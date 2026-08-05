@@ -1,11 +1,9 @@
 # Union of every package required by the four pipeline modules.
-# Mirrors _MASTER_REQUIRED in Master(1.4.2).py, which auto-installs these
-# at import time if they are missing (Colab-friendly).
+# Mirrors _MASTER_REQUIRED in master.py, which auto-installs these at import
+# time if they are missing (Colab-friendly).
 requests
 pandas
 numpy
 yfinance
-astropy
-astroquery
 tqdm
 pyarrow

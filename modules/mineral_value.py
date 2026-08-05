@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""MineralValue(1.1.0)
+"""mineral_value — Module 2 of the Asteroid Profitability Pipeline.
 
 Module 2 of the Asteroid Profitability Pipeline.
 
@@ -38,6 +38,15 @@ Adding a new mineral / element:
 # ─────────────────────────────────────────────────────────────────────────────
 # Auto-installs missing packages.  Safe to re-run.
 
+# Windows consoles default to cp1252, which cannot encode the emoji used in
+# this file's progress output -- force UTF-8 before anything prints.
+import sys as _sys
+for _stream in (_sys.stdout, _sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 import subprocess, sys
 
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance"]
@@ -65,7 +74,7 @@ import json
 import os
 import warnings
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 import numpy as np
@@ -84,6 +93,26 @@ pd.set_option("display.float_format", "{:.4g}".format)
 # ║   ★  USER SETTINGS — EDIT THESE TO TUNE THE PIPELINE  ★                  ║
 # ║                                                                           ║
 # ═════════════════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+# DEFAULT OUTPUT LOCATION
+# ─────────────────────────────────────────────────────────────────────────────
+# Colab keeps its scratch space at /content.  Anywhere else (local Windows,
+# Linux, CI) that path is meaningless -- on Windows it silently resolves to
+# C:\content -- so fall back to an ./asteroid_pipeline dir under the CWD.
+
+def _default_output_dir() -> str:
+    """Colab-aware default output directory."""
+    env = os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
+    if env:
+        return env
+    if os.path.isdir("/content"):
+        return "/content/asteroid_pipeline"
+    return os.path.join(os.getcwd(), "asteroid_pipeline")
+
+
+_DEFAULT_OUTPUT_DIR = _default_output_dir()
+
+
 @dataclass
 class MineralValueConfig:
     """User-editable configuration for the mineral-value catalog."""
@@ -103,7 +132,7 @@ class MineralValueConfig:
     request_timeout: int = 60   # seconds per HTTP request
 
     # ─── OUTPUT ──────────────────────────────────────────────────────────────
-    output_dir:       str = "/content/asteroid_pipeline"
+    output_dir:       str = _DEFAULT_OUTPUT_DIR
     catalog_filename: str = "mineral_value_catalog.csv"
 
     # ─── PRICE UNITS ─────────────────────────────────────────────────────────
@@ -147,7 +176,7 @@ class MineralValueConfig:
     #           M-type bulk value          $2.61 → $3.69/kg  (+41%)
     #           C-type bulk value          $375  → $638/kg   (+70%, water-driven)
     #           B-type bulk value          $500  → $850/kg   (+70%, water-driven)
-    pipeline_version: str = "1.1.3"
+    pipeline_version: str = "1.1.4"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows: int = 20
@@ -794,7 +823,7 @@ def fetch_metals_dev(config: MineralValueConfig) -> pd.DataFrame:
         print("     ⚠️  metals.dev returned no `metals` payload")
         return pd.DataFrame()
 
-    date = payload.get("date") or payload.get("timestamp_iso") or datetime.utcnow().strftime("%Y-%m-%d")
+    date = payload.get("date") or payload.get("timestamp_iso") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     rows = []
     for entry in MINERAL_REFERENCE:
@@ -1085,30 +1114,32 @@ print("    mineral_to_element_value(catalog, 'nickel-iron')")
 # ─────────────────────────────────────────────────────────────────────────────
 # RUN & PREVIEW
 # ─────────────────────────────────────────────────────────────────────────────
-catalog = build_mineral_value_catalog(CONFIG)
+# Only self-runs when executed directly; importing this module is side-effect free.
+if __name__ == "__main__":
+    catalog = build_mineral_value_catalog(CONFIG)
 
-if not catalog.empty:
+    if not catalog.empty:
 
-    PREVIEW_COLS = [
-        "name", "kind", "formula", "density_gcm3",
-        "price_usd_per_kg", "price_basis",
-        "live_price_source", "live_price_date",
-        "ref_price_date",
-    ]
-    show = [c for c in PREVIEW_COLS if c in catalog.columns]
+        PREVIEW_COLS = [
+            "name", "kind", "formula", "density_gcm3",
+            "price_usd_per_kg", "price_basis",
+            "live_price_source", "live_price_date",
+            "ref_price_date",
+        ]
+        show = [c for c in PREVIEW_COLS if c in catalog.columns]
 
-    print(f"\n{'='*75}")
-    print(f"  📋  MINERAL VALUE CATALOG — first {CONFIG.preview_rows} entries")
-    print(f"{'='*75}")
-    print(catalog[show].head(CONFIG.preview_rows).to_string(index=False))
+        print(f"\n{'='*75}")
+        print(f"  📋  MINERAL VALUE CATALOG — first {CONFIG.preview_rows} entries")
+        print(f"{'='*75}")
+        print(catalog[show].head(CONFIG.preview_rows).to_string(index=False))
 
-    # ── Mineral implied-value cross-check ─────────────────────────────────────
-    print(f"\n{'='*75}")
-    print("  🧪  MINERAL IMPLIED VALUE (USD/kg, computed from elemental yields)")
-    print(f"{'='*75}")
-    for _, r in catalog[catalog["kind"] == "mineral"].iterrows():
-        implied = mineral_to_element_value(catalog, r["name"])
-        if implied is None:
-            print(f"  {r['name']:18s} —  (no yields defined)")
-        else:
-            print(f"  {r['name']:18s}  implied ≈ {implied:>14,.2f}  USD/kg")
+        # ── Mineral implied-value cross-check ─────────────────────────────────────
+        print(f"\n{'='*75}")
+        print("  🧪  MINERAL IMPLIED VALUE (USD/kg, computed from elemental yields)")
+        print(f"{'='*75}")
+        for _, r in catalog[catalog["kind"] == "mineral"].iterrows():
+            implied = mineral_to_element_value(catalog, r["name"])
+            if implied is None:
+                print(f"  {r['name']:18s} —  (no yields defined)")
+            else:
+                print(f"  {r['name']:18s}  implied ≈ {implied:>14,.2f}  USD/kg")

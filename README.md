@@ -8,35 +8,27 @@ databases → price the minerals those asteroids contain → cost the
 transportation → run the rocket-equation and cost cascade to produce a ranked
 profitability table.
 
-## Pipeline stages
+## Layout
 
-| Stage | Module | Latest | What it does |
-|-------|--------|--------|--------------|
-| 1 | `profitability_pipeline` | `(1.0.5)` | Asteroid catalog — JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
-| 2 | `MineralValue` | `(1.1.3)` | Mineral price + density catalog — live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy |
-| 3 | `TransportationData` | `(1.2.4)` | Launch vehicles, propellants, Δv segments, operational costs — normalised to comparable units |
-| 4 | `CalcPipeline` | `(1.3.5)` | Rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned per asteroid |
-
-### The Master file
-
-`Master(1.4.2).py` is all four modules **machine-assembled into one
-self-contained, runnable file** — copy-paste it into Colab/Jupyter or run it
-directly, and the orchestrator at the bottom executes all four stages.
-
-It is generated, not hand-edited. To regenerate it after changing a module:
-
-```bash
-python .combine_master.py
+```
+build_master.py        Build tool: assembles modules/ into master.py
+master.py              GENERATED single-file pipeline — do not edit by hand
+modules/
+    catalog.py         Stage 1 — asteroid catalog
+    mineral_value.py   Stage 2 — mineral prices + densities
+    transportation.py  Stage 3 — launch / propellant / Δv / ops costs
+    calc.py            Stage 4 — profitability calculation
 ```
 
-That combiner strips each module's docstring, auto-install block, and
-`RUN & PREVIEW` section, renames each `CONFIG` global to a unique name
-(`CATALOG_CONFIG`, `MINERAL_CONFIG`, `TRANSPORT_CONFIG`, `CALC_CONFIG`), and
-resolves cross-module function-name collisions.
+Each module is standalone: run it directly to build just that stage, or import
+it for its functions without triggering a run.
 
-> **Note:** `.combine_master.py` still has the original Google Drive paths
-> hardcoded at the top (`PROJECT = r"G:/My Drive/Profitability Pipeline"`).
-> Point `PROJECT` at your clone before running it.
+| Stage | Module | Version | What it does |
+|-------|--------|---------|--------------|
+| 1 | `modules/catalog.py` | 1.0.6 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
+| 2 | `modules/mineral_value.py` | 1.1.4 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy |
+| 3 | `modules/transportation.py` | 1.2.5 | Launch vehicles, propellants, Δv segments, operational costs |
+| 4 | `modules/calc.py` | 1.3.6 | Rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 
@@ -44,20 +36,65 @@ resolves cross-module function-name collisions.
 pip install -r requirements.txt
 ```
 
+Run the whole pipeline as one self-contained file:
+
 ```bash
-python "Master(1.4.2).py"
+python master.py
 ```
 
-The modules also auto-install their own dependencies at import time, so the
-master file runs as-is in a fresh Colab runtime with no setup.
+Or run a single stage:
 
-Tuning knobs live in `MASTER_CONFIG` near the bottom of the config section:
+```bash
+python modules/transportation.py
+```
 
-- `MASTER_CONFIG.output_dir` — where everything lands (default `/content/asteroid_pipeline`)
+`master.py` is also designed to be pasted straight into a Colab or Jupyter cell
+— it auto-installs its own dependencies and runs top-to-bottom.
+
+### Output location
+
+Defaults to `/content/asteroid_pipeline` on Colab and `./asteroid_pipeline`
+everywhere else. Override with an environment variable:
+
+```bash
+ASTEROID_PIPELINE_OUTPUT_DIR=/path/to/output python master.py
+```
+
+or in code, via `MASTER_CONFIG.output_dir`.
+
+### Tuning
+
+`MASTER_CONFIG` sits near the bottom of `master.py`:
+
+- `MASTER_CONFIG.output_dir` — where everything lands
 - `MASTER_CONFIG.catalog.jpl_limit` — asteroid catalog size
 - `MASTER_CONFIG.calc.nre_amortization_missions` — multi-mission NRE split
 - `MASTER_CONFIG.calc.use_isru_return_propellant` — ISRU on/off
 - `MASTER_CONFIG.calc.eval_row_cap` — limit Stage 4 evaluations
+
+Importing `master.py` is side-effect free, so you can drive it yourself:
+
+```python
+import master
+results = master.run_full_pipeline()
+```
+
+## Rebuilding master.py
+
+`master.py` is **generated**. Edit the modules, then:
+
+```bash
+python build_master.py
+```
+
+The build strips each module's docstring, auto-install block, and
+`RUN & PREVIEW` section, renames each `CONFIG` global to a unique name
+(`CATALOG_CONFIG`, `MINERAL_CONFIG`, `TRANSPORT_CONFIG`, `CALC_CONFIG`),
+resolves cross-module function-name collisions, then syntax-checks the result.
+The build fails loudly rather than emitting a silently-wrong `master.py`.
+
+Paths are resolved relative to `build_master.py`, so the repo works from any
+location.
 
 ## Output
 
@@ -98,12 +135,13 @@ Earth launch → LEO → outbound burn → asteroid rendezvous
 - **USGS Mineral Commodity Summaries + LME** — reference prices for metals yfinance doesn't expose
 - **metals.dev** — optional; set `MINERAL_CONFIG.metals_api_key` (defaults to `"DEMO"`, i.e. skipped)
 
-## Repository layout
+## History
 
-Files are kept flat with their original version-suffixed names, so every
-historical revision stays alongside the current one and `.combine_master.py`
-resolves its inputs unchanged. Latest versions are the ones in the stage table
-above; the rest are prior revisions retained for reference.
+Earlier version-suffixed copies of every module (`Master(1.4.0).py`,
+`CalcPipeline(1.3.0).py`, the original Colab notebook, and the rest) were
+removed once the code moved into git — version history lives in commits now.
+They remain retrievable from the initial import commit:
 
-`Profitability Pipeline(1.0.2).ipynb` is the original Colab notebook the
-project started from.
+```bash
+git log --diff-filter=D --name-only
+```
