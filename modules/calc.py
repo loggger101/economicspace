@@ -185,7 +185,8 @@ class CalcConfig:
     # per-run to model a specific class.
     default_dv_outbound_m_s:   float = 6_500    # avg NEA per Module 3
     default_dv_return_m_s:     float = 5_500    # propulsive return
-    default_mission_duration_yr: float = 3.0
+    # (a default_mission_duration_yr constant used to sit here; nothing read
+    #  it once asteroid_mission_duration_yr() began deriving duration from Δv)
 
     # ─── AEROCAPTURE  (return via heat shield rather than propulsive) ────────
     # When True, return Δv is reduced by `aerocapture_dv_savings_m_s` but a

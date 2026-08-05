@@ -259,10 +259,10 @@ class CatalogConfig:
     #         Os, Rh, Au) portion of the metal-fraction value.  Differentiated
     #         core fragments (M / Xe = 2.0×), basaltic crust (V = 0.2×), mantle
     #         fragments (A / R / O = 0.5×).  Consumed by Module 4 v1.3.4.
-    # 1.0.6 — lookup_asteroid() passes regex=False.  Designations and names
+    # 1.0.6 — lookup_asteroid_catalog() passes regex=False.  Designations and names
     #         carry regex metacharacters, and pandas' str.contains defaults to
     #         regex=True, so the "substring match" the docstring promised was
-    #         really a pattern match: lookup_asteroid(cat, "(1) Ceres")
+    #         really a pattern match: lookup_asteroid_catalog(cat, "(1) Ceres")
     #         silently matched "1 Ceres", and any unbalanced bracket raised
     #         re.PatternError.  No other behaviour change.
     # 1.0.5 — removed Asterank source (asterank.com/api).  Dropped:
@@ -2278,14 +2278,14 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
 # ─────────────────────────────────────────────────────────────────────────────
 # QUERY UTILITIES
 # ─────────────────────────────────────────────────────────────────────────────
-def lookup_asteroid(catalog: pd.DataFrame, query: str) -> pd.DataFrame:
+def lookup_asteroid_catalog(catalog: pd.DataFrame, query: str) -> pd.DataFrame:
     """
     Quick lookup by designation or name (case-insensitive substring match).
 
     Usage:
-        lookup_asteroid(catalog, "Ceres")
-        lookup_asteroid(catalog, "2024 BX1")
-        lookup_asteroid(catalog, "(1) Ceres")
+        lookup_asteroid_catalog(catalog, "Ceres")
+        lookup_asteroid_catalog(catalog, "2024 BX1")
+        lookup_asteroid_catalog(catalog, "(1) Ceres")
 
     regex=False — designations and names carry regex metacharacters, which
     pandas' default regex=True would interpret as a pattern: "(1) Ceres"
@@ -2336,7 +2336,7 @@ def filter_by_spectral_group(catalog: pd.DataFrame, *groups: str) -> pd.DataFram
 
 
 print("\n✅  Helper utilities available:")
-print("    lookup_asteroid(catalog, 'Ceres')")
+print("    lookup_asteroid_catalog(catalog, 'Ceres')")
 print("    filter_by_region(catalog, 2.0, 3.3)   # main-belt slice")
 print("    filter_by_spectral_group(catalog, 'X-complex')  # metallic")
 
@@ -3492,11 +3492,11 @@ class TransportConfig:
     # ─── UNIT INVARIANT ──────────────────────────────────────────────────────
     # All monetary values in this pipeline are USD.  All physical quantities
     # use SI (kg, m, s, m/s).  Volumes in litres (not m³) because that is how
-    # propellant tanks are quoted in the trade.  Single source of truth.
-    CURRENCY:   str = "USD"
-    MASS_UNIT:  str = "kg"
-    DV_UNIT:    str = "m/s"
-    TIME_UNIT:  str = "yr"
+    # propellant tanks are quoted in the trade.  Enforced by validate_transport() and
+    # carried in each output column's name (`_usd_per_kg`, `_m_per_s`, …)
+    # rather than by config fields — CURRENCY / MASS_UNIT / DV_UNIT /
+    # TIME_UNIT constants lived here but nothing ever read them, so they
+    # documented an invariant they did not actually enforce.
 
     # ─── ISRU (In-Situ Resource Utilization) ─────────────────────────────────
     # If True, the return-leg propellant is assumed to be manufactured from
@@ -4947,7 +4947,8 @@ class CalcConfig:
     # per-run to model a specific class.
     default_dv_outbound_m_s:   float = 6_500    # avg NEA per Module 3
     default_dv_return_m_s:     float = 5_500    # propulsive return
-    default_mission_duration_yr: float = 3.0
+    # (a default_mission_duration_yr constant used to sit here; nothing read
+    #  it once asteroid_mission_duration_yr() began deriving duration from Δv)
 
     # ─── AEROCAPTURE  (return via heat shield rather than propulsive) ────────
     # When True, return Δv is reduced by `aerocapture_dv_savings_m_s` but a
