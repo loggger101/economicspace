@@ -21,6 +21,16 @@ Run once via:  py .combine_master.py
 """
 import re
 import os
+import sys
+
+# Every diagnostic below is decorated with ✅ / ⚠️ / ✗.  Windows picks the
+# locale code page (cp1252 here) for a redirected stdout, so `py
+# .combine_master.py > build.log` would die with UnicodeEncodeError on the
+# first of those — losing the build report, and losing the collision and
+# strip warnings in exactly the case you kept a log to read them.  A live
+# console is unaffected; this only matters when redirected.
+for _stream in (sys.stdout, sys.stderr):
+    _stream.reconfigure(encoding="utf-8")
 
 PROJECT = r"G:/My Drive/Profitability Pipeline"
 
@@ -86,30 +96,44 @@ def word_replace(content, old, new):
     return re.sub(r'\b' + re.escape(old) + r'\b', new, content)
 
 
+def prepare(path, label):
+    """Read a module and apply all three strips, insisting each one bites.
+
+    Every strip above is anchored to a literal the four modules happen to
+    share.  A module edit that moves or renames its anchor turns that strip
+    into a silent no-op and the text it should have cut lands in the master
+    instead: a duplicate install block, a leaked module docstring, or —
+    worst — the module's auto-run block firing partway down the file, so
+    that stage re-runs while the master is still being imported.  None of
+    those are name collisions, so the post-build check below would not
+    notice.  Fail here instead, naming the module and the anchor that moved.
+    """
+    content = read(path)
+    for strip, what in (
+        (strip_top_docstring,     "module docstring"),
+        (strip_install_block,     "auto-install block"),
+        (strip_run_preview_block, "RUN & PREVIEW block"),
+    ):
+        stripped = strip(content)
+        if stripped == content:
+            raise SystemExit(
+                f"✗ {label} ({os.path.basename(path)}): could not find the "
+                f"{what} to strip.\n"
+                f"  The anchor it keys off moved or was renamed — update "
+                f"{strip.__name__}() in .combine_master.py to match."
+            )
+        content = stripped
+    return content
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # READ + PROCESS EACH MODULE
 # ─────────────────────────────────────────────────────────────────────────────
-m1 = read(M1_PATH)
-m2 = read(M2_PATH)
-m3 = read(M3_PATH)
-m4 = read(M4_PATH)
-
-# Strip docstrings, install blocks, auto-run blocks
-m1 = strip_top_docstring(m1)
-m1 = strip_install_block(m1)
-m1 = strip_run_preview_block(m1)
-
-m2 = strip_top_docstring(m2)
-m2 = strip_install_block(m2)
-m2 = strip_run_preview_block(m2)
-
-m3 = strip_top_docstring(m3)
-m3 = strip_install_block(m3)
-m3 = strip_run_preview_block(m3)
-
-m4 = strip_top_docstring(m4)
-m4 = strip_install_block(m4)
-m4 = strip_run_preview_block(m4)
+# Read each module and strip its docstring, install block and auto-run block.
+m1 = prepare(M1_PATH, "Module 1")
+m2 = prepare(M2_PATH, "Module 2")
+m3 = prepare(M3_PATH, "Module 3")
+m4 = prepare(M4_PATH, "Module 4")
 
 # ── Rename per-module globals + functions to avoid collisions ────────────────
 # Module 1: CONFIG → CATALOG_CONFIG, build_catalog → build_asteroid_catalog,

@@ -75,6 +75,14 @@ functions, then concatenates. Afterwards it parses what it wrote and reports
 any top-level name defined twice — a silent shadowing bug otherwise, since
 Python just lets the last definition win.
 
+Each strip is anchored to a literal the four modules share (the `# INSTALLATION`
+banner, the `# RUN & PREVIEW` banner, the `# -*- coding -*-` line). Rename or
+move one in a module and that strip would quietly match nothing, folding the
+text it should have cut into the Master — at worst a module's auto-run block
+firing partway down the file, re-running that stage on import. The build now
+stops and names the module and the strip that missed, so bump the anchors and
+the strip together.
+
 ### Filenames must match `pipeline_version`
 
 Every output CSV carries a `pipeline_version` column, so a filename that
