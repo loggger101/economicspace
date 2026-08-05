@@ -51,8 +51,26 @@ OUT_PATH = os.path.join(PROJECT, f"Master({MASTER_VERSION}).py")
 
 
 def read(path):
+    # newline=None (the default) is deliberate on the read side: it folds any
+    # CRLF a module picked up back to "\n", so the concatenation below is
+    # uniform whatever state the sources are in on disk.
     with open(path, encoding="utf-8") as f:
         return f.read()
+
+
+def write(path, text):
+    """Write LF-terminated, whatever the platform.
+
+    Text mode defaults to newline=os.linesep, so on Windows every "\\n" here
+    would go to disk as "\\r\\n" and the generated Master would be CRLF while
+    its four sources are LF.  That contradicts .gitattributes (`*.py text
+    eol=lf`), which pins LF precisely because the Master is pasted into
+    Colab; it also left git reporting the file as modified after every
+    rebuild — "CRLF will be replaced by LF the next time Git touches it" —
+    even though the content had not changed at all.
+    """
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -420,17 +438,18 @@ def fill_versions(text):
 # ─────────────────────────────────────────────────────────────────────────────
 # WRITE OUTPUT
 # ─────────────────────────────────────────────────────────────────────────────
-with open(OUT_PATH, "w", encoding="utf-8") as f:
-    f.write(fill_versions(MASTER_HEADER))
-    f.write(section_banner("MODULE 1 — ASTEROID CATALOG BUILDER"))
-    f.write(m1)
-    f.write(section_banner("MODULE 2 — MINERAL VALUE CATALOG"))
-    f.write(m2)
-    f.write(section_banner("MODULE 3 — TRANSPORTATION DATA"))
-    f.write(m3)
-    f.write(section_banner("MODULE 4 — PROFITABILITY CALCULATOR"))
-    f.write(m4)
-    f.write(fill_versions(MASTER_ORCHESTRATOR))
+write(OUT_PATH, "".join([
+    fill_versions(MASTER_HEADER),
+    section_banner("MODULE 1 — ASTEROID CATALOG BUILDER"),
+    m1,
+    section_banner("MODULE 2 — MINERAL VALUE CATALOG"),
+    m2,
+    section_banner("MODULE 3 — TRANSPORTATION DATA"),
+    m3,
+    section_banner("MODULE 4 — PROFITABILITY CALCULATOR"),
+    m4,
+    fill_versions(MASTER_ORCHESTRATOR),
+]))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # POST-BUILD CHECKS
