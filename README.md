@@ -25,10 +25,10 @@ it for its functions without triggering a run.
 
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
-| 1 | `modules/catalog.py` | 1.0.6 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
-| 2 | `modules/mineral_value.py` | 1.1.4 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy |
+| 1 | `modules/catalog.py` | 1.0.7 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
+| 2 | `modules/mineral_value.py` | 1.1.5 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy |
 | 3 | `modules/transportation.py` | 1.2.5 | Launch vehicles, propellants, Δv segments, operational costs |
-| 4 | `modules/calc.py` | 1.3.6 | Rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.3.7 | Rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 

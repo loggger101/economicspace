@@ -88,11 +88,6 @@ pd.set_option("display.max_columns", None)
 pd.set_option("display.float_format", "{:.4g}".format)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# ║                                                                           ║
-# ║   ★  USER SETTINGS — EDIT THESE TO TUNE THE PIPELINE  ★                  ║
-# ║                                                                           ║
-# ═════════════════════════════════════════════════════════════════════════════
 # ─────────────────────────────────────────────────────────────────────────────
 # DEFAULT OUTPUT LOCATION
 # ─────────────────────────────────────────────────────────────────────────────
@@ -105,7 +100,12 @@ def _default_output_dir() -> str:
     env = os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
     if env:
         return env
-    if os.path.isdir("/content"):
+    # Colab detection.  os.path.isdir("/content") alone is not enough: on
+    # Windows a leading "/" is drive-relative, so it tests C:\content -- a
+    # directory an earlier run of the pre-fix code may itself have created,
+    # which would route output straight back to the path this function
+    # exists to avoid.  Require a POSIX platform as well.
+    if os.name == "posix" and os.path.isdir("/content"):
         return "/content/asteroid_pipeline"
     return os.path.join(os.getcwd(), "asteroid_pipeline")
 
@@ -113,6 +113,11 @@ def _default_output_dir() -> str:
 _DEFAULT_OUTPUT_DIR = _default_output_dir()
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# ║                                                                           ║
+# ║   ★  USER SETTINGS — EDIT THESE TO TUNE THE PIPELINE  ★                  ║
+# ║                                                                           ║
+# ═════════════════════════════════════════════════════════════════════════════
 @dataclass
 class MineralValueConfig:
     """User-editable configuration for the mineral-value catalog."""
@@ -147,6 +152,11 @@ class MineralValueConfig:
     # 1.1.1 — cross-file audit cleanup (May 2026):
     #         • removed unused imports (`field` from dataclasses, `Dict` from typing)
     #         • refreshed _REF_PRICE_DATE stamp 2026-01-15 → 2026-05-29
+    # 1.1.4 — lookup_mineral() passes regex=False.  pandas' str.contains
+    #         defaults to regex=True, so a query containing metacharacters —
+    #         "nickel-iron (alloy)" — was read as a pattern rather than the
+    #         literal substring the docstring promises, and an unbalanced
+    #         bracket raised re.PatternError.  No other behaviour change.
     # 1.1.3 — added rare-mineral phase entries (Option 3 from low-value audit):
     #         • sperrylite  PtAs2     56.6% Pt  → ~$25k/kg implied
     #         • laurite     RuS2      61.2% Ru  → ~$10k/kg implied
@@ -176,7 +186,7 @@ class MineralValueConfig:
     #           M-type bulk value          $2.61 → $3.69/kg  (+41%)
     #           C-type bulk value          $375  → $638/kg   (+70%, water-driven)
     #           B-type bulk value          $500  → $850/kg   (+70%, water-driven)
-    pipeline_version: str = "1.1.4"
+    pipeline_version: str = "1.1.5"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows: int = 20
@@ -1065,9 +1075,16 @@ def build_mineral_value_catalog(
 # QUERY UTILITIES
 # ─────────────────────────────────────────────────────────────────────────────
 def lookup_mineral(catalog: pd.DataFrame, name: str) -> pd.DataFrame:
-    """Case-insensitive substring match against the `name` column."""
+    """Case-insensitive substring match against the `name` column.
+
+    regex=False — a query like "nickel-iron (alloy)" would otherwise be read
+    as a regex pattern rather than the literal substring the docstring
+    promises, and an unbalanced bracket would raise re.PatternError.
+    """
     q = name.strip().lower()
-    return catalog[catalog["name"].str.lower().str.contains(q, na=False)].copy()
+    return catalog[
+        catalog["name"].str.lower().str.contains(q, na=False, regex=False)
+    ].copy()
 
 
 def value_per_kg(catalog: pd.DataFrame, mineral: str) -> Optional[float]:
@@ -1114,7 +1131,6 @@ print("    mineral_to_element_value(catalog, 'nickel-iron')")
 # ─────────────────────────────────────────────────────────────────────────────
 # RUN & PREVIEW
 # ─────────────────────────────────────────────────────────────────────────────
-# Only self-runs when executed directly; importing this module is side-effect free.
 if __name__ == "__main__":
     catalog = build_mineral_value_catalog(CONFIG)
 
