@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""MineralValue(1.1.0)
+"""MineralValue (1.1.x — see pipeline_version below for current)
 
 Module 2 of the Asteroid Profitability Pipeline.
 
