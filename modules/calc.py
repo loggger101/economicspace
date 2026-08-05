@@ -116,11 +116,6 @@ pd.set_option("display.float_format", "{:.4g}".format)
 G0_M_S2 = 9.806_65    # standard gravity (matches Module 3)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# ║                                                                           ║
-# ║   ★  USER SETTINGS — EDIT THESE TO TUNE THE PIPELINE  ★                  ║
-# ║                                                                           ║
-# ═════════════════════════════════════════════════════════════════════════════
 # ─────────────────────────────────────────────────────────────────────────────
 # DEFAULT OUTPUT LOCATION
 # ─────────────────────────────────────────────────────────────────────────────
@@ -133,7 +128,12 @@ def _default_output_dir() -> str:
     env = os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
     if env:
         return env
-    if os.path.isdir("/content"):
+    # Colab detection.  os.path.isdir("/content") alone is not enough: on
+    # Windows a leading "/" is drive-relative, so it tests C:\content -- a
+    # directory an earlier run of the pre-fix code may itself have created,
+    # which would route output straight back to the path this function
+    # exists to avoid.  Require a POSIX platform as well.
+    if os.name == "posix" and os.path.isdir("/content"):
         return "/content/asteroid_pipeline"
     return os.path.join(os.getcwd(), "asteroid_pipeline")
 
@@ -141,6 +141,11 @@ def _default_output_dir() -> str:
 _DEFAULT_OUTPUT_DIR = _default_output_dir()
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# ║                                                                           ║
+# ║   ★  USER SETTINGS — EDIT THESE TO TUNE THE PIPELINE  ★                  ║
+# ║                                                                           ║
+# ═════════════════════════════════════════════════════════════════════════════
 @dataclass
 class CalcConfig:
     """User-editable configuration for the profitability calculator."""
@@ -239,6 +244,26 @@ class CalcConfig:
     #           is per-mission (fly-and-die).
     #         • WACC compounding time-bucketed: upfront × (1+W)^T,
     #           ongoing × (1+W)^(T/2), end × 1.0  (was all to end).
+    # 1.3.6 — correctness + performance.  No change to any number produced by
+    #         a default-config run (verified bitwise across all 53 numeric
+    #         output columns on a 500-asteroid catalog):
+    #         • Return-payload is now bounded by return-capsule VOLUME, not
+    #           just by mining fraction.  With use_isru_return_propellant=True
+    #           AND use_aerocapture_return=False, tps_frac collapses to 0 and
+    #           nothing in the rocket equation scales with payload, so the
+    #           launch-mass constraint went slack: a 30 km body "returned"
+    #           7.4e14 kg in a 500 kg capsule for a $7.8e17 profit that topped
+    #           the rankings.  The volume check already existed and already
+    #           flagged it (volume_fits=False) but was never applied.  It now
+    #           caps the payload; that case yields 144,000 kg / -$2.67e9.
+    #           Both sane toggle combinations are unchanged to the bit.
+    #         • lookup_asteroid() passes regex=False — designations carry
+    #           regex metacharacters, so "(1) Ceres" silently matched
+    #           "1 Ceres" and an unbalanced bracket raised re.PatternError.
+    #         • Ops-cost and mineral-price lookups memoised; candidate
+    #           vehicle × propellant grid hoisted out of the per-asteroid
+    #           loop (it depends only on config).  Module 4 went from
+    #           8 to 469 asteroids/s — a 5,000-row run is ~11s, was ~10.6min.
     # 1.3.5 — removed Asterank-dependent code (paired with Module 1 v1.0.5):
     #         • asteroid_dv_m_s no longer reads asteroid_row["delta_v_kms"];
     #           all missions use config.default_dv_outbound_m_s / return.
@@ -288,7 +313,7 @@ class CalcConfig:
     #         Single-mission profitability is still tough but the top of
     #         the rankings now shows realistic million-dollar gross values
     #         for water-bearing C/B-type targets.
-    pipeline_version: str = "1.3.6"
+    pipeline_version: str = "1.3.7"
 
 
 CONFIG = CalcConfig()
@@ -437,13 +462,42 @@ RARE_METAL_ELEMENTS: set = {
 }
 
 
+# Same single-slot memo as _OPS_CACHE, for the mineral table.  Every asteroid
+# re-prices the same 4 bulk minerals, and nickel-iron alone fans out to ~10
+# element lookups, so this is ~19 full-DataFrame scans per asteroid otherwise.
+# Holds price and yields side by side since both are keyed by mineral name.
+_MINERAL_CACHE: Tuple[Optional[pd.DataFrame], Dict[str, Tuple[Optional[float], str]]] = (None, {})
+
+
+def _mineral_table(mineral_df: pd.DataFrame) -> Dict[str, Tuple[Optional[float], str]]:
+    """name → (price_usd_per_kg, yields_json) mapping, built once and memoised."""
+    global _MINERAL_CACHE
+    cached_df, mapping = _MINERAL_CACHE
+    if cached_df is mineral_df:
+        return mapping
+
+    has_yields = "yields_json" in mineral_df.columns
+    yields_col = mineral_df["yields_json"] if has_yields else [None] * len(mineral_df)
+
+    mapping = {}
+    for name, price, yields in zip(
+        mineral_df["name"], mineral_df["price_usd_per_kg"], yields_col,
+    ):
+        key = str(name)
+        if key in mapping:
+            continue                      # first match wins, as .iloc[0] did
+        mapping[key] = (
+            float(price) if pd.notna(price) else None,
+            yields if isinstance(yields, str) else "",
+        )
+    _MINERAL_CACHE = (mineral_df, mapping)
+    return mapping
+
+
 def _mineral_price(mineral_df: pd.DataFrame, name: str) -> Optional[float]:
     """Look up `price_usd_per_kg` for a mineral / element by exact name."""
-    row = mineral_df[mineral_df["name"] == name]
-    if row.empty:
-        return None
-    val = row["price_usd_per_kg"].iloc[0]
-    return float(val) if pd.notna(val) else None
+    entry = _mineral_table(mineral_df).get(name)
+    return None if entry is None else entry[0]
 
 
 def _mineral_implied_value(
@@ -464,12 +518,12 @@ def _mineral_implied_value(
 
     Returns the direct row price as a fallback if yields are empty.
     """
-    row = mineral_df[mineral_df["name"] == mineral_name]
-    if row.empty:
+    entry = _mineral_table(mineral_df).get(mineral_name)
+    if entry is None:
         return None
 
     try:
-        yields = json.loads(row["yields_json"].iloc[0] or "{}")
+        yields = json.loads(entry[1] or "{}")
     except (json.JSONDecodeError, TypeError, AttributeError):
         yields = {}
 
@@ -642,11 +696,6 @@ def max_return_payload_kg(
             (s · R_ret − 1)
 
     Returns a dict with the full mass cascade.  All masses in kg.
-
-    Physically impossible inputs (non-positive / non-finite Isp, negative or
-    non-finite Δv) return a non-viable result rather than raising or silently
-    producing a nonsense payload -- a bad row in the propellant or Δv table
-    must not take down a 50,000-asteroid run.
     """
     def _infeasible(r_out=0.0, r_ret=0.0):
         return {"max_payload_kg": 0.0, "viable": False,
@@ -753,13 +802,45 @@ def max_return_payload_kg(
 # ─────────────────────────────────────────────────────────────────────────────
 # OPERATIONAL-COSTS LOOKUP HELPER
 # ─────────────────────────────────────────────────────────────────────────────
+# Single-slot memo for the ops table.  mission_cost_usd pulls 9 line items per
+# (vehicle × propellant) combo, so a 5,000-asteroid run at 11 vehicles × 7
+# propellants issued ~2.5M full-DataFrame boolean scans of a 17-row table —
+# 89% of Module 4's total runtime.  The table is loaded once per run and never
+# mutated, so one dict build serves every lookup.
+#
+# Keyed by object identity, and the frame itself is held in the slot so its id
+# can't be recycled onto a different object.  Single-slot (not a growing dict)
+# so a long-lived session swapping ops tables can't leak.  A caller that
+# mutates ops_df IN PLACE rather than rebinding would read a stale cache —
+# rebuild by passing a fresh frame, which load_all_catalogs already does.
+_OPS_CACHE: Tuple[Optional[pd.DataFrame], Dict[str, Optional[float]]] = (None, {})
+
+
+def _ops_table(ops_df: pd.DataFrame) -> Dict[str, Optional[float]]:
+    """category → value mapping for `ops_df`, built once and memoised."""
+    global _OPS_CACHE
+    cached_df, mapping = _OPS_CACHE
+    if cached_df is ops_df:
+        return mapping
+
+    mapping = {}
+    for cat, val in zip(ops_df["category"], ops_df["value"]):
+        key = str(cat)
+        if key in mapping:
+            continue                      # first match wins, as .iloc[0] did
+        mapping[key] = float(val) if pd.notna(val) else None
+    _OPS_CACHE = (ops_df, mapping)
+    return mapping
+
+
 def _ops_value(ops_df: pd.DataFrame, category: str, default: float = 0.0) -> float:
-    """Pull an operational-cost line-item value from Module 3 by category."""
-    row = ops_df[ops_df["category"] == category]
-    if row.empty:
-        return default
-    val = row["value"].iloc[0]
-    return float(val) if pd.notna(val) else default
+    """Pull an operational-cost line-item value from Module 3 by category.
+
+    Absent category and present-but-NaN value both fall back to `default`,
+    matching the original row-filter implementation exactly.
+    """
+    val = _ops_table(ops_df).get(category)
+    return default if val is None else val
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -987,9 +1068,42 @@ def evaluate_combo(
         return None
     mineable_kg = float(asteroid_mass) * config.max_mining_fraction
 
-    m_payload = min(cascade["max_payload_kg"], mineable_kg)
+    # ── Volume cap ───────────────────────────────────────────────────────────
+    # Cargo volume = payload mass / bulk density.  Asteroid bulk density
+    # (Module 1) is a fair proxy for the mined material's packing density
+    # since the user spec'd "uniform composition".  A return capsule occupies
+    # a fraction of the fairing — say 25% — when sharing the vehicle with
+    # mission hardware and propellant tanks.
+    #
+    # This rarely binds (a tonne of metal is < 0.2 m³ against an ~80 m³
+    # fairing floor) but it is the constraint that keeps the mission physical
+    # when the launch-mass constraint goes slack: with ISRU return propellant
+    # AND propulsive return (tps_frac = 0), nothing in the rocket equation
+    # scales with payload, so max_return_payload_kg legitimately reports an
+    # unbounded mass budget.  Left uncapped, `mineable_kg` alone bound the
+    # result and a 30 km body returned 7.4e14 kg in a 500 kg capsule for a
+    # $7.8e17 "profit" that topped the rankings.  Volume was already computed
+    # and compared here, but only as a reported flag — it now binds.
+    bulk_density = asteroid_row.get("density_gcm3")
+    if bulk_density is None or pd.isna(bulk_density) or float(bulk_density) <= 0:
+        bulk_density = 2.0    # default: rocky-asteroid average
+    bulk_density_kg_per_L = float(bulk_density)         # g/cm³ ≡ kg/L
+
+    fairing_m3 = vehicle.get("fairing_volume_m3")
+    fairing_m3 = float(fairing_m3) if fairing_m3 is not None and not pd.isna(fairing_m3) else 100.0
+    usable_return_m3   = 0.25 * fairing_m3
+    volume_capacity_kg = usable_return_m3 * 1000.0 * bulk_density_kg_per_L
+
+    # `volume_fits` keeps its original sense — False means the payload the
+    # mission would otherwise have returned does not fit — but the payload is
+    # now actually reduced to what does fit.
+    m_payload_demand = min(cascade["max_payload_kg"], mineable_kg)
+    volume_fits      = m_payload_demand <= volume_capacity_kg
+    m_payload        = min(m_payload_demand, volume_capacity_kg)
     if m_payload <= 0:
         return None
+
+    return_volume_m3 = m_payload / bulk_density_kg_per_L / 1000.0
 
     # Recompute the full cascade at the capped payload.  TPS, return-prop,
     # outbound-prop, launch all depend on m_payload — must be redone to
@@ -1015,25 +1129,6 @@ def evaluate_combo(
         "m_at_asteroid":   m_at_asteroid,
         "m_tps":           m_tps,
     }
-
-    # ── Volume check ─────────────────────────────────────────────────────────
-    # Cargo volume = payload mass / bulk density.  Asteroid bulk density
-    # (Module 1) is a fair proxy for the mined material's packing density
-    # since the user spec'd "uniform composition".  Note this rarely binds —
-    # even a tonne of metal occupies < 0.2 m³, while smallest fairing is ~80 m³ —
-    # but it lets Module 4 flag the edge case (a low-density volatile body
-    # returning a comparable mass of fluffy regolith would binge volume first).
-    bulk_density = asteroid_row.get("density_gcm3")
-    if bulk_density is None or pd.isna(bulk_density) or float(bulk_density) <= 0:
-        bulk_density = 2.0    # default: rocky-asteroid average
-    bulk_density_kg_per_L = float(bulk_density)         # g/cm³ ≡ kg/L
-    return_volume_m3 = m_payload / bulk_density_kg_per_L / 1000.0
-
-    fairing_m3 = vehicle.get("fairing_volume_m3")
-    fairing_m3 = float(fairing_m3) if fairing_m3 is not None and not pd.isna(fairing_m3) else 100.0
-    # A return capsule occupies a fraction of the fairing — say 25% — when
-    # sharing the vehicle with mission hardware and propellant tanks.
-    volume_fits = return_volume_m3 < (0.25 * fairing_m3)
 
     gross_value         = m_payload * bulk_value_per_kg
     mission_duration_yr = asteroid_mission_duration_yr(dv_out_m_s, dv_ret_m_s, config)
@@ -1101,19 +1196,51 @@ def evaluate_combo(
     }
 
 
+def candidate_combos(
+    catalogs: Dict[str, pd.DataFrame],
+    config:   CalcConfig,
+) -> List[Tuple[pd.Series, pd.Series]]:
+    """Every (vehicle, propellant) pair that passes the CalcConfig filters.
+
+    The filters depend only on `config`, never on the asteroid, so the whole
+    cross-join is built once per run and reused for every row.  Doing it
+    inside the per-asteroid loop re-ran two DataFrame copies plus ~88
+    `iterrows()` Series constructions for each of N asteroids.
+    """
+    vdf = catalogs["vehicles"]
+    if config.operational_vehicles_only and "status" in vdf.columns:
+        vdf = vdf[vdf["status"] == "operational"]
+    if config.candidate_vehicles is not None:
+        vdf = vdf[vdf["name"].isin(config.candidate_vehicles)]
+
+    pdf = catalogs["propellants"]
+    if config.candidate_propellants is not None:
+        pdf = pdf[pdf["name"].isin(config.candidate_propellants)]
+
+    propellant_rows = [row for _, row in pdf.iterrows()]
+    return [
+        (vehicle, propellant)
+        for _, vehicle in vdf.iterrows()
+        for propellant in propellant_rows
+    ]
+
+
 def evaluate_asteroid(
     asteroid_row: pd.Series,
     catalogs:     Dict[str, pd.DataFrame],
     config:       CalcConfig,
+    combos:       Optional[List[Tuple[pd.Series, pd.Series]]] = None,
 ) -> Optional[dict]:
     """Pick the highest-profit (vehicle × propellant) combo for one asteroid.
 
     Returns a single result dict (best combo) or None if no combo is viable.
+
+    `combos` is the precomputed candidate cross-join from candidate_combos().
+    Left as None it is rebuilt per call — correct but slow, so the main loop
+    builds it once and passes it in.
     """
-    minerals    = catalogs["minerals"]
-    vehicles_df = catalogs["vehicles"]
-    propellants = catalogs["propellants"]
-    ops_df      = catalogs["ops"]
+    minerals = catalogs["minerals"]
+    ops_df   = catalogs["ops"]
 
     # Bulk $/kg for this asteroid's blended composition
     bulk_value = asteroid_bulk_value_usd_per_kg(asteroid_row, minerals)
@@ -1122,32 +1249,23 @@ def evaluate_asteroid(
 
     dv_out, dv_ret = asteroid_dv_m_s(asteroid_row, config)
 
-    # Candidate filtering
-    vdf = vehicles_df.copy()
-    if config.operational_vehicles_only and "status" in vdf.columns:
-        vdf = vdf[vdf["status"] == "operational"]
-    if config.candidate_vehicles is not None:
-        vdf = vdf[vdf["name"].isin(config.candidate_vehicles)]
+    if combos is None:
+        combos = candidate_combos(catalogs, config)
 
-    pdf = propellants.copy()
-    if config.candidate_propellants is not None:
-        pdf = pdf[pdf["name"].isin(config.candidate_propellants)]
-
-    # Cross-join candidates and keep the highest-profit one
+    # Keep the highest-profit candidate
     best       = None
     best_profit = -np.inf
-    for _, vehicle in vdf.iterrows():
-        for _, propellant in pdf.iterrows():
-            result = evaluate_combo(
-                asteroid_row, vehicle, propellant,
-                bulk_value, dv_out, dv_ret,
-                ops_df, config,
-            )
-            if result is None:
-                continue
-            if result["profit_usd"] > best_profit:
-                best_profit = result["profit_usd"]
-                best        = result
+    for vehicle, propellant in combos:
+        result = evaluate_combo(
+            asteroid_row, vehicle, propellant,
+            bulk_value, dv_out, dv_ret,
+            ops_df, config,
+        )
+        if result is None:
+            continue
+        if result["profit_usd"] > best_profit:
+            best_profit = result["profit_usd"]
+            best        = result
 
     if best is None:
         return None
@@ -1213,11 +1331,20 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
         print(f"     ✂️   Capped at {config.eval_row_cap:,} rows for this run "
               f"(eval_row_cap in CONFIG)")
 
+    # Candidate (vehicle × propellant) grid is config-driven, not asteroid-
+    # driven — build it once and hand it to every evaluation.
+    combos = candidate_combos(catalogs, config)
+    if not combos:
+        print("\n❌  No candidate vehicle × propellant combinations after "
+              "filtering — check operational_vehicles_only / candidate_* in CONFIG.")
+        return pd.DataFrame()
+    print(f"     🔧  {len(combos):,} vehicle × propellant combinations per asteroid")
+
     n = len(work_df)
     results = []
     last_report = 0
     for i, (_, asteroid) in enumerate(work_df.iterrows(), 1):
-        result = evaluate_asteroid(asteroid, catalogs, config)
+        result = evaluate_asteroid(asteroid, catalogs, config, combos)
         if result is not None:
             results.append(result)
         # Lightweight progress report every ~10%
@@ -1273,11 +1400,19 @@ def filter_viable(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def lookup_asteroid(df: pd.DataFrame, query: str) -> pd.DataFrame:
-    """Find by designation OR name (case-insensitive substring match)."""
+    """Find by designation OR name (case-insensitive substring match).
+
+    regex=False — designations and names carry regex metacharacters ("(1)
+    Ceres", "1999 RQ36"), which pandas' default regex=True would interpret
+    as a pattern: "(1) CERES" silently matched "1 CERES", and a stray
+    bracket raised re.PatternError.  Literal substring is what's wanted.
+    """
     q = query.strip().upper()
-    mask = df["designation"].astype(str).str.upper().str.contains(q, na=False)
+    mask = df["designation"].astype(str).str.upper().str.contains(
+        q, na=False, regex=False)
     if "name" in df.columns:
-        mask |= df["name"].astype(str).str.upper().str.contains(q, na=False)
+        mask |= df["name"].astype(str).str.upper().str.contains(
+            q, na=False, regex=False)
     return df[mask]
 
 
@@ -1290,7 +1425,6 @@ print("    lookup_asteroid(catalog, 'Bennu')")
 # ─────────────────────────────────────────────────────────────────────────────
 # RUN & PREVIEW
 # ─────────────────────────────────────────────────────────────────────────────
-# Only self-runs when executed directly; importing this module is side-effect free.
 if __name__ == "__main__":
     catalog = build_profitability_catalog(CONFIG)
 

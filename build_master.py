@@ -100,6 +100,8 @@ for label, before in (("catalog", m1), ("mineral_value", m2),
                       ("transportation", m3), ("calc", m4)):
     check("# INSTALLATION" in before, f"{label}: no INSTALLATION block to strip")
     check("# RUN & PREVIEW" in before, f"{label}: no RUN & PREVIEW block to strip")
+    check(before.startswith('# -*- coding'),
+          f"{label}: no leading coding line, so the docstring strip cannot anchor")
 
 # Strip docstrings, install blocks, auto-run blocks
 m1 = strip_top_docstring(m1)
@@ -123,6 +125,11 @@ for label, after in (("catalog", m1), ("mineral_value", m2),
     check("# INSTALLATION" not in after, f"{label}: INSTALLATION block survived")
     check("# RUN & PREVIEW" not in after, f"{label}: RUN & PREVIEW block survived")
     check("__main__" not in after, f"{label}: __main__ guard leaked into master")
+    # The docstring strip is anchored to the coding line; if it silently
+    # no-opped, the module's own docstring becomes a bare string expression
+    # partway down master.py and its title contradicts the master's.
+    check(not after.lstrip().startswith('"""'),
+          f"{label}: module docstring survived the strip")
 
 # ── Rename per-module globals + functions to avoid collisions ────────────────
 # Module 1: CONFIG → CATALOG_CONFIG, build_catalog → build_asteroid_catalog
@@ -148,22 +155,22 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # ─────────────────────────────────────────────────────────────────────────────
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.4.3)
+"""Master Asteroid Profitability Pipeline (1.4.4)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom — the orchestrator at the bottom executes everything.
 
-    Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.0.6)
+    Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.0.7)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
-    Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.1.4)
+    Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.1.5)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
     Stage 3  →  Transportation Data     (modules/transportation.py 1.2.5)
                 Launch vehicles + propellants + Δv segments + ops costs
                 (UNCREWED autonomous mining — no crew costs)
-    Stage 4  →  Profitability Calc      (modules/calc.py 1.3.6)
+    Stage 4  →  Profitability Calc      (modules/calc.py 1.3.7)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2×, V-type 0.2×)
 
@@ -321,7 +328,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.4.3")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.4.4")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 

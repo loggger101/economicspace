@@ -128,7 +128,12 @@ def _default_output_dir() -> str:
     env = os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
     if env:
         return env
-    if os.path.isdir("/content"):
+    # Colab detection.  os.path.isdir("/content") alone is not enough: on
+    # Windows a leading "/" is drive-relative, so it tests C:\content -- a
+    # directory an earlier run of the pre-fix code may itself have created,
+    # which would route output straight back to the path this function
+    # exists to avoid.  Require a POSIX platform as well.
+    if os.name == "posix" and os.path.isdir("/content"):
         return "/content/asteroid_pipeline"
     return os.path.join(os.getcwd(), "asteroid_pipeline")
 
