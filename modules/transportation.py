@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""TransportationData (1.2.x — see pipeline_version below for current)
+"""transportation — Module 3 of the Asteroid Profitability Pipeline.
 
 Module 3 of the Asteroid Profitability Pipeline.
 
@@ -63,6 +63,15 @@ Pipeline flow:
 # ─────────────────────────────────────────────────────────────────────────────
 # INSTALLATION
 # ─────────────────────────────────────────────────────────────────────────────
+# Windows consoles default to cp1252, which cannot encode the emoji used in
+# this file's progress output -- force UTF-8 before anything prints.
+import sys as _sys
+for _stream in (_sys.stdout, _sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 import subprocess, sys
 
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance"]
@@ -107,6 +116,26 @@ pd.set_option("display.float_format", "{:.4g}".format)
 # ║   ★  USER SETTINGS — EDIT THESE TO TUNE THE PIPELINE  ★                  ║
 # ║                                                                           ║
 # ═════════════════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+# DEFAULT OUTPUT LOCATION
+# ─────────────────────────────────────────────────────────────────────────────
+# Colab keeps its scratch space at /content.  Anywhere else (local Windows,
+# Linux, CI) that path is meaningless -- on Windows it silently resolves to
+# C:\content -- so fall back to an ./asteroid_pipeline dir under the CWD.
+
+def _default_output_dir() -> str:
+    """Colab-aware default output directory."""
+    env = os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
+    if env:
+        return env
+    if os.path.isdir("/content"):
+        return "/content/asteroid_pipeline"
+    return os.path.join(os.getcwd(), "asteroid_pipeline")
+
+
+_DEFAULT_OUTPUT_DIR = _default_output_dir()
+
+
 @dataclass
 class TransportConfig:
     """User-editable configuration for the transportation-cost catalog."""
@@ -119,7 +148,7 @@ class TransportConfig:
     request_timeout: int = 60
 
     # ─── OUTPUT ──────────────────────────────────────────────────────────────
-    output_dir:       str = "/content/asteroid_pipeline"
+    output_dir:       str = _DEFAULT_OUTPUT_DIR
     # Four sub-files land in `<output_dir>/transportation/`:
     #     launch_vehicles.csv, propellants.csv,
     #     delta_v_segments.csv, operational_costs.csv
@@ -174,7 +203,7 @@ class TransportConfig:
     #           'Autonomous mining control & AI (NRE)' ($200M per program)
     #         • All downstream Module 4 cost cascades now uncrewed by design;
     #           no life-support / crew-habitat mass overhead anywhere
-    pipeline_version: str = "1.2.4"
+    pipeline_version: str = "1.2.5"
     preview_rows:     int = 15
 
 
@@ -1485,68 +1514,70 @@ print("    mission_cost_breakdown(catalog, payload_kg=1000, "
 # ─────────────────────────────────────────────────────────────────────────────
 # RUN & PREVIEW
 # ─────────────────────────────────────────────────────────────────────────────
-catalog = build_transportation_catalog(CONFIG)
+# Only self-runs when executed directly; importing this module is side-effect free.
+if __name__ == "__main__":
+    catalog = build_transportation_catalog(CONFIG)
 
-if catalog and not catalog["launch_vehicles"].empty:
+    if catalog and not catalog["launch_vehicles"].empty:
 
-    # ── Launch vehicles preview ──────────────────────────────────────────────
-    print(f"\n{'='*75}")
-    print(f"  🚀  LAUNCH VEHICLES — cheapest $/kg-to-LEO first")
-    print(f"{'='*75}")
-    lv_cols = ["name", "operator", "status", "payload_leo_kg",
-               "usd_per_kg_to_leo", "usd_per_kg_to_gto", "usd_per_kg_to_escape"]
-    print(catalog["launch_vehicles"].sort_values("usd_per_kg_to_leo")[
-        lv_cols
-    ].head(CONFIG.preview_rows).to_string(index=False))
+        # ── Launch vehicles preview ──────────────────────────────────────────────
+        print(f"\n{'='*75}")
+        print(f"  🚀  LAUNCH VEHICLES — cheapest $/kg-to-LEO first")
+        print(f"{'='*75}")
+        lv_cols = ["name", "operator", "status", "payload_leo_kg",
+                   "usd_per_kg_to_leo", "usd_per_kg_to_gto", "usd_per_kg_to_escape"]
+        print(catalog["launch_vehicles"].sort_values("usd_per_kg_to_leo")[
+            lv_cols
+        ].head(CONFIG.preview_rows).to_string(index=False))
 
-    # ── Propellant preview ───────────────────────────────────────────────────
-    print(f"\n{'='*75}")
-    print(f"  🔥  PROPELLANTS — Isp, density, cost  (live where available)")
-    print(f"{'='*75}")
-    p_cols = ["name", "type", "isp_vac_s", "density_kg_per_L",
-              "cost_usd_per_kg", "cost_usd_per_L", "price_basis"]
-    print(catalog["propellants"][p_cols].to_string(index=False))
+        # ── Propellant preview ───────────────────────────────────────────────────
+        print(f"\n{'='*75}")
+        print(f"  🔥  PROPELLANTS — Isp, density, cost  (live where available)")
+        print(f"{'='*75}")
+        p_cols = ["name", "type", "isp_vac_s", "density_kg_per_L",
+                  "cost_usd_per_kg", "cost_usd_per_L", "price_basis"]
+        print(catalog["propellants"][p_cols].to_string(index=False))
 
-    # ── Δv reference preview ─────────────────────────────────────────────────
-    print(f"\n{'='*75}")
-    print(f"  📐  MISSION Δv SEGMENTS")
-    print(f"{'='*75}")
-    print(catalog["delta_v_segments"][
-        ["segment", "dv_m_per_s", "duration_yr", "notes"]
-    ].to_string(index=False))
+        # ── Δv reference preview ─────────────────────────────────────────────────
+        print(f"\n{'='*75}")
+        print(f"  📐  MISSION Δv SEGMENTS")
+        print(f"{'='*75}")
+        print(catalog["delta_v_segments"][
+            ["segment", "dv_m_per_s", "duration_yr", "notes"]
+        ].to_string(index=False))
 
-    # ── Operational costs preview ────────────────────────────────────────────
-    print(f"\n{'='*75}")
-    print(f"  🏢  OPERATIONAL COSTS")
-    print(f"{'='*75}")
-    print(catalog["operational_costs"][
-        ["category", "value", "unit", "range_low", "range_high"]
-    ].to_string(index=False))
+        # ── Operational costs preview ────────────────────────────────────────────
+        print(f"\n{'='*75}")
+        print(f"  🏢  OPERATIONAL COSTS")
+        print(f"{'='*75}")
+        print(catalog["operational_costs"][
+            ["category", "value", "unit", "range_low", "range_high"]
+        ].to_string(index=False))
 
-    # ── Cost-per-Δv comparison (the headline normalised metric) ──────────────
-    print(f"\n{'='*75}")
-    print(f"  🧮  PROPELLANT COST PER kg OF PAYLOAD — at Δv = 6 500 m/s "
-          f"(median NEA)")
-    print(f"{'='*75}")
-    headline = cheapest_propellant_for(catalog, 6_500)
-    print(headline.to_string(index=False))
+        # ── Cost-per-Δv comparison (the headline normalised metric) ──────────────
+        print(f"\n{'='*75}")
+        print(f"  🧮  PROPELLANT COST PER kg OF PAYLOAD — at Δv = 6 500 m/s "
+              f"(median NEA)")
+        print(f"{'='*75}")
+        headline = cheapest_propellant_for(catalog, 6_500)
+        print(headline.to_string(index=False))
 
-    # ── Worked-example mission cost ──────────────────────────────────────────
-    print(f"\n{'='*75}")
-    print(f"  💼  WORKED EXAMPLE — 1 000-kg payload, LEO → avg NEA → return")
-    print(f"{'='*75}")
-    example = mission_cost_breakdown(
-        catalog,
-        payload_kg          = 1_000,
-        delta_v_outbound    = 6_500,
-        delta_v_return      = 5_500,
-        launch_vehicle      = "Falcon Heavy (reusable side cores)",
-        propellant          = "methalox  (LCH4 / LOX)",
-        mission_duration_yr = 3.0,
-        hardware_kg         = 2_000,
-    )
-    for k, v in example.items():
-        if isinstance(v, float):
-            print(f"    {k:28s} : {v:>18,.0f}")
-        else:
-            print(f"    {k:28s} : {v}")
+        # ── Worked-example mission cost ──────────────────────────────────────────
+        print(f"\n{'='*75}")
+        print(f"  💼  WORKED EXAMPLE — 1 000-kg payload, LEO → avg NEA → return")
+        print(f"{'='*75}")
+        example = mission_cost_breakdown(
+            catalog,
+            payload_kg          = 1_000,
+            delta_v_outbound    = 6_500,
+            delta_v_return      = 5_500,
+            launch_vehicle      = "Falcon Heavy (reusable side cores)",
+            propellant          = "methalox  (LCH4 / LOX)",
+            mission_duration_yr = 3.0,
+            hardware_kg         = 2_000,
+        )
+        for k, v in example.items():
+            if isinstance(v, float):
+                print(f"    {k:28s} : {v:>18,.0f}")
+            else:
+                print(f"    {k:28s} : {v}")

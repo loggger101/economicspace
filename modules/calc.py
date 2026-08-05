@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""CalcPipeline (1.3.x — see pipeline_version below for current)
+"""calc — Module 4 of the Asteroid Profitability Pipeline.
 
 Module 4 of the Asteroid Profitability Pipeline.
 
@@ -62,6 +62,15 @@ Pipeline flow:
 # ─────────────────────────────────────────────────────────────────────────────
 # INSTALLATION
 # ─────────────────────────────────────────────────────────────────────────────
+# Windows consoles default to cp1252, which cannot encode the emoji used in
+# this file's progress output -- force UTF-8 before anything prints.
+import sys as _sys
+for _stream in (_sys.stdout, _sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 import subprocess, sys
 
 _REQUIRED_PKGS = ["pandas", "numpy"]
@@ -112,12 +121,32 @@ G0_M_S2 = 9.806_65    # standard gravity (matches Module 3)
 # ║   ★  USER SETTINGS — EDIT THESE TO TUNE THE PIPELINE  ★                  ║
 # ║                                                                           ║
 # ═════════════════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+# DEFAULT OUTPUT LOCATION
+# ─────────────────────────────────────────────────────────────────────────────
+# Colab keeps its scratch space at /content.  Anywhere else (local Windows,
+# Linux, CI) that path is meaningless -- on Windows it silently resolves to
+# C:\content -- so fall back to an ./asteroid_pipeline dir under the CWD.
+
+def _default_output_dir() -> str:
+    """Colab-aware default output directory."""
+    env = os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
+    if env:
+        return env
+    if os.path.isdir("/content"):
+        return "/content/asteroid_pipeline"
+    return os.path.join(os.getcwd(), "asteroid_pipeline")
+
+
+_DEFAULT_OUTPUT_DIR = _default_output_dir()
+
+
 @dataclass
 class CalcConfig:
     """User-editable configuration for the profitability calculator."""
 
     # ─── INPUTS  (where Modules 1-3 wrote their catalogs) ────────────────────
-    input_dir:                str = "/content/asteroid_pipeline"
+    input_dir:                str = _DEFAULT_OUTPUT_DIR
     asteroid_catalog_file:    str = "asteroid_catalog.csv"
     mineral_catalog_file:     str = "mineral_value_catalog.csv"
     transportation_subdir:    str = "transportation"
@@ -128,7 +157,7 @@ class CalcConfig:
     operational_costs_file:   str = "operational_costs.csv"
 
     # ─── OUTPUT ──────────────────────────────────────────────────────────────
-    output_dir:               str = "/content/asteroid_pipeline"
+    output_dir:               str = _DEFAULT_OUTPUT_DIR
     output_filename:          str = "profitability_catalog.csv"
 
     # ─── MISSION HARDWARE (kg) ───────────────────────────────────────────────
@@ -145,7 +174,10 @@ class CalcConfig:
     max_mining_fraction:       float = 0.05
 
     # ─── Δv DEFAULTS (m/s) ───────────────────────────────────────────────────
-    # Used when an asteroid has no Asterank `delta_v_kms` field to override.
+    # Applied uniformly to every asteroid (v1.3.5 — per-target Asterank Δv
+    # override removed alongside the Asterank source).  All missions use
+    # the Module 3 reference Δv for "average NEA" by default; edit here
+    # per-run to model a specific class.
     default_dv_outbound_m_s:   float = 6_500    # avg NEA per Module 3
     default_dv_return_m_s:     float = 5_500    # propulsive return
     default_mission_duration_yr: float = 3.0
@@ -207,6 +239,14 @@ class CalcConfig:
     #           is per-mission (fly-and-die).
     #         • WACC compounding time-bucketed: upfront × (1+W)^T,
     #           ongoing × (1+W)^(T/2), end × 1.0  (was all to end).
+    # 1.3.5 — removed Asterank-dependent code (paired with Module 1 v1.0.5):
+    #         • asteroid_dv_m_s no longer reads asteroid_row["delta_v_kms"];
+    #           all missions use config.default_dv_outbound_m_s / return.
+    #         • Output dict no longer emits asterank_value_usd /
+    #           asterank_profit_usd / asterank_accessibility columns.
+    #         No behavioural change for catalogs without Asterank columns
+    #         (which is now every catalog) — v1.3.4 already fell back to
+    #         defaults when the field was absent.
     # 1.3.4 — per-asteroid PGM enrichment (paired with Module 1 v1.0.4
     #         + Module 2 v1.1.3).  Three changes:
     #         • Added RARE_METAL_ELEMENTS = {Pt, Pd, Rh, Ir, Os, Ru, Au}.
@@ -248,7 +288,7 @@ class CalcConfig:
     #         Single-mission profitability is still tough but the top of
     #         the rankings now shows realistic million-dollar gross values
     #         for water-bearing C/B-type targets.
-    pipeline_version: str = "1.3.4"
+    pipeline_version: str = "1.3.6"
 
 
 CONFIG = CalcConfig()
@@ -521,24 +561,20 @@ def asteroid_bulk_value_usd_per_kg(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Δv PER-ASTEROID OVERRIDE
+# Δv RESOLVER
 # ─────────────────────────────────────────────────────────────────────────────
-# Module 1 carries Asterank's `delta_v_kms` for many asteroids — a far better
-# per-target estimate than Module 3's broad "avg NEA = 6,500 m/s" default.
-# Use it when available (km/s → m/s); return defaults otherwise.
+# Returns (Δv_outbound, Δv_return) for an asteroid using the Module 3
+# reference defaults from CalcConfig.  All asteroids get the same Δv —
+# the per-target Asterank override was removed in v1.3.5.  If you want
+# per-asteroid Δv accuracy in future, derive it from Module 1's orbital
+# elements (semi_major_axis_au, eccentricity, inclination_deg) using a
+# Shoemaker-Helin or Tisserand-parameter estimator, rather than a hosted
+# economic-model service.
 
 def asteroid_dv_m_s(asteroid_row: pd.Series, config: CalcConfig) -> Tuple[float, float]:
     """Return (Δv_outbound, Δv_return) in m/s for one asteroid."""
-    asterank_dv_kms = asteroid_row.get("delta_v_kms")
-    if asterank_dv_kms is not None and not pd.isna(asterank_dv_kms):
-        dv_out = float(asterank_dv_kms) * 1000.0
-        # Return Δv is asymmetric to outbound — typical sample-return missions
-        # see ~85% of outbound on the return leg (matched Earth-arrival geometry,
-        # no need to circularise at asteroid).
-        dv_ret_propulsive = dv_out * 0.85
-    else:
-        dv_out             = config.default_dv_outbound_m_s
-        dv_ret_propulsive  = config.default_dv_return_m_s
+    dv_out             = config.default_dv_outbound_m_s
+    dv_ret_propulsive  = config.default_dv_return_m_s
 
     if config.use_aerocapture_return:
         dv_ret = max(500.0, dv_ret_propulsive - config.aerocapture_dv_savings_m_s)
@@ -606,9 +642,31 @@ def max_return_payload_kg(
             (s · R_ret − 1)
 
     Returns a dict with the full mass cascade.  All masses in kg.
+
+    Physically impossible inputs (non-positive / non-finite Isp, negative or
+    non-finite Δv) return a non-viable result rather than raising or silently
+    producing a nonsense payload -- a bad row in the propellant or Δv table
+    must not take down a 50,000-asteroid run.
     """
+    def _infeasible(r_out=0.0, r_ret=0.0):
+        return {"max_payload_kg": 0.0, "viable": False,
+                "r_out": r_out, "r_ret": r_ret,
+                "m_launch": 0, "m_outbound_prop": 0, "m_return_prop": 0,
+                "m_at_asteroid": 0, "m_tps": 0}
+
+    if not np.isfinite(isp_s) or isp_s <= 0:
+        return _infeasible()
+    if not (np.isfinite(dv_out_m_s) and np.isfinite(dv_ret_m_s)):
+        return _infeasible()
+    if dv_out_m_s < 0 or dv_ret_m_s < 0:
+        return _infeasible()
+    if not np.isfinite(leo_capacity_kg) or leo_capacity_kg <= 0:
+        return _infeasible()
+
     r_out = float(np.exp(dv_out_m_s / (isp_s * G0_M_S2)))
     r_ret = float(np.exp(dv_ret_m_s / (isp_s * G0_M_S2)))
+    if not (np.isfinite(r_out) and np.isfinite(r_ret)):
+        return _infeasible()      # Δv/Isp so extreme the mass ratio overflows
     s     = 1.0 + tps_frac
 
     if isru_return:
@@ -1110,10 +1168,6 @@ def evaluate_asteroid(
         "comp_carbon_fraction":     asteroid_row.get("comp_carbon_fraction"),
         "comp_ice_fraction":        asteroid_row.get("comp_ice_fraction"),
         "comp_pgm_enrichment":      asteroid_row.get("comp_pgm_enrichment"),
-        # Asterank cross-check (if Module 1's catalog carried it)
-        "asterank_value_usd":       asteroid_row.get("estimated_value_usd"),
-        "asterank_profit_usd":      asteroid_row.get("estimated_profit_usd"),
-        "asterank_accessibility":   asteroid_row.get("accessibility_score"),
     })
 
     return best
@@ -1236,66 +1290,68 @@ print("    lookup_asteroid(catalog, 'Bennu')")
 # ─────────────────────────────────────────────────────────────────────────────
 # RUN & PREVIEW
 # ─────────────────────────────────────────────────────────────────────────────
-catalog = build_profitability_catalog(CONFIG)
+# Only self-runs when executed directly; importing this module is side-effect free.
+if __name__ == "__main__":
+    catalog = build_profitability_catalog(CONFIG)
 
-if not catalog.empty:
+    if not catalog.empty:
 
-    # ── Top-N preview ────────────────────────────────────────────────────────
-    print(f"\n{'='*95}")
-    print(f"  🏆  TOP {CONFIG.top_n_preview} MOST PROFITABLE ASTEROIDS")
-    print(f"{'='*95}")
-    preview_cols = [
-        "designation", "name", "spectral_type", "comp_group",
-        "estimated_mass_kg", "max_payload_kg",
-        "bulk_value_usd_per_kg", "gross_M$", "cost_M$", "profit_M$", "roi",
-        "vehicle", "propellant",
-    ]
-    show = [c for c in preview_cols if c in catalog.columns]
-    print(catalog[show].head(CONFIG.top_n_preview).to_string(index=False))
+        # ── Top-N preview ────────────────────────────────────────────────────────
+        print(f"\n{'='*95}")
+        print(f"  🏆  TOP {CONFIG.top_n_preview} MOST PROFITABLE ASTEROIDS")
+        print(f"{'='*95}")
+        preview_cols = [
+            "designation", "name", "spectral_type", "comp_group",
+            "estimated_mass_kg", "max_payload_kg",
+            "bulk_value_usd_per_kg", "gross_M$", "cost_M$", "profit_M$", "roi",
+            "vehicle", "propellant",
+        ]
+        show = [c for c in preview_cols if c in catalog.columns]
+        print(catalog[show].head(CONFIG.top_n_preview).to_string(index=False))
 
-    # ── Summary by composition group ─────────────────────────────────────────
-    print(f"\n{'='*95}")
-    print("  📊  PROFITABILITY BY COMPOSITION GROUP")
-    print(f"{'='*95}")
-    if "comp_group" in catalog.columns:
-        grp = catalog.groupby("comp_group").agg(
-            n             = ("designation", "count"),
-            viable_n      = ("viable", "sum"),
-            mean_profit_M = ("profit_M$", "mean"),
-            best_profit_M = ("profit_M$", "max"),
-            mean_roi      = ("roi", "mean"),
-        ).sort_values("best_profit_M", ascending=False)
-        print(grp.to_string())
+        # ── Summary by composition group ─────────────────────────────────────────
+        print(f"\n{'='*95}")
+        print("  📊  PROFITABILITY BY COMPOSITION GROUP")
+        print(f"{'='*95}")
+        if "comp_group" in catalog.columns:
+            grp = catalog.groupby("comp_group").agg(
+                n             = ("designation", "count"),
+                viable_n      = ("viable", "sum"),
+                mean_profit_M = ("profit_M$", "mean"),
+                best_profit_M = ("profit_M$", "max"),
+                mean_roi      = ("roi", "mean"),
+            ).sort_values("best_profit_M", ascending=False)
+            print(grp.to_string())
 
-    # ── Vehicle / propellant selection summary ───────────────────────────────
-    print(f"\n{'='*95}")
-    print("  🚀  WINNING VEHICLE × PROPELLANT COMBINATIONS")
-    print(f"{'='*95}")
-    if "vehicle" in catalog.columns and "propellant" in catalog.columns:
-        combo = (
-            catalog.groupby(["vehicle", "propellant"])
-                   .size().reset_index(name="n_asteroids")
-                   .sort_values("n_asteroids", ascending=False)
-        )
-        print(combo.head(15).to_string(index=False))
+        # ── Vehicle / propellant selection summary ───────────────────────────────
+        print(f"\n{'='*95}")
+        print("  🚀  WINNING VEHICLE × PROPELLANT COMBINATIONS")
+        print(f"{'='*95}")
+        if "vehicle" in catalog.columns and "propellant" in catalog.columns:
+            combo = (
+                catalog.groupby(["vehicle", "propellant"])
+                       .size().reset_index(name="n_asteroids")
+                       .sort_values("n_asteroids", ascending=False)
+            )
+            print(combo.head(15).to_string(index=False))
 
-    # ── Cost-component diagnostic ────────────────────────────────────────────
-    # Average dollar breakdown — tells the user WHERE the money is going.
-    # If launch dominates → consider a cheaper vehicle; if NRE/hardware
-    # dominates → multi-mission amortisation will help; if WACC dominates →
-    # shorter mission duration is the lever.  Shows breakdown for viable
-    # missions when there are any, else for all evaluated rows so the user
-    # can still diagnose what would need to change to become profitable.
-    cost_cols = [c for c in catalog.columns if c.endswith("_cost_usd")]
-    viable_df = catalog[catalog["viable"]]
-    diag_df, label = (viable_df, "viable missions") if not viable_df.empty else (catalog, "ALL evaluated (no viable mission yet — try cheaper hardware / multi-mission NRE / Starship)")
-    print(f"\n{'='*95}")
-    print(f"  💵  AVERAGE COST BREAKDOWN  ({label}, USD)")
-    print(f"{'='*95}")
-    if cost_cols and not diag_df.empty:
-        means = diag_df[cost_cols].mean().sort_values(ascending=False)
-        bar_scale = means.max() / 50 if means.max() > 0 else 1
-        for col, val in means.items():
-            bar = "█" * max(1, int(val / bar_scale))
-            cat = col.replace("_cost_usd", "").replace("_", " ")
-            print(f"  {cat:25s} {bar:<52s}  ${val:>15,.0f}")
+        # ── Cost-component diagnostic ────────────────────────────────────────────
+        # Average dollar breakdown — tells the user WHERE the money is going.
+        # If launch dominates → consider a cheaper vehicle; if NRE/hardware
+        # dominates → multi-mission amortisation will help; if WACC dominates →
+        # shorter mission duration is the lever.  Shows breakdown for viable
+        # missions when there are any, else for all evaluated rows so the user
+        # can still diagnose what would need to change to become profitable.
+        cost_cols = [c for c in catalog.columns if c.endswith("_cost_usd")]
+        viable_df = catalog[catalog["viable"]]
+        diag_df, label = (viable_df, "viable missions") if not viable_df.empty else (catalog, "ALL evaluated (no viable mission yet — try cheaper hardware / multi-mission NRE / Starship)")
+        print(f"\n{'='*95}")
+        print(f"  💵  AVERAGE COST BREAKDOWN  ({label}, USD)")
+        print(f"{'='*95}")
+        if cost_cols and not diag_df.empty:
+            means = diag_df[cost_cols].mean().sort_values(ascending=False)
+            bar_scale = means.max() / 50 if means.max() > 0 else 1
+            for col, val in means.items():
+                bar = "█" * max(1, int(val / bar_scale))
+                cat = col.replace("_cost_usd", "").replace("_", " ")
+                print(f"  {cat:25s} {bar:<52s}  ${val:>15,.0f}")

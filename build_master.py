@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Combiner script — produces Master(1.4.0).py from the four module files.
+"""Build script — assembles modules/*.py into the single-file master.py.
 
-This script is a one-shot build tool, NOT part of the pipeline.  It performs
-surgical edits to each module so they coexist in one file without name
-collisions:
+This is a build tool, NOT part of the pipeline.  It performs surgical edits
+to each module so they coexist in one file without name collisions:
 
   • Strip each module's top-of-file docstring (one master docstring will
     cover everything).
-  • Strip each module's auto-install subprocess block (master has its own
-    consolidated installer at the top).
+  • Strip each module's auto-install block (master has its own consolidated
+    installer, including the UTF-8 console fix, at the top).
   • Strip each module's `RUN & PREVIEW` block at the bottom (the master
     orchestrator drives execution instead).
   • Rename each module's `CONFIG` global to a unique name
@@ -17,17 +16,20 @@ collisions:
   • Rename function-name collisions between modules (merge_sources,
     validate, build_catalog).
 
-Run once via:  py .combine_master.py
+Paths are resolved relative to this file, so the repo can live anywhere.
+
+Run via:  python build_master.py
 """
 import re
 import os
 
-PROJECT  = r"G:/My Drive/Profitability Pipeline"
-M1_PATH  = os.path.join(PROJECT, "profitability_pipeline(1.0.5).py")
-M2_PATH  = os.path.join(PROJECT, "MineralValue(1.1.3).py")
-M3_PATH  = os.path.join(PROJECT, "TransportationData(1.2.4).py")
-M4_PATH  = os.path.join(PROJECT, "CalcPipeline(1.3.5).py")
-OUT_PATH = os.path.join(PROJECT, "Master(1.4.2).py")
+HERE     = os.path.dirname(os.path.abspath(__file__))
+MODULES  = os.path.join(HERE, "modules")
+M1_PATH  = os.path.join(MODULES, "catalog.py")
+M2_PATH  = os.path.join(MODULES, "mineral_value.py")
+M3_PATH  = os.path.join(MODULES, "transportation.py")
+M4_PATH  = os.path.join(MODULES, "calc.py")
+OUT_PATH = os.path.join(HERE, "master.py")
 
 
 def read(path):
@@ -57,8 +59,8 @@ def strip_top_docstring(content):
 
 
 def strip_install_block(content):
-    """Remove the auto-install subprocess block.
-    The block always ends with the print('All packages present') line."""
+    """Remove the auto-install block (which also carries the per-module UTF-8
+    console fix).  The block always ends with the 'All packages present' line."""
     return re.sub(
         r'# ─+\n# INSTALLATION\n# ─+\n.*?print\("✅  All packages present"\)\n',
         '', content, count=1, flags=re.DOTALL
@@ -66,7 +68,11 @@ def strip_install_block(content):
 
 
 def strip_run_preview_block(content):
-    """Remove everything from the `RUN & PREVIEW` section to end of file."""
+    """Remove everything from the `RUN & PREVIEW` section to end of file.
+
+    In the modules that region is wrapped in `if __name__ == "__main__":` so
+    the module stays importable; master.py gets the orchestrator instead.
+    """
     pattern = re.compile(r'\n# ─+\n# RUN [^\n]*\n# ─+.*', flags=re.DOTALL)
     return pattern.sub('\n', content)
 
@@ -76,6 +82,12 @@ def word_replace(content, old, new):
     return re.sub(r'\b' + re.escape(old) + r'\b', new, content)
 
 
+def check(condition, message):
+    """Fail the build loudly rather than emitting a silently-wrong master.py."""
+    if not condition:
+        raise SystemExit(f"BUILD FAILED: {message}")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # READ + PROCESS EACH MODULE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -83,6 +95,11 @@ m1 = read(M1_PATH)
 m2 = read(M2_PATH)
 m3 = read(M3_PATH)
 m4 = read(M4_PATH)
+
+for label, before in (("catalog", m1), ("mineral_value", m2),
+                      ("transportation", m3), ("calc", m4)):
+    check("# INSTALLATION" in before, f"{label}: no INSTALLATION block to strip")
+    check("# RUN & PREVIEW" in before, f"{label}: no RUN & PREVIEW block to strip")
 
 # Strip docstrings, install blocks, auto-run blocks
 m1 = strip_top_docstring(m1)
@@ -100,6 +117,12 @@ m3 = strip_run_preview_block(m3)
 m4 = strip_top_docstring(m4)
 m4 = strip_install_block(m4)
 m4 = strip_run_preview_block(m4)
+
+for label, after in (("catalog", m1), ("mineral_value", m2),
+                     ("transportation", m3), ("calc", m4)):
+    check("# INSTALLATION" not in after, f"{label}: INSTALLATION block survived")
+    check("# RUN & PREVIEW" not in after, f"{label}: RUN & PREVIEW block survived")
+    check("__main__" not in after, f"{label}: __main__ guard leaked into master")
 
 # ── Rename per-module globals + functions to avoid collisions ────────────────
 # Module 1: CONFIG → CATALOG_CONFIG, build_catalog → build_asteroid_catalog
@@ -125,31 +148,29 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # ─────────────────────────────────────────────────────────────────────────────
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.4.1)
+"""Master Asteroid Profitability Pipeline (1.4.3)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom — the orchestrator at the bottom executes everything.
 
-    Stage 1  →  Asteroid Catalog        (Module 1, profitability_pipeline 1.0.5)
+    Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.0.6)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
-                (Asterank removed in module v1.0.5)
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
-    Stage 2  →  Mineral Value Catalog   (Module 2, MineralValue 1.1.3)
+    Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.1.4)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
-    Stage 3  →  Transportation Data     (Module 3, TransportationData 1.2.4)
+    Stage 3  →  Transportation Data     (modules/transportation.py 1.2.5)
                 Launch vehicles + propellants + Δv segments + ops costs
                 (UNCREWED autonomous mining — no crew costs)
-    Stage 4  →  Profitability Calc      (Module 4, CalcPipeline 1.3.5)
+    Stage 4  →  Profitability Calc      (modules/calc.py 1.3.6)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2×, V-type 0.2×)
-                (Asterank Δv override removed in module v1.3.5)
 
 Mission profile: UNCREWED autonomous mining spacecraft throughout (no
 crew costs, no life-support overhead).
 
-Output tree (under MASTER_CONFIG.output_dir, default /content/asteroid_pipeline):
+Output tree (under MASTER_CONFIG.output_dir):
     asteroid_catalog.csv               ← Stage 1 (~30-40 MB at 50k rows)
     rejected_entries.csv               ← Stage 1 (validation rejects)
     mineral_value_catalog.csv          ← Stage 2
@@ -161,6 +182,10 @@ Output tree (under MASTER_CONFIG.output_dir, default /content/asteroid_pipeline)
         transportation_summary.csv     ← Stage 3 (vehicle × prop × segment)
     profitability_catalog.csv          ← Stage 4 (the headline output)
 
+The output directory defaults to /content/asteroid_pipeline on Colab and
+./asteroid_pipeline everywhere else; override with the environment variable
+ASTEROID_PIPELINE_OUTPUT_DIR or by setting MASTER_CONFIG.output_dir.
+
 Tuning:
     MASTER_CONFIG sits at the bottom of the master config section.  Edit:
         MASTER_CONFIG.output_dir                    (where everything lands)
@@ -170,9 +195,22 @@ Tuning:
         MASTER_CONFIG.calc.eval_row_cap             (limit Stage 4 evaluations)
     Or set any sub-config field directly before run_full_pipeline() fires.
 
-This file was machine-assembled from the four source modules by
-.combine_master.py — to regenerate, re-run that script.
+GENERATED FILE — do not edit by hand.  Machine-assembled from modules/*.py by
+build_master.py; edit the modules and re-run that script.
 """
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONSOLE ENCODING
+# ─────────────────────────────────────────────────────────────────────────────
+# Windows consoles default to cp1252, which cannot encode the emoji used in
+# this file's progress output.  Must happen before the first print().
+
+import sys as _sys
+for _stream in (_sys.stdout, _sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSOLIDATED INSTALLATION
@@ -181,11 +219,9 @@ This file was machine-assembled from the four source modules by
 # import time; safe to re-run.
 
 import subprocess as _subprocess
-import sys as _sys
 
 _MASTER_REQUIRED = [
-    "requests", "pandas", "numpy", "yfinance",
-    "astropy", "astroquery", "tqdm", "pyarrow",
+    "requests", "pandas", "numpy", "yfinance", "tqdm", "pyarrow",
 ]
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -228,7 +264,7 @@ class MasterConfig:
         MASTER_CONFIG.catalog.jpl_limit = 10_000
         MASTER_CONFIG.calc.use_isru_return_propellant = True
     """
-    output_dir: str = "/content/asteroid_pipeline"
+    output_dir: str = _DEFAULT_OUTPUT_DIR
 
     @property
     def catalog(self):   return CATALOG_CONFIG
@@ -285,7 +321,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.4.2")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.4.3")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
@@ -341,12 +377,12 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # AUTO-RUN
 # ─────────────────────────────────────────────────────────────────────────────
-# Default invocation — Colab / Jupyter / `python Master(1.4.0).py`.
-# To skip the auto-run (e.g. importing this file for its functions), set
-#     MASTER_AUTORUN = False
-# before importing, or comment out the call below.
+# Runs when executed as a script (`python master.py`) or pasted into a Colab /
+# Jupyter cell — both give __name__ == "__main__".  Importing this file for its
+# functions is side-effect free.  Force either way by setting MASTER_AUTORUN
+# before the file executes.
 
-MASTER_AUTORUN = globals().get("MASTER_AUTORUN", True)
+MASTER_AUTORUN = globals().get("MASTER_AUTORUN", __name__ == "__main__")
 if MASTER_AUTORUN:
     results = run_full_pipeline(MASTER_CONFIG)
 '''
@@ -364,7 +400,7 @@ def section_banner(name):
 # ─────────────────────────────────────────────────────────────────────────────
 # WRITE OUTPUT
 # ─────────────────────────────────────────────────────────────────────────────
-with open(OUT_PATH, "w", encoding="utf-8") as f:
+with open(OUT_PATH, "w", encoding="utf-8", newline="") as f:
     f.write(MASTER_HEADER)
     f.write(section_banner("MODULE 1 — ASTEROID CATALOG BUILDER"))
     f.write(m1)
@@ -376,10 +412,16 @@ with open(OUT_PATH, "w", encoding="utf-8") as f:
     f.write(m4)
     f.write(MASTER_ORCHESTRATOR)
 
-# Quick report
+# Verify the generated file is syntactically valid before declaring success.
+import py_compile
+_check = os.path.join(HERE, ".master_check.pyc")
+py_compile.compile(OUT_PATH, doraise=True, cfile=_check)
+os.remove(_check)
+
 size = os.path.getsize(OUT_PATH)
 with open(OUT_PATH, encoding="utf-8") as f:
     lines = sum(1 for _ in f)
 print(f"Wrote: {OUT_PATH}")
 print(f"  size : {size:>10,} bytes")
 print(f"  lines: {lines:>10,}")
+print("  syntax: OK")
