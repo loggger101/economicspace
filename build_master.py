@@ -100,6 +100,8 @@ for label, before in (("catalog", m1), ("mineral_value", m2),
                       ("transportation", m3), ("calc", m4)):
     check("# INSTALLATION" in before, f"{label}: no INSTALLATION block to strip")
     check("# RUN & PREVIEW" in before, f"{label}: no RUN & PREVIEW block to strip")
+    check(before.startswith('# -*- coding'),
+          f"{label}: no leading coding line, so the docstring strip cannot anchor")
 
 # Strip docstrings, install blocks, auto-run blocks
 m1 = strip_top_docstring(m1)
@@ -123,6 +125,11 @@ for label, after in (("catalog", m1), ("mineral_value", m2),
     check("# INSTALLATION" not in after, f"{label}: INSTALLATION block survived")
     check("# RUN & PREVIEW" not in after, f"{label}: RUN & PREVIEW block survived")
     check("__main__" not in after, f"{label}: __main__ guard leaked into master")
+    # The docstring strip is anchored to the coding line; if it silently
+    # no-opped, the module's own docstring becomes a bare string expression
+    # partway down master.py and its title contradicts the master's.
+    check(not after.lstrip().startswith('"""'),
+          f"{label}: module docstring survived the strip")
 
 # ── Rename per-module globals + functions to avoid collisions ────────────────
 # Module 1: CONFIG → CATALOG_CONFIG, build_catalog → build_asteroid_catalog
