@@ -105,9 +105,29 @@ nothing could open it) and is not a duplicate of any `.py`: it is the only
 surviving copy of Module 1 v1.0.3, Module 2 v1.1.0, Module 3 v1.2.0 and
 Module 4 v1.3.2.
 
-## Note on Google Drive
+## Note on Google Drive — the repo lives outside it
 
-This working copy lives in a synced Drive folder. Drive syncing a `.git`
-directory can interleave writes with git's own and corrupt objects. If the
-repo ever reports a broken object, prefer a clone outside Drive as the working
-copy, or push to a remote so history exists somewhere Drive is not managing.
+The working files are in a synced Drive folder, but the git repository is not.
+`.git` here is a one-line pointer file, not a directory:
+
+```
+gitdir: C:/Users/Owner/repos/profitability-pipeline.git
+```
+
+Git commands work normally from this folder — nothing to remember day to day.
+
+This is deliberate. Drive seeds a `desktop.ini` into every folder it syncs, and
+within seconds of `git init` it had written 41 of them inside `.git`, including
+`refs/heads/` and `refs/tags/`, which git reads as refs (`warning: ignoring
+broken ref refs/tags/desktop.ini`). Worse, a sync landing mid-write on a loose
+object can corrupt the repository. Moving the git directory to local disk stops
+Drive touching git internals at all.
+
+Consequences worth knowing:
+
+- **History is on this machine only.** Drive backs up your working files, not
+  the repo. Push to a remote if you want history backed up too.
+- **On another machine the pointer path won't resolve.** Re-point it by editing
+  the `.git` file, or clone from a remote instead.
+- Moving the repo: edit the path in `.git`, and update `core.worktree` in
+  `C:/Users/Owner/repos/profitability-pipeline.git/config`.
