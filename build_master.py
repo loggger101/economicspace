@@ -132,9 +132,19 @@ for label, after in (("catalog", m1), ("mineral_value", m2),
           f"{label}: module docstring survived the strip")
 
 # ── Rename per-module globals + functions to avoid collisions ────────────────
-# Module 1: CONFIG → CATALOG_CONFIG, build_catalog → build_asteroid_catalog
+# Module 1: CONFIG → CATALOG_CONFIG, build_catalog → build_asteroid_catalog,
+#           lookup_asteroid → lookup_asteroid_catalog
+# Modules 1 and 4 both define lookup_asteroid, and they are not the same
+# function: Module 1's searches the Stage-1 asteroid catalog, Module 4's
+# searches the Stage-4 profitability catalog.  Concatenated, Module 4's wins
+# and Module 1's is unreachable — while both modules' help text still tells
+# you to call `lookup_asteroid(catalog, ...)`.  Following Module 1's advice
+# therefore ran Module 4's function against the wrong frame.  Module 4 keeps
+# the plain name (the profitability catalog is the headline output); Module
+# 1's is renamed, and word_replace rewrites its help text to match.
 m1 = word_replace(m1, "CONFIG", "CATALOG_CONFIG")
 m1 = word_replace(m1, "build_catalog", "build_asteroid_catalog")
+m1 = word_replace(m1, "lookup_asteroid", "lookup_asteroid_catalog")
 
 # Module 2: CONFIG → MINERAL_CONFIG, merge_sources → merge_mineral_sources,
 #           validate → validate_minerals
@@ -425,6 +435,40 @@ _check = os.path.join(HERE, ".master_check.pyc")
 py_compile.compile(OUT_PATH, doraise=True, cfile=_check)
 os.remove(_check)
 
+# ── Shadowed top-level names ─────────────────────────────────────────────────
+# The renames above are maintained by hand, so a collision introduced by a
+# module edit lands silently: Python just lets the last definition win, and
+# the master quietly runs the wrong function.  Syntax-checking cannot see it.
+# Parse what we actually wrote and report.
+#
+# Some duplication is by design — each module is standalone-runnable, so the
+# ones listed here are expected and identical in every copy.  Anything else
+# is a real collision.
+import ast as _ast
+from collections import defaultdict as _defaultdict
+
+_EXPECTED_DUPES = {
+    # every module resolves its own default output dir when run alone
+    "_default_output_dir", "_DEFAULT_OUTPUT_DIR",
+    # standard gravity: Module 3 defines it, Module 4 repeats it verbatim
+    "G0_M_S2",
+}
+
+with open(OUT_PATH, encoding="utf-8") as f:
+    _built = f.read()
+
+_top = _defaultdict(list)
+for _node in _ast.parse(_built).body:
+    if isinstance(_node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
+        _top[_node.name].append(_node.lineno)
+    elif isinstance(_node, _ast.Assign):
+        for _t in _node.targets:
+            if isinstance(_t, _ast.Name):
+                _top[_t.id].append(_node.lineno)
+
+_collisions = {k: v for k, v in _top.items()
+               if len(v) > 1 and k not in _EXPECTED_DUPES}
+
 size = os.path.getsize(OUT_PATH)
 with open(OUT_PATH, encoding="utf-8") as f:
     lines = sum(1 for _ in f)
@@ -432,3 +476,13 @@ print(f"Wrote: {OUT_PATH}")
 print(f"  size : {size:>10,} bytes")
 print(f"  lines: {lines:>10,}")
 print("  syntax: OK")
+
+if _collisions:
+    print(f"  ⚠️   {len(_collisions)} shadowed top-level name(s) — the LAST "
+          f"definition wins at runtime:")
+    for _name, _linenos in sorted(_collisions.items()):
+        print(f"        {_name}  defined at lines {_linenos}")
+    print("        → add a word_replace() rename above, or list the name in "
+          "_EXPECTED_DUPES if the duplication is deliberate.")
+else:
+    print("  names : no unexpected shadowed definitions")

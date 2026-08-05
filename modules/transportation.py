@@ -164,11 +164,11 @@ class TransportConfig:
     # ─── UNIT INVARIANT ──────────────────────────────────────────────────────
     # All monetary values in this pipeline are USD.  All physical quantities
     # use SI (kg, m, s, m/s).  Volumes in litres (not m³) because that is how
-    # propellant tanks are quoted in the trade.  Single source of truth.
-    CURRENCY:   str = "USD"
-    MASS_UNIT:  str = "kg"
-    DV_UNIT:    str = "m/s"
-    TIME_UNIT:  str = "yr"
+    # propellant tanks are quoted in the trade.  Enforced by validate() and
+    # carried in each output column's name (`_usd_per_kg`, `_m_per_s`, …)
+    # rather than by config fields — CURRENCY / MASS_UNIT / DV_UNIT /
+    # TIME_UNIT constants lived here but nothing ever read them, so they
+    # documented an invariant they did not actually enforce.
 
     # ─── ISRU (In-Situ Resource Utilization) ─────────────────────────────────
     # If True, the return-leg propellant is assumed to be manufactured from
