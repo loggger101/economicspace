@@ -1,0 +1,29 @@
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ── Google Drive / Windows shell metadata ────────────────────────────────────
+# Drive writes these into every synced folder; they are machine-local.
+desktop.ini
+Thumbs.db
+.DS_Store
+
+# ── Claude Code local settings ───────────────────────────────────────────────
+# Per-machine permission grants — not shared state.
+.claude/settings.local.json
+
+# ── Pipeline outputs ─────────────────────────────────────────────────────────
+# Every stage writes CSVs to MASTER_CONFIG.output_dir (default
+# /content/asteroid_pipeline, outside the repo).  These patterns catch the
+# case where output_dir is pointed at the repo itself.
+asteroid_pipeline/
+transportation/
+_cache/
+*.csv
+*.parquet
+
+# Stage 1 caches the ~500 MB SsODNet parquet; never commit it.
+ssoBFT-latest_Asteroid.parquet*

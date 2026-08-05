@@ -1,0 +1,13 @@
+# The pipeline sources are LF on disk and are pasted into Colab / Jupyter,
+# which expect LF.  Pin it so a checkout on Windows (where core.autocrlf is
+# often true) does not rewrite every file to CRLF.
+*.py    text eol=lf
+*.ipynb text eol=lf
+*.md    text eol=lf
+.gitignore    text eol=lf
+.gitattributes text eol=lf
+
+# Machine-generated: one 6,200-line file assembled by .combine_master.py.
+# Marking it linguist-generated keeps it out of diff noise on hosts that
+# understand the attribute.
+Master*.py linguist-generated=true
