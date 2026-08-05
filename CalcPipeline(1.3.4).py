@@ -145,10 +145,7 @@ class CalcConfig:
     max_mining_fraction:       float = 0.05
 
     # ─── Δv DEFAULTS (m/s) ───────────────────────────────────────────────────
-    # Applied uniformly to every asteroid (v1.3.5 — per-target Asterank Δv
-    # override removed alongside the Asterank source).  All missions use
-    # the Module 3 reference Δv for "average NEA" by default; edit here
-    # per-run to model a specific class.
+    # Used when an asteroid has no Asterank `delta_v_kms` field to override.
     default_dv_outbound_m_s:   float = 6_500    # avg NEA per Module 3
     default_dv_return_m_s:     float = 5_500    # propulsive return
     default_mission_duration_yr: float = 3.0
@@ -210,14 +207,6 @@ class CalcConfig:
     #           is per-mission (fly-and-die).
     #         • WACC compounding time-bucketed: upfront × (1+W)^T,
     #           ongoing × (1+W)^(T/2), end × 1.0  (was all to end).
-    # 1.3.5 — removed Asterank-dependent code (paired with Module 1 v1.0.5):
-    #         • asteroid_dv_m_s no longer reads asteroid_row["delta_v_kms"];
-    #           all missions use config.default_dv_outbound_m_s / return.
-    #         • Output dict no longer emits asterank_value_usd /
-    #           asterank_profit_usd / asterank_accessibility columns.
-    #         No behavioural change for catalogs without Asterank columns
-    #         (which is now every catalog) — v1.3.4 already fell back to
-    #         defaults when the field was absent.
     # 1.3.4 — per-asteroid PGM enrichment (paired with Module 1 v1.0.4
     #         + Module 2 v1.1.3).  Three changes:
     #         • Added RARE_METAL_ELEMENTS = {Pt, Pd, Rh, Ir, Os, Ru, Au}.
@@ -259,7 +248,7 @@ class CalcConfig:
     #         Single-mission profitability is still tough but the top of
     #         the rankings now shows realistic million-dollar gross values
     #         for water-bearing C/B-type targets.
-    pipeline_version: str = "1.3.5"
+    pipeline_version: str = "1.3.4"
 
 
 CONFIG = CalcConfig()
@@ -532,20 +521,24 @@ def asteroid_bulk_value_usd_per_kg(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Δv RESOLVER
+# Δv PER-ASTEROID OVERRIDE
 # ─────────────────────────────────────────────────────────────────────────────
-# Returns (Δv_outbound, Δv_return) for an asteroid using the Module 3
-# reference defaults from CalcConfig.  All asteroids get the same Δv —
-# the per-target Asterank override was removed in v1.3.5.  If you want
-# per-asteroid Δv accuracy in future, derive it from Module 1's orbital
-# elements (semi_major_axis_au, eccentricity, inclination_deg) using a
-# Shoemaker-Helin or Tisserand-parameter estimator, rather than a hosted
-# economic-model service.
+# Module 1 carries Asterank's `delta_v_kms` for many asteroids — a far better
+# per-target estimate than Module 3's broad "avg NEA = 6,500 m/s" default.
+# Use it when available (km/s → m/s); return defaults otherwise.
 
 def asteroid_dv_m_s(asteroid_row: pd.Series, config: CalcConfig) -> Tuple[float, float]:
     """Return (Δv_outbound, Δv_return) in m/s for one asteroid."""
-    dv_out             = config.default_dv_outbound_m_s
-    dv_ret_propulsive  = config.default_dv_return_m_s
+    asterank_dv_kms = asteroid_row.get("delta_v_kms")
+    if asterank_dv_kms is not None and not pd.isna(asterank_dv_kms):
+        dv_out = float(asterank_dv_kms) * 1000.0
+        # Return Δv is asymmetric to outbound — typical sample-return missions
+        # see ~85% of outbound on the return leg (matched Earth-arrival geometry,
+        # no need to circularise at asteroid).
+        dv_ret_propulsive = dv_out * 0.85
+    else:
+        dv_out             = config.default_dv_outbound_m_s
+        dv_ret_propulsive  = config.default_dv_return_m_s
 
     if config.use_aerocapture_return:
         dv_ret = max(500.0, dv_ret_propulsive - config.aerocapture_dv_savings_m_s)
@@ -1117,6 +1110,10 @@ def evaluate_asteroid(
         "comp_carbon_fraction":     asteroid_row.get("comp_carbon_fraction"),
         "comp_ice_fraction":        asteroid_row.get("comp_ice_fraction"),
         "comp_pgm_enrichment":      asteroid_row.get("comp_pgm_enrichment"),
+        # Asterank cross-check (if Module 1's catalog carried it)
+        "asterank_value_usd":       asteroid_row.get("estimated_value_usd"),
+        "asterank_profit_usd":      asteroid_row.get("estimated_profit_usd"),
+        "asterank_accessibility":   asteroid_row.get("accessibility_score"),
     })
 
     return best

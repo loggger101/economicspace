@@ -13,6 +13,8 @@ Original file is located at
 #
 #  Active sources:
 #    • NASA JPL Small-Body Database (SBDB)  — primary backbone (orbital + phys)
+#    • Asterank (asterank.com)              — orbital + physical + economics
+#                                             (mass, Δv, value, accessibility)
 #    • MP3C (Observatoire Côte d'Azur)      — physical-properties compilation;
 #                                             may be DNS-blocked from some
 #                                             Colab runtimes (returns empty
@@ -117,6 +119,7 @@ class CatalogConfig:
     # source is silently tolerated by the pipeline; you don't need to flip the
     # toggle just because a host is down.
     use_jpl:      bool = True   # NASA JPL Small-Body Database     (orbital + physical)
+    use_asterank: bool = True   # Asterank.com                      (adds mass, Δv, value)
     use_mp3c:     bool = True   # MP3C @ Observatoire Côte d'Azur   (physical compilation)
     use_ssodnet:  bool = True   # SsODNet ssoBFT (IMCCE)            (mass, density, taxonomy, …)
     use_neowise:  bool = True   # NEOWISE V2.0 via IRSA TAP         (IR diameters + albedos)
@@ -174,15 +177,7 @@ class CatalogConfig:
     #         Os, Rh, Au) portion of the metal-fraction value.  Differentiated
     #         core fragments (M / Xe = 2.0×), basaltic crust (V = 0.2×), mantle
     #         fragments (A / R / O = 0.5×).  Consumed by Module 4 v1.3.4.
-    # 1.0.5 — removed Asterank source (asterank.com/api).  Dropped:
-    #         • fetch_asterank() function + _ASTERANK_* constants
-    #         • use_asterank toggle from CatalogConfig
-    #         • "Asterank" entry from build_catalog's sources dict
-    #         • Asterank-only output columns (provisional_des, delta_v_kms,
-    #           estimated_value_usd, estimated_profit_usd, accessibility_score,
-    #           source_asterank).  Module 4 v1.3.5+ no longer uses these.
-    #         Active sources reduced to: JPL SBDB, SsODNet, NEOWISE, MP3C.
-    pipeline_version: str = "1.0.5"
+    pipeline_version: str = "1.0.4"
 
 
 # Instantiate and create the output dir.  Edit CONFIG values above this line
@@ -214,7 +209,7 @@ os.makedirs(_resolve_cache_dir(CONFIG), exist_ok=True)
 
 print(f"✅  Configuration loaded — output dir: {CONFIG.output_dir}")
 print(f"    Active sources  : "
-      f"{', '.join(s for s, on in (('JPL', CONFIG.use_jpl), ('MP3C', CONFIG.use_mp3c), ('SsODNet', CONFIG.use_ssodnet), ('NEOWISE', CONFIG.use_neowise)) if on)}")
+      f"{', '.join(s for s, on in (('JPL', CONFIG.use_jpl), ('Asterank', CONFIG.use_asterank), ('MP3C', CONFIG.use_mp3c), ('SsODNet', CONFIG.use_ssodnet), ('NEOWISE', CONFIG.use_neowise)) if on)}")
 print(f"    Fetch limit     : {CONFIG.jpl_limit:,} asteroids per source")
 print(f"    Min diameter    : {CONFIG.min_diameter_km} km")
 print(f"    Strict taxonomy : {CONFIG.require_spectral_type}")
@@ -527,7 +522,7 @@ TAXONOMY_COMPOSITION: Dict[str, dict] = {
     # ── Tholen-only types (no direct Bus-DeMeo equivalent) ────────────────────
     # The Tholen (1984) taxonomy uses a few letters that Bus-DeMeo (2009)
     # subsequently absorbed into the X- and C-complex.  We keep them as
-    # first-class entries here so the enrichment step can use a JPL
+    # first-class entries here so the enrichment step can use a JPL/Asterank
     # `spec_T` value directly when `spec_B` is empty.
     "M": {
         "group": "X-complex",
@@ -908,8 +903,8 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
 #   • Numbered asteroids → integer string, e.g. "1" (Ceres), "433" (Eros)
 #   • Unnumbered         → provisional designation, e.g. "2024 BX1", "1999 KW4"
 #
-# Other sources spell the same identifier differently — VizieR uses
-# "(1) Ceres", some catalogs render "1 Ceres", others zero-pad to "00001".
+# Other sources spell the same identifier differently — Asterank uses
+# "1 Ceres", VizieR uses "(1) Ceres", some catalogs zero-pad to "00001".
 # This helper collapses every common surface form to the JPL form so the
 # merge key is consistent across every source.
 #
@@ -972,6 +967,220 @@ def _extract_canonical_designation(s: pd.Series) -> pd.Series:
     return result.replace(
         {"": pd.NA, "nan": pd.NA, "NaN": pd.NA, "None": pd.NA, "none": pd.NA}
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ASTERANK FETCHER
+# ─────────────────────────────────────────────────────────────────────────────
+# Asterank (asterank.com/api) — JSON REST API providing JPL-orbit + WISE-physical
+# data per row, plus four unique-to-Asterank derived fields:
+#   • mass            — bulk mass estimate (kg)
+#   • dv              — Δv needed to rendezvous from LEO (km/s)
+#   • price           — Asterank's USD economic-value model
+#   • closeness       — accessibility score (0-1)
+# Query syntax: `?query=<json-mongodb-style>&limit=N`.  Empty {} returns all.
+
+_ASTERANK_URL    = "https://www.asterank.com/api/asterank"
+_ASTERANK_RENAME = {
+    # identity
+    "full_name":     "designation_raw",   # like "1 Ceres" — we'll normalise below
+    "prov_des":      "provisional_des",
+    # `name` passes through verbatim
+    "spkid":         "spk_id",
+    # orbital
+    "a":             "semi_major_axis_au",
+    "e":             "eccentricity",
+    "i":             "inclination_deg",
+    "om":            "longitude_asc_node_deg",
+    "w":             "arg_perihelion_deg",
+    "ma":            "mean_anomaly_deg",
+    "per_y":         "orbital_period_yr",
+    "n":             "mean_motion_deg_day",
+    "q":             "perihelion_au",
+    "ad":            "aphelion_au",
+    "moid":          "moid_au",
+    # physical (`albedo` passes through verbatim)
+    "H":             "absolute_magnitude_h",
+    "diameter":      "diameter_km",
+    "rot_per":       "rotation_period_h",
+    "spec_T":        "spectral_type_tholen",
+    "spec_B":        "spectral_type",
+    "mass":          "estimated_mass_kg",
+    # economics (Asterank-specific)
+    "dv":            "delta_v_kms",
+    "price":         "estimated_value_usd",
+    "closeness":     "accessibility_score",
+    "profit":        "estimated_profit_usd",
+    # flags
+    "neo":           "is_neo",
+    "pha":           "is_pha",
+}
+_ASTERANK_NUMERIC = [
+    "semi_major_axis_au", "eccentricity", "inclination_deg",
+    "longitude_asc_node_deg", "arg_perihelion_deg", "mean_anomaly_deg",
+    "orbital_period_yr", "mean_motion_deg_day", "perihelion_au",
+    "aphelion_au", "moid_au", "absolute_magnitude_h", "diameter_km",
+    "rotation_period_h", "albedo", "estimated_mass_kg",
+    "delta_v_kms", "estimated_value_usd", "accessibility_score",
+    "estimated_profit_usd",
+]
+
+
+# Asterank's server hard-caps every response at 1,000 rows regardless of the
+# `limit` query parameter.  To honor config.jpl_limit (potentially much
+# larger) we paginate via a `spkid` cursor: each call asks for records whose
+# spkid is strictly greater than the highest seen so far.
+_ASTERANK_BATCH_CAP = 1000
+
+
+def fetch_asterank(config: CatalogConfig) -> pd.DataFrame:
+    """
+    Fetch from Asterank's REST API with cursor-based pagination.
+
+    Asterank caps each response at 1,000 rows server-side.  We work around
+    this by issuing repeated queries with a MongoDB `{"spkid": {"$gt": N}}`
+    filter where N is the maximum spkid returned by the previous batch.
+    Pagination stops on:
+      • reaching config.jpl_limit
+      • an empty or short batch (source exhausted)
+      • a stuck cursor (no spkid in batch was higher than the previous max —
+        indicates the API isn't honoring the filter; we keep what we have)
+      • any HTTP / JSON error (returns whatever was collected so far)
+
+    Returns the combined, normalised DataFrame.  Empty on first-call failure.
+    """
+    print("\n💎  Asterank  (asterank.com/api) — paginating …")
+
+    target          = max(1, int(config.jpl_limit))
+    records: list   = []
+    last_spkid      = 0
+    batches_done    = 0
+    # Safety bound: even if the cap dropped, never issue more than this many
+    # requests.  100k records is more than the API can serve anyway.
+    max_batches     = max(2, (target // _ASTERANK_BATCH_CAP) + 5)
+
+    # Live progress bar: total = target record count, updates with each batch.
+    # tqdm.auto renders an HTML bar in Colab/Jupyter and a terminal bar elsewhere.
+    pbar = tqdm(
+        total=target,
+        desc="     Asterank",
+        unit=" records",
+        unit_scale=False,
+        leave=True,
+        mininterval=0.3,
+    )
+
+    try:
+        for batch_idx in range(max_batches):
+            if len(records) >= target:
+                break
+
+            remaining  = target - len(records)
+            batch_size = min(_ASTERANK_BATCH_CAP, remaining)
+
+            # Cursor filter — empty on the first call, "{spkid: {$gt: N}}" after
+            query_str = (
+                "{}" if last_spkid == 0
+                else json.dumps({"spkid": {"$gt": last_spkid}})
+            )
+            params = {"query": query_str, "limit": batch_size}
+
+            try:
+                r = requests.get(_ASTERANK_URL, params=params,
+                                 timeout=config.request_timeout)
+            except requests.exceptions.ConnectionError as exc:
+                tqdm.write(f"     ❌  Connection error on batch {batch_idx+1}: {str(exc)[:100]}")
+                break
+            except requests.exceptions.Timeout:
+                tqdm.write(f"     ❌  Timed out on batch {batch_idx+1} after "
+                           f"{config.request_timeout}s")
+                break
+            except Exception as exc:
+                tqdm.write(f"     ❌  {type(exc).__name__} on batch {batch_idx+1}: {exc}")
+                break
+
+            if r.status_code != 200:
+                tqdm.write(f"     ❌  HTTP {r.status_code} on batch {batch_idx+1}")
+                break
+
+            try:
+                batch = r.json()
+            except Exception as exc:
+                tqdm.write(f"     ❌  JSON parse failed on batch {batch_idx+1}: {exc}")
+                break
+
+            if not isinstance(batch, list) or len(batch) == 0:
+                break  # source exhausted
+
+            # Advance the cursor to the max spkid in this batch
+            try:
+                new_last = max(
+                    int(rec.get("spkid", 0) or 0)
+                    for rec in batch if rec.get("spkid")
+                )
+            except Exception:
+                new_last = last_spkid
+
+            if new_last <= last_spkid:
+                # Server isn't honoring our filter — pagination won't work past
+                # this point.  Keep the batch we just got (if it's the first one)
+                # and stop.
+                tqdm.write(f"     ⚠️  Cursor stuck at spkid={last_spkid}; "
+                           f"Asterank pagination not advancing — stopping after batch {batch_idx+1}")
+                if last_spkid == 0:
+                    records.extend(batch)
+                    batches_done += 1
+                    pbar.update(len(batch))
+                break
+
+            records.extend(batch)
+            last_spkid    = new_last
+            batches_done += 1
+            pbar.update(len(batch))
+            pbar.set_postfix(
+                batch=f"{batches_done}",
+                cursor=f"spkid>{last_spkid}",
+                refresh=False,
+            )
+
+            if len(batch) < batch_size:
+                break  # short batch — source has no more rows past this cursor
+    finally:
+        pbar.close()
+
+    if not records:
+        print(f"     ⚠️  No records retrieved from Asterank")
+        return pd.DataFrame()
+
+    df = pd.json_normalize(records)
+
+    # Rename to standard schema
+    df = df.rename(columns={k: v for k, v in _ASTERANK_RENAME.items() if k in df.columns})
+
+    # Build a JPL-compatible designation via the shared canonical extractor.
+    # Handles "1 Ceres" → "1", "(4) Vesta" → "4", and crucially keeps
+    # "2024 BX1" intact (does NOT incorrectly collapse to "2024").
+    if "designation_raw" in df.columns:
+        df["designation"] = _extract_canonical_designation(df["designation_raw"])
+        df = df.drop(columns=["designation_raw"])
+
+    # Coerce numerics
+    for col in _ASTERANK_NUMERIC:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Boolean flags (Asterank returns 0/1 ints)
+    for flag in ("is_neo", "is_pha"):
+        if flag in df.columns:
+            df[flag] = df[flag].map(
+                {1: True, 0: False, "1": True, "0": False,
+                 "Y": True, "N": False, True: True, False: False}
+            )
+
+    df["source_asterank"] = True
+    print(f"     ✅  {len(df):,} records from Asterank "
+          f"(paginated across {batches_done} batch(es) of up to {_ASTERANK_BATCH_CAP})")
+    return df
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1647,7 +1856,7 @@ def _normalise_designation_key(s: pd.Series) -> pd.Series:
 
     This is the SAME logic the fetchers run when they produce `designation`,
     so a designation produced by the JPL pdes field and one produced from
-    another catalog's variant form are guaranteed to compare equal as dedup keys.
+    Asterank's full_name are guaranteed to compare equal as dedup keys.
     """
     return _extract_canonical_designation(s).str.upper().str.strip()
 
@@ -1769,7 +1978,7 @@ def merge_sources(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
 
         # Pass every column through, INCLUDING `source_*` flags.  Every
         # fetcher tags itself with a uniquely-named flag (source_jpl,
-        # source_ssodnet, source_neowise, source_mp3c)
+        # source_ssodnet, source_neowise, source_asterank, source_mp3c)
         # so there's no collision risk; preserving them gives each row a
         # full provenance footprint after the merge.
         fill_cols = [c for c in supp.columns if c != "designation"]
@@ -1936,7 +2145,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
       2b. Where it's STILL absent, infer a coarse type from geometric albedo.
           A `spectral_type_source` column records provenance:
             • "source"  → arrived from a fetcher (JPL spec_B, SsODNet
-                          taxonomy.class, MP3C taxonomy, …)
+                          taxonomy.class, MP3C taxonomy, Asterank spec_B, …)
             • "tholen"  → filled from spectral_type_tholen (step 2a)
             • "albedo"  → inferred from geometric albedo (step 2b)
             • "unknown" → still missing after every fallback
@@ -1944,7 +2153,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
       4. Fill density_gcm3 from taxonomy estimate where no measurement exists;
          `density_measured` flag tracks provenance.
       5. Compute estimated_mass_kg, preserving any value already supplied by a
-         fetcher (SsODNet) and filling gaps with (4/3)π r³ ρ from
+         fetcher (SsODNet, Asterank) and filling gaps with (4/3)π r³ ρ from
          diameter × density; `mass_measured` flag tracks provenance.
     """
     print("\n🧪  Enriching composition data …")
@@ -1973,15 +2182,15 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
 
     # `spectral_type_source` tracks WHERE the final classification came from so
     # consumers can filter on confidence:
-    #   "source"  — supplied by a fetcher (Bus-DeMeo from JPL spec_B, or a
-    #               curated mix from SsODNet / MP3C)
+    #   "source"  — supplied by a fetcher (could be Bus-DeMeo from JPL/Asterank
+    #               spec_B, or a curated mix from SsODNet / MP3C)
     #   "tholen"  — filled from spectral_type_tholen because Bus wasn't there
     #   "albedo"  — crude inference from geometric albedo
     #   "unknown" — still missing after every fallback
     df["spectral_type_source"] = np.where(df["spectral_type"].notna(), "source", "unknown")
 
     # ── 2a. Fall back to Tholen classification where Bus-DeMeo is missing ────
-    # JPL (`spec_T`) supplies Tholen; we hold it in
+    # JPL (`spec_T`) and Asterank both supply Tholen; we hold it in
     # `spectral_type_tholen`.  Most Tholen letters (S, C, X, V, …) overlap with
     # Bus-DeMeo directly; the Tholen-only ones (M, E, P, F, G) are now in
     # TAXONOMY_COMPOSITION too, so the lookup at step 3 handles them uniformly.
@@ -2065,7 +2274,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
     print(f"     📊  Density: {n_meas:,} measured  |  {n_est:,} estimated from taxonomy")
 
     # ── 5. Compute estimated mass (kg) ────────────────────────────────────────
-    # Keep any MEASURED mass already supplied by a source (SsODNet).
+    # Keep any MEASURED mass already supplied by a source (SsODNet, Asterank).
     # `mass_measured` tracks provenance: True if the value came from a fetcher,
     # False if we derived it here from diameter × density (sphere assumption).
     if "estimated_mass_kg" in df.columns:
@@ -2126,6 +2335,7 @@ def build_catalog(config: CatalogConfig = CONFIG) -> pd.DataFrame:
         "JPL SBDB": fetch_jpl_sbdb(config) if config.use_jpl      else pd.DataFrame(),
         "SsODNet":  fetch_ssodnet(config)  if config.use_ssodnet  else pd.DataFrame(),
         "NEOWISE":  fetch_neowise(config)  if config.use_neowise  else pd.DataFrame(),
+        "Asterank": fetch_asterank(config) if config.use_asterank else pd.DataFrame(),
         "MP3C":     fetch_mp3c(config)     if config.use_mp3c     else pd.DataFrame(),
         # "<Source>":  fetch_<name>(config) if config.use_<name> else pd.DataFrame(),
     }
