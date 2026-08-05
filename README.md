@@ -140,8 +140,33 @@ Earth launch → LEO → outbound burn → asteroid rendezvous
 Earlier version-suffixed copies of every module (`Master(1.4.0).py`,
 `CalcPipeline(1.3.0).py`, the original Colab notebook, and the rest) were
 removed once the code moved into git — version history lives in commits now.
-They remain retrievable from the initial import commit:
+They remain retrievable from the import commit `84ae606`:
 
 ```bash
-git log --diff-filter=D --name-only
+git show --name-only 84ae606                              # what was imported
+git show '84ae606:CalcPipeline(1.3.0).py' > restored.py   # restore one
 ```
+
+`Profitability Pipeline(1.0.2).ipynb` is worth knowing about specifically: it
+is the original Colab notebook, and it is not a duplicate of any `.py` here.
+It is the only surviving copy of Module 1 v1.0.3, Module 2 v1.1.0, Module 3
+v1.2.0 and Module 4 v1.3.2, which were overwritten in place before any of
+this was under version control.
+
+```bash
+git show '84ae606:Profitability Pipeline(1.0.2).ipynb' > notebook.ipynb
+```
+
+### The parallel-repo divergence
+
+This project was briefly developed in two places at once, and both copies
+shipped different code under the *same* `pipeline_version` — `1.0.6`, `1.1.4`
+and `1.3.6` each meant two different things depending on which copy you read.
+That is precisely the failure `pipeline_version` exists to prevent, since it
+is stamped into every output CSV.
+
+The two were reconciled in `5ecafa1`, and the merged modules were renumbered
+(catalog `1.0.7`, mineral_value `1.1.5`, calc `1.3.7`, master `1.4.4`) because
+they match neither parent. Any CSV produced before that merge carries an
+ambiguous version stamp — treat `1.0.6` / `1.1.4` / `1.3.6` output as
+undated and re-run rather than trusting the number.
