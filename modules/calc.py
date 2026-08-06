@@ -235,6 +235,52 @@ class CalcConfig:
     # very little; 7 puts the optimum within a few percent.
     concentration_search_steps: int  = 7
 
+    # ─── MODELLING COMPLETENESS  (v1.7.0) ────────────────────────────────────
+    # Five things the pipeline previously got for free.  All default ON —
+    # they are corrections, not options, and each one moves numbers.  Set any
+    # to False only to isolate its effect.
+    #
+    # LOW-THRUST TRIP TIME.  Electric propulsion paid a Δv penalty but flew
+    # its burns instantly on power it did not carry.  With this on, the EP
+    # stage is sized to complete its thrusting inside `ep_target_thrust_yr`,
+    # the array and thruster mass that demands enters the rocket equation,
+    # and the thrusting time enters mission duration.  This is what stops a
+    # 3,000 s Isp thruster winning a mass cascade it could only fly over
+    # decades.
+    model_low_thrust_time:     bool  = True
+    ep_target_thrust_yr:       float = 3.0    # thrusting time the EP stage is sized for
+    # Reject any mission whose total duration exceeds this.  A 40-year
+    # round trip is not a mission, it is a bequest.
+    max_mission_duration_yr:   float = 25.0
+
+    # LAUNCH WINDOWS.  Departure needs the target and destination phased,
+    # and those alignments recur at the synodic period.  Expected wait after
+    # mining completes is half a period.  Counterintuitively this punishes
+    # NEAs hardest — their periods are near Earth's, so windows are years
+    # apart.
+    model_launch_windows:      bool  = True
+
+    # BOUND-WATER LIBERATION.  C/B/D-type "ice" is water locked in
+    # phyllosilicates; it has to be baked out at ~700 K, not scooped.  The
+    # pipeline was extracting it for free while selling it at full
+    # launch-cost-avoided.
+    model_water_liberation:    bool  = True
+
+    # LEARNING CURVE on recurring hardware.  Only NRE amortised across a
+    # fleet; the rig cost $300k/kg at unit 1 and unit 500 alike.  Wright's
+    # law at 85% is standard for aerospace serial production.  Has NO effect
+    # at nre_amortization_missions = 1, where the cumulative average is the
+    # first-unit cost by definition.
+    learning_curve_rate:       float = 0.85   # 1.0 disables
+
+    # MARKET SATURATION.  Prices were static at the point of sale, so a
+    # mission could return any quantity of platinum at spot and the
+    # "fly more missions" lever had no stopping point.  Constant-elasticity
+    # demand: P/P0 = (1 + Q/Q_market)^(-1/ε).  Precious-metal demand is
+    # inelastic (ε ≈ 0.5), so doubling world supply quarters the price.
+    model_market_saturation:   bool  = True
+    demand_elasticity:         float = 0.5
+
     # ─── PER-ASTEROID Δv  (v1.4.0) ───────────────────────────────────────────
     # When True, each asteroid's Δv is derived from its own orbital elements
     # (semi_major_axis_au, eccentricity, inclination_deg) by the patched-conic
@@ -579,7 +625,51 @@ class CalcConfig:
     #         New Δv legs on asteroid_transfer_dv_km_s: ret_lunar_surface_prop,
     #         ret_mars_surface_aero, ret_mars_surface_prop, v_inf_mars,
     #         dv_depart_for_mars.
-    pipeline_version: str = "1.6.0"
+    # 1.7.0 — MODELLING COMPLETENESS.  Five things the pipeline previously got
+    #         for free.  Unlike v1.5.0/1.6.0 these are CORRECTIONS, not new
+    #         options: they default ON and every number moves.  Paired with
+    #         Module 2 v1.5.0 and Module 3 v1.6.0.
+    #         • LOW-THRUST TRIP TIME.  Electric propulsion paid a Δv penalty
+    #           but flew its burns instantly on power it never carried.  A
+    #           thruster's power fixes its thrust, T = 2ηP/(Isp·g0), so
+    #           burning m_prop takes m_prop(Isp·g0)²/(2ηP) — high Isp buys
+    #           propellant mass at a QUADRATIC cost in time-or-power.  The EP
+    #           stage is now sized to finish inside ep_target_thrust_yr, its
+    #           array (1/r²) and thruster/PPU mass enter the rocket equation,
+    #           and the thrusting time enters mission duration.  Validated
+    #           against Dawn: 5.0-9.3 yr predicted at its 2.2-3.0 AU operating
+    #           distance against ~5.9 yr actually flown.
+    #           This was load-bearing — v1.6.0's headline Mars result was a
+    #           1,500 s Hall thruster that would have needed 48 kW and a
+    #           4-tonne array at 2.26 AU.
+    #         • LAUNCH WINDOWS.  Departure needs phasing, and alignments recur
+    #           at the synodic period, so expected wait after mining is half a
+    #           period.  Punishes NEAs hardest — a body at a = 1.05 AU has a
+    #           10-year synodic period with Earth against 1.3 years for a
+    #           main-belt object.  Δv accessibility and TIME accessibility
+    #           pull in opposite directions and only one was modelled.
+    #         • BOUND-WATER LIBERATION.  C/B/D "ice" is water in
+    #           phyllosilicates, baked out at ~700 K, not scooped: 2,500 Wh
+    #           per kg of water (Module 3).  It was being extracted free and
+    #           sold at full launch-cost-avoided.
+    #         • LEARNING CURVE.  Wright's law at 85% on the per-mission
+    #           articles (capsule/lander, power system).  The amortised mining
+    #           rig is excluded — it is one shared unit, not N built.  Exactly
+    #           1.0 at nre_amortization_missions = 1, so a single-mission run
+    #           is untouched.
+    #         • MARKET SATURATION.  P/P0 = (1 + Q/Q_market)^(-1/ε) against
+    #           Module 2's annual_market_kg.  Returning 180 t/yr of platinum
+    #           doubles world supply and quarters the price; delivering 6.6
+    #           t/yr of water to a 20 t/yr Mars base cuts it to 0.57.  Without
+    #           this the "fly more missions" lever had no stopping point.
+    #         New config: model_low_thrust_time, ep_target_thrust_yr,
+    #         max_mission_duration_yr, model_launch_windows,
+    #         model_water_liberation, learning_curve_rate,
+    #         model_market_saturation, demand_elasticity.
+    #         New output columns: is_electric, ep_power_w, ep_system_kg,
+    #         ep_thrust_yr, synodic_period_yr, launch_window_wait_yr,
+    #         water_liberated_kg, saturation_multiplier, learning_curve_factor.
+    pipeline_version: str = "1.7.0"
 
 
 CONFIG = CalcConfig()
@@ -793,6 +883,31 @@ def _mineral_table(mineral_df: pd.DataFrame) -> Dict[str, Tuple[Optional[float],
     return mapping
 
 
+_MARKET_CACHE: Tuple[Optional[pd.DataFrame], Dict[str, float]] = (None, {})
+
+
+def market_table(mineral_df: pd.DataFrame) -> Optional[Dict[str, float]]:
+    """name → annual absorbable quantity (kg/yr), memoised.
+
+    Returns None for a pre-v1.5.0 Module 2 catalog that carries no
+    `annual_market_kg` column, which switches saturation modelling off rather
+    than silently assuming an infinite market.
+    """
+    global _MARKET_CACHE
+    cached_df, mapping = _MARKET_CACHE
+    if cached_df is mineral_df:
+        return mapping or None
+    if "annual_market_kg" not in mineral_df.columns:
+        _MARKET_CACHE = (mineral_df, {})
+        return None
+    mapping = {}
+    for name, qty in zip(mineral_df["name"], mineral_df["annual_market_kg"]):
+        if pd.notna(qty):
+            mapping.setdefault(str(name), float(qty))
+    _MARKET_CACHE = (mineral_df, mapping)
+    return mapping or None
+
+
 def _mineral_price(mineral_df: pd.DataFrame, name: str) -> Optional[float]:
     """Look up `price_usd_per_kg` for a mineral / element by exact name."""
     entry = _mineral_table(mineral_df).get(name)
@@ -953,6 +1068,29 @@ def asteroid_phase_table(
     return phases
 
 
+def saturation_price_multiplier(
+    delivered_kg_per_yr: float,
+    annual_market_kg:    float,
+    elasticity:          float,
+) -> float:
+    """Price multiplier when a mission's output is material next to the market.
+
+        P / P0 = (1 + Q_new / Q_market) ^ (−1/ε)
+
+    Constant-elasticity demand.  Precious-metal demand is inelastic —
+    ε ≈ 0.5 — so doubling world supply quarters the price, which is why
+    "return a tonne of platinum" was never the business it looks like on a
+    spot-price spreadsheet.  Returns 1.0 when the market swallows the
+    quantity without noticing.
+    """
+    if annual_market_kg <= 0 or delivered_kg_per_yr <= 0 or elasticity <= 0:
+        return 1.0
+    ratio = delivered_kg_per_yr / annual_market_kg
+    if ratio <= 1e-9:
+        return 1.0
+    return (1.0 + ratio) ** (-1.0 / elasticity)
+
+
 def optimal_payload_mix(
     payload_kg: float,
     feed_kg:    float,
@@ -1084,6 +1222,109 @@ def solar_specific_power_w_per_kg(
     if not (0.1 < r < 100.0):
         return float(base_w_per_kg)
     return float(base_w_per_kg) / (r * r)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LOW-THRUST TRIP TIME  (v1.7.0)
+# ─────────────────────────────────────────────────────────────────────────────
+# Until now electric propulsion carried a Δv penalty and nothing else: it flew
+# its burns instantly and drew no power.  That is the single most flattering
+# error left in the model, and it was load-bearing — the best Mars mission in
+# v1.6.0 was a 1,500 s argon Hall thruster that would in reality have spent
+# years thrusting on megawatts it did not carry.
+#
+# The physics is not optional.  A thruster's jet power fixes its thrust:
+#
+#     T = 2·η·P / (Isp·g0)                     [P_jet = ½·ṁ·v_e², T = ṁ·v_e]
+#
+# and burning m_prop at that thrust takes
+#
+#     t = m_prop / ṁ = m_prop·(Isp·g0)² / (2·η·P)
+#
+# So high Isp buys propellant mass at a QUADRATIC cost in time-or-power.  A
+# chemical stage does its burn in minutes and this never binds; an electric
+# stage thrusts for most of the mission.
+#
+# Validated against Dawn, which is the only deep-space mission that flew this
+# regime for real: Isp 3,100 s, 425 kg of xenon, a 10 kW array at 1 AU, η 0.6.
+# Dawn worked at 2.2-3.0 AU, where 1/r² leaves it 1.1-2.1 kW, and the formula
+# gives 5.0-9.3 years of thrusting.  Dawn actually thrust for ~5.9 years of
+# its 11-year mission.  The 1/r² term is doing the work here — evaluated at
+# the 1 AU array rating instead, the same sum gives 1.0 year and is nonsense.
+
+def low_thrust_burn_time_yr(
+    m_prop_kg:  float,
+    isp_s:      float,
+    power_w:    float,
+    efficiency: float,
+) -> float:
+    """Years of continuous thrusting to expend `m_prop_kg` at `power_w`.
+
+        t = m_prop · (Isp·g0)² / (2·η·P)
+
+    Returns inf for zero power — a thruster with no supply never finishes.
+    """
+    if power_w <= 0 or m_prop_kg <= 0 or isp_s <= 0:
+        return 0.0 if m_prop_kg <= 0 else float("inf")
+    ve = isp_s * G0_M_S2
+    seconds = m_prop_kg * ve * ve / (2.0 * efficiency * power_w)
+    return seconds / (365.25 * 24.0 * 3600.0)
+
+
+def ep_power_required_w(
+    m_prop_kg:  float,
+    isp_s:      float,
+    thrust_yr:  float,
+    efficiency: float,
+) -> float:
+    """Electrical power to expend `m_prop_kg` within `thrust_yr` of thrusting.
+
+    The same relation solved for P.  This is how a real mission is sized:
+    you pick an acceptable trip time and buy the array that delivers it.
+    """
+    if thrust_yr <= 0 or m_prop_kg <= 0:
+        return 0.0
+    ve = isp_s * G0_M_S2
+    seconds = thrust_yr * 365.25 * 24.0 * 3600.0
+    return m_prop_kg * ve * ve / (2.0 * efficiency * seconds)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LAUNCH WINDOWS  (v1.7.0)
+# ─────────────────────────────────────────────────────────────────────────────
+# Every asteroid was previously assumed departable whenever the mining
+# finished.  Real transfers need the target and the destination correctly
+# phased, and those alignments recur at the SYNODIC period:
+#
+#     S = 1 / |1/T_asteroid − 1/T_destination|
+#
+# The counterintuitive part, and the reason this is worth modelling: NEAs are
+# the WORST offenders.  Their orbital periods sit close to Earth's, so the
+# phase drifts slowly and windows are years apart — a body at a = 1.13 AU
+# (T = 1.20 yr) has a 6-year synodic period with Earth.  A main-belt body at
+# 2.7 AU has one of 1.3 years.  Accessibility in Δv and accessibility in
+# TIME pull in opposite directions.
+
+def synodic_period_yr(a_asteroid_au: Optional[float], a_dest_au: float) -> float:
+    """Years between successive departure windows, capped at 10.
+
+    Bodies whose period nearly matches the destination's have a synodic
+    period tending to infinity; the cap stands in for the fact that a real
+    mission would accept a worse, non-optimal transfer rather than wait
+    forever.
+    """
+    try:
+        a = float(a_asteroid_au)
+    except (TypeError, ValueError):
+        return 1.0
+    if not (0.05 < a < 100.0) or a_dest_au <= 0:
+        return 1.0
+    t_ast  = a ** 1.5                       # Kepler, years (GM_sun units)
+    t_dest = a_dest_au ** 1.5
+    denom  = abs(1.0 / t_ast - 1.0 / t_dest)
+    if denom <= 1e-9:
+        return 10.0
+    return min(1.0 / denom, 10.0)
 
 
 def processing_power_w(
@@ -1719,6 +1960,25 @@ def max_return_payload_kg(
 _OPS_CACHE: Tuple[Optional[pd.DataFrame], Dict[str, Optional[float]]] = (None, {})
 
 
+def learning_curve_factor(n_units: int, rate: float) -> float:
+    """Cumulative-average cost multiplier for building `n_units` (Wright's law).
+
+    The nth unit costs T1·n^b with b = log₂(rate); an 85% curve means each
+    doubling of cumulative production cuts unit cost to 85%.  Standard for
+    aerospace serial production and the reason nobody prices the hundredth
+    article at the first article's cost.
+
+    Summed exactly rather than integrated — the integral approximation is
+    wrong by 30% at N = 1, which is precisely the case that has to come out
+    at exactly 1.0 so a single-mission run is unaffected.
+    """
+    n = max(1, int(n_units))
+    if n == 1 or rate >= 1.0 or rate <= 0.0:
+        return 1.0
+    b = math.log(rate) / math.log(2.0)
+    return sum(k ** b for k in range(1, n + 1)) / n
+
+
 def _ops_table(ops_df: pd.DataFrame) -> Dict[str, Optional[float]]:
     """category → value mapping for `ops_df`, built once and memoised."""
     global _OPS_CACHE
@@ -1828,12 +2088,19 @@ def mission_cost_usd(
         capsule_per_kg = _ops_value(ops_df, "Return capsule recurring cost", default=150_000.0)
     else:
         capsule_per_kg = _ops_value(ops_df, "Berthing adapter recurring cost", default=60_000.0)
-    capsule_cost            = config.return_vehicle_dry_kg * capsule_per_kg   # per-mission
+    # v1.7.0: LEARNING CURVE.  The per-mission articles — the capsule or
+    # lander, and the power system — are built N times over a programme, and
+    # the Nth costs less than the first.  The mining rig is excluded: when
+    # nre_amortization_missions > 1 it is modelled as ONE unit shared across
+    # missions, not N units built, so a curve on it would double-count.
+    # Exactly 1.0 at N = 1, so a single-mission run is untouched.
+    lc = learning_curve_factor(config.nre_amortization_missions, config.learning_curve_rate)
+    capsule_cost            = config.return_vehicle_dry_kg * capsule_per_kg * lc
     # v1.5.0: the beneficiation plant's solar array, priced per installed Watt
     # off Module 3's power-system row.  Zero unless beneficiation is on — the
     # baseline rig's own power is already implicit in its $/kg recurring rate.
     power_per_w             = _ops_value(ops_df, "Power system (solar + battery)", default=800.0)
-    power_system_cost       = max(0.0, float(processing_power_w)) * power_per_w
+    power_system_cost       = max(0.0, float(processing_power_w)) * power_per_w * lc
     hardware_cost           = mining_rig_cost + capsule_cost + power_system_cost
 
     # Mission ops × duration  (per-asteroid duration from Δv estimator)
@@ -1981,6 +2248,7 @@ def _evaluate_combo_at_ratio(
     phases:            Optional[List[Tuple[str, float, float]]] = None,
     target_ratio:      float = 1.0,
     beneficiate:       Optional[bool] = None,
+    markets:           Optional[Dict[str, float]] = None,
 ) -> Optional[Dict[str, float]]:
     """Evaluate one (vehicle × propellant) combination for one asteroid.
 
@@ -2043,47 +2311,77 @@ def _evaluate_combo_at_ratio(
     if not beneficiate:
         target_ratio = 1.0
 
+    # ── Electric propulsion sizing (v1.7.0) ──────────────────────────────────
+    # An electric stage is not a chemical stage with better Isp — it needs a
+    # power plant proportional to how fast you want the propellant burnt, and
+    # that plant is mass in the same rocket equation.  Sized to finish its
+    # thrusting inside ep_target_thrust_yr.  Module 3 tags electric
+    # propellants with dv_penalty_factor > 1.
+    is_electric = (config.model_low_thrust_time
+                   and float(propellant.get("dv_penalty_factor", 1.0) or 1.0) > 1.0)
+    ep_eff        = _ops_value(ops_df, "Electric propulsion efficiency", default=0.60)
+    ep_kg_per_kw  = _ops_value(ops_df, "Electric thruster + PPU specific mass", default=8.0)
+
     power_system_kg = 0.0
+    ep_system_kg    = 0.0
+    ep_power_watts  = 0.0
+    ep_thrust_yr    = 0.0
     processing_power_watts = 0.0
     cascade = None
-    for _ in range(6):
+    for _ in range(8):
         cascade = max_return_payload_kg(
             leo_capacity_kg = leo_cap,
             isp_s           = float(propellant["isp_vac_s"]),
             dv_out_m_s      = dv_out_m_s,
             dv_ret_m_s      = dv_ret_m_s,
-            hardware_kg     = config.mining_hardware_kg + power_system_kg,
+            hardware_kg     = config.mining_hardware_kg + power_system_kg + ep_system_kg,
             dry_return_kg   = config.return_vehicle_dry_kg,
             tps_frac        = tps_frac,
             isru_return     = config.use_isru_return_propellant,
         )
         if not cascade["viable"]:
             return None
-        if not beneficiate:
-            break
 
-        # Provisional payload for sizing purposes — the caps below refine it,
-        # but the array only needs to be sized to the right order.
-        trial_payload = min(cascade["max_payload_kg"], mineable_kg,
-                            max_payload_by_throughput_kg(config))
-        if trial_payload <= 0:
-            return None
-        trial_feed = min(trial_payload * target_ratio,
-                         max_payload_by_throughput_kg(config), mineable_kg)
-        trial_dur  = max(mining_duration_yr(trial_feed, config),
-                         config.station_keeping_floor_yr)
-        processing_power_watts = processing_power_w(
-            trial_feed, trial_payload, trial_dur, dig_wh, benef_wh,
-        )
-        new_power_kg = processing_power_watts / w_per_kg if w_per_kg > 0 else 0.0
-        if abs(new_power_kg - power_system_kg) <= 0.01 * max(new_power_kg, 1.0):
-            power_system_kg = new_power_kg
+        new_ep_kg = 0.0
+        if is_electric:
+            m_prop_total = (float(cascade.get("m_outbound_prop", 0.0))
+                            + float(cascade.get("m_return_prop", 0.0)))
+            ep_power_watts = ep_power_required_w(
+                m_prop_total, float(propellant["isp_vac_s"]),
+                config.ep_target_thrust_yr, ep_eff,
+            )
+            ep_thrust_yr = config.ep_target_thrust_yr if m_prop_total > 0 else 0.0
+            # Array (scales 1/r²) plus thruster + PPU (does not).
+            array_kg  = ep_power_watts / w_per_kg if w_per_kg > 0 else 0.0
+            drive_kg  = ep_power_watts / 1000.0 * ep_kg_per_kw
+            new_ep_kg = array_kg + drive_kg
+
+        new_power_kg = power_system_kg
+        if beneficiate:
+            # Provisional payload for sizing purposes — the caps below refine
+            # it, but the array only needs to be sized to the right order.
+            trial_payload = min(cascade["max_payload_kg"], mineable_kg,
+                                max_payload_by_throughput_kg(config))
+            if trial_payload <= 0:
+                return None
+            trial_feed = min(trial_payload * target_ratio,
+                             max_payload_by_throughput_kg(config), mineable_kg)
+            trial_dur  = max(mining_duration_yr(trial_feed, config),
+                             config.station_keeping_floor_yr)
+            processing_power_watts = processing_power_w(
+                trial_feed, trial_payload, trial_dur, dig_wh, benef_wh,
+            )
+            new_power_kg = processing_power_watts / w_per_kg if w_per_kg > 0 else 0.0
+
+        converged = (abs(new_power_kg - power_system_kg) <= 0.01 * max(new_power_kg, 1.0)
+                     and abs(new_ep_kg - ep_system_kg) <= 0.01 * max(new_ep_kg, 1.0))
+        power_system_kg, ep_system_kg = new_power_kg, new_ep_kg
+        if converged or (not beneficiate and not is_electric):
             break
-        power_system_kg = new_power_kg
 
     if cascade is None or not cascade["viable"]:
         return None
-    hardware_total_kg = config.mining_hardware_kg + power_system_kg
+    hardware_total_kg = config.mining_hardware_kg + power_system_kg + ep_system_kg
 
     # ── Volume cap ───────────────────────────────────────────────────────────
     # Cargo volume = payload mass / bulk density.  Asteroid bulk density
@@ -2208,16 +2506,63 @@ def _evaluate_combo_at_ratio(
 
     # Time is charged on the FEED, not the product: the rig has to dig all
     # of it, and that stay time flows into ops cost and WACC.
-    mining_yr           = mining_duration_yr(feed_kg, config)
+    mining_yr = mining_duration_yr(feed_kg, config)
+
+    # ── Launch window (v1.7.0) ───────────────────────────────────────────────
+    # You cannot leave when you finish digging; you leave when the phasing
+    # allows.  Expected wait after mining completes is half a synodic period.
+    # Worst for NEAs, whose periods sit near Earth's so the phase drifts
+    # slowly — accessibility in Δv and accessibility in TIME are different
+    # things and this is where they diverge.
+    a_dest_au = (A_MARS_AU
+                 if str(config.delivery_destination).strip().lower() == "mars_surface"
+                 else 1.0)
+    synodic_yr  = synodic_period_yr(asteroid_row.get("semi_major_axis_au"), a_dest_au)
+    window_wait_yr = 0.5 * synodic_yr if config.model_launch_windows else 0.0
+    stay_yr = mining_yr + window_wait_yr
+
     mission_duration_yr = asteroid_mission_duration_yr(
-        dv_out_m_s, dv_ret_m_s, config, mining_yr=mining_yr,
+        dv_out_m_s, dv_ret_m_s, config, mining_yr=stay_yr,
     )
+    # ── Low-thrust cruise (v1.7.0) ───────────────────────────────────────────
+    # The Δv-linear cruise estimate is calibrated to chemical transfers.  An
+    # electric stage thrusts for most of the trip instead, so its duration is
+    # governed by burn time, not by an impulsive-transfer fit.
+    if is_electric and ep_thrust_yr > 0:
+        mission_duration_yr = max(mission_duration_yr, ep_thrust_yr + stay_yr)
+    if mission_duration_yr > config.max_mission_duration_yr:
+        return None                     # not a mission, a bequest
+
     # Re-derive the plant's power at the final feed / payload / duration so the
     # cost matches the mission actually flown, not the sizing pass.
     if beneficiate:
         processing_power_watts = processing_power_w(
             feed_kg, m_payload, mining_yr, dig_wh, benef_wh,
         )
+    # ── Bound-water liberation (v1.7.0) ──────────────────────────────────────
+    # C/B/D-type "ice" is water locked into phyllosilicates.  Selling it as
+    # water means baking it out at ~700 K first, and that energy was free
+    # until now.  Charged on the water actually delivered, on top of the
+    # mechanical-separation energy above.
+    water_kg = 0.0
+    if config.model_water_liberation:
+        if beneficiate and payload_mix:
+            water_kg = float(payload_mix.get("water", 0.0))
+        elif not beneficiate:
+            ice_frac = asteroid_row.get("comp_ice_fraction")
+            if ice_frac is not None and not pd.isna(ice_frac):
+                water_kg = m_payload * float(ice_frac)
+        if water_kg > 0 and mining_yr > 0:
+            water_wh = _ops_value(
+                ops_df, "Water liberation energy (bound water)", default=2_500.0,
+            )
+            processing_power_watts += (
+                water_wh * water_kg / (mining_yr * 365.25 * 24.0)
+            )
+            # That extra power needs extra array, which the cascade already
+            # flew; recording it keeps the reported plant honest.
+            if w_per_kg > 0:
+                power_system_kg = processing_power_watts / w_per_kg
     cost                = mission_cost_usd(
         mass_cascade        = actual_cascade,
         vehicle             = vehicle,
@@ -2227,6 +2572,35 @@ def _evaluate_combo_at_ratio(
         mission_duration_yr = mission_duration_yr,
         processing_power_w  = processing_power_watts,
     )
+
+    # ── Market saturation (v1.7.0) ───────────────────────────────────────────
+    # Selling is not free of consequence.  A mission that returns a
+    # meaningful fraction of a commodity's annual market moves the price it
+    # is being valued at.  Applied to the delivered RATE (kg per mission-year)
+    # against Module 2's annual_market_kg, per commodity where the payload mix
+    # is known, and on the payload as a whole otherwise.
+    saturation_mult = 1.0
+    if (config.model_market_saturation and mission_duration_yr > 0
+            and phases and markets is not None):
+        # The mix actually sold: chosen by the optimiser when concentrating,
+        # otherwise the body's own proportions.
+        if beneficiate and payload_mix:
+            sold = dict(payload_mix)
+        else:
+            frac_sum = sum(f for _n, f, _p in phases)
+            sold = {n: m_payload * f / frac_sum for n, f, _p in phases} if frac_sum > 0 else {}
+        adj_value = 0.0
+        for phase, kg in sold.items():
+            price = next((p for n, _f, p in phases if n == phase), 0.0)
+            adj_value += kg * price * saturation_price_multiplier(
+                kg / mission_duration_yr,
+                markets.get(phase, float("inf")),
+                config.demand_elasticity,
+            )
+        if gross_value > 0:
+            saturation_mult = adj_value / gross_value
+        gross_value = adj_value
+        delivered_value_per_kg = gross_value / m_payload if m_payload > 0 else 0.0
 
     profit               = gross_value - cost["total_cost"]
     roi                  = profit / cost["total_cost"] if cost["total_cost"] > 0 else np.nan
@@ -2273,6 +2647,18 @@ def _evaluate_combo_at_ratio(
             and best_phase_value_per_kg > 0
             and delivered_value_per_kg >= best_phase_value_per_kg * (1.0 - 1e-9)
         ),
+        # ── v1.7.0 modelling completeness ──────────────────────────────────
+        "is_electric":              is_electric,
+        "ep_power_w":               ep_power_watts,
+        "ep_system_kg":             ep_system_kg,
+        "ep_thrust_yr":             ep_thrust_yr,
+        "synodic_period_yr":        synodic_yr,
+        "launch_window_wait_yr":    window_wait_yr,
+        "water_liberated_kg":       water_kg,
+        "saturation_multiplier":    saturation_mult,
+        "learning_curve_factor":    learning_curve_factor(
+                                        config.nre_amortization_missions,
+                                        config.learning_curve_rate),
         "processing_power_w":       processing_power_watts,
         "power_system_kg":          power_system_kg,
         "power_w_per_kg_at_target":  w_per_kg,
@@ -2350,6 +2736,7 @@ def evaluate_combo(
     config:            CalcConfig,
     best_phase_value_per_kg: Optional[float] = None,
     phases:            Optional[List[Tuple[str, float, float]]] = None,
+    markets:           Optional[Dict[str, float]] = None,
 ) -> Optional[Dict[str, float]]:
     """Best mission for one (asteroid × vehicle × propellant), profit-maximising
     over how hard to concentrate.
@@ -2377,7 +2764,7 @@ def evaluate_combo(
         asteroid_row, vehicle, propellant, bulk_value_per_kg,
         dv_out_m_s, dv_ret_m_s, ops_df, config,
         best_phase_value_per_kg=best_phase_value_per_kg,
-        phases=phases, target_ratio=r, beneficiate=b,
+        phases=phases, target_ratio=r, beneficiate=b, markets=markets,
     )
 
     if not config.use_beneficiation:
@@ -2476,12 +2863,12 @@ def evaluate_asteroid(
     # Phase table for the load optimiser, and the purity ceiling for reporting.
     # Both depend only on composition and prices, so compute once per asteroid
     # rather than once per (vehicle x propellant) combo.
-    if config.use_beneficiation:
-        phases           = asteroid_phase_table(asteroid_row, minerals)
-        best_phase_value = asteroid_best_phase_usd_per_kg(asteroid_row, minerals)
-    else:
-        phases           = []
-        best_phase_value = bulk_value
+    # v1.7.0: the phase table is needed even without beneficiation, because
+    # market saturation prices each commodity in the haul separately.
+    phases  = asteroid_phase_table(asteroid_row, minerals)
+    markets = market_table(minerals)
+    best_phase_value = (asteroid_best_phase_usd_per_kg(asteroid_row, minerals)
+                        if config.use_beneficiation else bulk_value)
 
     dv_out, dv_ret = asteroid_dv_m_s(asteroid_row, config)
 
@@ -2497,7 +2884,7 @@ def evaluate_asteroid(
             bulk_value, dv_out, dv_ret,
             ops_df, config,
             best_phase_value_per_kg=best_phase_value,
-            phases=phases,
+            phases=phases, markets=markets,
         )
         if result is None:
             continue

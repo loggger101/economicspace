@@ -267,7 +267,18 @@ class TransportConfig:
     #         the 5,920 m/s from LEO is paid propulsively.  Mars is four
     #         times further in Δv terms from Earth but gets most of its
     #         arrival braking free from an atmosphere.
-    pipeline_version: str = "1.5.0"
+    # 1.6.0 — data for the modelling gaps Module 4 v1.7.0 closes.  Additive;
+    #         no existing number changed.
+    #         • "Electric thruster + PPU specific mass" 8 kg/kW and
+    #           "Electric propulsion efficiency" 0.60.  Together with the
+    #           existing power-system row these make low-thrust TRIP TIME
+    #           computable: T = 2·η·P/(Isp·g0), and a burn lasting
+    #           m_prop·(Isp·g0)²/(2·η·P).  Until now electric propulsion paid
+    #           a Δv penalty but flew instantly and drew no power.
+    #         • "Water liberation energy (bound water)" 2,500 Wh/kg.  C-type
+    #           water is bound in phyllosilicates and has to be baked out;
+    #           the pipeline was extracting it for free.
+    pipeline_version: str = "1.6.0"
     preview_rows:     int = 15
 
 
@@ -1123,6 +1134,52 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
                  "heliocentric distance — Module 4 applies that per asteroid, "
                  "which is why main-belt targets are punished so hard once "
                  "processing power is modelled.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Electric thruster + PPU specific mass",
+        "unit":             "kg per kW of input electrical power",
+        "value":            8,
+        "range_low":        5,
+        "range_high":       15,
+        "notes": "v1.6.0.  Thruster, power-processing unit, gimbals, xenon/argon "
+                 "feed system, tankage and thermal — NOT the solar array, which "
+                 "is carried separately by the 'Power system specific mass' row "
+                 "and scales 1/r^2.  NASA NEXT-C: 7 kW thruster ~13.5 kg + PPU "
+                 "~34 kg ≈ 7 kg/kW.  Gateway AEPS: 12.5 kW Hall, similar class. "
+                 "8 kg/kW allows for feed system and structure.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Electric propulsion efficiency",
+        "unit":             "fraction of input power converted to jet power",
+        "value":            0.60,
+        "range_low":        0.45,
+        "range_high":       0.72,
+        "notes": "v1.6.0.  Total efficiency (anode × mass-utilisation × PPU). "
+                 "Hall thrusters run 0.50-0.60; gridded ion (NEXT) reaches "
+                 "0.65-0.70 at high specific impulse.  Sets thrust for a given "
+                 "power: T = 2·η·P / (Isp·g0), which is what makes low-thrust "
+                 "trip time computable at all.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Water liberation energy (bound water)",
+        "unit":             "Watt-hours per kg of water extracted",
+        "value":            2_500,
+        "range_low":        1_000,
+        "range_high":       5_000,
+        "notes": "v1.6.0.  C/B/D-type 'ice' is not ice — it is water bound into "
+                 "phyllosilicates, and getting it out means heating the rock "
+                 "past dehydroxylation, not melting a cube.  Arithmetic for a "
+                 "10 wt% hydrated body, per kg of WATER recovered: heat 10 kg "
+                 "of rock from ~200 K to ~700 K at c_p ≈ 800 J/kg·K = 4.0 MJ; "
+                 "dehydroxylation enthalpy of serpentine ≈ 250 kJ/kg of rock "
+                 "= 2.5 MJ; vaporise and capture 1 kg of water = 2.26 MJ. "
+                 "Total ≈ 8.8 MJ/kg = 2,440 Wh/kg.  Matches the 1-3 kWh/kg "
+                 "range in the asteroid-ISRU literature (Colorado School of "
+                 "Mines / NASA ISRU studies).  Charged ON TOP of the generic "
+                 "beneficiation row, which covers mechanical separation only.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {

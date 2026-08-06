@@ -28,9 +28,9 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.0.8 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
-| 2 | `modules/mineral_value.py` | 1.4.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity |
-| 3 | `modules/transportation.py` | 1.5.0 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
-| 4 | `modules/calc.py` | 1.6.0 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
+| 2 | `modules/mineral_value.py` | 1.5.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity |
+| 3 | `modules/transportation.py` | 1.6.0 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
+| 4 | `modules/calc.py` | 1.7.0 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 
@@ -453,32 +453,25 @@ would be breakeven):
 
 | | plain (best / median) | beneficiated (best / median) |
 |---|---|---|
-| `earth_surface` | 297,155× / 17,941,089× | 151,976× / 14,487,961× |
-| `leo` | 323× / 4,055× | 249× / 1,913× |
-| `cislunar` | 51× / 1,221× | 51× / 594× |
-| `lunar_surface` | 46× / 881× | 32× / 402× |
-| `mars_surface` | 14× / 158× | **2.2× / 74×** |
+| `earth_surface` | 151,266× / 21,883,237× | 151,266× / 17,616,717× |
+| `leo` | 262× / 5,145× | 177× / 2,595× |
+| `cislunar` | 62× / 2,973× | 62× / 1,397× |
+| `lunar_surface` | 133× / 2,074× | 71× / 951× |
+| `mars_surface` | 25× / 442× | **14× / 110×** |
 
 Beneficiation roughly **halves** the gap for a typical target. At cislunar it
 declines to concentrate on the single best body — already water-rich enough
 that grinding more rock costs more than it returns.
 
-Still **zero viable missions** anywhere, but Mars closes the gap by ~5 orders
-of magnitude from the default and lands within a factor of a few.
+Still **zero viable missions** anywhere, but Mars closes the gap by ~4 orders
+of magnitude from the default and lands within a factor of ~14.
 
-⚠️ **The 2.2× figure leans on a modelling gap.** The winning Mars combination
-is a 1,500 s argon Hall thruster, and *low-thrust trip time is not modelled* —
-it carries a Δv penalty but not the years a real spiral adds, nor the
-megawatts it would draw. Restricted to chemical propulsion the honest figures
-are:
-
-| Mars, beneficiated | best | median |
-|---|---|---|
-| all propellants | 2.2× | 74× |
-| **chemical only** | **9.8×** | 89× |
-
-Take **9.8×** as the defensible headline. Set
-`.calc.candidate_propellants` to the chemical subset to reproduce it.
+These figures are ~6× worse than the v1.6.0 release, and deliberately so —
+v1.7.0 closed five modelling gaps that all flattered the answer. The old
+headline of 2.2× at Mars was a 1,500 s Hall thruster flying instantly on
+power it never carried. With low-thrust trip time modelled, electric
+propulsion falls from 12% of winning combos to 2%, and Mars settles at 14×.
+See [What the model now charges for](#what-the-model-now-charges-for).
 
 ## Mission model
 
@@ -506,13 +499,6 @@ Stated plainly so results aren't over-read:
   orders of magnitude below cost in most configurations, so `profit_usd`
   reduces to `-total_cost_usd` and `top_profitable()` becomes a pure cost
   ranking — a Δv table wearing a profit label.
-- **No learning curve on recurring hardware.** The rig costs $300k/kg at unit
-  1 and unit 500 alike. Only NRE amortises. An 85% Wright curve would put
-  unit 100 near $102k/kg, and rig hardware is ~28% of mission cost.
-- **No market saturation.** `nre_amortization_missions` spreads development
-  across a fleet for free, but ~600 M-type missions a year would double world
-  platinum supply and collapse the price that justified them. The model has
-  no demand curve, so that lever has no natural stopping point.
 - **Cheap launch does not rescue this.** Launch is ~2.3% of a mission. Zeroing
   it entirely improves the ratio by 2.3%.
 - **In-space utility fractions are judgements.** `IN_SPACE_UTILITY` decides how
@@ -521,11 +507,10 @@ Stated plainly so results aren't over-read:
 - **In-space manufacturing is not costed.** Raw Fe-Ni is not a pressure
   vessel. The 0.70 utility factor is a stand-in for a refining and forming
   plant that appears nowhere in the cost model.
-- **Trip time for low-thrust is not modelled, and this is now load-bearing.**
-  Electric propulsion carries a Δv penalty but not the years a real spiral
-  adds, nor the megawatts it would draw. The headline Mars result (2.2×)
-  picks a 1,500 s Hall thruster because of it; chemical-only gives 9.8×.
-  Treat the chemical figure as the defensible one until trip time is costed.
+- **Low-thrust trajectories are sized, not optimised.** Trip time and power
+  are now modelled (see [What the model now charges for](#what-the-model-now-charges-for)),
+  but the EP stage is sized to a fixed target thrusting time rather than having
+  its trajectory jointly optimised against payload and arrival date.
 - **The mining rate has no flight heritage.** No one has sustained-mined an
   asteroid, so `mining_rate_kg_per_day_per_kg_rig` is an engineering
   assumption. It is a single obvious dial rather than a hidden infinity, but
@@ -533,11 +518,9 @@ Stated plainly so results aren't over-read:
 - **Δv is analytic, not trajectory-optimised.** The patched-conic estimator
   lands within ~10% of published figures and slightly high on the easiest
   co-orbital targets, where real mission design finds better transfers.
-- **No launch windows, phasing, or synodic periods.** Every asteroid is
-  assumed reachable whenever you like.
-- **Prices are static at the point of sale.** Returning enough platinum to
-  move the platinum market would move the platinum market; at the payloads
-  this model produces (grams of PGM), that never binds.
+- **Launch windows are statistical, not ephemeris-based.** The synodic period
+  gives an expected wait; the model does not compute actual departure dates,
+  so it cannot tell you *which* window.
 - **Composition is uniform.** Each asteroid is its taxonomy class's mean
   composition all the way through — no core/mantle structure, no regolith
   versus bedrock, no ore grade. Beneficiation concentrates *against that mean*,
@@ -550,7 +533,78 @@ Stated plainly so results aren't over-read:
   metal concentrate is denser than the parent body, so the volume constraint
   is conservative.
 - **C-type "ice" is bound water** in phyllosilicates, not accessible ice. The
-  energy to liberate it is not modelled.
+  energy to liberate it is now charged (2,500 Wh/kg), but the extraction
+  hardware — kilns, condensers, cold traps — is not sized or costed.
+
+## What the model now charges for
+
+v1.7.0 closed five gaps that all pushed the answer the same way — towards
+optimism. Each defaults ON; set the flag to `False` to isolate its effect.
+
+**Low-thrust trip time** (`model_low_thrust_time`). Electric propulsion used
+to pay a Δv penalty and nothing else — it flew its burns instantly on power
+it never carried. A thruster's power fixes its thrust, so burning `m_prop`
+takes `m_prop·(Isp·g0)² / (2·η·P)`: **high specific impulse buys propellant
+mass at a quadratic cost in time-or-power.** The EP stage is now sized to
+finish inside `ep_target_thrust_yr` (3.0 by default), and the array plus
+thruster/PPU mass that demands goes into the same rocket equation as
+everything else. A typical electric winner now hauls ~4,900 kg of power
+system against a 2,000 kg mining rig.
+
+Validated against Dawn — the only mission that has flown this regime. At its
+2.2–3.0 AU operating distance the formula gives 5.0–9.3 years of thrusting;
+Dawn actually thrust ~5.9 years. The 1/r² term does the work: evaluated at
+Dawn's 1 AU array rating the same sum gives 1.0 year and is nonsense.
+
+**Launch windows** (`model_launch_windows`). Departure needs phasing, and
+alignments recur at the synodic period, so expected wait after mining is half
+a period. This punishes **NEAs hardest**, which is the opposite of the Δv
+story:
+
+| Semi-major axis | Period | Synodic with Earth |
+|---|---|---|
+| 1.05 AU | 1.08 yr | **10.0 yr** |
+| 1.13 AU | 1.20 yr | 6.0 yr |
+| 2.70 AU | 4.44 yr | 1.3 yr |
+
+A body whose period nearly matches Earth's drifts in phase very slowly.
+Accessibility in Δv and accessibility in *time* pull in opposite directions,
+and only one of them was modelled before.
+
+**Bound-water liberation** (`model_water_liberation`). C/B/D-type "ice" is
+water locked into phyllosilicates — it has to be baked out at ~700 K, not
+scooped. Stage 3 charges 2,500 Wh per kg of water, derived from heating the
+rock through dehydroxylation plus the enthalpy of dehydration plus
+vaporisation, and matching the 1–3 kWh/kg in the ISRU literature. The
+pipeline had been extracting it for free and selling it at full
+launch-cost-avoided.
+
+**Learning curve** (`learning_curve_rate`, 0.85). Wright's law on the
+per-mission articles — capsule/lander and power system. The amortised mining
+rig is excluded because it is modelled as one shared unit, not N built.
+Exactly 1.0 at `nre_amortization_missions = 1`, so a single-mission run is
+untouched; 0.44 at N = 100.
+
+**Market saturation** (`model_market_saturation`). `P/P0 = (1 + Q/Q_market)^(−1/ε)`
+against Stage 2's `annual_market_kg`, with ε = 0.5 (precious-metal demand is
+inelastic). Returning 180 t/yr of platinum doubles world supply and quarters
+the price. Delivering 6.6 t/yr of water to a 20 t/yr Mars base cuts it to
+0.57. Without this, `nre_amortization_missions` had no natural stopping
+point — you could amortise development across a fleet whose output would
+have destroyed the price justifying it.
+
+World production is USGS; the in-space absorption ceilings (LEO 500 t/yr,
+cislunar 100 t, lunar surface 50 t, Mars 20 t) are **judgement, not
+measurement** — no such market exists.
+
+### Net effect on a default earth_surface run
+
+| | v1.6.0 | v1.7.0 |
+|---|---|---|
+| Electric share of winning combos | 12% | **2%** |
+| Median mission duration | 3.49 yr | 4.12 yr (+18%) |
+| Median total cost | $2.59 B | $2.77 B (+7.3%) |
+| Rows with no feasible mission | 0 | 47 |
 
 ## Data sources
 
