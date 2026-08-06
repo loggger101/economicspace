@@ -285,12 +285,21 @@ The decision belongs to the (target × destination) pair, not to the target.
 The median halves roughly everywhere regardless, cislunar included
 (4,053× → 2,161×, −47%).
 
-Closing the last 25× is not a tuning exercise. Rig terminal value and
+Closing the remaining gap is not a tuning exercise. Rig terminal value and
 in-space manufacturing were the named candidates and both shipped in v1.8.0
-(`e860259`), so what remains is joint trajectory/payload optimisation, and
+(`e860259`); the architecture search and the corrected selection objective
+shipped in v1.10.0. What remains is joint trajectory/payload optimisation --
+the EP stage is still sized to a fixed `ep_target_thrust_yr` rather than
+having its trajectory optimised against payload and arrival date -- and
 programme scale. Do not manufacture viability by editing `IN_SPACE_UTILITY`
 or the in-space demand ceilings -- both are judgement tables and both are
 load-bearing.
+
+The rig itself is the next obvious per-asteroid decision that is still a
+global: `mining_hardware_kg` is 2,000 kg for a 500-metre NEA and for Ceres
+alike, and it sets both the throughput cap and a big block of dead mass. It
+was left alone in v1.10.0 because sizing it per target changes the meaning of
+`max_payload_by_throughput_kg` everywhere it is read.
 
 ## The twelve things the model stopped giving away
 
