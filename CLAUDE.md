@@ -160,8 +160,10 @@ pay the separation recovery loss and the array mass for no grade gain.
 Without that baseline beneficiation cannot be declined, and stops being
 weakly dominant.
 
-Note this makes the beneficiation path ~10× slower (~5 s → ~55 s per 1,959
-asteroids). `concentration_search_steps` is the dial.
+Note this makes the beneficiation path ~8× slower — on the v1.0.9 catalog
+(35,778 asteroids) a destination costs ~140 s raw against ~1,100 s
+beneficiated, so re-measuring all five destinations is a couple of hours, not
+a coffee break. `concentration_search_steps` is the dial.
 
 **The beneficiation power plant feeds back into the rocket equation.**
 Processing energy (Module 3: 200 Wh/kg dug, 500 Wh/kg concentrated) over the
@@ -194,59 +196,73 @@ accordingly; don't restore the 0.80/5.30 values.
 A default run produces zero viable missions. That is the correct answer, not
 a regression. So does every other combination currently in the model.
 
-⚠️ **The destination table below is mid-re-measurement.** Catalog v1.0.9 fixed
-SsODNet being discarded at merge, which took the measured-taxonomy population
-from ~1,850 to ~24,675 bodies — so every ratio measured before it is stale.
-`mars_surface` has been re-measured on the restored catalog; the other four
-have not. Do not compare a fresh run against the stale rows.
+Best cost/revenue, beneficiated, across all 35,778 evaluable asteroids at
+catalog `1.0.9` / calc `1.9.1` (lower is better, 1.0 is breakeven). The
+pre-1.0.9 column is kept because the *change* is the point — it is entirely a
+population effect, not a modelling one:
 
-Best cost/revenue, beneficiated, lower is better, 1.0 is breakeven:
-
-| destination | best | population | status |
+| destination | pre-1.0.9 | **current** | winner |
 |---|---|---|---|
-| `earth_surface` (default) | 191,359× | 1,959 | stale — pre-1.0.9 catalog |
-| `leo` | 290× | 1,959 | stale — pre-1.0.9 catalog |
-| `cislunar` | 143× | 1,959 | stale — pre-1.0.9 catalog |
-| `lunar_surface` | 74× | 1,959 | stale — pre-1.0.9 catalog |
-| `mars_surface` | **25.2×** | 35,778 evaluated | **current** (catalog 1.0.9, calc 1.9.1) |
+| `earth_surface` (default) | 191,359× | 156,725× | 17188 (1999 WC2), M |
+| `leo` | 290× | 290.4× | 434 Hungaria, Xe |
+| `lunar_surface` | 74× | 53.5× | 4660 Nereus, Xe |
+| `cislunar` | 143× | 39.8× | 4660 Nereus, Xe |
+| `mars_surface` | 34× | **25.2×** | 4015 Wilson-Harrington, B |
 
-Mars was 34× on the degraded catalog and is 25.2× on the restored one. Nothing
-about the physics changed — the optimiser simply has 13× more real-taxonomy
-targets to pick a winner from, so the best of them is better. Expect the other
-four to move by a similar mechanism when re-measured.
+Two things in that table are worth not "fixing":
+
+**Cislunar and lunar surface swapped.** The Moon used to beat cislunar (74×
+vs 143×) and no longer does (53.5× vs 39.8×). Nothing about either
+architecture changed — cislunar gained 3.6× from the larger population and
+the Moon only 1.4×, because the restored catalog contains accessible NEAs
+(the winner is 4660 Nereus for both) that suit the cheaper cislunar capture.
+The ordering is a property of which asteroids you know about, not just of Δv.
+
+**LEO barely moved** (290× → 290.4×) while everything else moved a lot. Its
+winner, 434 Hungaria, was already inside the old ~1,850-body subset, so 13×
+more targets found nothing better. A destination that does not respond to a
+population change is not evidence the run failed.
+
+`mars_surface` remains the best case the model can reach. That changed in
+`1a5e0c8` when the lunar and Mars destinations landed, and the gap has been
+tracked on Mars ever since.
 
 **`mars_surface` is the best case the model can currently reach**, not
 cislunar — that changed in `1a5e0c8` when the lunar and Mars destinations
 landed, and the gap has been tracked on Mars ever since. Flying more missions
-is the strongest remaining lever: on the pre-1.0.9 catalog ~34× at N=1 fell to
-~8× at N=100 (see the reliability-growth and rig-service-life entries below,
-which pull against each other). The N=1 case is 25.2× on the restored catalog
-and the rest of that curve has not been re-measured — the shape holds, the
-absolutes do not.
+is the strongest remaining lever. Mars, beneficiated, on the restored catalog:
+**25.2× at N=1 → 6.9× at N=10 → 5.3× at N=100** (was 34.2 → ~10 → ~8). See the
+reliability-growth and rig-service-life entries below, which pull against each
+other — that is why the 10→100 step buys so little.
 
 **Beneficiation behaves differently at Mars than it did at cislunar, and the
 old cislunar intuition does not carry over.** At cislunar (`fa263ad`) the
 optimiser *declined* to concentrate on the single best body, so beneficiation
-halved the median and left the best case untouched. At `mars_surface`, on the
-restored v1.0.9 catalog (35,778 evaluated, 34,116 scored):
+halved the median and left the best case untouched. Measured across every
+destination on one catalog (v1.0.9, 35,778 evaluated), best cost/revenue:
 
-| mars_surface | best | median | winner |
+| destination | raw | beneficiated | best target concentrated? |
 |---|---|---|---|
-| not beneficiated | 54.2× | 1,154× | 22290 (1989 AO), D |
-| beneficiated | **25.2×** | **248×** | 4015 Wilson-Harrington, B, concentrated 4.2× |
+| `earth_surface` | 236,629× | 156,725× | yes, 2.2× |
+| `leo` | 445.9× | 290.4× | yes, 2.5× |
+| `cislunar` | 39.79× | **39.79×** | **no — declines** |
+| `lunar_surface` | 126.6× | 53.5× | yes, 2.5× |
+| `mars_surface` | 54.2× | **25.2×** | yes, 4.2× |
 
-That is −53% on the best case and −79% on the median, and it *changes which
-asteroid wins*. So do not repeat "beneficiation does not move the best target"
-as a general fact. It was a cislunar result and it is false at Mars: the
-cislunar winner was already water-rich enough that grinding more rock cost
-more than it returned, and the Mars winner is not.
+**Cislunar is the one destination where the optimiser declines to concentrate
+the best body** — 39.79× to the hundredth either way. That is the `fa263ad`
+result, and it still reproduces on a catalog 19× larger. Everywhere else
+beneficiation moves the best case hard, and usually changes which asteroid
+wins. So do not repeat "beneficiation does not move the best target" as a
+general fact: it is a cislunar result, not a property of beneficiation.
 
-The effect replicates across three independent populations, which is why it
-can be trusted even though each population gives different absolutes —
-1,854 measured-taxonomy bodies gave 69.6× → 31.0×, 5,000 mostly albedo-typed
-bodies gave 71.8× → 32.5×, and the full restored catalog gives 54.2× → 25.2×.
-All three are roughly −55% on the best case, and all three concentrate the
-winner at a ratio near 4–5.
+The reason is compositional, and 4660 Nereus makes it visible — the *same*
+asteroid wins both cislunar and lunar surface, and the optimiser declines to
+concentrate it at cislunar while concentrating it 2.5× for the lunar surface.
+The decision belongs to the (target × destination) pair, not to the target.
+
+The median halves roughly everywhere regardless, cislunar included
+(4,053× → 2,161×, −47%).
 
 Closing the last 25× is not a tuning exercise. Rig terminal value and
 in-space manufacturing were the named candidates and both shipped in v1.8.0
@@ -328,10 +344,10 @@ already mature, and MTBF is a duration exposure, not a heritage question. Do
 not "complete" the model by adding growth to them.
 
 Note how reliability growth and the rig service-life cap pull against each
-other. Mars beneficiated: N=1 34.2x, N=10 ~10x, N=100 ~8x. The 10->100 step
-buys little because one rig only serves 7 missions at that stay length, so
-mission 8 buys a new rig. "Fly more missions" is real but sublinear, and
-bounded by market saturation at the far end.
+other. Mars beneficiated, catalog v1.0.9: N=1 25.2x, N=10 6.9x, N=100 5.3x.
+The 10->100 step buys little because one rig only serves 7 missions at that
+stay length, so mission 8 buys a new rig. "Fly more missions" is real but
+sublinear, and bounded by market saturation at the far end.
 
 **Cryogenic boil-off** (v1.8.0). Return propellant is held for years, so
 hydrolox loads 2.5x what it burns on a 5-year mission. Folded into an
