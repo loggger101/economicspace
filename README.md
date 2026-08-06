@@ -181,6 +181,22 @@ problem than it is. Repoint it:
 git config --file "C:/Users/Owner/repos/economicspace.git/config" core.worktree "<new absolute path>"
 ```
 
+Drive also corrupts git's stat cache. When git writes a file during checkout
+and immediately stats it, Drive reports a placeholder size of 16384 bytes
+rather than the real one, and git caches that in the index. Every later
+`git status` sees the mismatch and reports the file modified *without reading
+it* — a differing size is normally conclusive proof of a change. The tell is
+`git status` and `git diff` disagreeing, and the consequence is that
+`git checkout` and `git merge --ff-only` abort on phantom changes, so a merged
+PR fails to land locally.
+
+`.githooks/drive-restat.sh` repairs it automatically via `post-checkout`,
+`post-merge` and `post-rewrite`. A fresh clone opts in once:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 `.gitattributes` pins `*.py` to LF, because the sources get pasted into Colab
 and Jupyter, which expect LF. Git for Windows sets `core.autocrlf=true` in its
 system config by default, so without that pin a checkout here would rewrite
