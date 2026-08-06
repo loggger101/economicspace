@@ -225,7 +225,23 @@ class CatalogConfig:
     #         as 1.0.6, so that stamp is ambiguous.  The reconciled module is
     #         1.0.7 because it matches neither parent.  Treat any CSV stamped
     #         1.0.6 as undated and re-run rather than trusting the number.
-    pipeline_version: str = "1.0.7"
+    # 1.0.8 — realism audit: X-complex metal fractions were pre-Psyche.
+    #         M-type carried 0.80 metal at 5.30 g/cm³ — the "exposed iron
+    #         core" picture.  No M-type has ever been measured near that
+    #         density: 16 Psyche is ~3.8-3.9 g/cm³ (Elkins-Tanton 2020,
+    #         Siltala & Granvik 2021) against 7.8 for iron meteorite, and
+    #         metal content is now put at ~30-60%.  Revised:
+    #             type   metal  0.80→0.50   density 5.30→3.90   (M)
+    #                    metal  0.75→0.45   density 5.00→3.80   (Xe)
+    #                    metal  0.50→0.25   density 3.80→3.60   (Xk)
+    #                    metal  0.40→0.30   density 3.50→3.30   (X)
+    #                    metal  0.30→0.10   density 3.50→3.20   (E)
+    #         Xk/E were independently inconsistent — both are described as
+    #         enstatite-dominant, and aubrites are near metal-free.
+    #         Fraction sums per type are unchanged, so the v1.3.3 residual
+    #         silicate floor behaves exactly as before.  Lowers M-type bulk
+    #         value; raises nothing.
+    pipeline_version: str = "1.0.8"
 
 
 # Instantiate and create the output dir.  Edit CONFIG values above this line
@@ -425,12 +441,14 @@ TAXONOMY_COMPOSITION: Dict[str, dict] = {
         "group": "X-complex",
         "composition": "X-type: possibly metallic or primitive (albedo ambiguous)",
         "minerals": ["nickel-iron", "enstatite", "troilite"],
-        "density_est_gcm3":  3.50,
-        "metal_fraction":    0.40,
-        "silicate_fraction": 0.40,
+        "density_est_gcm3":  3.30,
+        "metal_fraction":    0.30,
+        "silicate_fraction": 0.50,
         "carbon_fraction":   0.05,
         "ice_fraction":      0.00,
-        "notes": "Requires albedo to distinguish M, E, or P sub-type",
+        "notes": "Requires albedo to distinguish M, E, or P sub-type.  v1.0.8: "
+                 "metal 0.40 → 0.30, tracking the M revision — an unresolved "
+                 "X sits between metal-rich M and near-metal-free P.",
     },
     "Xc": {
         "group": "X-complex",
@@ -445,25 +463,29 @@ TAXONOMY_COMPOSITION: Dict[str, dict] = {
     },
     "Xe": {
         "group": "X-complex",
-        "composition": "Xe-type (M-type analog): metallic, nickel-iron dominant",
+        "composition": "Xe-type (M-type analog): metal-rich, metal-silicate mix",
         "minerals": ["nickel-iron", "troilite", "enstatite"],
-        "density_est_gcm3":  5.00,
-        "metal_fraction":    0.75,
-        "silicate_fraction": 0.15,
+        "density_est_gcm3":  3.80,
+        "metal_fraction":    0.45,
+        "silicate_fraction": 0.45,
         "carbon_fraction":   0.01,
         "ice_fraction":      0.00,
-        "notes": "High-albedo X; likely metallic core fragment",
+        "notes": "High-albedo X; metal-rich but not a bare core.  v1.0.8: "
+                 "was 0.75 metal / 5.00 g/cm³ — tracked down alongside M for "
+                 "the same measured-density reason.",
     },
     "Xk": {
         "group": "X-complex",
         "composition": "Xk-type: E-chondrite analog, enstatite dominant",
         "minerals": ["enstatite", "nickel-iron", "troilite"],
-        "density_est_gcm3":  3.80,
-        "metal_fraction":    0.50,
-        "silicate_fraction": 0.40,
+        "density_est_gcm3":  3.60,
+        "metal_fraction":    0.25,
+        "silicate_fraction": 0.65,
         "carbon_fraction":   0.01,
         "ice_fraction":      0.00,
-        "notes": "E-chondrite analog; high albedo",
+        "notes": "E-chondrite analog; high albedo.  v1.0.8: metal 0.50 → 0.25 "
+                 "— EH/EL enstatite chondrites carry ~20-25 wt% metal, and "
+                 "'enstatite dominant' cannot also be half metal.",
     },
 
     # ── Other spectral types ──────────────────────────────────────────────────
@@ -574,25 +596,34 @@ TAXONOMY_COMPOSITION: Dict[str, dict] = {
     # `spec_T` value directly when `spec_B` is empty.
     "M": {
         "group": "X-complex",
-        "composition": "Metallic (Tholen): nickel-iron core fragment",
-        "minerals": ["nickel-iron", "troilite"],
-        "density_est_gcm3":  5.30,
-        "metal_fraction":    0.80,
-        "silicate_fraction": 0.15,
+        "composition": "Metallic (Tholen): metal-silicate mix, core-fragment affinity",
+        "minerals": ["nickel-iron", "troilite", "enstatite"],
+        "density_est_gcm3":  3.90,
+        "metal_fraction":    0.50,
+        "silicate_fraction": 0.45,
         "carbon_fraction":   0.01,
         "ice_fraction":      0.00,
-        "notes": "Tholen M-type ≈ Bus-DeMeo Xe; high IR albedo, low optical",
+        "notes": "Tholen M-type ≈ Bus-DeMeo Xe; high IR albedo, low optical.  "
+                 "v1.0.8: was 0.80 metal / 5.30 g/cm³, the pre-Psyche "
+                 "'exposed iron core' assumption.  16 Psyche's measured bulk "
+                 "density is ~3.8-3.9 g/cm³ (Elkins-Tanton et al. 2020, "
+                 "Siltala & Granvik 2021) — far below the 7.8 g/cm³ of iron "
+                 "meteorite — and metal content is now put at roughly "
+                 "30-60%.  A solid-metal M-type is not supported by any "
+                 "measured density.",
     },
     "E": {
         "group": "X-complex",
         "composition": "Enstatite (Tholen): aubrite/E-chondrite analog",
         "minerals": ["enstatite", "nickel-iron"],
-        "density_est_gcm3":  3.50,
-        "metal_fraction":    0.30,
-        "silicate_fraction": 0.65,
+        "density_est_gcm3":  3.20,
+        "metal_fraction":    0.10,
+        "silicate_fraction": 0.85,
         "carbon_fraction":   0.01,
         "ice_fraction":      0.00,
-        "notes": "Tholen E-type ≈ Bus-DeMeo Xk; very high albedo (>0.3)",
+        "notes": "Tholen E-type ≈ Bus-DeMeo Xk; very high albedo (>0.3).  "
+                 "v1.0.8: metal 0.30 → 0.10 — aubrites are enstatite "
+                 "achondrites and are very nearly metal-free.",
     },
     "P": {
         "group": "C-complex",
