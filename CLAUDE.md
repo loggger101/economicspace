@@ -62,8 +62,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.0.8`, mineral_value `1.4.0`, transportation `1.5.0`,
-calc `1.6.0`, master `1.7.0` (the master version is a literal in
+Current: catalog `1.0.8`, mineral_value `1.5.0`, transportation `1.6.0`,
+calc `1.7.0`, master `1.8.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
 ## Model assumptions that are load-bearing
@@ -178,9 +178,46 @@ revenue, down from ~297,000× at the `earth_surface` default. Beneficiation
 halves the *median* gap but does not move the best target, where the
 optimiser declines to concentrate.
 Closing that last 51× is not a tuning exercise; the remaining candidates are
-a learning curve on recurring hardware, multi-mission amortisation against a
-market-saturation limit that does not yet exist in the model, and rig
-terminal value. Do not manufacture viability by editing `IN_SPACE_UTILITY`.
+a rig terminal value, in-space manufacturing (the 0.70 metal utility factor is
+standing in for a refining plant that is costed nowhere), and joint
+trajectory/payload optimisation. Do not manufacture viability by editing
+`IN_SPACE_UTILITY` or the in-space demand ceilings -- both are judgement
+tables and both are load-bearing.
+
+## The five things v1.7.0 stopped giving away
+
+Each defaults ON and each moved every number. They are corrections, not
+options; the flags exist to isolate effects, not to be left off.
+
+**Low-thrust trip time.** `T = 2*eta*P/(Isp*g0)`, so burning m_prop takes
+`m_prop*(Isp*g0)^2/(2*eta*P)` -- high Isp buys propellant mass at a QUADRATIC
+cost in time-or-power. The EP stage is sized to finish inside
+`ep_target_thrust_yr` and its array (1/r^2) plus thruster/PPU mass enters the
+rocket equation. Electric fell from 12% of winning combos to 2%. Validated
+against Dawn: 5.0-9.3 yr predicted at its 2.2-3.0 AU operating distance vs
+~5.9 yr flown. Evaluate at Dawn's 1 AU array rating instead and you get 1.0
+yr -- if this check ever "passes" that easily, the 1/r^2 term has been lost.
+
+**Launch windows.** Expected wait is half a synodic period. This punishes
+NEAs HARDEST -- their periods sit near Earth's so phase drifts slowly, giving
+a 10-year synodic period at a = 1.05 AU against 1.3 years for a main-belt
+body. Delta-v accessibility and time accessibility are anticorrelated; do not
+assume a low-Delta-v target is a fast one.
+
+**Bound-water liberation.** C/B/D "ice" is water in phyllosilicates, baked out
+at ~700 K. 2,500 Wh/kg. It was being extracted free and sold at full
+launch-cost-avoided.
+
+**Learning curve.** Wright's law 85% on the per-mission articles only. The
+amortised mining rig is EXCLUDED -- it is one shared unit, not N built, so a
+curve on it double-counts. Exactly 1.0 at nre_amortization_missions = 1, which
+is what keeps a single-mission run unaffected.
+
+**Market saturation.** `P/P0 = (1 + Q/Q_market)^(-1/eps)`, eps = 0.5. Without
+it `nre_amortization_missions` had no stopping point: you could amortise
+development across a fleet whose output would have destroyed the price that
+justified it. The in-space absorption ceilings are judgement, not
+measurement.
 
 Rank by `total_cost_usd / gross_value_usd`, not by `profit_usd`. Revenue is
 orders of magnitude below cost in most configurations, which makes

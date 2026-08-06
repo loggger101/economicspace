@@ -336,7 +336,19 @@ class MineralValueConfig:
     #         ⚠️  Both surface figures are marginal-transport LOWER BOUNDS —
     #         no NRE, no programme overhead, no cadence limit.  CLPS lunar
     #         landers really cost ~$1M/kg today at ~100 kg scale.
-    pipeline_version: str = "1.4.0"
+    # 1.5.0 — market-size data for Module 4 v1.7.0's saturation model.
+    #         Prices were static at the point of sale: a mission could return
+    #         any quantity of platinum and sell every kilogram at spot, which
+    #         left the "fly more missions" lever with no stopping point.
+    #         • ANNUAL_WORLD_PRODUCTION_KG — USGS primary production.  The
+    #           targets asteroid mining always names are the small ones:
+    #           osmium ~1 t/yr, iridium 7.5 t, rhodium 23 t, platinum 180 t.
+    #         • IN_SPACE_ANNUAL_DEMAND_KG — what a theoretical base can absorb
+    #           per year, all commodities competing for one import budget.
+    #           LEO 500 t, cislunar 100 t, lunar surface 50 t, Mars 20 t.
+    #           ⚠️  JUDGEMENT, not measurement — no such market exists.
+    #         New output column: annual_market_kg (destination-aware).
+    pipeline_version: str = "1.5.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows: int = 20
@@ -721,6 +733,67 @@ IN_SPACE_UTILITY: Dict[str, float] = {
     # See in_space_price_usd_per_kg.
 }
 IN_SPACE_UTILITY_DEFAULT = 0.0
+
+
+# ─── HOW BIG IS THE MARKET?  (v1.5.0) ────────────────────────────────────────
+# Prices in this pipeline were static at the point of sale: a mission could
+# return any quantity of platinum and still sell every kilogram at spot.  That
+# is the one remaining assumption that flatters the model in a direction
+# nothing else corrects, because the whole "just fly more missions" lever —
+# nre_amortization_missions — has no natural stopping point without it.
+#
+# Terrestrial figures are USGS Mineral Commodity Summaries annual primary
+# production.  Bulk commodities Earth has in effective abundance carry a
+# deliberately huge number so saturation never binds on them.
+ANNUAL_WORLD_PRODUCTION_KG: Dict[str, float] = {
+    # Precious — small markets, and the ones asteroid mining always targets
+    "osmium":         1.0e3,      # ~1 t/yr, a by-product of a by-product
+    "iridium":        7.5e3,      # ~7.5 t
+    "rhodium":        2.3e4,      # ~23 t
+    "ruthenium":      3.0e4,      # ~30 t
+    "platinum":       1.8e5,      # ~180 t
+    "palladium":      2.1e5,      # ~210 t
+    "gold":           3.0e6,      # ~3,000 t
+    "silver":         2.6e7,      # ~26,000 t
+    # Base metals — large markets, saturation effectively never binds
+    "cobalt":         2.3e8,
+    "copper":         2.2e10,
+    "nickel":         3.6e9,
+    "iron":           1.3e12,     # world pig-iron production
+    # Effectively unlimited on Earth
+    "water":          1.0e15,
+    "carbon":         1.0e12,
+    "silicates":      1.0e15,
+    "organics":       1.0e12,
+}
+_UNLIMITED_MARKET_KG = 1.0e15
+
+# What a theoretical in-space base can actually ABSORB per year, all
+# commodities competing for the same import budget.
+#
+# ⚠️  JUDGEMENT, not measurement — no such market exists.  Anchored to
+# publicly discussed architectures: a Starship-class refuelling campaign needs
+# on the order of 1,000 t of propellant in LEO per Mars departure; an
+# Artemis-scale NRHO depot is a fraction of that; surface bases are smaller
+# again and would supply much of their own water locally from regolith or ice.
+#
+# This is what stops a single mission "selling" 40 tonnes of water to a Mars
+# outpost at full launch-cost-avoided.  A base that imports 20 t/yr does not
+# pay the same price for the 400th tonne as for the first.
+IN_SPACE_ANNUAL_DEMAND_KG: Dict[str, float] = {
+    "leo":           500_000.0,
+    "cislunar":      100_000.0,
+    "lunar_surface":  50_000.0,
+    "mars_surface":   20_000.0,
+}
+
+
+def annual_market_kg(name: str, destination: str) -> float:
+    """Annual absorbable quantity for `name` at `destination`, in kg/yr."""
+    dest = str(destination or "").strip().lower()
+    if dest in IN_SPACE_ANNUAL_DEMAND_KG:
+        return IN_SPACE_ANNUAL_DEMAND_KG[dest]
+    return ANNUAL_WORLD_PRODUCTION_KG.get(str(name), _UNLIMITED_MARKET_KG)
 
 
 def value_for_destination(destination: str) -> dict:
@@ -1665,6 +1738,12 @@ def build_mineral_value_catalog(
     catalog = validate(catalog)
 
     # ── Step 5 — Metadata + sort ─────────────────────────────────────────────
+    # How much of each commodity the market can absorb per year — Module 4
+    # uses it to apply a demand curve rather than selling any quantity at spot.
+    catalog["annual_market_kg"] = [
+        annual_market_kg(str(n), config.delivery_destination) for n in catalog["name"]
+    ]
+
     catalog["catalog_date"]         = t0.strftime("%Y-%m-%d")
     catalog["pipeline_version"]     = config.pipeline_version
     # Stamped into every row: the water price — and therefore the whole
