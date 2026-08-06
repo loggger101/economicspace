@@ -62,9 +62,43 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.0.7`, mineral_value `1.1.5`, transportation `1.2.5`,
-calc `1.3.7`, master `1.4.4` (the master version is a literal in
+Current: catalog `1.0.8`, mineral_value `1.2.0`, transportation `1.3.0`,
+calc `1.4.0`, master `1.5.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
+
+## Model assumptions that are load-bearing
+
+These were found by a realism audit and are easy to silently break again.
+
+**Water is priced by delivery destination, not intrinsically.** It is
+~100% of the value of every C/B/D-type asteroid, so
+`MINERAL_CONFIG.delivery_destination` decides the whole ranking. The default
+`earth_surface` matches what the Stage 4 mission model actually delivers.
+Setting `leo` restores the old, much larger numbers, but pairing an in-space
+price with a re-entry architecture is exactly the inconsistency the field
+exists to prevent.
+
+**Δv must stay per-asteroid.** Before v1.4.0 every asteroid got the same Δv,
+which made `max_payload_kg`, `total_cost_usd`, `mission_duration_yr`, `vehicle`
+and `propellant` single-valued across an entire catalog — the ranking was
+composition-only and accessibility had no effect. If you ever see those
+columns collapse to one unique value again, `use_per_asteroid_dv` is off or
+the orbital elements aren't reaching Stage 4.
+
+**Electric propulsion needs its Δv penalty.** The rocket equation ignores
+thrust; trajectories don't. Without `dv_penalty_factor`, a 3,000 s Isp
+thruster wins the mass cascade on an impulsive budget it cannot fly.
+
+**Extraction is rate-limited.** Payload is capped by what the rig can dig
+inside `max_mining_duration_yr`, and the dig time feeds mission duration, ops
+cost and WACC. Removing that cap makes the rig an infinitely fast vacuum.
+
+**M-type is not a bare metal core.** No M-type has ever been measured near
+iron-meteorite density — Psyche is ~3.8–3.9 g/cm³. Metal fractions are set
+accordingly; don't restore the 0.80/5.30 values.
+
+A default run produces zero viable missions. That is the correct answer, not
+a regression.
 
 ## Config discipline
 
