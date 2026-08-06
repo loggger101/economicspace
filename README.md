@@ -270,15 +270,11 @@ With reliability growth in, `nre_amortization_missions` finally does what its
 name suggests — and the two v1.8.0/v1.9.0 models pull against each other in a
 way worth understanding. Mars, beneficiated:
 
-⚠️ Measured on the pre-v1.0.9 catalog — the single-mission case is 25.2× on the
-restored one, so the whole column shifts down. The *shape* is what matters here
-and that does not depend on the population; the absolute ratios need re-running.
-
 | Programme | `p_mining` | `P(success)` | Missions sharing one rig | Best cost/revenue |
 |---|---|---|---|---|
-| 1 mission | 0.850 | 0.698 | 1 | 34.2× → 25.2× re-measured |
-| 10 missions | 0.902 | 0.741 | 7 (capped) | ~10× *(stale)* |
-| 100 missions | 0.943 | 0.775 | 7 (capped) | **~8×** *(stale)* |
+| 1 mission | 0.850 | 0.698 | 1 | 25.2× |
+| 10 missions | 0.902 | 0.741 | 7 (capped) | 6.9× |
+| 100 missions | 0.943 | 0.775 | 7 (capped) | **5.3×** |
 
 Going from 10 to 100 missions buys much less than going from 1 to 10, and the
 reason is the rig service-life cap: at this stay length one rig serves seven
@@ -462,12 +458,14 @@ Costs charged, all of which the search trades against:
   equation as everything else. Payload → feed → power → mass → payload is a
   real circular dependency, solved by fixed-point iteration.
 
-⚠️ The search costs runtime: roughly **10× slower** on the beneficiation path
-(~5 s → ~55 s for 1,959 asteroids). Tune with
+⚠️ The search costs runtime: roughly **8× slower** on the beneficiation path.
+On the v1.0.9 catalog (35,778 asteroids) one destination is ~140 s raw against
+~1,100 s beneficiated, so re-measuring all five is a couple of hours. Tune with
 `.calc.concentration_search_steps`.
 
-The 1/r² term punishes distant targets hard (cislunar delivery, 1,959-body
-run):
+The 1/r² term punishes distant targets hard (cislunar delivery, measured on a
+1,959-body pre-v1.0.9 run; the ratios between rows are the point, not the
+absolute masses):
 
 | Semi-major axis | W/kg at target | Mean array mass |
 |-----------------|---------------|-----------------|
@@ -477,25 +475,26 @@ run):
 
 ### Combined effect
 
-Cost/revenue ratio, beneficiated (lower is better; 1.0 would be breakeven).
+Cost/revenue ratio across all 35,778 evaluable asteroids, catalog v1.0.9 /
+calc v1.9.1 (lower is better; 1.0 would be breakeven):
 
-⚠️ **Mid-re-measurement.** Catalog v1.0.9 fixed SsODNet being discarded at
-merge, taking the measured-taxonomy population from ~1,850 to ~24,675 bodies.
-`mars_surface` has been re-measured on the restored catalog; the other four
-still carry pre-1.0.9 numbers and will move when re-run. See
-[Source outages change the population](#source-outages-change-the-population-not-just-the-coverage).
+| | raw (best / median) | beneficiated (best / median) | best target |
+|---|---|---|---|
+| `earth_surface` | 236,629× / 54,522,844× | 156,725× / 50,335,564× | 17188 (1999 WC2), M |
+| `leo` | 445.9× / 15,092× | 290.4× / 9,884× | 434 Hungaria, Xe |
+| `lunar_surface` | 126.6× / 1,224× | 53.5× / 663× | 4660 Nereus, Xe |
+| `cislunar` | 39.79× / 4,053× | 39.79× / 2,161× | 4660 Nereus, Xe |
+| `mars_surface` | 54.2× / 1,154× | **25.2× / 248×** | 4015 Wilson-Harrington, B |
 
-| | best / median | population |
-|---|---|---|
-| `earth_surface` | 191,359× / 52,832,913× | 1,959 — *stale* |
-| `leo` | 290× / 10,067× | 1,959 — *stale* |
-| `cislunar` | 143× / 2,377× | 1,959 — *stale* |
-| `lunar_surface` | 74× / 543× | 1,959 — *stale* |
-| `mars_surface` | **25.2× / 248×** | 35,778 — **current** |
+Against the pre-v1.0.9 catalog (191,359 / 290 / 74 / 143 / 34) every
+destination improved except LEO, and **the ordering changed** — the Moon used
+to beat cislunar and no longer does. That is a population effect, not a
+modelling one: cislunar gained 3.6× from the restored catalog and the Moon
+only 1.4×, because the newly-visible bodies include accessible NEAs suited to
+the cheaper cislunar capture. LEO barely moved (290× → 290.4×) because its
+winner was already in the old subset.
 
-Mars was 34× on the degraded catalog and is 25.2× on the restored one. No
-physics changed: the optimiser simply has 13× more real-taxonomy targets to
-choose a winner from, so the best of them is better.
+Still **zero viable missions** anywhere.
 
 Beneficiation roughly **halves** the gap for a typical target — and what it
 does to the *best* target depends on the destination, which is easy to get
@@ -503,18 +502,17 @@ wrong. At cislunar it declines to concentrate on the single best body, already
 water-rich enough that grinding more rock costs more than it returns. **At
 Mars it does not decline, and the best case moves a lot:**
 
-| `mars_surface` | best | median | best target |
-|---|---|---|---|
-| not beneficiated | 54.2× | 1,154× | 22290 (1989 AO), D |
-| beneficiated | **25.2×** | **248×** | 4015 Wilson-Harrington (B), concentrated 4.2× |
+Cislunar is the **only** destination where it declines — 39.79× either way, to
+the hundredth — and that reproduces the original `fa263ad` finding on a
+catalog 19× larger. Everywhere else it moves the best case hard: −34% at
+`earth_surface`, −35% at `leo`, −58% at `lunar_surface`, −53% at
+`mars_surface`, usually changing which asteroid wins.
 
-−53% on the best case, −79% on the median, and a *different asteroid wins*.
-The effect replicates across three independent populations, which is why it
-can be trusted even though each gives different absolutes: 1,854
-measured-taxonomy bodies gave 69.6× → 31.0×, 5,000 mostly albedo-typed bodies
-gave 71.8× → 32.5×, and the full restored catalog above gives 54.2× → 25.2×.
-All three land near −55% on the best case and concentrate the winner at a
-ratio of 4–5.
+4660 Nereus makes the mechanism visible. The *same* asteroid wins both
+cislunar and lunar surface, and the optimiser declines to concentrate it for
+cislunar while concentrating it 2.5× for the lunar surface. The decision
+belongs to the (target × destination) pair, not to the target — which is why
+"beneficiation doesn't move the best target" was never a general fact.
 
 Still **zero viable missions** anywhere, but Mars closes the gap by ~4 orders
 of magnitude from the default and lands within a factor of ~25.
