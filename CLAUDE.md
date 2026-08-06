@@ -5,8 +5,8 @@ what it does and how to run it; this file covers what will bite you.
 
 ## master.py is generated — never edit it
 
-`master.py` is 6,300 lines assembled from `modules/*.py` by `build_master.py`.
-Edit the module, run `python build_master.py`, commit both. A change made
+`master.py` is ~9,600 lines assembled from `modules/*.py` by `build_master.py`.
+Edit the module, run `py build_master.py`, commit both. A change made
 directly in `master.py` is destroyed by the next build.
 
 `git status` immediately after a build is the sync check: clean means
@@ -62,9 +62,29 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.0.8`, mineral_value `1.6.0`, transportation `1.8.1`,
-calc `1.9.1`, master `1.10.1` (the master version is a literal in
+Current: catalog `1.0.9`, mineral_value `1.6.0`, transportation `1.8.1`,
+calc `1.9.1`, master `1.11.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
+
+## When a number changes, grep the prose too
+
+The recurring documentation failure here is not a missing table — it is a
+stale sentence. A commit that measures something naturally rewrites the table
+it measured, and leaves every summary paragraph that quoted the old figure
+standing. An August 2026 audit found four releases' worth of rot in
+committed-clean files: CLAUDE.md still called cislunar the best case at 51×
+when Mars had been the best case at 34× for three commits; both files said
+"nine" models in a section listing ten; the README asserted Mars "lands
+within a factor of ~14" immediately above its own table reading 34×.
+
+That matters more here than in most repos, because these files exist to stop
+someone "fixing" a result that only looks wrong. A stale headline invites
+exactly that.
+
+So after changing any number, search for the superseded **claim**, not just
+the digits: "best case", "still comes in", counts spelled out in prose and
+headings, and the name of whichever destination used to win. Check that
+summary paragraphs still agree with the tables below them in the same file.
 
 ## Model assumptions that are load-bearing
 
@@ -172,19 +192,70 @@ iron-meteorite density — Psyche is ~3.8–3.9 g/cm³. Metal fractions are set
 accordingly; don't restore the 0.80/5.30 values.
 
 A default run produces zero viable missions. That is the correct answer, not
-a regression. So does every other combination currently in the model — the
-best case found so far (cislunar delivery) still comes in at ~51× cost over
-revenue, down from ~297,000× at the `earth_surface` default. Beneficiation
-halves the *median* gap but does not move the best target, where the
-optimiser declines to concentrate.
-Closing that last 51× is not a tuning exercise; the remaining candidates are
-a rig terminal value, in-space manufacturing (the 0.70 metal utility factor is
-standing in for a refining plant that is costed nowhere), and joint
-trajectory/payload optimisation. Do not manufacture viability by editing
-`IN_SPACE_UTILITY` or the in-space demand ceilings -- both are judgement
-tables and both are load-bearing.
+a regression. So does every other combination currently in the model.
 
-## The nine things the model stopped giving away
+⚠️ **The destination table below is mid-re-measurement.** Catalog v1.0.9 fixed
+SsODNet being discarded at merge, which took the measured-taxonomy population
+from ~1,850 to ~24,675 bodies — so every ratio measured before it is stale.
+`mars_surface` has been re-measured on the restored catalog; the other four
+have not. Do not compare a fresh run against the stale rows.
+
+Best cost/revenue, beneficiated, lower is better, 1.0 is breakeven:
+
+| destination | best | population | status |
+|---|---|---|---|
+| `earth_surface` (default) | 191,359× | 1,959 | stale — pre-1.0.9 catalog |
+| `leo` | 290× | 1,959 | stale — pre-1.0.9 catalog |
+| `cislunar` | 143× | 1,959 | stale — pre-1.0.9 catalog |
+| `lunar_surface` | 74× | 1,959 | stale — pre-1.0.9 catalog |
+| `mars_surface` | **25.2×** | 35,778 evaluated | **current** (catalog 1.0.9, calc 1.9.1) |
+
+Mars was 34× on the degraded catalog and is 25.2× on the restored one. Nothing
+about the physics changed — the optimiser simply has 13× more real-taxonomy
+targets to pick a winner from, so the best of them is better. Expect the other
+four to move by a similar mechanism when re-measured.
+
+**`mars_surface` is the best case the model can currently reach**, not
+cislunar — that changed in `1a5e0c8` when the lunar and Mars destinations
+landed, and the gap has been tracked on Mars ever since. Flying more missions
+is the strongest remaining lever: on the pre-1.0.9 catalog ~34× at N=1 fell to
+~8× at N=100 (see the reliability-growth and rig-service-life entries below,
+which pull against each other). The N=1 case is 25.2× on the restored catalog
+and the rest of that curve has not been re-measured — the shape holds, the
+absolutes do not.
+
+**Beneficiation behaves differently at Mars than it did at cislunar, and the
+old cislunar intuition does not carry over.** At cislunar (`fa263ad`) the
+optimiser *declined* to concentrate on the single best body, so beneficiation
+halved the median and left the best case untouched. At `mars_surface`, on the
+restored v1.0.9 catalog (35,778 evaluated, 34,116 scored):
+
+| mars_surface | best | median | winner |
+|---|---|---|---|
+| not beneficiated | 54.2× | 1,154× | 22290 (1989 AO), D |
+| beneficiated | **25.2×** | **248×** | 4015 Wilson-Harrington, B, concentrated 4.2× |
+
+That is −53% on the best case and −79% on the median, and it *changes which
+asteroid wins*. So do not repeat "beneficiation does not move the best target"
+as a general fact. It was a cislunar result and it is false at Mars: the
+cislunar winner was already water-rich enough that grinding more rock cost
+more than it returned, and the Mars winner is not.
+
+The effect replicates across three independent populations, which is why it
+can be trusted even though each population gives different absolutes —
+1,854 measured-taxonomy bodies gave 69.6× → 31.0×, 5,000 mostly albedo-typed
+bodies gave 71.8× → 32.5×, and the full restored catalog gives 54.2× → 25.2×.
+All three are roughly −55% on the best case, and all three concentrate the
+winner at a ratio near 4–5.
+
+Closing the last 25× is not a tuning exercise. Rig terminal value and
+in-space manufacturing were the named candidates and both shipped in v1.8.0
+(`e860259`), so what remains is joint trajectory/payload optimisation, and
+programme scale. Do not manufacture viability by editing `IN_SPACE_UTILITY`
+or the in-space demand ceilings -- both are judgement tables and both are
+load-bearing.
+
+## The ten things the model stopped giving away
 
 Each defaults ON and each moved every number. They are corrections, not
 options; the flags exist to isolate effects, not to be left off.
@@ -231,10 +302,14 @@ full because you spend the money either way. Launch insurance replaces
 hardware, not revenue, so it is not a double count -- do not "fix" that.
 
 p_mining = 0.85 is counted from the FULL regolith-contact flight record --
-10 successes (Apollo, Luna 16/20/24, Stardust, Phoenix, Curiosity, Hayabusa2,
-OSIRIS-REx, Perseverance, Chang'e 5 and 6), 1 partial (Hayabusa returned its
-sample despite the sampler failing), 2 failures (Philae's harpoons, InSight's
-mole) = 11/13. v1.7.0 used 0.75, counted from the three failures alone with
+10 successes, 1 partial (Hayabusa returned its sample despite the sampler
+failing), 2 failures (Philae's harpoons, InSight's mole) = 11/13. The ten
+are counted by PROGRAMME where a programme flew one design repeatedly and by
+MISSION otherwise: Apollo 15-17 (1), Luna 16/20/24 (1), Stardust, Phoenix,
+Curiosity, Hayabusa2, OSIRIS-REx, Perseverance, Chang'e 5, Chang'e 6. Count
+them all as separate missions and you get a different denominator -- the
+canonical roster with per-mission detail is the "Mining system first-of-kind
+success probability" note in `transportation.py`, not this summary. v1.7.0 used 0.75, counted from the three failures alone with
 none of the successes; that was selection bias and below even the pessimistic
 0.77 reading. If you revisit this number, count both columns.
 
@@ -314,6 +389,58 @@ routing around an outage.
 
 `metals.dev` defaults to the key `"DEMO"`, which makes the fetcher skip
 entirely. That is intentional; the demo endpoint is heavily rate-limited.
+
+**But a soft failure silently changes the population you are measuring, and
+that will invalidate a comparison without warning.** Missing spectral types
+are backfilled by inferring a coarse type from albedo, so an outage does not
+shrink the catalog — it *inflates* it with guessed taxonomy.
+
+Check `spectral_type_source` (`source` / `tholen` / `albedo` / `unknown`)
+before comparing any run to a committed number. The startup banner's "Active
+sources" line lists what was *enabled*, not what answered — read the
+`Source summary: {...}` dict instead.
+
+### The SsODNet outage that wasn't an outage (fixed in v1.0.9)
+
+This one is worth reading in full, because nothing about it looked wrong.
+
+ssoBFT renamed its identity columns — `sso_number`/`sso_name`/`sso_id` became
+`number`/`name`/`id`. The column projection tolerated the loss, so
+`fetch_ssodnet` cheerfully returned 50,000 rows with no `designation`, and
+`merge_sources` dropped the entire source behind one ⚠️ line. A ~500 MB
+download, and every literature diameter, density, rotation and taxonomy in it,
+went in the bin on every run. The damage:
+
+| | before | after |
+|---|---|---|
+| taxonomy measured | 1,854 | **24,675** |
+| taxonomy guessed from albedo | 33,235 | **11,131** |
+| density measured | 0 | **438** |
+| V-type bodies | 3,988 | 2,614 |
+
+**Every number committed before v1.0.9 was measured on the degraded catalog**
+— roughly 1,900 real-taxonomy bodies instead of ~24,700. The V-type count is
+the tell: V-types are rare, and 3,988 of them was an artefact of guessing
+taxonomy from albedo.
+
+Three separate things kept it quiet, and each is a trap worth not rebuilding:
+
+- **The drift warning only fired when fewer than 5 of 24 columns matched.**
+  Fourteen still matched, so losing every merge key read as healthy. A
+  projection that tolerates missing columns must still *assert* the ones it
+  cannot work without — that is what `_SSODNET_REQUIRED` is for now.
+- **The row-cap sort key sat behind an `if in df.columns` guard**, so
+  truncation silently stopped sorting and took an arbitrary 50,000 rows
+  starting near asteroid 367488 instead of Ceres. A guard that turns a wrong
+  answer into a quiet one is worse than no guard.
+- **`pq.ParquetFile.schema` is the PHYSICAL parquet schema**, which names a
+  nested list column by its inner path, so `spins.period.value` read as
+  absent. Test membership against `schema_arrow` — that is what
+  `read(columns=…)` accepts.
+
+After fixing, spot-check against literature rather than trusting row counts:
+Ceres 939.4 km / 2.162 g/cm³ / 9.074 h / C, Vesta 522.8 / 3.411 / 5.342 h / V,
+Pallas B, Psyche X, Eros 5.27 h / S.
 
 ## Google Drive makes the tree look dirty — run the hooks
 

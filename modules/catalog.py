@@ -241,7 +241,48 @@ class CatalogConfig:
     #         Fraction sums per type are unchanged, so the v1.3.3 residual
     #         silicate floor behaves exactly as before.  Lowers M-type bulk
     #         value; raises nothing.
-    pipeline_version: str = "1.0.8"
+    # 1.0.9 — SsODNet was being fetched and then thrown away.  ssoBFT renamed
+    #         its identity columns (sso_number/sso_name/sso_id → number/name/
+    #         id), the column projection tolerated the loss, and merge_sources
+    #         then dropped the whole source for having no `designation`.  A
+    #         ~500 MB download and every literature diameter, density,
+    #         rotation and TAXONOMY in it went in the bin, silently, behind
+    #         one ⚠️ line.  Six more columns had drifted with it:
+    #             perihelion            → periapsis_distance
+    #             aphelion              → apoapsis_distance
+    #             perihelion_argument   → periapsis_argument
+    #             absolute_magnitude.value → absolute_magnitude.H.value
+    #             spins.<1..3>.period.value → spins.period.value (now a LIST)
+    #         Three separate things kept it quiet, all now fixed:
+    #           • the drift warning only fired when <5 of 24 columns matched.
+    #             14 matched, so losing every merge key read as healthy.  It
+    #             now always reports, and _SSODNET_REQUIRED makes the identity
+    #             columns fatal for the source instead of silently useless.
+    #           • the row-cap sort key `sso_number` sat behind an
+    #             `if in df.columns` guard, so truncation silently stopped
+    #             sorting and took an arbitrary 50,000 rows starting near
+    #             asteroid 367488 rather than Ceres.  Sort key is now required.
+    #           • pq.ParquetFile.schema is the PHYSICAL schema, which names a
+    #             nested list column by its inner path, so `spins.period.value`
+    #             read as absent.  Membership is tested against schema_arrow,
+    #             which is what read(columns=…) actually accepts.
+    #         EFFECT — this changes the evaluated population, so it changes
+    #         every downstream number.  Same run, sources otherwise identical
+    #         (JPL 50k, NEOWISE 50k, MP3C unreachable):
+    #             catalog entries            35,098 →  35,807
+    #             taxonomy MEASURED           1,854 →  24,675
+    #                 (source + tholen; was 1,358 + 496)
+    #             taxonomy GUESSED from albedo 33,235 → 11,131
+    #             density measured                0 →     438
+    #             V-type bodies               3,988 →   2,614
+    #         The V-type count is the tell that the old catalog was wrong:
+    #         V-types are rare, and 3,988 of them was an artefact of guessing
+    #         taxonomy from albedo.  Verified against literature after the
+    #         fix — Ceres 939.4 km / 2.162 g/cm³ / 9.074 h / C, Vesta 522.8 /
+    #         3.411 / 5.342 h / V, Pallas B, Psyche X, Eros 5.27 h / S.
+    #         Any CSV stamped 1.0.8 or earlier was built on the degraded
+    #         catalog — re-run rather than trusting it.
+    pipeline_version: str = "1.0.9"
 
 
 # Instantiate and create the output dir.  Edit CONFIG values above this line
@@ -1214,19 +1255,36 @@ def _normalise_mp3c_df(df: pd.DataFrame, source_url: str) -> pd.DataFrame:
 # (~500 MB) ONCE per `cache_max_age_days` and read only the columns we need
 # via pyarrow column projection so the in-memory footprint is small.
 #
-# Schema notes (parquet column names use dotted paths — 915 cols total):
-#   Identity:  sso_id, sso_number, sso_name
+# Schema notes (parquet column names use dotted paths — 244 cols as of the
+# 2026-08 release; verify against the cached file, not this comment):
+#   Identity:  id, number, name
 #   Physical:  diameter.value, diameter.error.{min,max}        (km)
 #              albedo.value                                    (geometric)
 #              mass.value                                      (kg)
 #              density.value                                   (kg/m³ → we convert to g/cm³)
-#              absolute_magnitude.value                        (mag)
+#              absolute_magnitude.H.value                      (mag)
 #   Taxonomy:  taxonomy.class, taxonomy.complex
 #   Orbital:   orbital_elements.{semi_major_axis,eccentricity,
-#                inclination,perihelion,aphelion,node_longitude,
-#                perihelion_argument,mean_anomaly,orbital_period}.value
-#   Rotation:  spins.<1..5>.period.value  (ranked best-of solutions, plural,
-#                                          1-indexed; we coalesce ranks 1-3)
+#                inclination,periapsis_distance,apoapsis_distance,
+#                node_longitude,periapsis_argument,mean_anomaly,
+#                orbital_period}.value
+#   Rotation:  spins.period.value — a LIST column (one row holds every ranked
+#              solution); we take the first non-null element.
+#
+# ⚠️  THE IDENTITY COLUMNS WERE RENAMED (v1.0.9).  ssoBFT used to ship
+# `sso_id` / `sso_number` / `sso_name`; it now ships `id` / `number` / `name`.
+# Because the projection silently drops columns it cannot find, the fetcher
+# went on returning 50,000 rows with NO merge key, and `merge_sources` then
+# discarded the entire source with a one-line warning — for a ~500 MB download
+# and every literature diameter, density and taxonomy in the catalog.  Six
+# other columns drifted at the same time (perihelion → periapsis_distance,
+# aphelion → apoapsis_distance, perihelion_argument → periapsis_argument,
+# absolute_magnitude.value → absolute_magnitude.H.value, and the three ranked
+# spin columns → one list column).
+#
+# The lesson: a projection that tolerates missing columns MUST still assert
+# the ones it cannot work without.  `_SSODNET_REQUIRED` below does that, and
+# the fetcher now fails loudly rather than returning an unmergeable frame.
 #
 # Documentation: https://ssp.imcce.fr/webservices/ssodnet/api/ssobft/
 # Bulk file:     https://ssp.imcce.fr/data/ssoBFT-latest_Asteroid.parquet
@@ -1237,7 +1295,7 @@ _SSODNET_CACHE_FILE  = "ssoBFT-latest_Asteroid.parquet"
 # Columns we WANT.  Asked of pyarrow as a projection; any not present in the
 # file's actual schema are silently dropped (handled below).
 _SSODNET_WANTED = [
-    "sso_id", "sso_number", "sso_name",
+    "id", "number", "name",
     "diameter.value", "diameter.error.min", "diameter.error.max",
     "albedo.value",
     "mass.value",
@@ -1246,32 +1304,41 @@ _SSODNET_WANTED = [
     "orbital_elements.semi_major_axis.value",
     "orbital_elements.eccentricity.value",
     "orbital_elements.inclination.value",
-    "orbital_elements.perihelion.value",
-    "orbital_elements.aphelion.value",
+    "orbital_elements.periapsis_distance.value",
+    "orbital_elements.apoapsis_distance.value",
     "orbital_elements.node_longitude.value",
-    "orbital_elements.perihelion_argument.value",
+    "orbital_elements.periapsis_argument.value",
     "orbital_elements.mean_anomaly.value",
     "orbital_elements.orbital_period.value",
-    "absolute_magnitude.value",
-    # Spin / rotation: ssoBFT exposes up to 5 ranked-best spin solutions as
-    # `spins.<1..5>.period.value` (plural, 1-indexed).  Pull the top-3 ranks;
-    # the fetcher coalesces them — first non-NaN wins → maximises coverage.
-    "spins.1.period.value", "spins.2.period.value", "spins.3.period.value",
+    "absolute_magnitude.H.value",
+    # Spin / rotation: ssoBFT now stores every ranked solution for a body in
+    # ONE list column rather than `spins.<1..5>.period.value` scalars.  The
+    # fetcher takes the first non-null element (rank order is preserved).
+    "spins.period.value",
 ]
+
+# Without these three the frame cannot be merged — `merge_sources` keys on
+# `designation`, which is built from `number` falling back to `name`.  Losing
+# them silently is the failure documented above, so the fetcher treats their
+# absence as fatal for this source rather than returning a useless frame.
+_SSODNET_REQUIRED = ["number", "name"]
 
 _SSODNET_RENAME = {
     # Identity:
-    #   sso_number  → numeric IAU number (e.g. "1" for Ceres).  Used as our
-    #                 merge key (designation).
-    #   sso_name    → human-readable name ("Ceres").
-    #   sso_id      → IMCCE's quaero-resolved canonical identifier; for
-    #                 numbered asteroids this is the name string, for
-    #                 unnumbered it's the provisional designation.  Kept as
-    #                 `ssodnet_id` so a user can round-trip back to the
-    #                 SsODNet REST API (ssp.imcce.fr/.../ssocard/<ssodnet_id>).
-    "sso_number":                                      "designation",
-    "sso_name":                                        "name",
-    "sso_id":                                          "ssodnet_id",
+    #   number  → numeric IAU number (e.g. 1 for Ceres).  Used as our merge
+    #             key (designation).  Nullable — unnumbered bodies fall back
+    #             to `name`.
+    #   name    → human-readable name ("Ceres").
+    #   id      → IMCCE's quaero-resolved canonical identifier; for numbered
+    #             asteroids this is the name string, for unnumbered it's the
+    #             provisional designation.  Kept as `ssodnet_id` so a user can
+    #             round-trip back to the SsODNet REST API
+    #             (ssp.imcce.fr/.../ssocard/<ssodnet_id>).
+    # These were sso_number / sso_name / sso_id before the 2026-08 schema
+    # change — see the ⚠️ note above before "fixing" them back.
+    "number":                                          "designation",
+    "name":                                            "name",
+    "id":                                              "ssodnet_id",
     "diameter.value":                                  "diameter_km",
     "albedo.value":                                    "albedo",
     "mass.value":                                      "estimated_mass_kg",
@@ -1283,15 +1350,15 @@ _SSODNET_RENAME = {
     "orbital_elements.semi_major_axis.value":          "semi_major_axis_au",
     "orbital_elements.eccentricity.value":             "eccentricity",
     "orbital_elements.inclination.value":              "inclination_deg",
-    "orbital_elements.perihelion.value":               "perihelion_au",
-    "orbital_elements.aphelion.value":                 "aphelion_au",
+    "orbital_elements.periapsis_distance.value":       "perihelion_au",
+    "orbital_elements.apoapsis_distance.value":        "aphelion_au",
     "orbital_elements.node_longitude.value":           "longitude_asc_node_deg",
-    "orbital_elements.perihelion_argument.value":      "arg_perihelion_deg",
+    "orbital_elements.periapsis_argument.value":       "arg_perihelion_deg",
     "orbital_elements.mean_anomaly.value":             "mean_anomaly_deg",
     "orbital_elements.orbital_period.value":           "orbital_period_yr",
-    "absolute_magnitude.value":                        "absolute_magnitude_h",
-    # spins.<n>.period.value handled separately below — they're coalesced
-    # into a single `rotation_period_h` column.
+    "absolute_magnitude.H.value":                      "absolute_magnitude_h",
+    # spins.period.value handled separately below — the list is reduced to a
+    # single `rotation_period_h` column.
 }
 
 _SSODNET_NUMERIC = [
@@ -1407,17 +1474,40 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
         if engine == "pyarrow":
             import pyarrow.parquet as pq
             pf = pq.ParquetFile(cache_path)
-            schema_names = set(pf.schema.names)
+            # schema_arrow, NOT schema.  The parquet PHYSICAL schema flattens a
+            # list column into its inner path, so `spins.period.value` is absent
+            # from pf.schema.names while present in pf.schema_arrow.names — and
+            # read(columns=…) expects the arrow-level name.  Testing membership
+            # against the physical schema silently drops every nested column.
+            schema_names = set(pf.schema_arrow.names)
             cols = [c for c in _SSODNET_WANTED if c in schema_names]
             missing = [c for c in _SSODNET_WANTED if c not in schema_names]
             if missing:
-                # Common — SsODNet uses different flattened names per release.
-                # Only surface this when essentially nothing matched.
-                if len(cols) < 5:
-                    print(f"     ⚠️  Schema only matched {len(cols)} of {len(_SSODNET_WANTED)} expected columns")
+                # SsODNet renames flattened columns between releases, so a few
+                # misses are normal and tolerable.  Say which, at every scale —
+                # the old code only spoke up when fewer than 5 columns matched,
+                # which is exactly why a release that renamed the IDENTITY
+                # columns (and 6 others) passed for healthy: 14 still matched.
+                print(f"     ℹ️   Schema drift: {len(cols)}/{len(_SSODNET_WANTED)} "
+                      f"columns matched, missing {missing}")
+            absent_required = [c for c in _SSODNET_REQUIRED if c not in schema_names]
+            if absent_required:
+                print(f"     ❌  ssoBFT schema is missing the merge key(s) "
+                      f"{absent_required} — cannot build `designation`, so every "
+                      f"row would be dropped at merge time.  Skipping SsODNet.")
+                print(f"         Inspect the real schema and update "
+                      f"_SSODNET_WANTED / _SSODNET_RENAME:")
+                print(f"         py -c \"import pyarrow.parquet as pq; "
+                      f"print(pq.ParquetFile(r'{cache_path}').schema_arrow.names)\"")
+                return pd.DataFrame()
             df = pf.read(columns=cols).to_pandas()
         else:
             df = pd.read_parquet(cache_path)
+            absent_required = [c for c in _SSODNET_REQUIRED if c not in df.columns]
+            if absent_required:
+                print(f"     ❌  ssoBFT schema is missing the merge key(s) "
+                      f"{absent_required} — skipping SsODNet.")
+                return pd.DataFrame()
             df = df[[c for c in _SSODNET_WANTED if c in df.columns]]
     except Exception as exc:
         print(f"     ❌  Parquet read failed: {type(exc).__name__}: {exc}")
@@ -1429,28 +1519,40 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
 
     # Cap to config.jpl_limit so SsODNet doesn't dominate runtime on small runs.
     # NB: full table is ~1.2 M rows; trimming here keeps merge / dedup fast.
-    # IMPORTANT: sort by sso_number ASC first so a small-N run gets the LOWEST
+    # IMPORTANT: sort by `number` ASC first so a small-N run gets the LOWEST
     # IAU numbers (Ceres=1, Pallas=2, Juno=3, Vesta=4, …) — the most famous
     # bodies — rather than whatever arbitrary order the parquet stores rows in.
-    # Unnumbered bodies (sso_number = NaN) are sorted to the end via na_position.
+    # Unnumbered bodies (number = NaN) are sorted to the end via na_position.
+    #
+    # This silently stopped working when the column was renamed from
+    # `sso_number`: the guard skipped the sort, and the run took an arbitrary
+    # 50,000 rows starting around asteroid 367488 instead of Ceres.  The sort
+    # key is required now, so the guard cannot silently no-op again.
     if config.jpl_limit and len(df) > config.jpl_limit:
-        if "sso_number" in df.columns:
-            df = df.sort_values("sso_number", ascending=True, na_position="last")
+        df = df.sort_values("number", ascending=True, na_position="last")
         df = df.head(config.jpl_limit).copy()
-        print(f"     ✂️   Truncated to first {config.jpl_limit:,} rows by sso_number ASC")
+        print(f"     ✂️   Truncated to first {config.jpl_limit:,} rows by number ASC")
 
-    # Coalesce the ranked spin solutions (spins.1 > spins.2 > spins.3) into a
-    # single rotation_period_h column.  Best-rank wins per row; lower-ranked
-    # values fill gaps where the best rank is NaN — maximises coverage.
-    spin_cols = [c for c in ("spins.1.period.value",
-                             "spins.2.period.value",
-                             "spins.3.period.value") if c in df.columns]
-    if spin_cols:
-        rot = df[spin_cols[0]].astype("float64")
-        for c in spin_cols[1:]:
-            rot = rot.fillna(df[c].astype("float64"))
-        df["rotation_period_h"] = rot
-        df = df.drop(columns=spin_cols)
+    # Reduce the ranked spin solutions to a single rotation_period_h column.
+    # ssoBFT used to expose them as `spins.<1..3>.period.value` scalars and now
+    # ships ONE list column holding every solution for the body, best rank
+    # first.  Take the first non-null element — same "best rank wins, lower
+    # ranks fill the gap" behaviour as before, expressed over a list.
+    if "spins.period.value" in df.columns:
+        def _first_period(v) -> float:
+            # pyarrow hands back None for absent lists and np.ndarray otherwise.
+            if v is None:
+                return np.nan
+            try:
+                for x in v:
+                    if x is not None and not pd.isna(x) and float(x) > 0:
+                        return float(x)
+            except TypeError:          # scalar sneaking through a schema change
+                return float(v) if pd.notna(v) else np.nan
+            return np.nan
+
+        df["rotation_period_h"] = df["spins.period.value"].apply(_first_period)
+        df = df.drop(columns=["spins.period.value"])
 
     # Derive diameter_sigma_km from the asymmetric (min, max) error pair before
     # we drop the dotted columns.  Average is a reasonable scalar uncertainty.
@@ -1462,9 +1564,9 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
 
     df = df.rename(columns={k: v for k, v in _SSODNET_RENAME.items() if k in df.columns})
 
-    # Designation: prefer sso_number (numbered → "1"), fall back to sso_name
+    # Designation: prefer `number` (numbered → "1"), fall back to `name`
     # (provisional designations / unnumbered).
-    # IMPORTANT: sso_number is int64 in the parquet but pandas casts to float64
+    # IMPORTANT: `number` is int64 in the parquet but pandas casts to float64
     # whenever NaN is present (unnumbered bodies), which would stringify "1" as
     # "1.0".  Cast to the nullable Int64 dtype first so the str() round-trip
     # gives us the bare integer form JPL uses.
