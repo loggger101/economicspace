@@ -20,8 +20,10 @@ modules/
     calc.py            Stage 4 — profitability calculation
 ```
 
-Each module is standalone: run it directly to build just that stage, or import
-it for its functions without triggering a run.
+Each module is a standalone file: run it directly to build just that stage, or
+import it for its functions without triggering a run. They share no Python
+imports — stages hand off through CSVs on disk, not through each other's
+namespaces (see [Stage dependencies](#stage-dependencies)).
 
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
@@ -31,6 +33,8 @@ it for its functions without triggering a run.
 | 4 | `modules/calc.py` | 1.3.7 | Rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
+
+Python 3.9+ (developed and run on 3.13). Then:
 
 ```bash
 pip install -r requirements.txt
@@ -51,6 +55,30 @@ python modules/transportation.py
 `master.py` is also designed to be pasted straight into a Colab or Jupyter cell
 — it auto-installs its own dependencies and runs top-to-bottom.
 
+### Stage dependencies
+
+Stages 1, 2 and 3 are independent of each other and can be run in any order or
+alone. **Stage 4 is not** — `modules/calc.py` reads the CSVs the other three
+wrote, so it needs a populated `output_dir` before it will do anything. Run the
+full `master.py` at least once, or run stages 1–3 individually first.
+
+### What a first run costs
+
+- **Stage 1** dominates. At the default `jpl_limit = 50_000` it takes a couple
+  of minutes and writes a ~30–40 MB CSV.
+- SsODNet's ssoBFT table is a **~500 MB parquet bulk download** on first run.
+  It is cached and re-used for `cache_max_age_days` (7 by default). The cache
+  lives in the system temp directory, deliberately *not* under `output_dir` —
+  on a Google Drive working copy that keeps half a gigabyte from re-syncing
+  every run. Point `CATALOG_CONFIG.cache_dir` somewhere else if you want it
+  co-located.
+- **Stage 4** is fast since v1.3.7 — roughly 470 asteroids/s, so the default
+  5,000-row cap finishes in ~10 s. Raising `eval_row_cap` scales linearly.
+- Every source is failure-tolerant: an unreachable host returns empty and the
+  run continues on what it did get. MP3C in particular is often DNS-blocked
+  from Colab runtimes. You do not need to flip a source toggle just because a
+  host is down.
+
 ### Output location
 
 Defaults to `/content/asteroid_pipeline` on Colab and `./asteroid_pipeline`
@@ -64,13 +92,33 @@ or in code, via `MASTER_CONFIG.output_dir`.
 
 ### Tuning
 
-`MASTER_CONFIG` sits near the bottom of `master.py`:
+`MASTER_CONFIG` sits near the bottom of `master.py` and exposes the four
+module configs as `.catalog`, `.mineral`, `.transport` and `.calc`. The levers
+that actually move the answer:
 
-- `MASTER_CONFIG.output_dir` — where everything lands
-- `MASTER_CONFIG.catalog.jpl_limit` — asteroid catalog size
-- `MASTER_CONFIG.calc.nre_amortization_missions` — multi-mission NRE split
-- `MASTER_CONFIG.calc.use_isru_return_propellant` — ISRU on/off
-- `MASTER_CONFIG.calc.eval_row_cap` — limit Stage 4 evaluations
+| Knob | Default | Effect |
+|------|---------|--------|
+| `MASTER_CONFIG.output_dir` | platform-dependent | Where everything lands |
+| `.catalog.jpl_limit` | `50_000` | Catalog size; also caps every other source. JPL accepts ~250k |
+| `.catalog.min_diameter_km` | `0.001` | Size floor. Raise to `1.0` to study km-class bodies only |
+| `.catalog.require_spectral_type` | `False` | `True` drops untyped rows — fewer asteroids, but every one has a composition |
+| `.catalog.use_jpl` / `use_mp3c` / `use_ssodnet` / `use_neowise` | all `True` | Per-source toggles. Turning off SsODNet skips the 500 MB download |
+| `.calc.eval_row_cap` | `5_000` | Stage-4 evaluation cap; `0` evaluates every row |
+| `.calc.max_mining_fraction` | `0.05` | Share of asteroid mass one mission may remove |
+| `.calc.use_aerocapture_return` | `True` | Trades 4,000 m/s of return Δv for a TPS mass penalty (15% of payload) |
+| `.calc.use_isru_return_propellant` | `False` | Return propellant made at the asteroid instead of hauled out |
+| `.calc.nre_amortization_missions` | `1` | Spread ~$588M development NRE across a fleet |
+| `.calc.contingency_fraction` | `0.20` | Flat contingency on the cost cascade |
+| `.calc.apply_wacc_compounding` | `True` | Time-value of money, bucketed by when each cost is incurred |
+| `.mineral.metals_api_key` | `"DEMO"` | Set a real metals.dev key to enable that source; `"DEMO"` silently skips |
+
+The two toggles worth understanding together are `use_isru_return_propellant`
+and `use_aerocapture_return`. With ISRU on *and* aerocapture off, nothing in
+the rocket equation scales with returned payload, so the launch-mass
+constraint goes slack. Stage 4 v1.3.6+ handles this by binding the return
+capsule's **volume** limit instead — without it, a 30 km body "returns"
+7.4e14 kg in a 500 kg capsule and tops the rankings with a fictional
+$7.8e17 profit.
 
 Importing `master.py` is side-effect free, so you can drive it yourself:
 
@@ -96,6 +144,43 @@ The build fails loudly rather than emitting a silently-wrong `master.py`.
 Paths are resolved relative to `build_master.py`, so the repo works from any
 location.
 
+After writing `master.py` the build re-parses it and reports any top-level
+name defined twice. Python silently lets the last definition win, so a
+collision introduced by a module edit would otherwise land unnoticed and the
+master would quietly run the wrong function — syntax-checking cannot see it.
+A clean build ends with `names : no unexpected shadowed definitions`. If it
+instead lists a name, either add a `word_replace()` rename in `build_master.py`
+or, if the duplication is deliberate and identical in every copy, add the name
+to `_EXPECTED_DUPES`.
+
+Commit the rebuilt `master.py` alongside the module change — it is tracked,
+and `git status` after a build is the check that the two are in sync.
+
+## Working copy
+
+The working tree lives in Google Drive, but the git directory does **not** —
+`.git` here is a one-line pointer file rather than a directory:
+
+```
+gitdir: C:/Users/Owner/repos/economicspace.git
+```
+
+That keeps thousands of loose objects out of Drive sync. The cost is that the
+external git directory stores the working tree's absolute path in its
+`core.worktree` setting, so **renaming or moving this folder breaks git** —
+`git status` starts failing with `fatal: this operation must be run in a work
+tree` while `git log` keeps working, which makes it look like a stranger
+problem than it is. Repoint it:
+
+```bash
+git config --file "C:/Users/Owner/repos/economicspace.git/config" core.worktree "<new absolute path>"
+```
+
+`.gitattributes` pins `*.py` to LF, because the sources get pasted into Colab
+and Jupyter, which expect LF. Git for Windows sets `core.autocrlf=true` in its
+system config by default, so without that pin a checkout here would rewrite
+every file to CRLF.
+
 ## Output
 
 ```
@@ -113,6 +198,39 @@ location.
 ```
 
 Output files are gitignored — they are regenerated by every run.
+
+### Reading `profitability_catalog.csv`
+
+One row per asteroid — the best (vehicle × propellant) combination found for
+it — sorted by `profit_usd` descending. Roughly 60 columns; the ones to look
+at first:
+
+| Column | Meaning |
+|--------|---------|
+| `designation`, `name`, `spectral_type`, `comp_group` | Which asteroid, and what it's made of |
+| `viable` | `profit_usd > 0`. The headline filter |
+| `profit_M$`, `gross_M$`, `cost_M$` | Same numbers as the `_usd` columns, in millions, for reading |
+| `roi` | `profit / total_cost` |
+| `usd_per_kg_cost` | Mission cost per kg actually returned — the cleanest cross-asteroid comparison |
+| `vehicle`, `propellant`, `isp_s` | The winning combination |
+| `max_payload_kg` | Material actually returned, after the mining-fraction, rocket-equation and volume caps |
+| `bulk_value_usd_per_kg` | Stage-2 prices × Stage-1 composition × PGM enrichment |
+| `volume_fits` | `False` means the capsule volume cap bound the payload, not the mass budget |
+| `m_launch_kg`, `m_outbound_prop_kg`, `m_return_prop_kg`, `m_at_asteroid_kg`, `tps_mass_kg` | The mass cascade |
+| `*_cost_usd` (15 of them) | The cost cascade, line by line — launch, propellant, hardware, ops, TPS, recovery, liability, licensing, insurance, NRE, autonomy NRE, contingency |
+| `upfront_cost_usd`, `ongoing_cost_usd`, `end_of_mission_cost_usd`, `wacc_multiplier*` | Cost by time bucket, and the WACC factor applied to each |
+| `pipeline_version`, `catalog_date` | Which version of Stage 4 produced this row, and when |
+
+Running `python modules/calc.py` directly (rather than `master.py`) also
+prints a top-20 table, a breakdown by composition group, the winning
+vehicle × propellant combinations, and a bar chart of where the money goes.
+That last one is the fastest way to see which lever matters: launch-dominated
+means try a cheaper vehicle, NRE-dominated means amortise across missions,
+WACC-dominated means shorten the mission.
+
+Every mineral price column carries a `_usd_per_kg` suffix — prices are
+normalised to USD/kg on the way in, everywhere, so the unit is never in
+question downstream.
 
 ## Mission model
 
