@@ -29,8 +29,8 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.0.9 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.6.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity |
-| 3 | `modules/transportation.py` | 1.8.1 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
-| 4 | `modules/calc.py` | 1.9.1 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
+| 3 | `modules/transportation.py` | 1.8.2 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
+| 4 | `modules/calc.py` | 1.10.0 | Per-asteroid Δv **and mission architecture**, in-space delivery, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 
@@ -117,20 +117,31 @@ that actually move the answer:
 | `.catalog.use_jpl` / `use_mp3c` / `use_ssodnet` / `use_neowise` | all `True` | Per-source toggles. Turning off SsODNet skips the 500 MB download |
 | `.calc.eval_row_cap` | `5_000` | Stage-4 evaluation cap; `0` evaluates every row |
 | `.calc.max_mining_fraction` | `0.05` | Share of asteroid mass one mission may remove |
-| `.calc.use_aerocapture_return` | `True` | Trades 4,000 m/s of return Δv for a TPS mass penalty (15% of payload) |
-| `.calc.use_isru_return_propellant` | `False` | Return propellant made at the asteroid instead of hauled out |
+| `.calc.use_aerocapture_return` | `True` | Makes aerocapture *available*. Trades return Δv for a TPS mass penalty (15% of payload); Stage 4 prices both and flies whichever pays, per asteroid |
+| `.calc.use_isru_return_propellant` | `True` | Makes ISRU *available*: hydrolox only, at bodies with water, with the extra rock dug, timed and charged |
+| `.calc.optimise_architecture_per_asteroid` | `True` | Search return mode and propellant sourcing per target rather than fixing them catalog-wide |
+| `.calc.selection_objective` | `"cost_revenue_ratio"` | What the per-asteroid search maximises. `"profit"` restores pre-v1.10.0 behaviour |
+| `.calc.return_structure_frac_of_payload` | `0.15` | Return-vehicle structure as a fraction of the haul, on top of the 500 kg base |
 | `.calc.nre_amortization_missions` | `1` | Spread ~$588M development NRE across a fleet |
 | `.calc.contingency_fraction` | `0.20` | Flat contingency on the cost cascade |
 | `.calc.apply_wacc_compounding` | `True` | Time-value of money, bucketed by when each cost is incurred |
 | `.mineral.metals_api_key` | `"DEMO"` | Set a real metals.dev key to enable that source; `"DEMO"` silently skips |
 
-The two toggles worth understanding together are `use_isru_return_propellant`
-and `use_aerocapture_return`. With ISRU on *and* aerocapture off, nothing in
-the rocket equation scales with returned payload, so the launch-mass
-constraint goes slack. Stage 4 v1.3.6+ handles this by binding the return
-capsule's **volume** limit instead — without it, a 30 km body "returns"
-7.4e14 kg in a 500 kg capsule and tops the rankings with a fictional
-$7.8e17 profit.
+`use_isru_return_propellant` and `use_aerocapture_return` changed meaning in
+Stage 4 v1.10.0. They used to *force* an architecture on the whole catalog;
+they now say it is **available**, and Stage 4 prices every feasible
+combination per asteroid and flies the one that pays. ISRU is additionally
+gated on physics — hydrolox only, at a body with a non-zero ice fraction — and
+the rock it takes to make the propellant is dug, timed and charged like any
+other feed.
+
+Historically the dangerous corner was ISRU on *and* aerocapture off: nothing
+in the rocket equation scaled with returned payload, so the launch-mass
+constraint went slack and a 30 km body "returned" 7.4e14 kg in a 500 kg
+capsule for a fictional $7.8e17 profit. Stage 4 v1.3.6 bound the return
+**volume** to stop it; v1.10.0 closes it properly, because
+`return_structure_frac_of_payload` puts a payload-proportional term back into
+the cascade. Set that to `0.0` and the corner reopens.
 
 Importing `master.py` is side-effect free, so you can drive it yourself:
 
@@ -475,6 +486,15 @@ absolute masses):
 
 ### Combined effect
 
+> ⚠️ **Everything in this section was measured on calc v1.9.1 and has been
+> superseded by v1.10.0**, which changed what the per-asteroid search
+> optimises, started charging for the electric propulsion stage, and made the
+> return vehicle scale with its cargo. All three move every row. The tables
+> are kept because the shape of the result — Mars best, LEO stubborn,
+> beneficiation destination-dependent — is what matters and still holds, but
+> **the digits are stale until all five destinations are re-run on the v1.0.9
+> catalog**. See "What changed in v1.10.0" below.
+
 Cost/revenue ratio across all 35,778 evaluable asteroids, catalog v1.0.9 /
 calc v1.9.1 (lower is better; 1.0 would be breakeven):
 
@@ -531,6 +551,46 @@ silently discarded. Both are the same discipline running the other way.
 | v1.8.0 | 39× | rig service life, mission reliability, cryogenic boil-off, in-space manufacturing |
 | v1.9.1 | 34× | reliability growth, and `p_mining` recalibrated 0.75 → 0.85 on the full flight record |
 | catalog v1.0.9 | **25×** | nothing new — restored SsODNet, which had been downloaded and then discarded on every run, taking measured taxonomy from ~1,850 to ~24,675 bodies |
+| v1.10.0 | *not yet measured* | the electric propulsion stage and the return vehicle's structure — both flown as mass, neither billed — plus a per-asteroid architecture search and a fixed selection objective |
+
+### What changed in v1.10.0
+
+Two of these are the same bug in two places: **a mass entered the rocket
+equation and never entered the ledger.** That is the failure mode to watch for
+here, because the mass cascade and the cost cascade live in different
+functions and nothing checks that every kilogram in one has a price in the
+other.
+
+- **The electric propulsion stage was free.** v1.7.0 sized the EP array and
+  thruster, pushed them through the rocket equation, and never passed them to
+  the cost model. A 309 kW, 14-tonne electric stage cost nothing. Now priced:
+  the array off the existing $800/W row, the thruster and PPU off a new
+  $1.5M/kW Stage-3 row anchored on NEXT-C.
+- **The return vehicle did not grow with its cargo.** A flat 500 kg however
+  much it carried, so the cascade loaded 125 tonnes of ore into a half-tonne
+  can — 250:1 payload-to-structure, against 0.4:1 to 2:1 for real cargo
+  spacecraft. `return_structure_frac_of_payload` fixes it, and the closed-form
+  payload solver carries the term exactly.
+- **The search optimised the wrong thing.** Every per-asteroid search picked
+  the highest `profit_usd`. Since revenue here sits orders of magnitude below
+  cost, that is `≈ −total_cost_usd`, so it quietly meant "pick the cheapest
+  mission" — while this README ranked the output by a cost/revenue ratio
+  nothing had optimised. The tell was unmissable once looked for: adding
+  options could make a target's reported ratio *worse*. `selection_key` now
+  maximises profit when anything is profitable and minimises cost/revenue
+  otherwise.
+- **Aerocapture and ISRU became per-asteroid choices**, and ISRU became
+  physical: hydrolox only, at bodies with water, at 1.286 kg of water per kg
+  of propellant, with the extra rock dug, timed and charged. The old switch
+  synthesised *xenon* at a rubble pile.
+- **The rendezvous apsis is searched, not assumed**, and resolved against the
+  destination — a body best met at aphelion for an Earth return can be best
+  met at perihelion for Mars. Published validation figures are unaffected.
+
+The first two both flattered electric propulsion and large hauls, so v1.10.0
+is expected to move the headline number *up* before the architecture search
+pulls it back down. Which of those dominates is exactly what the re-measure
+has to establish — do not guess it in the prose.
 
 If a change suddenly improves these by an order of magnitude, suspect it has
 switched one of the ten models off rather than found something. See
