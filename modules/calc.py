@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """calc — Module 4 of the Asteroid Profitability Pipeline.
 
-Module 4 of the Asteroid Profitability Pipeline.
-
 Reads the catalogs produced by Modules 1-3 and computes, for every asteroid:
 
     1.  How much of each mineral category is present  (Module 1 × mass)
@@ -314,6 +312,11 @@ class CalcConfig:
     #         Single-mission profitability is still tough but the top of
     #         the rankings now shows realistic million-dollar gross values
     #         for water-bearing C/B-type targets.
+    # 1.3.7 — renumbering, no behaviour change.  This project was briefly
+    #         developed in two places at once and both shipped different code
+    #         as 1.3.6, so that stamp is ambiguous.  The reconciled module is
+    #         1.3.7 because it matches neither parent.  Treat any CSV stamped
+    #         1.3.6 as undated and re-run rather than trusting the number.
     pipeline_version: str = "1.3.7"
 
 
@@ -853,8 +856,6 @@ def mission_cost_usd(
     propellant:          pd.Series,
     ops_df:              pd.DataFrame,
     config:              CalcConfig,
-    payload_returned_kg: float,
-    gross_value_usd:     float,
     mission_duration_yr: float,
 ) -> Dict[str, float]:
     """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
@@ -873,6 +874,14 @@ def mission_cost_usd(
       • WACC compounding is time-bucketed: upfront costs compound at
         (1+W)^T, ongoing (ops + ISRU prop) at (1+W)^(T/2), end-of-mission
         (recovery) at 1.0.  Previous all-to-end overstated time-cost ~5%.
+
+    Takes no payload or gross-value argument.  It used to take both, and
+    v1.3.2 left them stranded: the insurance rebasing above removed the only
+    read of gross_value_usd, and sample recovery became a flat Module 3 ops
+    lookup rather than a per-kg charge, removing the only read of
+    payload_returned_kg.  Every cost here now derives from the mass cascade,
+    the Module 3 reference tables, and config — nothing scales with the
+    revenue the mission is projected to earn, which is the point.
 
     Line items (every value sourced from Module 3's reference tables):
         UPFRONT     — launch, outbound prop, return prop (if not ISRU),
@@ -1139,8 +1148,6 @@ def evaluate_combo(
         propellant          = propellant,
         ops_df              = ops_df,
         config              = config,
-        payload_returned_kg = m_payload,
-        gross_value_usd     = gross_value,
         mission_duration_yr = mission_duration_yr,
     )
 

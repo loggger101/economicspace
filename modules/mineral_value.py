@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """mineral_value — Module 2 of the Asteroid Profitability Pipeline.
 
-Module 2 of the Asteroid Profitability Pipeline.
-
 Builds a catalog of CURRENT market prices and bulk DENSITIES for every
 mineral / element that appears in Module 1's TAXONOMY_COMPOSITION table.
 Downstream profitability scoring multiplies asteroid mass × composition
@@ -186,6 +184,11 @@ class MineralValueConfig:
     #           M-type bulk value          $2.61 → $3.69/kg  (+41%)
     #           C-type bulk value          $375  → $638/kg   (+70%, water-driven)
     #           B-type bulk value          $500  → $850/kg   (+70%, water-driven)
+    # 1.1.5 — renumbering, no behaviour change.  This project was briefly
+    #         developed in two places at once and both shipped different code
+    #         as 1.1.4, so that stamp is ambiguous.  The reconciled module is
+    #         1.1.5 because it matches neither parent.  Treat any CSV stamped
+    #         1.1.4 as undated and re-run rather than trusting the number.
     pipeline_version: str = "1.1.5"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────

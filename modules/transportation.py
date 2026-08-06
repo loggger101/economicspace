@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """transportation — Module 3 of the Asteroid Profitability Pipeline.
 
-Module 3 of the Asteroid Profitability Pipeline.
-
 Builds a reference catalog of every cost that sits between "asteroid in
 space" and "refined material delivered to its market":
 
@@ -208,6 +206,14 @@ class TransportConfig:
     #           'Autonomous mining control & AI (NRE)' ($200M per program)
     #         • All downstream Module 4 cost cascades now uncrewed by design;
     #           no life-support / crew-habitat mass overhead anywhere
+    # 1.2.5 — portability, no change to any number produced:
+    #         • output_dir defaults via _default_output_dir() instead of a
+    #           hardcoded /content/asteroid_pipeline, which on Windows
+    #           silently resolved to C:\content
+    #         • stdout/stderr forced to UTF-8 before the first print — the
+    #           emoji progress output crashed cp1252 consoles instantly
+    #         • RUN & PREVIEW moved under a main-guard so importing the
+    #           module no longer triggers a full run
     pipeline_version: str = "1.2.5"
     preview_rows:     int = 15
 
