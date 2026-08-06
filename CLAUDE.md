@@ -62,21 +62,74 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.0.8`, mineral_value `1.2.0`, transportation `1.3.0`,
-calc `1.4.0`, master `1.5.0` (the master version is a literal in
+Current: catalog `1.0.8`, mineral_value `1.3.0`, transportation `1.4.0`,
+calc `1.5.0`, master `1.6.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
 ## Model assumptions that are load-bearing
 
 These were found by a realism audit and are easy to silently break again.
 
-**Water is priced by delivery destination, not intrinsically.** It is
-~100% of the value of every C/B/D-type asteroid, so
-`MINERAL_CONFIG.delivery_destination` decides the whole ranking. The default
-`earth_surface` matches what the Stage 4 mission model actually delivers.
-Setting `leo` restores the old, much larger numbers, but pairing an in-space
-price with a re-entry architecture is exactly the inconsistency the field
-exists to prevent.
+**`delivery_destination` must be set in TWO places, and they must agree.**
+`MINERAL_CONFIG.delivery_destination` decides what a kilogram sells for;
+`CALC_CONFIG.delivery_destination` decides the architecture that puts it
+there. Disagreement prices the cargo at a depot while paying to land it in
+Utah — Stage 4's `destination_check()` catches it and shouts, and in
+`master.py` use `MASTER_CONFIG.delivery_destination`, which writes both.
+
+**Every commodity is priced by destination, not just water** (Stage 2
+v1.3.0). At an in-space destination the terrestrial price is *replaced* by
+`in_space_utility × launch-cost-avoided`. Two consequences that look wrong
+but are not: bulk iron jumps from $0.50/kg to ~$2,977/kg in LEO, and
+platinum drops to **zero**, because there is no orbital market for it. The
+in-space prices are derived through the rocket equation in
+`delivered_cost_usd_per_kg()`, not tabulated — but `IN_SPACE_UTILITY` is a
+table of *engineering judgements*, and it is the softest assumption in the
+whole pipeline. Treat it as a dial, not a measurement.
+
+**Cislunar is cheaper to reach than LEO, and worth more.** This is the one
+result that reliably reads as a bug. Capturing into LEO has to kill the
+entire arrival hyperbola (~3.6 km/s at v_inf = 3 km/s); capturing into an
+NRHO depot only has to *bind* the orbit, and the burn takes the Oberth
+benefit at low perigee (~0.94 km/s). See `_cislunar_capture_dv_km_s`. Do not
+"fix" it.
+
+**A commodity with no in-space market is not worth zero at a depot.** It is
+worth its terrestrial price *minus* the downleg (`downleg_cost_usd_per_kg` —
+capsule + TPS + recovery + departure burn, ~$25,400/kg from LEO). Platinum at
+a depot is ~$31,300/kg, not $0. Conversely, launch-cost-avoided is **additive**
+to the terrestrial price, not a replacement for it. `value_route` records
+which fate each commodity took.
+
+**The payload mix is optimised, not specified.** `optimal_payload_mix` is a
+fractional knapsack over `asteroid_phase_table` — fill the hold with the best
+phase available, then the next. Greedy by $/kg is provably optimal here
+because the phases are divisible and priced per kg. Both bounds (content and
+purity) fall out of it; do not reintroduce them as separate clamps.
+
+**How hard to concentrate is searched, not derived.** Grade saturates at
+`saturation_ratio` = 1/(frac_best × recovery); costs keep climbing. So the
+optimum is usually strictly interior and `evaluate_combo` sweeps for it. Two
+mistakes already made here, both of which *looked* principled:
+  1. Driving the ratio to the maximum — made cislunar missions 4× worse.
+  2. Driving it to saturation on principle — still made cislunar ~12% worse.
+The search also always evaluates **not concentrating at all** (via
+`beneficiate=False`), which is not the same as ratio 1.0 — that would still
+pay the separation recovery loss and the array mass for no grade gain.
+Without that baseline beneficiation cannot be declined, and stops being
+weakly dominant.
+
+Note this makes the beneficiation path ~10× slower (~5 s → ~55 s per 1,959
+asteroids). `concentration_search_steps` is the dial.
+
+**The beneficiation power plant feeds back into the rocket equation.**
+Processing energy (Module 3: 200 Wh/kg dug, 500 Wh/kg concentrated) over the
+stay time gives a power draw; Module 3's 60 W/kg-at-1-AU row scaled 1/r² by
+the target's semi-major axis turns that into array mass; the array is
+launched like everything else. Payload → feed → power → mass → payload is a
+genuine circular dependency and `evaluate_combo` solves it by fixed-point
+iteration. The 1/r² term is why a 3+ AU target needs a ~54× heavier plant
+than a 1 AU one.
 
 **Δv must stay per-asteroid.** Before v1.4.0 every asteroid got the same Δv,
 which made `max_payload_kg`, `total_cost_usd`, `mission_duration_yr`, `vehicle`
@@ -98,7 +151,21 @@ iron-meteorite density — Psyche is ~3.8–3.9 g/cm³. Metal fractions are set
 accordingly; don't restore the 0.80/5.30 values.
 
 A default run produces zero viable missions. That is the correct answer, not
-a regression.
+a regression. So does every other combination currently in the model — the
+best case found so far (cislunar delivery) still comes in at ~51× cost over
+revenue, down from ~297,000× at the `earth_surface` default. Beneficiation
+halves the *median* gap but does not move the best target, where the
+optimiser declines to concentrate.
+Closing that last 51× is not a tuning exercise; the remaining candidates are
+a learning curve on recurring hardware, multi-mission amortisation against a
+market-saturation limit that does not yet exist in the model, and rig
+terminal value. Do not manufacture viability by editing `IN_SPACE_UTILITY`.
+
+Rank by `total_cost_usd / gross_value_usd`, not by `profit_usd`. Revenue is
+orders of magnitude below cost in most configurations, which makes
+`profit_usd ≈ -total_cost_usd`, so `top_profitable()` degenerates into a
+pure cost ranking — a Δv table wearing a profit label. The ratio is the only
+ranking that responds to both sides.
 
 ## Config discipline
 
