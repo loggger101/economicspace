@@ -165,7 +165,7 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # ─────────────────────────────────────────────────────────────────────────────
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.10.0)
+"""Master Asteroid Profitability Pipeline (1.10.1)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -178,10 +178,10 @@ run top-to-bottom — the orchestrator at the bottom executes everything.
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
                 + destination pricing for EVERY commodity
-    Stage 3  →  Transportation Data     (modules/transportation.py 1.8.0)
+    Stage 3  →  Transportation Data     (modules/transportation.py 1.8.1)
                 Launch vehicles + propellants + Δv segments + ops costs
                 (UNCREWED autonomous mining — no crew costs)
-    Stage 4  →  Profitability Calc      (modules/calc.py 1.9.0)
+    Stage 4  →  Profitability Calc      (modules/calc.py 1.9.1)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2×, V-type 0.2×)
                 + delivery architecture: earth_surface / leo / cislunar /
@@ -375,7 +375,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.10.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.10.1")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 

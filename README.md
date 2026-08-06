@@ -29,8 +29,8 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.0.8 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.6.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity |
-| 3 | `modules/transportation.py` | 1.8.0 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
-| 4 | `modules/calc.py` | 1.9.0 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
+| 3 | `modules/transportation.py` | 1.8.1 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
+| 4 | `modules/calc.py` | 1.9.1 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 
@@ -268,9 +268,9 @@ way worth understanding. Mars, beneficiated:
 
 | Programme | `p_mining` | `P(success)` | Missions sharing one rig | Best cost/revenue |
 |---|---|---|---|---|
-| 1 mission | 0.750 | 0.630 | 1 | 38.7× |
-| 10 missions | 0.837 | 0.704 | 7 (capped) | 10.8× |
-| 100 missions | 0.912 | 0.767 | 7 (capped) | **8.2×** |
+| 1 mission | 0.850 | 0.698 | 1 | 34.2× |
+| 10 missions | 0.902 | 0.741 | 7 (capped) | ~10× |
+| 100 missions | 0.943 | 0.775 | 7 (capped) | **~8×** |
 
 Going from 10 to 100 missions buys much less than going from 1 to 10, and the
 reason is the rig service-life cap: at this stay length one rig serves seven
@@ -472,13 +472,13 @@ run):
 Cost/revenue ratio across the same 1,959 asteroids (lower is better; 1.0
 would be breakeven):
 
-| | plain (best / median) | beneficiated (best / median) |
-|---|---|---|
-| `earth_surface` | 258,906× / 66,406,811× | 216,579× / 59,820,323× |
-| `leo` | 505× / 17,740× | 329× / 11,612× |
-| `cislunar` | 285× / 5,537× | 162× / 2,700× |
-| `lunar_surface` | 162× / 1,042× | 83× / 618× |
-| `mars_surface` | 79× / 1,475× | **39× / 390×** |
+| | beneficiated (best / median) |
+|---|---|
+| `earth_surface` | 191,359× / 52,832,913× |
+| `leo` | 290× / 10,067× |
+| `cislunar` | 143× / 2,377× |
+| `lunar_surface` | 74× / 543× |
+| `mars_surface` | **34× / 338×** |
 
 Beneficiation roughly **halves** the gap for a typical target. At cislunar it
 declines to concentrate on the single best body — already water-rich enough
@@ -495,7 +495,8 @@ correction rather than a regression:
 |---|---|---|
 | v1.6.0 | 2.2× | — |
 | v1.7.0 | 14× | low-thrust trip time, launch windows, bound-water energy, learning curve, market saturation |
-| v1.8.0 | **39×** | rig service life, mission reliability, cryogenic boil-off, in-space manufacturing |
+| v1.8.0 | 39× | rig service life, mission reliability, cryogenic boil-off, in-space manufacturing |
+| v1.9.1 | **34×** | reliability growth, and `p_mining` recalibrated 0.75 → 0.85 on the full flight record |
 
 If a change suddenly improves these by an order of magnitude, suspect it has
 switched one of the nine models off rather than found something. See
@@ -649,16 +650,31 @@ asteroid nobody revisits is stranded, not an asset, so a single-mission run
 is unaffected.
 
 **Mission reliability** (`model_reliability`). Revenue was certain. Expected
-revenue is now `p_launch(0.97) × exp(−T/MTBF)(30 yr) × p_mining(0.75)` —
-about 0.62 for a five-year mission. **Costs are still charged in full**,
+revenue is now `p_launch(0.97) × exp(−T/MTBF)(30 yr) × p_mining(0.85)` —
+about 0.70 for a five-year mission. **Costs are still charged in full**,
 which is both conservative and correct: you spend the money whether or not it
 works. Launch insurance in the cost model replaces hardware, not revenue, so
 there is no double count.
 
-`p_mining` is the honest one. Nobody has ever sustained-mined an asteroid,
-and regolith-contact mechanisms are precisely where deep-space missions fail:
-OSIRIS-REx's sample head jammed open, Hayabusa's first sampler never fired,
-Philae's harpoons did not deploy.
+`p_mining` is counted from the actual flight record of regolith-contact
+mechanisms, not from the failures alone:
+
+| | Missions |
+|---|---|
+| **Succeeded** (10) | Apollo 15–17 drills/scoops; Luna 16/20/24; Stardust aerogel; Phoenix arm; Curiosity drill (feed mechanism failed 2016, recovered by feed-extended drilling); Hayabusa2 sampler + SCI impactor; OSIRIS-REx TAGSAM (121.6 g against a 60 g requirement); Perseverance corer; Chang'e 5 and 6 |
+| **Partial** (1) | Hayabusa — projectile never fired, but contact dust was still collected and returned |
+| **Failed** (2) | Philae's harpoon pyrotechnics; InSight's HP³ mole, which could not get purchase in Martian regolith |
+
+That is **11/13 = 0.85** counting Hayabusa as the success it ultimately was,
+or 0.77 counting it as a loss. 0.85 is taken because Hayabusa did return its
+sample. An earlier release used 0.75, counted from the failures alone — which
+was selection bias, and below even the pessimistic reading.
+
+The honest caveat: none of these is *sustained* mining. They are one-shot or
+short-campaign collections of grams to kilograms, not a rig moving 200 kg/day
+for years without maintenance. 0.85 is the demonstrated **mechanism** rate;
+the sustained-operation exposure is carried by the spacecraft MTBF term
+rather than double-counted here.
 
 **Reliability growth** (`model_reliability_growth`). `p_mining` used to sit at
 its first-of-kind 0.75 no matter how many missions a programme flew — the one
@@ -674,17 +690,17 @@ a 0.95 mature ceiling, because growth is asymptotic: mature spacecraft
 mechanisms run 97–99%, and a continuously-operating excavator is harder than
 a one-shot deployment.
 
-| Programme size | `p_mining` (fleet average) | Last mission |
-|---|---|---|
-| 1 | 0.750 | 0.750 |
-| 10 | 0.837 | 0.875 |
-| 100 | 0.912 | 0.937 |
+| Programme size | `p_mining` (fleet average) |
+|---|---|
+| 1 | 0.850 |
+| 10 | 0.902 |
+| 100 | 0.943 |
 
 Reported as the **mean over missions 1..N, not the terminal value.** NRE and
 the rig are amortised across the whole programme, so per-mission expected
 revenue has to use the programme average — quoting the last mission's
 reliability would credit every mission with heritage only the last one has.
-Exactly 0.750 at N = 1, so single-mission runs are unchanged.
+Exactly 0.850 at N = 1, so single-mission runs use the first-of-kind figure.
 
 Launch and cruise reliability deliberately do *not* grow: launch vehicles are
 already mature, and MTBF is a duration exposure rather than a heritage
@@ -727,7 +743,7 @@ refined on Earth. The utility factor now means only what it says.
 |---|---|---|---|
 | Electric share of winning combos | 12% | 2% | varies by destination |
 | Median mission duration | 3.49 yr | 4.12 yr | 4.1 yr |
-| Expected revenue multiplier | 1.00 | 1.00 | **0.58** (reliability) |
+| Expected revenue multiplier | 1.00 | 1.00 | **0.67** (reliability) |
 | Rows with no feasible mission | 0 | 47 | 85 |
 
 ## Data sources

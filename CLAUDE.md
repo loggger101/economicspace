@@ -62,8 +62,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.0.8`, mineral_value `1.6.0`, transportation `1.8.0`,
-calc `1.9.0`, master `1.10.0` (the master version is a literal in
+Current: catalog `1.0.8`, mineral_value `1.6.0`, transportation `1.8.1`,
+calc `1.9.1`, master `1.10.1` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
 ## Model assumptions that are load-bearing
@@ -229,19 +229,31 @@ an asset, which is what keeps a single-mission run unchanged.
 **Mission reliability multiplies REVENUE ONLY** (v1.8.0). Costs are charged in
 full because you spend the money either way. Launch insurance replaces
 hardware, not revenue, so it is not a double count -- do not "fix" that.
+
+p_mining = 0.85 is counted from the FULL regolith-contact flight record --
+10 successes (Apollo, Luna 16/20/24, Stardust, Phoenix, Curiosity, Hayabusa2,
+OSIRIS-REx, Perseverance, Chang'e 5 and 6), 1 partial (Hayabusa returned its
+sample despite the sampler failing), 2 failures (Philae's harpoons, InSight's
+mole) = 11/13. v1.7.0 used 0.75, counted from the three failures alone with
+none of the successes; that was selection bias and below even the pessimistic
+0.77 reading. If you revisit this number, count both columns.
+
+Sustained-operation risk is deliberately NOT folded into p_mining -- none of
+those missions was sustained mining, and the exposure is already carried by
+the spacecraft MTBF term. Adding it here double-counts.
 **Mining reliability GROWS with programme size** (v1.9.0). Duane/AMSAA,
 q(n) = q_first * n^(-0.30), capped at 0.95. Reported as the MEAN over
 missions 1..N, not the terminal value -- NRE and the rig amortise across the
 whole programme, so per-mission expected revenue must use the programme
 average. Quoting the last mission's reliability would credit every mission
-with heritage only the last one has. Exactly 0.75 at N=1.
+with heritage only the last one has. Exactly 0.85 at N=1.
 
 Launch and cruise reliability deliberately do NOT grow: launch vehicles are
 already mature, and MTBF is a duration exposure, not a heritage question. Do
 not "complete" the model by adding growth to them.
 
 Note how reliability growth and the rig service-life cap pull against each
-other. Mars beneficiated: N=1 38.7x, N=10 10.8x, N=100 8.2x. The 10->100 step
+other. Mars beneficiated: N=1 34.2x, N=10 ~10x, N=100 ~8x. The 10->100 step
 buys little because one rig only serves 7 missions at that stay length, so
 mission 8 buys a new rig. "Fly more missions" is real but sublinear, and
 bounded by market saturation at the far end.
