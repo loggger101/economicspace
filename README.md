@@ -29,8 +29,8 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.0.8 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.6.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity |
-| 3 | `modules/transportation.py` | 1.7.0 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
-| 4 | `modules/calc.py` | 1.8.0 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
+| 3 | `modules/transportation.py` | 1.8.0 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
+| 4 | `modules/calc.py` | 1.9.0 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 
@@ -259,6 +259,27 @@ WACC-dominated means shorten the mission.
 Every mineral price column carries a `_usd_per_kg` suffix — prices are
 normalised to USD/kg on the way in, everywhere, so the unit is never in
 question downstream.
+
+## Programme scale is now the strongest lever
+
+With reliability growth in, `nre_amortization_missions` finally does what its
+name suggests — and the two v1.8.0/v1.9.0 models pull against each other in a
+way worth understanding. Mars, beneficiated:
+
+| Programme | `p_mining` | `P(success)` | Missions sharing one rig | Best cost/revenue |
+|---|---|---|---|---|
+| 1 mission | 0.750 | 0.630 | 1 | 38.7× |
+| 10 missions | 0.837 | 0.704 | 7 (capped) | 10.8× |
+| 100 missions | 0.912 | 0.767 | 7 (capped) | **8.2×** |
+
+Going from 10 to 100 missions buys much less than going from 1 to 10, and the
+reason is the rig service-life cap: at this stay length one rig serves seven
+missions, so the 8th mission buys a whole new rig. NRE keeps amortising,
+reliability keeps growing, but the hardware does not get cheaper past that
+point.
+
+That is the honest shape of the "just fly more missions" argument — real, but
+sublinear, and bounded by market saturation at the far end.
 
 ## Where the material is sold
 
@@ -536,9 +557,6 @@ Stated plainly so results aren't over-read:
 - **Concentrate density is approximated by bulk density** in the volume cap. A
   metal concentrate is denser than the parent body, so the volume constraint
   is conservative.
-- **Reliability is not learned.** `p_mining` stays at its first-of-kind 0.75
-  however many missions a programme flies, though a fleet would gain heritage.
-  Raise it by hand alongside `nre_amortization_missions`.
 - **The refinery is priced but not flown.** In-space manufacturing is charged
   per kg against the material's value; the plant's mass is not added to any
   mission's rocket equation, because it belongs to the buyer at the depot
@@ -641,6 +659,36 @@ there is no double count.
 and regolith-contact mechanisms are precisely where deep-space missions fail:
 OSIRIS-REx's sample head jammed open, Hayabusa's first sampler never fired,
 Philae's harpoons did not deploy.
+
+**Reliability growth** (`model_reliability_growth`). `p_mining` used to sit at
+its first-of-kind 0.75 no matter how many missions a programme flew — the one
+place the model was *pessimistic* rather than optimistic. A fleet that has
+flown ten rigs has found and designed out failure modes the first one
+discovered the hard way.
+
+Duane/AMSAA: failure probability falls as a power law in cumulative
+production, `q(n) = q_first · n^(−α)` with α = 0.30, the bottom of
+MIL-HDBK-189's *active* growth band — appropriate for hardware that flies
+once every few years with no test fleet to accelerate the learning. Capped at
+a 0.95 mature ceiling, because growth is asymptotic: mature spacecraft
+mechanisms run 97–99%, and a continuously-operating excavator is harder than
+a one-shot deployment.
+
+| Programme size | `p_mining` (fleet average) | Last mission |
+|---|---|---|
+| 1 | 0.750 | 0.750 |
+| 10 | 0.837 | 0.875 |
+| 100 | 0.912 | 0.937 |
+
+Reported as the **mean over missions 1..N, not the terminal value.** NRE and
+the rig are amortised across the whole programme, so per-mission expected
+revenue has to use the programme average — quoting the last mission's
+reliability would credit every mission with heritage only the last one has.
+Exactly 0.750 at N = 1, so single-mission runs are unchanged.
+
+Launch and cruise reliability deliberately do *not* grow: launch vehicles are
+already mature, and MTBF is a duration exposure rather than a heritage
+question.
 
 **Cryogenic boil-off** (`model_propellant_boiloff`). Return propellant sits
 in the tank from launch until the departure burn — years, not hours. Loading

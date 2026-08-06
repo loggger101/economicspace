@@ -290,7 +290,15 @@ class TransportConfig:
     #           spacecraft MTBF 30 yr, first-of-kind mining success 0.75,
     #           rig service life 15 yr, rig salvage fraction 0.50, and
     #           in-space plant throughput 100 kg/yr per kg of plant.
-    pipeline_version: str = "1.7.0"
+    # 1.8.0 — two rows for Module 4 v1.9.0's reliability-growth model:
+    #         "Mining reliability growth exponent" 0.30 (Duane alpha, bottom
+    #         of MIL-HDBK-189's active-growth band -- appropriate for hardware
+    #         that flies once every few years with no test fleet) and
+    #         "Mining system mature success probability" 0.95 (asymptotic
+    #         ceiling; mature spacecraft mechanisms run 97-99% and a
+    #         continuously-operating excavator is harder than a one-shot
+    #         deployment).
+    pipeline_version: str = "1.8.0"
     preview_rows:     int = 15
 
 
@@ -1312,6 +1320,40 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
                  "where deep-space missions actually fail.  Drops toward 0.95 "
                  "for a repeat mission with flight heritage — raise it "
                  "alongside nre_amortization_missions.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Mining reliability growth exponent",
+        "unit":             "Duane / AMSAA growth parameter (alpha)",
+        "value":            0.30,
+        "range_low":        0.10,
+        "range_high":       0.60,
+        "notes": "v1.9.0.  Reliability is not static across a programme — it "
+                 "grows as failure modes are found and designed out.  The "
+                 "Duane model has failure probability fall as n^(-alpha) with "
+                 "cumulative production, and MIL-HDBK-189 puts alpha at "
+                 "0.3-0.6 for an ACTIVE reliability-growth programme (one that "
+                 "root-causes every anomaly and feeds fixes back) against "
+                 "0.1-0.2 for passive fielding.  0.30 is the bottom of the "
+                 "active band — appropriate for hardware that flies once every "
+                 "few years, where each mission is a slow, expensive lesson "
+                 "and there is no test fleet to accelerate the learning.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Mining system mature success probability",
+        "unit":             "asymptotic ceiling on rig success probability",
+        "value":            0.95,
+        "range_low":        0.85,
+        "range_high":       0.99,
+        "notes": "v1.9.0.  Growth is asymptotic, not unbounded — no amount of "
+                 "flight heritage makes a machine that grinds rock in vacuum "
+                 "certain to work.  0.95 is where mature, high-cycle "
+                 "spacecraft MECHANISMS sit: solar-array and antenna "
+                 "deployments run ~97-99% across the fleet record, and a "
+                 "continuously-operating excavator is harder than a one-shot "
+                 "deployment.  Without this ceiling the Duane curve would "
+                 "eventually promise certainty, which no mechanism earns.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {

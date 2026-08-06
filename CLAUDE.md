@@ -62,8 +62,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.0.8`, mineral_value `1.6.0`, transportation `1.7.0`,
-calc `1.8.0`, master `1.9.0` (the master version is a literal in
+Current: catalog `1.0.8`, mineral_value `1.6.0`, transportation `1.8.0`,
+calc `1.9.0`, master `1.10.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
 ## Model assumptions that are load-bearing
@@ -229,8 +229,22 @@ an asset, which is what keeps a single-mission run unchanged.
 **Mission reliability multiplies REVENUE ONLY** (v1.8.0). Costs are charged in
 full because you spend the money either way. Launch insurance replaces
 hardware, not revenue, so it is not a double count -- do not "fix" that.
-p_mining = 0.75 is first-of-kind and does not learn; raise it by hand
-alongside nre_amortization_missions.
+**Mining reliability GROWS with programme size** (v1.9.0). Duane/AMSAA,
+q(n) = q_first * n^(-0.30), capped at 0.95. Reported as the MEAN over
+missions 1..N, not the terminal value -- NRE and the rig amortise across the
+whole programme, so per-mission expected revenue must use the programme
+average. Quoting the last mission's reliability would credit every mission
+with heritage only the last one has. Exactly 0.75 at N=1.
+
+Launch and cruise reliability deliberately do NOT grow: launch vehicles are
+already mature, and MTBF is a duration exposure, not a heritage question. Do
+not "complete" the model by adding growth to them.
+
+Note how reliability growth and the rig service-life cap pull against each
+other. Mars beneficiated: N=1 38.7x, N=10 10.8x, N=100 8.2x. The 10->100 step
+buys little because one rig only serves 7 missions at that stay length, so
+mission 8 buys a new rig. "Fly more missions" is real but sublinear, and
+bounded by market saturation at the far end.
 
 **Cryogenic boil-off** (v1.8.0). Return propellant is held for years, so
 hydrolox loads 2.5x what it burns on a 5-year mission. Folded into an
