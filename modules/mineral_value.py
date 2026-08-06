@@ -69,11 +69,12 @@ else:
 # IMPORTS & CONFIGURATION
 # ─────────────────────────────────────────────────────────────────────────────
 import json
+import math
 import os
 import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -131,26 +132,33 @@ class MineralValueConfig:
     metals_api_key: str = "DEMO"
     metals_api_url: str = "https://api.metals.dev/v1/latest"
 
-    # ─── DELIVERY DESTINATION  (drives the water price — read this) ──────────
-    # Where the mined material is actually SOLD.  This is not cosmetic: water
-    # is the only commodity here whose price depends on it, and water is
-    # ~100% of the value of every C / B / D-type asteroid, so this field
-    # alone decides which asteroids top the profitability ranking.
+    # ─── DELIVERY DESTINATION  (drives EVERY price — read this) ──────────────
+    # Where the mined material is actually SOLD.  This is the single most
+    # consequential field in the pipeline: it selects the market, and the
+    # market decides both what a kilogram is worth and which asteroids win.
     #
-    #   "earth_surface" — material re-enters and is sold on Earth.  Water is
-    #                     worth terrestrial commodity value, i.e. nothing.
-    #                     This is what Module 4's mission model actually does
-    #                     (it ends in a sample-return capsule), so it is the
-    #                     default.
-    #   "leo"           — material is delivered to and sold in low Earth
-    #                     orbit.  Water is worth the launch cost it avoids.
-    #                     Requires a mission architecture that stops at LEO;
-    #                     Module 4 still costs a full re-entry, so this
-    #                     over-values a return mission.
-    #   "cislunar"      — sold at a lunar-vicinity depot.  Water is worth the
-    #                     (much larger) cost of lifting it that far.
+    #   "earth_surface" — material re-enters and is sold on Earth at
+    #                     terrestrial commodity prices.  Water is worth
+    #                     ~nothing; platinum is worth $57,000/kg.  Favours
+    #                     metal-rich M / X types.
+    #   "leo"           — delivered to and sold in low Earth orbit.  Every
+    #                     commodity with in-space utility is worth the launch
+    #                     cost it avoids ($4,253/kg); precious metals are
+    #                     worth nothing, because no orbital market for them
+    #                     exists.  Favours water- and metal-rich bulk.
+    #   "cislunar"      — sold at a lunar-vicinity (NRHO) depot, worth the
+    #                     larger launch cost avoided ($10,809/kg, derived).
+    #                     Also the CHEAPEST of the three to reach from an
+    #                     asteroid — see Module 4's return-Δv model.
     #
-    # See WATER_VALUE_BY_DESTINATION below for the numbers and sourcing.
+    # v1.3.0: this used to reprice water only.  It now reprices everything,
+    # which is the consistent form of the same correction — see
+    # DELIVERY_DESTINATIONS and IN_SPACE_UTILITY below for the numbers, the
+    # derivation, and which parts are judgement rather than measurement.
+    #
+    # ⚠️  Module 4's CALC_CONFIG carries a delivery_destination of its own,
+    # and it must MATCH this one — it selects the mission architecture that
+    # actually delivers the cargo here.  Module 4 checks and warns.
     delivery_destination: str = "earth_surface"
 
     # ─── NETWORK ─────────────────────────────────────────────────────────────
@@ -234,7 +242,58 @@ class MineralValueConfig:
     #         the old numbers, but only alongside a mission model that
     #         actually stops at LEO.
     #         New output columns: value_basis, delivery_destination.
-    pipeline_version: str = "1.2.0"
+    # 1.3.0 — IN-SPACE DELIVERY: destination pricing generalised from water to
+    #         EVERY commodity.  Paired with Module 3 v1.4.0 / Module 4 v1.5.0.
+    #         v1.2.0 repriced water by destination and left every other
+    #         commodity at its terrestrial spot price, which is the same
+    #         inconsistency v1.2.0 existed to fix, just moved: iron delivered
+    #         to LEO was still valued at scrap-steel rates while the water
+    #         beside it in the same capsule was valued at launch cost avoided.
+    #         • WATER_VALUE_BY_DESTINATION → DELIVERY_DESTINATIONS, and the
+    #           in-space prices are now DERIVED rather than tabulated.  The
+    #           old cislunar figure was "~3x the LEO figure" by assertion;
+    #           it is now $4,253/kg-to-LEO carried a further 3,600 m/s
+    #           (Module 3's TLI + NRHO insertion) by an Isp 465 s stage of
+    #           dry-mass fraction 0.10, via the rocket equation in
+    #           delivered_cost_usd_per_kg().  That lands at $10,809/kg —
+    #           15% below the old hand-waved $12,750, and now traceable.
+    #             earth_surface  $0/kg avoided (terrestrial prices stand)
+    #             leo            $4,253/kg
+    #             cislunar      $10,809/kg
+    #         • A kilogram at a depot is worth the BETTER OF TWO FATES, and
+    #           the choice is made per commodity:
+    #             USED IN SPACE   terrestrial price PLUS in_space_utility x
+    #                             launch cost avoided.  Note the PLUS — the
+    #                             launch bill is what delivering it saves, on
+    #                             top of the material itself.
+    #             SHIPPED DOWN    terrestrial price MINUS the downleg
+    #                             (downleg_cost_usd_per_kg): capsule + TPS +
+    #                             recovery, derived from the same Module 3
+    #                             rates Module 4 charges for an Earth return,
+    #                             plus the depot-departure burn.  ~$25,400/kg
+    #                             from LEO, ~$27,300/kg from NRHO.  Coming
+    #                             down is far cheaper than going up.
+    #           This is what puts an honest number on platinum at a depot:
+    #           nobody in orbit wants it, but it is still platinum, so it is
+    #           priced by shipping it home rather than written off.
+    #         • New IN_SPACE_UTILITY table: how good a substitute each
+    #           commodity is for the launched article.  Water 1.00, structural
+    #           metals 0.70, silicates 0.25, carbon 0.40, organics 0.20, and
+    #           0.00 for the precious metals — which routes them down the
+    #           ship-to-Earth branch rather than zeroing them.
+    #           THESE ARE JUDGEMENTS, not measurements; they are the softest
+    #           assumption in the in-space case and live in one table for that
+    #           reason.
+    #         • New apply_delivery_destination() step runs after merge_sources
+    #           so it overrides LIVE quotes as well as reference ones.
+    #         Numerical impact at LEO / cislunar (earth_surface unchanged):
+    #           nickel-iron  $4.73/kg  -> $2,978  / $7,567   (used in space)
+    #           water        $0.001    -> $4,253  / $10,810  (used in space)
+    #           platinum     $56,695   -> $31,285 / $29,378  (shipped down)
+    #           gold        $138,882   -> $113,472/ $111,565 (shipped down)
+    #         New output columns: terrestrial_price_usd_per_kg,
+    #         in_space_utility, downleg_cost_usd_per_kg, value_route.
+    pipeline_version: str = "1.3.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows: int = 20
@@ -248,7 +307,7 @@ print(f"    Active sources : "
       f"{', '.join(s for s, on in (('yfinance', CONFIG.use_yfinance), ('metals.dev', CONFIG.use_metals_api and CONFIG.metals_api_key != 'DEMO'), ('reference', CONFIG.use_reference_table)) if on)}")
 print(f"    Price unit     : {CONFIG.PRICE_UNIT}  (every numeric price column ends with _usd_per_kg)")
 print(f"    Delivery dest  : {CONFIG.delivery_destination}  "
-      f"(sets the water price — see WATER_VALUE_BY_DESTINATION)")
+      f"(sets EVERY price — see DELIVERY_DESTINATIONS + IN_SPACE_UTILITY)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -336,41 +395,259 @@ _REF_PRICE_DATE = "2026-05-29"
 # inconsistency was worth a factor of ~4 million on C-type asteroids and
 # inverted the entire ranking.
 
-WATER_VALUE_BY_DESTINATION: Dict[str, dict] = {
-    "earth_surface": {
-        "usd_per_kg": 0.001,
-        "basis": "terrestrial bulk industrial water",
-        "notes": "Municipal/industrial bulk water runs $0.0005-0.002/kg.  "
-                 "Asteroid water landed on Earth competes with rain.",
-    },
-    "leo": {
-        "usd_per_kg": 4_250.0,
-        "basis": "launch cost avoided to LEO",
-        "notes": "Falcon 9 reusable $/kg-to-LEO, matching Module 3 "
-                 "($4,253).  Valid only if the water is SOLD in orbit.",
-    },
-    "cislunar": {
-        "usd_per_kg": 12_750.0,
-        "basis": "launch cost avoided to cislunar space",
-        "notes": "~3× the LEO figure, tracking the extra Δv to a TLI / NRHO "
-                 "depot.  The most favourable honest case for water.",
-    },
+# ─────────────────────────────────────────────────────────────────────────────
+# DELIVERY DESTINATIONS  —  what a kilogram is worth, and where  (v1.3.0)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Material sold in space is worth the launch cost it AVOIDS.  That number is
+# not asserted here — it is derived from the rocket equation, from the Δv
+# ladder in Module 3's DELTA_V_REFERENCE, and from a real launch price.
+#
+# Constants below are cross-referenced to Module 3.  They are duplicated
+# rather than imported because Module 2 runs BEFORE Module 3 in the pipeline
+# order (and in the concatenated master.py), so the tables are not in scope.
+# If you change one of these, change it in Module 3 too.
+
+G0_M_S2 = 9.806_65                 # standard gravity, exact by definition
+
+# Falcon 9 reusable $/kg-to-LEO — Module 3 LAUNCH_VEHICLES ($74M / 17.4 t).
+# This is the cheapest operational figure in that table, so every in-space
+# price derived from it is a LOWER bound on the launch cost avoided.
+_LEO_USD_PER_KG = 4_253.0
+
+# Δv above LEO for each destination — Module 3 DELTA_V_REFERENCE.
+#   cislunar = "LEO → cislunar NRHO depot" = TLI (3,150) + NRHO insertion (450)
+_DV_ABOVE_LEO_M_S = {"earth_surface": None, "leo": 0.0, "cislunar": 3_600.0}
+
+# The tug that would have carried the payload up if you had launched it.
+# Isp 465 s = hydrolox upper stage (Module 3 PROPELLANTS: LH2/LOX, 450-465 s
+# vacuum).  Dry-mass fraction 0.10 is mid-range for a cryogenic upper stage
+# (Centaur V ~0.08, DCSS ~0.11) — stage dry mass / (dry + propellant).
+_TUG_ISP_S            = 465.0
+_TUG_DRY_MASS_FRAC    = 0.10
+
+
+def delivered_cost_usd_per_kg(
+    dv_above_leo_m_s: float,
+    leo_usd_per_kg:   float = _LEO_USD_PER_KG,
+    isp_s:            float = _TUG_ISP_S,
+    dry_mass_frac:    float = _TUG_DRY_MASS_FRAC,
+) -> float:
+    """Cost of putting 1 kg at a destination `dv_above_leo_m_s` above LEO.
+
+    This is the "launch cost avoided" that gives asteroid material its
+    in-space value.  Derived, not tabulated:
+
+        R  = exp(Δv / (Isp·g0))                        rocket equation
+        p  = (R − 1)(1 + d)                            propellant per kg payload
+        δ  = d / (d + p)   ⇒   d = δ(R−1) / (1 − δR)   stage dry mass
+        m0 = R (1 + d)                                 total mass needed in LEO
+
+    and the delivered cost is `leo_usd_per_kg × m0` — you pay to lift the
+    payload, the propellant, and the stage.
+
+    Returns 0.0 for Δv = 0 above LEO... no: returns exactly `leo_usd_per_kg`,
+    since m0 = 1 when Δv = 0.  Raises nothing; an infeasible stage (δ·R ≥ 1,
+    i.e. the tank cannot close on that Δv) returns inf.
+    """
+    if dv_above_leo_m_s <= 0:
+        return float(leo_usd_per_kg)
+    r = math.exp(float(dv_above_leo_m_s) / (isp_s * G0_M_S2))
+    if dry_mass_frac * r >= 1.0:
+        return float("inf")          # stage cannot close on this Δv
+    d  = dry_mass_frac * (r - 1.0) / (1.0 - dry_mass_frac * r)
+    m0 = r * (1.0 + d)
+    return float(leo_usd_per_kg) * m0
+
+
+# Terrestrial bulk-industrial water, for the earth_surface case.  Municipal /
+# industrial bulk water runs $0.0005-0.002/kg — asteroid water landed on Earth
+# competes with rain.
+_EARTH_SURFACE_WATER_USD_PER_KG = 0.001
+
+
+def _build_destination_table() -> Dict[str, dict]:
+    """Materialise the destination table, deriving the in-space prices."""
+    out = {}
+    for key, dv in _DV_ABOVE_LEO_M_S.items():
+        if dv is None:                       # Earth's surface avoids no launch
+            out[key] = {
+                "usd_per_kg": 0.0,
+                "dv_above_leo_m_s": 0.0,
+                "basis": "terrestrial market price",
+                "notes": "Material delivered to Earth's surface avoids no "
+                         "launch, so it is worth its terrestrial commodity "
+                         "price and nothing more.",
+            }
+            continue
+        out[key] = {
+            "usd_per_kg": delivered_cost_usd_per_kg(dv),
+            "dv_above_leo_m_s": dv,
+            "basis": f"launch cost avoided ({'LEO' if dv == 0 else 'LEO + %.0f m/s' % dv})",
+            "notes": (f"Derived: ${_LEO_USD_PER_KG:,.0f}/kg to LEO "
+                      f"(Falcon 9 reusable, Module 3) carried a further "
+                      f"{dv:,.0f} m/s by an Isp {_TUG_ISP_S:.0f} s stage of "
+                      f"dry fraction {_TUG_DRY_MASS_FRAC:.2f}."),
+        }
+    return out
+
+
+DELIVERY_DESTINATIONS: Dict[str, dict] = _build_destination_table()
+
+
+# ─── DOWNLEG: GETTING IT FROM A DEPOT TO THE TERRESTRIAL MARKET ──────────────
+# A commodity with no in-space demand is not worthless at a depot — it is
+# worth its Earth price MINUS whatever it costs to fly it the rest of the way
+# down.  Someone has to pay that leg; the miner selling at the depot eats it
+# in the price.
+#
+# Derived from the same Module 3 rates Module 4 charges for an Earth-return
+# mission, so the two sides of the pipeline cannot drift apart:
+#
+#   capsule dry mass  0.10 x payload             @ $150,000/kg   (Module 3
+#                                                 "Return capsule recurring")
+#   TPS               0.15 x (payload + capsule) @  $50,000/kg   (Module 3
+#                                                 "Heat shield / TPS", and
+#                                                 0.15 is Module 4's
+#                                                 heat_shield_frac_of_payload)
+#   recovery campaign $15,000,000 over a nominal 10 t batch       (Module 3
+#                                                 "Sample recovery operations")
+#   departure burn    rocket-equation mass penalty for leaving the depot
+#
+# Coming down is far cheaper than going up — you need a heat shield, not a
+# launch vehicle — which is why these numbers are a fraction of the
+# launch-cost-avoided figures above.
+_DOWNLEG_CAPSULE_DRY_FRAC   = 0.10
+_DOWNLEG_TPS_FRAC           = 0.15
+_DOWNLEG_CAPSULE_USD_PER_KG = 150_000.0
+_DOWNLEG_TPS_USD_PER_KG     =  50_000.0
+_DOWNLEG_RECOVERY_USD       = 15_000_000.0
+_DOWNLEG_BATCH_KG           = 10_000.0
+# Δv to leave the depot onto an Earth-return trajectory, entering directly.
+#   leo      — deorbit burn, ~120 m/s
+#   cislunar — NRHO departure, ~450 m/s (Module 3 "TLI → NRHO insertion",
+#              which is symmetric)
+_DOWNLEG_DEPARTURE_DV_M_S = {"leo": 120.0, "cislunar": 450.0}
+
+
+def downleg_cost_usd_per_kg(destination: str) -> float:
+    """Cost of moving 1 kg from an in-space depot to the terrestrial market.
+
+    Returns 0.0 for earth_surface — the material is already there.
+    """
+    key = str(destination or "").strip().lower()
+    if key not in _DOWNLEG_DEPARTURE_DV_M_S:
+        return 0.0
+    capsule_kg = _DOWNLEG_CAPSULE_DRY_FRAC
+    tps_kg     = _DOWNLEG_TPS_FRAC * (1.0 + capsule_kg)
+    hardware   = (capsule_kg * _DOWNLEG_CAPSULE_USD_PER_KG
+                  + tps_kg * _DOWNLEG_TPS_USD_PER_KG)
+    recovery   = _DOWNLEG_RECOVERY_USD / _DOWNLEG_BATCH_KG
+    # Departure burn shows up as extra mass to be built and flown.
+    r = math.exp(_DOWNLEG_DEPARTURE_DV_M_S[key] / (_TUG_ISP_S * G0_M_S2))
+    return (hardware + recovery) * r
+
+
+# ─── IN-SPACE UTILITY BY COMMODITY ───────────────────────────────────────────
+# How much of the launch-cost-avoided a commodity actually captures at an
+# in-space destination.  1.0 means it is a drop-in substitute for the same
+# mass launched from Earth; 0.0 means there is no in-space market for it at
+# all and it can only be sold by flying it down.
+#
+# ⚠️  THESE ARE ENGINEERING JUDGEMENTS, NOT MEASUREMENTS.  Unlike the price
+# above — which is derived from the rocket equation and a real launch price —
+# no market exists yet to calibrate these against.  They are the single
+# biggest soft assumption in the in-space case, so they live here as one
+# obvious table rather than being buried per-entry.
+IN_SPACE_UTILITY: Dict[str, float] = {
+    # Volatiles — the canonical in-space commodity.  Water is propellant
+    # feedstock, radiation shielding, life support and coolant; electrolysis
+    # is the only processing step between raw ice and a fuelled depot.
+    "water":            1.00,
+    # Structural metals.  Discounted for the in-space manufacturing gap:
+    # raw Fe-Ni is not a pressure vessel, and the melting / forming plant that
+    # turns it into one is not costed anywhere in this pipeline.
+    "iron":             0.70,
+    "nickel":           0.70,
+    "cobalt":           0.70,
+    "copper":           0.70,   # wiring, coils, heat exchangers
+    "nickel-iron":      0.70,
+    "awaruite":         0.70,
+    "magnetite":        0.40,   # oxide — needs reduction before it is metal
+    "troilite":         0.30,   # sulphur source, minor structural use
+    # Silicates.  Usable as bulk radiation shielding and as 3-D-printing /
+    # sintering feedstock, but a poor per-kg substitute for engineered
+    # structure, and available in quantity from the Moon as well.
+    "olivine":          0.25, "pyroxene":        0.25, "orthopyroxene": 0.25,
+    "enstatite":        0.25, "plagioclase":     0.25, "spinel":        0.25,
+    "phyllosilicates":  0.25, "oxides":          0.25, "silicates":     0.25,
+    # Carbon and organics — composites, plastics, agriculture feedstock.
+    "carbon":           0.40,
+    "organics":         0.20,
+    # Everything not listed — the precious metals above all — defaults to 0.0.
+    # That does NOT make them worthless at a depot: a zero here means only
+    # that nobody in orbit wants the material for its own sake, so it is
+    # valued by shipping it down instead (terrestrial price less the downleg).
+    # See in_space_price_usd_per_kg.
 }
+IN_SPACE_UTILITY_DEFAULT = 0.0
 
 
-def water_value_for_destination(destination: str) -> dict:
-    """Look up the water price for a delivery destination.
+def value_for_destination(destination: str) -> dict:
+    """Look up the delivered-value basis for a delivery destination.
 
     Unknown destinations fall back to earth_surface — the conservative
     choice — rather than silently keeping an in-space premium.
     """
     key = str(destination or "").strip().lower()
-    if key not in WATER_VALUE_BY_DESTINATION:
+    if key not in DELIVERY_DESTINATIONS:
         print(f"     ⚠️   Unknown delivery_destination {destination!r} — "
               f"falling back to 'earth_surface'.  Valid: "
-              f"{', '.join(sorted(WATER_VALUE_BY_DESTINATION))}")
+              f"{', '.join(sorted(DELIVERY_DESTINATIONS))}")
         key = "earth_surface"
-    return WATER_VALUE_BY_DESTINATION[key]
+    return DELIVERY_DESTINATIONS[key]
+
+
+def in_space_price_usd_per_kg(
+    name: str, destination: str, terrestrial_usd_per_kg: Optional[float],
+) -> Optional[Tuple[float, str]]:
+    """Value of 1 kg of `name` sitting at `destination`, and how it is realised.
+
+    Returns (usd_per_kg, route) — or None at earth_surface, where the
+    terrestrial price already stands.
+
+    A kilogram at a depot has two possible fates, and it is worth the better
+    of them:
+
+      USE IT IN SPACE.  Worth what an equivalent kilogram delivered from Earth
+        would have cost: its purchase price PLUS the launch bill.  Note the
+        PLUS — v1.3.0 replaced the terrestrial price with the launch cost,
+        which quietly threw the material itself away.  Scaled by
+        `in_space_utility`, which is how good a substitute it actually is for
+        the launched article.  Only available where demand exists (utility>0).
+
+      SHIP IT DOWN.  Worth the terrestrial price less the cost of the onward
+        leg to the surface.  Always available, and it is what puts a real,
+        non-zero number on platinum at a depot: nobody in orbit wants
+        platinum, but it is still platinum.
+
+    Floored at zero — material too cheap to be worth the freight is worth
+    nothing, not a negative.
+    """
+    dest = value_for_destination(destination)
+    if dest["dv_above_leo_m_s"] is None or dest["usd_per_kg"] <= 0.0:
+        return None                                   # earth_surface
+
+    terrestrial = float(terrestrial_usd_per_kg or 0.0)
+    utility     = IN_SPACE_UTILITY.get(name, IN_SPACE_UTILITY_DEFAULT)
+
+    use_in_space = (terrestrial + utility * dest["usd_per_kg"]
+                    if utility > 0 else None)
+    ship_to_earth = terrestrial - downleg_cost_usd_per_kg(destination)
+
+    if use_in_space is not None and use_in_space >= ship_to_earth:
+        return max(0.0, use_in_space), "used in space"
+    return max(0.0, ship_to_earth), "shipped to Earth"
 
 
 MINERAL_REFERENCE: List[dict] = [
@@ -543,15 +820,16 @@ MINERAL_REFERENCE: List[dict] = [
         "yfinance_ticker":       None,
         "yfinance_unit":         None,
         "metals_dev_key":        None,
-        # RESOLVED AT RUNTIME from config.delivery_destination — see
-        # WATER_VALUE_BY_DESTINATION above.  The value here is only the
-        # fallback if the resolver is somehow bypassed; it deliberately
-        # matches the conservative earth_surface case rather than the
-        # in-space premium, so a mistake under-values rather than over-values.
+        # This is the TERRESTRIAL price — bulk industrial water, what a
+        # kilogram of it is worth once landed.  At an in-space destination
+        # apply_delivery_destination() overwrites it with the launch cost
+        # avoided; see DELIVERY_DESTINATIONS and IN_SPACE_UTILITY above.
+        # Keeping the conservative earth_surface figure here means a bypassed
+        # resolver under-values water rather than over-values it.
         "ref_price_usd_per_kg":  0.001,
         "ref_price_date":        _REF_PRICE_DATE,
         "notes":                 "Price depends entirely on where the water is SOLD, "
-                                 "not on the asteroid — see WATER_VALUE_BY_DESTINATION. "
+                                 "not on the asteroid — see DELIVERY_DESTINATIONS. "
                                  "Set MINERAL_CONFIG.delivery_destination to 'leo' or "
                                  "'cislunar' to price it as launch cost avoided; the "
                                  "default 'earth_surface' prices it as what it is once "
@@ -991,17 +1269,17 @@ def fetch_reference_table(config: MineralValueConfig) -> pd.DataFrame:
     """Static USGS / LME / mineralogy reference data — always available."""
     print("\n📚  Reference table — loading curated prices + densities …")
 
-    # Water is priced by DELIVERY DESTINATION, not by the asteroid.  Resolve
-    # it once here so the number that lands in the CSV carries its basis.
-    water = water_value_for_destination(config.delivery_destination)
-
+    # Every row here carries its TERRESTRIAL price.  The in-space repricing is
+    # applied once, uniformly, after the merge — see apply_delivery_destination
+    # — because it has to override live quotes too (platinum's LME price is
+    # not what platinum is worth at a cislunar depot).
     rows = []
     for entry in MINERAL_REFERENCE:
         is_water   = entry["name"] == "water"
-        ref_price  = water["usd_per_kg"] if is_water else entry.get("ref_price_usd_per_kg")
-        value_basis = water["basis"] if is_water else "terrestrial market price"
-        notes      = (f"{water['notes']}  (delivery_destination="
-                      f"{config.delivery_destination})") if is_water else entry.get("notes", "")
+        ref_price  = (_EARTH_SURFACE_WATER_USD_PER_KG if is_water
+                      else entry.get("ref_price_usd_per_kg"))
+        value_basis = "terrestrial market price"
+        notes      = entry.get("notes", "")
         rows.append({
             "name":                 entry["name"],
             "kind":                 entry["kind"],
@@ -1017,9 +1295,80 @@ def fetch_reference_table(config: MineralValueConfig) -> pd.DataFrame:
 
     df = pd.DataFrame(rows)
     print(f"     ✅  {len(df)} reference rows loaded")
-    print(f"     💧  Water priced at ${water['usd_per_kg']:,.3f}/kg "
-          f"({water['basis']})")
     return df
+
+
+def apply_delivery_destination(
+    catalog: pd.DataFrame, config: MineralValueConfig,
+) -> pd.DataFrame:
+    """Reprice the whole catalog for the configured delivery destination.
+
+    At `earth_surface` this is a no-op: every commodity keeps the terrestrial
+    price the sources supplied.
+
+    At an in-space destination every commodity is revalued to the better of
+    its two fates — used in space, or shipped down to the terrestrial market.
+    See in_space_price_usd_per_kg for the rule.  Two consequences worth being
+    explicit about, because they are the whole point of the field:
+
+      • Bulk material becomes enormously more valuable.  Iron is worth $0.50/kg
+        on Earth and ~$2,978/kg in LEO, because a kilogram of structural metal
+        already in orbit is a kilogram nobody has to launch.
+      • Precious metals lose their in-space premium but keep their value.
+        Nobody in orbit wants platinum, so it is priced by shipping it down:
+        terrestrial price less the downleg.  ~$31,700/kg in LEO against
+        $57,074 on the ground — a real discount, not a wipeout.
+
+    Applied after merge_sources so it overrides live quotes as well as
+    reference ones.
+    """
+    dest_key = str(config.delivery_destination or "").strip().lower()
+    dest     = value_for_destination(dest_key)
+    if dest["usd_per_kg"] <= 0.0:
+        print(f"\n🌍  Delivery destination '{dest_key}' — terrestrial prices stand.")
+        return catalog
+
+    downleg = downleg_cost_usd_per_kg(dest_key)
+    print(f"\n🛰️   Repricing for delivery to '{dest_key}' …")
+    print(f"     Launch cost avoided : ${dest['usd_per_kg']:,.0f}/kg  ({dest['basis']})")
+    print(f"     Downleg to surface  : ${downleg:,.0f}/kg  "
+          f"(capsule + TPS + recovery, per kg delivered)")
+
+    catalog = catalog.copy()
+    new_price, new_basis, routes = [], [], []
+    for name, terrestrial in zip(catalog["name"], catalog["price_usd_per_kg"]):
+        t = None if pd.isna(terrestrial) else float(terrestrial)
+        result = in_space_price_usd_per_kg(str(name), dest_key, t)
+        if result is None:
+            new_price.append(terrestrial)
+            new_basis.append("terrestrial market price")
+            routes.append("terrestrial")
+            continue
+        price, route = result
+        utility = IN_SPACE_UTILITY.get(str(name), IN_SPACE_UTILITY_DEFAULT)
+        new_price.append(price)
+        routes.append(route)
+        new_basis.append(
+            f"terrestrial + {utility:.2f} x launch cost avoided"
+            if route == "used in space" else "terrestrial price less downleg"
+        )
+
+    catalog["terrestrial_price_usd_per_kg"] = catalog["price_usd_per_kg"]
+    catalog["in_space_utility"] = [
+        IN_SPACE_UTILITY.get(str(n), IN_SPACE_UTILITY_DEFAULT) for n in catalog["name"]
+    ]
+    catalog["downleg_cost_usd_per_kg"] = downleg
+    catalog["value_route"]     = routes
+    catalog["price_usd_per_kg"] = new_price
+    catalog["value_basis"]      = new_basis
+    catalog["price_basis"]      = "derived-in-space"
+
+    n_use  = routes.count("used in space")
+    n_ship = routes.count("shipped to Earth")
+    n_zero = int((pd.to_numeric(catalog["price_usd_per_kg"], errors="coerce") == 0).sum())
+    print(f"     ✅  {n_use} sold in space, {n_ship} shipped down "
+          f"({n_zero} worth less than the freight)")
+    return catalog
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1175,6 +1524,12 @@ def build_mineral_value_catalog(
 
     # ── Step 3 — Merge ───────────────────────────────────────────────────────
     catalog = merge_sources(reference, live_frames)
+
+    # ── Step 3b — Reprice for the delivery destination ───────────────────────
+    # Must follow the merge: at an in-space destination this overrides live
+    # quotes too, since a terrestrial spot price is not what a commodity is
+    # worth at a depot.
+    catalog = apply_delivery_destination(catalog, config)
 
     # ── Step 4 — Validate ────────────────────────────────────────────────────
     catalog = validate(catalog)

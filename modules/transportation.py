@@ -228,7 +228,28 @@ class TransportConfig:
     #           $300k/kg mining-payload rate, pricing a parachute-and-heat-
     #           shield can as regolith-contact machinery.
     #         New output column on propellants.csv: dv_penalty_factor.
-    pipeline_version: str = "1.3.0"
+    # 1.4.0 — IN-SPACE DELIVERY ARCHITECTURE.  Reference data for selling the
+    #         mined material at an in-space destination instead of flying it
+    #         down.  Paired with Module 2 v1.3.0 and Module 4 v1.5.0.
+    #         Nothing existing changed value; this release is additive, so
+    #         every number a v1.3.0 earth_surface run produced is unchanged.
+    #         • 6 new DELTA_V_REFERENCE segments: the delivery ladder above
+    #           LEO (TLI 3,150 / NRHO insertion 450 / LEO→NRHO 3,600 m/s) and
+    #           the three asteroid return legs quoted at v_inf = 3 km/s
+    #           (LEO propulsive 3,626, cislunar Oberth capture 944, LEO
+    #           aerobraked 100 m/s).  The LEO→NRHO figure is what Module 2
+    #           integrates to price material sold at a cislunar depot.
+    #         • 3 new OPERATIONAL_COSTS rows: "Berthing adapter recurring
+    #           cost" ($60k/kg — replaces the re-entry capsule for in-space
+    #           delivery), "Depot berthing & handover operations" ($2M —
+    #           replaces the $15M Earth recovery campaign), and "FAA Part 450
+    #           licensing (launch only)" ($1.2M — no re-entry licence).
+    #         The headline physical result these encode: cislunar is BOTH
+    #         cheaper to reach from an asteroid than LEO (960 vs 3,590 m/s,
+    #         because capture can take the Oberth benefit and NRHO is barely
+    #         bound) AND worth more per kg on arrival.  Earth's surface is the
+    #         cheapest to reach and worth the least.
+    pipeline_version: str = "1.4.0"
     preview_rows:     int = 15
 
 
@@ -763,6 +784,51 @@ DELTA_V_REFERENCE: List[dict] = [
      "notes": "Per Taylor 2018 — long cruise; favours electric propulsion."},
     {"segment": "Lunar surface  →  LEO",          "dv_m_per_s":  5_900, "duration_yr": 0.01,
      "notes": "Apollo Lunar Module ascent + plane change — reference for lunar-relay arch."},
+
+    # ── Delivery ladder above LEO  (v1.4.0) ──────────────────────────────────
+    # These price the "launch cost avoided" for material sold in space, and
+    # give Module 4 the return-leg budget for a non-Earth-surface delivery.
+    {"segment": "LEO  →  TLI (trans-lunar injection)", "dv_m_per_s": 3_150, "duration_yr": 0.01,
+     "notes": "Apollo TLI 3.05-3.20 km/s (NASA SP-4029 / Apollo-by-the-Numbers). "
+              "Effectively the same burn as LEO→Earth-escape, 50 m/s cheaper "
+              "because the Moon is bound rather than at C3=0."},
+    {"segment": "TLI  →  NRHO insertion",         "dv_m_per_s":    450, "duration_yr": 0.01,
+     "notes": "Near-rectilinear halo orbit insertion for Gateway / Orion, "
+              "~0.4-0.45 km/s (NASA Gateway NRHO trade studies, Whitley & "
+              "Martinez 2016 'Options for Staging Orbits in Cis-Lunar Space'). "
+              "NRHO is the cheapest usefully-stable cislunar depot orbit."},
+    {"segment": "LEO  →  cislunar NRHO depot",    "dv_m_per_s":  3_600, "duration_yr": 0.02,
+     "notes": "TLI + NRHO insertion.  This is the Δv that a kilogram of "
+              "asteroid material delivered to NRHO AVOIDS having to be lifted "
+              "through — it sets the cislunar sale price in Module 2."},
+
+    # ── Asteroid return legs by delivery destination  (v1.4.0) ───────────────
+    # Reference magnitudes only; Module 4 computes these per-asteroid from the
+    # actual arrival v_infinity.  Quoted here at v_inf = 3 km/s, a typical NEA
+    # return, so the three architectures can be compared at a glance.
+    {"segment": "NEA  →  LEO delivery (propulsive)", "dv_m_per_s": 3_626, "duration_yr": 1.5,
+     "notes": "Circularising into LEO from a v_inf=3 km/s arrival hyperbola: "
+              "sqrt(v_esc^2 + v_inf^2) - v_circ at 200 km.  The most expensive "
+              "destination to reach propulsively — LEO sits deepest in the well "
+              "of the three, which is exactly why material there is worth most "
+              "per kg and costs most to deliver.  Computed by Module 4's "
+              "_leo_departure_dv_km_s; excludes the asteroid-departure burn."},
+    {"segment": "NEA  →  cislunar NRHO (Oberth capture)", "dv_m_per_s": 944, "duration_yr": 1.6,
+     "notes": "Capture at a low perigee into an ellipse reaching lunar distance "
+              "(494 m/s at v_inf=3 km/s, taking the Oberth benefit of burning "
+              "deep in the well), then NRHO insertion at apogee (450 m/s). "
+              "3.8x cheaper than propulsive LEO capture, and the destination "
+              "is worth MORE per kg — the two effects compound.  Computed by "
+              "Module 4's _cislunar_capture_dv_km_s; excludes the "
+              "asteroid-departure burn.  The advantage widens as arrival "
+              "energy falls: 5.6x at v_inf=1 km/s, 2.7x at 5 km/s."},
+    {"segment": "NEA  →  LEO delivery (aerobraked)", "dv_m_per_s": 100, "duration_yr": 2.0,
+     "notes": "Aerocapture into a high ellipse, then multi-pass aerobraking to "
+              "circularise; drag does the work, so the propulsive cost is only "
+              "the periapsis-raise burn out of the atmosphere.  Mars Odyssey / "
+              "MRO flew this for real, saving ~1.2 km/s over ~6 months of "
+              "passes (JPL).  Buys Δv with TPS mass and MONTHS of time — the "
+              "duration figure carries that."},
 ]
 
 print(f"✅  Mission Δv reference loaded — {len(DELTA_V_REFERENCE)} trajectory segments")
@@ -826,6 +892,38 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
         "reference_year":   _REF_YEAR_OPS,
     },
     {
+        "category":         "Berthing adapter recurring cost",
+        "unit":             "USD per kg of delivery-vehicle dry mass",
+        "value":             60_000,
+        "range_low":         30_000,
+        "range_high":       150_000,
+        "notes": "v1.4.0.  In-space delivery (LEO / cislunar depot) replaces the "
+                 "re-entry capsule with a passive berthing adapter + cargo "
+                 "carrier: structure, latches, grapple fixture, RF beacon.  No "
+                 "TPS, no parachute, no guided-entry GNC, no flotation or "
+                 "beacon-for-recovery.  Priced well under the $150k/kg re-entry "
+                 "capsule rate and near the low end of the NICM/SSCM recurring "
+                 "bracket, since it is the simplest deep-space-rated structure "
+                 "in the catalog.  Heritage: Cygnus PCM, Dragon trunk, the "
+                 "passive half of the NASA Docking System.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Depot berthing & handover operations",
+        "unit":             "USD per delivery",
+        "value":            2_000_000,
+        "range_low":          500_000,
+        "range_high":       8_000_000,
+        "notes": "v1.4.0.  In-space counterpart to 'Sample recovery operations'. "
+                 "Rendezvous-and-proximity-operations support, depot crew or "
+                 "robotic-arm time, cargo survey and handover.  Far cheaper than "
+                 "an Earth recovery campaign: no search aircraft, no ships, no "
+                 "range clearance, no clean-room convoy.  Scaled from ISS "
+                 "visiting-vehicle berthing ops rather than the $15M OSIRIS-REx "
+                 "UTTR recovery.  ESTIMATE — no commercial depot exists yet.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
         "category":         "Heat shield / TPS for Earth return",
         "unit":             "USD per kg of TPS mass",
         "value":             50_000,
@@ -870,7 +968,26 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
         "notes": "FAA does not charge an application fee; cost is internal "
                  "engineering + legal + safety-case work for 14 CFR Part 450 "
                  "compliance (FAA.gov / Congress.gov R48582).  First-of-kind "
-                 "re-entry missions (asteroid sample return) trend upper-end.",
+                 "re-entry missions (asteroid sample return) trend upper-end. "
+                 "v1.4.0: this row is the LAUNCH + RE-ENTRY figure; a mission "
+                 "delivering to an in-space depot never re-enters and carries "
+                 "the launch-only row below instead.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "FAA Part 450 licensing (launch only)",
+        "unit":             "USD per program",
+        "value":            1_200_000,
+        "range_low":          600_000,
+        "range_high":       2_500_000,
+        "notes": "v1.4.0.  Part 450 covers launch AND re-entry as separately "
+                 "licensed activities (14 CFR 450.1).  A mission that delivers "
+                 "to LEO or a cislunar depot performs no re-entry, so it drops "
+                 "the re-entry safety case, the debris-casualty-expectation "
+                 "analysis for the landing footprint, and the range/airspace "
+                 "coordination that dominate the first-of-kind sample-return "
+                 "figure.  Roughly half the combined licence, which is where "
+                 "routine launch-only Part 450 compliance sits.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
@@ -911,6 +1028,25 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
         "range_low":        500,
         "range_high":     1_500,
         "notes": "Burdened recurring cost for a deep-space PV+battery train.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Power system specific mass",
+        "unit":             "Watts per kg of power system, at 1 AU",
+        "value":            60,
+        "range_low":        30,
+        "range_high":      150,
+        "notes": "v1.4.0.  SYSTEM-level, not array-level: photovoltaic wing + "
+                 "PMAD + battery + deployment structure.  ROSA / iROSA "
+                 "roll-out arrays demonstrate ~150 W/kg at the wing (NASA "
+                 "ROSA flight demo, ISS iROSA 2021+), but batteries, "
+                 "regulation and structure roughly halve that at the system "
+                 "level, and a mining rig needs power through eclipse and "
+                 "through the night side of a rotating body.  60 W/kg is "
+                 "mid-range for a deep-space PV train.  Scales as 1/r^2 with "
+                 "heliocentric distance — Module 4 applies that per asteroid, "
+                 "which is why main-belt targets are punished so hard once "
+                 "processing power is modelled.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
