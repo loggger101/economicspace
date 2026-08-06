@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.5.0)
+"""Master Asteroid Profitability Pipeline (1.6.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -8,18 +8,25 @@ run top-to-bottom — the orchestrator at the bottom executes everything.
     Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.0.8)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
-    Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.2.0)
+    Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.3.0)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
-    Stage 3  →  Transportation Data     (modules/transportation.py 1.3.0)
+                + destination pricing for EVERY commodity
+    Stage 3  →  Transportation Data     (modules/transportation.py 1.4.0)
                 Launch vehicles + propellants + Δv segments + ops costs
                 (UNCREWED autonomous mining — no crew costs)
-    Stage 4  →  Profitability Calc      (modules/calc.py 1.4.0)
+    Stage 4  →  Profitability Calc      (modules/calc.py 1.5.0)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2×, V-type 0.2×)
+                + in-space delivery architecture (earth_surface/leo/cislunar)
 
 Mission profile: UNCREWED autonomous mining spacecraft throughout (no
 crew costs, no life-support overhead).
+
+DELIVERY DESTINATION — set MINERAL_CONFIG.delivery_destination and
+CALC_CONFIG.delivery_destination TO THE SAME VALUE.  Stage 2 decides what a
+kilogram sells for; Stage 4 decides what it costs to put it there, and the
+answer is only meaningful when they agree.  Stage 4 checks and warns.
 
 Output tree (under MASTER_CONFIG.output_dir):
     asteroid_catalog.csv               ← Stage 1 (~30-40 MB at 50k rows)
@@ -2390,11 +2397,12 @@ print("    filter_by_spectral_group(catalog, 'X-complex')  # metallic")
 # IMPORTS & CONFIGURATION
 # ─────────────────────────────────────────────────────────────────────────────
 import json
+import math
 import os
 import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -2452,26 +2460,33 @@ class MineralValueConfig:
     metals_api_key: str = "DEMO"
     metals_api_url: str = "https://api.metals.dev/v1/latest"
 
-    # ─── DELIVERY DESTINATION  (drives the water price — read this) ──────────
-    # Where the mined material is actually SOLD.  This is not cosmetic: water
-    # is the only commodity here whose price depends on it, and water is
-    # ~100% of the value of every C / B / D-type asteroid, so this field
-    # alone decides which asteroids top the profitability ranking.
+    # ─── DELIVERY DESTINATION  (drives EVERY price — read this) ──────────────
+    # Where the mined material is actually SOLD.  This is the single most
+    # consequential field in the pipeline: it selects the market, and the
+    # market decides both what a kilogram is worth and which asteroids win.
     #
-    #   "earth_surface" — material re-enters and is sold on Earth.  Water is
-    #                     worth terrestrial commodity value, i.e. nothing.
-    #                     This is what Module 4's mission model actually does
-    #                     (it ends in a sample-return capsule), so it is the
-    #                     default.
-    #   "leo"           — material is delivered to and sold in low Earth
-    #                     orbit.  Water is worth the launch cost it avoids.
-    #                     Requires a mission architecture that stops at LEO;
-    #                     Module 4 still costs a full re-entry, so this
-    #                     over-values a return mission.
-    #   "cislunar"      — sold at a lunar-vicinity depot.  Water is worth the
-    #                     (much larger) cost of lifting it that far.
+    #   "earth_surface" — material re-enters and is sold on Earth at
+    #                     terrestrial commodity prices.  Water is worth
+    #                     ~nothing; platinum is worth $57,000/kg.  Favours
+    #                     metal-rich M / X types.
+    #   "leo"           — delivered to and sold in low Earth orbit.  Every
+    #                     commodity with in-space utility is worth the launch
+    #                     cost it avoids ($4,253/kg); precious metals are
+    #                     worth nothing, because no orbital market for them
+    #                     exists.  Favours water- and metal-rich bulk.
+    #   "cislunar"      — sold at a lunar-vicinity (NRHO) depot, worth the
+    #                     larger launch cost avoided ($10,809/kg, derived).
+    #                     Also the CHEAPEST of the three to reach from an
+    #                     asteroid — see Module 4's return-Δv model.
     #
-    # See WATER_VALUE_BY_DESTINATION below for the numbers and sourcing.
+    # v1.3.0: this used to reprice water only.  It now reprices everything,
+    # which is the consistent form of the same correction — see
+    # DELIVERY_DESTINATIONS and IN_SPACE_UTILITY below for the numbers, the
+    # derivation, and which parts are judgement rather than measurement.
+    #
+    # ⚠️  Module 4's CALC_CONFIG carries a delivery_destination of its own,
+    # and it must MATCH this one — it selects the mission architecture that
+    # actually delivers the cargo here.  Module 4 checks and warns.
     delivery_destination: str = "earth_surface"
 
     # ─── NETWORK ─────────────────────────────────────────────────────────────
@@ -2555,7 +2570,58 @@ class MineralValueConfig:
     #         the old numbers, but only alongside a mission model that
     #         actually stops at LEO.
     #         New output columns: value_basis, delivery_destination.
-    pipeline_version: str = "1.2.0"
+    # 1.3.0 — IN-SPACE DELIVERY: destination pricing generalised from water to
+    #         EVERY commodity.  Paired with Module 3 v1.4.0 / Module 4 v1.5.0.
+    #         v1.2.0 repriced water by destination and left every other
+    #         commodity at its terrestrial spot price, which is the same
+    #         inconsistency v1.2.0 existed to fix, just moved: iron delivered
+    #         to LEO was still valued at scrap-steel rates while the water
+    #         beside it in the same capsule was valued at launch cost avoided.
+    #         • WATER_VALUE_BY_DESTINATION → DELIVERY_DESTINATIONS, and the
+    #           in-space prices are now DERIVED rather than tabulated.  The
+    #           old cislunar figure was "~3x the LEO figure" by assertion;
+    #           it is now $4,253/kg-to-LEO carried a further 3,600 m/s
+    #           (Module 3's TLI + NRHO insertion) by an Isp 465 s stage of
+    #           dry-mass fraction 0.10, via the rocket equation in
+    #           delivered_cost_usd_per_kg().  That lands at $10,809/kg —
+    #           15% below the old hand-waved $12,750, and now traceable.
+    #             earth_surface  $0/kg avoided (terrestrial prices stand)
+    #             leo            $4,253/kg
+    #             cislunar      $10,809/kg
+    #         • A kilogram at a depot is worth the BETTER OF TWO FATES, and
+    #           the choice is made per commodity:
+    #             USED IN SPACE   terrestrial price PLUS in_space_utility x
+    #                             launch cost avoided.  Note the PLUS — the
+    #                             launch bill is what delivering it saves, on
+    #                             top of the material itself.
+    #             SHIPPED DOWN    terrestrial price MINUS the downleg
+    #                             (downleg_cost_usd_per_kg): capsule + TPS +
+    #                             recovery, derived from the same Module 3
+    #                             rates Module 4 charges for an Earth return,
+    #                             plus the depot-departure burn.  ~$25,400/kg
+    #                             from LEO, ~$27,300/kg from NRHO.  Coming
+    #                             down is far cheaper than going up.
+    #           This is what puts an honest number on platinum at a depot:
+    #           nobody in orbit wants it, but it is still platinum, so it is
+    #           priced by shipping it home rather than written off.
+    #         • New IN_SPACE_UTILITY table: how good a substitute each
+    #           commodity is for the launched article.  Water 1.00, structural
+    #           metals 0.70, silicates 0.25, carbon 0.40, organics 0.20, and
+    #           0.00 for the precious metals — which routes them down the
+    #           ship-to-Earth branch rather than zeroing them.
+    #           THESE ARE JUDGEMENTS, not measurements; they are the softest
+    #           assumption in the in-space case and live in one table for that
+    #           reason.
+    #         • New apply_delivery_destination() step runs after merge_mineral_sources
+    #           so it overrides LIVE quotes as well as reference ones.
+    #         Numerical impact at LEO / cislunar (earth_surface unchanged):
+    #           nickel-iron  $4.73/kg  -> $2,978  / $7,567   (used in space)
+    #           water        $0.001    -> $4,253  / $10,810  (used in space)
+    #           platinum     $56,695   -> $31,285 / $29,378  (shipped down)
+    #           gold        $138,882   -> $113,472/ $111,565 (shipped down)
+    #         New output columns: terrestrial_price_usd_per_kg,
+    #         in_space_utility, downleg_cost_usd_per_kg, value_route.
+    pipeline_version: str = "1.3.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows: int = 20
@@ -2569,7 +2635,7 @@ print(f"    Active sources : "
       f"{', '.join(s for s, on in (('yfinance', MINERAL_CONFIG.use_yfinance), ('metals.dev', MINERAL_CONFIG.use_metals_api and MINERAL_CONFIG.metals_api_key != 'DEMO'), ('reference', MINERAL_CONFIG.use_reference_table)) if on)}")
 print(f"    Price unit     : {MINERAL_CONFIG.PRICE_UNIT}  (every numeric price column ends with _usd_per_kg)")
 print(f"    Delivery dest  : {MINERAL_CONFIG.delivery_destination}  "
-      f"(sets the water price — see WATER_VALUE_BY_DESTINATION)")
+      f"(sets EVERY price — see DELIVERY_DESTINATIONS + IN_SPACE_UTILITY)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2657,41 +2723,259 @@ _REF_PRICE_DATE = "2026-05-29"
 # inconsistency was worth a factor of ~4 million on C-type asteroids and
 # inverted the entire ranking.
 
-WATER_VALUE_BY_DESTINATION: Dict[str, dict] = {
-    "earth_surface": {
-        "usd_per_kg": 0.001,
-        "basis": "terrestrial bulk industrial water",
-        "notes": "Municipal/industrial bulk water runs $0.0005-0.002/kg.  "
-                 "Asteroid water landed on Earth competes with rain.",
-    },
-    "leo": {
-        "usd_per_kg": 4_250.0,
-        "basis": "launch cost avoided to LEO",
-        "notes": "Falcon 9 reusable $/kg-to-LEO, matching Module 3 "
-                 "($4,253).  Valid only if the water is SOLD in orbit.",
-    },
-    "cislunar": {
-        "usd_per_kg": 12_750.0,
-        "basis": "launch cost avoided to cislunar space",
-        "notes": "~3× the LEO figure, tracking the extra Δv to a TLI / NRHO "
-                 "depot.  The most favourable honest case for water.",
-    },
+# ─────────────────────────────────────────────────────────────────────────────
+# DELIVERY DESTINATIONS  —  what a kilogram is worth, and where  (v1.3.0)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Material sold in space is worth the launch cost it AVOIDS.  That number is
+# not asserted here — it is derived from the rocket equation, from the Δv
+# ladder in Module 3's DELTA_V_REFERENCE, and from a real launch price.
+#
+# Constants below are cross-referenced to Module 3.  They are duplicated
+# rather than imported because Module 2 runs BEFORE Module 3 in the pipeline
+# order (and in the concatenated master.py), so the tables are not in scope.
+# If you change one of these, change it in Module 3 too.
+
+G0_M_S2 = 9.806_65                 # standard gravity, exact by definition
+
+# Falcon 9 reusable $/kg-to-LEO — Module 3 LAUNCH_VEHICLES ($74M / 17.4 t).
+# This is the cheapest operational figure in that table, so every in-space
+# price derived from it is a LOWER bound on the launch cost avoided.
+_LEO_USD_PER_KG = 4_253.0
+
+# Δv above LEO for each destination — Module 3 DELTA_V_REFERENCE.
+#   cislunar = "LEO → cislunar NRHO depot" = TLI (3,150) + NRHO insertion (450)
+_DV_ABOVE_LEO_M_S = {"earth_surface": None, "leo": 0.0, "cislunar": 3_600.0}
+
+# The tug that would have carried the payload up if you had launched it.
+# Isp 465 s = hydrolox upper stage (Module 3 PROPELLANTS: LH2/LOX, 450-465 s
+# vacuum).  Dry-mass fraction 0.10 is mid-range for a cryogenic upper stage
+# (Centaur V ~0.08, DCSS ~0.11) — stage dry mass / (dry + propellant).
+_TUG_ISP_S            = 465.0
+_TUG_DRY_MASS_FRAC    = 0.10
+
+
+def delivered_cost_usd_per_kg(
+    dv_above_leo_m_s: float,
+    leo_usd_per_kg:   float = _LEO_USD_PER_KG,
+    isp_s:            float = _TUG_ISP_S,
+    dry_mass_frac:    float = _TUG_DRY_MASS_FRAC,
+) -> float:
+    """Cost of putting 1 kg at a destination `dv_above_leo_m_s` above LEO.
+
+    This is the "launch cost avoided" that gives asteroid material its
+    in-space value.  Derived, not tabulated:
+
+        R  = exp(Δv / (Isp·g0))                        rocket equation
+        p  = (R − 1)(1 + d)                            propellant per kg payload
+        δ  = d / (d + p)   ⇒   d = δ(R−1) / (1 − δR)   stage dry mass
+        m0 = R (1 + d)                                 total mass needed in LEO
+
+    and the delivered cost is `leo_usd_per_kg × m0` — you pay to lift the
+    payload, the propellant, and the stage.
+
+    Returns 0.0 for Δv = 0 above LEO... no: returns exactly `leo_usd_per_kg`,
+    since m0 = 1 when Δv = 0.  Raises nothing; an infeasible stage (δ·R ≥ 1,
+    i.e. the tank cannot close on that Δv) returns inf.
+    """
+    if dv_above_leo_m_s <= 0:
+        return float(leo_usd_per_kg)
+    r = math.exp(float(dv_above_leo_m_s) / (isp_s * G0_M_S2))
+    if dry_mass_frac * r >= 1.0:
+        return float("inf")          # stage cannot close on this Δv
+    d  = dry_mass_frac * (r - 1.0) / (1.0 - dry_mass_frac * r)
+    m0 = r * (1.0 + d)
+    return float(leo_usd_per_kg) * m0
+
+
+# Terrestrial bulk-industrial water, for the earth_surface case.  Municipal /
+# industrial bulk water runs $0.0005-0.002/kg — asteroid water landed on Earth
+# competes with rain.
+_EARTH_SURFACE_WATER_USD_PER_KG = 0.001
+
+
+def _build_destination_table() -> Dict[str, dict]:
+    """Materialise the destination table, deriving the in-space prices."""
+    out = {}
+    for key, dv in _DV_ABOVE_LEO_M_S.items():
+        if dv is None:                       # Earth's surface avoids no launch
+            out[key] = {
+                "usd_per_kg": 0.0,
+                "dv_above_leo_m_s": 0.0,
+                "basis": "terrestrial market price",
+                "notes": "Material delivered to Earth's surface avoids no "
+                         "launch, so it is worth its terrestrial commodity "
+                         "price and nothing more.",
+            }
+            continue
+        out[key] = {
+            "usd_per_kg": delivered_cost_usd_per_kg(dv),
+            "dv_above_leo_m_s": dv,
+            "basis": f"launch cost avoided ({'LEO' if dv == 0 else 'LEO + %.0f m/s' % dv})",
+            "notes": (f"Derived: ${_LEO_USD_PER_KG:,.0f}/kg to LEO "
+                      f"(Falcon 9 reusable, Module 3) carried a further "
+                      f"{dv:,.0f} m/s by an Isp {_TUG_ISP_S:.0f} s stage of "
+                      f"dry fraction {_TUG_DRY_MASS_FRAC:.2f}."),
+        }
+    return out
+
+
+DELIVERY_DESTINATIONS: Dict[str, dict] = _build_destination_table()
+
+
+# ─── DOWNLEG: GETTING IT FROM A DEPOT TO THE TERRESTRIAL MARKET ──────────────
+# A commodity with no in-space demand is not worthless at a depot — it is
+# worth its Earth price MINUS whatever it costs to fly it the rest of the way
+# down.  Someone has to pay that leg; the miner selling at the depot eats it
+# in the price.
+#
+# Derived from the same Module 3 rates Module 4 charges for an Earth-return
+# mission, so the two sides of the pipeline cannot drift apart:
+#
+#   capsule dry mass  0.10 x payload             @ $150,000/kg   (Module 3
+#                                                 "Return capsule recurring")
+#   TPS               0.15 x (payload + capsule) @  $50,000/kg   (Module 3
+#                                                 "Heat shield / TPS", and
+#                                                 0.15 is Module 4's
+#                                                 heat_shield_frac_of_payload)
+#   recovery campaign $15,000,000 over a nominal 10 t batch       (Module 3
+#                                                 "Sample recovery operations")
+#   departure burn    rocket-equation mass penalty for leaving the depot
+#
+# Coming down is far cheaper than going up — you need a heat shield, not a
+# launch vehicle — which is why these numbers are a fraction of the
+# launch-cost-avoided figures above.
+_DOWNLEG_CAPSULE_DRY_FRAC   = 0.10
+_DOWNLEG_TPS_FRAC           = 0.15
+_DOWNLEG_CAPSULE_USD_PER_KG = 150_000.0
+_DOWNLEG_TPS_USD_PER_KG     =  50_000.0
+_DOWNLEG_RECOVERY_USD       = 15_000_000.0
+_DOWNLEG_BATCH_KG           = 10_000.0
+# Δv to leave the depot onto an Earth-return trajectory, entering directly.
+#   leo      — deorbit burn, ~120 m/s
+#   cislunar — NRHO departure, ~450 m/s (Module 3 "TLI → NRHO insertion",
+#              which is symmetric)
+_DOWNLEG_DEPARTURE_DV_M_S = {"leo": 120.0, "cislunar": 450.0}
+
+
+def downleg_cost_usd_per_kg(destination: str) -> float:
+    """Cost of moving 1 kg from an in-space depot to the terrestrial market.
+
+    Returns 0.0 for earth_surface — the material is already there.
+    """
+    key = str(destination or "").strip().lower()
+    if key not in _DOWNLEG_DEPARTURE_DV_M_S:
+        return 0.0
+    capsule_kg = _DOWNLEG_CAPSULE_DRY_FRAC
+    tps_kg     = _DOWNLEG_TPS_FRAC * (1.0 + capsule_kg)
+    hardware   = (capsule_kg * _DOWNLEG_CAPSULE_USD_PER_KG
+                  + tps_kg * _DOWNLEG_TPS_USD_PER_KG)
+    recovery   = _DOWNLEG_RECOVERY_USD / _DOWNLEG_BATCH_KG
+    # Departure burn shows up as extra mass to be built and flown.
+    r = math.exp(_DOWNLEG_DEPARTURE_DV_M_S[key] / (_TUG_ISP_S * G0_M_S2))
+    return (hardware + recovery) * r
+
+
+# ─── IN-SPACE UTILITY BY COMMODITY ───────────────────────────────────────────
+# How much of the launch-cost-avoided a commodity actually captures at an
+# in-space destination.  1.0 means it is a drop-in substitute for the same
+# mass launched from Earth; 0.0 means there is no in-space market for it at
+# all and it can only be sold by flying it down.
+#
+# ⚠️  THESE ARE ENGINEERING JUDGEMENTS, NOT MEASUREMENTS.  Unlike the price
+# above — which is derived from the rocket equation and a real launch price —
+# no market exists yet to calibrate these against.  They are the single
+# biggest soft assumption in the in-space case, so they live here as one
+# obvious table rather than being buried per-entry.
+IN_SPACE_UTILITY: Dict[str, float] = {
+    # Volatiles — the canonical in-space commodity.  Water is propellant
+    # feedstock, radiation shielding, life support and coolant; electrolysis
+    # is the only processing step between raw ice and a fuelled depot.
+    "water":            1.00,
+    # Structural metals.  Discounted for the in-space manufacturing gap:
+    # raw Fe-Ni is not a pressure vessel, and the melting / forming plant that
+    # turns it into one is not costed anywhere in this pipeline.
+    "iron":             0.70,
+    "nickel":           0.70,
+    "cobalt":           0.70,
+    "copper":           0.70,   # wiring, coils, heat exchangers
+    "nickel-iron":      0.70,
+    "awaruite":         0.70,
+    "magnetite":        0.40,   # oxide — needs reduction before it is metal
+    "troilite":         0.30,   # sulphur source, minor structural use
+    # Silicates.  Usable as bulk radiation shielding and as 3-D-printing /
+    # sintering feedstock, but a poor per-kg substitute for engineered
+    # structure, and available in quantity from the Moon as well.
+    "olivine":          0.25, "pyroxene":        0.25, "orthopyroxene": 0.25,
+    "enstatite":        0.25, "plagioclase":     0.25, "spinel":        0.25,
+    "phyllosilicates":  0.25, "oxides":          0.25, "silicates":     0.25,
+    # Carbon and organics — composites, plastics, agriculture feedstock.
+    "carbon":           0.40,
+    "organics":         0.20,
+    # Everything not listed — the precious metals above all — defaults to 0.0.
+    # That does NOT make them worthless at a depot: a zero here means only
+    # that nobody in orbit wants the material for its own sake, so it is
+    # valued by shipping it down instead (terrestrial price less the downleg).
+    # See in_space_price_usd_per_kg.
 }
+IN_SPACE_UTILITY_DEFAULT = 0.0
 
 
-def water_value_for_destination(destination: str) -> dict:
-    """Look up the water price for a delivery destination.
+def value_for_destination(destination: str) -> dict:
+    """Look up the delivered-value basis for a delivery destination.
 
     Unknown destinations fall back to earth_surface — the conservative
     choice — rather than silently keeping an in-space premium.
     """
     key = str(destination or "").strip().lower()
-    if key not in WATER_VALUE_BY_DESTINATION:
+    if key not in DELIVERY_DESTINATIONS:
         print(f"     ⚠️   Unknown delivery_destination {destination!r} — "
               f"falling back to 'earth_surface'.  Valid: "
-              f"{', '.join(sorted(WATER_VALUE_BY_DESTINATION))}")
+              f"{', '.join(sorted(DELIVERY_DESTINATIONS))}")
         key = "earth_surface"
-    return WATER_VALUE_BY_DESTINATION[key]
+    return DELIVERY_DESTINATIONS[key]
+
+
+def in_space_price_usd_per_kg(
+    name: str, destination: str, terrestrial_usd_per_kg: Optional[float],
+) -> Optional[Tuple[float, str]]:
+    """Value of 1 kg of `name` sitting at `destination`, and how it is realised.
+
+    Returns (usd_per_kg, route) — or None at earth_surface, where the
+    terrestrial price already stands.
+
+    A kilogram at a depot has two possible fates, and it is worth the better
+    of them:
+
+      USE IT IN SPACE.  Worth what an equivalent kilogram delivered from Earth
+        would have cost: its purchase price PLUS the launch bill.  Note the
+        PLUS — v1.3.0 replaced the terrestrial price with the launch cost,
+        which quietly threw the material itself away.  Scaled by
+        `in_space_utility`, which is how good a substitute it actually is for
+        the launched article.  Only available where demand exists (utility>0).
+
+      SHIP IT DOWN.  Worth the terrestrial price less the cost of the onward
+        leg to the surface.  Always available, and it is what puts a real,
+        non-zero number on platinum at a depot: nobody in orbit wants
+        platinum, but it is still platinum.
+
+    Floored at zero — material too cheap to be worth the freight is worth
+    nothing, not a negative.
+    """
+    dest = value_for_destination(destination)
+    if dest["dv_above_leo_m_s"] is None or dest["usd_per_kg"] <= 0.0:
+        return None                                   # earth_surface
+
+    terrestrial = float(terrestrial_usd_per_kg or 0.0)
+    utility     = IN_SPACE_UTILITY.get(name, IN_SPACE_UTILITY_DEFAULT)
+
+    use_in_space = (terrestrial + utility * dest["usd_per_kg"]
+                    if utility > 0 else None)
+    ship_to_earth = terrestrial - downleg_cost_usd_per_kg(destination)
+
+    if use_in_space is not None and use_in_space >= ship_to_earth:
+        return max(0.0, use_in_space), "used in space"
+    return max(0.0, ship_to_earth), "shipped to Earth"
 
 
 MINERAL_REFERENCE: List[dict] = [
@@ -2864,15 +3148,16 @@ MINERAL_REFERENCE: List[dict] = [
         "yfinance_ticker":       None,
         "yfinance_unit":         None,
         "metals_dev_key":        None,
-        # RESOLVED AT RUNTIME from config.delivery_destination — see
-        # WATER_VALUE_BY_DESTINATION above.  The value here is only the
-        # fallback if the resolver is somehow bypassed; it deliberately
-        # matches the conservative earth_surface case rather than the
-        # in-space premium, so a mistake under-values rather than over-values.
+        # This is the TERRESTRIAL price — bulk industrial water, what a
+        # kilogram of it is worth once landed.  At an in-space destination
+        # apply_delivery_destination() overwrites it with the launch cost
+        # avoided; see DELIVERY_DESTINATIONS and IN_SPACE_UTILITY above.
+        # Keeping the conservative earth_surface figure here means a bypassed
+        # resolver under-values water rather than over-values it.
         "ref_price_usd_per_kg":  0.001,
         "ref_price_date":        _REF_PRICE_DATE,
         "notes":                 "Price depends entirely on where the water is SOLD, "
-                                 "not on the asteroid — see WATER_VALUE_BY_DESTINATION. "
+                                 "not on the asteroid — see DELIVERY_DESTINATIONS. "
                                  "Set MINERAL_CONFIG.delivery_destination to 'leo' or "
                                  "'cislunar' to price it as launch cost avoided; the "
                                  "default 'earth_surface' prices it as what it is once "
@@ -3312,17 +3597,17 @@ def fetch_reference_table(config: MineralValueConfig) -> pd.DataFrame:
     """Static USGS / LME / mineralogy reference data — always available."""
     print("\n📚  Reference table — loading curated prices + densities …")
 
-    # Water is priced by DELIVERY DESTINATION, not by the asteroid.  Resolve
-    # it once here so the number that lands in the CSV carries its basis.
-    water = water_value_for_destination(config.delivery_destination)
-
+    # Every row here carries its TERRESTRIAL price.  The in-space repricing is
+    # applied once, uniformly, after the merge — see apply_delivery_destination
+    # — because it has to override live quotes too (platinum's LME price is
+    # not what platinum is worth at a cislunar depot).
     rows = []
     for entry in MINERAL_REFERENCE:
         is_water   = entry["name"] == "water"
-        ref_price  = water["usd_per_kg"] if is_water else entry.get("ref_price_usd_per_kg")
-        value_basis = water["basis"] if is_water else "terrestrial market price"
-        notes      = (f"{water['notes']}  (delivery_destination="
-                      f"{config.delivery_destination})") if is_water else entry.get("notes", "")
+        ref_price  = (_EARTH_SURFACE_WATER_USD_PER_KG if is_water
+                      else entry.get("ref_price_usd_per_kg"))
+        value_basis = "terrestrial market price"
+        notes      = entry.get("notes", "")
         rows.append({
             "name":                 entry["name"],
             "kind":                 entry["kind"],
@@ -3338,9 +3623,80 @@ def fetch_reference_table(config: MineralValueConfig) -> pd.DataFrame:
 
     df = pd.DataFrame(rows)
     print(f"     ✅  {len(df)} reference rows loaded")
-    print(f"     💧  Water priced at ${water['usd_per_kg']:,.3f}/kg "
-          f"({water['basis']})")
     return df
+
+
+def apply_delivery_destination(
+    catalog: pd.DataFrame, config: MineralValueConfig,
+) -> pd.DataFrame:
+    """Reprice the whole catalog for the configured delivery destination.
+
+    At `earth_surface` this is a no-op: every commodity keeps the terrestrial
+    price the sources supplied.
+
+    At an in-space destination every commodity is revalued to the better of
+    its two fates — used in space, or shipped down to the terrestrial market.
+    See in_space_price_usd_per_kg for the rule.  Two consequences worth being
+    explicit about, because they are the whole point of the field:
+
+      • Bulk material becomes enormously more valuable.  Iron is worth $0.50/kg
+        on Earth and ~$2,978/kg in LEO, because a kilogram of structural metal
+        already in orbit is a kilogram nobody has to launch.
+      • Precious metals lose their in-space premium but keep their value.
+        Nobody in orbit wants platinum, so it is priced by shipping it down:
+        terrestrial price less the downleg.  ~$31,700/kg in LEO against
+        $57,074 on the ground — a real discount, not a wipeout.
+
+    Applied after merge_mineral_sources so it overrides live quotes as well as
+    reference ones.
+    """
+    dest_key = str(config.delivery_destination or "").strip().lower()
+    dest     = value_for_destination(dest_key)
+    if dest["usd_per_kg"] <= 0.0:
+        print(f"\n🌍  Delivery destination '{dest_key}' — terrestrial prices stand.")
+        return catalog
+
+    downleg = downleg_cost_usd_per_kg(dest_key)
+    print(f"\n🛰️   Repricing for delivery to '{dest_key}' …")
+    print(f"     Launch cost avoided : ${dest['usd_per_kg']:,.0f}/kg  ({dest['basis']})")
+    print(f"     Downleg to surface  : ${downleg:,.0f}/kg  "
+          f"(capsule + TPS + recovery, per kg delivered)")
+
+    catalog = catalog.copy()
+    new_price, new_basis, routes = [], [], []
+    for name, terrestrial in zip(catalog["name"], catalog["price_usd_per_kg"]):
+        t = None if pd.isna(terrestrial) else float(terrestrial)
+        result = in_space_price_usd_per_kg(str(name), dest_key, t)
+        if result is None:
+            new_price.append(terrestrial)
+            new_basis.append("terrestrial market price")
+            routes.append("terrestrial")
+            continue
+        price, route = result
+        utility = IN_SPACE_UTILITY.get(str(name), IN_SPACE_UTILITY_DEFAULT)
+        new_price.append(price)
+        routes.append(route)
+        new_basis.append(
+            f"terrestrial + {utility:.2f} x launch cost avoided"
+            if route == "used in space" else "terrestrial price less downleg"
+        )
+
+    catalog["terrestrial_price_usd_per_kg"] = catalog["price_usd_per_kg"]
+    catalog["in_space_utility"] = [
+        IN_SPACE_UTILITY.get(str(n), IN_SPACE_UTILITY_DEFAULT) for n in catalog["name"]
+    ]
+    catalog["downleg_cost_usd_per_kg"] = downleg
+    catalog["value_route"]     = routes
+    catalog["price_usd_per_kg"] = new_price
+    catalog["value_basis"]      = new_basis
+    catalog["price_basis"]      = "derived-in-space"
+
+    n_use  = routes.count("used in space")
+    n_ship = routes.count("shipped to Earth")
+    n_zero = int((pd.to_numeric(catalog["price_usd_per_kg"], errors="coerce") == 0).sum())
+    print(f"     ✅  {n_use} sold in space, {n_ship} shipped down "
+          f"({n_zero} worth less than the freight)")
+    return catalog
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3496,6 +3852,12 @@ def build_mineral_value_catalog(
 
     # ── Step 3 — Merge ───────────────────────────────────────────────────────
     catalog = merge_mineral_sources(reference, live_frames)
+
+    # ── Step 3b — Reprice for the delivery destination ───────────────────────
+    # Must follow the merge: at an in-space destination this overrides live
+    # quotes too, since a terrestrial spot price is not what a commodity is
+    # worth at a depot.
+    catalog = apply_delivery_destination(catalog, config)
 
     # ── Step 4 — Validate ────────────────────────────────────────────────────
     catalog = validate_minerals(catalog)
@@ -3733,7 +4095,28 @@ class TransportConfig:
     #           $300k/kg mining-payload rate, pricing a parachute-and-heat-
     #           shield can as regolith-contact machinery.
     #         New output column on propellants.csv: dv_penalty_factor.
-    pipeline_version: str = "1.3.0"
+    # 1.4.0 — IN-SPACE DELIVERY ARCHITECTURE.  Reference data for selling the
+    #         mined material at an in-space destination instead of flying it
+    #         down.  Paired with Module 2 v1.3.0 and Module 4 v1.5.0.
+    #         Nothing existing changed value; this release is additive, so
+    #         every number a v1.3.0 earth_surface run produced is unchanged.
+    #         • 6 new DELTA_V_REFERENCE segments: the delivery ladder above
+    #           LEO (TLI 3,150 / NRHO insertion 450 / LEO→NRHO 3,600 m/s) and
+    #           the three asteroid return legs quoted at v_inf = 3 km/s
+    #           (LEO propulsive 3,626, cislunar Oberth capture 944, LEO
+    #           aerobraked 100 m/s).  The LEO→NRHO figure is what Module 2
+    #           integrates to price material sold at a cislunar depot.
+    #         • 3 new OPERATIONAL_COSTS rows: "Berthing adapter recurring
+    #           cost" ($60k/kg — replaces the re-entry capsule for in-space
+    #           delivery), "Depot berthing & handover operations" ($2M —
+    #           replaces the $15M Earth recovery campaign), and "FAA Part 450
+    #           licensing (launch only)" ($1.2M — no re-entry licence).
+    #         The headline physical result these encode: cislunar is BOTH
+    #         cheaper to reach from an asteroid than LEO (960 vs 3,590 m/s,
+    #         because capture can take the Oberth benefit and NRHO is barely
+    #         bound) AND worth more per kg on arrival.  Earth's surface is the
+    #         cheapest to reach and worth the least.
+    pipeline_version: str = "1.4.0"
     preview_rows:     int = 15
 
 
@@ -4268,6 +4651,51 @@ DELTA_V_REFERENCE: List[dict] = [
      "notes": "Per Taylor 2018 — long cruise; favours electric propulsion."},
     {"segment": "Lunar surface  →  LEO",          "dv_m_per_s":  5_900, "duration_yr": 0.01,
      "notes": "Apollo Lunar Module ascent + plane change — reference for lunar-relay arch."},
+
+    # ── Delivery ladder above LEO  (v1.4.0) ──────────────────────────────────
+    # These price the "launch cost avoided" for material sold in space, and
+    # give Module 4 the return-leg budget for a non-Earth-surface delivery.
+    {"segment": "LEO  →  TLI (trans-lunar injection)", "dv_m_per_s": 3_150, "duration_yr": 0.01,
+     "notes": "Apollo TLI 3.05-3.20 km/s (NASA SP-4029 / Apollo-by-the-Numbers). "
+              "Effectively the same burn as LEO→Earth-escape, 50 m/s cheaper "
+              "because the Moon is bound rather than at C3=0."},
+    {"segment": "TLI  →  NRHO insertion",         "dv_m_per_s":    450, "duration_yr": 0.01,
+     "notes": "Near-rectilinear halo orbit insertion for Gateway / Orion, "
+              "~0.4-0.45 km/s (NASA Gateway NRHO trade studies, Whitley & "
+              "Martinez 2016 'Options for Staging Orbits in Cis-Lunar Space'). "
+              "NRHO is the cheapest usefully-stable cislunar depot orbit."},
+    {"segment": "LEO  →  cislunar NRHO depot",    "dv_m_per_s":  3_600, "duration_yr": 0.02,
+     "notes": "TLI + NRHO insertion.  This is the Δv that a kilogram of "
+              "asteroid material delivered to NRHO AVOIDS having to be lifted "
+              "through — it sets the cislunar sale price in Module 2."},
+
+    # ── Asteroid return legs by delivery destination  (v1.4.0) ───────────────
+    # Reference magnitudes only; Module 4 computes these per-asteroid from the
+    # actual arrival v_infinity.  Quoted here at v_inf = 3 km/s, a typical NEA
+    # return, so the three architectures can be compared at a glance.
+    {"segment": "NEA  →  LEO delivery (propulsive)", "dv_m_per_s": 3_626, "duration_yr": 1.5,
+     "notes": "Circularising into LEO from a v_inf=3 km/s arrival hyperbola: "
+              "sqrt(v_esc^2 + v_inf^2) - v_circ at 200 km.  The most expensive "
+              "destination to reach propulsively — LEO sits deepest in the well "
+              "of the three, which is exactly why material there is worth most "
+              "per kg and costs most to deliver.  Computed by Module 4's "
+              "_leo_departure_dv_km_s; excludes the asteroid-departure burn."},
+    {"segment": "NEA  →  cislunar NRHO (Oberth capture)", "dv_m_per_s": 944, "duration_yr": 1.6,
+     "notes": "Capture at a low perigee into an ellipse reaching lunar distance "
+              "(494 m/s at v_inf=3 km/s, taking the Oberth benefit of burning "
+              "deep in the well), then NRHO insertion at apogee (450 m/s). "
+              "3.8x cheaper than propulsive LEO capture, and the destination "
+              "is worth MORE per kg — the two effects compound.  Computed by "
+              "Module 4's _cislunar_capture_dv_km_s; excludes the "
+              "asteroid-departure burn.  The advantage widens as arrival "
+              "energy falls: 5.6x at v_inf=1 km/s, 2.7x at 5 km/s."},
+    {"segment": "NEA  →  LEO delivery (aerobraked)", "dv_m_per_s": 100, "duration_yr": 2.0,
+     "notes": "Aerocapture into a high ellipse, then multi-pass aerobraking to "
+              "circularise; drag does the work, so the propulsive cost is only "
+              "the periapsis-raise burn out of the atmosphere.  Mars Odyssey / "
+              "MRO flew this for real, saving ~1.2 km/s over ~6 months of "
+              "passes (JPL).  Buys Δv with TPS mass and MONTHS of time — the "
+              "duration figure carries that."},
 ]
 
 print(f"✅  Mission Δv reference loaded — {len(DELTA_V_REFERENCE)} trajectory segments")
@@ -4331,6 +4759,38 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
         "reference_year":   _REF_YEAR_OPS,
     },
     {
+        "category":         "Berthing adapter recurring cost",
+        "unit":             "USD per kg of delivery-vehicle dry mass",
+        "value":             60_000,
+        "range_low":         30_000,
+        "range_high":       150_000,
+        "notes": "v1.4.0.  In-space delivery (LEO / cislunar depot) replaces the "
+                 "re-entry capsule with a passive berthing adapter + cargo "
+                 "carrier: structure, latches, grapple fixture, RF beacon.  No "
+                 "TPS, no parachute, no guided-entry GNC, no flotation or "
+                 "beacon-for-recovery.  Priced well under the $150k/kg re-entry "
+                 "capsule rate and near the low end of the NICM/SSCM recurring "
+                 "bracket, since it is the simplest deep-space-rated structure "
+                 "in the catalog.  Heritage: Cygnus PCM, Dragon trunk, the "
+                 "passive half of the NASA Docking System.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Depot berthing & handover operations",
+        "unit":             "USD per delivery",
+        "value":            2_000_000,
+        "range_low":          500_000,
+        "range_high":       8_000_000,
+        "notes": "v1.4.0.  In-space counterpart to 'Sample recovery operations'. "
+                 "Rendezvous-and-proximity-operations support, depot crew or "
+                 "robotic-arm time, cargo survey and handover.  Far cheaper than "
+                 "an Earth recovery campaign: no search aircraft, no ships, no "
+                 "range clearance, no clean-room convoy.  Scaled from ISS "
+                 "visiting-vehicle berthing ops rather than the $15M OSIRIS-REx "
+                 "UTTR recovery.  ESTIMATE — no commercial depot exists yet.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
         "category":         "Heat shield / TPS for Earth return",
         "unit":             "USD per kg of TPS mass",
         "value":             50_000,
@@ -4375,7 +4835,26 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
         "notes": "FAA does not charge an application fee; cost is internal "
                  "engineering + legal + safety-case work for 14 CFR Part 450 "
                  "compliance (FAA.gov / Congress.gov R48582).  First-of-kind "
-                 "re-entry missions (asteroid sample return) trend upper-end.",
+                 "re-entry missions (asteroid sample return) trend upper-end. "
+                 "v1.4.0: this row is the LAUNCH + RE-ENTRY figure; a mission "
+                 "delivering to an in-space depot never re-enters and carries "
+                 "the launch-only row below instead.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "FAA Part 450 licensing (launch only)",
+        "unit":             "USD per program",
+        "value":            1_200_000,
+        "range_low":          600_000,
+        "range_high":       2_500_000,
+        "notes": "v1.4.0.  Part 450 covers launch AND re-entry as separately "
+                 "licensed activities (14 CFR 450.1).  A mission that delivers "
+                 "to LEO or a cislunar depot performs no re-entry, so it drops "
+                 "the re-entry safety case, the debris-casualty-expectation "
+                 "analysis for the landing footprint, and the range/airspace "
+                 "coordination that dominate the first-of-kind sample-return "
+                 "figure.  Roughly half the combined licence, which is where "
+                 "routine launch-only Part 450 compliance sits.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
@@ -4416,6 +4895,25 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
         "range_low":        500,
         "range_high":     1_500,
         "notes": "Burdened recurring cost for a deep-space PV+battery train.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Power system specific mass",
+        "unit":             "Watts per kg of power system, at 1 AU",
+        "value":            60,
+        "range_low":        30,
+        "range_high":      150,
+        "notes": "v1.4.0.  SYSTEM-level, not array-level: photovoltaic wing + "
+                 "PMAD + battery + deployment structure.  ROSA / iROSA "
+                 "roll-out arrays demonstrate ~150 W/kg at the wing (NASA "
+                 "ROSA flight demo, ISS iROSA 2021+), but batteries, "
+                 "regulation and structure roughly halve that at the system "
+                 "level, and a mining rig needs power through eclipse and "
+                 "through the night side of a rotating body.  60 W/kg is "
+                 "mid-range for a deep-space PV train.  Scales as 1/r^2 with "
+                 "heliocentric distance — Module 4 applies that per asteroid, "
+                 "which is why main-belt targets are punished so hard once "
+                 "processing power is modelled.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
@@ -5202,6 +5700,42 @@ class CalcConfig:
     # approach, characterisation, proximity ops, departure phasing.
     station_keeping_floor_yr:          float = 0.25
 
+    # ─── BENEFICIATION  (v1.5.0) ─────────────────────────────────────────────
+    # Terrestrial mines do not ship ore, they ship CONCENTRATE.  Without this
+    # the pipeline flies home run-of-mine regolith at bulk grade, which throws
+    # away the only lever that does not require a bigger rocket: the rig can
+    # dig far more than the rocket can carry (219,150 kg against ~3,300 kg on
+    # a default run), and all of that surplus capacity was modelled as idle.
+    #
+    # With beneficiation on, the rig processes everything it can dig inside
+    # `max_mining_duration_yr`, rejects the gangue, and loads only concentrate.
+    # Value is then bounded from both sides, which is what keeps it honest:
+    #   • by CONTENT   — you cannot recover more than what you processed,
+    #                    times the recovery efficiency
+    #   • by PURITY    — you cannot make a concentrate richer than the best
+    #                    single phase actually present in the body
+    #
+    # Concentration is not free.  It costs energy (see the two Module 3 energy
+    # rows), the energy costs a power plant, the power plant costs mass, and
+    # the mass comes straight out of the payload budget through the same
+    # rocket equation.  Module 4 solves that feedback rather than ignoring it.
+    use_beneficiation:         bool  = False
+    # Fraction of the valuable phase that actually reports to concentrate.
+    # Terrestrial PGM / sulphide flotation circuits run 85-95%; magnetic
+    # separation of a metal phase from silicate gangue is mechanically simpler
+    # than flotation but has no microgravity flight heritage at all.
+    beneficiation_recovery:    float = 0.90
+    # Safety cap on feed:concentrate mass ratio.  Terrestrial mills run
+    # 100:1 to 1000:1 on PGM ores; 50:1 is deliberately conservative for a
+    # first autonomous rig.  The purity bound above usually binds first.
+    max_concentration_ratio:   float = 50.0
+    # How hard to concentrate is an economic decision, not a setting — see
+    # evaluate_combo.  This is how many points the profit sweep samples
+    # between "don't concentrate" and "concentrate to pure best phase",
+    # plus one refinement pass.  Raising it costs runtime linearly and buys
+    # very little; 7 puts the optimum within a few percent.
+    concentration_search_steps: int  = 7
+
     # ─── PER-ASTEROID Δv  (v1.4.0) ───────────────────────────────────────────
     # When True, each asteroid's Δv is derived from its own orbital elements
     # (semi_major_axis_au, eccentricity, inclination_deg) by the patched-conic
@@ -5229,9 +5763,34 @@ class CalcConfig:
     # (a default_mission_duration_yr constant used to sit here; nothing read
     #  it once asteroid_mission_duration_yr() began deriving duration from Δv)
 
+    # ─── DELIVERY DESTINATION  (selects the mission architecture) ────────────
+    # MUST MATCH Module 2's MINERAL_CONFIG.delivery_destination.  Module 2
+    # decides what a kilogram sells for; this field decides what it costs to
+    # put it there, and the two are only consistent when they agree.  A
+    # mismatch is checked and warned about loudly in build_profitability_catalog.
+    #
+    #   "earth_surface" — re-entry capsule, Earth recovery campaign, full
+    #                     launch + re-entry Part 450 licence.  Cheapest return
+    #                     Δv (direct entry needs no capture burn at all), but
+    #                     the cargo is worth terrestrial commodity prices.
+    #   "leo"           — berthed at an LEO depot.  No re-entry, so no capsule,
+    #                     no recovery campaign, launch-only licence.  The most
+    #                     EXPENSIVE return Δv in the model: circularising into
+    #                     LEO means killing the whole arrival hyperbola.
+    #   "cislunar"      — berthed at an NRHO depot.  Same cost savings as LEO,
+    #                     and the cheapest return Δv of the three, because
+    #                     capture only has to bind the orbit and the burn takes
+    #                     the Oberth benefit at low perigee.
+    #
+    # See DELIVERY_ARCHITECTURES for what each one actually changes.
+    delivery_destination:      str   = "earth_surface"
+
     # ─── AEROCAPTURE  (return via heat shield rather than propulsive) ────────
     # When True, return Δv is reduced by `aerocapture_dv_savings_m_s` but a
     # heat-shield mass overhead is added at the rate from Module 3.
+    # Only honoured where the architecture actually enters an atmosphere:
+    # earth_surface (direct entry) and leo (aerocapture + aerobraking).
+    # A cislunar delivery ignores it — see uses_tps().
     use_aerocapture_return:    bool  = True
     aerocapture_dv_savings_m_s: float = 4_000   # matches Module 3 NEA-return-aerocap
     heat_shield_frac_of_payload: float = 0.15   # TPS mass = 15% of returned payload
@@ -5401,7 +5960,90 @@ class CalcConfig:
     #           Set that field to 0.0 to restore the old double-booking.
     #         New output columns: dv_penalty_factor, mining_duration_yr,
     #         throughput_cap_kg, throughput_fits.
-    pipeline_version: str = "1.4.0"
+    # 1.5.0 — IN-SPACE DELIVERY ARCHITECTURE.  Paired with Module 2 v1.3.0 and
+    #         Module 3 v1.4.0.  `delivery_destination` was a Module 2 price
+    #         label that Module 4 ignored: whatever it said, this module flew a
+    #         re-entry capsule to Earth's surface and costed a full recovery
+    #         campaign.  Setting it to 'cislunar' therefore priced the cargo at
+    #         a depot while paying to land it in Utah — the exact inconsistency
+    #         the field was added to prevent.  It is now an architecture
+    #         selector that Module 4 honours, and the two modules are checked
+    #         against each other at load time (destination_check).
+    #         • RETURN Δv IS NOW PER-DESTINATION, derived per asteroid from the
+    #           arrival v_infinity rather than assumed.  asteroid_transfer_dv_km_s
+    #           returns a dict of legs instead of a 3-tuple.  New
+    #           _cislunar_capture_dv_km_s captures at low perigee into an
+    #           ellipse reaching lunar distance (taking the Oberth benefit),
+    #           then inserts into NRHO at apogee.
+    #           At v_inf = 3 km/s the three architectures cost:
+    #               earth_surface (direct entry)  dv_match + 0      km/s
+    #               cislunar (Oberth + NRHO)      dv_match + 0.96   km/s
+    #               leo (propulsive capture)      dv_match + 3.59   km/s
+    #           LEO is the most expensive destination to reach AND worth less
+    #           per kg than cislunar — the two effects compound, and the
+    #           ranking now shows it.
+    #         • COST LINES SWAP BY ARCHITECTURE.  An in-space delivery carries
+    #           a $60k/kg berthing adapter instead of a $150k/kg re-entry
+    #           capsule, $2M of depot handover instead of a $15M Earth recovery
+    #           campaign, and the $1.2M launch-only Part 450 licence instead of
+    #           the $2.5M launch+re-entry one.
+    #         • TPS IS ARCHITECTURE-GATED (uses_tps).  A cislunar delivery never
+    #           enters an atmosphere, so use_aerocapture_return is ignored there
+    #           and no heat-shield mass enters the cascade.  LEO honours it as
+    #           aerocapture + multi-pass aerobraking.
+    #         earth_surface runs are UNCHANGED to the bit — the architecture
+    #         table reproduces the old code path exactly for that destination.
+    #         New output columns: delivery_destination, delivery_arch,
+    #         returns_to_earth, flies_tps.
+    #
+    #         BENEFICIATION (use_beneficiation, default False — off preserves
+    #         v1.4.0 output bit-for-bit).  The pipeline flew home run-of-mine
+    #         regolith at bulk grade while the rig's own throughput cap sat 66x
+    #         above the rocket-equation payload limit and never bound: all that
+    #         processing capacity was modelled as idle.  Terrestrial mines ship
+    #         concentrate, not ore.  With it on:
+    #         • The throughput cap now bounds the FEED, not the payload.  The
+    #           rig digs everything it can reach inside max_mining_duration_yr
+    #           and loads only concentrate.
+    #         • THE LOAD IS OPTIMISED, NOT SPECIFIED.  A mission is not sent
+    #           for a named mineral; it brings back the most valuable load it
+    #           can assemble from what the target actually contains.  With a
+    #           fixed mass budget and divisible per-kg-priced phases that is a
+    #           fractional knapsack, so greedy selection by $/kg is provably
+    #           optimal: fill the hold with the best phase available, then the
+    #           next, until full or the feed runs out (optimal_payload_mix,
+    #           over asteroid_phase_table).
+    #           Both honest bounds fall out of it automatically — CONTENT (you
+    #           cannot load more of a phase than the processed feed held, times
+    #           beneficiation_recovery) and PURITY (once the hold is pure best
+    #           phase there is nothing better to add).  Worked example, M-type
+    #           at 50% metal / 45% silicate, recovery 0.90:
+    #               feed 1.0x -> $5,135/kg, hold 90% full, in-situ ratios
+    #               feed 2.0x -> $7,081/kg, 90% metal
+    #               feed 2.2x -> $7,567/kg, 100% metal — saturated
+    #               feed 5.0x -> $7,567/kg, no further gain
+    #           The saturation ratio is 1/(frac_best x recovery), which is what
+    #           sets target_ratio.
+    #         • TIME is charged on the feed: mining_duration_yr now takes
+    #           feed_kg, so a 50:1 ratio costs 50x the dig time, which flows
+    #           into mission duration, ops cost and WACC.
+    #         • ENERGY and MASS are charged and FED BACK.  Module 3's 200 Wh/kg
+    #           excavation and 500 Wh/kg beneficiation rates over the stay time
+    #           give a continuous power draw; Module 3's new 60 W/kg-at-1-AU
+    #           power-system row, scaled 1/r^2 by the target's semi-major axis,
+    #           turns that into array mass; the array enters the SAME rocket
+    #           equation as the rig, so grade is bought with payload.  The
+    #           circular dependency (payload -> feed -> power -> mass -> payload)
+    #           is solved by fixed-point iteration, not assumed away.
+    #         New config: use_beneficiation, beneficiation_recovery,
+    #         max_concentration_ratio.
+    #         New output columns: beneficiation, feed_processed_kg,
+    #         concentration_ratio, delivered_value_usd_per_kg,
+    #         best_phase_usd_per_kg, purity_bound_binds, payload_mix,
+    #         payload_dominant_phase, payload_dominant_frac,
+    #         processing_power_w, power_system_kg, power_w_per_kg_at_target,
+    #         hardware_total_kg, power_system_cost_usd.
+    pipeline_version: str = "1.5.0"
 
 
 CALC_CONFIG = CalcConfig()
@@ -5496,6 +6138,39 @@ def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
 # ─────────────────────────────────────────────────────────────────────────────
 # CROSS-MODULE INTEGRITY CHECK
 # ─────────────────────────────────────────────────────────────────────────────
+def destination_check(catalogs: Dict[str, pd.DataFrame], config: CalcConfig) -> None:
+    """Verify Module 2 priced the material for the destination Module 4 flies to.
+
+    This is the one cross-module mismatch that silently produces a
+    plausible-looking but meaningless answer.  Module 2 stamps every row with
+    the destination it priced for; if that disagrees with the architecture
+    this module is about to cost, the run pairs (say) cislunar-depot prices
+    with a re-entry-capsule mission — exactly the inconsistency the
+    destination field exists to prevent.
+    """
+    minerals = catalogs.get("minerals")
+    if minerals is None or "delivery_destination" not in minerals.columns:
+        print("     ⚠️   Module 2 catalog carries no `delivery_destination` "
+              "column (pre-v1.3.0) — cannot verify pricing matches this "
+              "mission architecture.  Re-run Module 2.")
+        return
+
+    stamped = str(minerals["delivery_destination"].iloc[0]).strip().lower()
+    mine    = str(config.delivery_destination).strip().lower()
+    if stamped == mine:
+        arch = delivery_architecture(mine)
+        print(f"     ✅  Delivery destination '{mine}' — {arch['label']}")
+        return
+
+    print(f"     ❌  DESTINATION MISMATCH — the prices and the mission disagree.")
+    print(f"          Module 2 priced the material for : {stamped}")
+    print(f"          Module 4 is flying it to         : {mine}")
+    print(f"        → Every profit number in this run is meaningless.  Set both")
+    print(f"          MINERAL_CONFIG.delivery_destination and")
+    print(f"          CALC_CONFIG.delivery_destination to the same value and")
+    print(f"          re-run Module 2 before Module 4.")
+
+
 def integrity_check(catalogs: Dict[str, pd.DataFrame]) -> None:
     """Verify every mineral named by Module 1 is priced by Module 2.
 
@@ -5702,6 +6377,199 @@ def asteroid_bulk_value_usd_per_kg(
     return total
 
 
+def asteroid_phase_table(
+    asteroid_row: pd.Series, mineral_df: pd.DataFrame,
+) -> List[Tuple[str, float, float]]:
+    """[(phase, mass_fraction, usd_per_kg)] for one asteroid (v1.6.0).
+
+    The same four taxonomy fractions `asteroid_bulk_value_usd_per_kg` blends,
+    but kept SEPARATE so a mission can choose what to load rather than being
+    handed the mean.  The residual (Module 1's fractions sum to 0.76-0.96) is
+    included as bulk silicate, matching the bulk function's floor treatment.
+
+    Phases with zero fraction are dropped — you cannot select what is not
+    there.
+    """
+    pgm_enrichment = asteroid_row.get("comp_pgm_enrichment")
+    if pgm_enrichment is None or pd.isna(pgm_enrichment):
+        pgm_enrichment = 1.0
+    pgm_enrichment = float(pgm_enrichment)
+
+    phases: List[Tuple[str, float, float]] = []
+    frac_sum = 0.0
+    for frac_col, mineral_name in FRACTION_TO_MINERAL.items():
+        frac = asteroid_row.get(frac_col)
+        if frac is None or pd.isna(frac) or float(frac) <= 0.0:
+            continue
+        if mineral_name == "nickel-iron":
+            price = _mineral_implied_value(mineral_df, mineral_name, pgm_enrichment)
+        else:
+            price = _mineral_implied_value(mineral_df, mineral_name)
+        if price is None:
+            continue
+        phases.append((mineral_name, float(frac), float(price)))
+        frac_sum += float(frac)
+
+    if 0.0 < frac_sum < 1.0:
+        silicate_price = _mineral_price(mineral_df, "silicates") or 0.05
+        phases.append(("other (bulk silicate)", 1.0 - frac_sum, float(silicate_price)))
+
+    return phases
+
+
+def optimal_payload_mix(
+    payload_kg: float,
+    feed_kg:    float,
+    phases:     List[Tuple[str, float, float]],
+    recovery:   float,
+) -> Dict[str, object]:
+    """Most valuable payload obtainable from `feed_kg` of this rock (v1.6.0).
+
+    The mission is not sent for a named mineral — it is sent to bring back the
+    best load it can assemble from what the target actually contains.  With a
+    fixed mass budget and divisible, per-kilogram-priced phases, that is a
+    FRACTIONAL KNAPSACK, and greedy selection by $/kg is provably optimal:
+    fill the hold with the most valuable phase available, then the next, until
+    the hold is full or the feed runs out.
+
+    Separation recovers `recovery` of each phase present in the feed; whatever
+    is not loaded is left at the asteroid.
+
+    Returns value, blended $/kg, the chosen mix in kg, and the mass fraction
+    the best phase makes up — which is the natural read on how well
+    concentrated the load actually is.
+    """
+    if payload_kg <= 0 or not phases:
+        return {"value_usd": 0.0, "usd_per_kg": 0.0, "mix_kg": {},
+                "dominant_phase": None, "dominant_frac": 0.0}
+
+    remaining = float(payload_kg)
+    total     = 0.0
+    mix: Dict[str, float] = {}
+    for name, frac, price in sorted(phases, key=lambda p: -p[2]):
+        if remaining <= 0:
+            break
+        available = float(feed_kg) * frac * recovery
+        take      = min(available, remaining)
+        if take <= 0:
+            continue
+        mix[name]  = take
+        total     += take * price
+        remaining -= take
+
+    # Anything the feed could not fill is dead space — the hold flies partly
+    # empty rather than being topped up with rock that was never dug.
+    loaded = float(payload_kg) - remaining
+    if loaded <= 0:
+        return {"value_usd": 0.0, "usd_per_kg": 0.0, "mix_kg": {},
+                "dominant_phase": None, "dominant_frac": 0.0}
+
+    dominant = max(mix.items(), key=lambda kv: kv[1])
+    return {
+        "value_usd":      total,
+        "usd_per_kg":     total / loaded,
+        "loaded_kg":      loaded,
+        "mix_kg":         mix,
+        "dominant_phase": dominant[0],
+        "dominant_frac":  dominant[1] / loaded,
+    }
+
+
+def asteroid_best_phase_usd_per_kg(
+    asteroid_row: pd.Series, mineral_df: pd.DataFrame,
+) -> float:
+    """$/kg of the single most valuable phase actually present (v1.5.0).
+
+    This is the PURITY BOUND on beneficiation.  Concentrating rejects gangue,
+    it does not transmute: the richest concentrate physically obtainable from
+    a body is 100% of its best phase, so no amount of processing can push the
+    delivered $/kg above this number.
+
+    Only phases with a non-zero fraction count — a body with no metal cannot
+    be concentrated into metal.  Returns the bulk value as a floor so the
+    bound can never sit below the unconcentrated material.
+    """
+    pgm_enrichment = asteroid_row.get("comp_pgm_enrichment")
+    if pgm_enrichment is None or pd.isna(pgm_enrichment):
+        pgm_enrichment = 1.0
+    pgm_enrichment = float(pgm_enrichment)
+
+    best = 0.0
+    for frac_col, mineral_name in FRACTION_TO_MINERAL.items():
+        frac = asteroid_row.get(frac_col)
+        if frac is None or pd.isna(frac) or float(frac) <= 0.0:
+            continue
+        if mineral_name == "nickel-iron":
+            price = _mineral_implied_value(mineral_df, mineral_name, pgm_enrichment)
+        else:
+            price = _mineral_implied_value(mineral_df, mineral_name)
+        if price is not None and float(price) > best:
+            best = float(price)
+
+    bulk = asteroid_bulk_value_usd_per_kg(asteroid_row, mineral_df)
+    return max(best, bulk)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BENEFICIATION — TIME AND ENERGY INTENSITY  (v1.5.0)
+# ─────────────────────────────────────────────────────────────────────────────
+# Concentrating ore in deep space costs three things, and the model charges
+# for all three:
+#
+#   TIME    — the rig has to dig the whole feed, not just the payload.  A 50:1
+#             concentration means excavating 50 kg for every kilogram flown
+#             home, and that time flows into mission duration, mission ops
+#             and WACC compounding exactly like any other stay time.
+#   ENERGY  — Module 3 rates excavation at 200 Wh per kg of regolith moved and
+#             beneficiation at 500 Wh per kg of product.  Energy over time is
+#             power, and power in deep space is a solar array.
+#   MASS    — that array has to be launched.  Its mass enters the SAME rocket
+#             equation as everything else, so a more aggressive concentration
+#             ratio buys grade at the cost of payload.  That feedback loop is
+#             solved, not assumed away.
+#
+# The 1/r² term is what makes this bite for distant targets: a main-belt body
+# at 2.7 AU gets 14% of the solar flux an NEA at 1 AU does, so the same
+# processing plant weighs seven times as much.
+
+def solar_specific_power_w_per_kg(
+    a_au: Optional[float], base_w_per_kg: float,
+) -> float:
+    """Power-system W/kg at an asteroid's heliocentric distance.
+
+    Photovoltaic output tracks solar flux, which falls as 1/r².  `base_w_per_kg`
+    is Module 3's system-level figure quoted at 1 AU.  Missing or absurd
+    distances fall back to 1 AU rather than silently producing free power.
+    """
+    try:
+        r = float(a_au)
+    except (TypeError, ValueError):
+        return float(base_w_per_kg)
+    if not (0.1 < r < 100.0):
+        return float(base_w_per_kg)
+    return float(base_w_per_kg) / (r * r)
+
+
+def processing_power_w(
+    feed_kg:        float,
+    concentrate_kg: float,
+    duration_yr:    float,
+    dig_wh_per_kg:  float,
+    benef_wh_per_kg: float,
+) -> float:
+    """Continuous electrical power to dig `feed_kg` and concentrate it.
+
+    Energy is charged on the two Module 3 rates — excavation per kg of
+    regolith MOVED, beneficiation per kg of product OUT — and divided by the
+    time available, because energy over time is power and power is what sizes
+    the array.
+    """
+    if duration_yr <= 0:
+        return 0.0
+    energy_wh = dig_wh_per_kg * max(feed_kg, 0.0) + benef_wh_per_kg * max(concentrate_kg, 0.0)
+    return energy_wh / (duration_yr * 365.25 * 24.0)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Δv RESOLVER  (v1.4.0 — per-asteroid, from orbital elements)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -5752,6 +6620,14 @@ MU_EARTH_KM3_S2  = 398_600.4418        # Earth gravitational parameter
 R_LEO_KM         = 6_378.14 + 200.0    # 200-km circular parking orbit
 
 
+R_MOON_ORBIT_KM  = 384_400.0           # lunar mean orbital radius
+# NRHO insertion at apogee, Module 3 DELTA_V_REFERENCE "TLI → NRHO insertion".
+DV_NRHO_INSERTION_KM_S = 0.450
+# Periapsis-raise burn to finish an aerobraked capture, Module 3
+# "NEA → LEO delivery (aerobraked)".
+DV_AEROBRAKE_TRIM_KM_S = 0.100
+
+
 def _leo_departure_dv_km_s(v_inf_km_s: float) -> float:
     """Δv to go from circular LEO onto a hyperbola with this v_infinity.
 
@@ -5763,13 +6639,52 @@ def _leo_departure_dv_km_s(v_inf_km_s: float) -> float:
     return math.sqrt(v_esc * v_esc + v_inf_km_s * v_inf_km_s) - v_leo
 
 
+def _cislunar_capture_dv_km_s(v_inf_km_s: float) -> float:
+    """Δv to capture from an arrival hyperbola into a cislunar (NRHO) depot.
+
+    Two burns, and the first one is where the saving lives:
+
+      1. Capture at LOW PERIGEE into an ellipse whose apogee reaches lunar
+         distance.  Burning deep in Earth's well takes the Oberth benefit, so
+         killing the hyperbolic excess costs far less here than it would out
+         at lunar distance:
+             Δv₁ = √(v_esc² + v_inf²) − √(μ(2/r_p − 1/a_ellipse))
+      2. NRHO insertion at apogee — Module 3's 450 m/s.
+
+    The result is markedly CHEAPER than circularising into LEO, because LEO
+    capture has to kill the entire perigee velocity down to circular while
+    this only has to bind the orbit.  At v_inf = 3 km/s: ~0.96 km/s to a
+    cislunar depot against ~3.59 km/s to LEO.
+
+    That is the single most consequential fact in the delivery-architecture
+    model: the destination that pays the most per kilogram is also the
+    cheapest one to reach.
+    """
+    v_leo = math.sqrt(MU_EARTH_KM3_S2 / R_LEO_KM)
+    v_esc = math.sqrt(2.0) * v_leo
+    v_hyp = math.sqrt(v_esc * v_esc + v_inf_km_s * v_inf_km_s)
+    a_ell = (R_LEO_KM + R_MOON_ORBIT_KM) / 2.0
+    v_ell = math.sqrt(MU_EARTH_KM3_S2 * (2.0 / R_LEO_KM - 1.0 / a_ell))
+    return max(0.0, v_hyp - v_ell) + DV_NRHO_INSERTION_KM_S
+
+
 def asteroid_transfer_dv_km_s(
     a_au: float, e: float, i_deg: float,
-) -> Optional[Tuple[float, float, float]]:
+) -> Optional[Dict[str, float]]:
     """Patched-conic Δv budget for a rendezvous mission to one asteroid.
 
-    Returns (dv_out, dv_return_propulsive, dv_return_aerocapture) in km/s,
-    or None if the elements are unusable.
+    Returns a dict of Δv legs in km/s, or None if the elements are unusable:
+
+        dv_out                  outbound, LEO departure + apsis rendezvous
+        v_inf                   arrival hyperbolic excess back at Earth
+        ret_earth_surface_aero  direct entry — no capture burn at all
+        ret_earth_surface_prop  propulsive capture into LEO, then deorbit
+        ret_leo_prop            propulsive capture into LEO
+        ret_leo_aero            aerocapture + aerobraking, trim burn only
+        ret_cislunar_prop       Oberth capture + NRHO insertion
+
+    v1.5.0 — was a 3-tuple (out, return_propulsive, return_aerocapture) when
+    Earth's surface was the only destination the pipeline could model.
 
     All heliocentric work is done in canonical units (Earth orbit radius = 1,
     Earth orbital speed = 1) and converted to km/s at the end.
@@ -5817,24 +6732,112 @@ def asteroid_transfer_dv_km_s(
     dv_out = dv_depart + dv_match
 
     # ── Return legs ──────────────────────────────────────────────────────────
-    # Departing the asteroid costs the same apsis burn in reverse.  Arriving
-    # at Earth then either costs a propulsive capture, or nothing propulsive
-    # at all if you enter the atmosphere (paid for in heat-shield mass
-    # instead, which the Module 4 cascade already carries).
-    dv_ret_propulsive = dv_match + _leo_departure_dv_km_s(v_inf)
-    dv_ret_aerocapture = dv_match
+    # Departing the asteroid costs the same apsis burn in reverse.  What
+    # happens on arrival is the delivery architecture, and it differs by
+    # destination far more than intuition suggests:
+    #
+    #   Earth surface, direct entry — no capture burn at all.  The arrival
+    #     energy is dumped into a heat shield, whose mass the Module 4 cascade
+    #     carries outbound and pushes back through the return burn.
+    #   LEO, propulsive — the most expensive option in the model.  LEO is the
+    #     deepest of the three destinations, so circularising there means
+    #     killing the whole hyperbolic excess AND the escape velocity.
+    #   LEO, aerobraked — trades that Δv for TPS mass and months of passes.
+    #   Cislunar — cheapest, because capture only has to BIND the orbit, and
+    #     the burn happens at low perigee where Oberth pays best.
+    dv_leo_capture = _leo_departure_dv_km_s(v_inf)
+    return {
+        "dv_out":                 dv_out,
+        "v_inf":                  v_inf,
+        "ret_earth_surface_aero": dv_match,
+        "ret_earth_surface_prop": dv_match + dv_leo_capture,
+        "ret_leo_prop":           dv_match + dv_leo_capture,
+        "ret_leo_aero":           dv_match + DV_AEROBRAKE_TRIM_KM_S,
+        "ret_cislunar_prop":      dv_match + _cislunar_capture_dv_km_s(v_inf),
+    }
 
-    return dv_out, dv_ret_propulsive, dv_ret_aerocapture
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DELIVERY ARCHITECTURE  (v1.5.0)
+# ─────────────────────────────────────────────────────────────────────────────
+# `delivery_destination` is not a price label — it selects a physically
+# different mission.  Each architecture decides which return leg is flown and
+# which cost lines exist at all.
+#
+#   uses_tps        heat shield hauled outbound and pushed back through the
+#                   return burn (direct entry, or aerobraked capture)
+#   returns_to_earth  the cargo enters the atmosphere.  Drives the re-entry
+#                   capsule, the Earth recovery campaign, and the full
+#                   launch+re-entry Part 450 licence.
+#
+# An in-space delivery swaps the re-entry capsule for a berthing adapter, the
+# $15M recovery campaign for $2M of depot handover, and the combined licence
+# for the launch-only one.
+
+DELIVERY_ARCHITECTURES: Dict[str, dict] = {
+    "earth_surface": {
+        "returns_to_earth": True,
+        "aero_leg":  "ret_earth_surface_aero",
+        "prop_leg":  "ret_earth_surface_prop",
+        "aero_allowed": True,
+        "label": "re-entry capsule to Earth's surface",
+    },
+    "leo": {
+        "returns_to_earth": False,
+        "aero_leg":  "ret_leo_aero",
+        "prop_leg":  "ret_leo_prop",
+        "aero_allowed": True,     # aerocapture + multi-pass aerobraking
+        "label": "berthed at an LEO depot",
+    },
+    "cislunar": {
+        "returns_to_earth": False,
+        "aero_leg":  None,        # never passes through the atmosphere
+        "prop_leg":  "ret_cislunar_prop",
+        "aero_allowed": False,
+        "label": "berthed at a cislunar (NRHO) depot",
+    },
+}
+
+
+def delivery_architecture(destination: str) -> dict:
+    """Look up the mission architecture for a delivery destination.
+
+    Unknown destinations fall back to earth_surface — the conservative
+    choice, and the one whose cost lines are all present.
+    """
+    key = str(destination or "").strip().lower()
+    if key not in DELIVERY_ARCHITECTURES:
+        print(f"     ⚠️   Unknown delivery_destination {destination!r} — "
+              f"falling back to 'earth_surface'.  Valid: "
+              f"{', '.join(sorted(DELIVERY_ARCHITECTURES))}")
+        key = "earth_surface"
+    return DELIVERY_ARCHITECTURES[key]
+
+
+def uses_tps(config: CalcConfig) -> bool:
+    """True when this architecture actually flies a heat shield.
+
+    Aerocapture is a request, not a guarantee: a cislunar delivery never
+    touches the atmosphere, so asking for aerocapture there gets you a
+    propulsive capture and no TPS mass.
+    """
+    arch = delivery_architecture(config.delivery_destination)
+    return bool(config.use_aerocapture_return and arch["aero_allowed"])
 
 
 def asteroid_dv_m_s(asteroid_row: pd.Series, config: CalcConfig) -> Tuple[float, float]:
     """Return (Δv_outbound, Δv_return) in m/s for one asteroid.
 
-    Uses the per-asteroid estimator when Module 1 supplied usable orbital
-    elements, and falls back to the CalcConfig reference defaults when it did
-    not.  Set `config.use_per_asteroid_dv = False` to force the old uniform
-    behaviour for every row.
+    The return leg depends on the delivery destination as well as on the
+    asteroid — v1.5.0.  Uses the per-asteroid estimator when Module 1 supplied
+    usable orbital elements, and falls back to the CalcConfig reference
+    defaults when it did not.  Set `config.use_per_asteroid_dv = False` to
+    force the old uniform behaviour for every row.
     """
+    arch = delivery_architecture(config.delivery_destination)
+    aero = uses_tps(config)
+    leg  = arch["aero_leg"] if aero else arch["prop_leg"]
+
     estimate = None
     if config.use_per_asteroid_dv:
         estimate = asteroid_transfer_dv_km_s(
@@ -5844,19 +6847,25 @@ def asteroid_dv_m_s(asteroid_row: pd.Series, config: CalcConfig) -> Tuple[float,
         )
 
     if estimate is not None:
-        dv_out_km, dv_ret_prop_km, dv_ret_aero_km = estimate
-        dv_out = dv_out_km * 1_000.0
-        dv_ret = (dv_ret_aero_km if config.use_aerocapture_return
-                  else dv_ret_prop_km) * 1_000.0
+        dv_out = estimate["dv_out"] * 1_000.0
+        dv_ret = estimate[leg] * 1_000.0
         # Clamp against physically silly extremes (bad elements upstream).
         dv_out = min(max(dv_out, 3_000.0), config.max_dv_outbound_m_s)
         dv_ret = min(max(dv_ret, 300.0),  config.max_dv_outbound_m_s)
         return dv_out, dv_ret
 
     # ── Fallback: uniform reference Δv (pre-v1.4.0 behaviour) ────────────────
+    # No orbital elements means no v_infinity, so the destination-specific
+    # capture cannot be derived.  Approximate it from the reference figures:
+    # the aerocapture saving for an Earth return, and Module 3's reference
+    # return legs for the in-space destinations.
     dv_out             = config.default_dv_outbound_m_s
     dv_ret_propulsive  = config.default_dv_return_m_s
-    if config.use_aerocapture_return:
+    if config.delivery_destination == "cislunar":
+        # Module 3 "NEA → cislunar NRHO (Oberth capture)" vs "NEA → Earth
+        # return (propulsive)": 960 / 5,500 of the propulsive budget.
+        dv_ret = dv_ret_propulsive * (960.0 / 5_500.0)
+    elif aero:
         dv_ret = max(500.0, dv_ret_propulsive - config.aerocapture_dv_savings_m_s)
     else:
         dv_ret = dv_ret_propulsive
@@ -6109,6 +7118,7 @@ def mission_cost_usd(
     ops_df:              pd.DataFrame,
     config:              CalcConfig,
     mission_duration_yr: float,
+    processing_power_w:  float = 0.0,
 ) -> Dict[str, float]:
     """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
 
@@ -6167,9 +7177,21 @@ def mission_cost_usd(
     # v1.4.0: the capsule is priced off its OWN rate.  It used to be billed at
     # the mining-payload rate, which treats a parachute-and-heat-shield can as
     # though it were regolith-contact machinery.
-    capsule_per_kg          = _ops_value(ops_df, "Return capsule recurring cost", default=150_000.0)
+    # v1.5.0: and which rate applies depends on where the cargo is going.  An
+    # in-space delivery never re-enters, so it carries a passive berthing
+    # adapter ($60k/kg) rather than a guided re-entry capsule ($150k/kg).
+    arch = delivery_architecture(config.delivery_destination)
+    if arch["returns_to_earth"]:
+        capsule_per_kg = _ops_value(ops_df, "Return capsule recurring cost", default=150_000.0)
+    else:
+        capsule_per_kg = _ops_value(ops_df, "Berthing adapter recurring cost", default=60_000.0)
     capsule_cost            = config.return_vehicle_dry_kg * capsule_per_kg   # per-mission
-    hardware_cost           = mining_rig_cost + capsule_cost
+    # v1.5.0: the beneficiation plant's solar array, priced per installed Watt
+    # off Module 3's power-system row.  Zero unless beneficiation is on — the
+    # baseline rig's own power is already implicit in its $/kg recurring rate.
+    power_per_w             = _ops_value(ops_df, "Power system (solar + battery)", default=800.0)
+    power_system_cost       = max(0.0, float(processing_power_w)) * power_per_w
+    hardware_cost           = mining_rig_cost + capsule_cost + power_system_cost
 
     # Mission ops × duration  (per-asteroid duration from Δv estimator)
     ops_per_year = _ops_value(ops_df, "Mission operations", default=31_400_000.0)
@@ -6183,10 +7205,17 @@ def mission_cost_usd(
     else:
         heat_shield_cost = 0.0
 
-    # Recovery + regulatory flat costs
-    recovery_cost   = _ops_value(ops_df, "Sample recovery operations",       default=15_000_000.0)
+    # Recovery + regulatory flat costs.  v1.5.0: an in-space delivery replaces
+    # the Earth recovery campaign (search aircraft, ships, range clearance,
+    # clean-room convoy) with depot handover, and drops the re-entry half of
+    # the Part 450 licence.
+    if arch["returns_to_earth"]:
+        recovery_cost  = _ops_value(ops_df, "Sample recovery operations",        default=15_000_000.0)
+        licensing_cost = _ops_value(ops_df, "FAA Part 450 licensing compliance", default=2_500_000.0)
+    else:
+        recovery_cost  = _ops_value(ops_df, "Depot berthing & handover operations", default=2_000_000.0)
+        licensing_cost = _ops_value(ops_df, "FAA Part 450 licensing (launch only)", default=1_200_000.0)
     liability_cost  = _ops_value(ops_df, "Third-party liability insurance",  default=1_500_000.0)
-    licensing_cost  = _ops_value(ops_df, "FAA Part 450 licensing compliance", default=2_500_000.0)
 
     # Launch insurance — percent of (launch + spacecraft book value).
     # Spacecraft book value at launch = recurring hardware cost (mining rig +
@@ -6271,6 +7300,7 @@ def mission_cost_usd(
         "hardware_cost":         hardware_cost,
         "mining_rig_cost":       mining_rig_cost,        # amortised portion
         "capsule_cost":          capsule_cost,           # per-mission portion
+        "power_system_cost":     power_system_cost,      # beneficiation plant
         "ops_cost":              ops_cost,
         "heat_shield_cost":      heat_shield_cost,
         "tps_mass_kg":           tps_mass,
@@ -6295,7 +7325,7 @@ def mission_cost_usd(
 # ─────────────────────────────────────────────────────────────────────────────
 # (VEHICLE × PROPELLANT) EVALUATOR FOR ONE ASTEROID
 # ─────────────────────────────────────────────────────────────────────────────
-def evaluate_combo(
+def _evaluate_combo_at_ratio(
     asteroid_row:      pd.Series,
     vehicle:           pd.Series,
     propellant:        pd.Series,
@@ -6304,6 +7334,10 @@ def evaluate_combo(
     dv_ret_m_s:        float,
     ops_df:            pd.DataFrame,
     config:            CalcConfig,
+    best_phase_value_per_kg: Optional[float] = None,
+    phases:            Optional[List[Tuple[str, float, float]]] = None,
+    target_ratio:      float = 1.0,
+    beneficiate:       Optional[bool] = None,
 ) -> Optional[Dict[str, float]]:
     """Evaluate one (vehicle × propellant) combination for one asteroid.
 
@@ -6314,6 +7348,10 @@ def evaluate_combo(
     leo_cap = float(vehicle.get("payload_leo_kg", 0) or 0)
     if leo_cap <= 0:
         return None
+    if best_phase_value_per_kg is None:
+        best_phase_value_per_kg = bulk_value_per_kg
+    if phases is None:
+        phases = []
 
     # ── Low-thrust Δv penalty (v1.4.0) ───────────────────────────────────────
     # Module 3 tags each propellant with the factor by which a real trajectory
@@ -6326,29 +7364,83 @@ def evaluate_combo(
     dv_out_m_s = dv_out_m_s * dv_penalty
     dv_ret_m_s = dv_ret_m_s * dv_penalty
 
-    tps_frac = (
-        config.heat_shield_frac_of_payload
-        if config.use_aerocapture_return else 0.0
-    )
-
-    cascade = max_return_payload_kg(
-        leo_capacity_kg = leo_cap,
-        isp_s           = float(propellant["isp_vac_s"]),
-        dv_out_m_s      = dv_out_m_s,
-        dv_ret_m_s      = dv_ret_m_s,
-        hardware_kg     = config.mining_hardware_kg,
-        dry_return_kg   = config.return_vehicle_dry_kg,
-        tps_frac        = tps_frac,
-        isru_return     = config.use_isru_return_propellant,
-    )
-    if not cascade["viable"]:
-        return None
+    # v1.5.0: TPS only exists if this architecture actually enters an
+    # atmosphere.  A cislunar delivery never does, so asking for aerocapture
+    # there yields a propulsive capture and no heat-shield mass.
+    tps_frac = config.heat_shield_frac_of_payload if uses_tps(config) else 0.0
 
     # Cap the returned payload by what the asteroid can supply
     asteroid_mass = asteroid_row.get("estimated_mass_kg")
     if asteroid_mass is None or pd.isna(asteroid_mass) or asteroid_mass <= 0:
         return None
     mineable_kg = float(asteroid_mass) * config.max_mining_fraction
+
+    # ── Power-plant feedback loop (v1.5.0, beneficiation only) ───────────────
+    # The processing plant's array mass rides in the same rocket equation as
+    # everything else, but its size depends on how much feed gets processed,
+    # which depends on the payload, which depends on the array mass.  Solve
+    # the fixed point instead of assuming it away.  Converges in 2-3 passes
+    # because the array is a modest fraction of the rig.
+    #
+    # With beneficiation OFF no array mass is added at all — the existing
+    # 2,000 kg rig figure already carries its own power implicitly, and this
+    # keeps a default run bit-identical to v1.4.0.
+    dig_wh   = _ops_value(ops_df, "Drilling / excavation energy", default=200.0)
+    benef_wh = _ops_value(ops_df, "Beneficiation / on-site processing energy", default=500.0)
+    base_w_per_kg = _ops_value(ops_df, "Power system specific mass", default=60.0)
+    w_per_kg = solar_specific_power_w_per_kg(
+        asteroid_row.get("semi_major_axis_au"), base_w_per_kg,
+    )
+
+    # `beneficiate` lets the caller price a NON-concentrating mission even
+    # when the run has beneficiation enabled, so evaluate_combo can offer
+    # "just scoop and go" as one of the options it chooses between.
+    if beneficiate is None:
+        beneficiate = config.use_beneficiation
+    if not beneficiate:
+        target_ratio = 1.0
+
+    power_system_kg = 0.0
+    processing_power_watts = 0.0
+    cascade = None
+    for _ in range(6):
+        cascade = max_return_payload_kg(
+            leo_capacity_kg = leo_cap,
+            isp_s           = float(propellant["isp_vac_s"]),
+            dv_out_m_s      = dv_out_m_s,
+            dv_ret_m_s      = dv_ret_m_s,
+            hardware_kg     = config.mining_hardware_kg + power_system_kg,
+            dry_return_kg   = config.return_vehicle_dry_kg,
+            tps_frac        = tps_frac,
+            isru_return     = config.use_isru_return_propellant,
+        )
+        if not cascade["viable"]:
+            return None
+        if not beneficiate:
+            break
+
+        # Provisional payload for sizing purposes — the caps below refine it,
+        # but the array only needs to be sized to the right order.
+        trial_payload = min(cascade["max_payload_kg"], mineable_kg,
+                            max_payload_by_throughput_kg(config))
+        if trial_payload <= 0:
+            return None
+        trial_feed = min(trial_payload * target_ratio,
+                         max_payload_by_throughput_kg(config), mineable_kg)
+        trial_dur  = max(mining_duration_yr(trial_feed, config),
+                         config.station_keeping_floor_yr)
+        processing_power_watts = processing_power_w(
+            trial_feed, trial_payload, trial_dur, dig_wh, benef_wh,
+        )
+        new_power_kg = processing_power_watts / w_per_kg if w_per_kg > 0 else 0.0
+        if abs(new_power_kg - power_system_kg) <= 0.01 * max(new_power_kg, 1.0):
+            power_system_kg = new_power_kg
+            break
+        power_system_kg = new_power_kg
+
+    if cascade is None or not cascade["viable"]:
+        return None
+    hardware_total_kg = config.mining_hardware_kg + power_system_kg
 
     # ── Volume cap ───────────────────────────────────────────────────────────
     # Cargo volume = payload mass / bulk density.  Asteroid bulk density
@@ -6384,14 +7476,43 @@ def evaluate_combo(
     # stay.  Previously extraction was instantaneous and unbounded, so a
     # mission's haul was limited only by the rocket equation — the rig might
     # as well have been a vacuum cleaner with infinite suction.
+    # v1.5.0: with beneficiation on, the throughput cap bounds the FEED the rig
+    # digs, not the payload it flies home — that is the whole point of
+    # concentrating.  With it off the semantics are unchanged: throughput caps
+    # the payload directly.
     throughput_cap_kg = max_payload_by_throughput_kg(config)
 
     m_payload_demand = min(cascade["max_payload_kg"], mineable_kg)
     volume_fits      = m_payload_demand <= volume_capacity_kg
     throughput_fits  = m_payload_demand <= throughput_cap_kg
-    m_payload        = min(m_payload_demand, volume_capacity_kg, throughput_cap_kg)
+    if beneficiate:
+        m_payload = min(m_payload_demand, volume_capacity_kg)
+    else:
+        m_payload = min(m_payload_demand, volume_capacity_kg, throughput_cap_kg)
     if m_payload <= 0:
         return None
+
+    # ── Beneficiation mass balance ───────────────────────────────────────────
+    # Concentrate exactly as far as it pays, and no further.  Once the
+    # concentrate reaches the purity bound — 100% of the best phase present —
+    # additional feed buys nothing: the delivered $/kg is already capped, while
+    # the extra rock still costs dig time, energy, array mass and WACC.  A real
+    # operator stops there, so the model does too.
+    #
+    #     ratio_to_saturate = best_phase / (bulk x recovery)
+    #
+    # then bounded by the safety cap, by what the rig can dig in the time
+    # allowed, and by what the body can supply.  Where bulk value already
+    # equals the best phase (a monomineralic body — pure ice, say) this
+    # collapses to 1.0 and beneficiation correctly becomes a no-op.
+    if beneficiate:
+        feed_kg = min(m_payload * target_ratio, throughput_cap_kg, mineable_kg)
+        feed_kg = max(feed_kg, m_payload)          # never less feed than product
+        concentration_ratio = feed_kg / m_payload if m_payload > 0 else 1.0
+        throughput_fits = feed_kg <= throughput_cap_kg
+    else:
+        feed_kg = m_payload
+        concentration_ratio = 1.0
 
     return_volume_m3 = m_payload / bulk_density_kg_per_L / 1000.0
 
@@ -6403,7 +7524,7 @@ def evaluate_combo(
     m_tps           = tps_frac * (m_payload + config.return_vehicle_dry_kg)
     m_after_return  = m_payload + config.return_vehicle_dry_kg + m_tps
     m_return_prop   = m_after_return * (r_ret - 1.0)
-    m_at_asteroid   = (config.mining_hardware_kg + config.return_vehicle_dry_kg + m_tps
+    m_at_asteroid   = (hardware_total_kg + config.return_vehicle_dry_kg + m_tps
                        + (0.0 if config.use_isru_return_propellant else m_return_prop))
     m_outbound_prop = m_at_asteroid * (r_out - 1.0)
     m_launch        = m_at_asteroid + m_outbound_prop
@@ -6420,11 +7541,40 @@ def evaluate_combo(
         "m_tps":           m_tps,
     }
 
-    gross_value         = m_payload * bulk_value_per_kg
-    mining_yr           = mining_duration_yr(m_payload, config)
+    # ── Delivered $/kg — the best load assemblable from this rock ────────────
+    # Not "go and fetch platinum": fill the hold with the most valuable phases
+    # the target actually contains, in whatever ratio maximises the load.  The
+    # two honest bounds fall out of the knapsack automatically — you cannot
+    # load more of a phase than the processed feed contained (content), and
+    # once the hold is pure best-phase there is nothing better to add (purity).
+    if beneficiate and phases:
+        mix = optimal_payload_mix(
+            m_payload, feed_kg, phases, config.beneficiation_recovery,
+        )
+        delivered_value_per_kg = float(mix["usd_per_kg"])
+        gross_value            = float(mix["value_usd"])
+        payload_mix            = mix["mix_kg"]
+        dominant_phase         = mix["dominant_phase"]
+        dominant_frac          = float(mix["dominant_frac"])
+    else:
+        delivered_value_per_kg = bulk_value_per_kg
+        gross_value            = m_payload * bulk_value_per_kg
+        payload_mix            = {}
+        dominant_phase         = None
+        dominant_frac          = 0.0
+
+    # Time is charged on the FEED, not the product: the rig has to dig all
+    # of it, and that stay time flows into ops cost and WACC.
+    mining_yr           = mining_duration_yr(feed_kg, config)
     mission_duration_yr = asteroid_mission_duration_yr(
         dv_out_m_s, dv_ret_m_s, config, mining_yr=mining_yr,
     )
+    # Re-derive the plant's power at the final feed / payload / duration so the
+    # cost matches the mission actually flown, not the sizing pass.
+    if beneficiate:
+        processing_power_watts = processing_power_w(
+            feed_kg, m_payload, mining_yr, dig_wh, benef_wh,
+        )
     cost                = mission_cost_usd(
         mass_cascade        = actual_cascade,
         vehicle             = vehicle,
@@ -6432,15 +7582,21 @@ def evaluate_combo(
         ops_df              = ops_df,
         config              = config,
         mission_duration_yr = mission_duration_yr,
+        processing_power_w  = processing_power_watts,
     )
 
     profit               = gross_value - cost["total_cost"]
     roi                  = profit / cost["total_cost"] if cost["total_cost"] > 0 else np.nan
     usd_per_kg_cost      = cost["total_cost"] / m_payload if m_payload > 0 else np.nan
 
+    arch = delivery_architecture(config.delivery_destination)
     return {
         "vehicle":              vehicle["name"],
         "propellant":           propellant["name"],
+        "delivery_destination": config.delivery_destination,
+        "delivery_arch":        arch["label"],
+        "returns_to_earth":     arch["returns_to_earth"],
+        "flies_tps":            tps_frac > 0.0,
         "dv_out_m_s":           dv_out_m_s,
         "dv_ret_m_s":           dv_ret_m_s,
         "isp_s":                float(propellant["isp_vac_s"]),
@@ -6450,6 +7606,34 @@ def evaluate_combo(
         "max_payload_kg":       m_payload,
         "throughput_cap_kg":    throughput_cap_kg,
         "throughput_fits":      throughput_fits,
+        # ── Beneficiation (v1.5.0) ──────────────────────────────────────────
+        "beneficiation":            beneficiate,
+        "feed_processed_kg":        feed_kg,
+        "concentration_ratio":      concentration_ratio,
+        "delivered_value_usd_per_kg": delivered_value_per_kg,
+        "best_phase_usd_per_kg":    best_phase_value_per_kg,
+        # What the optimiser actually chose to load
+        "payload_dominant_phase":   dominant_phase,
+        "payload_dominant_frac":    dominant_frac,
+        "payload_mix":              (
+            "; ".join(f"{k} {v:,.0f}kg" for k, v in
+                      sorted(payload_mix.items(), key=lambda kv: -kv[1]))
+            if payload_mix else ""
+        ),
+        # True when the concentrate is at the purity ceiling — i.e. grade, not
+        # processing capacity, is what limits the delivered value.  Compared
+        # against the delivered figure itself (with a relative tolerance)
+        # rather than re-deriving it, so a feed clipped by throughput or by
+        # the body's own mass reports honestly as NOT saturated.
+        "purity_bound_binds":       bool(
+            beneficiate
+            and best_phase_value_per_kg > 0
+            and delivered_value_per_kg >= best_phase_value_per_kg * (1.0 - 1e-9)
+        ),
+        "processing_power_w":       processing_power_watts,
+        "power_system_kg":          power_system_kg,
+        "power_w_per_kg_at_target":  w_per_kg,
+        "hardware_total_kg":        hardware_total_kg,
         "return_bulk_density_kg_per_L": bulk_density_kg_per_L,
         "return_volume_m3":     return_volume_m3,
         "fairing_volume_m3":    fairing_m3,
@@ -6471,6 +7655,7 @@ def evaluate_combo(
         "hardware_cost_usd":         cost["hardware_cost"],
         "mining_rig_cost_usd":       cost["mining_rig_cost"],   # amortised
         "capsule_cost_usd":          cost["capsule_cost"],      # per mission
+        "power_system_cost_usd":     cost["power_system_cost"],
         "ops_cost_usd":              cost["ops_cost"],
         "tps_mass_kg":               cost["tps_mass_kg"],
         "heat_shield_cost_usd":      cost["heat_shield_cost"],
@@ -6489,6 +7674,107 @@ def evaluate_combo(
         "wacc_multiplier_ongoing":   cost["wacc_multiplier_ongoing"],
         "wacc_multiplier":           cost["wacc_multiplier"],   # weighted avg
     }
+
+
+def saturation_ratio(
+    phases: List[Tuple[str, float, float]], recovery: float, cap: float,
+) -> float:
+    """Feed:concentrate ratio that just fills the hold with pure best phase.
+
+        feed x frac_best x recovery >= payload  ⇒  ratio >= 1 / (frac_best x recovery)
+
+    Above this the knapsack has nothing better to load, so grade stops
+    improving while dig time, energy and array mass keep climbing.  It is the
+    upper end of the useful search range, not necessarily the optimum.
+    """
+    if not phases:
+        return 1.0
+    best_frac = max(phases, key=lambda p: p[2])[1]
+    denom = best_frac * recovery
+    if denom <= 0:
+        return 1.0
+    return max(1.0, min(1.0 / denom, cap))
+
+
+def evaluate_combo(
+    asteroid_row:      pd.Series,
+    vehicle:           pd.Series,
+    propellant:        pd.Series,
+    bulk_value_per_kg: float,
+    dv_out_m_s:        float,
+    dv_ret_m_s:        float,
+    ops_df:            pd.DataFrame,
+    config:            CalcConfig,
+    best_phase_value_per_kg: Optional[float] = None,
+    phases:            Optional[List[Tuple[str, float, float]]] = None,
+) -> Optional[Dict[str, float]]:
+    """Best mission for one (asteroid × vehicle × propellant), profit-maximising
+    over how hard to concentrate.
+
+    Without beneficiation there is nothing to choose: one solve at ratio 1.0.
+
+    With it, the concentration ratio is a genuine economic decision rather
+    than a setting.  Digging more feed raises the grade of the load — but the
+    gain SATURATES once the hold is pure best-phase, while the costs do not:
+    every extra kilogram of feed still costs dig time (which compounds through
+    ops and WACC), processing energy, and the solar array mass to supply it,
+    and that array mass comes straight out of the payload budget.
+
+    So the value curve is concave and the cost curve is not, which puts the
+    optimum strictly inside the range on most targets.  An earlier version
+    drove the ratio to saturation on principle and made cislunar missions
+    ~12% worse than not concentrating at all.  This searches instead.
+
+    The search is a coarse sweep from 1.0 to the saturation ratio, refined
+    once around the winner.  Both endpoints are always evaluated, so the
+    answer can never be worse than either "don't concentrate" or
+    "concentrate fully".
+    """
+    solve = lambda r, b=True: _evaluate_combo_at_ratio(
+        asteroid_row, vehicle, propellant, bulk_value_per_kg,
+        dv_out_m_s, dv_ret_m_s, ops_df, config,
+        best_phase_value_per_kg=best_phase_value_per_kg,
+        phases=phases, target_ratio=r, beneficiate=b,
+    )
+
+    if not config.use_beneficiation:
+        return solve(1.0, False)
+
+    # Baseline: don't concentrate at all.  Not the same as concentrating at
+    # ratio 1.0 — that would still pay the separation recovery loss, the
+    # processing energy and the array mass for no grade improvement.
+    # Including it makes beneficiation an OPTION rather than an obligation,
+    # so the answer can never be worse than simply scooping and leaving.
+    best = solve(1.0, False)
+    best_profit = best["profit_usd"] if best is not None else -np.inf
+    best_r = 1.0
+
+    r_max = saturation_ratio(
+        phases or [], config.beneficiation_recovery, config.max_concentration_ratio,
+    )
+    if r_max <= 1.0:
+        return best
+
+    # Coarse sweep, geometric so the cheap end is sampled as finely as the
+    # expensive end.  Endpoints included explicitly.
+    n = max(2, int(config.concentration_search_steps))
+    candidates = [r_max ** (i / (n - 1)) for i in range(n)]
+
+    for r in candidates:
+        res = solve(r)
+        if res is not None and res["profit_usd"] > best_profit:
+            best_profit, best, best_r = res["profit_usd"], res, r
+
+    # One refinement pass around the winner, on the same geometric spacing.
+    if best is not None and n > 2:
+        step = r_max ** (1.0 / (n - 1))
+        for r in (best_r / (step ** 0.5), best_r * (step ** 0.5)):
+            if not (1.0 <= r <= r_max):
+                continue
+            res = solve(r)
+            if res is not None and res["profit_usd"] > best_profit:
+                best_profit, best = res["profit_usd"], res
+    return best
 
 
 def candidate_combos(
@@ -6541,6 +7827,18 @@ def evaluate_asteroid(
     bulk_value = asteroid_bulk_value_usd_per_kg(asteroid_row, minerals)
     if bulk_value <= 0:
         return None
+    # Purity bound for beneficiation — the richest concentrate obtainable.
+    # Computed once per asteroid rather than per combo; it depends only on
+    # composition and prices.
+    # Phase table for the load optimiser, and the purity ceiling for reporting.
+    # Both depend only on composition and prices, so compute once per asteroid
+    # rather than once per (vehicle x propellant) combo.
+    if config.use_beneficiation:
+        phases           = asteroid_phase_table(asteroid_row, minerals)
+        best_phase_value = asteroid_best_phase_usd_per_kg(asteroid_row, minerals)
+    else:
+        phases           = []
+        best_phase_value = bulk_value
 
     dv_out, dv_ret = asteroid_dv_m_s(asteroid_row, config)
 
@@ -6555,6 +7853,8 @@ def evaluate_asteroid(
             asteroid_row, vehicle, propellant,
             bulk_value, dv_out, dv_ret,
             ops_df, config,
+            best_phase_value_per_kg=best_phase_value,
+            phases=phases,
         )
         if result is None:
             continue
@@ -6600,8 +7900,9 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
     # ── Step 1 — Load catalogs ───────────────────────────────────────────────
     catalogs = load_all_catalogs(config)
 
-    # ── Step 2 — Integrity check ─────────────────────────────────────────────
+    # ── Step 2 — Integrity checks ────────────────────────────────────────────
     integrity_check(catalogs)
+    destination_check(catalogs, config)
 
     # ── Step 3 — Iterate asteroids ───────────────────────────────────────────
     asteroids = catalogs["asteroids"]
@@ -6739,8 +8040,27 @@ class MasterConfig:
 
         MASTER_CONFIG.catalog.jpl_limit = 10_000
         MASTER_CONFIG.calc.use_isru_return_propellant = True
+
+    One exception: set the delivery destination HERE, not on a sub-config —
+
+        MASTER_CONFIG.delivery_destination = "cislunar"
+
+    Stage 2 and Stage 4 each carry a delivery_destination, and they must
+    agree: Stage 2 decides what a kilogram sells for, Stage 4 decides the
+    architecture that puts it there.  Setting them apart prices the cargo at
+    a depot while paying to land it in Utah.  This property writes both.
     """
     output_dir: str = _DEFAULT_OUTPUT_DIR
+
+    @property
+    def delivery_destination(self) -> str:
+        """Where the mined material is sold — 'earth_surface', 'leo', 'cislunar'."""
+        return self.mineral.delivery_destination
+
+    @delivery_destination.setter
+    def delivery_destination(self, value: str) -> None:
+        self.mineral.delivery_destination = value
+        self.calc.delivery_destination    = value
 
     @property
     def catalog(self):   return CATALOG_CONFIG
@@ -6752,12 +8072,17 @@ class MasterConfig:
     def calc(self):      return CALC_CONFIG
 
     def apply(self):
-        """Push master output_dir to every sub-config, create the dir tree."""
+        """Push master output_dir to every sub-config, create the dir tree.
+
+        Also re-asserts the delivery destination across Stage 2 and Stage 4,
+        so a sub-config edited directly cannot leave the two disagreeing.
+        """
         self.catalog.output_dir   = self.output_dir
         self.mineral.output_dir   = self.output_dir
         self.transport.output_dir = self.output_dir
         self.calc.input_dir       = self.output_dir
         self.calc.output_dir      = self.output_dir
+        self.delivery_destination = self.mineral.delivery_destination
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, self.transport.subdir),
                     exist_ok=True)
@@ -6772,6 +8097,7 @@ print("  ⚙️   MASTER CONFIG READY")
 print(f"      Pipeline output  : {MASTER_CONFIG.output_dir}")
 print(f"      JPL limit        : {MASTER_CONFIG.catalog.jpl_limit:,} asteroids")
 print(f"      Eval row cap     : {MASTER_CONFIG.calc.eval_row_cap:,}")
+print(f"      Delivery dest    : {MASTER_CONFIG.delivery_destination}")
 print(f"      ISRU return      : {MASTER_CONFIG.calc.use_isru_return_propellant}")
 print(f"      NRE amortise     : over {MASTER_CONFIG.calc.nre_amortization_missions} mission(s)")
 print(f"      Contingency      : {MASTER_CONFIG.calc.contingency_fraction:.0%}")
@@ -6797,7 +8123,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.5.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.6.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
