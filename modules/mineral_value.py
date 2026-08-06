@@ -73,7 +73,7 @@ import os
 import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -130,6 +130,28 @@ class MineralValueConfig:
     # fetcher to silently skip — the demo endpoint is heavily rate-limited.
     metals_api_key: str = "DEMO"
     metals_api_url: str = "https://api.metals.dev/v1/latest"
+
+    # ─── DELIVERY DESTINATION  (drives the water price — read this) ──────────
+    # Where the mined material is actually SOLD.  This is not cosmetic: water
+    # is the only commodity here whose price depends on it, and water is
+    # ~100% of the value of every C / B / D-type asteroid, so this field
+    # alone decides which asteroids top the profitability ranking.
+    #
+    #   "earth_surface" — material re-enters and is sold on Earth.  Water is
+    #                     worth terrestrial commodity value, i.e. nothing.
+    #                     This is what Module 4's mission model actually does
+    #                     (it ends in a sample-return capsule), so it is the
+    #                     default.
+    #   "leo"           — material is delivered to and sold in low Earth
+    #                     orbit.  Water is worth the launch cost it avoids.
+    #                     Requires a mission architecture that stops at LEO;
+    #                     Module 4 still costs a full re-entry, so this
+    #                     over-values a return mission.
+    #   "cislunar"      — sold at a lunar-vicinity depot.  Water is worth the
+    #                     (much larger) cost of lifting it that far.
+    #
+    # See WATER_VALUE_BY_DESTINATION below for the numbers and sourcing.
+    delivery_destination: str = "earth_surface"
 
     # ─── NETWORK ─────────────────────────────────────────────────────────────
     request_timeout: int = 60   # seconds per HTTP request
@@ -189,7 +211,30 @@ class MineralValueConfig:
     #         as 1.1.4, so that stamp is ambiguous.  The reconciled module is
     #         1.1.5 because it matches neither parent.  Treat any CSV stamped
     #         1.1.4 as undated and re-run rather than trusting the number.
-    pipeline_version: str = "1.1.5"
+    # 1.2.0 — realism audit: water is now priced by DELIVERY DESTINATION.
+    #         Water was hardcoded at $4,250/kg — explicitly "the cost-to-LEO
+    #         of launching an equivalent water mass", i.e. the value of water
+    #         sitting in orbit — while Module 4's mission model flies the
+    #         cargo back down and lands it in a re-entry capsule.  Water on
+    #         Earth's surface is worth bulk-industrial rates.
+    #         The error was not marginal.  Measured across a real catalog,
+    #         water was 99.9-100.0% of the bulk value of EVERY water-bearing
+    #         type, so the entire profitability ranking was a proxy for
+    #         ice_fraction:
+    #             type   bulk $/kg   from water   share
+    #             D       1,062.63     1,062.50   100.0%
+    #             B         850.13       850.00   100.0%
+    #             C         637.63       637.50   100.0%
+    #             M           5.90         0.00     0.0%
+    #         New WATER_VALUE_BY_DESTINATION table + delivery_destination
+    #         config field (earth_surface / leo / cislunar).  Default is
+    #         earth_surface, which is what the Module 4 architecture actually
+    #         delivers — so C-type bulk value drops 637.63 → 0.13 $/kg and
+    #         the ranking inverts to metal-rich types.  Set 'leo' to recover
+    #         the old numbers, but only alongside a mission model that
+    #         actually stops at LEO.
+    #         New output columns: value_basis, delivery_destination.
+    pipeline_version: str = "1.2.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows: int = 20
@@ -202,6 +247,8 @@ print(f"✅  Configuration loaded — output dir: {CONFIG.output_dir}")
 print(f"    Active sources : "
       f"{', '.join(s for s, on in (('yfinance', CONFIG.use_yfinance), ('metals.dev', CONFIG.use_metals_api and CONFIG.metals_api_key != 'DEMO'), ('reference', CONFIG.use_reference_table)) if on)}")
 print(f"    Price unit     : {CONFIG.PRICE_UNIT}  (every numeric price column ends with _usd_per_kg)")
+print(f"    Delivery dest  : {CONFIG.delivery_destination}  "
+      f"(sets the water price — see WATER_VALUE_BY_DESTINATION)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -258,6 +305,73 @@ def _per_tonne_to_per_kg(usd_per_tonne: float) -> float:
 # you refresh ref_price_usd_per_kg values (the numbers below — when a fresh
 # audit re-reviews the static prices, bump this stamp).
 _REF_PRICE_DATE = "2026-05-29"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WATER VALUE BY DELIVERY DESTINATION  (v1.2.0)
+# ─────────────────────────────────────────────────────────────────────────────
+# Water is the pipeline's single most consequential price.  It is ~100% of the
+# bulk value of every C / B / D-type asteroid, so whichever number goes here
+# determines the entire top of the profitability ranking.
+#
+# Water has no intrinsic scarcity value — it is worth what it costs to put it
+# where the customer is.  So the price is a function of DESTINATION, not of
+# the asteroid:
+#
+#   earth_surface — you flew it down a gravity well to a planet that is 71%
+#                   ocean.  It is worth bulk industrial water, and even that
+#                   overstates it once you account for the fact that nobody
+#                   needs it.  This is what a sample-return architecture
+#                   actually delivers.
+#   leo           — worth the launch cost it avoids.  $4,250/kg matches the
+#                   Falcon 9 reusable $/kg-to-LEO in Module 3, so the two
+#                   modules stay consistent by construction.
+#   cislunar      — worth the cost of lifting it to lunar vicinity.  Roughly
+#                   3× the LEO figure, tracking the Δv difference between LEO
+#                   and a TLI/NRHO depot.
+#
+# BEFORE v1.2.0 this table did not exist and water was hardcoded at the LEO
+# figure while Module 4's mission model returned the material to Earth's
+# surface — pricing the cargo as if it had been left in orbit.  That single
+# inconsistency was worth a factor of ~4 million on C-type asteroids and
+# inverted the entire ranking.
+
+WATER_VALUE_BY_DESTINATION: Dict[str, dict] = {
+    "earth_surface": {
+        "usd_per_kg": 0.001,
+        "basis": "terrestrial bulk industrial water",
+        "notes": "Municipal/industrial bulk water runs $0.0005-0.002/kg.  "
+                 "Asteroid water landed on Earth competes with rain.",
+    },
+    "leo": {
+        "usd_per_kg": 4_250.0,
+        "basis": "launch cost avoided to LEO",
+        "notes": "Falcon 9 reusable $/kg-to-LEO, matching Module 3 "
+                 "($4,253).  Valid only if the water is SOLD in orbit.",
+    },
+    "cislunar": {
+        "usd_per_kg": 12_750.0,
+        "basis": "launch cost avoided to cislunar space",
+        "notes": "~3× the LEO figure, tracking the extra Δv to a TLI / NRHO "
+                 "depot.  The most favourable honest case for water.",
+    },
+}
+
+
+def water_value_for_destination(destination: str) -> dict:
+    """Look up the water price for a delivery destination.
+
+    Unknown destinations fall back to earth_surface — the conservative
+    choice — rather than silently keeping an in-space premium.
+    """
+    key = str(destination or "").strip().lower()
+    if key not in WATER_VALUE_BY_DESTINATION:
+        print(f"     ⚠️   Unknown delivery_destination {destination!r} — "
+              f"falling back to 'earth_surface'.  Valid: "
+              f"{', '.join(sorted(WATER_VALUE_BY_DESTINATION))}")
+        key = "earth_surface"
+    return WATER_VALUE_BY_DESTINATION[key]
+
 
 MINERAL_REFERENCE: List[dict] = [
 
@@ -429,15 +543,19 @@ MINERAL_REFERENCE: List[dict] = [
         "yfinance_ticker":       None,
         "yfinance_unit":         None,
         "metals_dev_key":        None,
-        "ref_price_usd_per_kg":  4_250.0,        # Falcon 9 reusable $/kg-to-LEO
+        # RESOLVED AT RUNTIME from config.delivery_destination — see
+        # WATER_VALUE_BY_DESTINATION above.  The value here is only the
+        # fallback if the resolver is somehow bypassed; it deliberately
+        # matches the conservative earth_surface case rather than the
+        # in-space premium, so a mistake under-values rather than over-values.
+        "ref_price_usd_per_kg":  0.001,
         "ref_price_date":        _REF_PRICE_DATE,
-        "notes":                 "Priced as the cost-to-LEO of launching an equivalent "
-                                 "water mass from Earth — i.e. the SAVINGS from "
-                                 "sourcing water in-space rather than launching it.  "
-                                 "$4,250/kg matches Module 3 v1.2.4 Falcon 9 reusable "
-                                 "$/kg-to-LEO ($4,253).  For TLI / cislunar customers "
-                                 "the value would be 2-4× higher (launch cost to "
-                                 "those orbits is much greater).",
+        "notes":                 "Price depends entirely on where the water is SOLD, "
+                                 "not on the asteroid — see WATER_VALUE_BY_DESTINATION. "
+                                 "Set MINERAL_CONFIG.delivery_destination to 'leo' or "
+                                 "'cislunar' to price it as launch cost avoided; the "
+                                 "default 'earth_surface' prices it as what it is once "
+                                 "landed, which is bulk industrial water.",
     },
 
     # ══════════════════════════════════════════════════════════════════════
@@ -873,22 +991,34 @@ def fetch_reference_table(config: MineralValueConfig) -> pd.DataFrame:
     """Static USGS / LME / mineralogy reference data — always available."""
     print("\n📚  Reference table — loading curated prices + densities …")
 
+    # Water is priced by DELIVERY DESTINATION, not by the asteroid.  Resolve
+    # it once here so the number that lands in the CSV carries its basis.
+    water = water_value_for_destination(config.delivery_destination)
+
     rows = []
     for entry in MINERAL_REFERENCE:
+        is_water   = entry["name"] == "water"
+        ref_price  = water["usd_per_kg"] if is_water else entry.get("ref_price_usd_per_kg")
+        value_basis = water["basis"] if is_water else "terrestrial market price"
+        notes      = (f"{water['notes']}  (delivery_destination="
+                      f"{config.delivery_destination})") if is_water else entry.get("notes", "")
         rows.append({
             "name":                 entry["name"],
             "kind":                 entry["kind"],
             "formula":              entry["formula"],
             "density_gcm3":         entry["density_gcm3"],
-            "ref_price_usd_per_kg":     entry.get("ref_price_usd_per_kg"),
+            "ref_price_usd_per_kg":     ref_price,
             "ref_price_date":       entry.get("ref_price_date"),
             "ref_price_source":     "USGS/LME/mineralogy reference",
-            "notes":                entry.get("notes", ""),
+            "value_basis":          value_basis,
+            "notes":                notes,
             "yields_json":          json.dumps(entry.get("yields", {})),
         })
 
     df = pd.DataFrame(rows)
     print(f"     ✅  {len(df)} reference rows loaded")
+    print(f"     💧  Water priced at ${water['usd_per_kg']:,.3f}/kg "
+          f"({water['basis']})")
     return df
 
 
@@ -1050,8 +1180,12 @@ def build_mineral_value_catalog(
     catalog = validate(catalog)
 
     # ── Step 5 — Metadata + sort ─────────────────────────────────────────────
-    catalog["catalog_date"]     = t0.strftime("%Y-%m-%d")
-    catalog["pipeline_version"] = config.pipeline_version
+    catalog["catalog_date"]         = t0.strftime("%Y-%m-%d")
+    catalog["pipeline_version"]     = config.pipeline_version
+    # Stamped into every row: the water price — and therefore the whole
+    # downstream ranking — is meaningless without knowing which destination
+    # it was priced for.
+    catalog["delivery_destination"] = config.delivery_destination
 
     catalog = catalog.sort_values(
         ["kind", "price_usd_per_kg"], ascending=[True, False]

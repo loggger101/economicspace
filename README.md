@@ -27,10 +27,10 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
-| 1 | `modules/catalog.py` | 1.0.7 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
-| 2 | `modules/mineral_value.py` | 1.1.5 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy |
-| 3 | `modules/transportation.py` | 1.2.5 | Launch vehicles, propellants, Δv segments, operational costs |
-| 4 | `modules/calc.py` | 1.3.7 | Rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
+| 1 | `modules/catalog.py` | 1.0.8 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
+| 2 | `modules/mineral_value.py` | 1.2.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination-priced water |
+| 3 | `modules/transportation.py` | 1.3.0 | Launch vehicles, propellants, Δv segments, operational costs |
+| 4 | `modules/calc.py` | 1.4.0 | Per-asteroid Δv, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 
@@ -99,6 +99,11 @@ that actually move the answer:
 | Knob | Default | Effect |
 |------|---------|--------|
 | `MASTER_CONFIG.output_dir` | platform-dependent | Where everything lands |
+| `.mineral.delivery_destination` | `"earth_surface"` | **Read [Where the material is sold](#where-the-material-is-sold) before changing.** Sets the water price, and water dominates C/B/D-type value |
+| `.calc.use_per_asteroid_dv` | `True` | Δv from each asteroid's own orbital elements. `False` gives every asteroid the same Δv |
+| `.calc.mining_rate_kg_per_day_per_kg_rig` | `0.10` | Extraction throughput per kg of rig; caps payload and sets time at the asteroid |
+| `.calc.max_mining_duration_yr` | `3.0` | Ceiling on time at the asteroid — binds how much you can return |
+| `.calc.nre_recurring_overlap_fraction` | `0.30` | Development share already inside the per-kg recurring rate; `0.0` books both in full |
 | `.catalog.jpl_limit` | `50_000` | Catalog size; also caps every other source. JPL accepts ~250k |
 | `.catalog.min_diameter_km` | `0.001` | Size floor. Raise to `1.0` to study km-class bodies only |
 | `.catalog.require_spectral_type` | `False` | `True` drops untyped rows — fewer asteroids, but every one has a composition |
@@ -213,7 +218,11 @@ at first:
 | `roi` | `profit / total_cost` |
 | `usd_per_kg_cost` | Mission cost per kg actually returned — the cleanest cross-asteroid comparison |
 | `vehicle`, `propellant`, `isp_s` | The winning combination |
-| `max_payload_kg` | Material actually returned, after the mining-fraction, rocket-equation and volume caps |
+| `dv_out_m_s`, `dv_ret_m_s` | Per-asteroid Δv from its own orbital elements, including any low-thrust penalty |
+| `dv_penalty_factor` | 1.0 for chemical, 1.5 for electric — electric can't fly impulsive burns |
+| `max_payload_kg` | Material actually returned, after the mining-fraction, rocket-equation, volume and throughput caps |
+| `mining_duration_yr` | Time at the asteroid to dig that payload; floors at `station_keeping_floor_yr` |
+| `throughput_cap_kg`, `throughput_fits` | Most the rig could dig in `max_mining_duration_yr`, and whether that bound bit |
 | `bulk_value_usd_per_kg` | Stage-2 prices × Stage-1 composition × PGM enrichment |
 | `volume_fits` | `False` means the capsule volume cap bound the payload, not the mass budget |
 | `m_launch_kg`, `m_outbound_prop_kg`, `m_return_prop_kg`, `m_at_asteroid_kg`, `tps_mass_kg` | The mass cascade |
@@ -232,6 +241,41 @@ Every mineral price column carries a `_usd_per_kg` suffix — prices are
 normalised to USD/kg on the way in, everywhere, so the unit is never in
 question downstream.
 
+## Where the material is sold
+
+This is the single most consequential setting in the pipeline, so it gets its
+own section.
+
+Water has no intrinsic scarcity value — it is worth whatever it costs to put
+it where the customer is. `MINERAL_CONFIG.delivery_destination` sets that:
+
+| Destination | Water | Basis |
+|-------------|-------|-------|
+| `earth_surface` *(default)* | $0.001/kg | Terrestrial bulk industrial water |
+| `leo` | $4,250/kg | Falcon 9 reusable $/kg-to-LEO avoided |
+| `cislunar` | $12,750/kg | Cost of lifting it to a TLI/NRHO depot |
+
+That choice decides the entire ranking, because water is **99.9–100% of the
+bulk value of every water-bearing asteroid type**:
+
+| Type | Bulk $/kg (`leo`) | From water | Share |
+|------|------------------|-----------|-------|
+| D | 1,062.63 | 1,062.50 | 100.0% |
+| B | 850.13 | 850.00 | 100.0% |
+| C | 637.63 | 637.50 | 100.0% |
+| M | 5.90 | 0.00 | 0.0% |
+
+Under `earth_surface`, C-type bulk value falls from $637.63 to **$0.13/kg** and
+the ranking inverts from carbonaceous types to metal-rich ones.
+
+The default is `earth_surface` because that is what Stage 4's mission model
+actually does — it ends in a sample-return capsule on the ground. Setting
+`leo` recovers the larger numbers, but only makes sense alongside an
+architecture that stops in orbit; Stage 4 still costs a full re-entry, so the
+combination over-values the mission. Every output row carries
+`delivery_destination` and `value_basis` so a CSV can't be read without
+knowing which assumption produced it.
+
 ## Mission model
 
 Return-sample architecture, uncrewed throughout — no life support, no crew
@@ -242,6 +286,37 @@ Earth launch → LEO → outbound burn → asteroid rendezvous
     → autonomous station-keeping + mining
     → return burn → Earth re-entry (sample-return capsule)
 ```
+
+## What the model does not capture
+
+Stated plainly so results aren't over-read:
+
+- **Nothing is viable.** On a default run, zero asteroids turn a profit, and
+  that is the honest answer rather than a bug. Fixed costs (development NRE,
+  autonomy NRE, rig, capsule, contingency, WACC) run to billions, while the
+  best bulk material is worth a few dollars per kg. There is no "don't fly"
+  option, so the ranking is really *which target loses least* — and since
+  return material costs more than it earns, the optimiser converges on the
+  smallest mission that still closes.
+- **Trip time for low-thrust is not modelled.** Electric propulsion carries a
+  Δv penalty but not the months-to-years a spiral actually adds.
+- **The mining rate has no flight heritage.** No one has sustained-mined an
+  asteroid, so `mining_rate_kg_per_day_per_kg_rig` is an engineering
+  assumption. It is a single obvious dial rather than a hidden infinity, but
+  it is still an assumption.
+- **Δv is analytic, not trajectory-optimised.** The patched-conic estimator
+  lands within ~10% of published figures and slightly high on the easiest
+  co-orbital targets, where real mission design finds better transfers.
+- **No launch windows, phasing, or synodic periods.** Every asteroid is
+  assumed reachable whenever you like.
+- **Prices are static at the point of sale.** Returning enough platinum to
+  move the platinum market would move the platinum market; at the payloads
+  this model produces (grams of PGM), that never binds.
+- **Composition is uniform.** Each asteroid is its taxonomy class's mean
+  composition all the way through — no core/mantle structure, no regolith
+  versus bedrock, no ore grade.
+- **C-type "ice" is bound water** in phyllosilicates, not accessible ice. The
+  energy to liberate it is not modelled.
 
 ## Data sources
 
