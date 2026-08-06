@@ -214,7 +214,21 @@ class TransportConfig:
     #           emoji progress output crashed cp1252 consoles instantly
     #         • RUN & PREVIEW moved under a main-guard so importing the
     #           module no longer triggers a full run
-    pipeline_version: str = "1.2.5"
+    # 1.3.0 — realism audit.  Two additions, both consumed by Module 4 v1.4.0:
+    #         • New `dv_penalty_factor` column on PROPELLANTS_REFERENCE.
+    #           The rocket equation does not care about thrust, but
+    #           trajectories do: a milli-newton electric stage cannot fly the
+    #           impulsive burns DELTA_V_REFERENCE assumes.  Spiralling out of
+    #           LEO costs ~7 km/s against ~3.2 km/s impulsive.  Chemical
+    #           systems carry 1.0; electric carry 1.5.  Without it, Isp
+    #           3,000 s wins the payload cascade on a Δv budget it cannot
+    #           achieve.
+    #         • New OPERATIONAL_COSTS row "Return capsule recurring cost" at
+    #           $150k/kg.  Module 4 was billing the return capsule at the
+    #           $300k/kg mining-payload rate, pricing a parachute-and-heat-
+    #           shield can as regolith-contact machinery.
+    #         New output column on propellants.csv: dv_penalty_factor.
+    pipeline_version: str = "1.3.0"
     preview_rows:     int = 15
 
 
@@ -517,6 +531,25 @@ print(f"✅  Launch vehicles reference loaded — {len(LAUNCH_VEHICLES_REFERENCE
 # prices (kerosene via heating oil, methane via natural gas) fill these
 # from yfinance where applicable; the rest are OTC specialty-gas quotes.
 
+# ─── LOW-THRUST Δv PENALTY  (v1.3.0) ─────────────────────────────────────────
+# The rocket equation is indifferent to thrust, but trajectories are not.  A
+# high-Isp electric stage cannot perform the impulsive burns the reference Δv
+# table assumes: with milli-newton thrust it spirals, and a spiral is strictly
+# more expensive in Δv than the equivalent impulsive manoeuvre.
+#
+#   • Escaping from LEO impulsively costs ~3.2 km/s.  Spiralling out costs
+#     ~7 km/s — essentially the whole LEO orbital velocity — because thrust
+#     is applied against a continuously rotating velocity vector.
+#   • Interplanetary low-thrust transfers land in the same territory, running
+#     ~1.3-2× the impulsive Δv depending on thrust-to-mass.
+#
+# `dv_penalty_factor` multiplies the mission Δv when Module 4 evaluates that
+# propellant.  Without it, electric propulsion wins the payload cascade on an
+# impulsive Δv budget it cannot actually fly.  1.5 is a mid-range figure; it
+# does not capture the OTHER low-thrust cost, which is trip time — a spiral
+# adds months to years that this pipeline's duration model does not yet see.
+_LOW_THRUST_DV_PENALTY = 1.5
+
 _REF_YEAR_PROP = 2026
 
 # Helper: combined Isp / density / cost for a fuel + oxidiser pair, weighted
@@ -577,6 +610,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
     {
         "name":                  "kerolox  (RP-1 / LOX)",
         "type":                  "bipropellant",
+        "dv_penalty_factor":     1.0,
         "isp_vac_s":             340,
         "exhaust_vel_m_per_s":   340 * G0_M_S2,
         "density_kg_per_L":      _kerolox["density_kg_per_L"],
@@ -591,6 +625,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
     {
         "name":                  "hydrolox  (LH2 / LOX)",
         "type":                  "bipropellant",
+        "dv_penalty_factor":     1.0,
         "isp_vac_s":             452,
         "exhaust_vel_m_per_s":   452 * G0_M_S2,
         "density_kg_per_L":      _hydrolox["density_kg_per_L"],
@@ -605,6 +640,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
     {
         "name":                  "methalox  (LCH4 / LOX)",
         "type":                  "bipropellant",
+        "dv_penalty_factor":     1.0,
         "isp_vac_s":             380,
         "exhaust_vel_m_per_s":   380 * G0_M_S2,
         "density_kg_per_L":      _methalox["density_kg_per_L"],
@@ -619,6 +655,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
     {
         "name":                  "MMH / NTO  (hypergolic)",
         "type":                  "bipropellant",
+        "dv_penalty_factor":     1.0,
         "isp_vac_s":             336,
         "exhaust_vel_m_per_s":   336 * G0_M_S2,
         "density_kg_per_L":      _mmh_nto["density_kg_per_L"],
@@ -633,6 +670,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
     {
         "name":                  "Hydrazine  (monoprop)",
         "type":                  "monopropellant",
+        "dv_penalty_factor":     1.0,
         "isp_vac_s":             220,
         "exhaust_vel_m_per_s":   220 * G0_M_S2,
         "density_kg_per_L":      _COMPONENTS["Hydrazine"]["density_kg_per_L"],
@@ -649,6 +687,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
     {
         "name":                  "Xenon  (Hall / ion)",
         "type":                  "electric",
+        "dv_penalty_factor":     _LOW_THRUST_DV_PENALTY,
         "isp_vac_s":             3_000,
         "exhaust_vel_m_per_s":   3_000 * G0_M_S2,
         "density_kg_per_L":      _COMPONENTS["Xenon"]["density_kg_per_L"],
@@ -665,6 +704,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
     {
         "name":                  "Argon  (Hall / ion)",
         "type":                  "electric",
+        "dv_penalty_factor":     _LOW_THRUST_DV_PENALTY,
         "isp_vac_s":             1_500,
         "exhaust_vel_m_per_s":   1_500 * G0_M_S2,
         "density_kg_per_L":      _COMPONENTS["Argon"]["density_kg_per_L"],
@@ -767,6 +807,22 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
                  "and NASA NICM bracket recurring deep-space hardware at "
                  "$100k-$1M/kg.  Asteroid-mining rigs trend mid-range due to "
                  "regolith-contact mechanisms.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Return capsule recurring cost",
+        "unit":             "USD per kg of return-capsule dry mass",
+        "value":            150_000,
+        "range_low":         50_000,
+        "range_high":       400_000,
+        "notes": "v1.3.0.  Was previously billed at the mining-payload rate "
+                 "($300k/kg), which over-prices it: a sample-return capsule is "
+                 "structure + TPS frame + parachute + beacon, with no "
+                 "regolith-contact mechanisms, no manipulator, no power or "
+                 "propulsion system, and no science payload.  Stardust and the "
+                 "OSIRIS-REx SRC are the heritage.  Half the mining-rig rate; "
+                 "range spans a bare capsule to one with active thermal and "
+                 "guided entry.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {

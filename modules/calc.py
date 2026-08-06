@@ -94,6 +94,7 @@ else:
 # ─────────────────────────────────────────────────────────────────────────────
 import ast
 import json
+import math
 import os
 import warnings
 from dataclasses import dataclass
@@ -176,6 +177,45 @@ class CalcConfig:
     # hundreds-of-kilometre body.
     max_mining_fraction:       float = 0.05
 
+    # ─── MINING THROUGHPUT  (v1.4.0) ─────────────────────────────────────────
+    # Before v1.4.0 the rig could extract any mass instantly: mission duration
+    # came only from Δv plus a flat 0.5 yr of station-keeping, whether the
+    # mission returned 33 kg or 50 tonnes.  Nothing anywhere connected how
+    # much you mined to how long it took.
+    #
+    # `mining_rate_kg_per_day_per_kg_rig` scales extraction with the rig you
+    # actually brought.  0.10 means a 2,000 kg rig moves 200 kg/day of
+    # regolith.  There is no flight heritage for sustained asteroid mining, so
+    # this is an engineering assumption, not a measurement — it sits here as a
+    # single obvious dial rather than being buried as an implicit infinity.
+    # For scale, OSIRIS-REx's TAGSAM collected ~122 g in a touch-and-go; a
+    # continuous rig is a different machine entirely.
+    mining_rate_kg_per_day_per_kg_rig: float = 0.10
+    # Hard ceiling on time spent at the asteroid.  Binds the payload: you can
+    # only return what you can dig in this long.  Also keeps ops cost and WACC
+    # from compounding over an implausible stay.
+    max_mining_duration_yr:            float = 3.0
+    # Floor on time at the asteroid regardless of how little is mined —
+    # approach, characterisation, proximity ops, departure phasing.
+    station_keeping_floor_yr:          float = 0.25
+
+    # ─── PER-ASTEROID Δv  (v1.4.0) ───────────────────────────────────────────
+    # When True, each asteroid's Δv is derived from its own orbital elements
+    # (semi_major_axis_au, eccentricity, inclination_deg) by the patched-conic
+    # estimator in asteroid_transfer_dv_km_s.  This is what makes the ranking
+    # reflect accessibility rather than composition alone.
+    #
+    # Set False to restore the pre-v1.4.0 behaviour, where every asteroid in
+    # the catalog received the same Δv from the two `default_dv_*` fields
+    # below.  Rows whose elements are missing or unusable fall back to those
+    # defaults automatically either way.
+    use_per_asteroid_dv:       bool  = True
+    # Sanity ceiling.  Elements arriving mangled from an upstream source can
+    # produce absurd transfers; anything above this is clamped rather than
+    # allowed to poison the ranking.  Module 3's most expensive reference
+    # segment is the 10.5 km/s main-belt transfer.
+    max_dv_outbound_m_s:       float = 20_000
+
     # ─── Δv DEFAULTS (m/s) ───────────────────────────────────────────────────
     # Applied uniformly to every asteroid (v1.3.5 — per-target Asterank Δv
     # override removed alongside the Asterank source).  All missions use
@@ -203,6 +243,14 @@ class CalcConfig:
     # Spacecraft development NRE (~$588M for OSIRIS-REx class).  If 1, the
     # first mission carries the full NRE; raise N to spread across a fleet.
     nre_amortization_missions: int   = 1
+    # Share of the NRE line already paid for inside the per-kg recurring
+    # hardware rate.  The Module 3 recurring brackets ($100k-$1M/kg, from
+    # NICM / SSCM / Aerospace Corp SMCM) are regressions fitted to total
+    # program cost, so they carry a development component.  Charging the full
+    # OSIRIS-REx $588.5M NRE on top of them double-books that component.
+    # 0.30 is a mid-range de-duplication; set to 0.0 to restore the
+    # pre-v1.4.0 behaviour and book both in full.
+    nre_recurring_overlap_fraction: float = 0.30
     # Time-value of money — compound up-front costs over mission_duration_yr.
     apply_wacc_compounding:    bool  = True
     contingency_fraction:      float = 0.20
@@ -317,7 +365,40 @@ class CalcConfig:
     #         as 1.3.6, so that stamp is ambiguous.  The reconciled module is
     #         1.3.7 because it matches neither parent.  Treat any CSV stamped
     #         1.3.6 as undated and re-run rather than trusting the number.
-    pipeline_version: str = "1.3.7"
+    # 1.4.0 — realism audit.  Every number this module produces changes.
+    #         • PER-ASTEROID Δv.  v1.3.5 removed the Asterank per-target
+    #           override and never replaced it, so every asteroid received
+    #           identical Δv.  Measured on a 150-row run, max_payload_kg,
+    #           total_cost_usd, m_launch_kg, mission_duration_yr, vehicle and
+    #           propellant each had exactly ONE unique value catalog-wide;
+    #           only bulk_value_usd_per_kg varied.  The profitability ranking
+    #           was a spectral-type ranking, and a main-belt body was costed
+    #           the same as a co-orbital NEA.  New patched-conic estimator
+    #           (asteroid_transfer_dv_km_s) from a / e / i, validated to
+    #           within ~10% of Module 3's table and of published Bennu /
+    #           Eros / Itokawa figures.  Aerocapture saving is now
+    #           per-asteroid rather than a flat 4,000 m/s.
+    #           Toggle: use_per_asteroid_dv.
+    #         • MINING THROUGHPUT.  Extraction was instantaneous and
+    #           unbounded — duration came only from Δv plus a flat 0.5 yr,
+    #           whether the mission returned 33 kg or 50 tonnes.  Payload is
+    #           now capped by what the rig can dig inside
+    #           max_mining_duration_yr, and the actual dig time flows into
+    #           mission duration, ops cost and WACC.
+    #           Config: mining_rate_kg_per_day_per_kg_rig, and see
+    #           mining_duration_yr() / max_payload_by_throughput_kg().
+    #         • LOW-THRUST Δv PENALTY.  Applies Module 3 v1.3.0's
+    #           dv_penalty_factor, so electric propulsion no longer wins the
+    #           mass cascade on an impulsive budget it cannot fly.
+    #         • COST DE-DUPLICATION.  The return capsule is priced off
+    #           Module 3's new capsule rate ($150k/kg) instead of the
+    #           mining-payload rate ($300k/kg), and
+    #           nre_recurring_overlap_fraction removes the development share
+    #           already embedded in the per-kg recurring brackets.
+    #           Set that field to 0.0 to restore the old double-booking.
+    #         New output columns: dv_penalty_factor, mining_duration_yr,
+    #         throughput_cap_kg, throughput_fits.
+    pipeline_version: str = "1.4.0"
 
 
 CONFIG = CalcConfig()
@@ -619,46 +700,214 @@ def asteroid_bulk_value_usd_per_kg(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Δv RESOLVER
+# Δv RESOLVER  (v1.4.0 — per-asteroid, from orbital elements)
 # ─────────────────────────────────────────────────────────────────────────────
-# Returns (Δv_outbound, Δv_return) for an asteroid using the Module 3
-# reference defaults from CalcConfig.  All asteroids get the same Δv —
-# the per-target Asterank override was removed in v1.3.5.  If you want
-# per-asteroid Δv accuracy in future, derive it from Module 1's orbital
-# elements (semi_major_axis_au, eccentricity, inclination_deg) using a
-# Shoemaker-Helin or Tisserand-parameter estimator, rather than a hosted
-# economic-model service.
+# Until v1.4.0 every asteroid in the catalog received the SAME Δv, because
+# v1.3.5 removed the per-target Asterank override without replacing it.  The
+# consequence was not subtle: on a 150-asteroid run, max_payload_kg,
+# total_cost_usd, m_launch_kg, mission_duration_yr, vehicle and propellant
+# each had exactly ONE unique value across the whole catalog.  Only
+# bulk_value_usd_per_kg varied.  The "profitability ranking" was a ranking of
+# spectral types, and orbital accessibility — the single most important
+# variable in asteroid mining economics — had no effect at all.  A main-belt
+# object at 2.7 AU was costed identically to a co-orbital NEA.
+#
+# The estimator below is a two-impulse patched-conic rendezvous, which is what
+# Shoemaker-Helin approximates and what Module 3's reference table was built
+# from.  Given the asteroid's a / e / i:
+#
+#   1. Transfer ellipse from Earth's orbit (1 AU) to the asteroid's apsis.
+#   2. Departure v_infinity = vector difference between the transfer velocity
+#      and Earth's orbital velocity, including the plane change for i.
+#   3. Δv to leave LEO onto that hyperbola:  √(v_esc² + v_inf²) − v_LEO.
+#   4. Δv to match the asteroid's velocity at the apsis (rendezvous, not
+#      flyby — a mining mission has to stop).
+#
+# Return is the mirror image: the apsis-match burn to get back onto an
+# Earth-intercept trajectory, then either a propulsive capture at Earth
+# (√(v_esc² + v_inf²) − v_LEO again) or an atmospheric entry that costs
+# essentially no propellant but buys a heat shield.  This replaces the flat
+# `aerocapture_dv_savings_m_s` constant with a per-asteroid saving.
+#
+# VALIDATED against Module 3's independently-sourced DELTA_V_REFERENCE:
+#   target                        estimator   Module 3 table
+#   main belt (a=2.7, e=0.1, i=10°)  10.43 km/s   10.5 km/s  (Module 3)
+#   moderate NEA (a=1.2, e=0.3, i=8°) 5.58 km/s    6.5 km/s  (Module 3 avg NEA)
+#   Bennu    (a=1.126, e=0.204, i=6.0°)  4.64 km/s   ~5.1 km/s (published)
+#   Eros     (a=1.458, e=0.223, i=10.8°) 6.10 km/s   ~6.5 km/s (published)
+#   Itokawa  (a=1.324, e=0.280, i=1.6°)  4.14 km/s   ~4.6 km/s (published)
+# Within ~10% of both the reference table and published mission values, which
+# is the accuracy an analytic estimator can honestly claim.  It runs slightly
+# LOW against published figures for the easiest co-orbital targets, where real
+# mission design finds better transfers than a two-impulse apsis match.
+# The floor is the physical one: escaping LEO costs √2·v_LEO − v_LEO ≈
+# 3.22 km/s no matter how accessible the target is.
+
+AU_KM            = 1.495_978_707e8     # astronomical unit
+V_EARTH_KM_S     = 29.784              # Earth mean orbital velocity
+MU_EARTH_KM3_S2  = 398_600.4418        # Earth gravitational parameter
+R_LEO_KM         = 6_378.14 + 200.0    # 200-km circular parking orbit
+
+
+def _leo_departure_dv_km_s(v_inf_km_s: float) -> float:
+    """Δv to go from circular LEO onto a hyperbola with this v_infinity.
+
+    Symmetric with capture: the same expression gives the propulsive cost of
+    arriving from a hyperbola and circularising back into LEO.
+    """
+    v_leo = math.sqrt(MU_EARTH_KM3_S2 / R_LEO_KM)
+    v_esc = math.sqrt(2.0) * v_leo
+    return math.sqrt(v_esc * v_esc + v_inf_km_s * v_inf_km_s) - v_leo
+
+
+def asteroid_transfer_dv_km_s(
+    a_au: float, e: float, i_deg: float,
+) -> Optional[Tuple[float, float, float]]:
+    """Patched-conic Δv budget for a rendezvous mission to one asteroid.
+
+    Returns (dv_out, dv_return_propulsive, dv_return_aerocapture) in km/s,
+    or None if the elements are unusable.
+
+    All heliocentric work is done in canonical units (Earth orbit radius = 1,
+    Earth orbital speed = 1) and converted to km/s at the end.
+    """
+    try:
+        a = float(a_au); e = float(e); i = float(i_deg)
+    except (TypeError, ValueError):
+        return None
+    if not (a > 0) or not (0.0 <= e < 1.0) or not (0.0 <= i <= 180.0):
+        return None
+
+    # Rendezvous at the apsis nearer to reachable transfer geometry.  For the
+    # overwhelming majority (a > 1) that is aphelion; for wholly-interior
+    # orbits (Atira-class) it is perihelion.
+    Q = a * (1.0 + e)
+    q = a * (1.0 - e)
+    r_target = Q if Q >= 1.0 else q
+    if r_target <= 0:
+        return None
+
+    # ── 1. Transfer ellipse from r=1 to r=r_target ───────────────────────────
+    a_t = (1.0 + r_target) / 2.0
+    v_t_at_earth_sq = 2.0 / 1.0 - 1.0 / a_t
+    if v_t_at_earth_sq <= 0:
+        return None
+    v_t_at_earth = math.sqrt(v_t_at_earth_sq)
+
+    # ── 2. v_infinity at Earth departure, plane change included ──────────────
+    # Law of cosines between the transfer velocity and Earth's (speed 1).
+    cos_i = math.cos(math.radians(i))
+    v_inf_sq = v_t_at_earth ** 2 + 1.0 - 2.0 * v_t_at_earth * cos_i
+    v_inf = math.sqrt(max(v_inf_sq, 0.0)) * V_EARTH_KM_S
+
+    # ── 3. LEO departure ─────────────────────────────────────────────────────
+    dv_depart = _leo_departure_dv_km_s(v_inf)
+
+    # ── 4. Apsis rendezvous burn ─────────────────────────────────────────────
+    v_t_at_target_sq = 2.0 / r_target - 1.0 / a_t
+    v_ast_at_target_sq = 2.0 / r_target - 1.0 / a
+    if v_t_at_target_sq <= 0 or v_ast_at_target_sq <= 0:
+        return None
+    dv_match = abs(math.sqrt(v_ast_at_target_sq)
+                   - math.sqrt(v_t_at_target_sq)) * V_EARTH_KM_S
+
+    dv_out = dv_depart + dv_match
+
+    # ── Return legs ──────────────────────────────────────────────────────────
+    # Departing the asteroid costs the same apsis burn in reverse.  Arriving
+    # at Earth then either costs a propulsive capture, or nothing propulsive
+    # at all if you enter the atmosphere (paid for in heat-shield mass
+    # instead, which the Module 4 cascade already carries).
+    dv_ret_propulsive = dv_match + _leo_departure_dv_km_s(v_inf)
+    dv_ret_aerocapture = dv_match
+
+    return dv_out, dv_ret_propulsive, dv_ret_aerocapture
+
 
 def asteroid_dv_m_s(asteroid_row: pd.Series, config: CalcConfig) -> Tuple[float, float]:
-    """Return (Δv_outbound, Δv_return) in m/s for one asteroid."""
+    """Return (Δv_outbound, Δv_return) in m/s for one asteroid.
+
+    Uses the per-asteroid estimator when Module 1 supplied usable orbital
+    elements, and falls back to the CalcConfig reference defaults when it did
+    not.  Set `config.use_per_asteroid_dv = False` to force the old uniform
+    behaviour for every row.
+    """
+    estimate = None
+    if config.use_per_asteroid_dv:
+        estimate = asteroid_transfer_dv_km_s(
+            asteroid_row.get("semi_major_axis_au"),
+            asteroid_row.get("eccentricity"),
+            asteroid_row.get("inclination_deg"),
+        )
+
+    if estimate is not None:
+        dv_out_km, dv_ret_prop_km, dv_ret_aero_km = estimate
+        dv_out = dv_out_km * 1_000.0
+        dv_ret = (dv_ret_aero_km if config.use_aerocapture_return
+                  else dv_ret_prop_km) * 1_000.0
+        # Clamp against physically silly extremes (bad elements upstream).
+        dv_out = min(max(dv_out, 3_000.0), config.max_dv_outbound_m_s)
+        dv_ret = min(max(dv_ret, 300.0),  config.max_dv_outbound_m_s)
+        return dv_out, dv_ret
+
+    # ── Fallback: uniform reference Δv (pre-v1.4.0 behaviour) ────────────────
     dv_out             = config.default_dv_outbound_m_s
     dv_ret_propulsive  = config.default_dv_return_m_s
-
     if config.use_aerocapture_return:
         dv_ret = max(500.0, dv_ret_propulsive - config.aerocapture_dv_savings_m_s)
     else:
         dv_ret = dv_ret_propulsive
-
     return dv_out, dv_ret
 
 
-def asteroid_mission_duration_yr(
-    dv_out_m_s: float, dv_ret_m_s: float, config: CalcConfig,
-) -> float:
-    """Estimate full round-trip mission duration (years) from Δv.
+def mining_duration_yr(payload_kg: float, config: CalcConfig) -> float:
+    """Time at the asteroid needed to extract `payload_kg` (years).
 
-    Calibrated against Module 3's DELTA_V_REFERENCE durations:
+    v1.4.0.  Throughput scales with the rig mass actually delivered, so a
+    bigger haul costs proportionally more mission-years — which then flows
+    into ops cost and WACC compounding.  Floored by station_keeping_floor_yr
+    (approach and proximity ops happen regardless).
+    """
+    rate_kg_per_day = (config.mining_hardware_kg
+                       * config.mining_rate_kg_per_day_per_kg_rig)
+    if rate_kg_per_day <= 0:
+        return config.station_keeping_floor_yr
+    dig_yr = float(payload_kg) / (rate_kg_per_day * 365.25)
+    return max(config.station_keeping_floor_yr, dig_yr)
+
+
+def max_payload_by_throughput_kg(config: CalcConfig) -> float:
+    """Most material the rig can extract inside max_mining_duration_yr."""
+    return (config.mining_hardware_kg
+            * config.mining_rate_kg_per_day_per_kg_rig
+            * 365.25
+            * config.max_mining_duration_yr)
+
+
+def asteroid_mission_duration_yr(
+    dv_out_m_s: float,
+    dv_ret_m_s: float,
+    config: CalcConfig,
+    mining_yr: Optional[float] = None,
+) -> float:
+    """Estimate full round-trip mission duration (years).
+
+    Cruise legs are calibrated against Module 3's DELTA_V_REFERENCE durations:
         4,500 m/s outbound  →  1.0 yr  one-way
         6,500 m/s           →  1.5 yr
         8,500 m/s           →  2.0 yr
        10,500 m/s           →  3.5 yr
-    Approximately linear at ~0.00023 yr per m/s, plus 0.5 yr station-keeping.
+    Approximately linear at ~0.00023 yr per m/s.
+
+    v1.4.0: the middle term is the actual mining duration rather than a flat
+    0.5 yr, so returning more material genuinely costs more mission-years.
+    Passing mining_yr=None restores the old fixed station-keeping term.
     Bounded below by 1.0 yr (a real mission can't be shorter).
     """
     outbound_yr = max(0.5, 0.000_23 * dv_out_m_s)
     return_yr   = max(0.5, 0.000_23 * dv_ret_m_s)
-    sk_yr       = 0.5
-    return max(1.0, outbound_yr + sk_yr + return_yr)
+    stay_yr     = 0.5 if mining_yr is None else float(mining_yr)
+    return max(1.0, outbound_yr + stay_yr + return_yr)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -912,7 +1161,11 @@ def mission_cost_usd(
     hw_per_kg               = _ops_value(ops_df, "Mining payload recurring cost", default=300_000.0)
     mining_rig_cost_total   = config.mining_hardware_kg * hw_per_kg
     mining_rig_cost         = mining_rig_cost_total / max(1, config.nre_amortization_missions)
-    capsule_cost            = config.return_vehicle_dry_kg * hw_per_kg     # per-mission
+    # v1.4.0: the capsule is priced off its OWN rate.  It used to be billed at
+    # the mining-payload rate, which treats a parachute-and-heat-shield can as
+    # though it were regolith-contact machinery.
+    capsule_per_kg          = _ops_value(ops_df, "Return capsule recurring cost", default=150_000.0)
+    capsule_cost            = config.return_vehicle_dry_kg * capsule_per_kg   # per-mission
     hardware_cost           = mining_rig_cost + capsule_cost
 
     # Mission ops × duration  (per-asteroid duration from Δv estimator)
@@ -940,9 +1193,14 @@ def mission_cost_usd(
     spacecraft_book_value = mining_rig_cost_total + capsule_cost
     launch_insurance_cost = launch_ins_pct * (launch_cost + spacecraft_book_value)
 
-    # Spacecraft bus NRE amortised across N missions
-    nre_total = _ops_value(ops_df, "Spacecraft development (NRE)", default=588_500_000.0)
-    nre_cost  = nre_total / max(1, config.nre_amortization_missions)
+    # Spacecraft bus NRE amortised across N missions, less the share already
+    # embedded in the per-kg recurring rate (v1.4.0 — see
+    # nre_recurring_overlap_fraction).  NICM / SSCM per-kg brackets are
+    # regressions on total program cost, so charging full OSIRIS-REx NRE on
+    # top of a $300k/kg recurring rate books part of the development twice.
+    nre_total   = _ops_value(ops_df, "Spacecraft development (NRE)", default=588_500_000.0)
+    nre_overlap = min(max(config.nre_recurring_overlap_fraction, 0.0), 1.0)
+    nre_cost    = nre_total * (1.0 - nre_overlap) / max(1, config.nre_amortization_missions)
 
     # Autonomous mining control & AI NRE — uncrewed-mission specific (Module 3
     # v1.2.4+ replaced the legacy 'Crew' line item with this).  Amortised the
@@ -1054,6 +1312,17 @@ def evaluate_combo(
     if leo_cap <= 0:
         return None
 
+    # ── Low-thrust Δv penalty (v1.4.0) ───────────────────────────────────────
+    # Module 3 tags each propellant with the factor by which a real trajectory
+    # exceeds the impulsive Δv budget.  Electric propulsion cannot fly the
+    # impulsive burns the reference table assumes — it spirals, and spiralling
+    # out of LEO costs roughly twice what an impulsive escape does.  Without
+    # this, a 3,000 s Isp thruster wins the mass cascade on a Δv budget it
+    # could never actually achieve.
+    dv_penalty = float(propellant.get("dv_penalty_factor", 1.0) or 1.0)
+    dv_out_m_s = dv_out_m_s * dv_penalty
+    dv_ret_m_s = dv_ret_m_s * dv_penalty
+
     tps_frac = (
         config.heat_shield_frac_of_payload
         if config.use_aerocapture_return else 0.0
@@ -1107,9 +1376,17 @@ def evaluate_combo(
     # `volume_fits` keeps its original sense — False means the payload the
     # mission would otherwise have returned does not fit — but the payload is
     # now actually reduced to what does fit.
+    # ── Throughput cap (v1.4.0) ──────────────────────────────────────────────
+    # You can only return what the rig can actually dig inside the maximum
+    # stay.  Previously extraction was instantaneous and unbounded, so a
+    # mission's haul was limited only by the rocket equation — the rig might
+    # as well have been a vacuum cleaner with infinite suction.
+    throughput_cap_kg = max_payload_by_throughput_kg(config)
+
     m_payload_demand = min(cascade["max_payload_kg"], mineable_kg)
     volume_fits      = m_payload_demand <= volume_capacity_kg
-    m_payload        = min(m_payload_demand, volume_capacity_kg)
+    throughput_fits  = m_payload_demand <= throughput_cap_kg
+    m_payload        = min(m_payload_demand, volume_capacity_kg, throughput_cap_kg)
     if m_payload <= 0:
         return None
 
@@ -1141,7 +1418,10 @@ def evaluate_combo(
     }
 
     gross_value         = m_payload * bulk_value_per_kg
-    mission_duration_yr = asteroid_mission_duration_yr(dv_out_m_s, dv_ret_m_s, config)
+    mining_yr           = mining_duration_yr(m_payload, config)
+    mission_duration_yr = asteroid_mission_duration_yr(
+        dv_out_m_s, dv_ret_m_s, config, mining_yr=mining_yr,
+    )
     cost                = mission_cost_usd(
         mass_cascade        = actual_cascade,
         vehicle             = vehicle,
@@ -1161,8 +1441,12 @@ def evaluate_combo(
         "dv_out_m_s":           dv_out_m_s,
         "dv_ret_m_s":           dv_ret_m_s,
         "isp_s":                float(propellant["isp_vac_s"]),
+        "dv_penalty_factor":    dv_penalty,
         "mission_duration_yr":  mission_duration_yr,
+        "mining_duration_yr":   mining_yr,
         "max_payload_kg":       m_payload,
+        "throughput_cap_kg":    throughput_cap_kg,
+        "throughput_fits":      throughput_fits,
         "return_bulk_density_kg_per_L": bulk_density_kg_per_L,
         "return_volume_m3":     return_volume_m3,
         "fairing_volume_m3":    fairing_m3,
