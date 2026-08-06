@@ -731,8 +731,7 @@ class CalcConfig:
     #           way -- and launch insurance replaces hardware, not revenue, so
     #           there is no double count.  p_mining is the honest one: nobody
     #           has ever sustained-mined an asteroid, and regolith-contact
-    #           mechanisms are exactly where OSIRIS-REx, Hayabusa and Philae
-    #           had their failures.
+    #           mechanisms are where deep-space missions fail.
     #         • CRYOGENIC BOIL-OFF.  Return propellant sits in the tank from
     #           launch to the departure burn -- years.  Hydrolox loses
     #           0.05%/day even actively cooled, so a 5-year hold means loading
@@ -775,7 +774,23 @@ class CalcConfig:
     #         rather than a heritage question.
     #         New config: model_reliability_growth.
     #         New output column: p_mining.
-    pipeline_version: str = "1.9.0"
+    # 1.9.1 — recalibrated the first-of-kind mining success probability from
+    #         0.75 to 0.85.  The old figure was counted from failures alone
+    #         (OSIRIS-REx's jammed flap, Hayabusa's dead projectile, Philae's
+    #         harpoons) with none of the successes, which is selection bias.
+    #         The full regolith-contact flight record is 10 clean successes
+    #         (Apollo, Luna 16/20/24, Stardust, Phoenix, Curiosity,
+    #         Hayabusa2, OSIRIS-REx, Perseverance, Chang'e 5 and 6), one
+    #         partial (Hayabusa returned its sample despite the sampler
+    #         failing) and two failures (Philae's harpoons, InSight's mole):
+    #         11/13 = 0.85, or 0.77 if Hayabusa is counted as a loss.  0.85
+    #         is taken because Hayabusa did return its sample.
+    #         Sustained-operation risk is NOT double-counted here — none of
+    #         those missions was sustained mining, and the exposure is
+    #         already carried by the spacecraft MTBF term.
+    #         Effect: P(success) on a 5-year mission rises 0.62 -> 0.70, and
+    #         every cost/revenue ratio improves ~13%.
+    pipeline_version: str = "1.9.1"
 
 
 CONFIG = CalcConfig()
@@ -2813,7 +2828,7 @@ def _evaluate_combo_at_ratio(
         # launch vehicles are already mature, and MTBF is a duration exposure
         # rather than a heritage question.
         p_first = _ops_value(
-            ops_df, "Mining system first-of-kind success probability", default=0.75,
+            ops_df, "Mining system first-of-kind success probability", default=0.85,
         )
         if config.model_reliability_growth:
             p_mining = mining_success_probability(

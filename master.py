@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.10.0)
+"""Master Asteroid Profitability Pipeline (1.10.1)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -12,10 +12,10 @@ run top-to-bottom — the orchestrator at the bottom executes everything.
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
                 + destination pricing for EVERY commodity
-    Stage 3  →  Transportation Data     (modules/transportation.py 1.8.0)
+    Stage 3  →  Transportation Data     (modules/transportation.py 1.8.1)
                 Launch vehicles + propellants + Δv segments + ops costs
                 (UNCREWED autonomous mining — no crew costs)
-    Stage 4  →  Profitability Calc      (modules/calc.py 1.9.0)
+    Stage 4  →  Profitability Calc      (modules/calc.py 1.9.1)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2×, V-type 0.2×)
                 + delivery architecture: earth_surface / leo / cislunar /
@@ -4471,7 +4471,12 @@ class TransportConfig:
     #         ceiling; mature spacecraft mechanisms run 97-99% and a
     #         continuously-operating excavator is harder than a one-shot
     #         deployment).
-    pipeline_version: str = "1.8.0"
+    # 1.8.1 — recalibrated "Mining system first-of-kind success probability"
+    #         0.75 -> 0.85.  The v1.7.0 note cited three failures and none of
+    #         the successes; the full regolith-contact record is 11/13.  Notes
+    #         now list the whole tally, both ways of counting Hayabusa, and
+    #         why sustained-operation risk is not double-counted here.
+    pipeline_version: str = "1.8.1"
     preview_rows:     int = 15
 
 
@@ -5480,19 +5485,37 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
     {
         "category":         "Mining system first-of-kind success probability",
         "unit":             "probability the rig works as designed",
-        "value":            0.75,
-        "range_low":        0.50,
+        "value":            0.85,
+        "range_low":        0.70,
         "range_high":       0.95,
-        "notes": "v1.7.0.  Nobody has ever sustained-mined an asteroid.  This "
-                 "is the probability that the excavation and beneficiation "
-                 "chain works at all once it arrives — separate from the "
-                 "spacecraft surviving the trip.  Anchors: OSIRIS-REx's TAGSAM "
-                 "collected far more than planned but its sample head jammed "
-                 "open; Hayabusa's first sampler failed to fire; Philae's "
-                 "harpoons did not deploy.  Regolith-contact mechanisms are "
-                 "where deep-space missions actually fail.  Drops toward 0.95 "
-                 "for a repeat mission with flight heritage — raise it "
-                 "alongside nre_amortization_missions.",
+        "notes": "v1.8.1.  Probability the excavation and beneficiation chain "
+                 "works once it arrives — separate from the spacecraft "
+                 "surviving the trip.  Counted from the actual flight record "
+                 "of regolith-contact mechanisms rather than from the "
+                 "failures alone, which is what v1.7.0's 0.75 did and it was "
+                 "unfairly harsh:\n"
+                 "  SUCCEEDED (10): Apollo 15-17 drills and scoops; Luna 16 / "
+                 "20 / 24 drills; Stardust aerogel; Phoenix arm (sticky soil "
+                 "delayed delivery but it worked); Curiosity drill (feed "
+                 "mechanism failed 2016, recovered by feed-extended drilling); "
+                 "Hayabusa2 sampler and SCI impactor, both touchdowns clean; "
+                 "OSIRIS-REx TAGSAM, 121.6 g against a 60 g requirement; "
+                 "Perseverance coring drill; Chang'e 5 and 6 drill + scoop.\n"
+                 "  PARTIAL (1): Hayabusa — the projectile never fired, but "
+                 "contact dust was still collected and returned.\n"
+                 "  FAILED (2): Philae's harpoon pyrotechnics; InSight's HP3 "
+                 "mole, which could not get purchase in Martian regolith.\n"
+                 "That is 11/13 = 0.85 counting Hayabusa as the success it "
+                 "ultimately was, or 10/13 = 0.77 counting it as a loss.  "
+                 "0.85 is taken because Hayabusa did return its sample.\n"
+                 "The honest caveat is that NONE of these is sustained "
+                 "mining — they are one-shot or short-campaign collections of "
+                 "grams to kilograms, not a rig moving 200 kg/day for years "
+                 "with no maintenance.  0.85 is therefore the demonstrated "
+                 "mechanism rate, and the sustained-operation risk on top of "
+                 "it is carried by the spacecraft MTBF term rather than "
+                 "double-counted here.  Grows with flight heritage — see "
+                 "'Mining reliability growth exponent'.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
@@ -6824,8 +6847,7 @@ class CalcConfig:
     #           way -- and launch insurance replaces hardware, not revenue, so
     #           there is no double count.  p_mining is the honest one: nobody
     #           has ever sustained-mined an asteroid, and regolith-contact
-    #           mechanisms are exactly where OSIRIS-REx, Hayabusa and Philae
-    #           had their failures.
+    #           mechanisms are where deep-space missions fail.
     #         • CRYOGENIC BOIL-OFF.  Return propellant sits in the tank from
     #           launch to the departure burn -- years.  Hydrolox loses
     #           0.05%/day even actively cooled, so a 5-year hold means loading
@@ -6868,7 +6890,23 @@ class CalcConfig:
     #         rather than a heritage question.
     #         New config: model_reliability_growth.
     #         New output column: p_mining.
-    pipeline_version: str = "1.9.0"
+    # 1.9.1 — recalibrated the first-of-kind mining success probability from
+    #         0.75 to 0.85.  The old figure was counted from failures alone
+    #         (OSIRIS-REx's jammed flap, Hayabusa's dead projectile, Philae's
+    #         harpoons) with none of the successes, which is selection bias.
+    #         The full regolith-contact flight record is 10 clean successes
+    #         (Apollo, Luna 16/20/24, Stardust, Phoenix, Curiosity,
+    #         Hayabusa2, OSIRIS-REx, Perseverance, Chang'e 5 and 6), one
+    #         partial (Hayabusa returned its sample despite the sampler
+    #         failing) and two failures (Philae's harpoons, InSight's mole):
+    #         11/13 = 0.85, or 0.77 if Hayabusa is counted as a loss.  0.85
+    #         is taken because Hayabusa did return its sample.
+    #         Sustained-operation risk is NOT double-counted here — none of
+    #         those missions was sustained mining, and the exposure is
+    #         already carried by the spacecraft MTBF term.
+    #         Effect: P(success) on a 5-year mission rises 0.62 -> 0.70, and
+    #         every cost/revenue ratio improves ~13%.
+    pipeline_version: str = "1.9.1"
 
 
 CALC_CONFIG = CalcConfig()
@@ -8906,7 +8944,7 @@ def _evaluate_combo_at_ratio(
         # launch vehicles are already mature, and MTBF is a duration exposure
         # rather than a heritage question.
         p_first = _ops_value(
-            ops_df, "Mining system first-of-kind success probability", default=0.75,
+            ops_df, "Mining system first-of-kind success probability", default=0.85,
         )
         if config.model_reliability_growth:
             p_mining = mining_success_probability(
@@ -9477,7 +9515,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.10.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.10.1")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
