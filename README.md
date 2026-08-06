@@ -27,7 +27,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
-| 1 | `modules/catalog.py` | 1.0.8 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
+| 1 | `modules/catalog.py` | 1.0.9 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.6.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity |
 | 3 | `modules/transportation.py` | 1.8.1 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
 | 4 | `modules/calc.py` | 1.9.1 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
@@ -39,6 +39,10 @@ Python 3.9+ (developed and run on 3.13). Then:
 ```bash
 pip install -r requirements.txt
 ```
+
+On Windows, invoke the launcher `py` rather than `python` — a bare `python`
+hits the Microsoft Store alias and exits without running anything. Every
+`python …` command below becomes `py …`.
 
 Run the whole pipeline as one self-contained file:
 
@@ -266,11 +270,15 @@ With reliability growth in, `nre_amortization_missions` finally does what its
 name suggests — and the two v1.8.0/v1.9.0 models pull against each other in a
 way worth understanding. Mars, beneficiated:
 
+⚠️ Measured on the pre-v1.0.9 catalog — the single-mission case is 25.2× on the
+restored one, so the whole column shifts down. The *shape* is what matters here
+and that does not depend on the population; the absolute ratios need re-running.
+
 | Programme | `p_mining` | `P(success)` | Missions sharing one rig | Best cost/revenue |
 |---|---|---|---|---|
-| 1 mission | 0.850 | 0.698 | 1 | 34.2× |
-| 10 missions | 0.902 | 0.741 | 7 (capped) | ~10× |
-| 100 missions | 0.943 | 0.775 | 7 (capped) | **~8×** |
+| 1 mission | 0.850 | 0.698 | 1 | 34.2× → 25.2× re-measured |
+| 10 missions | 0.902 | 0.741 | 7 (capped) | ~10× *(stale)* |
+| 100 missions | 0.943 | 0.775 | 7 (capped) | **~8×** *(stale)* |
 
 Going from 10 to 100 missions buys much less than going from 1 to 10, and the
 reason is the rig service-life cap: at this stay length one rig serves seven
@@ -469,37 +477,65 @@ run):
 
 ### Combined effect
 
-Cost/revenue ratio across the same 1,959 asteroids (lower is better; 1.0
-would be breakeven):
+Cost/revenue ratio, beneficiated (lower is better; 1.0 would be breakeven).
 
-| | beneficiated (best / median) |
-|---|---|
-| `earth_surface` | 191,359× / 52,832,913× |
-| `leo` | 290× / 10,067× |
-| `cislunar` | 143× / 2,377× |
-| `lunar_surface` | 74× / 543× |
-| `mars_surface` | **34× / 338×** |
+⚠️ **Mid-re-measurement.** Catalog v1.0.9 fixed SsODNet being discarded at
+merge, taking the measured-taxonomy population from ~1,850 to ~24,675 bodies.
+`mars_surface` has been re-measured on the restored catalog; the other four
+still carry pre-1.0.9 numbers and will move when re-run. See
+[Source outages change the population](#source-outages-change-the-population-not-just-the-coverage).
 
-Beneficiation roughly **halves** the gap for a typical target. At cislunar it
-declines to concentrate on the single best body — already water-rich enough
-that grinding more rock costs more than it returns.
+| | best / median | population |
+|---|---|---|
+| `earth_surface` | 191,359× / 52,832,913× | 1,959 — *stale* |
+| `leo` | 290× / 10,067× | 1,959 — *stale* |
+| `cislunar` | 143× / 2,377× | 1,959 — *stale* |
+| `lunar_surface` | 74× / 543× | 1,959 — *stale* |
+| `mars_surface` | **25.2× / 248×** | 35,778 — **current** |
+
+Mars was 34× on the degraded catalog and is 25.2× on the restored one. No
+physics changed: the optimiser simply has 13× more real-taxonomy targets to
+choose a winner from, so the best of them is better.
+
+Beneficiation roughly **halves** the gap for a typical target — and what it
+does to the *best* target depends on the destination, which is easy to get
+wrong. At cislunar it declines to concentrate on the single best body, already
+water-rich enough that grinding more rock costs more than it returns. **At
+Mars it does not decline, and the best case moves a lot:**
+
+| `mars_surface` | best | median | best target |
+|---|---|---|---|
+| not beneficiated | 54.2× | 1,154× | 22290 (1989 AO), D |
+| beneficiated | **25.2×** | **248×** | 4015 Wilson-Harrington (B), concentrated 4.2× |
+
+−53% on the best case, −79% on the median, and a *different asteroid wins*.
+The effect replicates across three independent populations, which is why it
+can be trusted even though each gives different absolutes: 1,854
+measured-taxonomy bodies gave 69.6× → 31.0×, 5,000 mostly albedo-typed bodies
+gave 71.8× → 32.5×, and the full restored catalog above gives 54.2× → 25.2×.
+All three land near −55% on the best case and concentrate the winner at a
+ratio of 4–5.
 
 Still **zero viable missions** anywhere, but Mars closes the gap by ~4 orders
-of magnitude from the default and lands within a factor of ~14.
+of magnitude from the default and lands within a factor of ~25.
 
 The trend across releases is the point. Mars, beneficiated, has gone
-2.2× → 14× → **39×** as modelling gaps closed, and every step was a
-correction rather than a regression:
+2.2× → 14× → 39× → 34× → **25×** as modelling gaps closed, and every step was
+a correction rather than a regression — including the last two, which moved
+the number *down*. v1.9.1 recalibrated a probability the model had been too
+pessimistic about; catalog v1.0.9 restored a data source that had been
+silently discarded. Both are the same discipline running the other way.
 
 | Release | Mars | What it started charging for |
 |---|---|---|
 | v1.6.0 | 2.2× | — |
 | v1.7.0 | 14× | low-thrust trip time, launch windows, bound-water energy, learning curve, market saturation |
 | v1.8.0 | 39× | rig service life, mission reliability, cryogenic boil-off, in-space manufacturing |
-| v1.9.1 | **34×** | reliability growth, and `p_mining` recalibrated 0.75 → 0.85 on the full flight record |
+| v1.9.1 | 34× | reliability growth, and `p_mining` recalibrated 0.75 → 0.85 on the full flight record |
+| catalog v1.0.9 | **25×** | nothing new — restored SsODNet, which had been downloaded and then discarded on every run, taking measured taxonomy from ~1,850 to ~24,675 bodies |
 
 If a change suddenly improves these by an order of magnitude, suspect it has
-switched one of the nine models off rather than found something. See
+switched one of the ten models off rather than found something. See
 [What the model charges for](#what-the-model-charges-for).
 
 ## Mission model
@@ -521,9 +557,11 @@ Stated plainly so results aren't over-read:
   a default run, and that is the honest answer rather than a bug. Fixed costs
   (development NRE, autonomy NRE, rig, capsule, contingency, WACC) run to
   billions, while the best bulk material is worth a few dollars per kg. The
-  best case the model can currently reach — cislunar delivery plus
-  beneficiation — still comes in ~36× short. There is no "don't fly" option,
-  so the ranking is really *which target loses least*.
+  best case the model can currently reach — `mars_surface` delivery plus
+  beneficiation — still comes in ~25× short at a single mission. There is no
+  "don't fly" option, so the ranking is really *which target loses least*.
+  (The 100-mission figure below it has not been re-measured since catalog
+  v1.0.9's population fix.)
 - **Rank by `total_cost_usd / gross_value_usd`, not `profit_usd`.** Revenue is
   orders of magnitude below cost in most configurations, so `profit_usd`
   reduces to `-total_cost_usd` and `top_profitable()` becomes a pure cost
@@ -570,8 +608,10 @@ Stated plainly so results aren't over-read:
 
 ## What the model charges for
 
-v1.7.0 closed five gaps that all pushed the answer the same way — towards
-optimism. Each defaults ON; set the flag to `False` to isolate its effect.
+Ten models in total, added across three releases. Each defaults ON; set the
+flag to `False` to isolate its effect. The five below closed gaps in v1.7.0
+that all pushed the answer the same way — towards optimism; the five after
+them arrived in v1.8.0 and v1.9.0, and one of those pushed back the other way.
 
 **Low-thrust trip time** (`model_low_thrust_time`). Electric propulsion used
 to pay a Δv penalty and nothing else — it flew its burns instantly on power
@@ -629,7 +669,12 @@ World production is USGS; the in-space absorption ceilings (LEO 500 t/yr,
 cislunar 100 t, lunar surface 50 t, Mars 20 t) are **judgement, not
 measurement** — no such market exists.
 
-### Added in v1.8.0
+### Added in v1.8.0 and v1.9.0
+
+Four in v1.8.0 — rig service life, mission reliability, cryogenic boil-off,
+in-space manufacturing — plus **Reliability growth** in v1.9.0, which is kept
+next to Mission reliability below rather than in release order because the two
+only make sense read together.
 
 **Rig service life and terminal value** (`model_rig_service_life`). The rig
 was amortised across `nre_amortization_missions` with no upper bound, so a
@@ -676,8 +721,9 @@ for years without maintenance. 0.85 is the demonstrated **mechanism** rate;
 the sustained-operation exposure is carried by the spacecraft MTBF term
 rather than double-counted here.
 
-**Reliability growth** (`model_reliability_growth`). `p_mining` used to sit at
-its first-of-kind 0.75 no matter how many missions a programme flew — the one
+**Reliability growth** (`model_reliability_growth`, v1.9.0). `p_mining` used
+to sit at its first-of-kind 0.75 no matter how many missions a programme
+flew — the one
 place the model was *pessimistic* rather than optimistic. A fleet that has
 flown ten rigs has found and designed out failure modes the first one
 discovered the hard way.
@@ -755,6 +801,38 @@ refined on Earth. The utility factor now means only what it says.
 - **yfinance** — live futures prices (metals; fuel-cost proxies)
 - **USGS Mineral Commodity Summaries + LME** — reference prices for metals yfinance doesn't expose
 - **metals.dev** — optional; set `MINERAL_CONFIG.metals_api_key` (defaults to `"DEMO"`, i.e. skipped)
+
+### Source outages change the population, not just the coverage
+
+Sources fail soft by design — an unreachable host returns empty and the run
+continues. What that hides is that **the number of asteroids evaluated, and
+their taxonomy mix, can change by an order of magnitude between runs.**
+
+Where a spectral type cannot be sourced, Stage 1 infers a coarse one from
+geometric albedo and records that in `spectral_type_source`
+(`source` / `tholen` / `albedo` / `unknown`).
+
+This is not hypothetical. Until catalog v1.0.9, SsODNet was downloaded in full
+(~500 MB), parsed, and then **discarded at merge time on every run** — ssoBFT
+had renamed its identity columns, the column projection tolerated the loss,
+and the source was dropped for having no `designation`:
+
+| | before v1.0.9 | after |
+|---|---|---|
+| taxonomy measured | 1,854 | **24,675** |
+| taxonomy guessed from albedo | 33,235 | **11,131** |
+| density measured | 0 | **438** |
+| V-type bodies | 3,988 | 2,614 |
+
+The V-type count is the giveaway — V-types are genuinely rare, and 3,988 of
+them was an artefact of guessing taxonomy from albedo. **Every figure in this
+README committed before v1.0.9 was measured on that degraded catalog**, which
+is why they quote "across 1,959 asteroids".
+
+**So check `spectral_type_source` before comparing a run against a committed
+number.** The run banner reporting a source as "Active" only means it was
+*enabled*, not that it returned anything — read the `Source summary: {...}`
+dict and the `Spectral type inferred from albedo for N entries` line instead.
 
 ## History
 
