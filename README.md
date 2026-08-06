@@ -28,9 +28,9 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.0.8 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
-| 2 | `modules/mineral_value.py` | 1.2.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination-priced water |
-| 3 | `modules/transportation.py` | 1.3.0 | Launch vehicles, propellants, Δv segments, operational costs |
-| 4 | `modules/calc.py` | 1.4.0 | Per-asteroid Δv, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
+| 2 | `modules/mineral_value.py` | 1.3.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity |
+| 3 | `modules/transportation.py` | 1.4.0 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
+| 4 | `modules/calc.py` | 1.5.0 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 
@@ -99,7 +99,10 @@ that actually move the answer:
 | Knob | Default | Effect |
 |------|---------|--------|
 | `MASTER_CONFIG.output_dir` | platform-dependent | Where everything lands |
-| `.mineral.delivery_destination` | `"earth_surface"` | **Read [Where the material is sold](#where-the-material-is-sold) before changing.** Sets the water price, and water dominates C/B/D-type value |
+| `MASTER_CONFIG.delivery_destination` | `"earth_surface"` | **Read [Where the material is sold](#where-the-material-is-sold) before changing.** Sets every price *and* the mission architecture. Writes Stage 2 and Stage 4 together — never set the two sub-configs separately |
+| `.calc.use_beneficiation` | `False` | Return concentrate instead of run-of-mine ore. Charges the extra dig time, processing energy and solar-array mass. See [Beneficiation](#beneficiation) |
+| `.calc.beneficiation_recovery` | `0.90` | Fraction of the valuable phase reporting to concentrate |
+| `.calc.max_concentration_ratio` | `50.0` | Safety cap on feed:concentrate. The purity bound normally binds first |
 | `.calc.use_per_asteroid_dv` | `True` | Δv from each asteroid's own orbital elements. `False` gives every asteroid the same Δv |
 | `.calc.mining_rate_kg_per_day_per_kg_rig` | `0.10` | Extraction throughput per kg of rig; caps payload and sets time at the asteroid |
 | `.calc.max_mining_duration_yr` | `3.0` | Ceiling on time at the asteroid — binds how much you can return |
@@ -262,35 +265,176 @@ question downstream.
 This is the single most consequential setting in the pipeline, so it gets its
 own section.
 
-Water has no intrinsic scarcity value — it is worth whatever it costs to put
-it where the customer is. `MINERAL_CONFIG.delivery_destination` sets that:
+Nothing mined has an intrinsic price — it is worth whatever it costs to put
+an equivalent kilogram where the customer already is. The destination sets
+both what the cargo sells for (Stage 2) and what the mission costs to fly
+(Stage 4), and **both stages carry the field, so both must be set**:
 
-| Destination | Water | Basis |
-|-------------|-------|-------|
-| `earth_surface` *(default)* | $0.001/kg | Terrestrial bulk industrial water |
-| `leo` | $4,250/kg | Falcon 9 reusable $/kg-to-LEO avoided |
-| `cislunar` | $12,750/kg | Cost of lifting it to a TLI/NRHO depot |
+```python
+MASTER_CONFIG.delivery_destination = "cislunar"   # writes Stage 2 and Stage 4
+```
 
-That choice decides the entire ranking, because water is **99.9–100% of the
-bulk value of every water-bearing asteroid type**:
+Setting only one is the classic error — it prices the cargo at a depot while
+still paying to land it in Utah. Stage 4's `destination_check()` refuses to
+let that pass quietly.
 
-| Type | Bulk $/kg (`leo`) | From water | Share |
-|------|------------------|-----------|-------|
-| D | 1,062.63 | 1,062.50 | 100.0% |
-| B | 850.13 | 850.00 | 100.0% |
-| C | 637.63 | 637.50 | 100.0% |
-| M | 5.90 | 0.00 | 0.0% |
+### What a kilogram is worth
 
-Under `earth_surface`, C-type bulk value falls from $637.63 to **$0.13/kg** and
-the ranking inverts from carbonaceous types to metal-rich ones.
+In-space prices are the launch cost avoided, **derived** rather than
+tabulated: Falcon 9 reusable $/kg-to-LEO, carried further by the rocket
+equation through Stage 3's Δv ladder (`delivered_cost_usd_per_kg`).
 
-The default is `earth_surface` because that is what Stage 4's mission model
-actually does — it ends in a sample-return capsule on the ground. Setting
-`leo` recovers the larger numbers, but only makes sense alongside an
-architecture that stops in orbit; Stage 4 still costs a full re-entry, so the
-combination over-values the mission. Every output row carries
-`delivery_destination` and `value_basis` so a CSV can't be read without
-knowing which assumption produced it.
+| Destination | Launch cost avoided | Δv above LEO | Basis |
+|-------------|--------------------|--------------|-------|
+| `earth_surface` *(default)* | — | — | Terrestrial commodity prices |
+| `leo` | $4,253/kg | 0 | Falcon 9 reusable $/kg-to-LEO |
+| `cislunar` | $10,810/kg | 3,600 m/s | + TLI and NRHO insertion, Isp 465 s stage, 0.10 dry fraction |
+
+A kilogram sitting at a depot is worth **the better of its two fates**, and
+the pipeline picks per commodity:
+
+- **Used in space** — worth its terrestrial price **plus** the launch bill
+  delivering it avoids, scaled by `IN_SPACE_UTILITY` (water 1.00, structural
+  metals 0.70, silicates 0.25, carbon 0.40, organics 0.20). Note the *plus*:
+  the launch cost is on top of the material, not instead of it.
+- **Shipped down** — worth its terrestrial price **minus** the downleg:
+  capsule + TPS + recovery + depot-departure burn, derived from the same
+  Stage 3 rates Stage 4 charges for an Earth return. ~$25,400/kg from LEO,
+  ~$27,300/kg from NRHO. Coming down is far cheaper than going up.
+
+This is what puts an honest number on platinum at a depot. Its in-space
+utility is 0.00 — nobody in orbit wants platinum — but it is still platinum,
+so it is priced by shipping it home rather than written off:
+
+| Commodity | `earth_surface` | `leo` | `cislunar` | Route |
+|-----------|----------------|-------|------------|-------|
+| water | $0.001/kg | $4,253 | $10,810 | used in space |
+| iron | $0.50/kg | $2,978 | $7,567 | used in space |
+| nickel | $16.50/kg | $2,994 | $7,583 | used in space |
+| platinum | $56,695/kg | $31,285 | $29,378 | shipped down |
+| gold | $138,882/kg | $113,472 | $111,565 | shipped down |
+| rhodium | $320,000/kg | $294,590 | $292,683 | shipped down |
+
+Note that cislunar is *worse* than LEO for anything shipped down — it is
+further from the customer. The `value_route` column records which fate was
+chosen for every row.
+
+⚠️ The prices and the downleg are derived; the utility fractions are
+**engineering judgements**. They are the softest assumption in the pipeline
+and live in one table for exactly that reason.
+
+### What it costs to get there
+
+The destination is a different mission, not a different label:
+
+| | `earth_surface` | `leo` | `cislunar` |
+|---|---|---|---|
+| Return leg (at v_inf = 3 km/s) | direct entry, **0 km/s** | capture, **3.63 km/s** | Oberth + NRHO, **0.94 km/s** |
+| Delivery vehicle | re-entry capsule $150k/kg | berthing adapter $60k/kg | berthing adapter $60k/kg |
+| Arrival ops | $15M recovery campaign | $2M depot handover | $2M depot handover |
+| Licensing | $2.5M launch + re-entry | $1.2M launch only | $1.2M launch only |
+| Heat shield | yes | only if aerobraking | never |
+
+**Cislunar is cheaper to reach than LEO and worth more per kilogram.** This
+reads as a bug and is not one: capturing into LEO must kill the entire
+arrival hyperbola, while capturing into an NRHO depot only has to *bind* the
+orbit, with the burn taking the Oberth benefit at low perigee. The advantage
+widens as arrival energy falls — 5.6× at v_inf = 1 km/s, 2.7× at 5 km/s.
+
+Every output row carries `delivery_destination`, `delivery_arch` and
+`value_basis`, so a CSV cannot be read without knowing which assumption
+produced it.
+
+## Beneficiation
+
+Off by default (`CALC_CONFIG.use_beneficiation`). Terrestrial mines ship
+concentrate, not ore; without this the pipeline flies home run-of-mine
+regolith at bulk grade while the rig's own throughput capacity — 66× the
+rocket-equation payload limit on a default run — sits idle.
+
+Switched on, the rig digs surplus feed, rejects the gangue, and loads
+concentrate.
+
+### The load is optimised, not specified
+
+A mission is not sent for a named mineral — it brings back **the most
+valuable load it can assemble from what the target actually contains**. With
+a fixed mass budget and divisible, per-kilogram-priced phases, that is a
+fractional knapsack, so greedy selection by $/kg is provably optimal: fill
+the hold with the best phase available, then the next, until full or the feed
+runs out (`optimal_payload_mix` over `asteroid_phase_table`).
+
+Both honest bounds fall out of it automatically — you cannot load more of a
+phase than the processed feed contained, and once the hold is pure best-phase
+there is nothing better to add. On an M-type at 50% metal / 45% silicate with
+0.90 recovery:
+
+| Feed | Delivered | Load |
+|------|-----------|------|
+| 1.0× | $5,135/kg | hold 90% full, in-situ ratios |
+| 2.0× | $7,081/kg | 90% metal |
+| 2.2× | $7,567/kg | 100% metal — saturated |
+| 5.0× | $7,567/kg | no further gain |
+
+### How hard to concentrate is an economic decision
+
+Grade saturates; costs do not. Every extra kilogram of feed still costs dig
+time (compounding through ops and WACC), processing energy, and the solar
+array mass to supply it — and that array mass comes out of the payload
+budget. So the optimum is usually *strictly inside* the range, and
+`evaluate_combo` searches for it rather than assuming it.
+
+The search always includes **not concentrating at all** as a baseline, so
+beneficiation is an option rather than an obligation and can never make a
+mission worse. On a cislunar run it declines on 1.4% of targets; where it
+does concentrate, the chosen ratio is typically ~7×, never the 50× cap.
+
+Costs charged, all of which the search trades against:
+
+- **Time.** Dig time is charged on the *feed*, not the product.
+- **Energy and mass.** Stage 3's 200 Wh/kg excavation and 500 Wh/kg
+  beneficiation rates over the stay time give a power draw; Stage 3's
+  60 W/kg-at-1-AU power-system row, scaled 1/r² by the target's semi-major
+  axis, turns that into array mass; the array flies in the same rocket
+  equation as everything else. Payload → feed → power → mass → payload is a
+  real circular dependency, solved by fixed-point iteration.
+
+⚠️ The search costs runtime: roughly **10× slower** on the beneficiation path
+(~5 s → ~55 s for 1,959 asteroids). Tune with
+`.calc.concentration_search_steps`.
+
+The 1/r² term punishes distant targets hard (cislunar delivery, 1,959-body
+run):
+
+| Semi-major axis | W/kg at target | Mean array mass |
+|-----------------|---------------|-----------------|
+| < 1.2 AU | 51.5 | 4 kg |
+| 1.8–2.5 AU | 11.4 | 41 kg |
+| > 3.2 AU | 4.7 | 226 kg |
+
+### Combined effect
+
+Cost/revenue ratio across the same 1,959 asteroids (lower is better; 1.0
+would be breakeven):
+
+| | | best target | 10th pct | median |
+|---|---|---|---|---|
+| `earth_surface` | plain | 297,108× | 3,298,409× | 17,939,903× |
+| | beneficiated | 151,951× | 2,428,826× | 14,485,919× |
+| `leo` | plain | 323× | 1,341× | 4,055× |
+| | beneficiated | 249× | 649× | 1,913× |
+| `cislunar` | plain | **51×** | 490× | 1,221× |
+| | beneficiated | **51×** | 232× | 594× |
+
+Read the columns separately. Beneficiation roughly **halves** the gap for a
+typical target (median 1,221× → 594× at cislunar), but on the single best
+target the optimiser declines to concentrate — that body is already
+water-rich enough that grinding more rock costs more than it returns.
+
+Still **zero viable missions** in every configuration. Destination choice
+alone buys ~5,800×; beneficiation buys ~2× more on the fleet. A real 51× gap
+remains, and that is the honest state of the model, not a bug to be tuned
+away.
 
 ## Mission model
 
@@ -307,13 +451,32 @@ Earth launch → LEO → outbound burn → asteroid rendezvous
 
 Stated plainly so results aren't over-read:
 
-- **Nothing is viable.** On a default run, zero asteroids turn a profit, and
-  that is the honest answer rather than a bug. Fixed costs (development NRE,
-  autonomy NRE, rig, capsule, contingency, WACC) run to billions, while the
-  best bulk material is worth a few dollars per kg. There is no "don't fly"
-  option, so the ranking is really *which target loses least* — and since
-  return material costs more than it earns, the optimiser converges on the
-  smallest mission that still closes.
+- **Nothing is viable, in any configuration.** Zero asteroids turn a profit on
+  a default run, and that is the honest answer rather than a bug. Fixed costs
+  (development NRE, autonomy NRE, rig, capsule, contingency, WACC) run to
+  billions, while the best bulk material is worth a few dollars per kg. The
+  best case the model can currently reach — cislunar delivery plus
+  beneficiation — still comes in ~36× short. There is no "don't fly" option,
+  so the ranking is really *which target loses least*.
+- **Rank by `total_cost_usd / gross_value_usd`, not `profit_usd`.** Revenue is
+  orders of magnitude below cost in most configurations, so `profit_usd`
+  reduces to `-total_cost_usd` and `top_profitable()` becomes a pure cost
+  ranking — a Δv table wearing a profit label.
+- **No learning curve on recurring hardware.** The rig costs $300k/kg at unit
+  1 and unit 500 alike. Only NRE amortises. An 85% Wright curve would put
+  unit 100 near $102k/kg, and rig hardware is ~28% of mission cost.
+- **No market saturation.** `nre_amortization_missions` spreads development
+  across a fleet for free, but ~600 M-type missions a year would double world
+  platinum supply and collapse the price that justified them. The model has
+  no demand curve, so that lever has no natural stopping point.
+- **Cheap launch does not rescue this.** Launch is ~2.3% of a mission. Zeroing
+  it entirely improves the ratio by 2.3%.
+- **In-space utility fractions are judgements.** `IN_SPACE_UTILITY` decides how
+  much of the launch-cost-avoided each commodity captures, and no market
+  exists to calibrate it against. It is the softest number in the pipeline.
+- **In-space manufacturing is not costed.** Raw Fe-Ni is not a pressure
+  vessel. The 0.70 utility factor is a stand-in for a refining and forming
+  plant that appears nowhere in the cost model.
 - **Trip time for low-thrust is not modelled.** Electric propulsion carries a
   Δv penalty but not the months-to-years a spiral actually adds.
 - **The mining rate has no flight heritage.** No one has sustained-mined an
@@ -330,7 +493,15 @@ Stated plainly so results aren't over-read:
   this model produces (grams of PGM), that never binds.
 - **Composition is uniform.** Each asteroid is its taxonomy class's mean
   composition all the way through — no core/mantle structure, no regolith
-  versus bedrock, no ore grade.
+  versus bedrock, no ore grade. Beneficiation concentrates *against that mean*,
+  so the purity bound is the class's best phase rather than a real assay.
+- **Beneficiation has no flight heritage either.** Magnetic and electrostatic
+  separation in microgravity, on a rotating body, with no water and no
+  gravity-fed classification, has never been demonstrated. The 0.90 recovery
+  is borrowed from terrestrial flotation circuits.
+- **Concentrate density is approximated by bulk density** in the volume cap. A
+  metal concentrate is denser than the parent body, so the volume constraint
+  is conservative.
 - **C-type "ice" is bound water** in phyllosilicates, not accessible ice. The
   energy to liberate it is not modelled.
 

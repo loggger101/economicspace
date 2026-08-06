@@ -165,7 +165,7 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # ─────────────────────────────────────────────────────────────────────────────
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.5.0)
+"""Master Asteroid Profitability Pipeline (1.6.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -174,18 +174,25 @@ run top-to-bottom — the orchestrator at the bottom executes everything.
     Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.0.8)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
-    Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.2.0)
+    Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.3.0)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
-    Stage 3  →  Transportation Data     (modules/transportation.py 1.3.0)
+                + destination pricing for EVERY commodity
+    Stage 3  →  Transportation Data     (modules/transportation.py 1.4.0)
                 Launch vehicles + propellants + Δv segments + ops costs
                 (UNCREWED autonomous mining — no crew costs)
-    Stage 4  →  Profitability Calc      (modules/calc.py 1.4.0)
+    Stage 4  →  Profitability Calc      (modules/calc.py 1.5.0)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2×, V-type 0.2×)
+                + in-space delivery architecture (earth_surface/leo/cislunar)
 
 Mission profile: UNCREWED autonomous mining spacecraft throughout (no
 crew costs, no life-support overhead).
+
+DELIVERY DESTINATION — set MINERAL_CONFIG.delivery_destination and
+CALC_CONFIG.delivery_destination TO THE SAME VALUE.  Stage 2 decides what a
+kilogram sells for; Stage 4 decides what it costs to put it there, and the
+answer is only meaningful when they agree.  Stage 4 checks and warns.
 
 Output tree (under MASTER_CONFIG.output_dir):
     asteroid_catalog.csv               ← Stage 1 (~30-40 MB at 50k rows)
@@ -280,8 +287,27 @@ class MasterConfig:
 
         MASTER_CONFIG.catalog.jpl_limit = 10_000
         MASTER_CONFIG.calc.use_isru_return_propellant = True
+
+    One exception: set the delivery destination HERE, not on a sub-config —
+
+        MASTER_CONFIG.delivery_destination = "cislunar"
+
+    Stage 2 and Stage 4 each carry a delivery_destination, and they must
+    agree: Stage 2 decides what a kilogram sells for, Stage 4 decides the
+    architecture that puts it there.  Setting them apart prices the cargo at
+    a depot while paying to land it in Utah.  This property writes both.
     """
     output_dir: str = _DEFAULT_OUTPUT_DIR
+
+    @property
+    def delivery_destination(self) -> str:
+        """Where the mined material is sold — 'earth_surface', 'leo', 'cislunar'."""
+        return self.mineral.delivery_destination
+
+    @delivery_destination.setter
+    def delivery_destination(self, value: str) -> None:
+        self.mineral.delivery_destination = value
+        self.calc.delivery_destination    = value
 
     @property
     def catalog(self):   return CATALOG_CONFIG
@@ -293,12 +319,17 @@ class MasterConfig:
     def calc(self):      return CALC_CONFIG
 
     def apply(self):
-        """Push master output_dir to every sub-config, create the dir tree."""
+        """Push master output_dir to every sub-config, create the dir tree.
+
+        Also re-asserts the delivery destination across Stage 2 and Stage 4,
+        so a sub-config edited directly cannot leave the two disagreeing.
+        """
         self.catalog.output_dir   = self.output_dir
         self.mineral.output_dir   = self.output_dir
         self.transport.output_dir = self.output_dir
         self.calc.input_dir       = self.output_dir
         self.calc.output_dir      = self.output_dir
+        self.delivery_destination = self.mineral.delivery_destination
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, self.transport.subdir),
                     exist_ok=True)
@@ -313,6 +344,7 @@ print("  ⚙️   MASTER CONFIG READY")
 print(f"      Pipeline output  : {MASTER_CONFIG.output_dir}")
 print(f"      JPL limit        : {MASTER_CONFIG.catalog.jpl_limit:,} asteroids")
 print(f"      Eval row cap     : {MASTER_CONFIG.calc.eval_row_cap:,}")
+print(f"      Delivery dest    : {MASTER_CONFIG.delivery_destination}")
 print(f"      ISRU return      : {MASTER_CONFIG.calc.use_isru_return_propellant}")
 print(f"      NRE amortise     : over {MASTER_CONFIG.calc.nre_amortization_missions} mission(s)")
 print(f"      Contingency      : {MASTER_CONFIG.calc.contingency_fraction:.0%}")
@@ -338,7 +370,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.5.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.6.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
