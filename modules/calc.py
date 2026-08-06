@@ -305,6 +305,14 @@ class CalcConfig:
     # already in the cost model replaces hardware on failure, not revenue, so
     # there is no double count.
     model_reliability:         bool  = True
+    # RELIABILITY GROWTH.  The mining chain learns: a programme's second rig
+    # is not as likely to jam as its first.  p_mining becomes the FLEET
+    # AVERAGE over nre_amortization_missions under the Duane model, capped at
+    # a mature ceiling.  Exactly the first-of-kind figure at N = 1.
+    # Launch and cruise reliability deliberately do NOT grow — launch vehicles
+    # are already mature, and MTBF is a duration exposure, not a heritage
+    # question.
+    model_reliability_growth:  bool  = True
 
     # CRYOGENIC BOIL-OFF.  Return propellant sits in the tank from launch
     # until the departure burn — years, not hours.  Hydrolox loses ~0.05%/day
@@ -743,7 +751,31 @@ class CalcConfig:
     #         New output columns: p_success, boiloff_factor,
     #         dv_ret_effective_m_s, rig_terminal_value_usd,
     #         missions_sharing_rig.
-    pipeline_version: str = "1.8.0"
+    # 1.9.0 — RELIABILITY GROWTH.  p_mining was pinned at its first-of-kind
+    #         0.75 however many missions a programme flew, which was the one
+    #         place the model was pessimistic rather than optimistic: a fleet
+    #         that has flown ten rigs has found and fixed failure modes the
+    #         first one discovered the hard way.
+    #         Duane / AMSAA: q(n) = q_first * n^(-alpha), alpha = 0.30 from
+    #         MIL-HDBK-189's active-growth band, capped at a 0.95 mature
+    #         ceiling because growth is asymptotic -- no heritage makes a
+    #         machine grinding rock in vacuum certain to work.
+    #         Reported as the MEAN over missions 1..N, not the terminal value.
+    #         That is what the rest of the cost model needs: NRE and the rig
+    #         are amortised across the whole programme, so per-mission
+    #         expected revenue must use the programme average.  Quoting the
+    #         last mission's reliability would credit every mission with
+    #         heritage only the last one has.
+    #             N=1   p_mining 0.750  (unchanged -- single-mission runs
+    #                                    are bit-identical to v1.8.0)
+    #             N=10           0.838
+    #             N=100          0.912
+    #         Launch and cruise reliability deliberately do not grow: launch
+    #         vehicles are already mature, and MTBF is a duration exposure
+    #         rather than a heritage question.
+    #         New config: model_reliability_growth.
+    #         New output column: p_mining.
+    pipeline_version: str = "1.9.0"
 
 
 CONFIG = CalcConfig()
@@ -2034,6 +2066,41 @@ def max_return_payload_kg(
 _OPS_CACHE: Tuple[Optional[pd.DataFrame], Dict[str, Optional[float]]] = (None, {})
 
 
+def mining_success_probability(
+    n_missions: int,
+    p_first:    float,
+    alpha:      float,
+    p_mature:   float,
+) -> float:
+    """Fleet-average probability the mining chain works, over `n_missions`.
+
+    Reliability grows with flight heritage: failure modes get found and
+    designed out.  The Duane / AMSAA model has failure probability fall as a
+    power law in cumulative production,
+
+        q(n) = q_first · n^(−α),    p(n) = 1 − q(n)
+
+    capped at `p_mature`, because growth is asymptotic — no amount of heritage
+    makes a machine that grinds rock in vacuum certain to work.
+
+    Returns the MEAN over missions 1..N, not the terminal value.  That is the
+    figure the rest of the cost model needs: NRE and the rig are amortised
+    across the whole programme, so the per-mission expected revenue has to be
+    the programme average.  Quoting the last mission's reliability would
+    credit every mission with heritage that only the last one has.
+
+    Exactly `p_first` at N = 1, so a single-mission run is unaffected.
+    """
+    n = max(1, int(n_missions))
+    q_first = max(0.0, 1.0 - p_first)
+    q_floor = max(0.0, 1.0 - p_mature)
+    total = 0.0
+    for k in range(1, n + 1):
+        q = q_first * (k ** -alpha) if alpha > 0 else q_first
+        total += 1.0 - max(q, q_floor)
+    return total / n
+
+
 def learning_curve_factor(n_units: int, rate: float) -> float:
     """Cumulative-average cost multiplier for building `n_units` (Wright's law).
 
@@ -2739,9 +2806,23 @@ def _evaluate_combo_at_ratio(
     if config.model_reliability:
         p_launch = _ops_value(ops_df, "Launch vehicle reliability", default=0.97)
         mtbf_yr  = _ops_value(ops_df, "Spacecraft mean time between failures", default=30.0)
-        p_mining = _ops_value(
+        # v1.9.0: the mining chain LEARNS.  A programme's second rig is not as
+        # likely to jam as its first, so p_mining is the fleet average over
+        # nre_amortization_missions rather than the first-of-kind figure held
+        # flat forever.  Launch and cruise reliability do not grow here —
+        # launch vehicles are already mature, and MTBF is a duration exposure
+        # rather than a heritage question.
+        p_first = _ops_value(
             ops_df, "Mining system first-of-kind success probability", default=0.75,
         )
+        if config.model_reliability_growth:
+            p_mining = mining_success_probability(
+                config.nre_amortization_missions, p_first,
+                _ops_value(ops_df, "Mining reliability growth exponent", default=0.30),
+                _ops_value(ops_df, "Mining system mature success probability", default=0.95),
+            )
+        else:
+            p_mining = p_first
         p_cruise = math.exp(-mission_duration_yr / mtbf_yr) if mtbf_yr > 0 else 1.0
         p_success = max(0.0, min(1.0, p_launch * p_cruise * p_mining))
         gross_value *= p_success
@@ -2801,6 +2882,7 @@ def _evaluate_combo_at_ratio(
         "water_liberated_kg":       water_kg,
         "saturation_multiplier":    saturation_mult,
         "p_success":                p_success,
+        "p_mining":                 p_mining if config.model_reliability else 1.0,
         "boiloff_factor":           boiloff_factor,
         "dv_ret_effective_m_s":     dv_ret_eff,
         "learning_curve_factor":    learning_curve_factor(
