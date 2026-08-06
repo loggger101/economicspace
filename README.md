@@ -28,9 +28,9 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.0.8 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
-| 2 | `modules/mineral_value.py` | 1.5.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity |
-| 3 | `modules/transportation.py` | 1.6.0 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
-| 4 | `modules/calc.py` | 1.7.0 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
+| 2 | `modules/mineral_value.py` | 1.6.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity |
+| 3 | `modules/transportation.py` | 1.7.0 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
+| 4 | `modules/calc.py` | 1.8.0 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 
@@ -453,11 +453,11 @@ would be breakeven):
 
 | | plain (best / median) | beneficiated (best / median) |
 |---|---|---|
-| `earth_surface` | 151,266× / 21,883,237× | 151,266× / 17,616,717× |
-| `leo` | 262× / 5,145× | 177× / 2,595× |
-| `cislunar` | 62× / 2,973× | 62× / 1,397× |
-| `lunar_surface` | 133× / 2,074× | 71× / 951× |
-| `mars_surface` | 25× / 442× | **14× / 110×** |
+| `earth_surface` | 258,906× / 66,406,811× | 216,579× / 59,820,323× |
+| `leo` | 505× / 17,740× | 329× / 11,612× |
+| `cislunar` | 285× / 5,537× | 162× / 2,700× |
+| `lunar_surface` | 162× / 1,042× | 83× / 618× |
+| `mars_surface` | 79× / 1,475× | **39× / 390×** |
 
 Beneficiation roughly **halves** the gap for a typical target. At cislunar it
 declines to concentrate on the single best body — already water-rich enough
@@ -466,12 +466,19 @@ that grinding more rock costs more than it returns.
 Still **zero viable missions** anywhere, but Mars closes the gap by ~4 orders
 of magnitude from the default and lands within a factor of ~14.
 
-These figures are ~6× worse than the v1.6.0 release, and deliberately so —
-v1.7.0 closed five modelling gaps that all flattered the answer. The old
-headline of 2.2× at Mars was a 1,500 s Hall thruster flying instantly on
-power it never carried. With low-thrust trip time modelled, electric
-propulsion falls from 12% of winning combos to 2%, and Mars settles at 14×.
-See [What the model now charges for](#what-the-model-now-charges-for).
+The trend across releases is the point. Mars, beneficiated, has gone
+2.2× → 14× → **39×** as modelling gaps closed, and every step was a
+correction rather than a regression:
+
+| Release | Mars | What it started charging for |
+|---|---|---|
+| v1.6.0 | 2.2× | — |
+| v1.7.0 | 14× | low-thrust trip time, launch windows, bound-water energy, learning curve, market saturation |
+| v1.8.0 | **39×** | rig service life, mission reliability, cryogenic boil-off, in-space manufacturing |
+
+If a change suddenly improves these by an order of magnitude, suspect it has
+switched one of the nine models off rather than found something. See
+[What the model charges for](#what-the-model-charges-for).
 
 ## Mission model
 
@@ -504,11 +511,8 @@ Stated plainly so results aren't over-read:
 - **In-space utility fractions are judgements.** `IN_SPACE_UTILITY` decides how
   much of the launch-cost-avoided each commodity captures, and no market
   exists to calibrate it against. It is the softest number in the pipeline.
-- **In-space manufacturing is not costed.** Raw Fe-Ni is not a pressure
-  vessel. The 0.70 utility factor is a stand-in for a refining and forming
-  plant that appears nowhere in the cost model.
 - **Low-thrust trajectories are sized, not optimised.** Trip time and power
-  are now modelled (see [What the model now charges for](#what-the-model-now-charges-for)),
+  are now modelled (see [What the model now charges for](#what-the-model-charges-for)),
   but the EP stage is sized to a fixed target thrusting time rather than having
   its trajectory jointly optimised against payload and arrival date.
 - **The mining rate has no flight heritage.** No one has sustained-mined an
@@ -532,11 +536,20 @@ Stated plainly so results aren't over-read:
 - **Concentrate density is approximated by bulk density** in the volume cap. A
   metal concentrate is denser than the parent body, so the volume constraint
   is conservative.
+- **Reliability is not learned.** `p_mining` stays at its first-of-kind 0.75
+  however many missions a programme flies, though a fleet would gain heritage.
+  Raise it by hand alongside `nre_amortization_missions`.
+- **The refinery is priced but not flown.** In-space manufacturing is charged
+  per kg against the material's value; the plant's mass is not added to any
+  mission's rocket equation, because it belongs to the buyer at the depot
+  rather than to the mining mission.
+- **Boil-off hold time is estimated, not integrated.** It uses the Δv-derived
+  cruise plus the stay, not an actual thermal model over the real trajectory.
 - **C-type "ice" is bound water** in phyllosilicates, not accessible ice. The
   energy to liberate it is now charged (2,500 Wh/kg), but the extraction
   hardware — kilns, condensers, cold traps — is not sized or costed.
 
-## What the model now charges for
+## What the model charges for
 
 v1.7.0 closed five gaps that all pushed the answer the same way — towards
 optimism. Each defaults ON; set the flag to `False` to isolate its effect.
@@ -597,14 +610,77 @@ World production is USGS; the in-space absorption ceilings (LEO 500 t/yr,
 cislunar 100 t, lunar surface 50 t, Mars 20 t) are **judgement, not
 measurement** — no such market exists.
 
+### Added in v1.8.0
+
+**Rig service life and terminal value** (`model_rig_service_life`). The rig
+was amortised across `nre_amortization_missions` with no upper bound, so a
+programme could spread one machine across 100 missions of two years each —
+200 years of duty from something chewing rock. A 15-year life now *caps* the
+amortisation, and the cap makes long-stay programmes markedly **more**
+expensive, not less:
+
+| Stay per mission | Missions one rig can serve | Charge vs. old flat ÷100 |
+|---|---|---|
+| 0.25 yr | 60 | 1.7× |
+| 1.0 yr | 15 | 6.7× |
+| 2.0 yr | 7 | **13.8×** |
+
+Life remaining when the programme ends is credited at the salvage fraction
+(0.50) — but only when `nre_amortization_missions > 1`. A rig parked at an
+asteroid nobody revisits is stranded, not an asset, so a single-mission run
+is unaffected.
+
+**Mission reliability** (`model_reliability`). Revenue was certain. Expected
+revenue is now `p_launch(0.97) × exp(−T/MTBF)(30 yr) × p_mining(0.75)` —
+about 0.62 for a five-year mission. **Costs are still charged in full**,
+which is both conservative and correct: you spend the money whether or not it
+works. Launch insurance in the cost model replaces hardware, not revenue, so
+there is no double count.
+
+`p_mining` is the honest one. Nobody has ever sustained-mined an asteroid,
+and regolith-contact mechanisms are precisely where deep-space missions fail:
+OSIRIS-REx's sample head jammed open, Hayabusa's first sampler never fired,
+Philae's harpoons did not deploy.
+
+**Cryogenic boil-off** (`model_propellant_boiloff`). Return propellant sits
+in the tank from launch until the departure burn — years, not hours. Loading
+per kg actually burned:
+
+| Hold | hydrolox (0.05%/day) | methalox (0.012%) | storable (0%) |
+|---|---|---|---|
+| 1 yr | 1.20× | 1.04× | 1.00× |
+| 5 yr | **2.49×** | 1.25× | 1.00× |
+| 8 yr | 4.31× | 1.42× | 1.00× |
+
+Folded into an effective return Δv, which leaves the closed-form cascade
+exact: since `m_return_prop` scales with `(R−1)`, inflating that term by `k`
+is `R_eff = 1 + (R−1)k`. ISRU return propellant is exempt — it is
+manufactured at the asteroid on departure. Without this, hydrolox won long
+missions it could not physically have stored propellant for.
+
+**In-space manufacturing** (Stage 2). Raw Fe-Ni is not a pressure vessel, and
+the gap used to hide inside the 0.70 utility factor — the refinery was
+assumed into existence and never costed. Now explicit, ~$230/kg for metals:
+
+- **Energy** at **$6.08/kWh** — the capital cost of a kilowatt-hour in deep
+  space ($800/W-EOL over a 15-year life), roughly 100× terrestrial industrial
+  power, which is why in-space processing is not obviously free. Metals take
+  5 kWh/kg; terrestrial electric-arc steelmaking is 4–5 kWh/kg and there is
+  no carbothermic shortcut in vacuum.
+- **Plant** at **$200/kg refined** — $300k/kg of deep-space hardware at
+  100 kg/yr throughput per kg of plant over 15 years.
+
+Deducted from the *used in space* route only; material shipped down is
+refined on Earth. The utility factor now means only what it says.
+
 ### Net effect on a default earth_surface run
 
-| | v1.6.0 | v1.7.0 |
-|---|---|---|
-| Electric share of winning combos | 12% | **2%** |
-| Median mission duration | 3.49 yr | 4.12 yr (+18%) |
-| Median total cost | $2.59 B | $2.77 B (+7.3%) |
-| Rows with no feasible mission | 0 | 47 |
+| | v1.6.0 | v1.7.0 | v1.8.0 |
+|---|---|---|---|
+| Electric share of winning combos | 12% | 2% | varies by destination |
+| Median mission duration | 3.49 yr | 4.12 yr | 4.1 yr |
+| Expected revenue multiplier | 1.00 | 1.00 | **0.58** (reliability) |
+| Rows with no feasible mission | 0 | 47 | 85 |
 
 ## Data sources
 

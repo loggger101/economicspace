@@ -62,8 +62,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.0.8`, mineral_value `1.5.0`, transportation `1.6.0`,
-calc `1.7.0`, master `1.8.0` (the master version is a literal in
+Current: catalog `1.0.8`, mineral_value `1.6.0`, transportation `1.7.0`,
+calc `1.8.0`, master `1.9.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
 ## Model assumptions that are load-bearing
@@ -184,7 +184,7 @@ trajectory/payload optimisation. Do not manufacture viability by editing
 `IN_SPACE_UTILITY` or the in-space demand ceilings -- both are judgement
 tables and both are load-bearing.
 
-## The five things v1.7.0 stopped giving away
+## The nine things the model stopped giving away
 
 Each defaults ON and each moved every number. They are corrections, not
 options; the flags exist to isolate effects, not to be left off.
@@ -218,6 +218,32 @@ it `nre_amortization_missions` had no stopping point: you could amortise
 development across a fleet whose output would have destroyed the price that
 justified it. The in-space absorption ceilings are judgement, not
 measurement.
+
+**Rig service life caps amortisation** (v1.8.0). A 15-year rig cannot serve
+100 missions of 2 years each. `missions_sharing_rig` is capped at
+`life / stay`, and at long stays this makes the rig 13.8x MORE expensive per
+mission than the old flat division, not less. Terminal value is credited only
+when nre_amortization_missions > 1 -- a rig nobody returns to is stranded, not
+an asset, which is what keeps a single-mission run unchanged.
+
+**Mission reliability multiplies REVENUE ONLY** (v1.8.0). Costs are charged in
+full because you spend the money either way. Launch insurance replaces
+hardware, not revenue, so it is not a double count -- do not "fix" that.
+p_mining = 0.75 is first-of-kind and does not learn; raise it by hand
+alongside nre_amortization_missions.
+
+**Cryogenic boil-off** (v1.8.0). Return propellant is held for years, so
+hydrolox loads 2.5x what it burns on a 5-year mission. Folded into an
+effective return Delta-v -- since m_return_prop scales with (R-1), inflating
+that term by k is exactly R_eff = 1 + (R-1)k, which leaves the closed-form
+cascade valid. ISRU is exempt. Without it hydrolox won missions it could not
+have stored propellant for.
+
+**In-space manufacturing is costed, not assumed** (v1.8.0, Module 2). ~$230/kg
+for metals: energy at $6.08/kWh (the capital cost of a Watt in deep space,
+~100x terrestrial) plus $200/kg of amortised refinery. It used to hide inside
+the 0.70 utility factor. The plant's MASS is deliberately not in any mission's
+rocket equation -- it belongs to the buyer at the depot, not to the miner.
 
 Rank by `total_cost_usd / gross_value_usd`, not by `profit_usd`. Revenue is
 orders of magnitude below cost in most configurations, which makes
