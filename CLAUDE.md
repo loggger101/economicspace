@@ -138,6 +138,57 @@ routing around an outage.
 `metals.dev` defaults to the key `"DEMO"`, which makes the fetcher skip
 entirely. That is intentional; the demo endpoint is heavily rate-limited.
 
+## Google Drive makes the tree look dirty — run the hooks
+
+Symptom: `git status` reports files as modified, `git diff` shows nothing,
+and every blob hash matches. Then `git checkout` or `git merge --ff-only`
+aborts with *"your local changes would be overwritten"*, so a merged PR
+silently fails to land locally. This bit twice before it was diagnosed.
+
+Cause: Drive File Stream reports a **placeholder size of 16384 bytes** when
+git stats a file right after writing it during checkout. Git caches that in
+the index stat:
+
+```
+git ls-files --debug master.py   ->  size: 16384
+ls -l master.py                  ->  328335
+```
+
+Every later `status` sees the mismatch and reports modified *without reading
+the file* — a differing size is normally conclusive proof of a change. That is
+exactly why `diff` and `status` disagree, and why
+`git update-index --refresh` refuses to fix it.
+
+It is **not** a stat-metadata problem. `core.checkStat=minimal`,
+`core.trustctime=false` and `core.fscache=false` were each tried and none of
+them help; don't re-add them.
+
+Fix: `.githooks/drive-restat.sh` re-stats entries whose content already
+matches the index, wired to `post-checkout`, `post-merge` and `post-rewrite`.
+A fresh clone must opt in once:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Run it by hand any time the tree looks wrong:
+
+```bash
+sh .githooks/drive-restat.sh
+```
+
+It only touches files whose hash already equals the index blob, so it cannot
+stage, hide, or discard a real edit. If things are badly tangled, the
+heavier reset is to delete the index and rebuild it — safe when the working
+tree already matches HEAD, and it discards staging only:
+
+```bash
+rm -f "$(git rev-parse --git-dir)/index" && git reset
+```
+
+A checkout that moves *back* to a commit predating the hooks deletes them
+mid-checkout, so they can't run — repair by hand afterwards.
+
 ## Environment
 
 Windows, Python 3.13, invoked as `py` (a bare `python` hits the Microsoft Store
