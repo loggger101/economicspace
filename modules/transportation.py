@@ -303,7 +303,16 @@ class TransportConfig:
     #         the successes; the full regolith-contact record is 11/13.  Notes
     #         now list the whole tally, both ways of counting Hayabusa, and
     #         why sustained-operation risk is not double-counted here.
-    pipeline_version: str = "1.8.1"
+    # 1.8.2 — new ops row: "Electric propulsion system recurring cost",
+    #         $1.5M per kW of thruster + PPU (NEXT-C anchored, range
+    #         $0.5-3M/kW).  Module 4 v1.7.0 put the electric stage's array and
+    #         thruster into the ROCKET EQUATION and never into any cost line,
+    #         so a 309 kW / 14-tonne EP system was free — and once Module 4
+    #         v1.10.0 stopped selecting missions by "cheapest", electric
+    #         propulsion won everywhere on hardware nobody had to buy.  The
+    #         array is priced off the existing $800/W power-system row; this
+    #         row covers only the propulsion train.  Adds one category (35).
+    pipeline_version: str = "1.8.2"
     preview_rows:     int = 15
 
 
@@ -1180,6 +1189,36 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
                  "and scales 1/r^2.  NASA NEXT-C: 7 kW thruster ~13.5 kg + PPU "
                  "~34 kg ≈ 7 kg/kW.  Gateway AEPS: 12.5 kW Hall, similar class. "
                  "8 kg/kW allows for feed system and structure.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Electric propulsion system recurring cost",
+        "unit":             "USD per kW of input electrical power (thruster + PPU)",
+        "value":            1_500_000,
+        "range_low":          500_000,
+        "range_high":       3_000_000,
+        "notes": "v1.8.2.  Recurring cost of the electric PROPULSION train — "
+                 "thruster, power-processing unit, gimbals, feed system, "
+                 "thermal.  NOT the solar array, which is priced separately "
+                 "off the 'Power system (solar + battery)' row at $/W and is "
+                 "far cheaper per kilogram.\n"
+                 "Anchor: a NASA NEXT-C flight string is a 7 kW gridded-ion "
+                 "thruster plus PPU at roughly 47 kg, procured in the "
+                 "$10-15M-per-string class as a flight article — call it "
+                 "$1.5-2M/kW.  High-power Hall systems buy down from there: "
+                 "Psyche's SPT-140 strings and Gateway's 12.5 kW AEPS are "
+                 "cheaper per kilowatt than NEXT-C, which is why the range "
+                 "runs down to $500k/kW and why the figure should be expected "
+                 "to fall if multi-hundred-kW deep-space EP is ever built.\n"
+                 "SOFT: no multi-hundred-kW deep-space electric stage has "
+                 "flown, and this pipeline sizes some missions at 300 kW — "
+                 "six times the largest article yet built.  Extrapolating a "
+                 "per-kW price that far is a judgement, not a quote.  It is "
+                 "here because the alternative was worse: before v1.8.2 the "
+                 "electric stage entered the rocket equation as mass and "
+                 "appeared in NO cost line at all, so a 14-tonne, 309 kW "
+                 "propulsion system was free and electric propulsion won on "
+                 "hardware nobody had to buy.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
