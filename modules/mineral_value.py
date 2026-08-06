@@ -147,9 +147,22 @@ class MineralValueConfig:
     #                     worth nothing, because no orbital market for them
     #                     exists.  Favours water- and metal-rich bulk.
     #   "cislunar"      — sold at a lunar-vicinity (NRHO) depot, worth the
-    #                     larger launch cost avoided ($10,809/kg, derived).
-    #                     Also the CHEAPEST of the three to reach from an
-    #                     asteroid — see Module 4's return-Δv model.
+    #                     larger launch cost avoided ($10,810/kg, derived).
+    #                     Also the CHEAPEST of the orbital options to reach
+    #                     from an asteroid — see Module 4's return-Δv model.
+    #   "lunar_surface" — sold at a Moon base.  $21,210/kg: nearest
+    #                     destination, but airless, so all 5,920 m/s from LEO
+    #                     is propulsive.
+    #   "mars_surface"  — sold at a Mars base.  $45,105/kg: far in Δv, but the
+    #                     atmosphere brakes most of the arrival for free.
+    #
+    # ⚠️  The two surface figures are MARGINAL-TRANSPORT LOWER BOUNDS.  They
+    # price the propellant and stages needed to move a kilogram, on a reusable
+    # Falcon 9 LEO price, with no first-of-kind development, no programme
+    # overhead and no launch-cadence limit.  Real delivered cost today is far
+    # higher — CLPS lunar landers run on the order of $1M/kg for ~100 kg
+    # payloads.  Treat these as "what it could cost at industrial scale", not
+    # "what it costs now".
     #
     # v1.3.0: this used to reprice water only.  It now reprices everything,
     # which is the consistent form of the same correction — see
@@ -293,7 +306,37 @@ class MineralValueConfig:
     #           gold        $138,882   -> $113,472/ $111,565 (shipped down)
     #         New output columns: terrestrial_price_usd_per_kg,
     #         in_space_utility, downleg_cost_usd_per_kg, value_route.
-    pipeline_version: str = "1.3.0"
+    # 1.4.0 — SURFACE DESTINATIONS: lunar_surface and mars_surface.  Paired
+    #         with Module 3 v1.5.0 and Module 4 v1.6.0.  Prices for the three
+    #         existing destinations are UNCHANGED.
+    #         • delivered_cost_usd_per_kg now walks a CHAIN OF LEGS
+    #           (_DELIVERY_LEGS) backwards from the payload instead of taking
+    #           one lumped Δv.  Staging is worth roughly 2x on a lunar
+    #           landing — a single stage flying the whole 5,920 m/s needs
+    #           10.96 kg in LEO per kg landed against 4.99 kg for the
+    #           TLI/LOI-tug + lander pair that would actually be flown — so
+    #           lumping it would have overstated the Moon by 2x.
+    #         • New "edl" leg type for atmospheric arrival, carrying a
+    #           surviving-mass fraction rather than a Δv.  Mars uses 0.30,
+    #           measured from MSL (3,257 kg entry -> 899 kg rover, 27.6%) and
+    #           Perseverance (3,440 -> 1,025, 29.8%).
+    #         • New _LANDER_DRY_MASS_FRAC 0.20 — Apollo LM descent stage flew
+    #           2,134 kg dry on 8,200 kg propellant.  A lander is structurally
+    #           much heavier than a cryo tug for the same propellant load.
+    #         Delivered cost, and the mass that has to reach LEO for it:
+    #             leo             1.00 kg/kg      $4,253/kg
+    #             cislunar        2.54 kg/kg     $10,810/kg
+    #             lunar_surface   4.99 kg/kg     $21,210/kg
+    #             mars_surface   10.61 kg/kg     $45,105/kg
+    #         Downlegs (shipping back to the terrestrial market) rise the same
+    #         way: $25,410 from LEO, $27,317 from NRHO, $44,939 from the Moon,
+    #         $96,394 from Mars.  The last exceeds the terrestrial price of
+    #         platinum, so platinum delivered to a Mars base is worth exactly
+    #         nothing — which is the correct answer, not a bug.
+    #         ⚠️  Both surface figures are marginal-transport LOWER BOUNDS —
+    #         no NRE, no programme overhead, no cadence limit.  CLPS lunar
+    #         landers really cost ~$1M/kg today at ~100 kg scale.
+    pipeline_version: str = "1.4.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows: int = 20
@@ -415,49 +458,104 @@ G0_M_S2 = 9.806_65                 # standard gravity, exact by definition
 # price derived from it is a LOWER bound on the launch cost avoided.
 _LEO_USD_PER_KG = 4_253.0
 
-# Δv above LEO for each destination — Module 3 DELTA_V_REFERENCE.
-#   cislunar = "LEO → cislunar NRHO depot" = TLI (3,150) + NRHO insertion (450)
-_DV_ABOVE_LEO_M_S = {"earth_surface": None, "leo": 0.0, "cislunar": 3_600.0}
-
-# The tug that would have carried the payload up if you had launched it.
+# The stages that would have carried the payload up if you had launched it.
 # Isp 465 s = hydrolox upper stage (Module 3 PROPELLANTS: LH2/LOX, 450-465 s
 # vacuum).  Dry-mass fraction 0.10 is mid-range for a cryogenic upper stage
 # (Centaur V ~0.08, DCSS ~0.11) — stage dry mass / (dry + propellant).
 _TUG_ISP_S            = 465.0
 _TUG_DRY_MASS_FRAC    = 0.10
+# A LANDER is structurally much heavier than a tug for the same propellant
+# load: throttleable engines, landing legs, terminal-guidance sensors.
+# Apollo LM descent stage flew 2,134 kg dry on 8,200 kg of propellant = 0.21.
+_LANDER_DRY_MASS_FRAC = 0.20
+
+# Fraction of Mars ENTRY mass that survives to be useful payload on the
+# surface.  Aeroshell, backshell, parachute and descent stage are all
+# discarded.  Measured, not assumed:
+#     MSL           entry 3,257 kg  ->  rover   899 kg  = 27.6%
+#     Perseverance  entry 3,440 kg  ->  rover 1,025 kg  = 29.8%
+# 0.30 takes the better of the two and is generous to Mars — larger entry
+# vehicles should scale better than MSL's sky-crane, but nothing that size
+# has flown.
+_MARS_LANDED_MASS_FRACTION = 0.30
+
+# ─── DELIVERY LEG CHAINS ─────────────────────────────────────────────────────
+# Each destination is a SEQUENCE of legs above LEO, flown by real stages, and
+# the mass ratios chain.  Modelling it leg-by-leg rather than as one big Δv
+# matters: staging is worth a great deal, and a single-stage lunar lander
+# burning 5,920 m/s would come out roughly twice as expensive as the two-stage
+# chain that would actually be flown.
+#
+# Every Δv here appears in Module 3's DELTA_V_REFERENCE.
+#   ("burn", Δv m/s, Isp s, dry fraction)  — a propulsive leg
+#   ("edl",  surviving mass fraction)      — atmospheric entry, descent, landing
+_DELIVERY_LEGS: Dict[str, Optional[List[tuple]]] = {
+    "earth_surface": None,                       # already at the market
+    "leo": [],                                   # nothing above LEO
+    "cislunar": [
+        ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TLI + NRHO insertion
+    ],
+    "lunar_surface": [
+        ("burn", 4_050.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TLI + LOI
+        ("burn", 1_870.0, _TUG_ISP_S, _LANDER_DRY_MASS_FRAC),   # powered descent
+    ],
+    "mars_surface": [
+        ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TMI
+        ("edl",  _MARS_LANDED_MASS_FRACTION),                   # aeroentry + landing
+        ("burn",   800.0, _TUG_ISP_S, _LANDER_DRY_MASS_FRAC),   # retropropulsion
+    ],
+}
 
 
-def delivered_cost_usd_per_kg(
-    dv_above_leo_m_s: float,
-    leo_usd_per_kg:   float = _LEO_USD_PER_KG,
-    isp_s:            float = _TUG_ISP_S,
-    dry_mass_frac:    float = _TUG_DRY_MASS_FRAC,
-) -> float:
-    """Cost of putting 1 kg at a destination `dv_above_leo_m_s` above LEO.
-
-    This is the "launch cost avoided" that gives asteroid material its
-    in-space value.  Derived, not tabulated:
+def _stage_mass_ratio(dv_m_s: float, isp_s: float, dry_mass_frac: float) -> float:
+    """Initial mass needed per kg of payload for one propulsive leg.
 
         R  = exp(Δv / (Isp·g0))                        rocket equation
         p  = (R − 1)(1 + d)                            propellant per kg payload
         δ  = d / (d + p)   ⇒   d = δ(R−1) / (1 − δR)   stage dry mass
-        m0 = R (1 + d)                                 total mass needed in LEO
+        m0 = R (1 + d)                                 total mass to start with
 
-    and the delivered cost is `leo_usd_per_kg × m0` — you pay to lift the
-    payload, the propellant, and the stage.
-
-    Returns 0.0 for Δv = 0 above LEO... no: returns exactly `leo_usd_per_kg`,
-    since m0 = 1 when Δv = 0.  Raises nothing; an infeasible stage (δ·R ≥ 1,
-    i.e. the tank cannot close on that Δv) returns inf.
+    Returns inf when δ·R ≥ 1 — the tank cannot close on that Δv and no amount
+    of propellant will fix it.
     """
-    if dv_above_leo_m_s <= 0:
-        return float(leo_usd_per_kg)
-    r = math.exp(float(dv_above_leo_m_s) / (isp_s * G0_M_S2))
+    if dv_m_s <= 0:
+        return 1.0
+    r = math.exp(float(dv_m_s) / (isp_s * G0_M_S2))
     if dry_mass_frac * r >= 1.0:
-        return float("inf")          # stage cannot close on this Δv
-    d  = dry_mass_frac * (r - 1.0) / (1.0 - dry_mass_frac * r)
-    m0 = r * (1.0 + d)
-    return float(leo_usd_per_kg) * m0
+        return float("inf")
+    d = dry_mass_frac * (r - 1.0) / (1.0 - dry_mass_frac * r)
+    return r * (1.0 + d)
+
+
+def delivered_cost_usd_per_kg(
+    destination:    str,
+    leo_usd_per_kg: float = _LEO_USD_PER_KG,
+) -> float:
+    """Cost of putting 1 kg of payload at `destination`, launched from Earth.
+
+    This is the "launch cost avoided" that gives asteroid material its
+    in-space value.  Derived, not tabulated: walk the destination's leg chain
+    BACKWARDS from the payload, multiplying up the mass each leg demands, then
+    charge the whole stack at the LEO launch price.
+
+    An `edl` leg divides rather than multiplies — surviving 30% of entry mass
+    means you must arrive with 1/0.30 = 3.33 kg for every kg that lands.
+    """
+    legs = _DELIVERY_LEGS.get(str(destination or "").strip().lower())
+    if legs is None:
+        return 0.0                       # earth_surface avoids no launch at all
+
+    mass = 1.0                           # kg that must exist at the start of the chain
+    for leg in reversed(legs):
+        if leg[0] == "edl":
+            frac = float(leg[1])
+            mass = mass / frac if frac > 0 else float("inf")
+        else:
+            _, dv, isp, dry = leg
+            mass *= _stage_mass_ratio(dv, isp, dry)
+        if not math.isfinite(mass):
+            return float("inf")
+    return float(leo_usd_per_kg) * mass
 
 
 # Terrestrial bulk-industrial water, for the earth_surface case.  Municipal /
@@ -466,11 +564,25 @@ def delivered_cost_usd_per_kg(
 _EARTH_SURFACE_WATER_USD_PER_KG = 0.001
 
 
+_DESTINATION_NOTES = {
+    "leo":           "Falcon 9 reusable $/kg-to-LEO, straight off Module 3.",
+    "cislunar":      "TLI + NRHO insertion (3,600 m/s) on one cryo stage.",
+    "lunar_surface": "TLI + LOI (4,050 m/s) on a cryo stage, then powered "
+                     "descent (1,870 m/s) on a lander.  No atmosphere, so "
+                     "every metre per second is propulsive — the Moon is the "
+                     "nearest destination and among the dearest to land on.",
+    "mars_surface":  "TMI (3,600 m/s), then aeroentry surviving 30% of entry "
+                     "mass (MSL / Perseverance measured), then 800 m/s of "
+                     "retropropulsion.  Mars is far but its atmosphere does "
+                     "most of the braking for free.",
+}
+
+
 def _build_destination_table() -> Dict[str, dict]:
-    """Materialise the destination table, deriving the in-space prices."""
+    """Materialise the destination table, deriving every in-space price."""
     out = {}
-    for key, dv in _DV_ABOVE_LEO_M_S.items():
-        if dv is None:                       # Earth's surface avoids no launch
+    for key, legs in _DELIVERY_LEGS.items():
+        if legs is None:                     # Earth's surface avoids no launch
             out[key] = {
                 "usd_per_kg": 0.0,
                 "dv_above_leo_m_s": 0.0,
@@ -480,14 +592,20 @@ def _build_destination_table() -> Dict[str, dict]:
                          "price and nothing more.",
             }
             continue
+        dv_total = sum(l[1] for l in legs if l[0] == "burn")
+        cost     = delivered_cost_usd_per_kg(key)
         out[key] = {
-            "usd_per_kg": delivered_cost_usd_per_kg(dv),
-            "dv_above_leo_m_s": dv,
-            "basis": f"launch cost avoided ({'LEO' if dv == 0 else 'LEO + %.0f m/s' % dv})",
-            "notes": (f"Derived: ${_LEO_USD_PER_KG:,.0f}/kg to LEO "
-                      f"(Falcon 9 reusable, Module 3) carried a further "
-                      f"{dv:,.0f} m/s by an Isp {_TUG_ISP_S:.0f} s stage of "
-                      f"dry fraction {_TUG_DRY_MASS_FRAC:.2f}."),
+            "usd_per_kg": cost,
+            "dv_above_leo_m_s": dv_total,
+            "basis": ("launch cost avoided (LEO)" if not legs
+                      else f"launch cost avoided (LEO + {dv_total:,.0f} m/s"
+                           + (" + entry" if any(l[0] == "edl" for l in legs) else "")
+                           + ")"),
+            "notes": (f"Derived from ${_LEO_USD_PER_KG:,.0f}/kg to LEO "
+                      f"(Falcon 9 reusable, Module 3): "
+                      + _DESTINATION_NOTES.get(key, "")
+                      + f"  Needs {cost / _LEO_USD_PER_KG:,.2f} kg in LEO per "
+                        f"kg delivered."),
         }
     return out
 
@@ -523,11 +641,23 @@ _DOWNLEG_CAPSULE_USD_PER_KG = 150_000.0
 _DOWNLEG_TPS_USD_PER_KG     =  50_000.0
 _DOWNLEG_RECOVERY_USD       = 15_000_000.0
 _DOWNLEG_BATCH_KG           = 10_000.0
-# Δv to leave the depot onto an Earth-return trajectory, entering directly.
-#   leo      — deorbit burn, ~120 m/s
-#   cislunar — NRHO departure, ~450 m/s (Module 3 "TLI → NRHO insertion",
-#              which is symmetric)
-_DOWNLEG_DEPARTURE_DV_M_S = {"leo": 120.0, "cislunar": 450.0}
+# Δv to leave the destination onto an Earth-return trajectory, entering
+# directly.  All from Module 3's DELTA_V_REFERENCE.
+#   leo           — deorbit burn, ~120 m/s
+#   cislunar      — NRHO departure, ~450 m/s (symmetric with insertion)
+#   lunar_surface — ascent to LLO (1,870) + trans-Earth injection (~850)
+#   mars_surface  — Mars ascent (4,100) + TEI from LMO (2,100)
+# The surface cases are punishing, and correctly so: hauling material back UP
+# out of a gravity well you just landed in is close to the worst thing you can
+# do with it.  Mars in particular ends up costing more to ship home than any
+# commodity in this catalog is worth, which is the honest answer — you do not
+# mine asteroids to deliver platinum to Mars and then fly it back.
+_DOWNLEG_DEPARTURE_DV_M_S = {
+    "leo":            120.0,
+    "cislunar":       450.0,
+    "lunar_surface": 2_720.0,
+    "mars_surface":  6_200.0,
+}
 
 
 def downleg_cost_usd_per_kg(destination: str) -> float:

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.6.0)
+"""Master Asteroid Profitability Pipeline (1.7.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -8,17 +8,18 @@ run top-to-bottom — the orchestrator at the bottom executes everything.
     Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.0.8)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
-    Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.3.0)
+    Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.4.0)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
                 + destination pricing for EVERY commodity
-    Stage 3  →  Transportation Data     (modules/transportation.py 1.4.0)
+    Stage 3  →  Transportation Data     (modules/transportation.py 1.5.0)
                 Launch vehicles + propellants + Δv segments + ops costs
                 (UNCREWED autonomous mining — no crew costs)
-    Stage 4  →  Profitability Calc      (modules/calc.py 1.5.0)
+    Stage 4  →  Profitability Calc      (modules/calc.py 1.6.0)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2×, V-type 0.2×)
-                + in-space delivery architecture (earth_surface/leo/cislunar)
+                + delivery architecture: earth_surface / leo / cislunar /
+                  lunar_surface / mars_surface, plus beneficiation
 
 Mission profile: UNCREWED autonomous mining spacecraft throughout (no
 crew costs, no life-support overhead).
@@ -2475,9 +2476,22 @@ class MineralValueConfig:
     #                     worth nothing, because no orbital market for them
     #                     exists.  Favours water- and metal-rich bulk.
     #   "cislunar"      — sold at a lunar-vicinity (NRHO) depot, worth the
-    #                     larger launch cost avoided ($10,809/kg, derived).
-    #                     Also the CHEAPEST of the three to reach from an
-    #                     asteroid — see Module 4's return-Δv model.
+    #                     larger launch cost avoided ($10,810/kg, derived).
+    #                     Also the CHEAPEST of the orbital options to reach
+    #                     from an asteroid — see Module 4's return-Δv model.
+    #   "lunar_surface" — sold at a Moon base.  $21,210/kg: nearest
+    #                     destination, but airless, so all 5,920 m/s from LEO
+    #                     is propulsive.
+    #   "mars_surface"  — sold at a Mars base.  $45,105/kg: far in Δv, but the
+    #                     atmosphere brakes most of the arrival for free.
+    #
+    # ⚠️  The two surface figures are MARGINAL-TRANSPORT LOWER BOUNDS.  They
+    # price the propellant and stages needed to move a kilogram, on a reusable
+    # Falcon 9 LEO price, with no first-of-kind development, no programme
+    # overhead and no launch-cadence limit.  Real delivered cost today is far
+    # higher — CLPS lunar landers run on the order of $1M/kg for ~100 kg
+    # payloads.  Treat these as "what it could cost at industrial scale", not
+    # "what it costs now".
     #
     # v1.3.0: this used to reprice water only.  It now reprices everything,
     # which is the consistent form of the same correction — see
@@ -2621,7 +2635,37 @@ class MineralValueConfig:
     #           gold        $138,882   -> $113,472/ $111,565 (shipped down)
     #         New output columns: terrestrial_price_usd_per_kg,
     #         in_space_utility, downleg_cost_usd_per_kg, value_route.
-    pipeline_version: str = "1.3.0"
+    # 1.4.0 — SURFACE DESTINATIONS: lunar_surface and mars_surface.  Paired
+    #         with Module 3 v1.5.0 and Module 4 v1.6.0.  Prices for the three
+    #         existing destinations are UNCHANGED.
+    #         • delivered_cost_usd_per_kg now walks a CHAIN OF LEGS
+    #           (_DELIVERY_LEGS) backwards from the payload instead of taking
+    #           one lumped Δv.  Staging is worth roughly 2x on a lunar
+    #           landing — a single stage flying the whole 5,920 m/s needs
+    #           10.96 kg in LEO per kg landed against 4.99 kg for the
+    #           TLI/LOI-tug + lander pair that would actually be flown — so
+    #           lumping it would have overstated the Moon by 2x.
+    #         • New "edl" leg type for atmospheric arrival, carrying a
+    #           surviving-mass fraction rather than a Δv.  Mars uses 0.30,
+    #           measured from MSL (3,257 kg entry -> 899 kg rover, 27.6%) and
+    #           Perseverance (3,440 -> 1,025, 29.8%).
+    #         • New _LANDER_DRY_MASS_FRAC 0.20 — Apollo LM descent stage flew
+    #           2,134 kg dry on 8,200 kg propellant.  A lander is structurally
+    #           much heavier than a cryo tug for the same propellant load.
+    #         Delivered cost, and the mass that has to reach LEO for it:
+    #             leo             1.00 kg/kg      $4,253/kg
+    #             cislunar        2.54 kg/kg     $10,810/kg
+    #             lunar_surface   4.99 kg/kg     $21,210/kg
+    #             mars_surface   10.61 kg/kg     $45,105/kg
+    #         Downlegs (shipping back to the terrestrial market) rise the same
+    #         way: $25,410 from LEO, $27,317 from NRHO, $44,939 from the Moon,
+    #         $96,394 from Mars.  The last exceeds the terrestrial price of
+    #         platinum, so platinum delivered to a Mars base is worth exactly
+    #         nothing — which is the correct answer, not a bug.
+    #         ⚠️  Both surface figures are marginal-transport LOWER BOUNDS —
+    #         no NRE, no programme overhead, no cadence limit.  CLPS lunar
+    #         landers really cost ~$1M/kg today at ~100 kg scale.
+    pipeline_version: str = "1.4.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows: int = 20
@@ -2743,49 +2787,104 @@ G0_M_S2 = 9.806_65                 # standard gravity, exact by definition
 # price derived from it is a LOWER bound on the launch cost avoided.
 _LEO_USD_PER_KG = 4_253.0
 
-# Δv above LEO for each destination — Module 3 DELTA_V_REFERENCE.
-#   cislunar = "LEO → cislunar NRHO depot" = TLI (3,150) + NRHO insertion (450)
-_DV_ABOVE_LEO_M_S = {"earth_surface": None, "leo": 0.0, "cislunar": 3_600.0}
-
-# The tug that would have carried the payload up if you had launched it.
+# The stages that would have carried the payload up if you had launched it.
 # Isp 465 s = hydrolox upper stage (Module 3 PROPELLANTS: LH2/LOX, 450-465 s
 # vacuum).  Dry-mass fraction 0.10 is mid-range for a cryogenic upper stage
 # (Centaur V ~0.08, DCSS ~0.11) — stage dry mass / (dry + propellant).
 _TUG_ISP_S            = 465.0
 _TUG_DRY_MASS_FRAC    = 0.10
+# A LANDER is structurally much heavier than a tug for the same propellant
+# load: throttleable engines, landing legs, terminal-guidance sensors.
+# Apollo LM descent stage flew 2,134 kg dry on 8,200 kg of propellant = 0.21.
+_LANDER_DRY_MASS_FRAC = 0.20
+
+# Fraction of Mars ENTRY mass that survives to be useful payload on the
+# surface.  Aeroshell, backshell, parachute and descent stage are all
+# discarded.  Measured, not assumed:
+#     MSL           entry 3,257 kg  ->  rover   899 kg  = 27.6%
+#     Perseverance  entry 3,440 kg  ->  rover 1,025 kg  = 29.8%
+# 0.30 takes the better of the two and is generous to Mars — larger entry
+# vehicles should scale better than MSL's sky-crane, but nothing that size
+# has flown.
+_MARS_LANDED_MASS_FRACTION = 0.30
+
+# ─── DELIVERY LEG CHAINS ─────────────────────────────────────────────────────
+# Each destination is a SEQUENCE of legs above LEO, flown by real stages, and
+# the mass ratios chain.  Modelling it leg-by-leg rather than as one big Δv
+# matters: staging is worth a great deal, and a single-stage lunar lander
+# burning 5,920 m/s would come out roughly twice as expensive as the two-stage
+# chain that would actually be flown.
+#
+# Every Δv here appears in Module 3's DELTA_V_REFERENCE.
+#   ("burn", Δv m/s, Isp s, dry fraction)  — a propulsive leg
+#   ("edl",  surviving mass fraction)      — atmospheric entry, descent, landing
+_DELIVERY_LEGS: Dict[str, Optional[List[tuple]]] = {
+    "earth_surface": None,                       # already at the market
+    "leo": [],                                   # nothing above LEO
+    "cislunar": [
+        ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TLI + NRHO insertion
+    ],
+    "lunar_surface": [
+        ("burn", 4_050.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TLI + LOI
+        ("burn", 1_870.0, _TUG_ISP_S, _LANDER_DRY_MASS_FRAC),   # powered descent
+    ],
+    "mars_surface": [
+        ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TMI
+        ("edl",  _MARS_LANDED_MASS_FRACTION),                   # aeroentry + landing
+        ("burn",   800.0, _TUG_ISP_S, _LANDER_DRY_MASS_FRAC),   # retropropulsion
+    ],
+}
 
 
-def delivered_cost_usd_per_kg(
-    dv_above_leo_m_s: float,
-    leo_usd_per_kg:   float = _LEO_USD_PER_KG,
-    isp_s:            float = _TUG_ISP_S,
-    dry_mass_frac:    float = _TUG_DRY_MASS_FRAC,
-) -> float:
-    """Cost of putting 1 kg at a destination `dv_above_leo_m_s` above LEO.
-
-    This is the "launch cost avoided" that gives asteroid material its
-    in-space value.  Derived, not tabulated:
+def _stage_mass_ratio(dv_m_s: float, isp_s: float, dry_mass_frac: float) -> float:
+    """Initial mass needed per kg of payload for one propulsive leg.
 
         R  = exp(Δv / (Isp·g0))                        rocket equation
         p  = (R − 1)(1 + d)                            propellant per kg payload
         δ  = d / (d + p)   ⇒   d = δ(R−1) / (1 − δR)   stage dry mass
-        m0 = R (1 + d)                                 total mass needed in LEO
+        m0 = R (1 + d)                                 total mass to start with
 
-    and the delivered cost is `leo_usd_per_kg × m0` — you pay to lift the
-    payload, the propellant, and the stage.
-
-    Returns 0.0 for Δv = 0 above LEO... no: returns exactly `leo_usd_per_kg`,
-    since m0 = 1 when Δv = 0.  Raises nothing; an infeasible stage (δ·R ≥ 1,
-    i.e. the tank cannot close on that Δv) returns inf.
+    Returns inf when δ·R ≥ 1 — the tank cannot close on that Δv and no amount
+    of propellant will fix it.
     """
-    if dv_above_leo_m_s <= 0:
-        return float(leo_usd_per_kg)
-    r = math.exp(float(dv_above_leo_m_s) / (isp_s * G0_M_S2))
+    if dv_m_s <= 0:
+        return 1.0
+    r = math.exp(float(dv_m_s) / (isp_s * G0_M_S2))
     if dry_mass_frac * r >= 1.0:
-        return float("inf")          # stage cannot close on this Δv
-    d  = dry_mass_frac * (r - 1.0) / (1.0 - dry_mass_frac * r)
-    m0 = r * (1.0 + d)
-    return float(leo_usd_per_kg) * m0
+        return float("inf")
+    d = dry_mass_frac * (r - 1.0) / (1.0 - dry_mass_frac * r)
+    return r * (1.0 + d)
+
+
+def delivered_cost_usd_per_kg(
+    destination:    str,
+    leo_usd_per_kg: float = _LEO_USD_PER_KG,
+) -> float:
+    """Cost of putting 1 kg of payload at `destination`, launched from Earth.
+
+    This is the "launch cost avoided" that gives asteroid material its
+    in-space value.  Derived, not tabulated: walk the destination's leg chain
+    BACKWARDS from the payload, multiplying up the mass each leg demands, then
+    charge the whole stack at the LEO launch price.
+
+    An `edl` leg divides rather than multiplies — surviving 30% of entry mass
+    means you must arrive with 1/0.30 = 3.33 kg for every kg that lands.
+    """
+    legs = _DELIVERY_LEGS.get(str(destination or "").strip().lower())
+    if legs is None:
+        return 0.0                       # earth_surface avoids no launch at all
+
+    mass = 1.0                           # kg that must exist at the start of the chain
+    for leg in reversed(legs):
+        if leg[0] == "edl":
+            frac = float(leg[1])
+            mass = mass / frac if frac > 0 else float("inf")
+        else:
+            _, dv, isp, dry = leg
+            mass *= _stage_mass_ratio(dv, isp, dry)
+        if not math.isfinite(mass):
+            return float("inf")
+    return float(leo_usd_per_kg) * mass
 
 
 # Terrestrial bulk-industrial water, for the earth_surface case.  Municipal /
@@ -2794,11 +2893,25 @@ def delivered_cost_usd_per_kg(
 _EARTH_SURFACE_WATER_USD_PER_KG = 0.001
 
 
+_DESTINATION_NOTES = {
+    "leo":           "Falcon 9 reusable $/kg-to-LEO, straight off Module 3.",
+    "cislunar":      "TLI + NRHO insertion (3,600 m/s) on one cryo stage.",
+    "lunar_surface": "TLI + LOI (4,050 m/s) on a cryo stage, then powered "
+                     "descent (1,870 m/s) on a lander.  No atmosphere, so "
+                     "every metre per second is propulsive — the Moon is the "
+                     "nearest destination and among the dearest to land on.",
+    "mars_surface":  "TMI (3,600 m/s), then aeroentry surviving 30% of entry "
+                     "mass (MSL / Perseverance measured), then 800 m/s of "
+                     "retropropulsion.  Mars is far but its atmosphere does "
+                     "most of the braking for free.",
+}
+
+
 def _build_destination_table() -> Dict[str, dict]:
-    """Materialise the destination table, deriving the in-space prices."""
+    """Materialise the destination table, deriving every in-space price."""
     out = {}
-    for key, dv in _DV_ABOVE_LEO_M_S.items():
-        if dv is None:                       # Earth's surface avoids no launch
+    for key, legs in _DELIVERY_LEGS.items():
+        if legs is None:                     # Earth's surface avoids no launch
             out[key] = {
                 "usd_per_kg": 0.0,
                 "dv_above_leo_m_s": 0.0,
@@ -2808,14 +2921,20 @@ def _build_destination_table() -> Dict[str, dict]:
                          "price and nothing more.",
             }
             continue
+        dv_total = sum(l[1] for l in legs if l[0] == "burn")
+        cost     = delivered_cost_usd_per_kg(key)
         out[key] = {
-            "usd_per_kg": delivered_cost_usd_per_kg(dv),
-            "dv_above_leo_m_s": dv,
-            "basis": f"launch cost avoided ({'LEO' if dv == 0 else 'LEO + %.0f m/s' % dv})",
-            "notes": (f"Derived: ${_LEO_USD_PER_KG:,.0f}/kg to LEO "
-                      f"(Falcon 9 reusable, Module 3) carried a further "
-                      f"{dv:,.0f} m/s by an Isp {_TUG_ISP_S:.0f} s stage of "
-                      f"dry fraction {_TUG_DRY_MASS_FRAC:.2f}."),
+            "usd_per_kg": cost,
+            "dv_above_leo_m_s": dv_total,
+            "basis": ("launch cost avoided (LEO)" if not legs
+                      else f"launch cost avoided (LEO + {dv_total:,.0f} m/s"
+                           + (" + entry" if any(l[0] == "edl" for l in legs) else "")
+                           + ")"),
+            "notes": (f"Derived from ${_LEO_USD_PER_KG:,.0f}/kg to LEO "
+                      f"(Falcon 9 reusable, Module 3): "
+                      + _DESTINATION_NOTES.get(key, "")
+                      + f"  Needs {cost / _LEO_USD_PER_KG:,.2f} kg in LEO per "
+                        f"kg delivered."),
         }
     return out
 
@@ -2851,11 +2970,23 @@ _DOWNLEG_CAPSULE_USD_PER_KG = 150_000.0
 _DOWNLEG_TPS_USD_PER_KG     =  50_000.0
 _DOWNLEG_RECOVERY_USD       = 15_000_000.0
 _DOWNLEG_BATCH_KG           = 10_000.0
-# Δv to leave the depot onto an Earth-return trajectory, entering directly.
-#   leo      — deorbit burn, ~120 m/s
-#   cislunar — NRHO departure, ~450 m/s (Module 3 "TLI → NRHO insertion",
-#              which is symmetric)
-_DOWNLEG_DEPARTURE_DV_M_S = {"leo": 120.0, "cislunar": 450.0}
+# Δv to leave the destination onto an Earth-return trajectory, entering
+# directly.  All from Module 3's DELTA_V_REFERENCE.
+#   leo           — deorbit burn, ~120 m/s
+#   cislunar      — NRHO departure, ~450 m/s (symmetric with insertion)
+#   lunar_surface — ascent to LLO (1,870) + trans-Earth injection (~850)
+#   mars_surface  — Mars ascent (4,100) + TEI from LMO (2,100)
+# The surface cases are punishing, and correctly so: hauling material back UP
+# out of a gravity well you just landed in is close to the worst thing you can
+# do with it.  Mars in particular ends up costing more to ship home than any
+# commodity in this catalog is worth, which is the honest answer — you do not
+# mine asteroids to deliver platinum to Mars and then fly it back.
+_DOWNLEG_DEPARTURE_DV_M_S = {
+    "leo":            120.0,
+    "cislunar":       450.0,
+    "lunar_surface": 2_720.0,
+    "mars_surface":  6_200.0,
+}
 
 
 def downleg_cost_usd_per_kg(destination: str) -> float:
@@ -4116,7 +4247,25 @@ class TransportConfig:
     #         because capture can take the Oberth benefit and NRHO is barely
     #         bound) AND worth more per kg on arrival.  Earth's surface is the
     #         cheapest to reach and worth the least.
-    pipeline_version: str = "1.4.0"
+    # 1.5.0 — SURFACE DESTINATIONS.  Reference data for delivering to a lunar
+    #         or Mars surface base.  Paired with Module 2 v1.4.0 and Module 4
+    #         v1.6.0.  Additive again — no existing number changed.
+    #         • 8 new DELTA_V_REFERENCE segments: the lunar descent chain
+    #           (TLI→LOI 900, NRHO→LLO 730, LLO→surface 1,870, and the
+    #           LEO→lunar-surface total of 5,920 m/s), and the Mars chain
+    #           (TMI 3,600, entry→surface retropropulsion 800, plus the
+    #           surface→LMO 4,100 and LMO→Earth 2,100 return legs).
+    #         • 1 new OPERATIONAL_COSTS row: "Surface lander recurring cost"
+    #           at $200k/kg — a lander is active where a re-entry capsule is
+    #           passive, so it sits above the $150k/kg capsule and below the
+    #           $300k/kg mining rig.
+    #         The Moon is the awkward case these numbers expose: it is the
+    #         CLOSEST destination and among the most expensive to land on,
+    #         because there is no atmosphere and every metre per second of
+    #         the 5,920 m/s from LEO is paid propulsively.  Mars is four
+    #         times further in Δv terms from Earth but gets most of its
+    #         arrival braking free from an atmosphere.
+    pipeline_version: str = "1.5.0"
     preview_rows:     int = 15
 
 
@@ -4669,6 +4818,46 @@ DELTA_V_REFERENCE: List[dict] = [
               "asteroid material delivered to NRHO AVOIDS having to be lifted "
               "through — it sets the cislunar sale price in Module 2."},
 
+    # ── Lunar surface  (v1.5.0) ──────────────────────────────────────────────
+    {"segment": "TLI  →  low lunar orbit (LOI)", "dv_m_per_s":    900, "duration_yr": 0.01,
+     "notes": "Apollo lunar-orbit insertion, 0.9 km/s (NASA SP-4029).  Larger "
+              "than NRHO insertion because LLO is a much more tightly bound "
+              "orbit — which is exactly why NRHO is the cheaper depot."},
+    {"segment": "NRHO  →  low lunar orbit",      "dv_m_per_s":    730, "duration_yr": 0.01,
+     "notes": "Gateway-to-LLO transfer, ~0.73 km/s (Whitley & Martinez 2016). "
+              "The price a cislunar depot pays to service the surface."},
+    {"segment": "LLO  →  lunar surface (descent)", "dv_m_per_s": 1_870, "duration_yr": 0.001,
+     "notes": "Apollo LM powered descent, 1.87 km/s including hover and "
+              "terminal guidance reserve (NASA SP-4029).  No atmosphere means "
+              "no aerobraking is available — every metre per second is paid "
+              "for propulsively, which is why the Moon is expensive to reach "
+              "despite being close."},
+    {"segment": "LEO  →  lunar surface",         "dv_m_per_s":  5_920, "duration_yr": 0.02,
+     "notes": "TLI (3,150) + LOI (900) + descent (1,870).  Sets the "
+              "lunar-base sale price in Module 2.  Apollo's LEO-to-surface "
+              "budget was ~6 km/s, which this matches."},
+
+    # ── Mars  (v1.5.0) ───────────────────────────────────────────────────────
+    {"segment": "LEO  →  trans-Mars injection",  "dv_m_per_s":  3_600, "duration_yr": 0.7,
+     "notes": "Minimum-energy Hohmann TMI at a favourable opportunity; the "
+              "real figure swings 3.6-4.3 km/s across the 26-month synodic "
+              "cycle (NASA DRA 5.0).  The low end is used, so the delivered "
+              "cost is a LOWER bound."},
+    {"segment": "Mars entry  →  surface (retroprop)", "dv_m_per_s": 800, "duration_yr": 0.001,
+     "notes": "Terminal propulsive descent after aeroentry and parachutes. "
+              "MSL's sky-crane phase used ~0.4 km/s; Starship-class EDL "
+              "estimates run 0.5-1.0 km/s for supersonic retropropulsion of a "
+              "heavy lander.  Mid-range taken.  The aeroshell and parachute "
+              "mass is carried separately as a landed-mass fraction — see "
+              "Module 2's _MARS_LANDED_MASS_FRACTION."},
+    {"segment": "Mars surface  →  low Mars orbit", "dv_m_per_s": 4_100, "duration_yr": 0.001,
+     "notes": "Mars ascent including gravity and drag losses (NASA DRA 5.0 "
+              "MAV sizing).  Relevant only to the downleg — shipping material "
+              "OFF Mars — and it is brutal enough that nothing mined for a "
+              "Mars base is worth flying home."},
+    {"segment": "Low Mars orbit  →  Earth (TEI)", "dv_m_per_s": 2_100, "duration_yr": 0.7,
+     "notes": "Trans-Earth injection from LMO (NASA DRA 5.0)."},
+
     # ── Asteroid return legs by delivery destination  (v1.4.0) ───────────────
     # Reference magnitudes only; Module 4 computes these per-asteroid from the
     # actual arrival v_infinity.  Quoted here at v_inf = 3 km/s, a typical NEA
@@ -4773,6 +4962,24 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
                  "bracket, since it is the simplest deep-space-rated structure "
                  "in the catalog.  Heritage: Cygnus PCM, Dragon trunk, the "
                  "passive half of the NASA Docking System.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Surface lander recurring cost",
+        "unit":             "USD per kg of lander dry mass",
+        "value":            200_000,
+        "range_low":        100_000,
+        "range_high":       500_000,
+        "notes": "v1.5.0.  Delivering to a lunar or Mars SURFACE base needs a "
+                 "lander, not a berthing adapter: throttleable descent "
+                 "engines, landing legs, terminal guidance and hazard "
+                 "avoidance, plus the GNC to fly it.  More capable than the "
+                 "$150k/kg re-entry capsule (which is passive after entry) "
+                 "and less than the $300k/kg regolith-contact mining rig.  "
+                 "Heritage: Apollo LM descent stage, and the CLPS landers "
+                 "(Intuitive Machines Nova-C, Astrobotic Peregrine, Blue "
+                 "Moon MK1).  A Mars lander carries the TPS row on top, "
+                 "because it has to survive entry as well as land.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
@@ -5778,9 +5985,21 @@ class CalcConfig:
     #                     EXPENSIVE return Δv in the model: circularising into
     #                     LEO means killing the whole arrival hyperbola.
     #   "cislunar"      — berthed at an NRHO depot.  Same cost savings as LEO,
-    #                     and the cheapest return Δv of the three, because
-    #                     capture only has to bind the orbit and the burn takes
-    #                     the Oberth benefit at low perigee.
+    #                     and the cheapest return Δv of the orbital options,
+    #                     because capture only has to bind the orbit and the
+    #                     burn takes the Oberth benefit at low perigee.
+    #   "lunar_surface" — landed at a Moon base.  Cislunar capture plus
+    #                     2.6 km/s of NRHO→LLO→surface, all propulsive — the
+    #                     Moon has no atmosphere to brake against.  Carries a
+    #                     $200k/kg lander instead of a berthing adapter.
+    #   "mars_surface"  — landed at a Mars base.  NOT an Earth return: the
+    #                     heliocentric transfer runs from the asteroid's orbit
+    #                     to Mars' (1.524 AU), so the departure burn, arrival
+    #                     v_infinity and capture are all separately computed
+    #                     (_asteroid_to_mars_dv_km_s).  Many NEAs have aphelia
+    #                     out near Mars and are genuinely closer to it than to
+    #                     Earth.  Aerocapture is available and worth several
+    #                     km/s.
     #
     # See DELIVERY_ARCHITECTURES for what each one actually changes.
     delivery_destination:      str   = "earth_surface"
@@ -6043,7 +6262,32 @@ class CalcConfig:
     #         payload_dominant_phase, payload_dominant_frac,
     #         processing_power_w, power_system_kg, power_w_per_kg_at_target,
     #         hardware_total_kg, power_system_cost_usd.
-    pipeline_version: str = "1.5.0"
+    # 1.6.0 — SURFACE DESTINATIONS: lunar_surface and mars_surface.  Paired
+    #         with Module 2 v1.4.0 and Module 3 v1.5.0.  The three existing
+    #         destinations are unchanged; an earth_surface run is still
+    #         bit-identical to v1.4.0.
+    #         • Lunar surface = cislunar capture + 2.6 km/s of NRHO→LLO→
+    #           surface (Module 3), entirely propulsive.  No TPS: there is no
+    #           atmosphere, so use_aerocapture_return is ignored, exactly as
+    #           for cislunar.
+    #         • MARS IS A DIFFERENT JOURNEY, not a discounted Earth return.
+    #           New _asteroid_to_mars_dv_km_s runs the same patched-conic
+    #           treatment but terminates the heliocentric transfer at Mars'
+    #           orbit (1.524 AU) rather than Earth's, so the departure burn,
+    #           the arrival v_infinity and the capture into Mars' well are all
+    #           computed separately.  Modelling it as "Earth return minus
+    #           something" would have hidden the interesting part: plenty of
+    #           NEAs have aphelia near Mars and are genuinely more accessible
+    #           from a Mars base than from Earth.
+    #           Aerocapture IS available at Mars and is worth several km/s, so
+    #           mars_surface carries TPS where lunar_surface cannot.
+    #         • Surface deliveries carry a $200k/kg lander (Module 3's new
+    #           row) rather than a $60k/kg berthing adapter or a $150k/kg
+    #           re-entry capsule — a lander flies itself down.
+    #         New Δv legs on asteroid_transfer_dv_km_s: ret_lunar_surface_prop,
+    #         ret_mars_surface_aero, ret_mars_surface_prop, v_inf_mars,
+    #         dv_depart_for_mars.
+    pipeline_version: str = "1.6.0"
 
 
 CALC_CONFIG = CalcConfig()
@@ -6627,6 +6871,21 @@ DV_NRHO_INSERTION_KM_S = 0.450
 # "NEA → LEO delivery (aerobraked)".
 DV_AEROBRAKE_TRIM_KM_S = 0.100
 
+# ── Lunar surface  (v1.6.0) ──────────────────────────────────────────────────
+# From a cislunar (NRHO) depot down to the surface, Module 3 DELTA_V_REFERENCE:
+#   NRHO → LLO   0.73 km/s        LLO → surface   1.87 km/s
+DV_NRHO_TO_LUNAR_SURFACE_KM_S = 0.730 + 1.870
+
+# ── Mars  (v1.6.0) ───────────────────────────────────────────────────────────
+MU_MARS_KM3_S2   = 42_828.37           # Mars gravitational parameter
+R_MARS_PARK_KM   = 3_396.2 + 200.0     # 200-km circular parking orbit
+A_MARS_AU        = 1.523_679           # Mars semi-major axis
+# Terminal propulsive descent after aeroentry, Module 3 "Mars entry → surface".
+DV_MARS_RETROPROP_KM_S = 0.800
+# Propulsive descent from low Mars orbit with NO atmospheric help — the
+# fallback when aerocapture is switched off.  Mirrors the 4.1 km/s ascent.
+DV_MARS_POWERED_DESCENT_KM_S = 4.100
+
 
 def _leo_departure_dv_km_s(v_inf_km_s: float) -> float:
     """Δv to go from circular LEO onto a hyperbola with this v_infinity.
@@ -6745,8 +7004,13 @@ def asteroid_transfer_dv_km_s(
     #   LEO, aerobraked — trades that Δv for TPS mass and months of passes.
     #   Cislunar — cheapest, because capture only has to BIND the orbit, and
     #     the burn happens at low perigee where Oberth pays best.
+    #   Lunar surface — cislunar capture, then NRHO→LLO→surface.  Airless, so
+    #     that last 2.6 km/s is entirely propulsive.
+    #   Mars — not an Earth return at all.  See the separate transfer below.
     dv_leo_capture = _leo_departure_dv_km_s(v_inf)
-    return {
+    dv_cislunar    = _cislunar_capture_dv_km_s(v_inf)
+
+    legs = {
         "dv_out":                 dv_out,
         "v_inf":                  v_inf,
         "ret_earth_surface_aero": dv_match,
@@ -6754,6 +7018,72 @@ def asteroid_transfer_dv_km_s(
         "ret_leo_prop":           dv_match + dv_leo_capture,
         "ret_leo_aero":           dv_match + DV_AEROBRAKE_TRIM_KM_S,
         "ret_cislunar_prop":      dv_match + _cislunar_capture_dv_km_s(v_inf),
+        "ret_lunar_surface_prop": dv_match + dv_cislunar
+                                  + DV_NRHO_TO_LUNAR_SURFACE_KM_S,
+    }
+
+    # ── Mars: a different journey, not a discounted Earth return ─────────────
+    # Delivering to Mars does not go near Earth.  The heliocentric transfer
+    # runs from the asteroid's orbit to Mars' (1.524 AU), so the departure
+    # burn, the arrival v_infinity and the capture are all different numbers.
+    # Many NEAs have aphelia out near Mars, which makes them genuinely closer
+    # to a Mars base than to Earth — a fact the model can only show if this
+    # leg is computed rather than approximated.
+    mars = _asteroid_to_mars_dv_km_s(a, e, i, r_target)
+    if mars is not None:
+        legs.update(mars)
+    return legs
+
+
+def _asteroid_to_mars_dv_km_s(
+    a: float, e: float, i_deg: float, r_target: float,
+) -> Optional[Dict[str, float]]:
+    """Δv from an asteroid to the Martian surface, in km/s.
+
+    Same patched-conic treatment as the Earth legs, but the heliocentric
+    transfer terminates at Mars' orbit instead of Earth's, and the capture is
+    into Mars' gravity well.
+
+    Returns the propulsive and aerocaptured surface arrivals, or None if the
+    transfer geometry does not close.  Mars has an atmosphere, so aerocapture
+    is genuinely available — and it is worth several km/s.
+    """
+    # ── 1. Transfer ellipse from the asteroid's apsis to Mars' orbit ─────────
+    a_t = (r_target + A_MARS_AU) / 2.0
+    v_t_at_ast_sq  = 2.0 / r_target - 1.0 / a_t
+    v_ast_sq       = 2.0 / r_target - 1.0 / a
+    v_t_at_mars_sq = 2.0 / A_MARS_AU - 1.0 / a_t
+    if min(v_t_at_ast_sq, v_ast_sq, v_t_at_mars_sq) <= 0:
+        return None
+
+    # ── 2. Departure burn at the asteroid, plane change included ────────────
+    # Law of cosines, same as the Earth-departure treatment: the asteroid's
+    # inclination has to be bought out to reach Mars' (nearly co-planar) orbit.
+    cos_i = math.cos(math.radians(i_deg))
+    dv_dep_sq = (v_t_at_ast_sq + v_ast_sq
+                 - 2.0 * math.sqrt(v_t_at_ast_sq * v_ast_sq) * cos_i)
+    dv_depart = math.sqrt(max(dv_dep_sq, 0.0)) * V_EARTH_KM_S
+
+    # ── 3. Arrival v_infinity at Mars ───────────────────────────────────────
+    v_mars = math.sqrt(1.0 / A_MARS_AU)          # circular, canonical units
+    v_inf_mars = abs(math.sqrt(v_t_at_mars_sq) - v_mars) * V_EARTH_KM_S
+
+    # ── 4. Capture and descent ──────────────────────────────────────────────
+    v_circ = math.sqrt(MU_MARS_KM3_S2 / R_MARS_PARK_KM)
+    v_esc  = math.sqrt(2.0) * v_circ
+    dv_capture = math.sqrt(v_esc * v_esc + v_inf_mars * v_inf_mars) - v_circ
+
+    return {
+        "v_inf_mars":              v_inf_mars,
+        "dv_depart_for_mars":      dv_depart,
+        # Aeroentry: the atmosphere absorbs capture AND most of the descent,
+        # leaving only terminal retropropulsion.  Paid for in TPS mass.
+        "ret_mars_surface_aero":   dv_depart + DV_MARS_RETROPROP_KM_S,
+        # All-propulsive: capture into low Mars orbit, then fly the lander
+        # down against gravity with no atmospheric help.  Brutal, and the
+        # reason nobody plans a Mars mission this way.
+        "ret_mars_surface_prop":   dv_depart + dv_capture
+                                   + DV_MARS_POWERED_DESCENT_KM_S,
     }
 
 
@@ -6795,6 +7125,22 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "prop_leg":  "ret_cislunar_prop",
         "aero_allowed": False,
         "label": "berthed at a cislunar (NRHO) depot",
+    },
+    "lunar_surface": {
+        "returns_to_earth": False,
+        "aero_leg":  None,        # the Moon has no atmosphere to brake against
+        "prop_leg":  "ret_lunar_surface_prop",
+        "aero_allowed": False,
+        "needs_lander": True,
+        "label": "landed at a lunar surface base",
+    },
+    "mars_surface": {
+        "returns_to_earth": False,
+        "aero_leg":  "ret_mars_surface_aero",
+        "prop_leg":  "ret_mars_surface_prop",
+        "aero_allowed": True,     # Mars aerocapture is worth several km/s
+        "needs_lander": True,
+        "label": "landed at a Mars surface base",
     },
 }
 
@@ -7180,8 +7526,13 @@ def mission_cost_usd(
     # v1.5.0: and which rate applies depends on where the cargo is going.  An
     # in-space delivery never re-enters, so it carries a passive berthing
     # adapter ($60k/kg) rather than a guided re-entry capsule ($150k/kg).
+    # v1.6.0: a surface base needs a LANDER — throttleable descent engines,
+    # legs, terminal guidance — which is more machine than either a passive
+    # re-entry capsule or a berthing adapter.
     arch = delivery_architecture(config.delivery_destination)
-    if arch["returns_to_earth"]:
+    if arch.get("needs_lander"):
+        capsule_per_kg = _ops_value(ops_df, "Surface lander recurring cost", default=200_000.0)
+    elif arch["returns_to_earth"]:
         capsule_per_kg = _ops_value(ops_df, "Return capsule recurring cost", default=150_000.0)
     else:
         capsule_per_kg = _ops_value(ops_df, "Berthing adapter recurring cost", default=60_000.0)
@@ -8123,7 +8474,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.6.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.7.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
