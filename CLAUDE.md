@@ -62,8 +62,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.0.8`, mineral_value `1.3.0`, transportation `1.4.0`,
-calc `1.5.0`, master `1.6.0` (the master version is a literal in
+Current: catalog `1.0.8`, mineral_value `1.4.0`, transportation `1.5.0`,
+calc `1.6.0`, master `1.7.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
 ## Model assumptions that are load-bearing
@@ -93,6 +93,27 @@ entire arrival hyperbola (~3.6 km/s at v_inf = 3 km/s); capturing into an
 NRHO depot only has to *bind* the orbit, and the burn takes the Oberth
 benefit at low perigee (~0.94 km/s). See `_cislunar_capture_dv_km_s`. Do not
 "fix" it.
+
+**Mars is a separate heliocentric transfer, not a scaled Earth return.**
+`_asteroid_to_mars_dv_km_s` terminates the transfer ellipse at 1.524 AU and
+captures into Mars' well. Approximating it off the Earth legs would erase the
+whole point: a main-belt body is cheaper to deliver to Mars (3.84 km/s) than
+to Earth (4.13). Mars has an atmosphere so aerocapture applies and TPS is
+carried; the Moon does not, so `lunar_surface` ignores
+`use_aerocapture_return` exactly as `cislunar` does.
+
+**Surface delivery costs are chained per stage, not lumped.** Module 2's
+`_DELIVERY_LEGS` walks real stages backwards from the payload. Collapsing the
+lunar chain into one 5,920 m/s burn would overstate the Moon by ~2x (10.96 vs
+4.99 kg in LEO per kg landed) because it throws away staging. Mars' `edl` leg
+carries a measured surviving-mass fraction (MSL 27.6%, Perseverance 29.8%),
+not a Delta-v.
+
+**The two surface prices are marginal-transport LOWER BOUNDS.** No NRE, no
+programme overhead, no cadence limit, on a reusable Falcon 9 LEO price. Real
+CLPS lunar delivery is ~$1M/kg today at ~100 kg scale against this model's
+$21,210/kg. They answer "what could this cost at industrial scale", and the
+whole Mars result rests on that framing.
 
 **A commodity with no in-space market is not worth zero at a depot.** It is
 worth its terrestrial price *minus* the downleg (`downleg_cost_usd_per_kg` —

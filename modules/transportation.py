@@ -249,7 +249,25 @@ class TransportConfig:
     #         because capture can take the Oberth benefit and NRHO is barely
     #         bound) AND worth more per kg on arrival.  Earth's surface is the
     #         cheapest to reach and worth the least.
-    pipeline_version: str = "1.4.0"
+    # 1.5.0 — SURFACE DESTINATIONS.  Reference data for delivering to a lunar
+    #         or Mars surface base.  Paired with Module 2 v1.4.0 and Module 4
+    #         v1.6.0.  Additive again — no existing number changed.
+    #         • 8 new DELTA_V_REFERENCE segments: the lunar descent chain
+    #           (TLI→LOI 900, NRHO→LLO 730, LLO→surface 1,870, and the
+    #           LEO→lunar-surface total of 5,920 m/s), and the Mars chain
+    #           (TMI 3,600, entry→surface retropropulsion 800, plus the
+    #           surface→LMO 4,100 and LMO→Earth 2,100 return legs).
+    #         • 1 new OPERATIONAL_COSTS row: "Surface lander recurring cost"
+    #           at $200k/kg — a lander is active where a re-entry capsule is
+    #           passive, so it sits above the $150k/kg capsule and below the
+    #           $300k/kg mining rig.
+    #         The Moon is the awkward case these numbers expose: it is the
+    #         CLOSEST destination and among the most expensive to land on,
+    #         because there is no atmosphere and every metre per second of
+    #         the 5,920 m/s from LEO is paid propulsively.  Mars is four
+    #         times further in Δv terms from Earth but gets most of its
+    #         arrival braking free from an atmosphere.
+    pipeline_version: str = "1.5.0"
     preview_rows:     int = 15
 
 
@@ -802,6 +820,46 @@ DELTA_V_REFERENCE: List[dict] = [
               "asteroid material delivered to NRHO AVOIDS having to be lifted "
               "through — it sets the cislunar sale price in Module 2."},
 
+    # ── Lunar surface  (v1.5.0) ──────────────────────────────────────────────
+    {"segment": "TLI  →  low lunar orbit (LOI)", "dv_m_per_s":    900, "duration_yr": 0.01,
+     "notes": "Apollo lunar-orbit insertion, 0.9 km/s (NASA SP-4029).  Larger "
+              "than NRHO insertion because LLO is a much more tightly bound "
+              "orbit — which is exactly why NRHO is the cheaper depot."},
+    {"segment": "NRHO  →  low lunar orbit",      "dv_m_per_s":    730, "duration_yr": 0.01,
+     "notes": "Gateway-to-LLO transfer, ~0.73 km/s (Whitley & Martinez 2016). "
+              "The price a cislunar depot pays to service the surface."},
+    {"segment": "LLO  →  lunar surface (descent)", "dv_m_per_s": 1_870, "duration_yr": 0.001,
+     "notes": "Apollo LM powered descent, 1.87 km/s including hover and "
+              "terminal guidance reserve (NASA SP-4029).  No atmosphere means "
+              "no aerobraking is available — every metre per second is paid "
+              "for propulsively, which is why the Moon is expensive to reach "
+              "despite being close."},
+    {"segment": "LEO  →  lunar surface",         "dv_m_per_s":  5_920, "duration_yr": 0.02,
+     "notes": "TLI (3,150) + LOI (900) + descent (1,870).  Sets the "
+              "lunar-base sale price in Module 2.  Apollo's LEO-to-surface "
+              "budget was ~6 km/s, which this matches."},
+
+    # ── Mars  (v1.5.0) ───────────────────────────────────────────────────────
+    {"segment": "LEO  →  trans-Mars injection",  "dv_m_per_s":  3_600, "duration_yr": 0.7,
+     "notes": "Minimum-energy Hohmann TMI at a favourable opportunity; the "
+              "real figure swings 3.6-4.3 km/s across the 26-month synodic "
+              "cycle (NASA DRA 5.0).  The low end is used, so the delivered "
+              "cost is a LOWER bound."},
+    {"segment": "Mars entry  →  surface (retroprop)", "dv_m_per_s": 800, "duration_yr": 0.001,
+     "notes": "Terminal propulsive descent after aeroentry and parachutes. "
+              "MSL's sky-crane phase used ~0.4 km/s; Starship-class EDL "
+              "estimates run 0.5-1.0 km/s for supersonic retropropulsion of a "
+              "heavy lander.  Mid-range taken.  The aeroshell and parachute "
+              "mass is carried separately as a landed-mass fraction — see "
+              "Module 2's _MARS_LANDED_MASS_FRACTION."},
+    {"segment": "Mars surface  →  low Mars orbit", "dv_m_per_s": 4_100, "duration_yr": 0.001,
+     "notes": "Mars ascent including gravity and drag losses (NASA DRA 5.0 "
+              "MAV sizing).  Relevant only to the downleg — shipping material "
+              "OFF Mars — and it is brutal enough that nothing mined for a "
+              "Mars base is worth flying home."},
+    {"segment": "Low Mars orbit  →  Earth (TEI)", "dv_m_per_s": 2_100, "duration_yr": 0.7,
+     "notes": "Trans-Earth injection from LMO (NASA DRA 5.0)."},
+
     # ── Asteroid return legs by delivery destination  (v1.4.0) ───────────────
     # Reference magnitudes only; Module 4 computes these per-asteroid from the
     # actual arrival v_infinity.  Quoted here at v_inf = 3 km/s, a typical NEA
@@ -906,6 +964,24 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
                  "bracket, since it is the simplest deep-space-rated structure "
                  "in the catalog.  Heritage: Cygnus PCM, Dragon trunk, the "
                  "passive half of the NASA Docking System.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Surface lander recurring cost",
+        "unit":             "USD per kg of lander dry mass",
+        "value":            200_000,
+        "range_low":        100_000,
+        "range_high":       500_000,
+        "notes": "v1.5.0.  Delivering to a lunar or Mars SURFACE base needs a "
+                 "lander, not a berthing adapter: throttleable descent "
+                 "engines, landing legs, terminal guidance and hazard "
+                 "avoidance, plus the GNC to fly it.  More capable than the "
+                 "$150k/kg re-entry capsule (which is passive after entry) "
+                 "and less than the $300k/kg regolith-contact mining rig.  "
+                 "Heritage: Apollo LM descent stage, and the CLPS landers "
+                 "(Intuitive Machines Nova-C, Astrobotic Peregrine, Blue "
+                 "Moon MK1).  A Mars lander carries the TPS row on top, "
+                 "because it has to survive entry as well as land.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
