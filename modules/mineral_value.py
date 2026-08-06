@@ -348,7 +348,25 @@ class MineralValueConfig:
     #           LEO 500 t, cislunar 100 t, lunar surface 50 t, Mars 20 t.
     #           ⚠️  JUDGEMENT, not measurement — no such market exists.
     #         New output column: annual_market_kg (destination-aware).
-    pipeline_version: str = "1.5.0"
+    # 1.6.0 — IN-SPACE MANUFACTURING is now costed instead of assumed.  The
+    #         gap between "kilogram of Fe-Ni at a depot" and "kilogram of
+    #         usable structure" used to hide inside the 0.70 utility factor,
+    #         so the refinery was assumed into existence and never paid for.
+    #         Now explicit and derived from Module 3 rates:
+    #           energy  kWh/kg x $6.08/kWh -- the capital cost of a kilowatt
+    #                   hour in deep space ($800/W-EOL over a 15-yr life),
+    #                   about 100x terrestrial industrial power
+    #           plant   $300k/kg of hardware at 100 kg/yr throughput per kg
+    #                   over 15 years = $200 per kg refined
+    #         Metals take 5 kWh/kg (electric-arc / direct-reduction
+    #         steelmaking is 4-5 kWh/kg terrestrially and there is no
+    #         carbothermic shortcut in vacuum), silicates 1, carbon 2,
+    #         water 0.5.  Deducted from the "used in space" route only --
+    #         material shipped down is refined on Earth.
+    #         The utility factor now means only what it says: how good a
+    #         substitute the finished article is for a launched one.
+    #         New output column: in_space_processing_usd_per_kg.
+    pipeline_version: str = "1.6.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows: int = 20
@@ -796,6 +814,74 @@ def annual_market_kg(name: str, destination: str) -> float:
     return ANNUAL_WORLD_PRODUCTION_KG.get(str(name), _UNLIMITED_MARKET_KG)
 
 
+# ─── IN-SPACE MANUFACTURING  (v1.6.0) ────────────────────────────────────────
+# Raw asteroid metal is not a pressure vessel.  Until now the gap between
+# "kilogram of Fe-Ni at a depot" and "kilogram of usable structure" was hidden
+# inside the 0.70 utility factor, which meant the refining and forming plant
+# was assumed into existence and never costed.  It is now explicit and
+# derived, so the utility factor means only what it says: how good a
+# substitute the finished article is for one launched from Earth.
+#
+# Two costs, both from Module 3 rates:
+#
+#   ENERGY   kWh per kg of feedstock, times the capital cost of a Watt in
+#            space.  A $800/W-EOL solar train delivering power for 15 years
+#            supplies 15 × 8,766 = 131,490 Wh per installed Watt, so energy
+#            costs $800 / 131,490 = $0.0061/Wh ≈ $6.08/kWh — roughly 100×
+#            terrestrial industrial power, which is the whole reason in-space
+#            processing is not obviously free.
+#
+#   PLANT    $300k/kg of deep-space hardware, at 100 kg/yr of throughput per
+#            kg of plant over a 15-year life ⇒ 1,500 kg processed per kg of
+#            plant ⇒ $300,000 / 1,500 = $200 per kg processed.
+_INSPACE_POWER_USD_PER_W        = 800.0     # Module 3 "Power system (solar + battery)"
+_INSPACE_PLANT_LIFE_YR          = 15.0
+_INSPACE_PLANT_USD_PER_KG       = 300_000.0 # Module 3 "Mining payload recurring cost"
+_INSPACE_PLANT_THROUGHPUT_KG_YR = 100.0     # Module 3 "In-space processing plant throughput"
+
+# Energy to turn raw feedstock into something usable, kWh per kg.
+#   water       filtration and phase change only; already nearly a product
+#   metals      reduction + melting + forming.  Terrestrial electric-arc /
+#               direct-reduction steelmaking runs 4-5 kWh/kg; electrowinning
+#               iron is similar.  No carbothermic shortcut in space.
+#   silicates   sintering for shielding blocks or print feedstock
+#   carbon      pyrolysis / compounding
+IN_SPACE_PROCESSING_KWH_PER_KG: Dict[str, float] = {
+    "water":            0.5,
+    "iron":             5.0,  "nickel":     5.0,  "cobalt": 5.0,  "copper": 5.0,
+    "nickel-iron":      5.0,  "awaruite":   5.0,
+    "magnetite":        7.0,  # oxide — reduction first
+    "troilite":         4.0,
+    "olivine":          1.0, "pyroxene":       1.0, "orthopyroxene": 1.0,
+    "enstatite":        1.0, "plagioclase":    1.0, "spinel":        1.0,
+    "phyllosilicates":  1.0, "oxides":         1.0, "silicates":     1.0,
+    "carbon":           2.0,
+    "organics":         2.0,
+}
+
+
+def in_space_energy_usd_per_kwh() -> float:
+    """Capital cost of a kilowatt-hour delivered in deep space."""
+    wh_per_installed_w = _INSPACE_PLANT_LIFE_YR * 365.25 * 24.0
+    return _INSPACE_POWER_USD_PER_W / wh_per_installed_w * 1000.0
+
+
+def in_space_processing_cost_usd_per_kg(name: str) -> float:
+    """Cost of refining 1 kg of raw feedstock into a usable in-space product.
+
+    Energy at the in-space capital rate, plus the amortised refinery.  Zero
+    for anything with no listed process — the caller then treats it as sold
+    as-is, which is the conservative reading.
+    """
+    kwh = IN_SPACE_PROCESSING_KWH_PER_KG.get(str(name))
+    if kwh is None:
+        return 0.0
+    energy = kwh * in_space_energy_usd_per_kwh()
+    plant  = (_INSPACE_PLANT_USD_PER_KG
+              / (_INSPACE_PLANT_THROUGHPUT_KG_YR * _INSPACE_PLANT_LIFE_YR))
+    return energy + plant
+
+
 def value_for_destination(destination: str) -> dict:
     """Look up the delivered-value basis for a delivery destination.
 
@@ -844,7 +930,10 @@ def in_space_price_usd_per_kg(
     terrestrial = float(terrestrial_usd_per_kg or 0.0)
     utility     = IN_SPACE_UTILITY.get(name, IN_SPACE_UTILITY_DEFAULT)
 
+    # v1.6.0: selling into the in-space market means delivering a usable
+    # product, not raw rock, so the refinery comes out of the price.
     use_in_space = (terrestrial + utility * dest["usd_per_kg"]
+                    - in_space_processing_cost_usd_per_kg(name)
                     if utility > 0 else None)
     ship_to_earth = terrestrial - downleg_cost_usd_per_kg(destination)
 
@@ -1561,6 +1650,9 @@ def apply_delivery_destination(
         IN_SPACE_UTILITY.get(str(n), IN_SPACE_UTILITY_DEFAULT) for n in catalog["name"]
     ]
     catalog["downleg_cost_usd_per_kg"] = downleg
+    catalog["in_space_processing_usd_per_kg"] = [
+        in_space_processing_cost_usd_per_kg(str(n)) for n in catalog["name"]
+    ]
     catalog["value_route"]     = routes
     catalog["price_usd_per_kg"] = new_price
     catalog["value_basis"]      = new_basis

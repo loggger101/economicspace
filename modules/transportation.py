@@ -278,7 +278,19 @@ class TransportConfig:
     #         • "Water liberation energy (bound water)" 2,500 Wh/kg.  C-type
     #           water is bound in phyllosilicates and has to be baked out;
     #           the pipeline was extracting it for free.
-    pipeline_version: str = "1.6.0"
+    # 1.7.0 — data for Module 4 v1.8.0's rig terminal value, in-space
+    #         manufacturing, reliability and boil-off models.  Additive.
+    #         • New `boiloff_pct_per_day` column on PROPELLANTS_REFERENCE.
+    #           Hydrolox 0.05%/day is the one that bites: over a 5-year
+    #           mission that is 2.5x the return propellant, which is exactly
+    #           why no flown mission has ever done a deep-space arrival burn
+    #           on hydrolox after a multi-year cruise.  Storables and the
+    #           electrics are 0.
+    #         • 6 new OPERATIONAL_COSTS rows: launch reliability 0.97,
+    #           spacecraft MTBF 30 yr, first-of-kind mining success 0.75,
+    #           rig service life 15 yr, rig salvage fraction 0.50, and
+    #           in-space plant throughput 100 kg/yr per kg of plant.
+    pipeline_version: str = "1.7.0"
     preview_rows:     int = 15
 
 
@@ -661,6 +673,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
         "name":                  "kerolox  (RP-1 / LOX)",
         "type":                  "bipropellant",
         "dv_penalty_factor":     1.0,
+        "boiloff_pct_per_day":   0.015,   # RP-1 is storable; the LOX half boils.  Weighted by the 1:2.30 mix ratio.
         "isp_vac_s":             340,
         "exhaust_vel_m_per_s":   340 * G0_M_S2,
         "density_kg_per_L":      _kerolox["density_kg_per_L"],
@@ -676,6 +689,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
         "name":                  "hydrolox  (LH2 / LOX)",
         "type":                  "bipropellant",
         "dv_penalty_factor":     1.0,
+        "boiloff_pct_per_day":   0.05,   # The worst case by far.  LH2 boils at 20 K and has the lowest heat of vaporisation of any propellant; even with multi-layer insulation and an active cryocooler, long-duration storage runs 0.03-0.1%/day.  This is why no flown mission has ever performed a deep-space arrival burn on hydrolox after a multi-year cruise -- Centaur is rated for hours of loiter, not years.
         "isp_vac_s":             452,
         "exhaust_vel_m_per_s":   452 * G0_M_S2,
         "density_kg_per_L":      _hydrolox["density_kg_per_L"],
@@ -691,6 +705,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
         "name":                  "methalox  (LCH4 / LOX)",
         "type":                  "bipropellant",
         "dv_penalty_factor":     1.0,
+        "boiloff_pct_per_day":   0.012,   # LCH4 boils at 112 K, close enough to LOX (90 K) that a single thermal system serves both -- the 'space-storable cryogen' argument for methalox.
         "isp_vac_s":             380,
         "exhaust_vel_m_per_s":   380 * G0_M_S2,
         "density_kg_per_L":      _methalox["density_kg_per_L"],
@@ -706,6 +721,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
         "name":                  "MMH / NTO  (hypergolic)",
         "type":                  "bipropellant",
         "dv_penalty_factor":     1.0,
+        "boiloff_pct_per_day":   0.0,   # Storable at room temperature indefinitely.  Voyager still had usable hydrazine after 45 years.
         "isp_vac_s":             336,
         "exhaust_vel_m_per_s":   336 * G0_M_S2,
         "density_kg_per_L":      _mmh_nto["density_kg_per_L"],
@@ -721,6 +737,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
         "name":                  "Hydrazine  (monoprop)",
         "type":                  "monopropellant",
         "dv_penalty_factor":     1.0,
+        "boiloff_pct_per_day":   0.0,   # Storable indefinitely.
         "isp_vac_s":             220,
         "exhaust_vel_m_per_s":   220 * G0_M_S2,
         "density_kg_per_L":      _COMPONENTS["Hydrazine"]["density_kg_per_L"],
@@ -738,6 +755,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
         "name":                  "Xenon  (Hall / ion)",
         "type":                  "electric",
         "dv_penalty_factor":     _LOW_THRUST_DV_PENALTY,
+        "boiloff_pct_per_day":   0.0,   # Stored supercritical at ambient temperature; no boil-off.
         "isp_vac_s":             3_000,
         "exhaust_vel_m_per_s":   3_000 * G0_M_S2,
         "density_kg_per_L":      _COMPONENTS["Xenon"]["density_kg_per_L"],
@@ -755,6 +773,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
         "name":                  "Argon  (Hall / ion)",
         "type":                  "electric",
         "dv_penalty_factor":     _LOW_THRUST_DV_PENALTY,
+        "boiloff_pct_per_day":   0.0,   # Stored supercritical at ambient temperature; no boil-off.
         "isp_vac_s":             1_500,
         "exhaust_vel_m_per_s":   1_500 * G0_M_S2,
         "density_kg_per_L":      _COMPONENTS["Argon"]["density_kg_per_L"],
@@ -1246,6 +1265,98 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
                  "NOTE: NASA has not published a standalone recovery-ops figure; "
                  "$15M is an order-of-magnitude estimate from the broader $283M / 9 yr "
                  "operations envelope — refine with project-specific data when available.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Launch vehicle reliability",
+        "unit":             "probability of a successful launch",
+        "value":            0.97,
+        "range_low":        0.90,
+        "range_high":       0.99,
+        "notes": "v1.7.0.  Falcon 9 has flown >99% success over 300+ flights; "
+                 "a first-flight or low-cadence vehicle sits near 0.90.  0.97 "
+                 "is a fleet-representative figure for an operational booster "
+                 "on a high-value payload.  Distinct from launch insurance, "
+                 "which replaces the HARDWARE on failure — it does not "
+                 "replace the revenue the mission would have earned.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Spacecraft mean time between failures",
+        "unit":             "years of deep-space operation",
+        "value":            30,
+        "range_low":        15,
+        "range_high":       60,
+        "notes": "v1.7.0.  Exponential survival: P = exp(-T/MTBF).  Anchors "
+                 "span the record — Voyager 1/2 past 45 years, New Horizons "
+                 "19+, Dawn 11 (ended on hydrazine exhaustion, not failure), "
+                 "against Akatsuki's orbit-insertion loss and Hayabusa's "
+                 "near-total systems failure at 4 years.  30 years puts a "
+                 "5-year mission at 85% survival, which matches the broad "
+                 "deep-space record.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Mining system first-of-kind success probability",
+        "unit":             "probability the rig works as designed",
+        "value":            0.75,
+        "range_low":        0.50,
+        "range_high":       0.95,
+        "notes": "v1.7.0.  Nobody has ever sustained-mined an asteroid.  This "
+                 "is the probability that the excavation and beneficiation "
+                 "chain works at all once it arrives — separate from the "
+                 "spacecraft surviving the trip.  Anchors: OSIRIS-REx's TAGSAM "
+                 "collected far more than planned but its sample head jammed "
+                 "open; Hayabusa's first sampler failed to fire; Philae's "
+                 "harpoons did not deploy.  Regolith-contact mechanisms are "
+                 "where deep-space missions actually fail.  Drops toward 0.95 "
+                 "for a repeat mission with flight heritage — raise it "
+                 "alongside nre_amortization_missions.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Mining rig service life",
+        "unit":             "years of operation before wear-out",
+        "value":            15,
+        "range_low":        5,
+        "range_high":       30,
+        "notes": "v1.7.0.  Caps how many missions one rig can actually serve, "
+                 "which the old flat amortisation ignored — you cannot spread "
+                 "a rig across 100 missions of 2 years each.  Bounded by "
+                 "abrasive wear on regolith-contact mechanisms, thermal "
+                 "cycling and radiation, not by propellant.  ISS-class "
+                 "hardware is rated 15-30 years; a machine chewing rock is at "
+                 "the low end.  Whatever life is left when the programme ends "
+                 "is credited back as terminal value.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Rig salvage fraction",
+        "unit":             "fraction of remaining book value recoverable",
+        "value":            0.50,
+        "range_low":        0.00,
+        "range_high":       0.80,
+        "notes": "v1.7.0.  A part-worn rig parked on a specific asteroid is "
+                 "worth something to whoever goes there next and nothing to "
+                 "anyone else — an illiquid, location-locked asset with a "
+                 "market of approximately one buyer.  Half of remaining book "
+                 "value is a deliberately unheroic haircut.  Set 0.0 to "
+                 "model abandonment.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "In-space processing plant throughput",
+        "unit":             "kg processed per year per kg of plant",
+        "value":            100,
+        "range_low":        20,
+        "range_high":       500,
+        "notes": "v1.7.0.  Sizes the refinery that turns raw asteroid feedstock "
+                 "into something a depot can actually build with.  Terrestrial "
+                 "smelters run 1,000x their own mass per year; 100x is a heavy "
+                 "derating for microgravity, no convection, no gravity-fed "
+                 "materials handling and full autonomy.  Combined with the "
+                 "$300k/kg recurring hardware rate this sets the capital "
+                 "charge per kg refined.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
