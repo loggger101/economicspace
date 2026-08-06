@@ -166,10 +166,35 @@ class CalcConfig:
 
     # ─── MISSION HARDWARE (kg) ───────────────────────────────────────────────
     # `m_hardware`     — mining rig + comms + structure that stays at asteroid
-    # `m_dry_return`   — return capsule dry mass (TPS frame + chute + structure,
+    # `m_dry_return`   — return vehicle dry mass (TPS frame + chute + structure,
     #                    NOT the ablative TPS itself which scales with payload)
     mining_hardware_kg:        float = 2_000
     return_vehicle_dry_kg:     float = 500
+
+    # ─── RETURN VEHICLE SCALES WITH ITS CARGO  (v1.10.0) ─────────────────────
+    # `return_vehicle_dry_kg` was the WHOLE dry mass of the return vehicle, a
+    # flat 500 kg however much it carried.  Since the payload is solved for
+    # rather than specified, that let the cascade load 125 tonnes of ore into a
+    # 500 kg can — a payload-to-structure ratio of 250:1, where real cargo
+    # spacecraft run between 0.4:1 and 2:1.  Nothing caught it because the only
+    # other check on returned mass was the launch vehicle's fairing VOLUME,
+    # which a dense metal payload never fills.
+    #
+    # So the 500 kg becomes a floor — the irreducible avionics, comms, beacon
+    # and separation hardware — and a structural fraction of the payload is
+    # added on top: tankage, primary structure, cargo restraint, the parachute
+    # or the berthing mechanism.  0.15 is deliberately at the light end of the
+    # real range because the ablative TPS is already carried separately by
+    # `heat_shield_frac_of_payload`, and because a purpose-built ore carrier
+    # should beat a crew-rated capsule.  Heritage for the range: Cygnus PCM
+    # ~1,500 kg dry for 3,500 kg of cargo (0.43), Dragon ~1.3:1 with crew
+    # provisions, OSIRIS-REx's SRC far worse again at sample scale.
+    #
+    # Set to 0.0 to restore the pre-v1.10.0 fixed-mass behaviour.  Note that
+    # doing so also restores an unbounded payload when ISRU is on and the
+    # return is propulsive: with no payload-scaling term anywhere in the
+    # cascade, nothing but the volume cap limits the haul.
+    return_structure_frac_of_payload: float = 0.15
 
     # ─── MINING MODEL ────────────────────────────────────────────────────────
     # Single mission can never strip-mine the whole asteroid.  Cap at this
@@ -383,20 +408,69 @@ class CalcConfig:
     # See DELIVERY_ARCHITECTURES for what each one actually changes.
     delivery_destination:      str   = "earth_surface"
 
+    # ─── WHAT THE PER-ASTEROID SEARCH OPTIMISES  (v1.10.0) ───────────────────
+    # Every search in this module — concentration ratio, vehicle, propellant,
+    # return mode, propellant sourcing — has to rank candidate missions by
+    # something, and until v1.10.0 that something was `profit_usd`.  In this
+    # model revenue sits orders of magnitude below cost, so profit is very
+    # nearly minus the cost, and maximising it quietly became "pick the
+    # cheapest mission" — while the project ranked the output by a cost/revenue
+    # ratio nothing had optimised.
+    #
+    #   "cost_revenue_ratio"  maximise profit if any candidate is profitable,
+    #                         otherwise minimise cost / revenue.  Default.
+    #   "profit"              maximise profit always (pre-v1.10.0 behaviour).
+    #
+    # See selection_key.
+    selection_objective:       str   = "cost_revenue_ratio"
+
+    # ─── PER-ASTEROID ARCHITECTURE SEARCH  (v1.10.0) ─────────────────────────
+    # The model has always chosen the launch vehicle and the propellant per
+    # asteroid, by profit.  Two other mission-architecture choices were set
+    # once for the whole catalog instead — whether to aerocapture, and whether
+    # to make return propellant on site — even though the right answer to both
+    # varies target by target and for exactly the same reasons.
+    #
+    # With this on, both become part of the same per-asteroid search: every
+    # feasible (return mode × ISRU) combination is priced against every
+    # (vehicle × propellant), and the mission that actually gets flown is the
+    # most profitable one.  The two flags below stop meaning "do this" and
+    # start meaning "this is available"; an option that never pays is simply
+    # never chosen.
+    #
+    # Cost: roughly doubles Stage 4 runtime at destinations where aerocapture
+    # is available, and adds a little more on water-bearing bodies where ISRU
+    # is feasible.  Set False to price only the config's nominal architecture.
+    optimise_architecture_per_asteroid: bool = True
+
     # ─── AEROCAPTURE  (return via heat shield rather than propulsive) ────────
-    # When True, return Δv is reduced by `aerocapture_dv_savings_m_s` but a
-    # heat-shield mass overhead is added at the rate from Module 3.
-    # Only honoured where the architecture actually enters an atmosphere:
-    # earth_surface (direct entry) and leo (aerocapture + aerobraking).
-    # A cislunar delivery ignores it — see uses_tps().
+    # Return Δv is reduced — per asteroid, from its own arrival v_infinity —
+    # but a heat-shield mass overhead is added at the rate from Module 3, and
+    # that mass is hauled outbound AND pushed back through the return burn.
+    # Only available where the architecture actually enters an atmosphere:
+    # earth_surface (direct entry), leo (aerocapture + aerobraking) and
+    # mars_surface.  Cislunar and lunar_surface ignore it — see uses_tps().
     use_aerocapture_return:    bool  = True
-    aerocapture_dv_savings_m_s: float = 4_000   # matches Module 3 NEA-return-aerocap
+    aerocapture_dv_savings_m_s: float = 4_000   # fallback only, when elements are unusable
     heat_shield_frac_of_payload: float = 0.15   # TPS mass = 15% of returned payload
 
-    # ─── ISRU  (propellant manufactured at asteroid — Module 3 toggle) ───────
-    # When True, return propellant is "free" at-launch (not hauled outbound)
-    # but adds an on-asteroid processing cost from Module 3.
-    use_isru_return_propellant:    bool  = False
+    # ─── ISRU  (return propellant manufactured at the asteroid) ──────────────
+    # Return propellant is not hauled outbound; it is electrolysed from mined
+    # water.  Available only where that is physically possible — a hydrolox
+    # stage at a body with a non-zero ice fraction — and the rock it takes to
+    # make it is dug, timed, powered and charged like any other feed.  See
+    # isru_feed_kg_per_kg_propellant.
+    #
+    # v1.10.0 flipped this default from False to True.  It used to be False
+    # because it was a blanket switch that handed free propellant to bodies
+    # with no water and to propellants nobody can synthesise; now that it is
+    # gated on the chemistry and costed on the feed, denying it outright would
+    # be modelling every mission as having declined an option a real programme
+    # would evaluate.
+    use_isru_return_propellant:    bool  = True
+    # Electrolysis, liquefaction and cryo storage OPEX per kg of propellant
+    # made.  The mining, hauling and water-liberation energy are NOT in here —
+    # they are charged through the feed, the dig time and the power plant.
     isru_processing_usd_per_kg:    float = 50.0
 
     # ─── COST AMORTISATION & FINANCIAL ───────────────────────────────────────
@@ -790,7 +864,60 @@ class CalcConfig:
     #         already carried by the spacecraft MTBF term.
     #         Effect: P(success) on a 5-year mission rises 0.62 -> 0.70, and
     #         every cost/revenue ratio improves ~13%.
-    pipeline_version: str = "1.9.1"
+    # 1.10.0 — PER-ASTEROID ARCHITECTURE SEARCH, plus three physical
+    #         corrections it exposed.  Every number this module produces
+    #         changes; the committed result tables need re-measuring.
+    #         • RETURN MODE IS NOW CHOSEN, NOT SET.  use_aerocapture_return
+    #           forced aerocapture on every asteroid wherever the destination
+    #           allowed it.  But aerocapture is a trade, not a saving: it buys
+    #           Δv with a heat shield massing 15% of the returned payload,
+    #           hauled outbound as dead mass and pushed back through the return
+    #           burn.  Whether that pays depends on the target's arrival
+    #           v_infinity and on the stage's Isp — both per-asteroid.  Both
+    #           modes are now priced and the profitable one flown.  The flag
+    #           now means "available", not "mandatory".
+    #         • RENDEZVOUS APSIS IS NOW SEARCHED.  The Δv estimator met every
+    #           target at its aphelion unless the whole orbit was interior to
+    #           Earth's.  That rule is right for most main-belt bodies and
+    #           wrong for others: meeting at aphelion means a slow transfer
+    #           with a cheap match burn and an expensive departure, meeting at
+    #           perihelion the reverse, and which dominates is a property of
+    #           a and e together.  Both are priced now, and — because the two
+    #           legs are costed against different bodies — the winner is
+    #           resolved against the DESTINATION, so a body best met at
+    #           aphelion for an Earth return can be met at perihelion for Mars.
+    #           New asteroid_transfer_options_km_s / asteroid_dv_options.
+    #         • ISRU IS NOW PHYSICAL, AND PER-ASTEROID.  The old switch deleted
+    #           the return propellant from the cascade for EVERY asteroid and
+    #           charged $50/kg.  It never asked what the body was made of (an
+    #           M-type with zero ice made propellant out of nothing), never
+    #           asked what the propellant was (xenon and argon are noble gases;
+    #           the switch synthesised them at a rubble pile), and never
+    #           charged the feed, the dig time or the bake-out energy — which
+    #           is the entire cost of ISRU.  Now: hydrolox only, at bodies with
+    #           a non-zero ice fraction, at the stoichiometric 1.286 kg of
+    #           water per kg of propellant, and the rock it takes comes off the
+    #           rig's throughput and the body's mineable mass BEFORE any ore is
+    #           loaded, costs dig time, and pays the 2,500 Wh/kg liberation
+    #           energy through the same power plant and the same rocket
+    #           equation as everything else.  Default flipped False -> True:
+    #           gated and costed, it is an option a real programme would
+    #           evaluate, and denying it outright was its own distortion.
+    #         • BOIL-OFF NOW USES THE REAL HOLD TIME.  It was computed once,
+    #           before the sizing loop, against a stay of station_keeping_floor_yr
+    #           (0.25 yr) — but the stay is dig time plus the launch-window
+    #           wait, which run to years on exactly the targets that want a
+    #           cryogenic stage.  Now solved inside the fixed point with the
+    #           other coupled terms.  Hydrolox on a 4-year hold loads 2.1x what
+    #           it burns, against the ~1.1x the old estimate implied.
+    #         • EARTH-SURFACE PROPULSIVE RETURN PAYS ITS DEORBIT BURN.  The leg
+    #           was documented as "capture into LEO, then deorbit" and priced
+    #           as capture only, making it numerically identical to ret_leo_prop.
+    #           +100 m/s.
+    #         New config: optimise_architecture_per_asteroid.
+    #         New output columns: aerocapture_return, isru_return,
+    #         isru_propellant_kg, isru_feed_kg, rendezvous_apsis.
+    pipeline_version: str = "1.10.0"
 
 
 CONFIG = CalcConfig()
@@ -801,8 +928,10 @@ print(f"    Hardware       : {CONFIG.mining_hardware_kg:,.0f} kg mining rig "
       f"+ {CONFIG.return_vehicle_dry_kg:,.0f} kg return-capsule dry")
 print(f"    Mining cap     : {CONFIG.max_mining_fraction:.0%} of asteroid mass per mission")
 print(f"    Return mode    : "
-      f"{'aerocapture (−' + str(int(CONFIG.aerocapture_dv_savings_m_s)) + ' m/s + TPS mass)' if CONFIG.use_aerocapture_return else 'propulsive'}")
-print(f"    ISRU           : {CONFIG.use_isru_return_propellant}")
+      f"{'aerocapture available (per-asteroid Δv saving vs TPS mass)' if CONFIG.use_aerocapture_return else 'propulsive only'}")
+print(f"    ISRU           : {'available where the rock has water' if CONFIG.use_isru_return_propellant else 'off'}")
+print(f"    Architecture   : "
+      f"{'searched per asteroid' if CONFIG.optimise_architecture_per_asteroid else 'fixed by config'}")
 print(f"    Contingency    : {CONFIG.contingency_fraction:.0%}  |  "
       f"NRE amortised over {CONFIG.nre_amortization_missions} mission(s)")
 
@@ -1498,19 +1627,17 @@ def processing_power_w(
 # essentially no propellant but buys a heat shield.  This replaces the flat
 # `aerocapture_dv_savings_m_s` constant with a per-asteroid saving.
 #
-# VALIDATED against Module 3's independently-sourced DELTA_V_REFERENCE:
-#   target                        estimator   Module 3 table
-#   main belt (a=2.7, e=0.1, i=10°)  10.43 km/s   10.5 km/s  (Module 3)
-#   moderate NEA (a=1.2, e=0.3, i=8°) 5.58 km/s    6.5 km/s  (Module 3 avg NEA)
-#   Bennu    (a=1.126, e=0.204, i=6.0°)  4.64 km/s   ~5.1 km/s (published)
-#   Eros     (a=1.458, e=0.223, i=10.8°) 6.10 km/s   ~6.5 km/s (published)
-#   Itokawa  (a=1.324, e=0.280, i=1.6°)  4.14 km/s   ~4.6 km/s (published)
-# Within ~10% of both the reference table and published mission values, which
-# is the accuracy an analytic estimator can honestly claim.  It runs slightly
-# LOW against published figures for the easiest co-orbital targets, where real
+# The validation table lives on asteroid_transfer_dv_km_s.  In summary: within
+# ~10% of both Module 3's reference table and published mission values, which is
+# the accuracy an analytic estimator can honestly claim.  It runs slightly LOW
+# against published figures for the easiest co-orbital targets, where real
 # mission design finds better transfers than a two-impulse apsis match.
 # The floor is the physical one: escaping LEO costs √2·v_LEO − v_LEO ≈
 # 3.22 km/s no matter how accessible the target is.
+#
+# v1.10.0: WHICH apsis to meet the target at is now searched rather than picked
+# by rule, and the search is resolved against the destination being flown — see
+# asteroid_transfer_options_km_s and asteroid_dv_options.
 
 AU_KM            = 1.495_978_707e8     # astronomical unit
 V_EARTH_KM_S     = 29.784              # Earth mean orbital velocity
@@ -1524,6 +1651,11 @@ DV_NRHO_INSERTION_KM_S = 0.450
 # Periapsis-raise burn to finish an aerobraked capture, Module 3
 # "NEA → LEO delivery (aerobraked)".
 DV_AEROBRAKE_TRIM_KM_S = 0.100
+# Deorbit from a 200-km circular parking orbit onto an entry trajectory.  Small
+# but not zero, and the all-propulsive Earth-surface return has to pay it: that
+# architecture captures into LEO and then still has to come down.  Standard
+# figure for lowering perigee to ~50 km from a 200-km circular orbit.
+DV_LEO_DEORBIT_KM_S = 0.100
 
 # ── Lunar surface  (v1.6.0) ──────────────────────────────────────────────────
 # From a cislunar (NRHO) depot down to the surface, Module 3 DELTA_V_REFERENCE:
@@ -1581,40 +1713,18 @@ def _cislunar_capture_dv_km_s(v_inf_km_s: float) -> float:
     return max(0.0, v_hyp - v_ell) + DV_NRHO_INSERTION_KM_S
 
 
-def asteroid_transfer_dv_km_s(
-    a_au: float, e: float, i_deg: float,
+def _transfer_legs_for_apsis(
+    a: float, e: float, i: float, r_target: float,
 ) -> Optional[Dict[str, float]]:
-    """Patched-conic Δv budget for a rendezvous mission to one asteroid.
+    """Full Δv leg set for rendezvousing at one specific apsis, in km/s.
 
-    Returns a dict of Δv legs in km/s, or None if the elements are unusable:
+    Split out of `asteroid_transfer_dv_km_s` in v1.10.0 so both apsides can be
+    priced and the cheaper one CHOSEN rather than guessed.  See
+    `asteroid_transfer_options_km_s` for why that matters.
 
-        dv_out                  outbound, LEO departure + apsis rendezvous
-        v_inf                   arrival hyperbolic excess back at Earth
-        ret_earth_surface_aero  direct entry — no capture burn at all
-        ret_earth_surface_prop  propulsive capture into LEO, then deorbit
-        ret_leo_prop            propulsive capture into LEO
-        ret_leo_aero            aerocapture + aerobraking, trim burn only
-        ret_cislunar_prop       Oberth capture + NRHO insertion
-
-    v1.5.0 — was a 3-tuple (out, return_propulsive, return_aerocapture) when
-    Earth's surface was the only destination the pipeline could model.
-
-    All heliocentric work is done in canonical units (Earth orbit radius = 1,
-    Earth orbital speed = 1) and converted to km/s at the end.
+    All heliocentric work is in canonical units (Earth orbit radius = 1, Earth
+    orbital speed = 1) and converted to km/s at the end.
     """
-    try:
-        a = float(a_au); e = float(e); i = float(i_deg)
-    except (TypeError, ValueError):
-        return None
-    if not (a > 0) or not (0.0 <= e < 1.0) or not (0.0 <= i <= 180.0):
-        return None
-
-    # Rendezvous at the apsis nearer to reachable transfer geometry.  For the
-    # overwhelming majority (a > 1) that is aphelion; for wholly-interior
-    # orbits (Atira-class) it is perihelion.
-    Q = a * (1.0 + e)
-    q = a * (1.0 - e)
-    r_target = Q if Q >= 1.0 else q
     if r_target <= 0:
         return None
 
@@ -1667,11 +1777,15 @@ def asteroid_transfer_dv_km_s(
     legs = {
         "dv_out":                 dv_out,
         "v_inf":                  v_inf,
+        "r_rendezvous_au":        r_target,
         "ret_earth_surface_aero": dv_match,
-        "ret_earth_surface_prop": dv_match + dv_leo_capture,
+        # v1.10.0: capture into LEO and then LAND is not the same manoeuvre as
+        # capture into LEO and stay there — the capsule still has to come down.
+        # The docstring claimed the deorbit burn all along; it was never added.
+        "ret_earth_surface_prop": dv_match + dv_leo_capture + DV_LEO_DEORBIT_KM_S,
         "ret_leo_prop":           dv_match + dv_leo_capture,
         "ret_leo_aero":           dv_match + DV_AEROBRAKE_TRIM_KM_S,
-        "ret_cislunar_prop":      dv_match + _cislunar_capture_dv_km_s(v_inf),
+        "ret_cislunar_prop":      dv_match + dv_cislunar,
         "ret_lunar_surface_prop": dv_match + dv_cislunar
                                   + DV_NRHO_TO_LUNAR_SURFACE_KM_S,
     }
@@ -1687,6 +1801,98 @@ def asteroid_transfer_dv_km_s(
     if mars is not None:
         legs.update(mars)
     return legs
+
+
+def asteroid_transfer_options_km_s(
+    a_au: float, e: float, i_deg: float,
+) -> List[Dict[str, float]]:
+    """Every rendezvous geometry worth pricing for one asteroid (v1.10.0).
+
+    A two-impulse transfer can meet the target at either apsis, and which one
+    is cheaper is a property of the individual orbit — not something a rule can
+    settle in advance.  Until v1.10.0 the estimator applied one:
+
+        r_target = aphelion if aphelion >= 1 AU else perihelion
+
+    which is right for most main-belt bodies and demonstrably wrong for others.
+    The trade is between two terms that move in opposite directions.  Meeting a
+    body at aphelion means a long, slow transfer whose arrival speed nearly
+    matches the target's — cheap rendezvous, expensive departure.  Meeting it at
+    perihelion means a short transfer, but both bodies are moving fast there and
+    the match burn is large.  Which term dominates depends on a and e together,
+    so it has to be evaluated, not assumed.
+
+    Returns one full leg dict per feasible apsis, each tagged with
+    `rendezvous_apsis` and `r_rendezvous_au`.  Callers pick — and because the
+    right pick depends on the DESTINATION (a body reached cheaply at aphelion
+    may still be a worse Mars target than the same body met at perihelion), the
+    choice belongs to `asteroid_dv_options`, which knows where the cargo is
+    going, rather than to this function.
+
+    An empty list means the elements were unusable.
+    """
+    try:
+        a = float(a_au); e = float(e); i = float(i_deg)
+    except (TypeError, ValueError):
+        return []
+    if not (a > 0) or not (0.0 <= e < 1.0) or not (0.0 <= i <= 180.0):
+        return []
+
+    Q = a * (1.0 + e)
+    q = a * (1.0 - e)
+
+    options: List[Dict[str, float]] = []
+    for label, r_target in (("aphelion", Q), ("perihelion", q)):
+        legs = _transfer_legs_for_apsis(a, e, i, r_target)
+        if legs is None:
+            continue
+        legs["rendezvous_apsis"] = label
+        options.append(legs)
+        if abs(Q - q) < 1e-9:
+            break                      # circular orbit — the apsides coincide
+    return options
+
+
+def asteroid_transfer_dv_km_s(
+    a_au: float, e: float, i_deg: float,
+) -> Optional[Dict[str, float]]:
+    """Patched-conic Δv budget for a rendezvous mission to one asteroid.
+
+    Returns a dict of Δv legs in km/s, or None if the elements are unusable:
+
+        dv_out                  outbound, LEO departure + apsis rendezvous
+        v_inf                   arrival hyperbolic excess back at Earth
+        r_rendezvous_au         where the transfer meets the target
+        rendezvous_apsis        which apsis that is
+        ret_earth_surface_aero  direct entry — no capture burn at all
+        ret_earth_surface_prop  propulsive capture into LEO, then deorbit
+        ret_leo_prop            propulsive capture into LEO
+        ret_leo_aero            aerocapture + aerobraking, trim burn only
+        ret_cislunar_prop       Oberth capture + NRHO insertion
+
+    v1.5.0 — was a 3-tuple (out, return_propulsive, return_aerocapture) when
+    Earth's surface was the only destination the pipeline could model.
+
+    v1.10.0 — the rendezvous apsis is now searched (see
+    `asteroid_transfer_options_km_s`).  This wrapper resolves it against an
+    EARTH round trip, which is what the validation figures below were measured
+    against; Module 4 itself calls the options function and resolves against
+    the destination actually being flown.
+
+    VALIDATED against Module 3's independently-sourced DELTA_V_REFERENCE:
+      target                              estimator   reference
+      main belt (a=2.7, e=0.1, i=10°)     10.43 km/s   10.5 km/s (Module 3)
+      moderate NEA (a=1.2, e=0.3, i=8°)    5.58 km/s    6.5 km/s (Module 3)
+      Bennu   (a=1.126, e=0.204, i=6.0°)   4.64 km/s   ~5.1 km/s (published)
+      Eros    (a=1.458, e=0.223, i=10.8°)  6.10 km/s   ~6.5 km/s (published)
+      Itokawa (a=1.324, e=0.280, i=1.6°)   4.14 km/s   ~4.6 km/s (published)
+    Every one of those resolves to the aphelion option, so the figures are
+    unchanged by the apsis search — it only moves bodies the old rule got wrong.
+    """
+    options = asteroid_transfer_options_km_s(a_au, e, i_deg)
+    if not options:
+        return None
+    return min(options, key=lambda o: o["dv_out"] + o["ret_earth_surface_prop"])
 
 
 def _asteroid_to_mars_dv_km_s(
@@ -1815,52 +2021,29 @@ def delivery_architecture(destination: str) -> dict:
 
 
 def uses_tps(config: CalcConfig) -> bool:
-    """True when this architecture actually flies a heat shield.
+    """True when this architecture CAN fly a heat shield.
 
     Aerocapture is a request, not a guarantee: a cislunar delivery never
     touches the atmosphere, so asking for aerocapture there gets you a
     propulsive capture and no TPS mass.
+
+    v1.10.0: this answers "is aerocapture on the menu", not "is it flown".
+    Whether it actually pays is decided per asteroid — see
+    `asteroid_dv_options`.
     """
     arch = delivery_architecture(config.delivery_destination)
     return bool(config.use_aerocapture_return and arch["aero_allowed"])
 
 
-def asteroid_dv_m_s(asteroid_row: pd.Series, config: CalcConfig) -> Tuple[float, float]:
-    """Return (Δv_outbound, Δv_return) in m/s for one asteroid.
+def _dv_fallback_m_s(config: CalcConfig, aero: bool) -> Tuple[float, float]:
+    """Uniform reference Δv for a row whose orbital elements are unusable.
 
-    The return leg depends on the delivery destination as well as on the
-    asteroid — v1.5.0.  Uses the per-asteroid estimator when Module 1 supplied
-    usable orbital elements, and falls back to the CalcConfig reference
-    defaults when it did not.  Set `config.use_per_asteroid_dv = False` to
-    force the old uniform behaviour for every row.
+    Pre-v1.4.0 behaviour, retained as the fallback.  No elements means no
+    v_infinity, so the destination-specific capture cannot be derived;
+    approximate it from Module 3's reference figures instead.
     """
-    arch = delivery_architecture(config.delivery_destination)
-    aero = uses_tps(config)
-    leg  = arch["aero_leg"] if aero else arch["prop_leg"]
-
-    estimate = None
-    if config.use_per_asteroid_dv:
-        estimate = asteroid_transfer_dv_km_s(
-            asteroid_row.get("semi_major_axis_au"),
-            asteroid_row.get("eccentricity"),
-            asteroid_row.get("inclination_deg"),
-        )
-
-    if estimate is not None:
-        dv_out = estimate["dv_out"] * 1_000.0
-        dv_ret = estimate[leg] * 1_000.0
-        # Clamp against physically silly extremes (bad elements upstream).
-        dv_out = min(max(dv_out, 3_000.0), config.max_dv_outbound_m_s)
-        dv_ret = min(max(dv_ret, 300.0),  config.max_dv_outbound_m_s)
-        return dv_out, dv_ret
-
-    # ── Fallback: uniform reference Δv (pre-v1.4.0 behaviour) ────────────────
-    # No orbital elements means no v_infinity, so the destination-specific
-    # capture cannot be derived.  Approximate it from the reference figures:
-    # the aerocapture saving for an Earth return, and Module 3's reference
-    # return legs for the in-space destinations.
-    dv_out             = config.default_dv_outbound_m_s
-    dv_ret_propulsive  = config.default_dv_return_m_s
+    dv_out            = config.default_dv_outbound_m_s
+    dv_ret_propulsive = config.default_dv_return_m_s
     if config.delivery_destination == "cislunar":
         # Module 3 "NEA → cislunar NRHO (Oberth capture)" vs "NEA → Earth
         # return (propulsive)": 960 / 5,500 of the propulsive budget.
@@ -1870,6 +2053,154 @@ def asteroid_dv_m_s(asteroid_row: pd.Series, config: CalcConfig) -> Tuple[float,
     else:
         dv_ret = dv_ret_propulsive
     return dv_out, dv_ret
+
+
+def asteroid_dv_options(
+    asteroid_row: pd.Series, config: CalcConfig,
+) -> List[Dict[str, object]]:
+    """Every (return mode × rendezvous apsis) worth flying to this asteroid.
+
+    v1.10.0.  Two things that were global settings are properly per-asteroid
+    decisions, and both were being made for the whole catalog at once:
+
+    RETURN MODE.  `use_aerocapture_return` FORCED aerocapture wherever the
+    architecture allowed it.  But aerocapture is a trade, not a free saving: it
+    buys Δv with a heat shield massing 15% of the returned payload, hauled out
+    from Earth as dead mass and pushed back through the return burn.  For a
+    target arriving slowly the Δv it saves is small and the TPS is not worth
+    carrying; for a fast one it is worth several km/s.  Where the crossover
+    falls depends on the asteroid's arrival v_infinity and on the stage's Isp,
+    so it belongs here with the other per-target choices, alongside the vehicle
+    and the propellant — both of which the model has always picked per asteroid.
+
+    RENDEZVOUS APSIS.  Which apsis is cheaper depends on the destination as
+    well as the orbit, because the outbound and return legs are priced against
+    different bodies: a Mars delivery pays no Earth capture at all, so a
+    geometry that is poor for an Earth return can be the best one for Mars.
+
+    Returns a list of dicts with `aero`, `dv_out_m_s`, `dv_ret_m_s`,
+    `rendezvous_apsis` and `tps_frac`, best apsis already resolved for each
+    return mode.  Never empty: a row with unusable elements gets the single
+    uniform-Δv fallback option.
+    """
+    arch = delivery_architecture(config.delivery_destination)
+    # Which return modes exist here at all.  Cislunar and the lunar surface
+    # have no atmosphere to brake against, so they are propulsive-only whatever
+    # the config asks for.
+    modes = [False]
+    if config.use_aerocapture_return and arch["aero_allowed"]:
+        modes = [True, False] if config.optimise_architecture_per_asteroid else [True]
+
+    options = asteroid_transfer_options_km_s(
+        asteroid_row.get("semi_major_axis_au"),
+        asteroid_row.get("eccentricity"),
+        asteroid_row.get("inclination_deg"),
+    ) if config.use_per_asteroid_dv else []
+
+    out: List[Dict[str, object]] = []
+    for aero in modes:
+        leg = arch["aero_leg"] if aero else arch["prop_leg"]
+        best = None
+        for legs in options:
+            if leg not in legs:
+                continue                # Mars geometry that did not close
+            dv_out = min(max(legs["dv_out"] * 1_000.0, 3_000.0),
+                         config.max_dv_outbound_m_s)
+            dv_ret = min(max(legs[leg] * 1_000.0, 300.0),
+                         config.max_dv_outbound_m_s)
+            # Resolve the apsis against the round trip actually being flown,
+            # not against a fixed Earth return.
+            if best is None or (dv_out + dv_ret) < (best["dv_out_m_s"] + best["dv_ret_m_s"]):
+                best = {"dv_out_m_s": dv_out, "dv_ret_m_s": dv_ret,
+                        "rendezvous_apsis": legs["rendezvous_apsis"]}
+        if best is None:
+            dv_out, dv_ret = _dv_fallback_m_s(config, aero)
+            best = {"dv_out_m_s": dv_out, "dv_ret_m_s": dv_ret,
+                    "rendezvous_apsis": "reference"}
+        best["aero"]     = aero
+        best["tps_frac"] = config.heat_shield_frac_of_payload if aero else 0.0
+        out.append(best)
+    return out
+
+
+def asteroid_dv_m_s(asteroid_row: pd.Series, config: CalcConfig) -> Tuple[float, float]:
+    """(Δv_outbound, Δv_return) in m/s for one asteroid, in m/s.
+
+    Kept as the single-answer form for interactive use and for callers that
+    want the config's nominal return mode rather than the optimised one.  The
+    pipeline itself uses `asteroid_dv_options`, which returns every mode worth
+    evaluating and lets the profit search choose.
+    """
+    aero = uses_tps(config)
+    for opt in asteroid_dv_options(asteroid_row, config):
+        if bool(opt["aero"]) == aero:
+            return float(opt["dv_out_m_s"]), float(opt["dv_ret_m_s"])
+    return _dv_fallback_m_s(config, aero)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ISRU RETURN PROPELLANT  (v1.10.0 — made physical, and made per-asteroid)
+# ─────────────────────────────────────────────────────────────────────────────
+# `use_isru_return_propellant` was a global switch that, when on, deleted the
+# return propellant from the outbound mass cascade for EVERY asteroid and
+# charged a flat $50/kg for it.  Three things were wrong with that, and they
+# compound:
+#
+#   1. It did not ask what the body is made of.  An M-type with a
+#      comp_ice_fraction of exactly zero manufactured its return propellant
+#      out of nothing.
+#   2. It did not ask what the propellant IS.  Xenon and argon are noble gases
+#      present in asteroids only in trace amounts; RP-1 is a refined
+#      hydrocarbon; MMH/NTO needs a nitrogen source asteroids largely lack.
+#      None of them can be made at a rubble pile, and the switch made all of
+#      them free.
+#   3. It charged no feed, no dig time and no energy.  Making propellant means
+#      mining and baking MORE rock — that is the whole cost of ISRU, and it was
+#      the one part not modelled.
+#
+# What is actually makeable from asteroid material is hydrolox: water,
+# electrolysed, cryo-cooled.  That is the architecture every asteroid-ISRU
+# study proposes and the only one this model can honestly price.
+#
+# The mass balance is stoichiometric.  Electrolysis yields 8 kg of O2 per kg of
+# H2 (mass ratio of O to H2 in H2O).  A hydrolox stage runs oxidiser-rich of
+# stoichiometric at an O/F around 6:1, so a kilogram of propellant is
+# 1/(1+6) kg of H2, and getting that H2 takes 9x its mass in water:
+#
+#     water per kg of propellant = 9 / (1 + O/F) = 1.286 kg
+#
+# The surplus oxygen (8/7 produced against 6/7 burnt) is vented — a real depot
+# would sell it, but this model has nobody to sell it to at an asteroid.
+#
+# Methalox is deliberately NOT included even though C-types carry both carbon
+# and water.  It needs a Sabatier loop and a carbon-reduction step that no
+# study has costed for asteroid regolith, and asserting a yield for it would be
+# inventing a number rather than deriving one.
+_HYDROLOX_OF_RATIO         = 6.0
+WATER_KG_PER_KG_HYDROLOX   = 9.0 / (1.0 + _HYDROLOX_OF_RATIO)
+_ISRU_PROPELLANTS          = ("hydrolox",)
+
+
+def isru_feed_kg_per_kg_propellant(
+    asteroid_row: pd.Series, propellant: pd.Series, config: CalcConfig,
+) -> Optional[float]:
+    """kg of regolith to dig per kg of ISRU return propellant, or None.
+
+    None means this mission cannot make its own propellant — either the
+    propellant is not manufacturable from asteroid material, or this body has
+    no water to make it from.  That is a per-(asteroid × propellant) fact, which
+    is why it is answered here rather than by a config flag.
+    """
+    name = str(propellant.get("name", "")).strip().lower()
+    if not any(tag in name for tag in _ISRU_PROPELLANTS):
+        return None
+
+    ice_frac = asteroid_row.get("comp_ice_fraction")
+    if ice_frac is None or pd.isna(ice_frac) or float(ice_frac) <= 0.0:
+        return None
+
+    recovery = max(1e-6, min(1.0, config.beneficiation_recovery))
+    return WATER_KG_PER_KG_HYDROLOX / (float(ice_frac) * recovery)
 
 
 def mining_duration_yr(payload_kg: float, config: CalcConfig) -> float:
@@ -1934,31 +2265,45 @@ def max_return_payload_kg(
     dry_return_kg:   float,
     tps_frac:        float = 0.0,
     isru_return:     bool  = False,
+    structure_frac:  float = 0.0,
 ) -> Dict[str, float]:
     """Closed-form max returned-payload solver for a return-sample mission.
 
-    Heat shield (`tps_frac` > 0) is fully accounted for: TPS mass = tps_frac
-    × (m_payload + m_dry_return) is hauled outbound from Earth AND pushed
-    through the return burn (even though it ablates during atmospheric
-    entry).  Let s = 1 + tps_frac.
+    Two masses scale with the payload and both are fully accounted for:
 
-    Working backward from Earth landing:
-        m_after_return  = m_payload + m_dry_return + m_tps
-                        = s · (m_payload + m_dry_return)
+      • HEAT SHIELD, tps_frac × (m_payload + m_dry_return) — hauled outbound
+        from Earth AND pushed back through the return burn, even though it
+        ablates on entry.  Let s = 1 + tps_frac.
+      • RETURN-VEHICLE STRUCTURE, structure_frac × m_payload (v1.10.0) — the
+        tankage, primary structure and cargo restraint that a bigger haul
+        needs.  Let f = structure_frac, so the dry vehicle is d0 + f·m_payload.
+
+    Working backward from arrival:
+        m_dry           = d0 + f · m_payload
+        m_tps           = tps_frac · (m_payload + m_dry)
+        m_after_return  = m_payload + m_dry + m_tps = s · (m_payload + m_dry)
         m_before_return = m_after_return × R_ret
         m_return_prop   = (R_ret − 1) × m_after_return     (zero if ISRU on)
 
-        m_at_asteroid     = m_hardware + m_dry_return + m_tps + m_return_prop
+        m_at_asteroid     = m_hardware + m_dry + m_tps + m_return_prop
                             (the mined payload is loaded HERE, not brought)
         m_before_outbound = m_at_asteroid × R_out
         m_outbound_prop   = (R_out − 1) × m_at_asteroid
 
         m_launch = m_at_asteroid × R_out
 
-    NO-ISRU closed form:
+    Writing g = s·(1 + f) − 1 for the combined payload-proportional overhead,
+    m_at_asteroid collapses to
+
+        m_hardware + s·d0·R_ret + m_payload · ((1 + g)·R_ret − 1)
+
+    so the NO-ISRU closed form is
+
         m_payload_max =
-            (M_LEO/R_out − m_hardware − m_dry_return · s · R_ret) /
-            (s · R_ret − 1)
+            (M_LEO/R_out − m_hardware − s·d0·R_ret) / ((1 + g)·R_ret − 1)
+
+    which reduces to the pre-v1.10.0 expression exactly when f = 0, since g
+    then equals tps_frac and (1 + g) equals s.
 
     Returns a dict with the full mass cascade.  All masses in kg.
     """
@@ -1966,7 +2311,7 @@ def max_return_payload_kg(
         return {"max_payload_kg": 0.0, "viable": False,
                 "r_out": r_out, "r_ret": r_ret,
                 "m_launch": 0, "m_outbound_prop": 0, "m_return_prop": 0,
-                "m_at_asteroid": 0, "m_tps": 0}
+                "m_at_asteroid": 0, "m_tps": 0, "m_dry_return": 0}
 
     if not np.isfinite(isp_s) or isp_s <= 0:
         return _infeasible()
@@ -1982,28 +2327,36 @@ def max_return_payload_kg(
     if not (np.isfinite(r_out) and np.isfinite(r_ret)):
         return _infeasible()      # Δv/Isp so extreme the mass ratio overflows
     s     = 1.0 + tps_frac
+    f     = max(0.0, float(structure_frac))
+    # Combined payload-proportional overhead: heat shield plus the structure
+    # that scales with the haul.  g = tps_frac exactly when f = 0.
+    g     = s * (1.0 + f) - 1.0
 
     if isru_return:
         # ISRU mode: return propellant is manufactured ON the asteroid from
-        # mined volatiles, NOT carried up from Earth.  TPS is still launched
-        # from Earth (must scale with planned m_payload), so the launch
-        # constraint becomes:
+        # mined volatiles, NOT carried up from Earth.  The heat shield and the
+        # payload-scaling structure are still launched from Earth, so the
+        # launch constraint becomes:
         #
-        #   M_LEO ≥ (m_hardware + m_dry_return + m_tps) × R_out
-        #         = (m_hardware + s·m_dry_return + tps_frac·m_payload) × R_out
+        #   M_LEO ≥ (m_hardware + m_dry + m_tps) × R_out
+        #         = (m_hardware + s·d0 + g·m_payload) × R_out
         #
-        # ⇒ m_payload_launch_max = (M_LEO/R_out − m_hardware − s·m_dry_return) / tps_frac
-        #   (and =∞ when tps_frac=0, i.e. propulsive return — mining cap binds)
+        # ⇒ m_payload_launch_max = (M_LEO/R_out − m_hardware − s·d0) / g
+        #
+        # v1.10.0: g is only zero when there is no heat shield AND no structure
+        # scaling — i.e. only if return_structure_frac_of_payload is explicitly
+        # set to 0.  That combination is what used to let the cascade report an
+        # unbounded payload with nothing but the volume cap to stop it.
         base_launch = (hardware_kg + s * dry_return_kg) * r_out
         if base_launch > leo_capacity_kg:
             return {"max_payload_kg": 0.0, "viable": False,
                     "r_out": r_out, "r_ret": r_ret,
                     "m_launch": 0, "m_outbound_prop": 0, "m_return_prop": 0,
-                    "m_at_asteroid": 0, "m_tps": 0}
-        if tps_frac > 0:
+                    "m_at_asteroid": 0, "m_tps": 0, "m_dry_return": 0}
+        if g > 0:
             m_payload_launch_max = (
                 leo_capacity_kg / r_out - hardware_kg - s * dry_return_kg
-            ) / tps_frac
+            ) / g
             m_payload_max = max(0.0, m_payload_launch_max)
         else:
             m_payload_max = np.inf   # mining cap binds downstream
@@ -2024,30 +2377,35 @@ def max_return_payload_kg(
         }
 
     # ── NO-ISRU: return prop is hauled outbound as dead mass ─────────────────
-    # m_after_return  = s · (m_payload + m_dry_return)
-    # m_return_prop   = (R_ret − 1) · s · (m_payload + m_dry_return)
-    # m_at_asteroid   = m_hardware + s · m_dry_return × R_ret + m_payload · (s·R_ret − 1)
+    # m_dry           = d0 + f · m_payload
+    # m_after_return  = s · (m_payload + m_dry) = m_payload·(1 + g) + s·d0
+    # m_return_prop   = (R_ret − 1) · m_after_return
+    # m_at_asteroid   = m_hardware + s·d0·R_ret + m_payload · ((1 + g)·R_ret − 1)
     # M_LEO = m_at_asteroid × R_out
-    # ⇒ m_payload_max = (M_LEO/R_out − m_hardware − s·m_dry_return·R_ret) / (s·R_ret − 1)
-    denom   = s * r_ret - 1.0
+    # ⇒ m_payload_max = (M_LEO/R_out − m_hardware − s·d0·R_ret) / ((1 + g)·R_ret − 1)
+    #
+    # With f = 0 this is g = tps_frac and (1 + g) = s, i.e. the pre-v1.10.0
+    # expression exactly.
+    denom   = (1.0 + g) * r_ret - 1.0
     bracket = leo_capacity_kg / r_out - hardware_kg - s * dry_return_kg * r_ret
     if bracket <= 0 or denom <= 0:
         return {"max_payload_kg": 0.0, "viable": False,
                 "r_out": r_out, "r_ret": r_ret,
                 "m_launch": 0, "m_outbound_prop": 0, "m_return_prop": 0,
-                "m_at_asteroid": 0, "m_tps": 0}
+                "m_at_asteroid": 0, "m_tps": 0, "m_dry_return": 0}
 
     m_payload_max = bracket / denom
     if m_payload_max <= 0:
         return {"max_payload_kg": 0.0, "viable": False,
                 "r_out": r_out, "r_ret": r_ret,
                 "m_launch": 0, "m_outbound_prop": 0, "m_return_prop": 0,
-                "m_at_asteroid": 0, "m_tps": 0}
+                "m_at_asteroid": 0, "m_tps": 0, "m_dry_return": 0}
 
-    m_tps          = tps_frac * (m_payload_max + dry_return_kg)
-    m_after_return = m_payload_max + dry_return_kg + m_tps
+    m_dry_return   = dry_return_kg + f * m_payload_max
+    m_tps          = tps_frac * (m_payload_max + m_dry_return)
+    m_after_return = m_payload_max + m_dry_return + m_tps
     m_return_prop  = m_after_return * (r_ret - 1.0)
-    m_at_asteroid  = hardware_kg + dry_return_kg + m_tps + m_return_prop
+    m_at_asteroid  = hardware_kg + m_dry_return + m_tps + m_return_prop
     m_outbound_prop = m_at_asteroid * (r_out - 1.0)
     m_launch       = m_at_asteroid + m_outbound_prop
 
@@ -2061,6 +2419,7 @@ def max_return_payload_kg(
         "m_return_prop":   m_return_prop,
         "m_at_asteroid":   m_at_asteroid,
         "m_tps":           m_tps,
+        "m_dry_return":    m_dry_return,
     }
 
 
@@ -2174,6 +2533,8 @@ def mission_cost_usd(
     mission_duration_yr: float,
     processing_power_w:  float = 0.0,
     stay_yr:             float = 0.0,
+    isru_return:         Optional[bool] = None,
+    ep_power_w:          float = 0.0,
 ) -> Dict[str, float]:
     """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
 
@@ -2214,7 +2575,12 @@ def mission_cost_usd(
     launch_cost      = float(mass_cascade["m_launch"]) * float(vehicle["usd_per_kg_to_leo"])
 
     outbound_prop_cost = float(mass_cascade["m_outbound_prop"]) * cost_per_kg_prop
-    if config.use_isru_return_propellant:
+    # v1.10.0: whether this particular mission makes its own propellant is a
+    # per-asteroid decision, so it arrives as an argument.  None falls back to
+    # the config for callers that have not been updated.
+    if isru_return is None:
+        isru_return = config.use_isru_return_propellant
+    if isru_return:
         # ISRU prop is "ongoing" — manufactured at the asteroid over the
         # mining duration, not pre-paid upfront on Earth.
         return_prop_cost = float(mass_cascade["m_return_prop"]) * config.isru_processing_usd_per_kg
@@ -2270,13 +2636,41 @@ def mission_cost_usd(
     # missions, not N units built, so a curve on it would double-count.
     # Exactly 1.0 at N = 1, so a single-mission run is untouched.
     lc = learning_curve_factor(config.nre_amortization_missions, config.learning_curve_rate)
-    capsule_cost            = config.return_vehicle_dry_kg * capsule_per_kg * lc
+    # v1.10.0: bill the return vehicle actually flown.  Its dry mass grows with
+    # the haul (return_structure_frac_of_payload), and the cascade records what
+    # it came to; charging the 500 kg base rate for a vehicle that massed
+    # 19 tonnes would put the mass in the rocket equation and leave the money
+    # out of the ledger — the same asymmetry the EP stage had.
+    dry_return_flown = float(mass_cascade.get(
+        "m_dry_return", config.return_vehicle_dry_kg))
+    capsule_cost            = dry_return_flown * capsule_per_kg * lc
     # v1.5.0: the beneficiation plant's solar array, priced per installed Watt
     # off Module 3's power-system row.  Zero unless beneficiation is on — the
     # baseline rig's own power is already implicit in its $/kg recurring rate.
     power_per_w             = _ops_value(ops_df, "Power system (solar + battery)", default=800.0)
     power_system_cost       = max(0.0, float(processing_power_w)) * power_per_w * lc
-    hardware_cost           = mining_rig_cost + capsule_cost + power_system_cost
+    # ── Electric propulsion stage (v1.10.0) ──────────────────────────────────
+    # v1.7.0 put the EP array and thruster into the ROCKET EQUATION and stopped
+    # there: `ep_system_kg` was hauled as mass and never appeared in a single
+    # cost line.  A 309 kW, 14-tonne electric stage was therefore free, and
+    # electric propulsion won missions on hardware nobody had to buy.  It shows
+    # up the moment the selection objective stops preferring the cheapest
+    # mission (see selection_key), which is how it was found.
+    #
+    # Priced in two parts, because they cost wildly different amounts per
+    # kilogram: the array off the same $/W row as any other deep-space PV
+    # train, the thruster and PPU off Module 3's per-kW propulsion row.
+    ep_kw = max(0.0, float(ep_power_w)) / 1000.0
+    if ep_kw > 0:
+        ep_drive_per_kw = _ops_value(
+            ops_df, "Electric propulsion system recurring cost", default=1_500_000.0,
+        )
+        ep_system_cost = (max(0.0, float(ep_power_w)) * power_per_w
+                          + ep_kw * ep_drive_per_kw) * lc
+    else:
+        ep_system_cost = 0.0
+    hardware_cost           = (mining_rig_cost + capsule_cost + power_system_cost
+                               + ep_system_cost)
 
     # Mission ops × duration  (per-asteroid duration from Δv estimator)
     ops_per_year = _ops_value(ops_df, "Mission operations", default=31_400_000.0)
@@ -2386,6 +2780,7 @@ def mission_cost_usd(
         "mining_rig_cost":       mining_rig_cost,        # amortised portion
         "capsule_cost":          capsule_cost,           # per-mission portion
         "power_system_cost":     power_system_cost,      # beneficiation plant
+        "ep_system_cost":        ep_system_cost,         # electric stage
         "rig_terminal_value":    rig_terminal_value,
         "missions_sharing_rig":  float(missions_sharing_rig),
         "ops_cost":              ops_cost,
@@ -2426,12 +2821,20 @@ def _evaluate_combo_at_ratio(
     target_ratio:      float = 1.0,
     beneficiate:       Optional[bool] = None,
     markets:           Optional[Dict[str, float]] = None,
+    aero:              Optional[bool] = None,
+    isru:              bool = False,
+    rendezvous_apsis:  str = "",
 ) -> Optional[Dict[str, float]]:
-    """Evaluate one (vehicle × propellant) combination for one asteroid.
+    """Evaluate one (vehicle × propellant × architecture) mission for one asteroid.
 
-    Returns None if the combo is infeasible (zero return payload), or a
-    full result dict including profit, ROI, $/kg returned, and the mass
-    + cost cascades.
+    `aero` and `isru` are the return mode and the propellant-sourcing decision
+    for THIS candidate mission — v1.10.0 made both per-asteroid searches rather
+    than global config settings, so they arrive as arguments.  Passing
+    aero=None falls back to what the config allows for the destination.
+
+    Returns None if the mission is infeasible (zero return payload, no
+    propellant to make, over the duration limit), or a full result dict
+    including profit, ROI, $/kg returned, and the mass + cost cascades.
     """
     leo_cap = float(vehicle.get("payload_leo_kg", 0) or 0)
     if leo_cap <= 0:
@@ -2455,13 +2858,39 @@ def _evaluate_combo_at_ratio(
     # v1.5.0: TPS only exists if this architecture actually enters an
     # atmosphere.  A cislunar delivery never does, so asking for aerocapture
     # there yields a propulsive capture and no heat-shield mass.
-    tps_frac = config.heat_shield_frac_of_payload if uses_tps(config) else 0.0
+    # v1.10.0: which return mode this candidate flies is decided by the caller.
+    if aero is None:
+        aero = uses_tps(config)
+    tps_frac = config.heat_shield_frac_of_payload if aero else 0.0
+
+    # ── ISRU feasibility (v1.10.0) ───────────────────────────────────────────
+    # Making return propellant is a property of the (asteroid × propellant)
+    # pair, not a switch.  A candidate that asks for ISRU where the chemistry
+    # does not close is not a mission.
+    isru_feed_per_kg_prop = 0.0
+    if isru:
+        ratio = isru_feed_kg_per_kg_propellant(asteroid_row, propellant, config)
+        if ratio is None:
+            return None
+        isru_feed_per_kg_prop = float(ratio)
 
     # Cap the returned payload by what the asteroid can supply
     asteroid_mass = asteroid_row.get("estimated_mass_kg")
     if asteroid_mass is None or pd.isna(asteroid_mass) or asteroid_mass <= 0:
         return None
     mineable_kg = float(asteroid_mass) * config.max_mining_fraction
+    throughput_cap_kg = max_payload_by_throughput_kg(config)
+    structure_frac = max(0.0, float(config.return_structure_frac_of_payload))
+
+    # ── Launch window (v1.7.0) ───────────────────────────────────────────────
+    # Hoisted above the sizing loop in v1.10.0: the wait depends only on the
+    # target and the destination, but it is part of the stay, and the stay is
+    # how long cryogenic return propellant sits in the tank boiling off.
+    a_dest_au = (A_MARS_AU
+                 if str(config.delivery_destination).strip().lower() == "mars_surface"
+                 else 1.0)
+    synodic_yr     = synodic_period_yr(asteroid_row.get("semi_major_axis_au"), a_dest_au)
+    window_wait_yr = 0.5 * synodic_yr if config.model_launch_windows else 0.0
 
     # ── Power-plant feedback loop (v1.5.0, beneficiation only) ───────────────
     # The processing plant's array mass rides in the same rocket equation as
@@ -2499,42 +2928,58 @@ def _evaluate_combo_at_ratio(
     ep_eff        = _ops_value(ops_df, "Electric propulsion efficiency", default=0.60)
     ep_kg_per_kw  = _ops_value(ops_df, "Electric thruster + PPU specific mass", default=8.0)
 
-    # ── Cryogenic boil-off (v1.8.0) ──────────────────────────────────────────
-    # Return propellant sits in the tank from launch until the departure burn.
-    # Losing a fraction b per day means loading exp(b·days) times what the
-    # rocket equation says you burn.  Folded into an EFFECTIVE return Δv:
-    # since m_return_prop scales with (R_ret − 1), inflating that term by k is
-    # exactly R_eff = 1 + (R_ret − 1)·k, and dv_eff = Isp·g0·ln(R_eff) leaves
-    # the closed-form cascade untouched and exact.
-    #
-    # ISRU is exempt — the propellant is made at the asteroid on departure.
     isp_s_val   = float(propellant["isp_vac_s"])
-    dv_ret_eff  = dv_ret_m_s
-    boiloff_factor = 1.0
     boiloff_pct = float(propellant.get("boiloff_pct_per_day", 0.0) or 0.0)
-    if (config.model_propellant_boiloff and boiloff_pct > 0
-            and not config.use_isru_return_propellant):
-        # Time the return propellant is held: outbound cruise plus the stay.
-        # Estimated from Δv here; the stay is refined below but the cruise
-        # term dominates and this only has to size a tank.
-        hold_yr = (max(0.5, 0.000_23 * dv_out_m_s)
-                   + config.station_keeping_floor_yr
-                   + (0.5 * synodic_period_yr(asteroid_row.get("semi_major_axis_au"),
-                                              A_MARS_AU if str(config.delivery_destination).strip().lower()
-                                              == "mars_surface" else 1.0)
-                      if config.model_launch_windows else 0.0))
-        boiloff_factor = math.exp(boiloff_pct / 100.0 * hold_yr * 365.25)
-        r_ret_raw = math.exp(dv_ret_m_s / (isp_s_val * G0_M_S2))
-        r_ret_eff = 1.0 + (r_ret_raw - 1.0) * boiloff_factor
-        dv_ret_eff = isp_s_val * G0_M_S2 * math.log(r_ret_eff)
+    # ISRU is exempt from boil-off — the propellant is made at the asteroid on
+    # departure rather than held from launch.
+    models_boiloff = (config.model_propellant_boiloff and boiloff_pct > 0
+                      and not isru)
 
+    # ── Coupled sizing loop ──────────────────────────────────────────────────
+    # Six quantities depend on one another in a ring, and none of them can be
+    # solved first:
+    #
+    #   payload → return propellant → ISRU feed ─┐
+    #      ↑                                     ↓
+    #   array mass ← power ← dig time ← total feed
+    #      └──────── hold time → boil-off → effective return Δv ───┘
+    #
+    # Fixed-point iteration solves the ring rather than assuming any leg of it
+    # away.  It converges in a handful of passes because each feedback term is
+    # a modest fraction of the mass it feeds back into.
+    #
+    # v1.10.0 pulled two more terms inside this loop.  Boil-off used to be
+    # computed once, before the loop, against a hold time that assumed the
+    # shortest stay the model allows (station_keeping_floor_yr, 0.25 yr) — but
+    # the stay is dig time plus the launch-window wait, which together run to
+    # YEARS on the targets that most want a cryogenic upper stage.  Hydrolox at
+    # 0.05%/day over a 4-year hold loads 2.1x what the rocket equation burns,
+    # against the 1.1x the old estimate implied.  The ISRU feed is new for the
+    # same reason: it is rock that has to be dug, and dug rock is time.
     power_system_kg = 0.0
     ep_system_kg    = 0.0
     ep_power_watts  = 0.0
     ep_thrust_yr    = 0.0
     processing_power_watts = 0.0
+    isru_feed_kg    = 0.0
+    isru_prop_kg    = 0.0
+    dv_ret_eff      = dv_ret_m_s
+    boiloff_factor  = 1.0
+    stay_est_yr     = config.station_keeping_floor_yr + window_wait_yr
+    outbound_yr     = max(0.5, 0.000_23 * dv_out_m_s)
     cascade = None
-    for _ in range(8):
+    for _ in range(12):
+        # Boil-off, folded into an EFFECTIVE return Δv: since m_return_prop
+        # scales with (R_ret − 1), inflating that term by k is exactly
+        # R_eff = 1 + (R_ret − 1)·k, and dv_eff = Isp·g0·ln(R_eff) leaves the
+        # closed-form cascade untouched and exact.
+        if models_boiloff:
+            hold_yr = outbound_yr + stay_est_yr
+            boiloff_factor = math.exp(boiloff_pct / 100.0 * hold_yr * 365.25)
+            r_ret_raw = math.exp(dv_ret_m_s / (isp_s_val * G0_M_S2))
+            r_ret_eff = 1.0 + (r_ret_raw - 1.0) * boiloff_factor
+            dv_ret_eff = isp_s_val * G0_M_S2 * math.log(r_ret_eff)
+
         cascade = max_return_payload_kg(
             leo_capacity_kg = leo_cap,
             isp_s           = isp_s_val,
@@ -2543,7 +2988,8 @@ def _evaluate_combo_at_ratio(
             hardware_kg     = config.mining_hardware_kg + power_system_kg + ep_system_kg,
             dry_return_kg   = config.return_vehicle_dry_kg,
             tps_frac        = tps_frac,
-            isru_return     = config.use_isru_return_propellant,
+            isru_return     = isru,
+            structure_frac  = structure_frac,
         )
         if not cascade["viable"]:
             return None
@@ -2553,8 +2999,7 @@ def _evaluate_combo_at_ratio(
             m_prop_total = (float(cascade.get("m_outbound_prop", 0.0))
                             + float(cascade.get("m_return_prop", 0.0)))
             ep_power_watts = ep_power_required_w(
-                m_prop_total, float(propellant["isp_vac_s"]),
-                config.ep_target_thrust_yr, ep_eff,
+                m_prop_total, isp_s_val, config.ep_target_thrust_yr, ep_eff,
             )
             ep_thrust_yr = config.ep_target_thrust_yr if m_prop_total > 0 else 0.0
             # Array (scales 1/r²) plus thruster + PPU (does not).
@@ -2562,27 +3007,60 @@ def _evaluate_combo_at_ratio(
             drive_kg  = ep_power_watts / 1000.0 * ep_kg_per_kw
             new_ep_kg = array_kg + drive_kg
 
+        # Propellant made on site is dug before it is burnt, so it takes its
+        # share of the rig's throughput before any ore does.
+        trial_payload = min(cascade["max_payload_kg"], mineable_kg,
+                            max(0.0, throughput_cap_kg - isru_feed_kg))
+        if trial_payload <= 0:
+            return None
+        new_isru_feed = 0.0
+        new_isru_prop = 0.0
+        if isru:
+            r_ret = cascade["r_ret"]
+            new_isru_prop = ((trial_payload
+                              + config.return_vehicle_dry_kg
+                              + structure_frac * trial_payload)
+                             * (1.0 + tps_frac) * (r_ret - 1.0))
+            new_isru_feed = new_isru_prop * isru_feed_per_kg_prop
+            if new_isru_feed >= throughput_cap_kg or new_isru_feed >= mineable_kg:
+                return None       # the rig cannot dig its own fuel in the time
+
+        trial_feed = (min(trial_payload * target_ratio,
+                          max(0.0, throughput_cap_kg - new_isru_feed),
+                          max(0.0, mineable_kg - new_isru_feed))
+                      if beneficiate else trial_payload)
+        trial_dur = max(mining_duration_yr(trial_feed + new_isru_feed, config),
+                        config.station_keeping_floor_yr)
+
         new_power_kg = power_system_kg
-        if beneficiate:
-            # Provisional payload for sizing purposes — the caps below refine
-            # it, but the array only needs to be sized to the right order.
-            trial_payload = min(cascade["max_payload_kg"], mineable_kg,
-                                max_payload_by_throughput_kg(config))
-            if trial_payload <= 0:
-                return None
-            trial_feed = min(trial_payload * target_ratio,
-                             max_payload_by_throughput_kg(config), mineable_kg)
-            trial_dur  = max(mining_duration_yr(trial_feed, config),
-                             config.station_keeping_floor_yr)
+        if beneficiate or isru:
             processing_power_watts = processing_power_w(
-                trial_feed, trial_payload, trial_dur, dig_wh, benef_wh,
+                trial_feed + new_isru_feed,
+                trial_payload if beneficiate else 0.0,
+                trial_dur, dig_wh, benef_wh,
             )
+            if isru and new_isru_prop > 0 and trial_dur > 0:
+                # Baking the water out of the rock, on top of digging it.
+                water_wh = _ops_value(
+                    ops_df, "Water liberation energy (bound water)", default=2_500.0,
+                )
+                processing_power_watts += (
+                    water_wh * new_isru_prop * WATER_KG_PER_KG_HYDROLOX
+                    / (trial_dur * 365.25 * 24.0)
+                )
             new_power_kg = processing_power_watts / w_per_kg if w_per_kg > 0 else 0.0
 
-        converged = (abs(new_power_kg - power_system_kg) <= 0.01 * max(new_power_kg, 1.0)
-                     and abs(new_ep_kg - ep_system_kg) <= 0.01 * max(new_ep_kg, 1.0))
+        new_stay_yr = trial_dur + window_wait_yr
+        converged = (
+            abs(new_power_kg - power_system_kg) <= 0.01 * max(new_power_kg, 1.0)
+            and abs(new_ep_kg - ep_system_kg) <= 0.01 * max(new_ep_kg, 1.0)
+            and abs(new_isru_feed - isru_feed_kg) <= 0.01 * max(new_isru_feed, 1.0)
+            and abs(new_stay_yr - stay_est_yr) <= 0.01 * max(new_stay_yr, 1.0)
+        )
         power_system_kg, ep_system_kg = new_power_kg, new_ep_kg
-        if converged or (not beneficiate and not is_electric):
+        isru_feed_kg, isru_prop_kg    = new_isru_feed, new_isru_prop
+        stay_est_yr                   = new_stay_yr
+        if converged:
             break
 
     if cascade is None or not cascade["viable"]:
@@ -2627,15 +3105,19 @@ def _evaluate_combo_at_ratio(
     # digs, not the payload it flies home — that is the whole point of
     # concentrating.  With it off the semantics are unchanged: throughput caps
     # the payload directly.
-    throughput_cap_kg = max_payload_by_throughput_kg(config)
+    # v1.10.0: propellant made on site is dug from the same rock by the same
+    # rig, so it comes off both budgets before any ore is loaded.  That is the
+    # cost of ISRU, and it is the part the old flat $50/kg charge left out.
+    ore_throughput_kg = max(0.0, throughput_cap_kg - isru_feed_kg)
+    ore_mineable_kg   = max(0.0, mineable_kg - isru_feed_kg)
 
-    m_payload_demand = min(cascade["max_payload_kg"], mineable_kg)
+    m_payload_demand = min(cascade["max_payload_kg"], ore_mineable_kg)
     volume_fits      = m_payload_demand <= volume_capacity_kg
-    throughput_fits  = m_payload_demand <= throughput_cap_kg
+    throughput_fits  = m_payload_demand <= ore_throughput_kg
     if beneficiate:
         m_payload = min(m_payload_demand, volume_capacity_kg)
     else:
-        m_payload = min(m_payload_demand, volume_capacity_kg, throughput_cap_kg)
+        m_payload = min(m_payload_demand, volume_capacity_kg, ore_throughput_kg)
     if m_payload <= 0:
         return None
 
@@ -2653,10 +3135,10 @@ def _evaluate_combo_at_ratio(
     # equals the best phase (a monomineralic body — pure ice, say) this
     # collapses to 1.0 and beneficiation correctly becomes a no-op.
     if beneficiate:
-        feed_kg = min(m_payload * target_ratio, throughput_cap_kg, mineable_kg)
+        feed_kg = min(m_payload * target_ratio, ore_throughput_kg, ore_mineable_kg)
         feed_kg = max(feed_kg, m_payload)          # never less feed than product
         concentration_ratio = feed_kg / m_payload if m_payload > 0 else 1.0
-        throughput_fits = feed_kg <= throughput_cap_kg
+        throughput_fits = feed_kg <= ore_throughput_kg
     else:
         feed_kg = m_payload
         concentration_ratio = 1.0
@@ -2668,13 +3150,25 @@ def _evaluate_combo_at_ratio(
     # reflect the actual mission, not the rocket-eq theoretical max.
     r_ret           = cascade["r_ret"]
     r_out           = cascade["r_out"]
-    m_tps           = tps_frac * (m_payload + config.return_vehicle_dry_kg)
-    m_after_return  = m_payload + config.return_vehicle_dry_kg + m_tps
+    # v1.10.0: the return vehicle grows with what it carries — see
+    # return_structure_frac_of_payload.
+    m_dry_return    = config.return_vehicle_dry_kg + structure_frac * m_payload
+    m_tps           = tps_frac * (m_payload + m_dry_return)
+    m_after_return  = m_payload + m_dry_return + m_tps
     m_return_prop   = m_after_return * (r_ret - 1.0)
-    m_at_asteroid   = (hardware_total_kg + config.return_vehicle_dry_kg + m_tps
-                       + (0.0 if config.use_isru_return_propellant else m_return_prop))
+    m_at_asteroid   = (hardware_total_kg + m_dry_return + m_tps
+                       + (0.0 if isru else m_return_prop))
     m_outbound_prop = m_at_asteroid * (r_out - 1.0)
     m_launch        = m_at_asteroid + m_outbound_prop
+
+    # Settle the ISRU books at the payload actually flown, so the reported feed
+    # and the dig time below describe the same mission the cost model prices.
+    if isru:
+        isru_prop_kg = m_return_prop
+        isru_feed_kg = isru_prop_kg * isru_feed_per_kg_prop
+        if isru_feed_kg + feed_kg > throughput_cap_kg + 1e-6:
+            return None
+    isru_water_kg = isru_prop_kg * WATER_KG_PER_KG_HYDROLOX if isru else 0.0
 
     actual_cascade = {
         "max_payload_kg":  m_payload,
@@ -2686,6 +3180,7 @@ def _evaluate_combo_at_ratio(
         "m_return_prop":   m_return_prop,
         "m_at_asteroid":   m_at_asteroid,
         "m_tps":           m_tps,
+        "m_dry_return":    m_dry_return,
     }
 
     # ── Delivered $/kg — the best load assemblable from this rock ────────────
@@ -2711,20 +3206,13 @@ def _evaluate_combo_at_ratio(
         dominant_frac          = 0.0
 
     # Time is charged on the FEED, not the product: the rig has to dig all
-    # of it, and that stay time flows into ops cost and WACC.
-    mining_yr = mining_duration_yr(feed_kg, config)
+    # of it, and that stay time flows into ops cost and WACC.  ISRU feed counts
+    # — propellant made on site is rock the same rig had to move.
+    mining_yr = mining_duration_yr(feed_kg + isru_feed_kg, config)
 
-    # ── Launch window (v1.7.0) ───────────────────────────────────────────────
-    # You cannot leave when you finish digging; you leave when the phasing
-    # allows.  Expected wait after mining completes is half a synodic period.
-    # Worst for NEAs, whose periods sit near Earth's so the phase drifts
-    # slowly — accessibility in Δv and accessibility in TIME are different
-    # things and this is where they diverge.
-    a_dest_au = (A_MARS_AU
-                 if str(config.delivery_destination).strip().lower() == "mars_surface"
-                 else 1.0)
-    synodic_yr  = synodic_period_yr(asteroid_row.get("semi_major_axis_au"), a_dest_au)
-    window_wait_yr = 0.5 * synodic_yr if config.model_launch_windows else 0.0
+    # The launch-window wait was computed above the sizing loop (it depends
+    # only on the target and the destination) because it is part of the stay,
+    # and the stay is how long cryogenic propellant sits in the tank.
     stay_yr = mining_yr + window_wait_yr
 
     mission_duration_yr = asteroid_mission_duration_yr(
@@ -2741,34 +3229,39 @@ def _evaluate_combo_at_ratio(
 
     # Re-derive the plant's power at the final feed / payload / duration so the
     # cost matches the mission actually flown, not the sizing pass.
-    if beneficiate:
+    if beneficiate or isru:
         processing_power_watts = processing_power_w(
-            feed_kg, m_payload, mining_yr, dig_wh, benef_wh,
+            feed_kg + isru_feed_kg, m_payload if beneficiate else 0.0,
+            mining_yr, dig_wh, benef_wh,
         )
     # ── Bound-water liberation (v1.7.0) ──────────────────────────────────────
     # C/B/D-type "ice" is water locked into phyllosilicates.  Selling it as
     # water means baking it out at ~700 K first, and that energy was free
     # until now.  Charged on the water actually delivered, on top of the
     # mechanical-separation energy above.
-    water_kg = 0.0
+    #
+    # v1.10.0: and on the water turned into propellant, which is the same bake
+    # for the same reason.  ISRU that pays no liberation energy is ISRU that
+    # boils water out of rock for free.
+    water_kg = isru_water_kg
     if config.model_water_liberation:
         if beneficiate and payload_mix:
-            water_kg = float(payload_mix.get("water", 0.0))
+            water_kg += float(payload_mix.get("water", 0.0))
         elif not beneficiate:
             ice_frac = asteroid_row.get("comp_ice_fraction")
             if ice_frac is not None and not pd.isna(ice_frac):
-                water_kg = m_payload * float(ice_frac)
-        if water_kg > 0 and mining_yr > 0:
-            water_wh = _ops_value(
-                ops_df, "Water liberation energy (bound water)", default=2_500.0,
-            )
-            processing_power_watts += (
-                water_wh * water_kg / (mining_yr * 365.25 * 24.0)
-            )
-            # That extra power needs extra array, which the cascade already
-            # flew; recording it keeps the reported plant honest.
-            if w_per_kg > 0:
-                power_system_kg = processing_power_watts / w_per_kg
+                water_kg += m_payload * float(ice_frac)
+    if water_kg > 0 and mining_yr > 0:
+        water_wh = _ops_value(
+            ops_df, "Water liberation energy (bound water)", default=2_500.0,
+        )
+        processing_power_watts += (
+            water_wh * water_kg / (mining_yr * 365.25 * 24.0)
+        )
+        # That extra power needs extra array, which the cascade already
+        # flew; recording it keeps the reported plant honest.
+        if w_per_kg > 0:
+            power_system_kg = processing_power_watts / w_per_kg
     cost                = mission_cost_usd(
         mass_cascade        = actual_cascade,
         vehicle             = vehicle,
@@ -2778,6 +3271,8 @@ def _evaluate_combo_at_ratio(
         mission_duration_yr = mission_duration_yr,
         processing_power_w  = processing_power_watts,
         stay_yr             = stay_yr,
+        isru_return         = isru,
+        ep_power_w          = ep_power_watts,
     )
 
     # ── Market saturation (v1.7.0) ───────────────────────────────────────────
@@ -2854,6 +3349,12 @@ def _evaluate_combo_at_ratio(
         "delivery_arch":        arch["label"],
         "returns_to_earth":     arch["returns_to_earth"],
         "flies_tps":            tps_frac > 0.0,
+        # ── Per-asteroid architecture choices (v1.10.0) ─────────────────────
+        "aerocapture_return":   bool(aero),
+        "isru_return":          bool(isru),
+        "isru_propellant_kg":   isru_prop_kg,
+        "isru_feed_kg":         isru_feed_kg,
+        "rendezvous_apsis":     rendezvous_apsis,
         "dv_out_m_s":           dv_out_m_s,
         "dv_ret_m_s":           dv_ret_m_s,
         "isp_s":                float(propellant["isp_vac_s"]),
@@ -2911,6 +3412,7 @@ def _evaluate_combo_at_ratio(
         "return_volume_m3":     return_volume_m3,
         "fairing_volume_m3":    fairing_m3,
         "volume_fits":          volume_fits,
+        "m_dry_return_kg":      m_dry_return,
         "m_launch_kg":          m_launch,
         "m_outbound_prop_kg":   m_outbound_prop,
         "m_return_prop_kg":     m_return_prop,
@@ -2929,6 +3431,7 @@ def _evaluate_combo_at_ratio(
         "mining_rig_cost_usd":       cost["mining_rig_cost"],   # amortised
         "capsule_cost_usd":          cost["capsule_cost"],      # per mission
         "power_system_cost_usd":     cost["power_system_cost"],
+        "ep_system_cost_usd":        cost["ep_system_cost"],
         "rig_terminal_value_usd":    cost["rig_terminal_value"],
         "missions_sharing_rig":      cost["missions_sharing_rig"],
         "ops_cost_usd":              cost["ops_cost"],
@@ -2949,6 +3452,58 @@ def _evaluate_combo_at_ratio(
         "wacc_multiplier_ongoing":   cost["wacc_multiplier_ongoing"],
         "wacc_multiplier":           cost["wacc_multiplier"],   # weighted avg
     }
+
+
+def selection_key(
+    result: Optional[Dict[str, float]], config: CalcConfig,
+) -> Tuple[float, float]:
+    """Ranking key for choosing between candidate missions.  Higher is better.
+
+    v1.10.0.  Every per-asteroid search in this module — over concentration
+    ratio, over vehicle, over propellant, over return mode — used to pick the
+    candidate with the highest `profit_usd`.  That is the right objective for a
+    firm, and it is the wrong one for this model, for a reason the README and
+    CLAUDE.md have documented for several versions without the code acting on
+    it: revenue here is orders of magnitude below cost, so
+
+        profit_usd = gross_value_usd − total_cost_usd ≈ −total_cost_usd
+
+    and maximising it degenerates into minimising cost.  The mission that got
+    selected was the CHEAPEST one, not the one that came closest to viability,
+    and then the whole project ranked the results by a cost/revenue ratio that
+    nothing had optimised.  The symptom is unmissable once you look for it:
+    widening the search space could make an asteroid's reported ratio WORSE,
+    because a newly-available cheaper-and-far-less-productive mission won on
+    profit.  A search whose answer degrades when given more options is not
+    optimising the quantity being reported.
+
+    So the objective is lexicographic, which costs nothing and is honest at
+    both ends of the regime:
+
+      • If any candidate actually turns a profit, maximise PROFIT.  That is a
+        real operator's objective and the ratio is no longer the interesting
+        number once you are above water.
+      • If none does — which is every default configuration today — minimise
+        COST / REVENUE.  That is the question the model exists to answer:
+        how close to viable can this rock be made to come?
+
+    Because (1, x) beats (0, y) for any x and y, a profitable candidate always
+    outranks an unprofitable one and the two regimes never mix.
+
+    Set `selection_objective = "profit"` to restore the pre-v1.10.0 behaviour.
+    """
+    if result is None:
+        return (-np.inf, -np.inf)
+    profit = float(result.get("profit_usd", -np.inf))
+    if str(config.selection_objective).strip().lower() == "profit":
+        return (0.0, profit)
+    if profit > 0:
+        return (1.0, profit)
+    gross = float(result.get("gross_value_usd", 0.0) or 0.0)
+    cost  = float(result.get("total_cost_usd", 0.0) or 0.0)
+    if gross <= 0:
+        return (-1.0, -cost)          # no revenue at all — lose the least
+    return (0.0, -(cost / gross))
 
 
 def saturation_ratio(
@@ -2983,9 +3538,13 @@ def evaluate_combo(
     best_phase_value_per_kg: Optional[float] = None,
     phases:            Optional[List[Tuple[str, float, float]]] = None,
     markets:           Optional[Dict[str, float]] = None,
+    aero:              Optional[bool] = None,
+    isru:              bool = False,
+    rendezvous_apsis:  str = "",
 ) -> Optional[Dict[str, float]]:
-    """Best mission for one (asteroid × vehicle × propellant), profit-maximising
-    over how hard to concentrate.
+    """Best mission for one (asteroid × vehicle × propellant × architecture),
+    optimising over how hard to concentrate.  "Best" is `selection_key`, which
+    is not simply the highest profit — see there.
 
     Without beneficiation there is nothing to choose: one solve at ratio 1.0.
 
@@ -3011,6 +3570,7 @@ def evaluate_combo(
         dv_out_m_s, dv_ret_m_s, ops_df, config,
         best_phase_value_per_kg=best_phase_value_per_kg,
         phases=phases, target_ratio=r, beneficiate=b, markets=markets,
+        aero=aero, isru=isru, rendezvous_apsis=rendezvous_apsis,
     )
 
     if not config.use_beneficiation:
@@ -3022,7 +3582,7 @@ def evaluate_combo(
     # Including it makes beneficiation an OPTION rather than an obligation,
     # so the answer can never be worse than simply scooping and leaving.
     best = solve(1.0, False)
-    best_profit = best["profit_usd"] if best is not None else -np.inf
+    best_key = selection_key(best, config)
     best_r = 1.0
 
     r_max = saturation_ratio(
@@ -3038,8 +3598,9 @@ def evaluate_combo(
 
     for r in candidates:
         res = solve(r)
-        if res is not None and res["profit_usd"] > best_profit:
-            best_profit, best, best_r = res["profit_usd"], res, r
+        key = selection_key(res, config)
+        if res is not None and key > best_key:
+            best_key, best, best_r = key, res, r
 
     # One refinement pass around the winner, on the same geometric spacing.
     if best is not None and n > 2:
@@ -3048,8 +3609,9 @@ def evaluate_combo(
             if not (1.0 <= r <= r_max):
                 continue
             res = solve(r)
-            if res is not None and res["profit_usd"] > best_profit:
-                best_profit, best = res["profit_usd"], res
+            key = selection_key(res, config)
+            if res is not None and key > best_key:
+                best_key, best = key, res
     return best
 
 
@@ -3088,9 +3650,17 @@ def evaluate_asteroid(
     config:       CalcConfig,
     combos:       Optional[List[Tuple[pd.Series, pd.Series]]] = None,
 ) -> Optional[dict]:
-    """Pick the highest-profit (vehicle × propellant) combo for one asteroid.
+    """Pick the highest-profit mission for one asteroid.
 
-    Returns a single result dict (best combo) or None if no combo is viable.
+    The search space is (vehicle × propellant × return mode × propellant
+    sourcing × concentration ratio), and every axis of it is resolved for THIS
+    asteroid.  v1.10.0 added the last two architecture axes: before it, the
+    return mode and whether to make propellant on site were set once for the
+    whole catalog, which meant a body whose best mission was an aerocaptured
+    return was flown propulsively — or vice versa — purely because of what some
+    other asteroid needed.
+
+    Returns a single result dict (best mission) or None if nothing is viable.
 
     `combos` is the precomputed candidate cross-join from candidate_combos().
     Left as None it is rebuilt per call — correct but slow, so the main loop
@@ -3116,27 +3686,48 @@ def evaluate_asteroid(
     best_phase_value = (asteroid_best_phase_usd_per_kg(asteroid_row, minerals)
                         if config.use_beneficiation else bulk_value)
 
-    dv_out, dv_ret = asteroid_dv_m_s(asteroid_row, config)
+    # Return modes worth flying to this body, each with its own best
+    # rendezvous apsis already resolved against the destination.
+    dv_options = asteroid_dv_options(asteroid_row, config)
 
     if combos is None:
         combos = candidate_combos(catalogs, config)
 
-    # Keep the highest-profit candidate
-    best       = None
-    best_profit = -np.inf
+    # Whether to make return propellant on site is a (target × propellant)
+    # question — it needs water in the rock AND a stage that can burn what
+    # water makes — so it is decided inside the combo loop rather than here.
+    isru_allowed = (config.use_isru_return_propellant
+                    and config.optimise_architecture_per_asteroid)
+
+    # Keep the best candidate under the selection objective — see
+    # selection_key for why that is not simply the highest profit.
+    best     = None
+    best_key = (-np.inf, -np.inf)
     for vehicle, propellant in combos:
-        result = evaluate_combo(
-            asteroid_row, vehicle, propellant,
-            bulk_value, dv_out, dv_ret,
-            ops_df, config,
-            best_phase_value_per_kg=best_phase_value,
-            phases=phases, markets=markets,
-        )
-        if result is None:
-            continue
-        if result["profit_usd"] > best_profit:
-            best_profit = result["profit_usd"]
-            best        = result
+        isru_modes = [False]
+        if config.use_isru_return_propellant and isru_feed_kg_per_kg_propellant(
+                asteroid_row, propellant, config) is not None:
+            # Feasible here.  Price both when searching; otherwise take ISRU as
+            # the config's instruction and fly it wherever it is possible.
+            isru_modes = [False, True] if isru_allowed else [True]
+        for dv_opt in dv_options:
+            for isru in isru_modes:
+                result = evaluate_combo(
+                    asteroid_row, vehicle, propellant,
+                    bulk_value,
+                    float(dv_opt["dv_out_m_s"]), float(dv_opt["dv_ret_m_s"]),
+                    ops_df, config,
+                    best_phase_value_per_kg=best_phase_value,
+                    phases=phases, markets=markets,
+                    aero=bool(dv_opt["aero"]), isru=isru,
+                    rendezvous_apsis=str(dv_opt["rendezvous_apsis"]),
+                )
+                if result is None:
+                    continue
+                key = selection_key(result, config)
+                if key > best_key:
+                    best_key = key
+                    best     = result
 
     if best is None:
         return None
@@ -3245,6 +3836,24 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
     out_path = os.path.join(config.output_dir, config.output_filename)
     df.to_csv(out_path, index=False)
     print(f"\n     💾  Profitability catalog → {out_path}  ({len(df):,} rows)")
+
+    # ── What the architecture search actually chose ──────────────────────────
+    # Worth printing rather than burying in the CSV: if every row picks the
+    # same return mode, the search is costing runtime and buying nothing, and
+    # you want to know that.  If the split is real, so is the effect.
+    if config.optimise_architecture_per_asteroid:
+        bits = []
+        if "aerocapture_return" in df.columns:
+            n_aero = int(df["aerocapture_return"].sum())
+            bits.append(f"{n_aero:,} aerocapture / {len(df) - n_aero:,} propulsive")
+        if "isru_return" in df.columns and int(df["isru_return"].sum()):
+            bits.append(f"{int(df['isru_return'].sum()):,} make their own propellant")
+        if "rendezvous_apsis" in df.columns:
+            n_peri = int((df["rendezvous_apsis"] == "perihelion").sum())
+            if n_peri:
+                bits.append(f"{n_peri:,} rendezvous at perihelion")
+        if bits:
+            print(f"     🧭  Architecture chosen: {'  |  '.join(bits)}")
 
     n_viable = int(df["viable"].sum())
     elapsed  = (datetime.now() - t0).total_seconds()

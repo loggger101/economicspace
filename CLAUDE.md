@@ -62,9 +62,17 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.0.9`, mineral_value `1.6.0`, transportation `1.8.1`,
-calc `1.9.1`, master `1.11.0` (the master version is a literal in
+Current: catalog `1.0.9`, mineral_value `1.6.0`, transportation `1.8.2`,
+calc `1.10.0`, master `1.12.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
+
+> ⚠️  **Every committed result number below predates calc `1.10.0` and is
+> superseded.** That release changed what the per-asteroid search optimises,
+> costed the electric propulsion stage for the first time, and made the return
+> vehicle scale with its cargo. All three move every row. The tables are kept
+> because the *shape* of the results still holds and because the deltas are the
+> point — but treat the digits as stale until someone re-runs all five
+> destinations on the v1.0.9 catalog. See "What v1.10.0 changed" below.
 
 ## When a number changes, grep the prose too
 
@@ -118,9 +126,13 @@ benefit at low perigee (~0.94 km/s). See `_cislunar_capture_dv_km_s`. Do not
 `_asteroid_to_mars_dv_km_s` terminates the transfer ellipse at 1.524 AU and
 captures into Mars' well. Approximating it off the Earth legs would erase the
 whole point: a main-belt body is cheaper to deliver to Mars (3.84 km/s) than
-to Earth (4.13). Mars has an atmosphere so aerocapture applies and TPS is
-carried; the Moon does not, so `lunar_surface` ignores
-`use_aerocapture_return` exactly as `cislunar` does.
+to Earth (4.13). Mars has an atmosphere so aerocapture is *available* and TPS
+can be carried; the Moon does not, so `lunar_surface` ignores
+`use_aerocapture_return` exactly as `cislunar` does. Since v1.10.0 "available"
+is literal — where an atmosphere exists the model prices both the aerocaptured
+and the propulsive return per asteroid and flies whichever pays. It is not a
+foregone conclusion: on a slow-arriving target the Δv saved is small and the
+heat shield is not worth hauling out and pushing back.
 
 **Surface delivery costs are chained per stage, not lumped.** Module 2's
 `_DELIVERY_LEGS` walks real stages backwards from the payload. Collapsing the
@@ -147,6 +159,15 @@ fractional knapsack over `asteroid_phase_table` — fill the hold with the best
 phase available, then the next. Greedy by $/kg is provably optimal here
 because the phases are divisible and priced per kg. Both bounds (content and
 purity) fall out of it; do not reintroduce them as separate clamps.
+
+**So is the mission architecture, as of v1.10.0.** The search for one asteroid
+now spans vehicle × propellant × return mode × propellant sourcing ×
+rendezvous apsis × concentration ratio, and every axis is resolved for that
+body. Aerocapture and ISRU used to be catalog-wide switches, which meant a
+target whose best mission was propulsive got flown aerocaptured because some
+other asteroid wanted it. If you add another architecture choice, add it to
+this search rather than to `CalcConfig` as a global — and check the
+never-worse invariant afterwards.
 
 **How hard to concentrate is searched, not derived.** Grade saturates at
 `saturation_ratio` = 1/(frac_best × recovery); costs keep climbing. So the
@@ -264,23 +285,38 @@ The decision belongs to the (target × destination) pair, not to the target.
 The median halves roughly everywhere regardless, cislunar included
 (4,053× → 2,161×, −47%).
 
-Closing the last 25× is not a tuning exercise. Rig terminal value and
+Closing the remaining gap is not a tuning exercise. Rig terminal value and
 in-space manufacturing were the named candidates and both shipped in v1.8.0
-(`e860259`), so what remains is joint trajectory/payload optimisation, and
+(`e860259`); the architecture search and the corrected selection objective
+shipped in v1.10.0. What remains is joint trajectory/payload optimisation --
+the EP stage is still sized to a fixed `ep_target_thrust_yr` rather than
+having its trajectory optimised against payload and arrival date -- and
 programme scale. Do not manufacture viability by editing `IN_SPACE_UTILITY`
 or the in-space demand ceilings -- both are judgement tables and both are
 load-bearing.
 
-## The ten things the model stopped giving away
+The rig itself is the next obvious per-asteroid decision that is still a
+global: `mining_hardware_kg` is 2,000 kg for a 500-metre NEA and for Ceres
+alike, and it sets both the throughput cap and a big block of dead mass. It
+was left alone in v1.10.0 because sizing it per target changes the meaning of
+`max_payload_by_throughput_kg` everywhere it is read.
+
+## The twelve things the model stopped giving away
 
 Each defaults ON and each moved every number. They are corrections, not
 options; the flags exist to isolate effects, not to be left off.
+
+The last two arrived in v1.10.0 and are documented under "What v1.10.0
+changed" rather than repeated here: the **electric propulsion stage**, which
+was flown as mass and never billed, and the **return vehicle's structure**,
+which did not grow with its cargo.
 
 **Low-thrust trip time.** `T = 2*eta*P/(Isp*g0)`, so burning m_prop takes
 `m_prop*(Isp*g0)^2/(2*eta*P)` -- high Isp buys propellant mass at a QUADRATIC
 cost in time-or-power. The EP stage is sized to finish inside
 `ep_target_thrust_yr` and its array (1/r^2) plus thruster/PPU mass enters the
-rocket equation. Electric fell from 12% of winning combos to 2%. Validated
+rocket equation -- and, since v1.10.0, the cost model too. Electric fell from
+12% of winning combos to 2%. Validated
 against Dawn: 5.0-9.3 yr predicted at its 2.2-3.0 AU operating distance vs
 ~5.9 yr flown. Evaluate at Dawn's 1 AU array rating instead and you get 1.0
 yr -- if this check ever "passes" that easily, the 1/r^2 term has been lost.
@@ -367,6 +403,84 @@ orders of magnitude below cost in most configurations, which makes
 `profit_usd ≈ -total_cost_usd`, so `top_profitable()` degenerates into a
 pure cost ranking — a Δv table wearing a profit label. The ratio is the only
 ranking that responds to both sides.
+
+**And until v1.10.0 the code did not take its own advice.** Every per-asteroid
+search — concentration ratio, vehicle, propellant — picked the candidate with
+the highest `profit_usd`, i.e. the cheapest mission, and then the project
+ranked the output by a ratio nothing had optimised. `selection_key` now makes
+the objective lexicographic: maximise profit if any candidate is actually
+profitable, otherwise minimise cost/revenue. `selection_objective = "profit"`
+restores the old behaviour.
+
+The diagnostic that finds this class of bug is worth remembering: **widening a
+search must never make the reported answer worse.** It did — adding options
+let a cheaper, far less productive mission win on profit while the reported
+ratio got worse. Any time a new option degrades a result, the search is
+optimising something other than what is being reported.
+
+## What v1.10.0 changed
+
+Four things, and two of them were asymmetries where a mass entered the rocket
+equation but never entered the ledger. That is the failure mode to watch for
+in this codebase: the mass cascade and the cost cascade are written in
+different places and nothing checks that every kilogram in one has a price in
+the other.
+
+**The electric propulsion stage was free.** v1.7.0 sized the EP array and
+thruster (`ep_system_kg`, `ep_power_w`), pushed them through the rocket
+equation, and never passed them to `mission_cost_usd`. A 309 kW, 14-tonne
+electric stage cost nothing, so electric propulsion won missions on hardware
+nobody had to buy. Now priced in two parts, because they cost wildly different
+amounts per kilogram: the array off the existing $800/W power-system row, the
+thruster and PPU off Module 3's new `Electric propulsion system recurring
+cost` at $1.5M/kW (NEXT-C anchored). This was invisible while the objective
+preferred cheap missions and appeared the moment it stopped.
+
+**The return vehicle did not grow with its cargo.** `return_vehicle_dry_kg`
+was a flat 500 kg however much it carried, so the cascade happily loaded 125
+tonnes of ore into a half-tonne can — 250:1 payload-to-structure, against 0.4:1
+to 2:1 for real cargo spacecraft. The only other check was the launch
+vehicle's fairing *volume*, which dense ore never fills.
+`return_structure_frac_of_payload` (0.15) now scales it, and the closed-form
+solver carries the term exactly: with `g = s·(1+f) − 1`, the payload formula
+reduces to the old one when `f = 0`. Side effect worth knowing: this is also
+what stops ISRU + propulsive return reporting an unbounded payload.
+
+**Two architecture choices became per-asteroid.** `use_aerocapture_return` and
+`use_isru_return_propellant` were catalog-wide switches even though the right
+answer to both varies target by target, for the same reasons the vehicle and
+propellant already did. Both now mean "available", not "mandatory", and the
+profit search picks. Turning the search off (`optimise_architecture_per_asteroid
+= False`) prices only the config's nominal architecture.
+
+**ISRU stopped being magic.** The old switch deleted return propellant from
+the cascade for every asteroid at a flat $50/kg. It never asked what the body
+was made of — an M-type with zero ice made propellant out of nothing — never
+asked what the propellant was, so it synthesised *xenon and argon* at a rubble
+pile, and never charged the feed, the dig time or the bake-out energy, which is
+the entire cost of ISRU. Now: hydrolox only, at bodies with a non-zero ice
+fraction, at the stoichiometric 1.286 kg of water per kg of propellant
+(electrolysis yields 8 kg O₂ per kg H₂; a 6:1 O/F stage needs 9/(1+6) kg of
+water per kg burnt). The rock it takes comes off the rig's throughput and the
+body's mineable mass *before* any ore is loaded. Default flipped to True,
+because gated and costed it is an option a real programme would evaluate.
+
+Also: the rendezvous apsis is searched rather than assumed (see below), and the
+all-propulsive Earth-surface return finally pays the 100 m/s deorbit burn its
+docstring had been claiming for four versions — it was numerically identical to
+`ret_leo_prop`.
+
+**Δv: which apsis you meet the target at is a search, not a rule.** The
+estimator used `r_target = aphelion if aphelion ≥ 1 AU else perihelion`. That
+is right for most main-belt bodies and wrong for high-eccentricity ones: an
+aphelion rendezvous is a slow transfer with a cheap match burn and an expensive
+departure, a perihelion rendezvous the reverse, and which dominates depends on
+a and e together. For a = 0.6, e = 0.8 the rule cost 18.5 km/s outbound where
+perihelion needs 12.1. Both apsides are priced now, and the winner is resolved
+against the **destination** — a Mars delivery pays no Earth capture, so a body
+best met at aphelion for an Earth return can be best met at perihelion for
+Mars. The published validation figures are unaffected: Bennu, Eros, Itokawa and
+both reference cases all still resolve to aphelion.
 
 ## Config discipline
 
