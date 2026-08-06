@@ -298,7 +298,12 @@ class TransportConfig:
     #         ceiling; mature spacecraft mechanisms run 97-99% and a
     #         continuously-operating excavator is harder than a one-shot
     #         deployment).
-    pipeline_version: str = "1.8.0"
+    # 1.8.1 — recalibrated "Mining system first-of-kind success probability"
+    #         0.75 -> 0.85.  The v1.7.0 note cited three failures and none of
+    #         the successes; the full regolith-contact record is 11/13.  Notes
+    #         now list the whole tally, both ways of counting Hayabusa, and
+    #         why sustained-operation risk is not double-counted here.
+    pipeline_version: str = "1.8.1"
     preview_rows:     int = 15
 
 
@@ -1307,19 +1312,37 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
     {
         "category":         "Mining system first-of-kind success probability",
         "unit":             "probability the rig works as designed",
-        "value":            0.75,
-        "range_low":        0.50,
+        "value":            0.85,
+        "range_low":        0.70,
         "range_high":       0.95,
-        "notes": "v1.7.0.  Nobody has ever sustained-mined an asteroid.  This "
-                 "is the probability that the excavation and beneficiation "
-                 "chain works at all once it arrives — separate from the "
-                 "spacecraft surviving the trip.  Anchors: OSIRIS-REx's TAGSAM "
-                 "collected far more than planned but its sample head jammed "
-                 "open; Hayabusa's first sampler failed to fire; Philae's "
-                 "harpoons did not deploy.  Regolith-contact mechanisms are "
-                 "where deep-space missions actually fail.  Drops toward 0.95 "
-                 "for a repeat mission with flight heritage — raise it "
-                 "alongside nre_amortization_missions.",
+        "notes": "v1.8.1.  Probability the excavation and beneficiation chain "
+                 "works once it arrives — separate from the spacecraft "
+                 "surviving the trip.  Counted from the actual flight record "
+                 "of regolith-contact mechanisms rather than from the "
+                 "failures alone, which is what v1.7.0's 0.75 did and it was "
+                 "unfairly harsh:\n"
+                 "  SUCCEEDED (10): Apollo 15-17 drills and scoops; Luna 16 / "
+                 "20 / 24 drills; Stardust aerogel; Phoenix arm (sticky soil "
+                 "delayed delivery but it worked); Curiosity drill (feed "
+                 "mechanism failed 2016, recovered by feed-extended drilling); "
+                 "Hayabusa2 sampler and SCI impactor, both touchdowns clean; "
+                 "OSIRIS-REx TAGSAM, 121.6 g against a 60 g requirement; "
+                 "Perseverance coring drill; Chang'e 5 and 6 drill + scoop.\n"
+                 "  PARTIAL (1): Hayabusa — the projectile never fired, but "
+                 "contact dust was still collected and returned.\n"
+                 "  FAILED (2): Philae's harpoon pyrotechnics; InSight's HP3 "
+                 "mole, which could not get purchase in Martian regolith.\n"
+                 "That is 11/13 = 0.85 counting Hayabusa as the success it "
+                 "ultimately was, or 10/13 = 0.77 counting it as a loss.  "
+                 "0.85 is taken because Hayabusa did return its sample.\n"
+                 "The honest caveat is that NONE of these is sustained "
+                 "mining — they are one-shot or short-campaign collections of "
+                 "grams to kilograms, not a rig moving 200 kg/day for years "
+                 "with no maintenance.  0.85 is therefore the demonstrated "
+                 "mechanism rate, and the sustained-operation risk on top of "
+                 "it is carried by the spacecraft MTBF term rather than "
+                 "double-counted here.  Grows with flight heritage — see "
+                 "'Mining reliability growth exponent'.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
