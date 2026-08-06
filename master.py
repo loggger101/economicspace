@@ -273,6 +273,11 @@ class CatalogConfig:
     #           estimated_value_usd, estimated_profit_usd, accessibility_score,
     #           source_asterank).  Module 4 v1.3.5+ no longer uses these.
     #         Active sources reduced to: JPL SBDB, SsODNet, NEOWISE, MP3C.
+    # 1.0.7 — renumbering, no behaviour change.  This project was briefly
+    #         developed in two places at once and both shipped different code
+    #         as 1.0.6, so that stamp is ambiguous.  The reconciled module is
+    #         1.0.7 because it matches neither parent.  Treat any CSV stamped
+    #         1.0.6 as undated and re-run rather than trusting the number.
     pipeline_version: str = "1.0.7"
 
 
@@ -2469,6 +2474,11 @@ class MineralValueConfig:
     #           M-type bulk value          $2.61 → $3.69/kg  (+41%)
     #           C-type bulk value          $375  → $638/kg   (+70%, water-driven)
     #           B-type bulk value          $500  → $850/kg   (+70%, water-driven)
+    # 1.1.5 — renumbering, no behaviour change.  This project was briefly
+    #         developed in two places at once and both shipped different code
+    #         as 1.1.4, so that stamp is ambiguous.  The reconciled module is
+    #         1.1.5 because it matches neither parent.  Treat any CSV stamped
+    #         1.1.4 as undated and re-run rather than trusting the number.
     pipeline_version: str = "1.1.5"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
@@ -3536,6 +3546,14 @@ class TransportConfig:
     #           'Autonomous mining control & AI (NRE)' ($200M per program)
     #         • All downstream Module 4 cost cascades now uncrewed by design;
     #           no life-support / crew-habitat mass overhead anywhere
+    # 1.2.5 — portability, no change to any number produced:
+    #         • output_dir defaults via _default_output_dir() instead of a
+    #           hardcoded /content/asteroid_pipeline, which on Windows
+    #           silently resolved to C:\content
+    #         • stdout/stderr forced to UTF-8 before the first print — the
+    #           emoji progress output crashed cp1252 consoles instantly
+    #         • RUN & PREVIEW moved under a main-guard so importing the
+    #           module no longer triggers a full run
     pipeline_version: str = "1.2.5"
     preview_rows:     int = 15
 
@@ -5076,6 +5094,11 @@ class CalcConfig:
     #         Single-mission profitability is still tough but the top of
     #         the rankings now shows realistic million-dollar gross values
     #         for water-bearing C/B-type targets.
+    # 1.3.7 — renumbering, no behaviour change.  This project was briefly
+    #         developed in two places at once and both shipped different code
+    #         as 1.3.6, so that stamp is ambiguous.  The reconciled module is
+    #         1.3.7 because it matches neither parent.  Treat any CSV stamped
+    #         1.3.6 as undated and re-run rather than trusting the number.
     pipeline_version: str = "1.3.7"
 
 
@@ -5615,8 +5638,6 @@ def mission_cost_usd(
     propellant:          pd.Series,
     ops_df:              pd.DataFrame,
     config:              CalcConfig,
-    payload_returned_kg: float,
-    gross_value_usd:     float,
     mission_duration_yr: float,
 ) -> Dict[str, float]:
     """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
@@ -5635,6 +5656,14 @@ def mission_cost_usd(
       • WACC compounding is time-bucketed: upfront costs compound at
         (1+W)^T, ongoing (ops + ISRU prop) at (1+W)^(T/2), end-of-mission
         (recovery) at 1.0.  Previous all-to-end overstated time-cost ~5%.
+
+    Takes no payload or gross-value argument.  It used to take both, and
+    v1.3.2 left them stranded: the insurance rebasing above removed the only
+    read of gross_value_usd, and sample recovery became a flat Module 3 ops
+    lookup rather than a per-kg charge, removing the only read of
+    payload_returned_kg.  Every cost here now derives from the mass cascade,
+    the Module 3 reference tables, and config — nothing scales with the
+    revenue the mission is projected to earn, which is the point.
 
     Line items (every value sourced from Module 3's reference tables):
         UPFRONT     — launch, outbound prop, return prop (if not ISRU),
@@ -5901,8 +5930,6 @@ def evaluate_combo(
         propellant          = propellant,
         ops_df              = ops_df,
         config              = config,
-        payload_returned_kg = m_payload,
-        gross_value_usd     = gross_value,
         mission_duration_yr = mission_duration_yr,
     )
 
