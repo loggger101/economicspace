@@ -277,9 +277,21 @@ class CalcConfig:
     #                     EXPENSIVE return Δv in the model: circularising into
     #                     LEO means killing the whole arrival hyperbola.
     #   "cislunar"      — berthed at an NRHO depot.  Same cost savings as LEO,
-    #                     and the cheapest return Δv of the three, because
-    #                     capture only has to bind the orbit and the burn takes
-    #                     the Oberth benefit at low perigee.
+    #                     and the cheapest return Δv of the orbital options,
+    #                     because capture only has to bind the orbit and the
+    #                     burn takes the Oberth benefit at low perigee.
+    #   "lunar_surface" — landed at a Moon base.  Cislunar capture plus
+    #                     2.6 km/s of NRHO→LLO→surface, all propulsive — the
+    #                     Moon has no atmosphere to brake against.  Carries a
+    #                     $200k/kg lander instead of a berthing adapter.
+    #   "mars_surface"  — landed at a Mars base.  NOT an Earth return: the
+    #                     heliocentric transfer runs from the asteroid's orbit
+    #                     to Mars' (1.524 AU), so the departure burn, arrival
+    #                     v_infinity and capture are all separately computed
+    #                     (_asteroid_to_mars_dv_km_s).  Many NEAs have aphelia
+    #                     out near Mars and are genuinely closer to it than to
+    #                     Earth.  Aerocapture is available and worth several
+    #                     km/s.
     #
     # See DELIVERY_ARCHITECTURES for what each one actually changes.
     delivery_destination:      str   = "earth_surface"
@@ -542,7 +554,32 @@ class CalcConfig:
     #         payload_dominant_phase, payload_dominant_frac,
     #         processing_power_w, power_system_kg, power_w_per_kg_at_target,
     #         hardware_total_kg, power_system_cost_usd.
-    pipeline_version: str = "1.5.0"
+    # 1.6.0 — SURFACE DESTINATIONS: lunar_surface and mars_surface.  Paired
+    #         with Module 2 v1.4.0 and Module 3 v1.5.0.  The three existing
+    #         destinations are unchanged; an earth_surface run is still
+    #         bit-identical to v1.4.0.
+    #         • Lunar surface = cislunar capture + 2.6 km/s of NRHO→LLO→
+    #           surface (Module 3), entirely propulsive.  No TPS: there is no
+    #           atmosphere, so use_aerocapture_return is ignored, exactly as
+    #           for cislunar.
+    #         • MARS IS A DIFFERENT JOURNEY, not a discounted Earth return.
+    #           New _asteroid_to_mars_dv_km_s runs the same patched-conic
+    #           treatment but terminates the heliocentric transfer at Mars'
+    #           orbit (1.524 AU) rather than Earth's, so the departure burn,
+    #           the arrival v_infinity and the capture into Mars' well are all
+    #           computed separately.  Modelling it as "Earth return minus
+    #           something" would have hidden the interesting part: plenty of
+    #           NEAs have aphelia near Mars and are genuinely more accessible
+    #           from a Mars base than from Earth.
+    #           Aerocapture IS available at Mars and is worth several km/s, so
+    #           mars_surface carries TPS where lunar_surface cannot.
+    #         • Surface deliveries carry a $200k/kg lander (Module 3's new
+    #           row) rather than a $60k/kg berthing adapter or a $150k/kg
+    #           re-entry capsule — a lander flies itself down.
+    #         New Δv legs on asteroid_transfer_dv_km_s: ret_lunar_surface_prop,
+    #         ret_mars_surface_aero, ret_mars_surface_prop, v_inf_mars,
+    #         dv_depart_for_mars.
+    pipeline_version: str = "1.6.0"
 
 
 CONFIG = CalcConfig()
@@ -1126,6 +1163,21 @@ DV_NRHO_INSERTION_KM_S = 0.450
 # "NEA → LEO delivery (aerobraked)".
 DV_AEROBRAKE_TRIM_KM_S = 0.100
 
+# ── Lunar surface  (v1.6.0) ──────────────────────────────────────────────────
+# From a cislunar (NRHO) depot down to the surface, Module 3 DELTA_V_REFERENCE:
+#   NRHO → LLO   0.73 km/s        LLO → surface   1.87 km/s
+DV_NRHO_TO_LUNAR_SURFACE_KM_S = 0.730 + 1.870
+
+# ── Mars  (v1.6.0) ───────────────────────────────────────────────────────────
+MU_MARS_KM3_S2   = 42_828.37           # Mars gravitational parameter
+R_MARS_PARK_KM   = 3_396.2 + 200.0     # 200-km circular parking orbit
+A_MARS_AU        = 1.523_679           # Mars semi-major axis
+# Terminal propulsive descent after aeroentry, Module 3 "Mars entry → surface".
+DV_MARS_RETROPROP_KM_S = 0.800
+# Propulsive descent from low Mars orbit with NO atmospheric help — the
+# fallback when aerocapture is switched off.  Mirrors the 4.1 km/s ascent.
+DV_MARS_POWERED_DESCENT_KM_S = 4.100
+
 
 def _leo_departure_dv_km_s(v_inf_km_s: float) -> float:
     """Δv to go from circular LEO onto a hyperbola with this v_infinity.
@@ -1244,8 +1296,13 @@ def asteroid_transfer_dv_km_s(
     #   LEO, aerobraked — trades that Δv for TPS mass and months of passes.
     #   Cislunar — cheapest, because capture only has to BIND the orbit, and
     #     the burn happens at low perigee where Oberth pays best.
+    #   Lunar surface — cislunar capture, then NRHO→LLO→surface.  Airless, so
+    #     that last 2.6 km/s is entirely propulsive.
+    #   Mars — not an Earth return at all.  See the separate transfer below.
     dv_leo_capture = _leo_departure_dv_km_s(v_inf)
-    return {
+    dv_cislunar    = _cislunar_capture_dv_km_s(v_inf)
+
+    legs = {
         "dv_out":                 dv_out,
         "v_inf":                  v_inf,
         "ret_earth_surface_aero": dv_match,
@@ -1253,6 +1310,72 @@ def asteroid_transfer_dv_km_s(
         "ret_leo_prop":           dv_match + dv_leo_capture,
         "ret_leo_aero":           dv_match + DV_AEROBRAKE_TRIM_KM_S,
         "ret_cislunar_prop":      dv_match + _cislunar_capture_dv_km_s(v_inf),
+        "ret_lunar_surface_prop": dv_match + dv_cislunar
+                                  + DV_NRHO_TO_LUNAR_SURFACE_KM_S,
+    }
+
+    # ── Mars: a different journey, not a discounted Earth return ─────────────
+    # Delivering to Mars does not go near Earth.  The heliocentric transfer
+    # runs from the asteroid's orbit to Mars' (1.524 AU), so the departure
+    # burn, the arrival v_infinity and the capture are all different numbers.
+    # Many NEAs have aphelia out near Mars, which makes them genuinely closer
+    # to a Mars base than to Earth — a fact the model can only show if this
+    # leg is computed rather than approximated.
+    mars = _asteroid_to_mars_dv_km_s(a, e, i, r_target)
+    if mars is not None:
+        legs.update(mars)
+    return legs
+
+
+def _asteroid_to_mars_dv_km_s(
+    a: float, e: float, i_deg: float, r_target: float,
+) -> Optional[Dict[str, float]]:
+    """Δv from an asteroid to the Martian surface, in km/s.
+
+    Same patched-conic treatment as the Earth legs, but the heliocentric
+    transfer terminates at Mars' orbit instead of Earth's, and the capture is
+    into Mars' gravity well.
+
+    Returns the propulsive and aerocaptured surface arrivals, or None if the
+    transfer geometry does not close.  Mars has an atmosphere, so aerocapture
+    is genuinely available — and it is worth several km/s.
+    """
+    # ── 1. Transfer ellipse from the asteroid's apsis to Mars' orbit ─────────
+    a_t = (r_target + A_MARS_AU) / 2.0
+    v_t_at_ast_sq  = 2.0 / r_target - 1.0 / a_t
+    v_ast_sq       = 2.0 / r_target - 1.0 / a
+    v_t_at_mars_sq = 2.0 / A_MARS_AU - 1.0 / a_t
+    if min(v_t_at_ast_sq, v_ast_sq, v_t_at_mars_sq) <= 0:
+        return None
+
+    # ── 2. Departure burn at the asteroid, plane change included ────────────
+    # Law of cosines, same as the Earth-departure treatment: the asteroid's
+    # inclination has to be bought out to reach Mars' (nearly co-planar) orbit.
+    cos_i = math.cos(math.radians(i_deg))
+    dv_dep_sq = (v_t_at_ast_sq + v_ast_sq
+                 - 2.0 * math.sqrt(v_t_at_ast_sq * v_ast_sq) * cos_i)
+    dv_depart = math.sqrt(max(dv_dep_sq, 0.0)) * V_EARTH_KM_S
+
+    # ── 3. Arrival v_infinity at Mars ───────────────────────────────────────
+    v_mars = math.sqrt(1.0 / A_MARS_AU)          # circular, canonical units
+    v_inf_mars = abs(math.sqrt(v_t_at_mars_sq) - v_mars) * V_EARTH_KM_S
+
+    # ── 4. Capture and descent ──────────────────────────────────────────────
+    v_circ = math.sqrt(MU_MARS_KM3_S2 / R_MARS_PARK_KM)
+    v_esc  = math.sqrt(2.0) * v_circ
+    dv_capture = math.sqrt(v_esc * v_esc + v_inf_mars * v_inf_mars) - v_circ
+
+    return {
+        "v_inf_mars":              v_inf_mars,
+        "dv_depart_for_mars":      dv_depart,
+        # Aeroentry: the atmosphere absorbs capture AND most of the descent,
+        # leaving only terminal retropropulsion.  Paid for in TPS mass.
+        "ret_mars_surface_aero":   dv_depart + DV_MARS_RETROPROP_KM_S,
+        # All-propulsive: capture into low Mars orbit, then fly the lander
+        # down against gravity with no atmospheric help.  Brutal, and the
+        # reason nobody plans a Mars mission this way.
+        "ret_mars_surface_prop":   dv_depart + dv_capture
+                                   + DV_MARS_POWERED_DESCENT_KM_S,
     }
 
 
@@ -1294,6 +1417,22 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "prop_leg":  "ret_cislunar_prop",
         "aero_allowed": False,
         "label": "berthed at a cislunar (NRHO) depot",
+    },
+    "lunar_surface": {
+        "returns_to_earth": False,
+        "aero_leg":  None,        # the Moon has no atmosphere to brake against
+        "prop_leg":  "ret_lunar_surface_prop",
+        "aero_allowed": False,
+        "needs_lander": True,
+        "label": "landed at a lunar surface base",
+    },
+    "mars_surface": {
+        "returns_to_earth": False,
+        "aero_leg":  "ret_mars_surface_aero",
+        "prop_leg":  "ret_mars_surface_prop",
+        "aero_allowed": True,     # Mars aerocapture is worth several km/s
+        "needs_lander": True,
+        "label": "landed at a Mars surface base",
     },
 }
 
@@ -1679,8 +1818,13 @@ def mission_cost_usd(
     # v1.5.0: and which rate applies depends on where the cargo is going.  An
     # in-space delivery never re-enters, so it carries a passive berthing
     # adapter ($60k/kg) rather than a guided re-entry capsule ($150k/kg).
+    # v1.6.0: a surface base needs a LANDER — throttleable descent engines,
+    # legs, terminal guidance — which is more machine than either a passive
+    # re-entry capsule or a berthing adapter.
     arch = delivery_architecture(config.delivery_destination)
-    if arch["returns_to_earth"]:
+    if arch.get("needs_lander"):
+        capsule_per_kg = _ops_value(ops_df, "Surface lander recurring cost", default=200_000.0)
+    elif arch["returns_to_earth"]:
         capsule_per_kg = _ops_value(ops_df, "Return capsule recurring cost", default=150_000.0)
     else:
         capsule_per_kg = _ops_value(ops_df, "Berthing adapter recurring cost", default=60_000.0)

@@ -28,9 +28,9 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.0.8 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
-| 2 | `modules/mineral_value.py` | 1.3.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity |
-| 3 | `modules/transportation.py` | 1.4.0 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
-| 4 | `modules/calc.py` | 1.5.0 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
+| 2 | `modules/mineral_value.py` | 1.4.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity |
+| 3 | `modules/transportation.py` | 1.5.0 | Launch vehicles, propellants, Δv segments (incl. the delivery ladder above LEO), operational costs |
+| 4 | `modules/calc.py` | 1.6.0 | Per-asteroid Δv, in-space delivery architecture, beneficiation, rocket-equation mass cascade + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 
@@ -99,7 +99,7 @@ that actually move the answer:
 | Knob | Default | Effect |
 |------|---------|--------|
 | `MASTER_CONFIG.output_dir` | platform-dependent | Where everything lands |
-| `MASTER_CONFIG.delivery_destination` | `"earth_surface"` | **Read [Where the material is sold](#where-the-material-is-sold) before changing.** Sets every price *and* the mission architecture. Writes Stage 2 and Stage 4 together — never set the two sub-configs separately |
+| `MASTER_CONFIG.delivery_destination` | `"earth_surface"` | **Read [Where the material is sold](#where-the-material-is-sold) before changing.** Sets every price *and* the mission architecture. One of `earth_surface`, `leo`, `cislunar`, `lunar_surface`, `mars_surface`. Writes Stage 2 and Stage 4 together — never set the two sub-configs separately |
 | `.calc.use_beneficiation` | `False` | Return concentrate instead of run-of-mine ore. Charges the extra dig time, processing energy and solar-array mass. See [Beneficiation](#beneficiation) |
 | `.calc.beneficiation_recovery` | `0.90` | Fraction of the valuable phase reporting to concentrate |
 | `.calc.max_concentration_ratio` | `50.0` | Safety cap on feed:concentrate. The purity bound normally binds first |
@@ -281,14 +281,32 @@ let that pass quietly.
 ### What a kilogram is worth
 
 In-space prices are the launch cost avoided, **derived** rather than
-tabulated: Falcon 9 reusable $/kg-to-LEO, carried further by the rocket
-equation through Stage 3's Δv ladder (`delivered_cost_usd_per_kg`).
+tabulated: Falcon 9 reusable $/kg-to-LEO, carried further by walking a chain
+of real stages backwards from the payload (`delivered_cost_usd_per_kg` over
+`_DELIVERY_LEGS`). Staging is modelled leg-by-leg because it matters — a
+single stage flying the whole 5,920 m/s to the lunar surface needs 10.96 kg
+in LEO per kg landed against 4.99 kg for the tug-plus-lander pair that would
+actually be flown.
 
-| Destination | Launch cost avoided | Δv above LEO | Basis |
-|-------------|--------------------|--------------|-------|
+| Destination | Launch cost avoided | kg in LEO per kg | Chain |
+|-------------|--------------------|------------------|-------|
 | `earth_surface` *(default)* | — | — | Terrestrial commodity prices |
-| `leo` | $4,253/kg | 0 | Falcon 9 reusable $/kg-to-LEO |
-| `cislunar` | $10,810/kg | 3,600 m/s | + TLI and NRHO insertion, Isp 465 s stage, 0.10 dry fraction |
+| `leo` | $4,253/kg | 1.00 | Falcon 9 reusable $/kg-to-LEO |
+| `cislunar` | $10,810/kg | 2.54 | TLI + NRHO insertion (3,600 m/s), cryo tug |
+| `lunar_surface` | $21,210/kg | 4.99 | TLI + LOI (4,050 m/s) tug, then 1,870 m/s lander |
+| `mars_surface` | $45,105/kg | 10.61 | TMI (3,600 m/s), aeroentry at 30% surviving mass, 800 m/s retroprop |
+
+Mars' entry survival fraction is measured, not assumed: MSL landed 899 kg of
+a 3,257 kg entry mass (27.6%) and Perseverance 1,025 of 3,440 (29.8%). The
+lander dry-mass fraction of 0.20 is the Apollo LM descent stage (2,134 kg dry
+on 8,200 kg of propellant).
+
+⚠️ **The two surface figures are marginal-transport lower bounds.** They price
+propellant and stages on a reusable Falcon 9 LEO price, with no first-of-kind
+development, no programme overhead and no cadence limit. Real delivered cost
+today is far higher — CLPS lunar landers run on the order of $1M/kg at ~100 kg
+scale. Read them as "what it could cost at industrial scale", not "what it
+costs now".
 
 A kilogram sitting at a depot is worth **the better of its two fates**, and
 the pipeline picks per commodity:
@@ -327,19 +345,35 @@ and live in one table for exactly that reason.
 
 The destination is a different mission, not a different label:
 
-| | `earth_surface` | `leo` | `cislunar` |
-|---|---|---|---|
-| Return leg (at v_inf = 3 km/s) | direct entry, **0 km/s** | capture, **3.63 km/s** | Oberth + NRHO, **0.94 km/s** |
-| Delivery vehicle | re-entry capsule $150k/kg | berthing adapter $60k/kg | berthing adapter $60k/kg |
-| Arrival ops | $15M recovery campaign | $2M depot handover | $2M depot handover |
-| Licensing | $2.5M launch + re-entry | $1.2M launch only | $1.2M launch only |
-| Heat shield | yes | only if aerobraking | never |
+| | `earth_surface` | `leo` | `cislunar` | `lunar_surface` | `mars_surface` |
+|---|---|---|---|---|---|
+| Delivery vehicle | re-entry capsule $150k/kg | berthing adapter $60k/kg | berthing adapter $60k/kg | lander $200k/kg | lander $200k/kg |
+| Arrival ops | $15M recovery | $2M handover | $2M handover | $2M handover | $2M handover |
+| Licensing | $2.5M launch + re-entry | $1.2M launch only | $1.2M launch only | $1.2M launch only | $1.2M launch only |
+| Heat shield | yes | only if aerobraking | never | never (airless) | yes |
 
 **Cislunar is cheaper to reach than LEO and worth more per kilogram.** This
 reads as a bug and is not one: capturing into LEO must kill the entire
 arrival hyperbola, while capturing into an NRHO depot only has to *bind* the
 orbit, with the burn taking the Oberth benefit at low perigee. The advantage
 widens as arrival energy falls — 5.6× at v_inf = 1 km/s, 2.7× at 5 km/s.
+
+**Mars is a different journey, not a discounted Earth return.**
+`_asteroid_to_mars_dv_km_s` runs the heliocentric transfer from the
+asteroid's orbit to Mars' (1.524 AU), so the departure burn, arrival
+v_infinity and capture are computed separately. That matters because plenty
+of asteroids are genuinely more accessible from Mars than from Earth — and
+approximating the leg would have hidden it entirely:
+
+| Target | → Earth surface | → cislunar | → lunar surface | → Mars surface |
+|--------|----------------|-----------|-----------------|----------------|
+| Bennu-like (a = 1.13) | **0.75** | 1.96 | 4.56 | 5.14 |
+| Mars-crosser (a = 1.46) | 0.78 | 2.33 | 4.93 | **3.28** |
+| Main belt (a = 2.70) | 4.13 | 7.32 | 9.92 | **3.84** |
+
+km/s of return Δv. A main-belt body is cheaper to deliver to Mars than to
+Earth. The Moon is the awkward one — nearest in distance, but airless, so
+every metre per second of arrival is propulsive.
 
 Every output row carries `delivery_destination`, `delivery_arch` and
 `value_basis`, so a CSV cannot be read without knowing which assumption
@@ -417,24 +451,34 @@ run):
 Cost/revenue ratio across the same 1,959 asteroids (lower is better; 1.0
 would be breakeven):
 
-| | | best target | 10th pct | median |
-|---|---|---|---|---|
-| `earth_surface` | plain | 297,108× | 3,298,409× | 17,939,903× |
-| | beneficiated | 151,951× | 2,428,826× | 14,485,919× |
-| `leo` | plain | 323× | 1,341× | 4,055× |
-| | beneficiated | 249× | 649× | 1,913× |
-| `cislunar` | plain | **51×** | 490× | 1,221× |
-| | beneficiated | **51×** | 232× | 594× |
+| | plain (best / median) | beneficiated (best / median) |
+|---|---|---|
+| `earth_surface` | 297,155× / 17,941,089× | 151,976× / 14,487,961× |
+| `leo` | 323× / 4,055× | 249× / 1,913× |
+| `cislunar` | 51× / 1,221× | 51× / 594× |
+| `lunar_surface` | 46× / 881× | 32× / 402× |
+| `mars_surface` | 14× / 158× | **2.2× / 74×** |
 
-Read the columns separately. Beneficiation roughly **halves** the gap for a
-typical target (median 1,221× → 594× at cislunar), but on the single best
-target the optimiser declines to concentrate — that body is already
-water-rich enough that grinding more rock costs more than it returns.
+Beneficiation roughly **halves** the gap for a typical target. At cislunar it
+declines to concentrate on the single best body — already water-rich enough
+that grinding more rock costs more than it returns.
 
-Still **zero viable missions** in every configuration. Destination choice
-alone buys ~5,800×; beneficiation buys ~2× more on the fleet. A real 51× gap
-remains, and that is the honest state of the model, not a bug to be tuned
-away.
+Still **zero viable missions** anywhere, but Mars closes the gap by ~5 orders
+of magnitude from the default and lands within a factor of a few.
+
+⚠️ **The 2.2× figure leans on a modelling gap.** The winning Mars combination
+is a 1,500 s argon Hall thruster, and *low-thrust trip time is not modelled* —
+it carries a Δv penalty but not the years a real spiral adds, nor the
+megawatts it would draw. Restricted to chemical propulsion the honest figures
+are:
+
+| Mars, beneficiated | best | median |
+|---|---|---|
+| all propellants | 2.2× | 74× |
+| **chemical only** | **9.8×** | 89× |
+
+Take **9.8×** as the defensible headline. Set
+`.calc.candidate_propellants` to the chemical subset to reproduce it.
 
 ## Mission model
 
@@ -477,8 +521,11 @@ Stated plainly so results aren't over-read:
 - **In-space manufacturing is not costed.** Raw Fe-Ni is not a pressure
   vessel. The 0.70 utility factor is a stand-in for a refining and forming
   plant that appears nowhere in the cost model.
-- **Trip time for low-thrust is not modelled.** Electric propulsion carries a
-  Δv penalty but not the months-to-years a spiral actually adds.
+- **Trip time for low-thrust is not modelled, and this is now load-bearing.**
+  Electric propulsion carries a Δv penalty but not the years a real spiral
+  adds, nor the megawatts it would draw. The headline Mars result (2.2×)
+  picks a 1,500 s Hall thruster because of it; chemical-only gives 9.8×.
+  Treat the chemical figure as the defensible one until trip time is costed.
 - **The mining rate has no flight heritage.** No one has sustained-mined an
   asteroid, so `mining_rate_kg_per_day_per_kg_rig` is an engineering
   assumption. It is a single obvious dial rather than a hidden infinity, but
