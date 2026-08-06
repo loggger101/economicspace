@@ -281,6 +281,39 @@ class CalcConfig:
     model_market_saturation:   bool  = True
     demand_elasticity:         float = 0.5
 
+    # ─── MODELLING COMPLETENESS, PART 2  (v1.8.0) ────────────────────────────
+    # RIG SERVICE LIFE AND TERMINAL VALUE.  The rig was amortised across
+    # `nre_amortization_missions` with no upper bound, so a programme could
+    # spread one rig across 100 missions of 2 years each — 200 years of duty
+    # from a machine chewing rock.  It now has a finite life (Module 3, 15 yr),
+    # which CAPS the amortisation, and whatever life is left when the
+    # programme ends is credited back at the salvage fraction.
+    #
+    # The cap is the part that bites: at long stays it makes the rig markedly
+    # MORE expensive than the old flat division, not less.  Terminal value is
+    # only credited when there is a programme to inherit the rig
+    # (nre_amortization_missions > 1) — a rig parked at an asteroid nobody
+    # returns to is stranded, not an asset.
+    model_rig_service_life:    bool  = True
+
+    # MISSION RELIABILITY.  Revenue was certain.  It is not: the launch can
+    # fail, the spacecraft can die in transit, and the mining chain has never
+    # been demonstrated at all.  Expected revenue is multiplied by
+    #     P = p_launch · exp(−T/MTBF) · p_mining
+    # while COSTS are still charged in full, which is the conservative and
+    # correct treatment — you spend the money either way.  Launch insurance
+    # already in the cost model replaces hardware on failure, not revenue, so
+    # there is no double count.
+    model_reliability:         bool  = True
+
+    # CRYOGENIC BOIL-OFF.  Return propellant sits in the tank from launch
+    # until the departure burn — years, not hours.  Hydrolox loses ~0.05%/day
+    # even with active cooling, which over a 5-year mission means loading 2.5×
+    # what the rocket equation says you burn.  Without this, hydrolox wins
+    # long missions it could not physically store propellant for.  ISRU return
+    # propellant is exempt: it is manufactured at the asteroid on departure.
+    model_propellant_boiloff:  bool  = True
+
     # ─── PER-ASTEROID Δv  (v1.4.0) ───────────────────────────────────────────
     # When True, each asteroid's Δv is derived from its own orbital elements
     # (semi_major_axis_au, eccentricity, inclination_deg) by the patched-conic
@@ -669,7 +702,48 @@ class CalcConfig:
     #         New output columns: is_electric, ep_power_w, ep_system_kg,
     #         ep_thrust_yr, synodic_period_yr, launch_window_wait_yr,
     #         water_liberated_kg, saturation_multiplier, learning_curve_factor.
-    pipeline_version: str = "1.7.0"
+    # 1.8.0 — MODELLING COMPLETENESS, PART 2.  Four more corrections, all
+    #         default ON.  Paired with Module 2 v1.6.0 and Module 3 v1.7.0.
+    #         • RIG SERVICE LIFE + TERMINAL VALUE.  The rig was amortised
+    #           across nre_amortization_missions with no upper bound, so a
+    #           programme could spread one machine across 100 missions of two
+    #           years each -- 200 years of duty from something chewing rock.
+    #           A 15-year life now CAPS the amortisation, and the cap makes
+    #           long-stay programmes markedly MORE expensive, not less:
+    #           at a 2-year stay one rig serves 7 missions, not 100, so the
+    #           per-mission charge is 13.8x what the old flat division gave.
+    #           Life left when the programme ends is credited at the salvage
+    #           fraction (0.50) -- but only when nre_amortization_missions > 1.
+    #           A rig parked at an asteroid nobody revisits is stranded, not
+    #           an asset, so a single-mission run is unchanged.
+    #         • MISSION RELIABILITY.  Revenue was certain.  Expected revenue
+    #           is now p_launch(0.97) x exp(-T/MTBF)(30 yr) x p_mining(0.75),
+    #           about 0.62 for a 5-year mission.  COSTS are charged in full,
+    #           which is the correct treatment -- you spend the money either
+    #           way -- and launch insurance replaces hardware, not revenue, so
+    #           there is no double count.  p_mining is the honest one: nobody
+    #           has ever sustained-mined an asteroid, and regolith-contact
+    #           mechanisms are exactly where OSIRIS-REx, Hayabusa and Philae
+    #           had their failures.
+    #         • CRYOGENIC BOIL-OFF.  Return propellant sits in the tank from
+    #           launch to the departure burn -- years.  Hydrolox loses
+    #           0.05%/day even actively cooled, so a 5-year hold means loading
+    #           ~2.5x what the rocket equation burns.  Folded into an
+    #           effective return Δv, which leaves the closed-form cascade
+    #           exact: since m_return_prop scales with (R-1), inflating that
+    #           term by k is R_eff = 1 + (R-1)k.  ISRU is exempt.
+    #           Without this, hydrolox won long missions it could not
+    #           physically store propellant for.
+    #         • IN-SPACE MANUFACTURING is costed in Module 2 v1.6.0 rather
+    #           than hidden inside the 0.70 utility factor -- ~$230/kg for
+    #           metals, energy at $6.08/kWh (the capital cost of a Watt in
+    #           deep space) plus $200/kg of amortised refinery.
+    #         New config: model_rig_service_life, model_reliability,
+    #         model_propellant_boiloff.
+    #         New output columns: p_success, boiloff_factor,
+    #         dv_ret_effective_m_s, rig_terminal_value_usd,
+    #         missions_sharing_rig.
+    pipeline_version: str = "1.8.0"
 
 
 CONFIG = CalcConfig()
@@ -2017,6 +2091,7 @@ def mission_cost_usd(
     config:              CalcConfig,
     mission_duration_yr: float,
     processing_power_w:  float = 0.0,
+    stay_yr:             float = 0.0,
 ) -> Dict[str, float]:
     """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
 
@@ -2071,7 +2146,25 @@ def mission_cost_usd(
     # and the return capsule (fresh per mission — fly-and-die).
     hw_per_kg               = _ops_value(ops_df, "Mining payload recurring cost", default=300_000.0)
     mining_rig_cost_total   = config.mining_hardware_kg * hw_per_kg
-    mining_rig_cost         = mining_rig_cost_total / max(1, config.nre_amortization_missions)
+    n_missions              = max(1, config.nre_amortization_missions)
+
+    # ── Rig service life and terminal value (v1.8.0) ─────────────────────────
+    # A rig cannot serve more missions than its life allows.  Whatever life
+    # remains when the programme ends is credited at the salvage fraction —
+    # but only if there IS a programme; a rig at an asteroid nobody revisits
+    # is stranded, not an asset.
+    rig_terminal_value = 0.0
+    missions_sharing_rig = n_missions
+    if config.model_rig_service_life and stay_yr > 0:
+        life_yr = _ops_value(ops_df, "Mining rig service life", default=15.0)
+        salvage = _ops_value(ops_df, "Rig salvage fraction", default=0.50)
+        missions_rig_can_serve = max(1, int(life_yr // stay_yr))
+        missions_sharing_rig   = min(n_missions, missions_rig_can_serve)
+        if n_missions > 1:
+            life_used_frac = min(1.0, missions_sharing_rig * stay_yr / life_yr)
+            rig_terminal_value = mining_rig_cost_total * (1.0 - life_used_frac) * salvage
+    mining_rig_cost = ((mining_rig_cost_total - rig_terminal_value)
+                       / max(1, missions_sharing_rig))
     # v1.4.0: the capsule is priced off its OWN rate.  It used to be billed at
     # the mining-payload rate, which treats a parachute-and-heat-shield can as
     # though it were regolith-contact machinery.
@@ -2142,7 +2235,7 @@ def mission_cost_usd(
     # top of a $300k/kg recurring rate books part of the development twice.
     nre_total   = _ops_value(ops_df, "Spacecraft development (NRE)", default=588_500_000.0)
     nre_overlap = min(max(config.nre_recurring_overlap_fraction, 0.0), 1.0)
-    nre_cost    = nre_total * (1.0 - nre_overlap) / max(1, config.nre_amortization_missions)
+    nre_cost    = nre_total * (1.0 - nre_overlap) / n_missions
 
     # Autonomous mining control & AI NRE — uncrewed-mission specific (Module 3
     # v1.2.4+ replaced the legacy 'Crew' line item with this).  Amortised the
@@ -2151,7 +2244,7 @@ def mission_cost_usd(
     autonomy_nre_total = _ops_value(
         ops_df, "Autonomous mining control & AI (NRE)", default=200_000_000.0,
     )
-    autonomy_nre_cost  = autonomy_nre_total / max(1, config.nre_amortization_missions)
+    autonomy_nre_cost  = autonomy_nre_total / n_missions
 
     # ── Time-bucket every line item ──────────────────────────────────────────
     # UPFRONT = paid at year 0 (or earlier — NRE accumulates pre-launch but
@@ -2211,6 +2304,8 @@ def mission_cost_usd(
         "mining_rig_cost":       mining_rig_cost,        # amortised portion
         "capsule_cost":          capsule_cost,           # per-mission portion
         "power_system_cost":     power_system_cost,      # beneficiation plant
+        "rig_terminal_value":    rig_terminal_value,
+        "missions_sharing_rig":  float(missions_sharing_rig),
         "ops_cost":              ops_cost,
         "heat_shield_cost":      heat_shield_cost,
         "tps_mass_kg":           tps_mass,
@@ -2322,6 +2417,35 @@ def _evaluate_combo_at_ratio(
     ep_eff        = _ops_value(ops_df, "Electric propulsion efficiency", default=0.60)
     ep_kg_per_kw  = _ops_value(ops_df, "Electric thruster + PPU specific mass", default=8.0)
 
+    # ── Cryogenic boil-off (v1.8.0) ──────────────────────────────────────────
+    # Return propellant sits in the tank from launch until the departure burn.
+    # Losing a fraction b per day means loading exp(b·days) times what the
+    # rocket equation says you burn.  Folded into an EFFECTIVE return Δv:
+    # since m_return_prop scales with (R_ret − 1), inflating that term by k is
+    # exactly R_eff = 1 + (R_ret − 1)·k, and dv_eff = Isp·g0·ln(R_eff) leaves
+    # the closed-form cascade untouched and exact.
+    #
+    # ISRU is exempt — the propellant is made at the asteroid on departure.
+    isp_s_val   = float(propellant["isp_vac_s"])
+    dv_ret_eff  = dv_ret_m_s
+    boiloff_factor = 1.0
+    boiloff_pct = float(propellant.get("boiloff_pct_per_day", 0.0) or 0.0)
+    if (config.model_propellant_boiloff and boiloff_pct > 0
+            and not config.use_isru_return_propellant):
+        # Time the return propellant is held: outbound cruise plus the stay.
+        # Estimated from Δv here; the stay is refined below but the cruise
+        # term dominates and this only has to size a tank.
+        hold_yr = (max(0.5, 0.000_23 * dv_out_m_s)
+                   + config.station_keeping_floor_yr
+                   + (0.5 * synodic_period_yr(asteroid_row.get("semi_major_axis_au"),
+                                              A_MARS_AU if str(config.delivery_destination).strip().lower()
+                                              == "mars_surface" else 1.0)
+                      if config.model_launch_windows else 0.0))
+        boiloff_factor = math.exp(boiloff_pct / 100.0 * hold_yr * 365.25)
+        r_ret_raw = math.exp(dv_ret_m_s / (isp_s_val * G0_M_S2))
+        r_ret_eff = 1.0 + (r_ret_raw - 1.0) * boiloff_factor
+        dv_ret_eff = isp_s_val * G0_M_S2 * math.log(r_ret_eff)
+
     power_system_kg = 0.0
     ep_system_kg    = 0.0
     ep_power_watts  = 0.0
@@ -2331,9 +2455,9 @@ def _evaluate_combo_at_ratio(
     for _ in range(8):
         cascade = max_return_payload_kg(
             leo_capacity_kg = leo_cap,
-            isp_s           = float(propellant["isp_vac_s"]),
+            isp_s           = isp_s_val,
             dv_out_m_s      = dv_out_m_s,
-            dv_ret_m_s      = dv_ret_m_s,
+            dv_ret_m_s      = dv_ret_eff,
             hardware_kg     = config.mining_hardware_kg + power_system_kg + ep_system_kg,
             dry_return_kg   = config.return_vehicle_dry_kg,
             tps_frac        = tps_frac,
@@ -2571,6 +2695,7 @@ def _evaluate_combo_at_ratio(
         config              = config,
         mission_duration_yr = mission_duration_yr,
         processing_power_w  = processing_power_watts,
+        stay_yr             = stay_yr,
     )
 
     # ── Market saturation (v1.7.0) ───────────────────────────────────────────
@@ -2601,6 +2726,25 @@ def _evaluate_combo_at_ratio(
             saturation_mult = adj_value / gross_value
         gross_value = adj_value
         delivered_value_per_kg = gross_value / m_payload if m_payload > 0 else 0.0
+
+    # ── Mission reliability (v1.8.0) ─────────────────────────────────────────
+    # Revenue was certain.  It is not.  Three independent ways to get nothing:
+    # the launch fails, the spacecraft dies on the way, or the mining chain —
+    # which has never been demonstrated anywhere — does not work when it
+    # arrives.  Costs are still charged in FULL, which is both conservative
+    # and correct: you spend the money either way.  The launch insurance
+    # already in the cost model replaces hardware, not revenue, so this is not
+    # a double count.
+    p_success = 1.0
+    if config.model_reliability:
+        p_launch = _ops_value(ops_df, "Launch vehicle reliability", default=0.97)
+        mtbf_yr  = _ops_value(ops_df, "Spacecraft mean time between failures", default=30.0)
+        p_mining = _ops_value(
+            ops_df, "Mining system first-of-kind success probability", default=0.75,
+        )
+        p_cruise = math.exp(-mission_duration_yr / mtbf_yr) if mtbf_yr > 0 else 1.0
+        p_success = max(0.0, min(1.0, p_launch * p_cruise * p_mining))
+        gross_value *= p_success
 
     profit               = gross_value - cost["total_cost"]
     roi                  = profit / cost["total_cost"] if cost["total_cost"] > 0 else np.nan
@@ -2656,6 +2800,9 @@ def _evaluate_combo_at_ratio(
         "launch_window_wait_yr":    window_wait_yr,
         "water_liberated_kg":       water_kg,
         "saturation_multiplier":    saturation_mult,
+        "p_success":                p_success,
+        "boiloff_factor":           boiloff_factor,
+        "dv_ret_effective_m_s":     dv_ret_eff,
         "learning_curve_factor":    learning_curve_factor(
                                         config.nre_amortization_missions,
                                         config.learning_curve_rate),
@@ -2685,6 +2832,8 @@ def _evaluate_combo_at_ratio(
         "mining_rig_cost_usd":       cost["mining_rig_cost"],   # amortised
         "capsule_cost_usd":          cost["capsule_cost"],      # per mission
         "power_system_cost_usd":     cost["power_system_cost"],
+        "rig_terminal_value_usd":    cost["rig_terminal_value"],
+        "missions_sharing_rig":      cost["missions_sharing_rig"],
         "ops_cost_usd":              cost["ops_cost"],
         "tps_mass_kg":               cost["tps_mass_kg"],
         "heat_shield_cost_usd":      cost["heat_shield_cost"],
