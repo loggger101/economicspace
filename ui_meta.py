@@ -1,24 +1,24 @@
 # -*- coding: utf-8 -*-
 """Config introspection and curation for the pipeline UI.
 
-Deliberately NOT in `modules/` — `build_master.py` concatenates every module in
+Deliberately NOT in `modules/`: `build_master.py` concatenates every module in
 that directory into `master.py` and asserts a specific header/footer shape on
-each one.  The UI is a *consumer* of `master.py`, not a part of it, so it lives
+each one. The UI is a *consumer* of `master.py`, not a part of it, so it lives
 at the repo root alongside `build_master.py`.
 
 Two jobs:
 
-1.  **Introspect.**  Walk the four config dataclasses and emit a widget spec per
+1.  **Introspect.** Walk the four config dataclasses and emit a widget spec per
     field, so a field added to `CalcConfig` tomorrow shows up in the UI without
     anyone remembering to list it here.
 
-2.  **Curate.**  Decide what belongs on the front page, what is a path rather
+2.  **Curate.** Decide what belongs on the front page, what is a path rather
     than a dial, and which fields have a fixed set of legal values.
 
 The help text shown in the UI is scraped straight out of the module sources.
-Those comment blocks are the real documentation for this model — the repo's
+Those comment blocks are the real documentation for this model. The repo's
 whole premise is that a number without its reasoning attached gets "fixed" by
-the next person — so the UI surfaces them rather than paraphrasing.
+the next person, so the UI surfaces them rather than paraphrasing.
 """
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Which module source backs each config, for comment scraping.  Note the class
-# names are the *module* names, not the renamed master.py globals: build_master
+# Which module source backs each config, for comment scraping. The class names
+# are the *module* names, not the renamed master.py globals: build_master.py
 # renames the CONFIG instances, not the classes.
 CONFIG_SOURCES: Dict[str, Tuple[str, str]] = {
     "catalog":   (os.path.join(_HERE, "modules", "catalog.py"),        "CatalogConfig"),
@@ -53,9 +53,9 @@ SECTION_LABELS: Dict[str, str] = {
 # FIELDS THE UI TREATS SPECIALLY
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Paths and filenames.  Real settings, but they are plumbing rather than model
+# Paths and filenames. Real settings, but plumbing rather than model
 # assumptions, so they get their own collapsed section instead of sitting among
-# the dials.  `output_dir` is excluded from even that: MasterConfig.apply()
+# the dials. `output_dir` is excluded from even that: MasterConfig.apply()
 # overwrites every sub-config's copy from the master, so editing one here would
 # be silently discarded.
 PATH_FIELDS = {
@@ -67,16 +67,16 @@ PATH_FIELDS = {
     "metals_api_url",
 }
 
-# Shown read-only.  `pipeline_version` is the stamp that tells you which code
-# produced a CSV — CLAUDE.md is explicit that it must be bumped in the source
+# Shown read-only. `pipeline_version` is the stamp that tells you which code
+# produced a CSV. CLAUDE.md is explicit that it must be bumped in the source
 # when output changes, so letting the UI edit it would defeat the entire point.
 READONLY_FIELDS = {"pipeline_version", "PRICE_UNIT"}
 
 # Never rendered as an ordinary widget anywhere.
 #
 # `delivery_destination` exists on BOTH the mineral and calc configs and the two
-# must agree — Stage 2 decides what a kilogram sells for, Stage 4 decides the
-# architecture that puts it there.  Rendering two independent widgets is exactly
+# must agree: Stage 2 decides what a kilogram sells for, Stage 4 decides the
+# architecture that puts it there. Rendering two independent widgets is exactly
 # the mismatch `destination_check()` exists to catch, so the UI renders one
 # control and writes it through `MASTER_CONFIG.delivery_destination`, which sets
 # both.
@@ -85,7 +85,7 @@ SUPPRESSED_FIELDS = {"delivery_destination"}
 # Secrets get a password-style input.
 SECRET_FIELDS = {"metals_api_key"}
 
-# Fixed value sets.  `None` means "resolve at runtime from the loaded module".
+# Fixed value sets. `None` means "resolve at runtime from the loaded module".
 CHOICES: Dict[str, Optional[List[str]]] = {
     "delivery_destination": None,          # from master.DELIVERY_DESTINATIONS
     "selection_objective": ["cost_revenue_ratio", "profit"],
@@ -93,8 +93,8 @@ CHOICES: Dict[str, Optional[List[str]]] = {
     "candidate_propellants": None,         # from transportation/propellants.csv
 }
 
-# Explicit numeric bounds where the default heuristic would get them wrong or
-# where a bad value wastes a 20-minute run.  (min, max, step).
+# Explicit numeric bounds where the default heuristic would get them wrong, or
+# where a bad value wastes a 20-minute run. (min, max, step).
 BOUNDS: Dict[str, Tuple[float, float, float]] = {
     "jpl_limit":                         (100, 200_000, 1_000),
     "eval_row_cap":                      (0, 200_000, 500),
@@ -137,9 +137,10 @@ BOUNDS: Dict[str, Tuple[float, float, float]] = {
 # ─────────────────────────────────────────────────────────────────────────────
 # THE CURATED FRONT PAGE
 # ─────────────────────────────────────────────────────────────────────────────
-# Ordered groups of (config_key, field_name).  Everything here ALSO appears on
-# its own module tab — this is a shortcut to the dials that actually move
-# results, not a separate set of settings.
+# Ordered groups of (config_key, field_name). Everything here is a shortcut to
+# the dials that actually move results, not a separate set of settings. Each of
+# these renders as the live control on the Common tab and as a read-only mirror
+# on its module tab.
 #
 # The grouping follows CLAUDE.md: the destination, the run-size dials, the
 # architecture search, and then "the twelve things the model stopped giving
@@ -149,13 +150,13 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
     (
         "Destination",
         "Where the material is sold. Sets Stage 2 pricing and Stage 4 "
-        "architecture together — they are meaningless apart.",
+        "architecture together; they are meaningless apart.",
         [("__master__", "delivery_destination")],
     ),
     (
         "Run size",
         "What this run costs you in wall-clock time. A full beneficiated "
-        "catalog is roughly 20 minutes per destination; capping the rows is "
+        "catalog is roughly 20 minutes per destination, so capping the rows is "
         "how you sanity-check a config change first.",
         [
             ("catalog", "jpl_limit"),
@@ -175,7 +176,7 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
     ),
     (
         "Architecture availability",
-        "Since v1.10.0 these mean *available*, not *mandatory* — the "
+        "Since v1.10.0 these mean *available*, not *mandatory*. The "
         "per-asteroid search decides whether to use them.",
         [
             ("calc", "use_aerocapture_return"),
@@ -186,7 +187,7 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
     (
         "The twelve corrections",
         "⚠️  These default ON and each one moved every number. They are "
-        "corrections, not options — the flags exist to isolate an effect, not "
+        "corrections, not options: the flags exist to isolate an effect, not "
         "to be left off. Switching them off makes the model more profitable "
         "and less true.",
         [
@@ -205,9 +206,9 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
     ),
     (
         "Data sources",
-        "A source that fails soft does not shrink the catalog — it inflates "
-        "it with albedo-guessed taxonomy. Check the source summary after the "
-        "run before comparing to a committed number.",
+        "A source that fails soft does not shrink the catalog, it inflates it "
+        "with albedo-guessed taxonomy. Check the provenance panel on the "
+        "results page before comparing to a committed number.",
         [
             ("catalog", "use_jpl"),
             ("catalog", "use_mp3c"),
@@ -219,16 +220,22 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
     ),
 ]
 
+CURATED_KEYS = {
+    f"{section}::{name}"
+    for _, _, fields in CURATED_GROUPS
+    for section, name in fields
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # COMMENT SCRAPING
 # ─────────────────────────────────────────────────────────────────────────────
 
-# `# ─── MINING THROUGHPUT  (v1.4.0) ────────────────────` and friends.  The
-# modules use box-drawing rules of a few different characters.
+# Matches `# ─── MINING THROUGHPUT  (v1.4.0) ────────────────────` and friends.
+# The modules use box-drawing rules of a few different characters.
 #
 # The class is built through re.escape because a literal "-" sitting between
-# two other characters is a RANGE, not a hyphen — the same family of mistake as
+# two other characters is a RANGE, not a hyphen: the same family of mistake as
 # the `str.contains(..., regex=False)` fixes in the pipeline itself.
 _RULE_CHARS = "".join(re.escape(c) for c in "─═━=_·•-")
 _BANNER_RE = re.compile(
@@ -240,7 +247,7 @@ _BARE_RULE_RE = re.compile(rf"^#\s*[{_RULE_CHARS}]{{4,}}\s*$")
 def _banner_title(line: str) -> Optional[str]:
     """Section title if `line` is a section banner, else None.
 
-    A banner must have an actual title.  The version-history blocks above each
+    A banner must have an actual title. The version-history blocks above each
     `pipeline_version` are markdown-ish tables whose separator rows otherwise
     match the banner shape and produce a group literally named
     `------  ----------------`.
@@ -249,46 +256,34 @@ def _banner_title(line: str) -> Optional[str]:
     if not match:
         return None
     title = match.group("title").strip()
-    if not title:
-        return None
     # Reject a "title" made of nothing but more rule characters.
-    if not re.search(r"[0-9A-Za-zΔ]", title):
+    if not title or not re.search(r"[0-9A-Za-zΔ]", title):
         return None
     return title
 
 
-def _is_comment(line: str) -> bool:
-    return line.lstrip().startswith("#")
-
-
 def _clean_comment(line: str) -> str:
-    stripped = line.lstrip()
-    body = stripped[1:]
+    body = line.lstrip()[1:]
     return body[1:] if body.startswith(" ") else body
 
 
-def scrape_field_docs(path: str, class_name: str) -> Dict[str, Dict[str, Any]]:
-    """field name → {"help": str, "section": str} scraped from a module source.
+def scrape_field_docs(path: str, class_name: str) -> Dict[str, Dict[str, str]]:
+    """field name -> {"help", "section"} scraped from a module source.
 
     Walks backwards from each field definition collecting the comment block
-    directly above it, stopping at the first blank line or section banner.  The
-    banner title, if there is one, becomes the field's group heading — the
+    directly above it, stopping at the first blank line or section banner. The
+    banner title, if there is one, becomes the field's group heading: the
     modules already organise their configs into labelled sections and there is
     no reason for the UI to invent its own taxonomy.
     """
     try:
         with open(path, encoding="utf-8") as fh:
             src = fh.read()
-    except OSError:
+        tree = ast.parse(src)
+    except (OSError, SyntaxError):
         return {}
 
     lines = src.split("\n")
-
-    try:
-        tree = ast.parse(src)
-    except SyntaxError:
-        return {}
-
     cls = next(
         (n for n in ast.walk(tree)
          if isinstance(n, ast.ClassDef) and n.name == class_name),
@@ -297,48 +292,32 @@ def scrape_field_docs(path: str, class_name: str) -> Dict[str, Dict[str, Any]]:
     if cls is None:
         return {}
 
-    docs: Dict[str, Dict[str, Any]] = {}
+    docs: Dict[str, Dict[str, str]] = {}
     for stmt in cls.body:
         if not isinstance(stmt, ast.AnnAssign) or not isinstance(stmt.target, ast.Name):
             continue
 
-        name = stmt.target.id
         block: List[str] = []
         section = ""
 
         i = stmt.lineno - 2          # 0-indexed line directly above the field
-        while i >= 0:
-            line = lines[i]
-            if not line.strip():
+        while i >= 0 and lines[i].strip() and lines[i].lstrip().startswith("#"):
+            section = _banner_title(lines[i]) or ""
+            if section or _BARE_RULE_RE.match(lines[i].strip()):
                 break
-            if not _is_comment(line):
-                break
-
-            banner = _banner_title(line)
-            if banner:
-                section = banner
-                break
-            if _BARE_RULE_RE.match(line.strip()):
-                break
-
-            block.append(_clean_comment(line))
+            block.append(_clean_comment(lines[i]))
             i -= 1
 
         # If the field had no comment of its own, keep scanning up for the
         # section banner it lives under so it still gets grouped.
-        if not section:
-            j = i
-            while j >= 0:
-                line = lines[j].strip()
-                if line.startswith("class ") or line.startswith("@dataclass"):
-                    break
-                banner = _banner_title(line)
-                if banner:
-                    section = banner
-                    break
-                j -= 1
+        while not section and i >= 0:
+            line = lines[i].strip()
+            if line.startswith("class ") or line.startswith("@dataclass"):
+                break
+            section = _banner_title(line) or ""
+            i -= 1
 
-        docs[name] = {
+        docs[stmt.target.id] = {
             "help": "\n".join(reversed(block)).strip(),
             "section": section or "Other",
         }
@@ -366,28 +345,12 @@ class FieldSpec:
 
     @property
     def key(self) -> str:
-        """Stable session-state key."""
+        """Stable session-state key, which is also the Streamlit widget key."""
         return f"cfg::{self.section_key}::{self.name}"
 
-
-def _infer_bounds(name: str, default: Any,
-                  kind: str = "") -> Optional[Tuple[float, float, float]]:
-    if name in BOUNDS:
-        return BOUNDS[name]
-    if isinstance(default, bool) or default is None:
-        return None
-    if kind == "int" or (not kind and isinstance(default, int)):
-        return (0, max(1_000, abs(default) * 100), 1)
-    if kind == "float" or isinstance(default, float):
-        default = float(default)
-        # A field whose name says "fraction" and whose default sits in [0, 1]
-        # is a fraction; anything else gets a permissive non-negative range.
-        if ("frac" in name or name.endswith("_rate")) and 0.0 <= default <= 1.0:
-            return (0.0, 1.0, 0.01)
-        span = max(1.0, abs(default) * 100.0)
-        step = 10.0 ** (len(f"{int(abs(default))}") - 2) if abs(default) >= 100 else 0.01
-        return (0.0, span, max(step, 0.01))
-    return None
+    @property
+    def curated(self) -> bool:
+        return f"{self.section_key}::{self.name}" in CURATED_KEYS
 
 
 def _kind_for(name: str, field: dataclasses.Field, default: Any) -> str:
@@ -397,10 +360,10 @@ def _kind_for(name: str, field: dataclasses.Field, default: Any) -> str:
         return "readonly"
     if name in CHOICES:
         return "list" if "List" in ann else "choice"
-    if isinstance(default, bool):          # before int — bool IS an int
+    if isinstance(default, bool):          # before int, because bool IS an int
         return "bool"
 
-    # The ANNOTATION wins over the default's runtime type.  Several float fields
+    # The ANNOTATION wins over the default's runtime type. Several float fields
     # are written with an int literal (`mining_hardware_kg: float = 2_000`), and
     # typing off the value alone would hand them an integer stepper and write an
     # int back into a float field.
@@ -408,7 +371,6 @@ def _kind_for(name: str, field: dataclasses.Field, default: Any) -> str:
         return "float"
     if "int" in ann:
         return "int"
-
     if isinstance(default, float):
         return "float"
     if isinstance(default, int):
@@ -416,10 +378,28 @@ def _kind_for(name: str, field: dataclasses.Field, default: Any) -> str:
     return "str"
 
 
+def _infer_bounds(name: str, default: Any,
+                  kind: str) -> Optional[Tuple[float, float, float]]:
+    if name in BOUNDS:
+        return BOUNDS[name]
+    if default is None or kind not in ("int", "float"):
+        return None
+    if kind == "int":
+        return (0, max(1_000, abs(int(default)) * 100), 1)
+
+    default = float(default)
+    # A field whose name says "fraction" and whose default sits in [0, 1] is a
+    # fraction; anything else gets a permissive non-negative range.
+    if ("frac" in name or name.endswith("_rate")) and 0.0 <= default <= 1.0:
+        return (0.0, 1.0, 0.01)
+    span = max(1.0, abs(default) * 100.0)
+    step = 10.0 ** (len(str(int(abs(default)))) - 2) if abs(default) >= 100 else 0.01
+    return (0.0, span, max(step, 0.01))
+
+
 def build_field_specs(config_obj: Any, section_key: str) -> List[FieldSpec]:
     """Introspect one config dataclass into an ordered list of FieldSpecs."""
-    src_path, class_name = CONFIG_SOURCES[section_key]
-    docs = scrape_field_docs(src_path, class_name)
+    docs = scrape_field_docs(*CONFIG_SOURCES[section_key])
 
     specs: List[FieldSpec] = []
     for field in dataclasses.fields(config_obj):
@@ -449,11 +429,7 @@ def build_field_specs(config_obj: Any, section_key: str) -> List[FieldSpec]:
 
 def group_specs(specs: List[FieldSpec]) -> List[Tuple[str, List[FieldSpec]]]:
     """Bucket specs by their scraped section banner, preserving source order."""
-    order: List[str] = []
     buckets: Dict[str, List[FieldSpec]] = {}
     for spec in specs:
-        if spec.group not in buckets:
-            buckets[spec.group] = []
-            order.append(spec.group)
-        buckets[spec.group].append(spec)
-    return [(g, buckets[g]) for g in order]
+        buckets.setdefault(spec.group, []).append(spec)
+    return list(buckets.items())          # dicts preserve insertion order
