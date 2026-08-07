@@ -62,17 +62,21 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.0.9`, mineral_value `1.6.0`, transportation `1.8.2`,
-calc `1.10.0`, master `1.12.0` (the master version is a literal in
+Current: catalog `1.0.9`, mineral_value `1.7.0`, transportation `1.8.2`,
+calc `1.10.0`, master `1.13.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
-> ⚠️  **Every committed result number below predates calc `1.10.0` and is
-> superseded.** That release changed what the per-asteroid search optimises,
-> costed the electric propulsion stage for the first time, and made the return
-> vehicle scale with its cargo. All three move every row. The tables are kept
-> because the *shape* of the results still holds and because the deltas are the
-> point — but treat the digits as stale until someone re-runs all five
-> destinations on the v1.0.9 catalog. See "What v1.10.0 changed" below.
+> ⚠️  **The five-destination tables below were re-measured on calc `1.10.0` +
+> mineral_value `1.7.0`** and are current, except the `earth_surface`
+> beneficiated cell, which is marked pending. Everything else quoting a result
+> — the programme-scale curve (N=1/10/100), the historical progression
+> 2.2× → 14× → 39× → 34× → 25×, and any figure in the version-history comment
+> blocks — still predates `1.10.0` and is superseded. Treat those digits as
+> stale and the *shape* as sound. See "What v1.10.0 changed" below.
+>
+> ⚠️  **`mars_surface` is no longer the best case — `cislunar` is.** That
+> reverses `1a5e0c8` and it is the single most important stale claim to watch
+> for, because it is asserted in prose all over both files.
 
 ## When a number changes, grep the prose too
 
@@ -106,14 +110,60 @@ Utah — Stage 4's `destination_check()` catches it and shouts, and in
 `master.py` use `MASTER_CONFIG.delivery_destination`, which writes both.
 
 **Every commodity is priced by destination, not just water** (Stage 2
-v1.3.0). At an in-space destination the terrestrial price is *replaced* by
-`in_space_utility × launch-cost-avoided`. Two consequences that look wrong
-but are not: bulk iron jumps from $0.50/kg to ~$2,977/kg in LEO, and
-platinum drops to **zero**, because there is no orbital market for it. The
-in-space prices are derived through the rocket equation in
-`delivered_cost_usd_per_kg()`, not tabulated — but `IN_SPACE_UTILITY` is a
-table of *engineering judgements*, and it is the softest assumption in the
-whole pipeline. Treat it as a dial, not a measurement.
+v1.3.0). At an in-space destination a kilogram is worth its terrestrial price
+**plus** `in_space_utility × launch-cost-avoided`, less the cost of refining
+it on site. The *plus* is the point — v1.3.0 briefly replaced the terrestrial
+price instead of adding to it, which quietly threw the material itself away.
+Bulk iron goes from $0.50/kg to ~$2,747/kg in LEO. The in-space prices are
+derived through the rocket equation in `delivered_cost_usd_per_kg()`, not
+tabulated — but the utility factors are *engineering judgements*, and they
+are the softest assumption in the whole pipeline. Treat them as a dial, not a
+measurement.
+
+**Utility is per destination, and the correction runs downward** (Stage 2
+v1.7.0). One table used to serve every in-space destination, so olivine
+captured the same fraction of its freight on the surface of Mars — a planet
+made of olivine — as at a depot in empty space. The missing term is not
+distance, it is **local competition: the alternative to importing is not
+always launching from Earth**. LEO and cislunar have no local resources at any
+price and keep the base profile as the calibration anchor;
+`IN_SPACE_UTILITY_BY_DESTINATION` discounts the two surfaces against what they
+can dig up (Mars water 1.00 → 0.25, carbon 0.40 → 0.02, silicates 0.25 → 0.02;
+Moon water → 0.60, iron → 0.45). Ni/Co/Cu are undiscounted everywhere — no
+concentrated ore of either body is known. Carbon is undiscounted on the Moon,
+where solar-wind implantation leaves it at ~100 ppm.
+
+Two things not to "fix" here. **Every override runs downward**, deliberately:
+raising a utility is precisely how this table becomes a way to manufacture
+viability. And **prices still rise with distance** — Mars freight is 10.6
+kg-in-LEO per kg delivered and that dominates — they just no longer rise as
+fast as the freight does, and the volatiles that carried the Mars result rise
+least. Water at Mars is 2.7× its LEO price now against 11× before.
+
+A settlement catalyst market for the PGMs (utility 0.05 at the two surfaces)
+was **considered and rejected**, and the reason generalises: this module
+prices each commodity with one $/kg and one market depth, and
+`in_space_price_usd_per_kg` routes on unit price alone. Gold at a lunar base
+would route "used in space" at $76,060/kg into a 25 kg/yr catalyst market,
+beating $30,061/kg into a 3,000,000 kg/yr terrestrial one — a
+five-order-of-magnitude cliff in market depth that the router cannot see. The
+real behaviour is a blend (sell the first few kg in space, fly the rest home)
+and the pipeline cannot express a blend. That needs a quantity-aware route
+choice, not a bigger table.
+
+**The import budget is split per commodity** (Stage 2 v1.7.0).
+`IN_SPACE_ANNUAL_DEMAND_KG` had called itself one shared budget since v1.5.0
+while the code handed every commodity the whole thing — a 20 t/yr Mars base
+absorbed 20 t of water *and* 20 t of platinum *and* 20 t of olivine.
+`_DEMAND_SHARE_BY_CLASS` partitions it (propellant 0.55 / structural 0.25 /
+shielding 0.15 / chemical 0.05, asserted to sum to 1.0), and shares are per
+*class* because within a class the commodities substitute for each other —
+shielding mass does not care whether it arrives as olivine or pyroxene. Also,
+`annual_market_kg` is now **routed**: the market that saturates is the one you
+actually sell into, so a commodity flown home is bounded by terrestrial annual
+production rather than a depot's import budget. Platinum at LEO was capped at
+the depot's 500 t/yr against the world's real 180 t/yr. This is the one part
+of v1.7.0 that runs upward, and it is a correction, not a concession.
 
 **Cislunar is cheaper to reach than LEO, and worth more.** This is the one
 result that reliably reads as a bug. Capturing into LEO has to kill the
@@ -217,73 +267,84 @@ accordingly; don't restore the 0.80/5.30 values.
 A default run produces zero viable missions. That is the correct answer, not
 a regression. So does every other combination currently in the model.
 
-Best cost/revenue, beneficiated, across all 35,778 evaluable asteroids at
-catalog `1.0.9` / calc `1.9.1` (lower is better, 1.0 is breakeven). The
-pre-1.0.9 column is kept because the *change* is the point — it is entirely a
-population effect, not a modelling one:
+Best cost/revenue (lower is better, 1.0 is breakeven), measured on catalog
+`1.0.9` / calc `1.10.0`, full catalog, 35,807 asteroids fetched and ~29,600–35,000
+evaluable per destination. Both columns were run in ONE process on identical
+code, so the delta is attributable to the Stage 2 change alone:
 
-| destination | pre-1.0.9 | **current** | winner |
+**Beneficiated:**
+
+| destination | mineral_value `1.6.0` | **`1.7.0`** | change | `1.7.0` winner |
+|---|---|---|---|---|
+| `earth_surface` (default) | 25,110× | _(re-run pending)_ | — | 4660 Nereus, Xe, 2.5× |
+| `leo` | 47.17× | 48.13× | +2.0% | 4015 Wilson-Harrington, B, 5.5× |
+| `cislunar` | 19.02× | **22.93×** | +20.6% | 7753, B, 5.4× |
+| `lunar_surface` | 21.42× | 40.61× | +89.6% | 7753, B, 4.8× |
+| `mars_surface` | **11.86×** | 51.82× | **+336.7%** | 6178, P, 7.1× |
+
+**Raw:**
+
+| destination | mineral_value `1.6.0` | **`1.7.0`** | change |
 |---|---|---|---|
-| `earth_surface` (default) | 191,359× | 156,725× | 17188 (1999 WC2), M |
-| `leo` | 290× | 290.4× | 434 Hungaria, Xe |
-| `lunar_surface` | 74× | 53.5× | 4660 Nereus, Xe |
-| `cislunar` | 143× | 39.8× | 4660 Nereus, Xe |
-| `mars_surface` | 34× | **25.2×** | 4015 Wilson-Harrington, B |
+| `earth_surface` | 46,049.9× | 46,071.3× | +0.05% |
+| `leo` | 65.97× | 72.45× | +9.8% |
+| `cislunar` | 21.71× | **31.83×** | +46.6% |
+| `lunar_surface` | 25.54× | 75.83× | +196.9% |
+| `mars_surface` | **16.59×** | 70.41× | +324.4% |
 
-Two things in that table are worth not "fixing":
+⚠️  **`earth_surface` is the control.** The Stage 2 change cannot touch it —
+in-space pricing does not apply there — so its raw +0.05% is the run-to-run
+noise floor from live price quotes moving between the two loops. Anything above
+~0.05% is signal. Do not "fix" a small earth_surface drift; do worry if it ever
+gets large.
 
-**Cislunar and lunar surface swapped.** The Moon used to beat cislunar (74×
-vs 143×) and no longer does (53.5× vs 39.8×). Nothing about either
-architecture changed — cislunar gained 3.6× from the larger population and
-the Moon only 1.4×, because the restored catalog contains accessible NEAs
-(the winner is 4660 Nereus for both) that suit the cheaper cislunar capture.
-The ordering is a property of which asteroids you know about, not just of Δv.
+Four things in those tables are worth not "fixing":
 
-**LEO barely moved** (290× → 290.4×) while everything else moved a lot. Its
-winner, 434 Hungaria, was already inside the old ~1,850-body subset, so 13×
-more targets found nothing better. A destination that does not respond to a
-population change is not evidence the run failed.
+**`cislunar` is now the best case, not `mars_surface`.** That reverses
+`1a5e0c8`, which is where Mars took the lead and where the gap had been tracked
+ever since. Mars was the best case *because* Stage 2 paid it full
+launch-cost-avoided for water and carbon at a destination with metres-thick
+mid-latitude ground ice and a 95.3% CO2 atmosphere. Price the local competition
+and Mars goes from best of the four in-space destinations to worst. Cislunar
+wins because an NRHO depot is the one destination with genuinely no local
+anything, so it takes no ISRU discount at all — its whole +20.6% is the routed
+market cap.
 
-`mars_surface` remains the best case the model can reach. That changed in
-`1a5e0c8` when the lunar and Mars destinations landed, and the gap has been
-tracked on Mars ever since.
+**The Mars winner changes identity three times**, which is the tell that this
+is a compositional effect rather than a scaling one: 35678 (D) raw baseline →
+4015 Wilson-Harrington (B) beneficiated baseline → 8651 (M) raw v1.7.0 → 6178
+(P) beneficiated v1.7.0. Discount the volatiles and the optimiser walks away
+from hydrated bodies. The Moon moves the opposite way — its winner goes
+*toward* a B-type — because lunar water only falls to 0.60 while Mars water
+falls to 0.25.
 
-**`mars_surface` is the best case the model can currently reach**, not
-cislunar — that changed in `1a5e0c8` when the lunar and Mars destinations
-landed, and the gap has been tracked on Mars ever since. Flying more missions
-is the strongest remaining lever. Mars, beneficiated, on the restored catalog:
-**25.2× at N=1 → 6.9× at N=10 → 5.3× at N=100** (was 34.2 → ~10 → ~8). See the
-reliability-growth and rig-service-life entries below, which pull against each
-other — that is why the 10→100 step buys so little.
+**LEO barely moves under beneficiation** (+2.0%) despite moving +9.8% raw, and
+its winner and concentration ratio do not change at all. Concentrating to 5.5×
+shifts the payload mix away from the commodity whose ceiling moved. A
+destination that absorbs a change under beneficiation is not evidence the run
+failed.
 
-**Beneficiation behaves differently at Mars than it did at cislunar, and the
-old cislunar intuition does not carry over.** At cislunar (`fa263ad`) the
-optimiser *declined* to concentrate on the single best body, so beneficiation
-halved the median and left the best case untouched. Measured across every
-destination on one catalog (v1.0.9, 35,778 evaluated), best cost/revenue:
+**Beneficiation now helps everywhere, including cislunar.** Under calc
+`1.10.0`, cislunar goes 21.71× raw → 19.02× beneficiated at `1.6.0` pricing and
+31.83× → 22.93× at `1.7.0`, concentrating 2.5× and 5.4× respectively.
 
-| destination | raw | beneficiated | best target concentrated? |
-|---|---|---|---|
-| `earth_surface` | 236,629× | 156,725× | yes, 2.2× |
-| `leo` | 445.9× | 290.4× | yes, 2.5× |
-| `cislunar` | 39.79× | **39.79×** | **no — declines** |
-| `lunar_surface` | 126.6× | 53.5× | yes, 2.5× |
-| `mars_surface` | 54.2× | **25.2×** | yes, 4.2× |
+⚠️  That **retires the `fa263ad` result**, which held that cislunar was the one
+destination where the optimiser declined to concentrate the best body (39.79×
+either way, unchanged to the hundredth). It no longer reproduces, and it was
+retired by **calc `1.10.0`, not by this change** — the `1.6.0` pricing column
+above already concentrates. v1.10.0 replaced the selection objective, and
+"declines to concentrate" was an artefact of optimising `profit_usd` while
+reporting a ratio. So the old warning has inverted: do not repeat "the
+optimiser declines to concentrate at cislunar" either. What survives is the
+weaker and still-true statement that the decision belongs to the
+(target × destination) pair, not to the target.
 
-**Cislunar is the one destination where the optimiser declines to concentrate
-the best body** — 39.79× to the hundredth either way. That is the `fa263ad`
-result, and it still reproduces on a catalog 19× larger. Everywhere else
-beneficiation moves the best case hard, and usually changes which asteroid
-wins. So do not repeat "beneficiation does not move the best target" as a
-general fact: it is a cislunar result, not a property of beneficiation.
-
-The reason is compositional, and 4660 Nereus makes it visible — the *same*
-asteroid wins both cislunar and lunar surface, and the optimiser declines to
-concentrate it at cislunar while concentrating it 2.5× for the lunar surface.
-The decision belongs to the (target × destination) pair, not to the target.
-
-The median halves roughly everywhere regardless, cislunar included
-(4,053× → 2,161×, −47%).
+⚠️  **Not re-measured, and therefore stale:** the programme-scale figures
+(Mars 25.2× at N=1 → 6.9× at N=10 → 5.3× at N=100) and the historical
+progression 2.2× → 14× → 39× → 34× → 25×. Each N value is its own full
+beneficiated run and they measure a different lever than this change. The N=1
+anchor is now 51.82× at Mars and 22.93× at cislunar, so the whole curve needs
+rebuilding against cislunar rather than Mars.
 
 Closing the remaining gap is not a tuning exercise. Rig terminal value and
 in-space manufacturing were the named candidates and both shipped in v1.8.0
@@ -291,9 +352,11 @@ in-space manufacturing were the named candidates and both shipped in v1.8.0
 shipped in v1.10.0. What remains is joint trajectory/payload optimisation --
 the EP stage is still sized to a fixed `ep_target_thrust_yr` rather than
 having its trajectory optimised against payload and arrival date -- and
-programme scale. Do not manufacture viability by editing `IN_SPACE_UTILITY`
-or the in-space demand ceilings -- both are judgement tables and both are
-load-bearing.
+programme scale. Do not manufacture viability by editing `IN_SPACE_UTILITY`,
+its per-destination overrides, or the in-space demand ceilings -- all three are
+judgement tables and all three are load-bearing. v1.7.0 held its overrides to
+running DOWNWARD for exactly this reason: a table that can be moved either way
+to taste stops being a model.
 
 The rig itself is the next obvious per-asteroid decision that is still a
 global: `mining_hardware_kg` is 2,000 kg for a 500-metre NEA and for Ceres
@@ -340,7 +403,10 @@ is what keeps a single-mission run unaffected.
 it `nre_amortization_missions` had no stopping point: you could amortise
 development across a fleet whose output would have destroyed the price that
 justified it. The in-space absorption ceilings are judgement, not
-measurement.
+measurement. Since Stage 2 v1.7.0 the destination ceiling is a total split
+across commodity classes rather than a figure each commodity gets to itself,
+and it follows the value route — see "The import budget is split per
+commodity" above.
 
 **Rig service life caps amortisation** (v1.8.0). A 15-year rig cannot serve
 100 missions of 2 years each. `missions_sharing_rig` is capped at
@@ -384,6 +450,12 @@ other. Mars beneficiated, catalog v1.0.9: N=1 25.2x, N=10 6.9x, N=100 5.3x.
 The 10->100 step buys little because one rig only serves 7 missions at that
 stay length, so mission 8 buys a new rig. "Fly more missions" is real but
 sublinear, and bounded by market saturation at the far end.
+
+⚠️  Those three numbers were measured before calc `1.10.0` and before
+mineral_value `1.7.0`, and have NOT been re-run -- the N=1 anchor alone has
+moved from 25.2x to 51.82x. The SHAPE of the argument (sublinear, capped by rig
+service life) is what to trust here; the digits are stale, and the curve now
+wants rebuilding at cislunar, which is the best case.
 
 **Cryogenic boil-off** (v1.8.0). Return propellant is held for years, so
 hydrolox loads 2.5x what it burns on a 5-year mission. Folded into an
