@@ -3810,10 +3810,21 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
         result = evaluate_asteroid(asteroid, catalogs, config, combos)
         if result is not None:
             results.append(result)
-        # Lightweight progress report every ~10%
-        if n >= 100 and (i * 10) // n != last_report:
-            last_report = (i * 10) // n
-            print(f"     … {i:,} / {n:,} evaluated  ({last_report * 10}%)")
+        # Lightweight progress report every ~1%.
+        #
+        # This was every 10% until the UI needed to draw a progress bar off it.
+        # A full beneficiated catalog takes ~20 minutes, so ten ticks is one
+        # every two minutes, and a bar that sits still that long is
+        # indistinguishable from a hung process.  Every 1% costs 100 lines of
+        # stdout on a long run, nothing at all on a run under 100 rows, and no
+        # measurable time -- the print is dwarfed by evaluate_asteroid().
+        #
+        # The message FORMAT is load-bearing: ui.py parses "i / n evaluated"
+        # out of the stream to size its bar.  Change the wording and the bar
+        # silently falls back to indeterminate.
+        if n >= 100 and (i * 100) // n != last_report:
+            last_report = (i * 100) // n
+            print(f"     … {i:,} / {n:,} evaluated  ({last_report}%)")
 
     if not results:
         print("\n❌  No viable evaluations — every asteroid failed.")

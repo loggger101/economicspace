@@ -38,8 +38,10 @@ import dataclasses
 import io
 import json
 import os
+import re
 import time
 import traceback
+from collections import deque
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -378,44 +380,267 @@ def reset_config() -> None:
 # RUN EXECUTION
 # ═════════════════════════════════════════════════════════════════════════════
 
-class _TailStream(io.TextIOBase):
-    """stdout sink that keeps the whole log and mirrors the tail into the page.
+def _fmt_duration(seconds: float) -> str:
+    """Compact human duration: 12s, 3m 19s, 1h 04m."""
+    seconds = max(0.0, float(seconds))
+    if seconds < 60:
+        return f"{seconds:.0f}s"
+    if seconds < 3600:
+        return f"{int(seconds // 60)}m {int(seconds % 60):02d}s"
+    return f"{int(seconds // 3600)}h {int(seconds % 3600) // 60:02d}m"
 
-    The pipeline's own progress prints are the only signal that a 20-minute
-    Stage 4 is alive rather than hung, so they are streamed rather than shown
-    after the fact. Updates are throttled because Stage 1 emits thousands of
-    lines and repainting on each one is slower than the pipeline.
+
+def _stage_minutes(key: str) -> float:
+    """Prior for how long a stage takes, in minutes.
+
+    Used for the sidebar estimate and for weighting the overall progress bar,
+    so the two can never disagree about which stage dominates a run.
+
+    Measured on this repo rather than guessed. The first version charged Stages
+    2 and 3 a flat 1.0 and 0.3 minutes when they actually finish in about two
+    seconds and half a second, which made the overall bar leap to ~85% while
+    Stage 4 was still reporting 25%, and produced an overall ETA that
+    contradicted the stage ETA directly beneath it.
+    """
+    if key == "mineral":
+        return 0.04              # ~2 s: a handful of live price quotes
+    if key == "transport":
+        return 0.01              # ~0.5 s: pure reference tables, no network
+
+    if key == "catalog":
+        limit = st.session_state.get("cfg::catalog::jpl_limit",
+                                     MASTER.catalog.jpl_limit) or 50_000
+        ssodnet = st.session_state.get("cfg::catalog::use_ssodnet",
+                                       MASTER.catalog.use_ssodnet)
+        # JPL, NEOWISE and the merge scale with the row cap; SsODNet is a flat
+        # ~500 MB parquet download that dwarfs all of them when enabled.
+        return 0.15 + limit / 50_000 * 1.5 + (5.0 if ssodnet else 0.0)
+
+    # Stage 4 is the long pole. `eval_row_cap` is an upper bound rather than a
+    # count, so this overestimates when the catalog is smaller than the cap;
+    # the stage bar self-corrects the moment the pipeline prints its first
+    # "i / n evaluated" and the real n becomes known.
+    rows = st.session_state.get("cfg::calc::eval_row_cap",
+                                MASTER.calc.eval_row_cap) or 35_000
+    benef = st.session_state.get("cfg::calc::use_beneficiation",
+                                 MASTER.calc.use_beneficiation)
+    return rows * (0.031 if benef else 0.008) / 60.0
+
+
+# Progress signals the pipeline already emits. These are PARSED rather than
+# added, because the pipeline is a library the UI drives and not a UI backend.
+# The one exception is calc.py's report interval, which went from 10% to 1% so
+# that a bar drawn off it advances more than ten times in twenty minutes.
+_COUNT_RE = re.compile(r"([\d,]+)\s*/\s*([\d,]+)\s+evaluated")
+_TQDM_PCT_RE = re.compile(r"(\d{1,3})%\|")
+_RULE_ONLY_RE = re.compile(r"^[\s=█▔▁─═*·.+-]*$")
+
+
+class _RunView:
+    """The loading screen: one overall bar, plus a live panel per stage.
+
+    Overall progress is weighted by `_stage_minutes`, so a run that includes
+    Stage 1 does not show 25% complete the instant the catalog download starts.
+    The weights are priors, and the caption says so; the per-stage bars are the
+    ones carrying real measured progress.
     """
 
-    def __init__(self, placeholder, tail_lines: int = 14, min_interval: float = 0.4):
-        self._buf = io.StringIO()
-        self._placeholder = placeholder
-        self._tail_lines = tail_lines
-        self._min_interval = min_interval
+    def __init__(self, stages: Sequence[Stage]):
+        self.stages = list(stages)
+        self.weights = [max(_stage_minutes(s.key), 0.05) for s in self.stages]
+        self.total_weight = sum(self.weights) or 1.0
+        self.t_start = time.monotonic()
+        self.done_weight = 0.0
+        self.index = 0
+        self._bar = st.progress(0.0)
+        self.paint(0.0)
+
+    def expected_seconds(self) -> float:
+        """Prior duration of the stage currently running, in seconds."""
+        return self.weights[self.index] * 60.0
+
+    def paint(self, stage_fraction: float,
+              stage_eta: Optional[float] = None) -> None:
+        """Repaint the overall bar for the running stage's progress.
+
+        The remaining time is COMPOSED (this stage's own estimate, plus the
+        priors for stages not yet started) rather than extrapolated from the
+        overall fraction. Extrapolating made the overall bar contradict the
+        stage bar sitting directly beneath it, because a stage whose prior is
+        wrong throws the overall fraction off and the error is then amplified
+        by dividing by it. Composing means the headline number is only ever as
+        wrong as the stage estimate it is built from.
+        """
+        stage_fraction = min(max(stage_fraction, 0.0), 1.0)
+        frac = min(max((self.done_weight
+                        + self.weights[self.index] * stage_fraction)
+                       / self.total_weight, 0.0), 1.0)
+        elapsed = time.monotonic() - self.t_start
+
+        if stage_eta is None:
+            stage_eta = self.expected_seconds() * (1.0 - stage_fraction)
+        remaining = stage_eta + sum(self.weights[self.index + 1:]) * 60.0
+
+        bits = [f"**{self.index + 1} of {len(self.stages)}**",
+                self.stages[self.index].label,
+                f"{_fmt_duration(elapsed)} elapsed",
+                f"~{_fmt_duration(remaining)} left"]
+        try:
+            self._bar.progress(frac, text="  ·  ".join(bits))
+        except Exception:
+            pass
+
+    def finish_stage(self) -> None:
+        self.done_weight += self.weights[self.index]
+        self.paint(0.0)
+
+
+class ProgressScan:
+    """Parses a pipeline stage's console stream into progress state.
+
+    Deliberately free of Streamlit so it can be exercised against real captured
+    output without a browser; `_StageMonitor` supplies the rendering.
+
+    The pipeline prints an unindented emoji header when it enters a phase, and
+    indented lines beneath it for detail. That indentation alone separates
+    "what is happening now" from "what just happened", so the UI needs no table
+    of phase names, which would rot the first time a module was reworded.
+
+    Two numeric signals give a determinate bar: Stage 4's "i / n evaluated" and
+    tqdm's percentage during the Stage 1 downloads.
+
+    Carriage returns are handled the way a terminal would. tqdm redraws its bar
+    with `\\r` and no newline, so only the text after the last `\\r` is real.
+    Without that the log becomes one enormous line of superimposed redraws, and
+    the pending buffer grows without bound across a 500 MB download.
+    """
+
+    def __init__(self, tail_lines: int = 6):
+        self.full: List[str] = []
+        self.tail = deque(maxlen=tail_lines)
+        self.live = ""               # in-flight tqdm redraw, not yet a log line
+        self.phase = ""
+        self.done = 0.0
+        self.total = 0.0
+        self._pending = ""
+
+    def feed(self, text: str) -> None:
+        self._pending += text.replace("\r\n", "\n")
+        while "\n" in self._pending:
+            line, self._pending = self._pending.split("\n", 1)
+            self._record(line.rsplit("\r", 1)[-1])
+        if "\r" in self._pending:
+            self.live = self._pending = self._pending.rsplit("\r", 1)[-1]
+            self._scan(self.live)
+
+    def close(self) -> None:
+        if self._pending.strip():
+            self._record(self._pending.rsplit("\r", 1)[-1])
+        self._pending = ""
+
+    @property
+    def display_lines(self) -> List[str]:
+        return list(self.tail) + ([self.live] if self.live else [])
+
+    @property
+    def log(self) -> str:
+        return "\n".join(self.full)
+
+    def _record(self, line: str) -> None:
+        self.live = ""
+        self.full.append(line)
+        self.tail.append(line)
+        self._scan(line)
+
+    def _scan(self, line: str) -> None:
+        line = line.rstrip()
+        if not line:
+            return
+
+        if match := _COUNT_RE.search(line):
+            self.done = float(match.group(1).replace(",", ""))
+            self.total = float(match.group(2).replace(",", ""))
+            return
+        if match := _TQDM_PCT_RE.search(line):
+            self.done, self.total = float(match.group(1)), 100.0
+            return
+
+        # Unindented and containing letters means a phase header; a new phase
+        # invalidates the counts the previous one was reporting.
+        if (line[:1] not in (" ", "\t")
+                and not _RULE_ONLY_RE.match(line)
+                and re.search(r"[A-Za-z]", line)):
+            self.phase = line.strip()
+            self.done = self.total = 0.0
+
+
+class _StageMonitor(io.TextIOBase):
+    """Renders one stage's ProgressScan into a live bar, caption and log tail.
+
+    Repaints are throttled: Stage 1 emits thousands of lines and a tqdm bar
+    redraws far faster than a browser can usefully follow, so painting on every
+    write would make the UI the bottleneck rather than the pipeline.
+    """
+
+    def __init__(self, view: _RunView, min_interval: float = 0.25):
+        self._view = view
+        self._scan = ProgressScan()
+        self._bar = st.progress(0.0)
+        self._log = st.empty()
+        self._t0 = time.monotonic()
         self._last_paint = 0.0
+        self._min_interval = min_interval
 
     def write(self, s: str) -> int:
-        self._buf.write(s)
-        now = time.monotonic()
-        if "\n" in s and (now - self._last_paint) >= self._min_interval:
-            self._last_paint = now
-            self._paint()
+        self._scan.feed(s)
+        self._paint()
         return len(s)
-
-    def _paint(self) -> None:
-        lines = self._buf.getvalue().rstrip("\n").split("\n")
-        try:
-            self._placeholder.code("\n".join(lines[-self._tail_lines:]),
-                                   language="text")
-        except Exception:
-            pass      # placeholder gone mid-write; never kill the pipeline for it
 
     def flush(self) -> None:
         pass
 
     def finish(self) -> str:
-        self._paint()
-        return self._buf.getvalue()
+        self._scan.close()
+        self._paint(force=True)
+        return self._scan.log
+
+    def _paint(self, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and now - self._last_paint < self._min_interval:
+            return
+        self._last_paint = now
+
+        scan = self._scan
+        elapsed = now - self._t0
+        measured = scan.total > 0
+        if measured:
+            frac = min(max(scan.done / scan.total, 0.0), 1.0)
+        else:
+            # No count to read. Creep against the prior rather than show a
+            # stalled 0%, capped short of full so it never claims to be done.
+            expected = self._view.expected_seconds()
+            frac = min(0.95, elapsed / expected) if expected > 0 else 0.0
+
+        # Only extrapolate once there is enough of a sample for the rate to
+        # mean anything; below that the number swings wildly between repaints.
+        eta = (elapsed * (1 - frac) / frac
+               if measured and frac > 0.03 and elapsed > 3 else None)
+
+        bits = [scan.phase or "working"]
+        if measured:
+            bits.append(f"{scan.done:,.0f} / {scan.total:,.0f}  ({frac:.0%})")
+        bits.append(f"{_fmt_duration(elapsed)} elapsed")
+        if eta is not None:
+            bits.append(f"~{_fmt_duration(eta)} left")
+        elif not measured:
+            bits.append("estimated")
+
+        try:
+            self._bar.progress(frac, text="  ·  ".join(bits))
+            self._log.code("\n".join(scan.display_lines) or "…", language="text")
+            self._view.paint(frac, eta)
+        except Exception:
+            pass      # placeholder gone mid-write; never kill the pipeline for it
 
 
 def write_run_manifest(selected: List[str], changes: List[str]) -> str:
@@ -451,30 +676,44 @@ def write_run_manifest(selected: List[str], changes: List[str]) -> str:
 
 
 def run_stages(selected_keys: Sequence[str]) -> None:
-    """Execute the chosen stages in order, streaming each one's log."""
+    """Execute the chosen stages in order, streaming each one's progress.
+
+    Blocking by design. Streamlit runs the script in one thread, so the page is
+    unresponsive until this returns; the loading screen exists to make that
+    obvious and legible rather than to hide it. Running the pipeline on a
+    worker thread would free the UI but needs every stage's prints marshalled
+    back through a script-run context, which is a lot of machinery to avoid a
+    wait the user deliberately asked for.
+    """
     changes = apply_config()
+    stages = [s for s in STAGES if s.key in selected_keys]
     logs: Dict[str, str] = {}
     st.session_state["run_error"] = None
-    t_start = time.monotonic()
 
-    for stage in [s for s in STAGES if s.key in selected_keys]:
+    view = _RunView(stages)
+    t_start = view.t_start
+
+    for index, stage in enumerate(stages):
+        view.index = index
         header = f"Stage {stage.number}: {stage.label}"
         with st.status(header, expanded=True) as status:
-            stream = _TailStream(st.empty())
+            monitor = _StageMonitor(view)
             t0 = time.monotonic()
             try:
-                with contextlib.redirect_stdout(stream), \
-                     contextlib.redirect_stderr(stream):
+                with contextlib.redirect_stdout(monitor), \
+                     contextlib.redirect_stderr(monitor):
                     BUILDERS[stage.key](CONFIG_OBJECTS[stage.key])
             except Exception as exc:
-                logs[stage.key] = stream.finish() + "\n" + traceback.format_exc()
+                logs[stage.key] = monitor.finish() + "\n" + traceback.format_exc()
                 status.update(label=f"{header} FAILED: {exc}", state="error")
                 st.session_state["run_error"] = f"{header}: {exc}"
                 st.session_state["run_logs"] = logs
                 return
-            logs[stage.key] = stream.finish()
-            status.update(label=f"{header} done in {time.monotonic() - t0:.1f}s",
-                          state="complete", expanded=False)
+            logs[stage.key] = monitor.finish()
+            status.update(
+                label=f"{header} done in {_fmt_duration(time.monotonic() - t0)}",
+                state="complete", expanded=False)
+        view.finish_stage()
 
     st.session_state["run_logs"] = logs
     st.session_state["run_elapsed"] = time.monotonic() - t_start
@@ -952,21 +1191,8 @@ def _render_drilldown(ranked: pd.DataFrame) -> None:
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _runtime_estimate(selected: Sequence[str]) -> str:
-    """Very rough wall-clock estimate, from the timings recorded in CLAUDE.md."""
-    minutes = 0.0
-    if "catalog" in selected:
-        minutes += 6.0                                   # ~500 MB of downloads
-    if "mineral" in selected:
-        minutes += 1.0
-    if "transport" in selected:
-        minutes += 0.3
-    if "calc" in selected:
-        rows = st.session_state.get("cfg::calc::eval_row_cap",
-                                    MASTER.calc.eval_row_cap) or 35_000
-        benef = st.session_state.get("cfg::calc::use_beneficiation",
-                                     MASTER.calc.use_beneficiation)
-        per_row_s = 0.031 if benef else 0.004        # ~1,100 s vs ~140 s at 35k
-        minutes += rows * per_row_s / 60.0
+    """Rough wall-clock estimate, from the timings recorded in CLAUDE.md."""
+    minutes = sum(_stage_minutes(k) for k in selected)
     if minutes < 1:
         return "under a minute"
     if minutes < 90:
@@ -1195,7 +1421,12 @@ def main() -> None:
                     horizontal=True, label_visibility="collapsed")
 
     if requested := st.session_state.pop("run_requested", None):
-        st.subheader("Run")
+        st.subheader("Running the pipeline")
+        st.caption(
+            "The page stays put until this finishes, so leave the tab open. "
+            "Percentages are measured where the pipeline reports a count and "
+            "estimated from prior timings otherwise; the caption says which."
+        )
         run_stages(requested)      # reruns on success; returns here on failure
 
     if st.session_state.get("run_logs"):
