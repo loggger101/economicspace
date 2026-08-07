@@ -1,0 +1,10 @@
+# Extra packages for the Streamlit UI (ui.py) only.
+#
+# Deliberately NOT merged into requirements.txt: that file mirrors
+# _MASTER_REQUIRED in master.py, which auto-installs its contents at import
+# time so the pipeline stays Colab-pasteable. Adding streamlit there would make
+# every headless pipeline run pull a web framework it never uses.
+#
+#     pip install -r requirements.txt -r requirements-ui.txt
+
+streamlit>=1.30
