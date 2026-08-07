@@ -13,12 +13,19 @@ profitability table.
 ```
 build_master.py        Build tool: assembles modules/ into master.py
 master.py              GENERATED single-file pipeline — do not edit by hand
+ui.py                  Streamlit front end (optional) — configure, run, inspect
+ui_meta.py             Config introspection + curation for ui.py
 modules/
     catalog.py         Stage 1 — asteroid catalog
     mineral_value.py   Stage 2 — mineral prices + densities
     transportation.py  Stage 3 — launch / propellant / Δv / ops costs
     calc.py            Stage 4 — profitability calculation
 ```
+
+`ui.py` and `ui_meta.py` sit at the root rather than in `modules/` on purpose:
+`build_master.py` concatenates everything in that directory into `master.py`
+and asserts a specific header/footer shape on each file. The UI is a consumer
+of the built `master.py`, not a stage of it.
 
 Each module is a standalone file: run it directly to build just that stage, or
 import it for its functions without triggering a run. They share no Python
@@ -58,6 +65,42 @@ python modules/transportation.py
 
 `master.py` is also designed to be pasted straight into a Colab or Jupyter cell
 — it auto-installs its own dependencies and runs top-to-bottom.
+
+### The UI
+
+There is an optional Streamlit front end for editing config, running stages and
+browsing results:
+
+```bash
+pip install -r requirements-ui.txt
+```
+
+```bash
+py -m streamlit run ui.py
+```
+
+It imports `master.py` (side-effect free — the auto-run is guarded on
+`__name__`) and drives `MASTER_CONFIG`, so it is exactly the documented way to
+tune the orchestrator, with a browser attached. Three things worth knowing:
+
+- **Every config field is introspected**, not hand-listed, so a field added to
+  any of the four dataclasses appears automatically. The help text on each
+  field is scraped from that field's own comment block in the module source.
+  A curated ⭐ Common tab pins the dials that actually move results.
+- **Stages are individually selectable and reuse the CSVs on disk.** Re-running
+  Stage 4 alone against a cached catalog is the normal working loop — seconds
+  rather than the ~20 minutes a full beneficiated run costs. Skipping Stage 2
+  after changing the destination is blocked rather than merely warned about,
+  because a mineral catalog priced for one destination and a mission flown to
+  another produces meaningless numbers that still look plausible.
+- **Each run writes `ui_run_config.json`** beside the outputs: the full config
+  snapshot, the stages run, and the diff from defaults. `pipeline_version`
+  identifies the code that produced a CSV but not the configuration, and this
+  repo's recurring failure is a number nobody can trace.
+
+The UI ranks by `total_cost_usd / gross_value_usd` rather than `profit_usd`,
+for the reason given in [Reading `profitability_catalog.csv`](#reading-profitability_catalogcsv).
+It reads and displays only — every number still comes from the pipeline.
 
 ### Stage dependencies
 
