@@ -368,6 +368,30 @@ class CalcConfig:
     # propellant is exempt: it is manufactured at the asteroid on departure.
     model_propellant_boiloff:  bool  = True
 
+    # PROPELLANT TANKAGE (v1.11.0).  A tank's mass scales with the VOLUME it
+    # encloses, so leaving it out of the cascade subsidised whichever propellant
+    # had the lowest density — which is the same propellant that has the
+    # highest Isp, so the error compounded instead of cancelling.  Module 3
+    # derives `tank_kg_per_L` per propellant from storage class and density;
+    # this flag turns the term on.  Set False to restore v1.10.1 masses.
+    model_tank_mass:           bool  = True
+
+    # RADIOISOTOPE POWER (v1.11.0).  Solar is 60 W/kg at 1 AU falling as 1/r²;
+    # an RTG is ~5 W/kg everywhere, so they cross at 3.46 AU and a large part
+    # of this catalog sits beyond it.  Module 3 has priced RTGs since v1.2.0
+    # and nothing read the row, so every main-belt body flew a starved solar
+    # array.  Capped because the binding constraint is Pu-238 supply (~1.5 kg/yr
+    # of DOE production, ~one flagship RTG a year for the world), not money.
+    allow_rtg_power:           bool  = True
+    rtg_max_power_w:           float = 5_000.0
+
+    # ORBITAL REFUELLING (v1.11.0).  A vehicle whose escape payload assumes
+    # tanker flights has to pay for them.  Starship's own Module 3 notes field
+    # has asked for this since v1.4.0 — its 27 t to escape EXCEEDS its 21 t to
+    # GTO precisely because it assumes refuelling — and until now its escape
+    # payload was priced at one $90M launch.
+    charge_tanker_flights:     bool  = True
+
     # ─── PER-ASTEROID Δv  (v1.4.0) ───────────────────────────────────────────
     # When True, each asteroid's Δv is derived from its own orbital elements
     # (semi_major_axis_au, eccentricity, inclination_deg) by the patched-conic
@@ -515,6 +539,14 @@ class CalcConfig:
     candidate_vehicles:        Optional[List[str]] = None
     candidate_propellants:     Optional[List[str]] = None
     operational_vehicles_only: bool = True
+    # v1.11.0.  Module 3 v1.9.0 grew the propellant table from 7 rows to 40,
+    # and 17 of the additions are development or concept hardware — nuclear
+    # thermal, VASIMR, fusion, an Orion pulse drive.  Left ungated, a search
+    # that maximises profit would fly every asteroid on antimatter.  This
+    # mirrors `operational_vehicles_only` exactly: True keeps the search to
+    # propellants that have actually moved a spacecraft.  Retired rows
+    # (mercury ion) are excluded either way.
+    operational_propellants_only: bool = True
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     top_n_preview:             int = 20
@@ -994,7 +1026,66 @@ class CalcConfig:
     #           propellant × architecture × ratio) — ~24M lookups of five
     #           unchanging numbers.  A further 1.09x.
     #         Net ~1.9x per core, ~7x wall-clock on 12 threads.
-    pipeline_version: str = "1.10.1"
+    # 1.11.0 — STORAGE, AND A MUCH WIDER CATALOG.  Pairs with Module 3 v1.9.0,
+    #         which took the propellant table from 7 rows to 40 and the vehicle
+    #         table from 12 to 36.  Every number moves.
+    #         • PROPELLANT TANKAGE IS IN THE ROCKET EQUATION.  Module 3 has
+    #           computed `density_kg_per_L` since v1.2.0 and NOTHING read it,
+    #           so a tank's mass — which scales with VOLUME, not with the
+    #           propellant mass inside it — was free.  That was a straight
+    #           subsidy to whichever propellant had the lowest density, which
+    #           is the same propellant that has the highest Isp, so the error
+    #           compounded rather than cancelling.  The closed form generalises
+    #           with two scalars: k = 1/(1 − t(R_ret−1)) on the return leg,
+    #           where the tank flies home with the cargo, and k_out on the
+    #           outbound leg, where it is staged at the asteroid.  Both are 1
+    #           at t = 0, so `model_tank_mass = False` reproduces v1.10.1
+    #           exactly.  t(R−1) ≥ 1 is "the tank cannot close" and is
+    #           infeasible rather than expensive.
+    #         • THE MATURITY GATE NOW APPLIES TO PROPELLANTS.  17 of Module 3's
+    #           new rows are development or concept hardware; ungated, a
+    #           profit-maximising search flies every asteroid on antimatter.
+    #           `operational_propellants_only` mirrors the vehicle flag.  Two
+    #           further filters are about the mission profile rather than
+    #           maturity and apply regardless: `restartable` excludes solids
+    #           (a return burn fires years after launch and a solid cannot be
+    #           relit) and `propellantless` excludes sails (infinite Isp
+    #           otherwise reports an unbounded payload).
+    #         • THE RTG ROW IS FINALLY READ.  Module 3 has priced radioisotope
+    #           power since v1.2.0, with a note saying it is for past ~3 AU,
+    #           and no code ever looked at it — so every main-belt body flew a
+    #           photovoltaic array starved by 1/r².  Solar is 60 W/kg at 1 AU
+    #           and an RTG is 5 W/kg everywhere, so they cross at 3.46 AU.
+    #           Capped by `rtg_max_power_w` because the binding constraint is
+    #           Pu-238 supply (~1.5 kg/yr of DOE production), not money, and
+    #           charged at its own $500k/W rather than the $800/W solar rate.
+    #           Deliberately not applied to the EP array — see
+    #           power_source_for_target.
+    #         • ORBITAL REFUELLING IS CHARGED.  Starship's escape payload
+    #           EXCEEDS its GTO payload, which is only possible because the
+    #           escape figure assumes tanker flights.  Module 3's row has said
+    #           so in prose since v1.4.0, including the fix; this implements it
+    #           via `tanker_flights_for_escape`.  12 flights at list price is
+    #           $1.08B on top of a $90M launch.
+    #         • ISRU IS NO LONGER HYDROLOX-ONLY.  v1.10.0 hardcoded the tuple
+    #           ("hydrolox",), which was right about the chemistry it knew and
+    #           wrong about the question: electrolysing water to cryogenic
+    #           hydrogen is the HARDEST thing to do with asteroid water, not
+    #           the only one.  A steam rocket boils it at 1.00 kg of water per
+    #           kg of propellant against hydrolox's 1.286, with no
+    #           electrolyser and no cryogenic tank, and buys that at 190 s
+    #           against 452.  Which wins varies by body, so it belongs in the
+    #           per-asteroid search.  Feed ratio and feed MATERIAL now come off
+    #           the propellant row, and the water-liberation energy follows the
+    #           propellant instead of a constant.
+    #         • Lunar-origin launch systems are excluded structurally rather
+    #           than by status: this module departs from Earth, and their
+    #           payload columns are annual throughput, so reading them would be
+    #           a unit error rather than merely optimism.
+    #         New output columns: tank_mass_frac, m_tank_return_kg,
+    #         m_tank_outbound_kg, propellant_storage_class, power_source,
+    #         tanker_flights, tanker_cost_usd, isru_feed_material.
+    pipeline_version: str = "1.11.0"
 
 
 CONFIG = CalcConfig()
@@ -1162,6 +1253,57 @@ def integrity_check(catalogs: Dict[str, pd.DataFrame]) -> None:
         # doesn't name directly.  Just informational.
         print(f"     ℹ️   Module 2 prices {len(extra)} extra rows not named by Module 1 "
               f"(expected: elements + ice + bulk categories)")
+
+    schema_check(catalogs)
+
+
+# Columns Module 3 v1.9.0 added that Module 4 v1.11.0 needs.  Each maps to the
+# behaviour that silently reverts when the column is absent.
+_MODULE3_REQUIRED = {
+    "propellants": {
+        "tank_kg_per_L":  "propellant tankage reverts to ZERO MASS — every tank flies free",
+        "status":         "the maturity gate cannot fire; development and concept rows may enter the search",
+        "restartable":    "solid motors are not excluded, and a solid cannot fire a return burn",
+        "propellantless": "sails are not excluded and report an unbounded payload",
+    },
+    "vehicles": {
+        "tanker_flights_for_escape": "orbital refuelling is not charged; a refuelled escape payload is priced at one launch",
+        "origin": "non-Earth launch systems are not excluded, and their payload columns are annual throughput",
+    },
+}
+
+
+def schema_check(catalogs: Dict[str, pd.DataFrame]) -> None:
+    """Warn when an upstream table predates the columns this module reads.
+
+    Stage 3 is the cheap stage, so it is the one people skip re-running — and
+    every one of these columns fails SILENTLY when missing, because the code
+    that reads them is written to tolerate a pre-v1.9.0 catalog.  Tolerating it
+    quietly is how a run ends up flying every propellant tank for free and
+    reporting a number that looks like a result.
+
+    This is the same lesson as `_SSODNET_REQUIRED` in Module 1: a projection
+    that tolerates missing columns must still ASSERT the ones it cannot work
+    without.
+    """
+    stale = []
+    for key, needed in _MODULE3_REQUIRED.items():
+        df = catalogs.get(key)
+        if df is None:
+            continue
+        for col, consequence in needed.items():
+            if col not in df.columns:
+                stale.append((key, col, consequence))
+
+    if not stale:
+        return
+    print(f"\n     ⚠️  Module 3 catalog is STALE — {len(stale)} column(s) this "
+          f"version reads are missing:")
+    for key, col, consequence in stale:
+        print(f"          • {key}.{col}  →  {consequence}")
+    print("        → Re-run Stage 3 (transportation).  It takes seconds, and "
+          "until you do, the numbers below are not comparable to any "
+          "committed figure.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1549,6 +1691,66 @@ def solar_specific_power_w_per_kg(
     if not (0.1 < r < 100.0):
         return float(base_w_per_kg)
     return float(base_w_per_kg) / (r * r)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POWER SOURCE SELECTION  (v1.11.0)
+# ─────────────────────────────────────────────────────────────────────────────
+# Module 3 has carried an "RTG (radioisotope power)" row since v1.2.0 — $500k
+# per Watt-electric, with a note reading "only used past ~3 AU when PV starves"
+# — and nothing in this module ever read it.  Every asteroid in the catalog
+# flew photovoltaics, including the ones at 3.5 AU where the 1/r² term makes
+# the array seven times heavier than at 1 AU.  So the main belt was being
+# punished for an architecture choice a real mission would simply not make.
+#
+# The crossover is arithmetic, not a judgement: solar is 60 W/kg at 1 AU and
+# falls as 1/r²; an RTG is ~5 W/kg everywhere.  They cross at
+#
+#     r = sqrt(60 / 5) = 3.46 AU
+#
+# Inside that, PV is lighter per watt.  Outside it, nothing beats a
+# radioisotope — and a meaningful slice of this catalog is outside it.
+#
+# Two things keep this from becoming a free win for distant bodies:
+#
+#   • It costs 625× more per watt ($500,000 against $800), so the model buys
+#     nuclear only where it is genuinely lighter, and pays for it.
+#   • Pu-238 supply is the real constraint.  DOE production is ~1.5 kg/yr,
+#     which is roughly one flagship RTG a year for the whole world, and a
+#     GPHS-RTG is 290 We.  A few kilowatts is the outside edge of plausible;
+#     a 300 kW nuclear-electric stage is not a cost question, it is a
+#     national-inventory question.  `rtg_max_power_w` caps it, and above the
+#     cap the mission goes back to solar and pays the mass.
+#
+# Deliberately NOT applied to the electric-propulsion array.  EP on the targets
+# this pipeline sizes runs to hundreds of kilowatts, which is two orders above
+# anything a radioisotope source can deliver — pricing that as an RTG would
+# quietly invent nuclear-electric propulsion, which is a development-status
+# propellant row of its own (see Module 3) with a reactor this model does not
+# size.  The processing plant is kilowatts and is the honest place for this.
+
+def power_source_for_target(
+    a_au:          Optional[float],
+    base_w_per_kg: float,
+    rtg_w_per_kg:  float,
+    required_w:    float,
+    max_rtg_w:     float,
+) -> Tuple[float, str]:
+    """(specific power W/kg, source name) for the processing plant.
+
+    Picks whichever of photovoltaic and radioisotope is LIGHTER at this
+    asteroid's heliocentric distance, subject to the radioisotope cap.
+    Returns the solar figure unchanged whenever RTG is unavailable, so
+    `allow_rtg_power = False` reproduces the pre-v1.11.0 behaviour exactly.
+    """
+    solar = solar_specific_power_w_per_kg(a_au, base_w_per_kg)
+    if rtg_w_per_kg <= 0 or required_w <= 0:
+        return solar, "solar"
+    if required_w > max_rtg_w:
+        return solar, "solar"           # more power than Pu-238 supply allows
+    if rtg_w_per_kg <= solar:
+        return solar, "solar"           # inside the crossover; PV is lighter
+    return float(rtg_w_per_kg), "rtg"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2235,21 +2437,41 @@ def asteroid_dv_m_s(asteroid_row: Row, config: CalcConfig) -> Tuple[float, float
 #      mining and baking MORE rock — that is the whole cost of ISRU, and it was
 #      the one part not modelled.
 #
-# What is actually makeable from asteroid material is hydrolox: water,
-# electrolysed, cryo-cooled.  That is the architecture every asteroid-ISRU
-# study proposes and the only one this model can honestly price.
-#
-# The mass balance is stoichiometric.  Electrolysis yields 8 kg of O2 per kg of
-# H2 (mass ratio of O to H2 in H2O).  A hydrolox stage runs oxidiser-rich of
-# stoichiometric at an O/F around 6:1, so a kilogram of propellant is
-# 1/(1+6) kg of H2, and getting that H2 takes 9x its mass in water:
+# What is makeable from asteroid material starts with hydrolox: water,
+# electrolysed, cryo-cooled.  The mass balance is stoichiometric.  Electrolysis
+# yields 8 kg of O2 per kg of H2 (mass ratio of O to H2 in H2O).  A hydrolox
+# stage runs oxidiser-rich of stoichiometric at an O/F around 6:1, so a
+# kilogram of propellant is 1/(1+6) kg of H2, and getting that H2 takes 9x its
+# mass in water:
 #
 #     water per kg of propellant = 9 / (1 + O/F) = 1.286 kg
 #
 # The surplus oxygen (8/7 produced against 6/7 burnt) is vented — a real depot
 # would sell it, but this model has nobody to sell it to at an asteroid.
 #
-# Methalox is deliberately NOT included even though C-types carry both carbon
+# ── v1.11.0: hydrolox is no longer the only answer ───────────────────────────
+# v1.10.0 hardcoded the tuple ("hydrolox",) here, which was right about the
+# chemistry it knew and wrong about the question.  Electrolysing water into
+# cryogenic hydrogen and oxygen is the HARDEST thing you can do with asteroid
+# water, not the only thing: a solar-thermal or electrothermal steam rocket
+# boils it and thrusts on the vapour at 1.00 kg of water per kg of propellant
+# against hydrolox's 1.286, with no electrolyser, no liquefaction and no
+# cryogenic tank.  It buys that at 190 s of Isp against 452.
+#
+# Which of those wins is a real trade and it varies by body — a wet, easily
+# reached target favours cheap propellant, a dry or distant one favours high
+# Isp — so it belongs in the per-asteroid architecture search, not in a
+# constant.  Module 3 now states the feed ratio and the feed MATERIAL on each
+# propellant row (`isru_feed_kg_per_kg`, `isru_feed_material`), and this
+# function reads them.
+#
+# Two feed materials exist:
+#   "water"     the ratio is water per kg of propellant, so the REGOLITH to dig
+#               is that divided by the body's ice fraction and the recovery.
+#   "regolith"  the propellant IS bulk rock (a mass driver's reaction mass), so
+#               the ratio is already regolith per kg and no water is required.
+#
+# Methalox is still deliberately excluded even though C-types carry both carbon
 # and water.  It needs a Sabatier loop and a carbon-reduction step that no
 # study has costed for asteroid regolith, and asserting a yield for it would be
 # inventing a number rather than deriving one.
@@ -2268,8 +2490,27 @@ def isru_feed_kg_per_kg_propellant(
     no water to make it from.  That is a per-(asteroid × propellant) fact, which
     is why it is answered here rather than by a config flag.
     """
-    name = str(propellant.get("name", "")).strip().lower()
-    if not any(tag in name for tag in _ISRU_PROPELLANTS):
+    ratio    = propellant.get("isru_feed_kg_per_kg")
+    material = propellant.get("isru_feed_material")
+
+    if ratio is None or (isinstance(ratio, float) and pd.isna(ratio)):
+        # Pre-v1.9.0 propellant row with no ISRU columns.  Fall back to the
+        # hydrolox name test so an old catalog still behaves as it did.
+        name = str(propellant.get("name", "")).strip().lower()
+        if not any(tag in name for tag in _ISRU_PROPELLANTS):
+            return None
+        ratio, material = WATER_KG_PER_KG_HYDROLOX, "water"
+
+    ratio = float(ratio)
+    if ratio <= 0:
+        return None
+
+    if material == "regolith":
+        # Reaction mass is the body itself; no volatiles needed and no
+        # separation loss, because nothing is being separated.
+        return ratio
+
+    if material != "water":
         return None
 
     ice_frac = asteroid_row.get("comp_ice_fraction")
@@ -2277,7 +2518,7 @@ def isru_feed_kg_per_kg_propellant(
         return None
 
     recovery = max(1e-6, min(1.0, config.beneficiation_recovery))
-    return WATER_KG_PER_KG_HYDROLOX / (float(ice_frac) * recovery)
+    return ratio / (float(ice_frac) * recovery)
 
 
 def mining_duration_yr(payload_kg: float, config: CalcConfig) -> float:
@@ -2343,44 +2584,71 @@ def max_return_payload_kg(
     tps_frac:        float = 0.0,
     isru_return:     bool  = False,
     structure_frac:  float = 0.0,
+    tank_frac:       float = 0.0,
 ) -> Dict[str, float]:
     """Closed-form max returned-payload solver for a return-sample mission.
 
-    Two masses scale with the payload and both are fully accounted for:
+    Three masses scale with something the solver is trying to find, and all
+    three are fully accounted for:
 
       • HEAT SHIELD, tps_frac × (m_payload + m_dry_return) — hauled outbound
         from Earth AND pushed back through the return burn, even though it
         ablates on entry.  Let s = 1 + tps_frac.
       • RETURN-VEHICLE STRUCTURE, structure_frac × m_payload (v1.10.0) — the
-        tankage, primary structure and cargo restraint that a bigger haul
-        needs.  Let f = structure_frac, so the dry vehicle is d0 + f·m_payload.
+        primary structure and cargo restraint that a bigger haul needs.
+        Let f = structure_frac, so the dry vehicle is d0 + f·m_payload.
+      • PROPELLANT TANKAGE, tank_frac × m_propellant (v1.11.0) — and this one
+        is circular in a way the other two are not, because the tank is sized
+        by the propellant and is itself mass the propellant has to push.
+        Let t = tank_frac.
+
+    On tankage.  Module 3 derives t per propellant from storage class and
+    density (tank_kg_per_L / density_kg_per_L), and it is not a rounding term:
+    2.5% for kerolox, 9.7% for hydrolox, 46% for cold gas, 53% for the bare
+    hydrogen a nuclear-thermal stage burns.  Leaving it out was a straight
+    subsidy to whichever propellant had the lowest density, which is the same
+    propellant that has the highest Isp — so the error compounded rather than
+    cancelling.
+
+    The two tanks are treated differently, because they are used differently:
+      • the RETURN tank flies home with the cargo, so it is dry mass at arrival
+        and rides inside m_after_return;
+      • the OUTBOUND tank is staged at the asteroid, so it is pushed through
+        the outbound burn and then dropped.
 
     Working backward from arrival:
         m_dry           = d0 + f · m_payload
         m_tps           = tps_frac · (m_payload + m_dry)
-        m_after_return  = m_payload + m_dry + m_tps = s · (m_payload + m_dry)
-        m_before_return = m_after_return × R_ret
+        m_tank_ret      = t · m_return_prop
+        m_after_return  = s · (m_payload + m_dry) + m_tank_ret
         m_return_prop   = (R_ret − 1) × m_after_return     (zero if ISRU on)
 
-        m_at_asteroid     = m_hardware + m_dry + m_tps + m_return_prop
-                            (the mined payload is loaded HERE, not brought)
-        m_before_outbound = m_at_asteroid × R_out
-        m_outbound_prop   = (R_out − 1) × m_at_asteroid
+    Substituting m_tank_ret and solving the loop gives a single scalar:
 
-        m_launch = m_at_asteroid × R_out
+        m_after_return = k · s · (m_payload·(1+f) + d0),
+            where k = 1 / (1 − t·(R_ret − 1))
 
-    Writing g = s·(1 + f) − 1 for the combined payload-proportional overhead,
-    m_at_asteroid collapses to
+    and k > 1 is precisely the cost of carrying your own tank home.  k → ∞ as
+    t·(R_ret − 1) → 1: the tank cannot close, no payload makes it, and the
+    combination is infeasible rather than merely expensive.  The same algebra
+    on the outbound leg gives k_out = 1/(1 − t·(R_out − 1)).
 
-        m_hardware + s·d0·R_ret + m_payload · ((1 + g)·R_ret − 1)
-
-    so the NO-ISRU closed form is
+    So the NO-ISRU closed form generalises to
 
         m_payload_max =
-            (M_LEO/R_out − m_hardware − s·d0·R_ret) / ((1 + g)·R_ret − 1)
+            (M_LEO/(k_out·R_out) − m_hardware − k·s·d0·R_ret)
+            / (k·s·R_ret·(1 + f) − 1)
 
-    which reduces to the pre-v1.10.0 expression exactly when f = 0, since g
-    then equals tps_frac and (1 + g) equals s.
+    and the ISRU form (return propellant made on site, but its TANK still
+    launched from Earth) to
+
+        m_payload_max =
+            (M_LEO/(k_out·R_out) − m_hardware − k·s·d0) / (k·s·(1 + f) − 1)
+
+    Both reduce to the v1.10.0 expressions exactly at t = 0, where k = k_out =
+    1 and k·s·(1+f) − 1 is g.  Side effect worth knowing: with t > 0 the ISRU
+    denominator is positive even when g would be zero, which closes the last
+    route to an unbounded reported payload.
 
     Returns a dict with the full mass cascade.  All masses in kg.
     """
@@ -2388,7 +2656,8 @@ def max_return_payload_kg(
         return {"max_payload_kg": 0.0, "viable": False,
                 "r_out": r_out, "r_ret": r_ret,
                 "m_launch": 0, "m_outbound_prop": 0, "m_return_prop": 0,
-                "m_at_asteroid": 0, "m_tps": 0, "m_dry_return": 0}
+                "m_at_asteroid": 0, "m_tps": 0, "m_dry_return": 0,
+                "m_tank_return": 0, "m_tank_outbound": 0}
 
     if not np.isfinite(isp_s) or isp_s <= 0:
         return _infeasible()
@@ -2405,35 +2674,48 @@ def max_return_payload_kg(
         return _infeasible()      # Δv/Isp so extreme the mass ratio overflows
     s     = 1.0 + tps_frac
     f     = max(0.0, float(structure_frac))
+    t     = max(0.0, float(tank_frac))
     # Combined payload-proportional overhead: heat shield plus the structure
     # that scales with the haul.  g = tps_frac exactly when f = 0.
     g     = s * (1.0 + f) - 1.0
 
+    # Tankage closure.  t·(R − 1) ≥ 1 means the tank needed to hold the
+    # propellant for this burn outweighs the propellant's own contribution —
+    # the same "the tank cannot close" condition Module 2 hits on δ·R ≥ 1.
+    # Infeasible, not expensive.
+    if t * (r_ret - 1.0) >= 1.0 or t * (r_out - 1.0) >= 1.0:
+        return _infeasible(r_out, r_ret)
+    k     = 1.0 / (1.0 - t * (r_ret - 1.0))
+    k_out = 1.0 / (1.0 - t * (r_out - 1.0))
+    # Launch capacity available to everything except the outbound tank and the
+    # outbound propellant.
+    launch_budget = leo_capacity_kg / (k_out * r_out)
+
     if isru_return:
         # ISRU mode: return propellant is manufactured ON the asteroid from
-        # mined volatiles, NOT carried up from Earth.  The heat shield and the
-        # payload-scaling structure are still launched from Earth, so the
-        # launch constraint becomes:
+        # mined volatiles, NOT carried up from Earth.  The heat shield, the
+        # payload-scaling structure AND the empty return TANK are still
+        # launched from Earth — you can make propellant out there, not a
+        # pressure vessel — so the launch constraint becomes:
         #
-        #   M_LEO ≥ (m_hardware + m_dry + m_tps) × R_out
-        #         = (m_hardware + s·d0 + g·m_payload) × R_out
+        #   M_LEO ≥ (m_hardware + k·s·(m_payload·(1+f) + d0) − m_payload)
+        #           × k_out × R_out
         #
-        # ⇒ m_payload_launch_max = (M_LEO/R_out − m_hardware − s·d0) / g
+        # ⇒ m_payload_max = (M_LEO/(k_out·R_out) − m_hardware − k·s·d0)
+        #                   / (k·s·(1 + f) − 1)
         #
-        # v1.10.0: g is only zero when there is no heat shield AND no structure
-        # scaling — i.e. only if return_structure_frac_of_payload is explicitly
-        # set to 0.  That combination is what used to let the cascade report an
-        # unbounded payload with nothing but the volume cap to stop it.
-        base_launch = (hardware_kg + s * dry_return_kg) * r_out
+        # v1.10.0 closed the unbounded-payload hole by making g > 0 whenever
+        # there is a heat shield or structure scaling; v1.11.0's tank term
+        # closes it for good, since k·s·(1+f) − 1 > 0 for any t > 0 even with
+        # both of those set to zero.
+        denom_isru  = k * s * (1.0 + f) - 1.0
+        base_launch = (hardware_kg + k * s * dry_return_kg) * k_out * r_out
         if base_launch > leo_capacity_kg:
-            return {"max_payload_kg": 0.0, "viable": False,
-                    "r_out": r_out, "r_ret": r_ret,
-                    "m_launch": 0, "m_outbound_prop": 0, "m_return_prop": 0,
-                    "m_at_asteroid": 0, "m_tps": 0, "m_dry_return": 0}
-        if g > 0:
+            return _infeasible(r_out, r_ret)
+        if denom_isru > 0:
             m_payload_launch_max = (
-                leo_capacity_kg / r_out - hardware_kg - s * dry_return_kg
-            ) / g
+                launch_budget - hardware_kg - k * s * dry_return_kg
+            ) / denom_isru
             m_payload_max = max(0.0, m_payload_launch_max)
         else:
             m_payload_max = np.inf   # mining cap binds downstream
@@ -2447,10 +2729,14 @@ def max_return_payload_kg(
             # actual capped payload is known (TPS / return-prop / outbound-prop
             # all depend on the final m_payload).
             "m_launch":        base_launch,
-            "m_outbound_prop": base_launch - (hardware_kg + s * dry_return_kg),
+            "m_outbound_prop": base_launch - (hardware_kg + k * s * dry_return_kg),
             "m_return_prop":   0.0,
-            "m_at_asteroid":   hardware_kg + s * dry_return_kg,
+            "m_at_asteroid":   hardware_kg + k * s * dry_return_kg,
             "m_tps":           tps_frac * dry_return_kg,  # baseline TPS for empty payload
+            "m_tank_return":   0.0,   # recomputed downstream with the real payload
+            "m_tank_outbound": 0.0,
+            "k_ret":           k,
+            "k_out":           k_out,
         }
 
     # ── NO-ISRU: return prop is hauled outbound as dead mass ─────────────────
@@ -2463,28 +2749,34 @@ def max_return_payload_kg(
     #
     # With f = 0 this is g = tps_frac and (1 + g) = s, i.e. the pre-v1.10.0
     # expression exactly.
-    denom   = (1.0 + g) * r_ret - 1.0
-    bracket = leo_capacity_kg / r_out - hardware_kg - s * dry_return_kg * r_ret
+    denom   = k * s * r_ret * (1.0 + f) - 1.0
+    bracket = launch_budget - hardware_kg - k * s * dry_return_kg * r_ret
     if bracket <= 0 or denom <= 0:
-        return {"max_payload_kg": 0.0, "viable": False,
-                "r_out": r_out, "r_ret": r_ret,
-                "m_launch": 0, "m_outbound_prop": 0, "m_return_prop": 0,
-                "m_at_asteroid": 0, "m_tps": 0, "m_dry_return": 0}
+        return _infeasible(r_out, r_ret)
 
     m_payload_max = bracket / denom
     if m_payload_max <= 0:
-        return {"max_payload_kg": 0.0, "viable": False,
-                "r_out": r_out, "r_ret": r_ret,
-                "m_launch": 0, "m_outbound_prop": 0, "m_return_prop": 0,
-                "m_at_asteroid": 0, "m_tps": 0, "m_dry_return": 0}
+        return _infeasible(r_out, r_ret)
 
     m_dry_return   = dry_return_kg + f * m_payload_max
     m_tps          = tps_frac * (m_payload_max + m_dry_return)
-    m_after_return = m_payload_max + m_dry_return + m_tps
+    # m_after_return carries the return tank as well as the cargo, so it is
+    # the k-inflated form rather than the bare sum.  Written out from the
+    # closed-form solution rather than re-derived, so the two cannot drift.
+    m_after_return = k * s * (m_payload_max * (1.0 + f) + dry_return_kg)
     m_return_prop  = m_after_return * (r_ret - 1.0)
-    m_at_asteroid  = hardware_kg + m_dry_return + m_tps + m_return_prop
-    m_outbound_prop = m_at_asteroid * (r_out - 1.0)
-    m_launch       = m_at_asteroid + m_outbound_prop
+    m_tank_return  = t * m_return_prop
+    # Everything launched from Earth that reaches the asteroid: hardware, the
+    # dry return vehicle, its heat shield, its tank, and the return propellant.
+    # (The mined payload is loaded there, so it is not in this sum.)
+    m_at_asteroid  = (hardware_kg + m_dry_return + m_tps
+                      + m_tank_return + m_return_prop)
+    # The outbound tank is staged at the asteroid: pushed through the outbound
+    # burn, then dropped.  It scales with the outbound propellant, which scales
+    # with it — hence k_out.
+    m_outbound_prop = m_at_asteroid * k_out * (r_out - 1.0)
+    m_tank_outbound = t * m_outbound_prop
+    m_launch       = m_at_asteroid + m_tank_outbound + m_outbound_prop
 
     return {
         "max_payload_kg":  m_payload_max,
@@ -2497,6 +2789,14 @@ def max_return_payload_kg(
         "m_at_asteroid":   m_at_asteroid,
         "m_tps":           m_tps,
         "m_dry_return":    m_dry_return,
+        "m_tank_return":   m_tank_return,
+        "m_tank_outbound": m_tank_outbound,
+        # Exported so the caller's recomputation at the CAPPED payload uses the
+        # same two scalars rather than re-deriving them.  Two copies of this
+        # algebra drifting apart is precisely how a mass ends up in the rocket
+        # equation without a matching entry in the ledger.
+        "k_ret":           k,
+        "k_out":           k_out,
     }
 
 
@@ -2610,11 +2910,11 @@ def _ops_value(ops_df: pd.DataFrame, category: str, default: float = 0.0) -> flo
 _OPS_SIZING_CACHE: Tuple[Optional[pd.DataFrame], Optional[Tuple[float, ...]]] = (None, None)
 
 
-def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, float, float, float, float]:
-    """The five Module 3 rows the coupled sizing loop needs, resolved once.
+def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, float, float, float, float, float]:
+    """The six Module 3 rows the coupled sizing loop needs, resolved once.
 
         (dig Wh/kg, beneficiation Wh/kg, array W/kg at 1 AU,
-         EP efficiency, EP thruster+PPU kg/kW)
+         EP efficiency, EP thruster+PPU kg/kW, RTG W/kg)
 
     None of them depends on the asteroid, the vehicle or the propellant, but
     they were being looked up inside `_evaluate_combo_at_ratio` — which runs
@@ -2634,6 +2934,7 @@ def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, float, float, fl
         _ops_value(ops_df, "Power system specific mass", default=60.0),
         _ops_value(ops_df, "Electric propulsion efficiency", default=0.60),
         _ops_value(ops_df, "Electric thruster + PPU specific mass", default=8.0),
+        _ops_value(ops_df, "RTG specific power", default=5.0),
     )
     _OPS_SIZING_CACHE = (ops_df, vals)
     return vals
@@ -2653,6 +2954,7 @@ def mission_cost_usd(
     stay_yr:             float = 0.0,
     isru_return:         Optional[bool] = None,
     ep_power_w:          float = 0.0,
+    power_source:        str   = "solar",
 ) -> Dict[str, float]:
     """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
 
@@ -2691,6 +2993,27 @@ def mission_cost_usd(
     """
     cost_per_kg_prop = float(propellant["cost_usd_per_kg"])
     launch_cost      = float(mass_cascade["m_launch"]) * float(vehicle["usd_per_kg_to_leo"])
+
+    # ── Orbital refuelling (v1.11.0) ─────────────────────────────────────────
+    # Some vehicles quote a beyond-LEO payload that assumes being refuelled in
+    # orbit first.  Starship is the case in this table, and the tell is in its
+    # own numbers: 27 t to escape against 21 t to GTO.  A payload cannot grow
+    # with departure energy under any propulsion system — unless the escape
+    # figure is for a vehicle that was topped up after reaching orbit.
+    #
+    # Module 3's row has said so in prose since v1.4.0, including the fix
+    # ("Module 4 should add ~$90M × N_tankers"), and Module 4 never did.  The
+    # count is now a column, `tanker_flights_for_escape`, and each tanker is a
+    # full flight of the same vehicle at its own list price.  At 12 flights
+    # that is $1.08B on top of a $90M launch — which is the difference between
+    # Starship being the obvious answer for a deep-space mission and being one
+    # candidate among several.
+    tanker_flights = int(vehicle.get("tanker_flights_for_escape", 0) or 0)
+    if config.charge_tanker_flights and tanker_flights > 0:
+        tanker_cost = tanker_flights * float(vehicle.get("list_price_usd", 0.0) or 0.0)
+    else:
+        tanker_cost = 0.0
+    launch_cost += tanker_cost
 
     outbound_prop_cost = float(mass_cascade["m_outbound_prop"]) * cost_per_kg_prop
     # v1.10.0: whether this particular mission makes its own propellant is a
@@ -2766,7 +3089,15 @@ def mission_cost_usd(
     # off Module 3's power-system row.  Zero unless beneficiation is on — the
     # baseline rig's own power is already implicit in its $/kg recurring rate.
     power_per_w             = _ops_value(ops_df, "Power system (solar + battery)", default=800.0)
-    power_system_cost       = max(0.0, float(processing_power_w)) * power_per_w * lc
+    # v1.11.0: past 3.46 AU the sizing loop may have chosen a radioisotope
+    # source because it is LIGHTER there.  It is also 625× more expensive per
+    # watt, and charging it at the solar rate would be exactly the asymmetry
+    # this codebase keeps finding — a mass in the rocket equation with the
+    # wrong price, or none, in the ledger.
+    plant_per_w             = (_ops_value(ops_df, "RTG (radioisotope power)",
+                                          default=500_000.0)
+                               if power_source == "rtg" else power_per_w)
+    power_system_cost       = max(0.0, float(processing_power_w)) * plant_per_w * lc
     # ── Electric propulsion stage (v1.10.0) ──────────────────────────────────
     # v1.7.0 put the EP array and thruster into the ROCKET EQUATION and stopped
     # there: `ep_system_kg` was hauled as mass and never appeared in a single
@@ -2890,6 +3221,8 @@ def mission_cost_usd(
 
     return {
         "launch_cost":           launch_cost,
+        "tanker_cost":           tanker_cost,
+        "tanker_flights":        float(tanker_flights),
         "autonomy_nre_cost":     autonomy_nre_cost,
         "mission_duration_yr":   mission_duration_yr,
         "outbound_prop_cost":    outbound_prop_cost,
@@ -2986,11 +3319,21 @@ def _evaluate_combo_at_ratio(
     # pair, not a switch.  A candidate that asks for ISRU where the chemistry
     # does not close is not a mission.
     isru_feed_per_kg_prop = 0.0
+    # Water actually baked out per kg of ISRU propellant.  v1.10.0 hardcoded
+    # hydrolox's 1.286 everywhere this appeared, which was right while hydrolox
+    # was the only ISRU route.  A steam rocket boils 1.00 kg per kg and a mass
+    # driver bakes nothing at all, so the liberation energy has to follow the
+    # propellant rather than a constant.
+    isru_water_per_kg_prop = 0.0
     if isru:
         ratio = isru_feed_kg_per_kg_propellant(asteroid_row, propellant, config)
         if ratio is None:
             return None
         isru_feed_per_kg_prop = float(ratio)
+        if propellant.get("isru_feed_material") == "water":
+            isru_water_per_kg_prop = float(propellant.get("isru_feed_kg_per_kg") or 0.0)
+        elif propellant.get("isru_feed_material") is None:
+            isru_water_per_kg_prop = WATER_KG_PER_KG_HYDROLOX   # pre-v1.9.0 row
 
     # Cap the returned payload by what the asteroid can supply
     asteroid_mass = asteroid_row.get("estimated_mass_kg")
@@ -3020,10 +3363,17 @@ def _evaluate_combo_at_ratio(
     # With beneficiation OFF no array mass is added at all — the existing
     # 2,000 kg rig figure already carries its own power implicitly, and this
     # keeps a default run bit-identical to v1.4.0.
-    dig_wh, benef_wh, base_w_per_kg, ep_eff, ep_kg_per_kw = _ops_sizing_constants(ops_df)
+    (dig_wh, benef_wh, base_w_per_kg, ep_eff, ep_kg_per_kw,
+     rtg_w_per_kg) = _ops_sizing_constants(ops_df)
+    # Solar for the electric-propulsion array always (see power_source_for_target
+    # for why a radioisotope source cannot serve hundreds of kilowatts), and for
+    # the processing plant until the loop below learns how much power it needs.
     w_per_kg = solar_specific_power_w_per_kg(
         asteroid_row.get("semi_major_axis_au"), base_w_per_kg,
     )
+    ep_w_per_kg   = w_per_kg
+    plant_w_per_kg = w_per_kg
+    power_source   = "solar"
 
     # `beneficiate` lets the caller price a NON-concentrating mission even
     # when the run has beneficiation enabled, so evaluate_combo can offer
@@ -3044,6 +3394,19 @@ def _evaluate_combo_at_ratio(
 
     isp_s_val   = float(propellant["isp_vac_s"])
     boiloff_pct = float(propellant.get("boiloff_pct_per_day", 0.0) or 0.0)
+    # ── Tankage (v1.11.0) ────────────────────────────────────────────────────
+    # Module 3 quotes tank mass per LITRE, because that is what it scales with;
+    # the cascade wants it per kilogram of propellant, so divide by density.
+    # A propellant row predating Module 3 v1.9.0 has neither column and comes
+    # through as 0.0, which reproduces v1.10.1 exactly.
+    tank_frac = 0.0
+    if config.model_tank_mass:
+        tank_per_L = propellant.get("tank_kg_per_L")
+        rho        = propellant.get("density_kg_per_L")
+        if (tank_per_L is not None and rho is not None
+                and not pd.isna(tank_per_L) and not pd.isna(rho)
+                and float(rho) > 0):
+            tank_frac = max(0.0, float(tank_per_L) / float(rho))
     # ISRU is exempt from boil-off — the propellant is made at the asteroid on
     # departure rather than held from launch.
     models_boiloff = (config.model_propellant_boiloff and boiloff_pct > 0
@@ -3104,6 +3467,7 @@ def _evaluate_combo_at_ratio(
             tps_frac        = tps_frac,
             isru_return     = isru,
             structure_frac  = structure_frac,
+            tank_frac       = tank_frac,
         )
         if not cascade["viable"]:
             return None
@@ -3117,7 +3481,7 @@ def _evaluate_combo_at_ratio(
             )
             ep_thrust_yr = config.ep_target_thrust_yr if m_prop_total > 0 else 0.0
             # Array (scales 1/r²) plus thruster + PPU (does not).
-            array_kg  = ep_power_watts / w_per_kg if w_per_kg > 0 else 0.0
+            array_kg  = ep_power_watts / ep_w_per_kg if ep_w_per_kg > 0 else 0.0
             drive_kg  = ep_power_watts / 1000.0 * ep_kg_per_kw
             new_ep_kg = array_kg + drive_kg
 
@@ -3159,10 +3523,31 @@ def _evaluate_combo_at_ratio(
                     ops_df, "Water liberation energy (bound water)", default=2_500.0,
                 )
                 processing_power_watts += (
-                    water_wh * new_isru_prop * WATER_KG_PER_KG_HYDROLOX
+                    water_wh * new_isru_prop * isru_water_per_kg_prop
                     / (trial_dur * 365.25 * 24.0)
                 )
-            new_power_kg = processing_power_watts / w_per_kg if w_per_kg > 0 else 0.0
+            # v1.11.0: pick the lighter power source for the plant now that its
+            # draw is known.  Inside 3.46 AU this returns solar unchanged, so a
+            # near-Earth run is untouched; beyond it, a starved photovoltaic
+            # array stops being the only option a main-belt target has.
+            #
+            # This sits INSIDE the fixed point, so a target whose draw lands
+            # right on `rtg_max_power_w` can alternate source between passes
+            # and never satisfy the convergence test.  That is bounded (the
+            # loop runs at most 12 times and the last cascade is used) and it
+            # is deterministic — same inputs, same iterate, same answer — so
+            # the serial/parallel sha256 check still holds.  It is a real
+            # discontinuity in the model rather than a numerical defect: at the
+            # cap, adding one watt of demand genuinely forces a different
+            # power plant.
+            if config.allow_rtg_power:
+                plant_w_per_kg, power_source = power_source_for_target(
+                    asteroid_row.get("semi_major_axis_au"),
+                    base_w_per_kg, rtg_w_per_kg,
+                    processing_power_watts, config.rtg_max_power_w,
+                )
+            new_power_kg = (processing_power_watts / plant_w_per_kg
+                            if plant_w_per_kg > 0 else 0.0)
 
         new_stay_yr = trial_dur + window_wait_yr
         converged = (
@@ -3268,12 +3653,25 @@ def _evaluate_combo_at_ratio(
     # return_structure_frac_of_payload.
     m_dry_return    = config.return_vehicle_dry_kg + structure_frac * m_payload
     m_tps           = tps_frac * (m_payload + m_dry_return)
-    m_after_return  = m_payload + m_dry_return + m_tps
+    # v1.11.0: the same two tankage scalars the solver used, read back rather
+    # than re-derived.  k_ret = 1/(1 − t(R_ret−1)) inflates the post-burn mass
+    # by the tank that flies home inside it; k_out does the same on the
+    # outbound leg for the tank that is staged at the asteroid.  Both are 1.0
+    # when model_tank_mass is off, which leaves this block identical to v1.10.1.
+    k_ret_c         = float(cascade.get("k_ret", 1.0))
+    k_out_c         = float(cascade.get("k_out", 1.0))
+    m_after_return  = k_ret_c * (1.0 + tps_frac) * (
+        m_payload * (1.0 + structure_frac) + config.return_vehicle_dry_kg)
     m_return_prop   = m_after_return * (r_ret - 1.0)
-    m_at_asteroid   = (hardware_total_kg + m_dry_return + m_tps
+    m_tank_return   = tank_frac * m_return_prop
+    # The return TANK is launched from Earth even under ISRU — you can make
+    # propellant at an asteroid, not a pressure vessel — so it is inside
+    # m_at_asteroid in both branches, and only the propellant itself drops out.
+    m_at_asteroid   = (hardware_total_kg + m_dry_return + m_tps + m_tank_return
                        + (0.0 if isru else m_return_prop))
-    m_outbound_prop = m_at_asteroid * (r_out - 1.0)
-    m_launch        = m_at_asteroid + m_outbound_prop
+    m_outbound_prop = m_at_asteroid * k_out_c * (r_out - 1.0)
+    m_tank_outbound = tank_frac * m_outbound_prop
+    m_launch        = m_at_asteroid + m_tank_outbound + m_outbound_prop
 
     # Settle the ISRU books at the payload actually flown, so the reported feed
     # and the dig time below describe the same mission the cost model prices.
@@ -3282,7 +3680,7 @@ def _evaluate_combo_at_ratio(
         isru_feed_kg = isru_prop_kg * isru_feed_per_kg_prop
         if isru_feed_kg + feed_kg > throughput_cap_kg + 1e-6:
             return None
-    isru_water_kg = isru_prop_kg * WATER_KG_PER_KG_HYDROLOX if isru else 0.0
+    isru_water_kg = isru_prop_kg * isru_water_per_kg_prop if isru else 0.0
 
     actual_cascade = {
         "max_payload_kg":  m_payload,
@@ -3295,6 +3693,8 @@ def _evaluate_combo_at_ratio(
         "m_at_asteroid":   m_at_asteroid,
         "m_tps":           m_tps,
         "m_dry_return":    m_dry_return,
+        "m_tank_return":   m_tank_return,
+        "m_tank_outbound": m_tank_outbound,
     }
 
     # ── Delivered $/kg — the best load assemblable from this rock ────────────
@@ -3373,9 +3773,17 @@ def _evaluate_combo_at_ratio(
             water_wh * water_kg / (mining_yr * 365.25 * 24.0)
         )
         # That extra power needs extra array, which the cascade already
-        # flew; recording it keeps the reported plant honest.
-        if w_per_kg > 0:
-            power_system_kg = processing_power_watts / w_per_kg
+        # flew; recording it keeps the reported plant honest.  v1.11.0: and it
+        # can flip the source, since the liberation term is a real addition to
+        # the plant's draw and the RTG cap is an absolute one.
+        if config.allow_rtg_power and (beneficiate or isru):
+            plant_w_per_kg, power_source = power_source_for_target(
+                asteroid_row.get("semi_major_axis_au"),
+                base_w_per_kg, rtg_w_per_kg,
+                processing_power_watts, config.rtg_max_power_w,
+            )
+        if plant_w_per_kg > 0:
+            power_system_kg = processing_power_watts / plant_w_per_kg
     cost                = mission_cost_usd(
         mass_cascade        = actual_cascade,
         vehicle             = vehicle,
@@ -3387,6 +3795,7 @@ def _evaluate_combo_at_ratio(
         stay_yr             = stay_yr,
         isru_return         = isru,
         ep_power_w          = ep_power_watts,
+        power_source        = power_source,
     )
 
     # ── Market saturation (v1.7.0) ───────────────────────────────────────────
@@ -3520,8 +3929,17 @@ def _evaluate_combo_at_ratio(
                                         config.learning_curve_rate),
         "processing_power_w":       processing_power_watts,
         "power_system_kg":          power_system_kg,
-        "power_w_per_kg_at_target":  w_per_kg,
+        "power_w_per_kg_at_target":  plant_w_per_kg,
+        "power_source":             power_source,
         "hardware_total_kg":        hardware_total_kg,
+        # ── v1.11.0 storage and refuelling ─────────────────────────────────
+        "tank_mass_frac":           tank_frac,
+        "m_tank_return_kg":         float(actual_cascade.get("m_tank_return", 0.0)),
+        "m_tank_outbound_kg":       float(actual_cascade.get("m_tank_outbound", 0.0)),
+        "propellant_storage_class": propellant.get("storage_class"),
+        "tanker_flights":           cost.get("tanker_flights", 0.0),
+        "tanker_cost_usd":          cost.get("tanker_cost", 0.0),
+        "isru_feed_material":       propellant.get("isru_feed_material"),
         "return_bulk_density_kg_per_L": bulk_density_kg_per_L,
         "return_volume_m3":     return_volume_m3,
         "fairing_volume_m3":    fairing_m3,
@@ -3757,6 +4175,30 @@ def _row_to_dict(row: Row) -> Dict[str, Any]:
     return row.to_dict()
 
 
+def _truthy(series: pd.Series, default: bool) -> pd.Series:
+    """Boolean coercion that survives a CSV round-trip.
+
+    These flags reach Module 4 through a file, and the round-trip is only
+    lossless while every row states the column: pandas then infers dtype bool
+    and `.astype(bool)` is correct.  Add ONE row that omits it and the column
+    comes back as object, at which point `.astype(bool)` reads the *string*
+    "False" as True and NaN as True — so a propellant that cannot fly this
+    mission profile would silently rejoin the search, and nothing would say so.
+
+    That is the failure mode this repo keeps finding: a guard that turns a
+    wrong answer into a quiet one.  Parse the strings, and let `default` decide
+    what a MISSING value means rather than letting truthiness decide it.
+    """
+    if series.dtype == bool:
+        return series
+    parsed = series.map(
+        lambda v: v if isinstance(v, (bool, np.bool_))
+        else (None if v is None or (isinstance(v, float) and pd.isna(v))
+              else str(v).strip().lower() in ("true", "1", "yes", "t"))
+    )
+    return parsed.fillna(default).astype(bool)
+
+
 def candidate_combos(
     catalogs: Dict[str, pd.DataFrame],
     config:   CalcConfig,
@@ -3775,10 +4217,39 @@ def candidate_combos(
     vdf = catalogs["vehicles"]
     if config.operational_vehicles_only and "status" in vdf.columns:
         vdf = vdf[vdf["status"] == "operational"]
+    # v1.11.0.  Module 3 v1.9.0 added lunar-origin launch systems (a mass
+    # driver and an elevator) whose $/kg is an order of magnitude below any
+    # rocket.  They are unreachable here for a structural reason rather than a
+    # maturity one: this module departs from Earth, and their payload columns
+    # are ANNUAL THROUGHPUT rather than per-launch mass, so reading them would
+    # not merely be optimistic, it would be a unit error.
+    if "origin" in vdf.columns:
+        vdf = vdf[vdf["origin"] == "earth_surface"]
     if config.candidate_vehicles is not None:
         vdf = vdf[vdf["name"].isin(config.candidate_vehicles)]
 
     pdf = catalogs["propellants"]
+    # ── Propellant gating (v1.11.0) ──────────────────────────────────────────
+    # Three filters, and only the first is about maturity.  The other two are
+    # about whether a propellant can fly THIS mission profile at all, and they
+    # apply regardless of how flight-proven it is:
+    #
+    #   restartable    An asteroid return fires its second burn years after the
+    #                  first.  A solid motor cannot be relit, so APCP is
+    #                  excluded permanently despite being TRL 9.
+    #   propellantless A sail has no mass ratio, so the rocket equation reports
+    #                  that it moves any payload for free.  Real sails run
+    #                  ~0.1 mm/s² and fall as 1/r²; sizing one needs a
+    #                  thrust-limited trajectory solver this module does not
+    #                  have.  Excluded rather than allowed to report infinity.
+    if config.operational_propellants_only and "status" in pdf.columns:
+        pdf = pdf[pdf["status"] == "operational"]
+    elif "status" in pdf.columns:
+        pdf = pdf[pdf["status"] != "retired"]
+    if "restartable" in pdf.columns:
+        pdf = pdf[_truthy(pdf["restartable"], default=True)]
+    if "propellantless" in pdf.columns:
+        pdf = pdf[~_truthy(pdf["propellantless"], default=False)]
     if config.candidate_propellants is not None:
         pdf = pdf[pdf["name"].isin(config.candidate_propellants)]
 
