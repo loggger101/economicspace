@@ -365,7 +365,61 @@ class TransportConfig:
     #           — present since v1.2.0 and never read by anything — is now
     #           consumed by Module 4.  Crossover against the 60 W/kg solar row
     #           is 3.46 AU, and this catalog runs well past it.
-    pipeline_version: str = "1.9.0"
+    # 1.10.0 — realism audit of the v1.9.0 tables.  Three changes, two of which
+    #         move every number.
+    #         • THRUSTER SYSTEMS: the DEVICE, as distinct from the propellant.
+    #           This table has always been half propellant and half propulsion
+    #           system (isp_vac_s, restartable and dv_penalty_factor are device
+    #           properties), and it carried nothing about whether the device can
+    #           be BUILT at the size Module 4 flies.  So Module 4 sized an
+    #           electric stage on power alone and a third of its winning
+    #           missions were pulsed plasma thrusters — 860 uN in flight, asked
+    #           for ~10 N.  New `_THRUSTER_SYSTEMS` block supplies
+    #           `thruster_kg_per_n`, `thruster_efficiency` and `thrust_scaling`
+    #           per technology, every figure anchored on a flight or ground
+    #           article.  The `continuous` / `replicated` split is the physics:
+    #           a discharge or beam you can enlarge stays at 6-90 kg/N however
+    #           big you build it; discrete emitters, needles and pulses are
+    #           stuck at 2,500-10,000 kg/N forever.  `_apply_thruster_data`
+    #           RAISES on an electric row with no entry rather than defaulting,
+    #           and tests dv_penalty_factor > 1 to match Module 4's own
+    #           is_electric test — keying off `type` would have missed
+    #           nuclear_electric, direct fusion drive and antimatter, and it
+    #           caught all three.
+    #         • NEW OPS ROW "Power processing unit specific mass" 4.7 kg/kW,
+    #           splitting the lumped 8 kg/kW "thruster + PPU".  A per-kW figure
+    #           cannot express a per-newton constraint, which is what allowed
+    #           the above.
+    #         • ARGON WAS A FREE RESOURCE, and the row said so itself.  It
+    #           carried liquid-argon density (1.395 kg/L, which only exists at
+    #           its 87.3 K boiling point) with a boil-off of ZERO, and its own
+    #           two comments — "liquid NBP (cryogenic storage)" and "stored
+    #           supercritical at ambient temperature" — sat three lines apart.
+    #           The combination bought the lightest tank of any gas here, 2.1%
+    #           of propellant mass, AND exemption from the hold-time penalty
+    #           every other cryogen pays.  Measured at cislunar, argon was
+    #           chosen for 25.0% of raw winners and 27.3% of beneficiated ones;
+    #           correctly bottled it takes 2.4% and 0.0%, and 1,059 bodies stop
+    #           being feasible.  It also carried the whole Mars result at both
+    #           settings, which has not been re-run.  Note what did NOT move:
+    #           both cislunar headline ratios are bit-identical either way,
+    #           because the best missions were never flying argon.
+    #           Split into the two real articles: `ArgonSC`, supercritical in a
+    #           COPV at 18 MPa and 0.30 kg/L, which is what has FLOWN (no
+    #           spacecraft has ever carried cryogenic argon), and `ArgonLIQ`,
+    #           the liquid feed a multi-tonne stage would want, tagged
+    #           `development` and paying derived boil-off.  Honestly bottled,
+    #           argon pays 22.9% of its own mass in tankage — worse than
+    #           krypton's 12.5% and xenon's 1.9%, because it is the LIGHTEST of
+    #           the three and tank fraction goes as 1/M once pressure cancels.
+    #           Density derived two ways (Peng-Robinson and generalised
+    #           compressibility), boil-off derived from this table's own LOX
+    #           figure.  See _COMPONENTS and _LAR_BOILOFF_PCT_PER_DAY.
+    #         • NEW OPS ROW "Propellant tank recurring cost", $6,000/kg,
+    #           Centaur-derived.  Module 3 has produced tank MASS since v1.9.0
+    #           and Module 4 has flown it since, and nothing ever bought one.
+    #         Propellants 40 → 41 (23 operational, 8 development).
+    pipeline_version: str = "1.10.0"
     preview_rows:     int = 15
 
 
@@ -1353,6 +1407,169 @@ _TANK_BASE_KG_PER_L = 0.025
 # NASA-STD-(I)-5019 class hardware.  Burst is taken at 1.5 × operating.
 _COPV_PERFORMANCE_J_PER_KG = 392_000.0
 
+# Passive boil-off for LIQUID argon, %/day.  Derived from the LOX rate already
+# in this table rather than asserted, because the whole point of the v1.10.0
+# argon split is that a cryogen has to pay what a cryogen costs.
+#
+# The kerolox row is 0.015%/day and its own comment says why: RP-1 is storable
+# and only the LOX half boils, weighted by the mix ratio.  At O/F 2.30 the LOX
+# mass fraction is 2.30/3.30 = 0.697, so LOX alone is 0.015/0.697 = 0.0215%/day.
+#
+# Scaling that to argon at the same tank and the same MLI, boil-off is heat leak
+# over the energy it takes to boil the contents, so two ratios:
+#
+#   heat leak        ∝ ΔT     (300 − 87.3) / (300 − 90.2)      = 1.014
+#   energy to boil   ∝ ρ·h_fg  (1.141 × 213.1) / (1.395 × 161.1) = 1.082
+#
+# giving 0.0215 × 1.014 × 1.082 = 0.0236, rounded to 0.024%/day.  Argon boils
+# slightly FASTER than oxygen: 3 K colder, and its latent heat per litre is 8%
+# lower.  Over a four-year hold that is a factor of 1.41 on the return
+# propellant — small next to hydrolox's 2.1, and not nothing.
+_LAR_BOILOFF_PCT_PER_DAY = 0.024
+
+# ─────────────────────────────────────────────────────────────────────────────
+# THRUSTER SYSTEMS  (v1.10.0) — the DEVICE, as distinct from the propellant
+# ─────────────────────────────────────────────────────────────────────────────
+# PROPELLANTS_REFERENCE has always been half a propellant table and half a
+# propulsion-system table — `isp_vac_s`, `restartable` and `dv_penalty_factor`
+# are properties of the DEVICE, not of the chemical.  What it never carried was
+# anything about whether the device can be built at the size this pipeline
+# flies, and that omission ran one way:
+#
+#     Module 4 sized an electric stage by POWER alone.  Buy enough kilowatts
+#     and any entry in the table became a cargo tug.
+#
+# So a full cislunar run had a third of its winning missions on PULSED PLASMA
+# THRUSTERS and a quarter on ELECTROSPRAY — devices that have flown, and have
+# flown producing MICRONEWTONS.  EO-1's PPT was 860 µN.  LISA Pathfinder's
+# colloid thrusters were 5-30 µN each.  The pipeline was asking them for ~10 N.
+#
+# Note the asymmetry this closes, and it is the same one the user spotted:
+# LAUNCH is modelled as an integrated vehicle with a payload it can actually
+# lift, while IN-SPACE propulsion was modelled as a bare specific impulse.  One
+# side had a capacity limit and the other did not.
+#
+# Two columns fix it, and neither is a threshold — the mass does the work, the
+# same way propellant tankage disqualifies low-density propellants without
+# anyone naming a cutoff:
+#
+#   thruster_kg_per_n   Thruster-head mass per newton of thrust.  Module 4
+#                       derives the thrust its mission needs (T = ṁ·ve, which
+#                       is just momentum flux and owes nothing to efficiency)
+#                       and multiplies.  A device that makes µN per kilogram
+#                       reports thousands of tonnes of thruster and dies in the
+#                       rocket equation.  No cutoff, no judgement call.
+#
+#   thruster_efficiency Total thrust efficiency, replacing the single global
+#                       0.60 that every electric row shared.  This one is
+#                       nearly as decisive as the mass: a PPT converts about
+#                       8% of its input into jet power against a gridded ion
+#                       thruster's 70%, so it needs ~9x the array for the same
+#                       thrust — and the array is mass too.
+#
+# `thrust_scaling` records WHY a device lands where it does, and it is the real
+# physical divide:
+#
+#   continuous   Thrust comes from a plasma discharge or a beam whose area you
+#                can enlarge.  Scaling up means building a BIGGER device, so
+#                kg/N stays roughly flat with size and lands at 6-90 kg/N
+#                across every mature technology here.
+#   replicated   Thrust comes from discrete emitters, needles or pulses.
+#                Scaling up means building MORE devices, so kg/N is fixed by
+#                the single unit and never improves — 2,500-10,000 kg/N.
+#                Accion's own literature puts a cargo-scale electrospray at
+#                "millions of emitters"; that sentence was already in this
+#                table's notes field and nothing read it.
+#
+# Every figure below is thruster HEAD mass over demonstrated thrust, from a
+# flight or ground article.  The PPU is separate and scales with power — see
+# the "Power processing unit specific mass" ops row — because a PPU is a power
+# converter and does not care what it is feeding.
+#
+# ⚠️  The replicated figures are deliberately GENEROUS to the technology.
+# Electrospray is entered at 10,000 kg/N when ST7-DRS heads work out nearer
+# 20,000-100,000; the conclusion does not depend on which end you take, and
+# taking the favourable end means nobody can claim the result was engineered.
+#
+# ⚠️  Iodine is the judgement call in this table, and it matters because iodine
+# wins most of the catalog.  Its only FLIGHT unit is ThrustMe's 1.1 mN cubesat
+# thruster, which works out near 1,100 kg/N — but that is a scale artifact of a
+# 1U device, not a property of iodine.  Iodine runs in Hall and gridded
+# thrusters whose bodies are the same hardware xenon uses; what it genuinely
+# costs is a heated feed line and corrosion-tolerant materials.  So it is
+# entered as Hall-class mass with a penalty (60 against xenon Hall's 30), and
+# `status` cannot express that its cargo-scale heritage is ground-test only.
+# If you want to be harsh with iodine, this is the number to move — but move it
+# for a reason, and record the reason.
+_THRUSTER_SYSTEMS = {
+    # name fragment           kg/N     η     scaling        anchor
+    "Xenon  (Hall / ion)":      (54.0, 0.70, "continuous"),  # NEXT-C 12.7 kg / 236 mN, 70% total
+    "Krypton  (Hall)":          (35.0, 0.45, "continuous"),  # SPT-140 body, Kr ~85% of Xe thrust and ~10 pts less efficient
+    "Argon  (Hall / ion)":      (40.0, 0.40, "continuous"),  # same body again; Ar lower still
+    "Argon  (Hall / ion, cryogenic)": (40.0, 0.40, "continuous"),
+    "Iodine  (Hall / gridded)": (60.0, 0.45, "continuous"),  # see the iodine caveat above
+    "Water  (gridded ion / ECR)": (80.0, 0.35, "continuous"),  # ECR ion; water is hard to ionise cleanly
+    "Water  (electrothermal / resistojet)": (10.0, 0.75, "continuous"),  # resistojet: high thrust density, low Isp
+    "Hydrazine arcjet":         ( 6.0, 0.35, "continuous"),  # MR-509 1.5 kg / 258 mN
+    "Mercury ion  (RETIRED)":   (54.0, 0.65, "continuous"),  # gridded-ion class
+    "Nuclear electric  (NEP, xenon)": (54.0, 0.70, "continuous"),
+    "VASIMR  (argon, variable Isp)":  (53.0, 0.50, "continuous"),  # VX-200 ~300 kg / 5.7 N
+    "MPD  (lithium magnetoplasmadynamic)": (40.0, 0.40, "continuous"),
+    # ── Concepts.  UNANCHORED, and they are here so the guard below cannot be
+    # satisfied by silence.  Both are gated out of the default search by
+    # `operational_propellants_only`; if you ever ungate them, these two
+    # numbers are the ones to distrust first.  Direct fusion drive is pinned to
+    # Princeton's PFRC-2 sketch (a few newtons from a ~10 t engine).  For
+    # antimatter there is no engineering basis whatsoever, so it is given the
+    # same figures rather than anything flattering — an unanchored row should
+    # never be the reason something wins.
+    "Direct fusion drive":      (2_000.0, 0.50, "continuous"),
+    "Antimatter-catalysed":     (2_000.0, 0.50, "continuous"),
+    # ── Replicated: thrust per EMITTER, so mass is linear in thrust forever ──
+    "Electrospray  (ionic liquid)": (10_000.0, 0.65, "replicated"),  # TILE-3 ~100 µN/kg-class; generous end
+    "FEEP  (indium field emission)": (2_500.0, 0.60, "replicated"),  # Enpulsion IFM Nano 0.35 mN / 0.9 kg
+    "PPT  (PTFE pulsed plasma)":     (5_000.0, 0.08, "replicated"),  # EO-1 PPT 860 µN / 4.9 kg; PPT efficiency is 5-13%
+}
+
+
+def _apply_thruster_data(df: pd.DataFrame) -> None:
+    """Attach device-level columns to the propellant frame, in place.
+
+    Chemical and propellantless rows get NaN — they are not electric, Module 4
+    never sizes a power plant for them, and a number there would imply a
+    constraint that does not apply.  Any ELECTRIC row missing from
+    `_THRUSTER_SYSTEMS` raises rather than defaulting: a silent default is how
+    a micronewton thruster got flown as a cargo tug in the first place.
+
+    "Electric" is tested as `dv_penalty_factor > 1`, which is the SAME test
+    Module 4 uses to decide whether to size a power plant (`is_electric` in
+    `_evaluate_combo_at_ratio`).  Keying off `type` instead would have let
+    `nuclear_electric` through — it is electric propulsion, it draws the
+    penalty, and it is not spelled "electric".
+    """
+    kg_per_n, eff, scaling = [], [], []
+    for _, row in df.iterrows():
+        name = str(row["name"])
+        entry = _THRUSTER_SYSTEMS.get(name)
+        if entry is None:
+            if float(row.get("dv_penalty_factor", 1.0) or 1.0) > 1.0:
+                raise KeyError(
+                    f"electric propellant {name!r} has no _THRUSTER_SYSTEMS "
+                    f"entry — add one with an anchor rather than letting "
+                    f"Module 4 size it on power alone"
+                )
+            kg_per_n.append(float("nan"))
+            eff.append(float("nan"))
+            scaling.append(None)
+            continue
+        kg_per_n.append(entry[0])
+        eff.append(entry[1])
+        scaling.append(entry[2])
+    df["thruster_kg_per_n"]   = kg_per_n
+    df["thruster_efficiency"] = eff
+    df["thrust_scaling"]      = scaling
+
+
 _STORAGE_CLASS_TANK_MULT = {
     # class            × base   anchor
     "storable_liquid":   1.00,  # 0.025 kg/L → NTO at 1.45 kg/L is 1.7% of propellant mass
@@ -1479,7 +1696,41 @@ _COMPONENTS = {
     "MMH":       {"density_kg_per_L": 0.870, "cost_usd_per_kg":    100.00, "storage_class": "storable_liquid"},
     "Hydrazine": {"density_kg_per_L": 1.010, "cost_usd_per_kg":     75.00, "storage_class": "storable_liquid"},  # DOD ref + handling
     "Xenon":     {"density_kg_per_L": 2.000, "cost_usd_per_kg": 10_000.00, "storage_class": "supercritical_gas", "pressure_mpa": 10.0},
-    "Argon":     {"density_kg_per_L": 1.395, "cost_usd_per_kg":     10.00, "storage_class": "mild_cryogen"},     # liquid NBP (cryogenic storage)
+    # v1.10.0.  Argon used to be ONE component carrying liquid-argon density
+    # (1.395 kg/L, normal boiling point 87.3 K) with the storage class of a
+    # cryogen and a boil-off of zero — the row's own two comments said "liquid
+    # NBP (cryogenic storage)" and "stored supercritical at ambient
+    # temperature" three lines apart.  You cannot have both: 1.395 kg/L only
+    # exists at 87 K, and at 87 K it boils.  The combination handed argon the
+    # lightest tank of any gas in the table AND exemption from the hold-time
+    # penalty every other cryogen pays, which is a free resource rather than a
+    # propellant.  Split into the two real articles instead, and let Module 4's
+    # per-asteroid search decide which one a mission flies.
+    #
+    #   ArgonSC   what has actually flown.  Every noble-gas EP system ever
+    #             launched — xenon on Dawn/BepiColombo/SMART-1, krypton on
+    #             Starlink v1, argon on Starlink V2 — stores its propellant
+    #             supercritical in a COPV at ambient temperature.  Density is
+    #             derived below, not asserted.
+    #   ArgonLIQ  the large-stage architecture: liquid at 87.3 K under MLI,
+    #             which is how you would really feed a multi-tonne NEP stage.
+    #             Studied, never flown, so the propellant row built on it is
+    #             tagged `development` and the default search excludes it.
+    #
+    # ArgonSC density: Peng-Robinson at 293.15 K / 18 MPa (the same bottle
+    # pressure as the krypton row) gives Z = 0.919 and ρ = 0.321 kg/L; a
+    # generalised-compressibility reading at Tr = 1.945, Pr = 3.70 gives
+    # Z ≈ 0.99 and ρ = 0.298.  0.30 is the round figure between them.
+    #
+    # Note the result barely moves with pressure, and that is the physics
+    # rather than a coincidence: COPV mass goes as 1.5·p/(PV/W) and stored
+    # density goes as p·M/(ZRT), so the tank FRACTION is ~1.5·Z·R·T/(M·(PV/W))
+    # — pressure cancels and molar mass is what is left.  Argon at 30 MPa pays
+    # 22.3% against 22.9% at 18 MPa.  Xenon 1.9% / krypton 12.5% / argon 22.9%
+    # is just M = 131.3 / 83.8 / 39.9 read backwards, and it is the whole
+    # reason a cheap propellant is not automatically a good one.
+    "ArgonSC":   {"density_kg_per_L": 0.300, "cost_usd_per_kg":     10.00, "storage_class": "supercritical_gas", "pressure_mpa": 18.0},
+    "ArgonLIQ":  {"density_kg_per_L": 1.395, "cost_usd_per_kg":     10.00, "storage_class": "mild_cryogen"},     # liquid at NBP 87.3 K
 
     # ── v1.9.0 additions ─────────────────────────────────────────────────────
     "UDMH":      {"density_kg_per_L": 0.793, "cost_usd_per_kg":     80.00, "storage_class": "storable_liquid"},
@@ -1728,23 +1979,33 @@ PROPELLANTS_REFERENCE: List[dict] = [
         "first_flight":          2023,   # Starlink V2 mini
         "restartable":           True,
         "propellantless":        False,
-        "storage_class":         "mild_cryogen",
-        "tank_kg_per_L":         _tank_kg_per_L("mild_cryogen"),
+        "storage_class":         "supercritical_gas",
+        "tank_kg_per_L":         _tank_kg_per_L("supercritical_gas", 18.0),
         "isru_feed_kg_per_kg":   None,
         "isru_feed_material":    None,
         "dv_penalty_factor":     _LOW_THRUST_DV_PENALTY,
-        "boiloff_pct_per_day":   0.0,   # Stored supercritical at ambient temperature; no boil-off.
+        "boiloff_pct_per_day":   0.0,   # Ambient-temperature COPV; nothing to boil.
         "isp_vac_s":             1_500,
         "exhaust_vel_m_per_s":   1_500 * G0_M_S2,
-        "density_kg_per_L":      _COMPONENTS["Argon"]["density_kg_per_L"],
-        "ref_cost_usd_per_kg":   _COMPONENTS["Argon"]["cost_usd_per_kg"],
-        "ref_cost_usd_per_L":    _COMPONENTS["Argon"]["cost_usd_per_kg"]
-                                 * _COMPONENTS["Argon"]["density_kg_per_L"],
+        "density_kg_per_L":      _COMPONENTS["ArgonSC"]["density_kg_per_L"],
+        "ref_cost_usd_per_kg":   _COMPONENTS["ArgonSC"]["cost_usd_per_kg"],
+        "ref_cost_usd_per_L":    _COMPONENTS["ArgonSC"]["cost_usd_per_kg"]
+                                 * _COMPONENTS["ArgonSC"]["density_kg_per_L"],
         "yfinance_proxy":        None,
         "reference_year":        _REF_YEAR_PROP,
         "notes": "Starlink-V2 thruster choice (SpaceX claims 2.4× thrust, 1.5× Isp "
                  "of their previous Kr design).  Bulk industrial $7-15/kg per "
-                 "SETS Space 2024; used $10/kg midpoint.",
+                 "SETS Space 2024; used $10/kg midpoint.\n"
+                 "v1.10.0: stored SUPERCRITICAL at 18 MPa and ambient "
+                 "temperature, 0.30 kg/L, which is what has flown — no spacecraft "
+                 "has ever carried cryogenic argon.  Until v1.10.0 this row took "
+                 "liquid-argon density (1.395 kg/L, 87.3 K) and a boil-off of "
+                 "zero at the same time, which gave it the lightest tank of any "
+                 "gas here and no cryogenic hold penalty.  Honestly stored it "
+                 "pays 22.9% of its own mass in COPV against krypton's 12.5% and "
+                 "xenon's 1.9% — argon is the LIGHTEST noble gas, so it is the "
+                 "worst of the three to bottle, and $10/kg does not buy that "
+                 "back.  The cryogenic article is a separate row below.",
     },
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -2410,13 +2671,13 @@ PROPELLANTS_REFERENCE: List[dict] = [
         "isru_feed_kg_per_kg":   None,
         "isru_feed_material":    None,
         "dv_penalty_factor":     _LOW_THRUST_DV_PENALTY,
-        "boiloff_pct_per_day":   0.0,
+        "boiloff_pct_per_day":   _LAR_BOILOFF_PCT_PER_DAY,
         "isp_vac_s":             4_000,
         "exhaust_vel_m_per_s":   4_000 * G0_M_S2,
-        "density_kg_per_L":      _COMPONENTS["Argon"]["density_kg_per_L"],
-        "ref_cost_usd_per_kg":   _COMPONENTS["Argon"]["cost_usd_per_kg"],
-        "ref_cost_usd_per_L":    _COMPONENTS["Argon"]["cost_usd_per_kg"]
-                                 * _COMPONENTS["Argon"]["density_kg_per_L"],
+        "density_kg_per_L":      _COMPONENTS["ArgonLIQ"]["density_kg_per_L"],
+        "ref_cost_usd_per_kg":   _COMPONENTS["ArgonLIQ"]["cost_usd_per_kg"],
+        "ref_cost_usd_per_L":    _COMPONENTS["ArgonLIQ"]["cost_usd_per_kg"]
+                                 * _COMPONENTS["ArgonLIQ"]["density_kg_per_L"],
         "yfinance_proxy":        None,
         "reference_year":        _REF_YEAR_PROP,
         "notes": "Ad Astra's VX-200SS ran 100 hours at 80 kW in 2021.  RF-heated "
@@ -2425,7 +2686,49 @@ PROPELLANTS_REFERENCE: List[dict] = [
                  "which is precisely the freedom a fixed-Isp table cannot "
                  "express.  Modelled here at a single 4,000 s point, which "
                  "understates it; capturing the variable-Isp advantage needs the "
-                 "same trajectory optimiser the sails do.",
+                 "same trajectory optimiser the sails do.\n"
+                 "Cryogenic argon feed, because a 100 kW-class stage moves "
+                 "propellant by the tonne and no COPV is a sensible way to carry "
+                 "tonnes of a gas this light.  v1.10.0: it therefore pays "
+                 "cryogenic boil-off, which it was exempt from before.",
+    },
+    {
+        "name":                  "Argon  (Hall / ion, cryogenic)",
+        "type":                  "electric",
+        "status":                "development",
+        "trl":                   4,
+        "first_flight":          None,
+        "restartable":           True,
+        "propellantless":        False,
+        "storage_class":         "mild_cryogen",
+        "tank_kg_per_L":         _tank_kg_per_L("mild_cryogen"),
+        "isru_feed_kg_per_kg":   None,
+        "isru_feed_material":    None,
+        "dv_penalty_factor":     _LOW_THRUST_DV_PENALTY,
+        "boiloff_pct_per_day":   _LAR_BOILOFF_PCT_PER_DAY,
+        "isp_vac_s":             1_500,
+        "exhaust_vel_m_per_s":   1_500 * G0_M_S2,
+        "density_kg_per_L":      _COMPONENTS["ArgonLIQ"]["density_kg_per_L"],
+        "ref_cost_usd_per_kg":   _COMPONENTS["ArgonLIQ"]["cost_usd_per_kg"],
+        "ref_cost_usd_per_L":    _COMPONENTS["ArgonLIQ"]["cost_usd_per_kg"]
+                                 * _COMPONENTS["ArgonLIQ"]["density_kg_per_L"],
+        "yfinance_proxy":        None,
+        "reference_year":        _REF_YEAR_PROP,
+        "notes": "v1.10.0.  The other half of the argon split — same 1,500 s Hall "
+                 "thruster as the operational row, fed from a liquid tank at "
+                 "87.3 K instead of an 18 MPa bottle.  It is the architecture a "
+                 "multi-tonne stage would actually want: 1.395 kg/L against "
+                 "0.30 buys a 2.1% tank against 22.9%, which is the single "
+                 "biggest storage swing in this table.\n"
+                 "DEVELOPMENT, not operational, and the distinction is the point. "
+                 "Liquid argon is routine on the ground and has never flown on a "
+                 "spacecraft; no EP system has ever carried a cryogen.  Tagging "
+                 "it operational would let the default search fly an article "
+                 "nobody has built, which is exactly what the pre-v1.10.0 argon "
+                 "row did by accident.  The honest version of that row is these "
+                 "two, and the tank saving now costs what it really costs: "
+                 "boil-off over a multi-year hold, on the same terms as every "
+                 "other cryogen here.",
     },
     {
         "name":                  "MPD  (lithium magnetoplasmadynamic)",
@@ -3045,6 +3348,35 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
         "reference_year":   _REF_YEAR_OPS,
     },
     {
+        "category":         "Propellant tank recurring cost",
+        "unit":             "USD per kg of tank dry mass",
+        "value":              6_000,
+        "range_low":          3_000,
+        "range_high":        25_000,
+        "notes": "v1.10.0.  Module 3 has derived tank MASS per propellant since "
+                 "v1.9.0 (tank_kg_per_L) and Module 4 has flown it through the "
+                 "rocket equation since then — but nothing ever priced it, so "
+                 "the tank paid its launch $/kg and cost nothing to build.  That "
+                 "is the same mass-without-a-price asymmetry as the free "
+                 "electric-propulsion stage, just smaller.\n"
+                 "Derived from Centaur III, the closest flight article: ~1,880 kg "
+                 "of stage structure, ~$30M for the stage against ~$20M for the "
+                 "RL10 it carries, so ~$10M of structure ≈ $5,300/kg.  Rounded "
+                 "up to $6,000 and quoted as a LOWER BOUND, consistent with the "
+                 "rest of this table: Centaur is a mature production article and "
+                 "a deep-space tank holding propellant for four years needs "
+                 "insulation Centaur does not carry.  The upper end of the range "
+                 "is where a one-off, long-duration cryogenic tank plausibly "
+                 "lands.\n"
+                 "It is deliberately the CHEAPEST hardware rate here — below the "
+                 "$60k/kg passive berthing adapter — because a tank is the "
+                 "simplest article in the mission: no mechanisms, no docking "
+                 "interface, no re-entry.  Do not read its small effect as a "
+                 "reason to drop it; the point of the line is that every "
+                 "kilogram in the mass cascade has one.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
         "category":         "Mission operations",
         "unit":             "USD per mission-year",
         "value":             31_400_000,        # OSIRIS-REx $283M / 9 yr
@@ -3168,7 +3500,32 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
                  "is carried separately by the 'Power system specific mass' row "
                  "and scales 1/r^2.  NASA NEXT-C: 7 kW thruster ~13.5 kg + PPU "
                  "~34 kg ≈ 7 kg/kW.  Gateway AEPS: 12.5 kW Hall, similar class. "
-                 "8 kg/kW allows for feed system and structure.",
+                 "8 kg/kW allows for feed system and structure.\n"
+                 "⚠️  SUPERSEDED for Module 4 v1.12.0 and retained as the "
+                 "fallback for a stale catalog.  Lumping thruster and PPU into "
+                 "one per-kW figure is what let a micronewton device be sized "
+                 "as a cargo tug: buy the kilowatts and you got the thrust.  "
+                 "They scale on different quantities — a PPU is a power "
+                 "converter (kg/kW, the row below) and a thruster head makes "
+                 "momentum (kg/N, per technology, in _THRUSTER_SYSTEMS).",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Power processing unit specific mass",
+        "unit":             "kg per kW of input electrical power",
+        "value":            4.7,
+        "range_low":        3.0,
+        "range_high":       8.0,
+        "notes": "v1.10.0.  The PPU alone, split out of the combined row above. "
+                 "NASA NEXT-C: 34.5 kg of PPU at 7.4 kW = 4.66 kg/kW.  A PPU "
+                 "converts bus power to the discharge and does not care what it "
+                 "is feeding, so it is the half of the old 8 kg/kW that really "
+                 "does scale with POWER.  The other half — the thruster head — "
+                 "scales with THRUST and is per-technology, because that is "
+                 "exactly where a pulsed plasma thruster and a gridded ion "
+                 "engine stop being interchangeable.  Together they reproduce "
+                 "NEXT-C: 4.7 x 7.4 + 54 x 0.236 = 47.5 kg against 47.2 kg "
+                 "measured (12.7 kg thruster + 34.5 kg PPU).",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
@@ -4037,7 +4394,10 @@ def load_launch_vehicles() -> pd.DataFrame:
 def load_propellants() -> pd.DataFrame:
     print("\n🔥  Loading propellants reference …")
     df = pd.DataFrame(PROPELLANTS_REFERENCE)
-    print(f"     ✅  {len(df)} propellant systems")
+    _apply_thruster_data(df)
+    n_rep = int((df["thrust_scaling"] == "replicated").sum())
+    print(f"     ✅  {len(df)} propellant systems "
+          f"({n_rep} thrust by replication — see _THRUSTER_SYSTEMS)")
     return df
 
 
