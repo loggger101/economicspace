@@ -63,8 +63,15 @@ See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.0.9`, mineral_value `1.7.0`, transportation `1.8.2`,
-calc `1.10.0`, master `1.13.0` (the master version is a literal in
+calc `1.10.1`, master `1.13.1` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
+
+calc `1.10.1` is the one stamp in this list that does **not** mean the numbers
+moved. It is a pure performance release, verified bit-identical, and it was
+bumped anyway so that a CSV still names the code that produced it — the rule
+above is "changing a number means bumping", not "bumping means a number
+changed". Every result table in this file was measured on `1.10.0` and stands
+unaltered on `1.10.1`; do not re-measure them on account of the version.
 
 > ⚠️  **The five-destination tables below were re-measured on calc `1.10.0` +
 > mineral_value `1.7.0`, and independently reproduced end to end on
@@ -244,19 +251,26 @@ pay the separation recovery loss and the array mass for no grade gain.
 Without that baseline beneficiation cannot be declined, and stops being
 weakly dominant.
 
-Note this makes the beneficiation path ~15× slower — on the v1.0.9 catalog
-(35,778 asteroids) a destination costs ~140 s raw against ~2,120 s
-beneficiated, so re-measuring all ten cells is most of an afternoon, not
-a coffee break. The 2026-08-07 reproduction took about three and a half hours.
-`concentration_search_steps` is the dial.
+Note this makes the beneficiation path ~4× slower than raw — on the v1.0.9
+catalog (35,778 asteroids) a destination costs **~33 s raw against ~137 s
+beneficiated**, so re-measuring all ten cells is a coffee break rather than
+most of a day. `concentration_search_steps` is the dial.
 
-⚠️  Those read ~1,100 s and 8× until 2026-08-07, and the correction is
-structural rather than a re-timing: v1.10.0 made the architecture search
-per-asteroid, and it multiplies with the concentration sweep, because every
-ratio is now priced against every vehicle × propellant × return mode × ISRU
-choice × apsis instead of against one nominal architecture. Two independent
-beneficiated runs came in at 2,122 s and 2,124 s, so this is not measurement
-noise. Budget for it before starting a sweep.
+⚠️  **Those figures are calc `1.10.1` and later.** On `1.10.0` the same two
+runs took ~140 s and ~2,120 s — the ratio was ~15×, the ten-cell reproduction
+on 2026-08-07 took about three and a half hours, and a beneficiated sweep was
+something to budget an afternoon for. None of that is true any more and none
+of it was a modelling change: v1.10.1 is a pure performance release that
+leaves every number bit-identical. See "What v1.10.1 changed".
+
+And before that, they read ~1,100 s and 8×. That correction was structural
+rather than a re-timing: v1.10.0 made the architecture search per-asteroid,
+and it multiplies with the concentration sweep, because every ratio is now
+priced against every vehicle × propellant × return mode × ISRU choice × apsis
+instead of against one nominal architecture. So the beneficiated figure has
+moved twice for opposite reasons — up because the model got more expensive,
+then down because the code got faster — and only the first of those changed
+any output.
 
 **The beneficiation power plant feeds back into the rocket equation.**
 Processing energy (Module 3: 200 Wh/kg dug, 500 Wh/kg concentrated) over the
@@ -644,6 +658,75 @@ against the **destination** — a Mars delivery pays no Earth capture, so a body
 best met at aphelion for an Earth return can be best met at perihelion for
 Mars. The published validation figures are unaffected: Bennu, Eros, Itokawa and
 both reference cases all still resolve to aphelion.
+
+## What v1.10.1 changed
+
+**Nothing you can measure.** It is a performance release and every number it
+produces is bit-identical to `1.10.0`. That was checked two ways rather than
+argued: serial and parallel runs over the same rows produce CSVs with the same
+sha256 — cislunar beneficiated at 1,200 and 6,000 rows, earth_surface raw at
+4,000 rows on ten workers, and mars_surface beneficiated at 2,500 rows on
+eight, which also exercises the separate heliocentric transfer — and a
+full-catalog run through `master.py` reproduced the committed cislunar cells
+exactly: **22.9336×** beneficiated with the same winner and concentration ratio
+(7753, B, 5.405×) and **31.8269×** raw.
+
+Cislunar is the destination that was reproduced end to end because it is the
+one the on-disk Stage 2 catalog is priced for. Checking another destination's
+*value* means re-running Stage 2 first — pointing Stage 4 at a mineral catalog
+priced elsewhere is exactly the mismatch `destination_check()` exists to catch,
+and it does catch it. The other two destinations above were checked for
+serial/parallel agreement, which does not depend on the prices being right.
+
+A full beneficiated destination went from ~2,120 s to **137 s**, and raw from
+~140 s to **33 s**.
+
+**The main loop runs on every core.** Asteroids are independent — the search
+reads the reference tables and writes nothing — so it had always been
+embarrassingly parallel, and had always run on exactly one of twelve threads.
+`parallel_workers` (0 = auto) now spreads it over a process pool.
+
+Three things about that are worth not undoing:
+
+- **Chunks are consumed in submission order** (`imap`, not `imap_unordered`).
+  The order matters because the caller sorts on `profit_usd` with pandas'
+  default quicksort, which is **not stable** — reordering arrivals would
+  permute tied rows and make two runs of identical code produce different
+  CSVs. The whole point of the release is that they don't.
+- **Workers must not re-execute the wrong main module.** Windows has no fork,
+  so a worker rebuilds the parent by importing `__main__` — and under
+  Streamlit `__main__` is a synthetic module whose `__file__` points at
+  `ui.py`, so the obvious `Pool()` runs the entire Streamlit app once per
+  worker. That was reproduced, not theorised. `_spawn_environment` repoints
+  `__main__.__spec__` at the pipeline module for the pool's lifetime.
+- **More workers is not always faster.** Startup is ~1.1 s per worker and
+  linear (each reads the 590 kB `master.py` twice, and on a Drive File Stream
+  working copy those reads serialise). At 3,000 beneficiated rows twelve
+  workers is *slower* end to end than six. `_resolve_worker_count` will not
+  start a worker that cannot repay itself, which is why a small interactive
+  run stays serial.
+
+The ceiling is the six **physical** cores: hyperthreading adds ~17% on this
+branch-heavy pure-Python workload, not 2×. Measured scaling net of startup is
+1.95× / 3.43× / 4.48× / 4.89× / 5.24× at 2 / 4 / 6 / 8 / 12 workers.
+
+**And ~1.9× of the gain is single-threaded**, which is the part that also helps
+anyone running one process per destination:
+
+- **Catalog rows are dicts in the hot path.** Every consumer reads a row with
+  `.get(key)` or `[key]` and nothing else, but pandas resolves each of those
+  through the index machinery at ~5 µs, and the search does ~7,400 per
+  asteroid. That was ~38% of the entire run spent re-deriving positions in an
+  index that never changes. `Series.to_dict()` unboxes numpy scalars to Python
+  ones, which is value-preserving — `np.float64` *is* a C double — so the
+  arithmetic downstream is unchanged. 1.73×.
+- **The five ops-table constants the sizing loop needs are memoised.** They
+  were looked up per (asteroid × vehicle × propellant × architecture × ratio):
+  ~24 million lookups of five numbers that never move. 1.09×.
+
+If you add to the search, the thing to re-run before trusting a parallel
+number is the serial/parallel sha256 diff — not the full reproduction, which
+is a much slower way to catch the same class of mistake.
 
 ## Config discipline
 
