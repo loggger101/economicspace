@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.13.0)
+"""Master Asteroid Profitability Pipeline (1.13.1)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -77,6 +77,27 @@ for _stream in (_sys.stdout, _sys.stderr):
         _stream.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SPAWNED-WORKER QUIET MODE
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 4 evaluates asteroids across a process pool.  Windows has no fork, so
+# every worker re-imports this file and would replay all four module banners --
+# 60 lines each, 700+ for a full pool, interleaved into the run log the UI
+# parses.  Stage 4's parent sets ASTEROID_PIPELINE_WORKER before creating the
+# pool; children inherit it.  Must sit above the first print(), which is why it
+# is here rather than in the calc section far below.
+#
+# Flipped to "silenced" rather than cleared so that calc's own copy of this
+# guard -- the modules each carry one, for when they are run standalone -- is a
+# no-op here instead of leaking a second handle.
+#
+# stderr is deliberately left alone: a worker that dies should still say so.
+
+import os as _os
+if _os.environ.get("ASTEROID_PIPELINE_WORKER") == "1":
+    _os.environ["ASTEROID_PIPELINE_WORKER"] = "silenced"
+    _sys.stdout = open(_os.devnull, "w", encoding="utf-8")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSOLIDATED INSTALLATION
@@ -6615,16 +6636,37 @@ print("    mission_cost_breakdown(catalog, payload_kg=1000, "
 # IMPORTS & CONFIGURATION
 # ─────────────────────────────────────────────────────────────────────────────
 import ast
+import contextlib
 import json
 import math
+import multiprocessing as mp
 import os
+import sys
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+# A row of one of the upstream catalogs.  The hot path converts these to plain
+# dicts (see _row_to_dict); everything that reads one uses only `.get(key)` and
+# `[key]`, which a dict and a Series serve identically.
+Row = Mapping[str, Any]
+
+# ─── SPAWNED-WORKER QUIET MODE ───────────────────────────────────────────────
+# Windows has no fork, so every parallel worker re-imports this file and would
+# replay the startup banner -- 60 lines each, 700+ for a full pool.  The parent
+# sets ASTEROID_PIPELINE_WORKER before creating the pool and children inherit
+# it.  Flipped to "silenced" rather than cleared so that the SECOND copy of
+# this guard in the built master.py (which carries both the master header's and
+# this module's) is a no-op instead of leaking another handle.
+#
+# stderr is deliberately left alone: a worker that dies should still say so.
+if os.environ.get("ASTEROID_PIPELINE_WORKER") == "1":
+    os.environ["ASTEROID_PIPELINE_WORKER"] = "silenced"
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
 
 for _cat in (DeprecationWarning, FutureWarning, UserWarning):
     warnings.filterwarnings("ignore", category=_cat)
@@ -7023,6 +7065,36 @@ class CalcConfig:
     # minutes.  Cap to a manageable subset for interactive runs.  Set to 0
     # to evaluate every row.
     eval_row_cap:              int = 5_000
+
+    # ─── PARALLEL EVALUATION  (v1.10.1) ──────────────────────────────────────
+    # Every asteroid is evaluated independently of every other one, so the main
+    # loop is embarrassingly parallel -- and until v1.10.1 it ran on a single
+    # core regardless of the machine.  A full beneficiated destination took
+    # ~2,120 s that way on twelve idle threads.
+    #
+    #   0  — auto.  One worker per logical CPU, scaled down when there are too
+    #        few asteroids to repay the spawn cost (no fork on Windows, so each
+    #        worker is a fresh interpreter plus a pandas import).
+    #   1  — force the serial path.  Use it to profile, or when an outer
+    #        harness already runs one process per destination and the cores are
+    #        spoken for.
+    #  >1  — exactly that many workers, clamped to the CPU count.
+    #
+    # The answer does not depend on this setting.  Chunks are consumed in
+    # submission order, so the result list -- and therefore the output CSV,
+    # including the order of any profit_usd ties -- is what the serial loop
+    # produced.  That was checked rather than assumed, two ways:
+    #   • serial and parallel run over the same rows, CSVs compared by sha256
+    #     -- cislunar beneficiated (1,200 and 6,000 rows), earth_surface raw
+    #     (4,000 rows, 10 workers), mars_surface beneficiated (2,500 rows,
+    #     8 workers, so the separate heliocentric transfer is exercised too).
+    #     Byte-identical, all three.
+    #   • the full catalog through master.py reproduced the committed table
+    #     exactly: cislunar 22.9336x beneficiated (7753, B, 5.405x) and
+    #     31.8269x raw.
+    # If you change anything in the search, re-run the first of those before
+    # trusting a parallel number.
+    parallel_workers:          int = 0
 
     # ─── PIPELINE VERSION ────────────────────────────────────────────────────
     # 1.3.0 — initial profitability calculator
@@ -7439,7 +7511,33 @@ class CalcConfig:
     #         New config: optimise_architecture_per_asteroid.
     #         New output columns: aerocapture_return, isru_return,
     #         isru_propellant_kg, isru_feed_kg, rendezvous_apsis.
-    pipeline_version: str = "1.10.0"
+    # 1.10.1 — PERFORMANCE ONLY.  NO NUMBER IN THIS MODULE'S OUTPUT CHANGES.
+    #         Verified, not asserted: serial and parallel runs of the same
+    #         rows produce byte-identical CSVs (sha256 compared, cislunar and
+    #         earth_surface, beneficiated and raw), and the pre-change build
+    #         produces the same file as the post-change one.  The five-
+    #         destination tables and the programme-scale curve stand as
+    #         measured on 1.10.0 — do NOT re-measure them on account of this
+    #         version.  The stamp moves only so that a CSV still names the
+    #         code that produced it.
+    #         • THE MAIN LOOP IS PARALLEL.  Asteroids are independent, so the
+    #           search was always embarrassingly parallel, and it had always
+    #           run on exactly one core.  New `parallel_workers`; chunks are
+    #           consumed in submission order so the row order — and therefore
+    #           the tie order under the non-stable sort — is unchanged.
+    #         • CATALOG ROWS ARE DICTS IN THE HOT PATH.  Every consumer reads
+    #           a row with `.get(key)` / `[key]` and nothing else, but pandas
+    #           resolves each through the index at ~5 us; the search does
+    #           ~7,400 per asteroid.  That was ~38% of total runtime spent
+    #           re-deriving positions in an index that never changes.
+    #           Series.to_dict() unboxes numpy scalars to Python ones, which
+    #           is value-preserving — np.float64 IS a C double.  1.73x.
+    #         • The five ops-table constants the sizing loop needs are
+    #           memoised instead of looked up per (asteroid × vehicle ×
+    #           propellant × architecture × ratio) — ~24M lookups of five
+    #           unchanging numbers.  A further 1.09x.
+    #         Net ~1.9x per core, ~7x wall-clock on 12 threads.
+    pipeline_version: str = "1.10.1"
 
 
 CALC_CONFIG = CalcConfig()
@@ -7752,7 +7850,7 @@ FRACTION_TO_MINERAL: Dict[str, str] = {
 
 
 def asteroid_bulk_value_usd_per_kg(
-    asteroid_row: pd.Series, mineral_df: pd.DataFrame,
+    asteroid_row: Row, mineral_df: pd.DataFrame,
 ) -> float:
     """Composite USD/kg for the bulk material of one asteroid.
 
@@ -7801,7 +7899,7 @@ def asteroid_bulk_value_usd_per_kg(
 
 
 def asteroid_phase_table(
-    asteroid_row: pd.Series, mineral_df: pd.DataFrame,
+    asteroid_row: Row, mineral_df: pd.DataFrame,
 ) -> List[Tuple[str, float, float]]:
     """[(phase, mass_fraction, usd_per_kg)] for one asteroid (v1.6.0).
 
@@ -7922,7 +8020,7 @@ def optimal_payload_mix(
 
 
 def asteroid_best_phase_usd_per_kg(
-    asteroid_row: pd.Series, mineral_df: pd.DataFrame,
+    asteroid_row: Row, mineral_df: pd.DataFrame,
 ) -> float:
     """$/kg of the single most valuable phase actually present (v1.5.0).
 
@@ -8578,7 +8676,7 @@ def _dv_fallback_m_s(config: CalcConfig, aero: bool) -> Tuple[float, float]:
 
 
 def asteroid_dv_options(
-    asteroid_row: pd.Series, config: CalcConfig,
+    asteroid_row: Row, config: CalcConfig,
 ) -> List[Dict[str, object]]:
     """Every (return mode × rendezvous apsis) worth flying to this asteroid.
 
@@ -8645,7 +8743,7 @@ def asteroid_dv_options(
     return out
 
 
-def asteroid_dv_m_s(asteroid_row: pd.Series, config: CalcConfig) -> Tuple[float, float]:
+def asteroid_dv_m_s(asteroid_row: Row, config: CalcConfig) -> Tuple[float, float]:
     """(Δv_outbound, Δv_return) in m/s for one asteroid, in m/s.
 
     Kept as the single-answer form for interactive use and for callers that
@@ -8704,7 +8802,7 @@ _ISRU_PROPELLANTS          = ("hydrolox",)
 
 
 def isru_feed_kg_per_kg_propellant(
-    asteroid_row: pd.Series, propellant: pd.Series, config: CalcConfig,
+    asteroid_row: Row, propellant: Row, config: CalcConfig,
 ) -> Optional[float]:
     """kg of regolith to dig per kg of ISRU return propellant, or None.
 
@@ -9038,9 +9136,50 @@ def _ops_value(ops_df: pd.DataFrame, category: str, default: float = 0.0) -> flo
 
     Absent category and present-but-NaN value both fall back to `default`,
     matching the original row-filter implementation exactly.
+
+    The cache tuple is read inline rather than through `_ops_table()`: this
+    runs ~9.6 million times over a full catalog (19 line items per cost
+    cascade), and at that count the function call to re-check an identity
+    that has already been checked is itself measurable.  `_ops_table` still
+    owns building the mapping — this only skips the call on a hit.
     """
-    val = _ops_table(ops_df).get(category)
+    cached_df, mapping = _OPS_CACHE
+    if cached_df is not ops_df:
+        mapping = _ops_table(ops_df)
+    val = mapping.get(category)
     return default if val is None else val
+
+
+_OPS_SIZING_CACHE: Tuple[Optional[pd.DataFrame], Optional[Tuple[float, ...]]] = (None, None)
+
+
+def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, float, float, float, float]:
+    """The five Module 3 rows the coupled sizing loop needs, resolved once.
+
+        (dig Wh/kg, beneficiation Wh/kg, array W/kg at 1 AU,
+         EP efficiency, EP thruster+PPU kg/kW)
+
+    None of them depends on the asteroid, the vehicle or the propellant, but
+    they were being looked up inside `_evaluate_combo_at_ratio` — which runs
+    once per (asteroid × vehicle × propellant × architecture × concentration
+    ratio), so five constant lookups became ~24 million of them on a
+    beneficiated catalog.  Memoised on `ops_df` identity like the other
+    reference tables.
+    """
+    global _OPS_SIZING_CACHE
+    cached_df, vals = _OPS_SIZING_CACHE
+    if cached_df is ops_df:
+        return vals
+
+    vals = (
+        _ops_value(ops_df, "Drilling / excavation energy", default=200.0),
+        _ops_value(ops_df, "Beneficiation / on-site processing energy", default=500.0),
+        _ops_value(ops_df, "Power system specific mass", default=60.0),
+        _ops_value(ops_df, "Electric propulsion efficiency", default=0.60),
+        _ops_value(ops_df, "Electric thruster + PPU specific mass", default=8.0),
+    )
+    _OPS_SIZING_CACHE = (ops_df, vals)
+    return vals
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -9048,8 +9187,8 @@ def _ops_value(ops_df: pd.DataFrame, category: str, default: float = 0.0) -> flo
 # ─────────────────────────────────────────────────────────────────────────────
 def mission_cost_usd(
     mass_cascade:        Dict[str, float],
-    vehicle:             pd.Series,
-    propellant:          pd.Series,
+    vehicle:             Row,
+    propellant:          Row,
     ops_df:              pd.DataFrame,
     config:              CalcConfig,
     mission_duration_yr: float,
@@ -9330,9 +9469,9 @@ def mission_cost_usd(
 # (VEHICLE × PROPELLANT) EVALUATOR FOR ONE ASTEROID
 # ─────────────────────────────────────────────────────────────────────────────
 def _evaluate_combo_at_ratio(
-    asteroid_row:      pd.Series,
-    vehicle:           pd.Series,
-    propellant:        pd.Series,
+    asteroid_row:      Row,
+    vehicle:           Row,
+    propellant:        Row,
     bulk_value_per_kg: float,
     dv_out_m_s:        float,
     dv_ret_m_s:        float,
@@ -9424,9 +9563,7 @@ def _evaluate_combo_at_ratio(
     # With beneficiation OFF no array mass is added at all — the existing
     # 2,000 kg rig figure already carries its own power implicitly, and this
     # keeps a default run bit-identical to v1.4.0.
-    dig_wh   = _ops_value(ops_df, "Drilling / excavation energy", default=200.0)
-    benef_wh = _ops_value(ops_df, "Beneficiation / on-site processing energy", default=500.0)
-    base_w_per_kg = _ops_value(ops_df, "Power system specific mass", default=60.0)
+    dig_wh, benef_wh, base_w_per_kg, ep_eff, ep_kg_per_kw = _ops_sizing_constants(ops_df)
     w_per_kg = solar_specific_power_w_per_kg(
         asteroid_row.get("semi_major_axis_au"), base_w_per_kg,
     )
@@ -9447,8 +9584,6 @@ def _evaluate_combo_at_ratio(
     # propellants with dv_penalty_factor > 1.
     is_electric = (config.model_low_thrust_time
                    and float(propellant.get("dv_penalty_factor", 1.0) or 1.0) > 1.0)
-    ep_eff        = _ops_value(ops_df, "Electric propulsion efficiency", default=0.60)
-    ep_kg_per_kw  = _ops_value(ops_df, "Electric thruster + PPU specific mass", default=8.0)
 
     isp_s_val   = float(propellant["isp_vac_s"])
     boiloff_pct = float(propellant.get("boiloff_pct_per_day", 0.0) or 0.0)
@@ -10049,9 +10184,9 @@ def saturation_ratio(
 
 
 def evaluate_combo(
-    asteroid_row:      pd.Series,
-    vehicle:           pd.Series,
-    propellant:        pd.Series,
+    asteroid_row:      Row,
+    vehicle:           Row,
+    propellant:        Row,
     bulk_value_per_kg: float,
     dv_out_m_s:        float,
     dv_ret_m_s:        float,
@@ -10137,16 +10272,48 @@ def evaluate_combo(
     return best
 
 
+def _row_to_dict(row: Row) -> Dict[str, Any]:
+    """A catalog row as a plain dict, for the inner search.
+
+    Every consumer of an asteroid / vehicle / propellant row in this module
+    reads it with `.get(key)` or `[key]` and nothing else, and a dict serves
+    both identically -- but pandas resolves each one through the index
+    machinery at ~5 us a lookup.  The search does roughly 7,400 of them per
+    asteroid (77 vehicle x propellant combos x the architecture and
+    concentration axes), which measured at ~38% of total runtime: a third of
+    the run was spent re-deriving positions in an index that never changes.
+
+    Converting once per row and then hitting a hash table costs one to_dict()
+    and buys all of it back.
+
+    This is value-preserving, not merely close.  `Series.to_dict()` unboxes
+    numpy scalars to their Python equivalents -- np.float64 to float, np.int64
+    to int -- and np.float64 IS a C double, so every downstream `float(...)`,
+    `math.exp`, and comparison sees the identical bit pattern.  Verified by
+    diffing a full catalog CSV against the pre-change output.
+
+    Already-dict rows (the parallel workers hand these back and forth) are
+    returned as-is rather than copied; nothing in the search mutates a row.
+    """
+    if isinstance(row, dict):
+        return row
+    return row.to_dict()
+
+
 def candidate_combos(
     catalogs: Dict[str, pd.DataFrame],
     config:   CalcConfig,
-) -> List[Tuple[pd.Series, pd.Series]]:
+) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
     """Every (vehicle, propellant) pair that passes the CalcConfig filters.
 
     The filters depend only on `config`, never on the asteroid, so the whole
     cross-join is built once per run and reused for every row.  Doing it
     inside the per-asteroid loop re-ran two DataFrame copies plus ~88
     `iterrows()` Series constructions for each of N asteroids.
+
+    Rows come back as dicts (v1.10.1) -- see _row_to_dict.  These are also
+    what gets shipped to the parallel workers, and a dict pickles far more
+    cheaply than a Series.
     """
     vdf = catalogs["vehicles"]
     if config.operational_vehicles_only and "status" in vdf.columns:
@@ -10158,19 +10325,19 @@ def candidate_combos(
     if config.candidate_propellants is not None:
         pdf = pdf[pdf["name"].isin(config.candidate_propellants)]
 
-    propellant_rows = [row for _, row in pdf.iterrows()]
+    propellant_rows = [_row_to_dict(row) for _, row in pdf.iterrows()]
     return [
         (vehicle, propellant)
-        for _, vehicle in vdf.iterrows()
+        for vehicle in (_row_to_dict(v) for _, v in vdf.iterrows())
         for propellant in propellant_rows
     ]
 
 
 def evaluate_asteroid(
-    asteroid_row: pd.Series,
+    asteroid_row: Row,
     catalogs:     Dict[str, pd.DataFrame],
     config:       CalcConfig,
-    combos:       Optional[List[Tuple[pd.Series, pd.Series]]] = None,
+    combos:       Optional[List[Tuple[Dict[str, Any], Dict[str, Any]]]] = None,
 ) -> Optional[dict]:
     """Pick the highest-profit mission for one asteroid.
 
@@ -10187,7 +10354,12 @@ def evaluate_asteroid(
     `combos` is the precomputed candidate cross-join from candidate_combos().
     Left as None it is rebuilt per call — correct but slow, so the main loop
     builds it once and passes it in.
+
+    `asteroid_row` may be a Series or a dict; it is normalised to a dict here,
+    once, because the search below reads it thousands of times.
     """
+    asteroid_row = _row_to_dict(asteroid_row)
+
     minerals = catalogs["minerals"]
     ops_df   = catalogs["ops"]
 
@@ -10276,6 +10448,230 @@ def evaluate_asteroid(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# PARALLEL EVALUATION  (v1.10.1)
+# ─────────────────────────────────────────────────────────────────────────────
+# Asteroids do not interact.  `evaluate_asteroid` reads the reference catalogs,
+# writes nothing outside its own return value, and touches no global except
+# three identity-keyed lookup caches — so the main loop is embarrassingly
+# parallel and had been running on one core.
+#
+# What makes this more than a one-line change is Windows.  There is no fork, so
+# every worker is a fresh interpreter that has to reconstruct the parent before
+# it can unpickle the first task, and it does that by importing the parent's
+# __main__.  Which module that is depends on how the pipeline was launched, and
+# one of the three launch paths is actively hostile — see _spawn_environment.
+
+_WORKER_CTX: Dict[str, Any] = {}
+
+
+def _worker_init(
+    minerals: pd.DataFrame,
+    ops:      pd.DataFrame,
+    combos:   List[Tuple[Dict[str, Any], Dict[str, Any]]],
+    config:   CalcConfig,
+) -> None:
+    """Seed one worker with the read-only state every chunk needs.
+
+    Sent once per worker rather than once per chunk.  Only two of the upstream
+    catalogs reach the inner search — minerals (prices, market depths) and ops
+    (Module 3's reference rows) — and both are a few dozen rows.  The asteroid
+    catalog is never shipped whole; a worker only ever receives the block it is
+    about to evaluate.
+    """
+    _WORKER_CTX["catalogs"] = {"minerals": minerals, "ops": ops}
+    _WORKER_CTX["combos"]   = combos
+    _WORKER_CTX["config"]   = config
+
+
+def _evaluate_chunk(chunk: pd.DataFrame) -> List[dict]:
+    """Evaluate one contiguous block of asteroids inside a worker.
+
+    Iterating with `iterrows()` here rather than pre-converting rows in the
+    parent is deliberate on both counts: it is the same call the serial loop
+    makes, so both paths hand `evaluate_asteroid` identical input, and the
+    conversion cost lands on a worker instead of on the single core the parent
+    has to itself.
+    """
+    catalogs = _WORKER_CTX["catalogs"]
+    combos   = _WORKER_CTX["combos"]
+    config   = _WORKER_CTX["config"]
+
+    out: List[dict] = []
+    for _, row in chunk.iterrows():
+        result = evaluate_asteroid(row, catalogs, config, combos)
+        if result is not None:
+            out.append(result)
+    return out
+
+
+# Measured on the reference machine (6 physical / 12 logical cores, working
+# copy on Google Drive), catalog v1.0.9, cislunar, beneficiated:
+#
+#   pool startup      6.8 s for 6 workers, 13.4 s for 12 -- ~1.1 s each, and
+#                     LINEAR, so every extra worker costs its own second
+#                     before it does any work.  Import time, not process
+#                     creation:
+#                     each worker reads and executes the 590 kB master.py
+#                     twice (once as __mp_main__, once when unpickling), and
+#                     on a Drive File Stream working copy those reads
+#                     serialise.  A local-disk checkout starts faster.
+#   per asteroid      ~29 ms beneficiated, ~3 ms raw
+#   scaling net of    2 -> 1.95x   4 -> 3.43x   6 -> 4.48x
+#   startup           8 -> 4.89x  12 -> 5.24x
+#   full catalog      2,120 s -> 137 s beneficiated, 140 s -> 33 s raw
+#
+# So the useful ceiling is set by the six PHYSICAL cores (hyperthreading adds
+# ~17% on this branch-heavy pure-Python workload, not 2x), and whether it is
+# worth going near it depends entirely on how much work there is.  At 3,000
+# beneficiated rows, 12 workers is SLOWER end to end than 6 -- 28.5 s against
+# 25.3 s -- because the extra six spend longer starting than they save.
+#
+# Rows one worker should get before it is worth starting: enough that its
+# share of the search outweighs its startup by ~10x.  Raw asteroids are ~9x
+# cheaper to evaluate than beneficiated ones, so they need proportionally
+# more.  The raw threshold is the more conservative of the two on purpose --
+# a raw destination now finishes in about half a minute either way, so there
+# is nothing to win there and a pool that fails to repay itself to lose.
+_ROWS_PER_WORKER_BENEFICIATED = 400
+_ROWS_PER_WORKER_RAW          = 6_000
+
+
+def _resolve_worker_count(config: CalcConfig, n_rows: int) -> int:
+    """How many worker processes to run.  1 means take the serial path.
+
+    An explicit `parallel_workers` is obeyed (clamped to the CPU count and to
+    the number of rows).  Auto mode additionally refuses to start workers that
+    cannot repay their own startup — which is what keeps a 400-row interactive
+    run from spending thirteen seconds building a pool for nine seconds of
+    work.
+    """
+    cpus      = os.cpu_count() or 1
+    requested = int(getattr(config, "parallel_workers", 0) or 0)
+
+    n = cpus if requested <= 0 else requested
+    n = max(1, min(n, cpus, n_rows))
+    if requested <= 0:
+        per_worker = (_ROWS_PER_WORKER_BENEFICIATED if config.use_beneficiation
+                      else _ROWS_PER_WORKER_RAW)
+        n = min(n, max(1, n_rows // per_worker))
+    return max(1, n)
+
+
+def _chunk_frame(work_df: pd.DataFrame, n_workers: int) -> List[pd.DataFrame]:
+    """Split the catalog into blocks sized for load balance and overhead both.
+
+    Asteroids are not equally expensive — the number of viable return modes,
+    whether ISRU is even possible, and the width of the concentration sweep all
+    vary per body — so one block per worker would leave most cores idle waiting
+    on whichever block drew the expensive tail.  Aim for ~16 blocks per worker,
+    and floor the block at 8 rows so pickling never starts to rival a ~60 ms
+    unit of work.
+    """
+    size = max(8, min(len(work_df) // (n_workers * 16), 256))
+    return [work_df.iloc[i:i + size] for i in range(0, len(work_df), size)]
+
+
+@contextlib.contextmanager
+def _spawn_environment():
+    """Hold the two things a spawned worker needs to come up correctly.
+
+    **The main module.**  multiprocessing rebuilds the parent in each worker
+    from `__main__`: it prefers `__main__.__spec__.name` and imports that, and
+    falls back to executing `__main__.__file__`.  Run as a script, `__main__`
+    IS this file and the fallback does the right thing.  Driven from `ui.py` it
+    does not — Streamlit installs a synthetic module named `__main__` whose
+    `__file__` points at `ui.py`, so the fallback runs the entire Streamlit app
+    inside every worker.  That is not a theoretical hazard; a three-worker pool
+    was observed executing the app three times before this was written.
+    Pointing `__spec__` at this module instead makes each worker import the
+    pipeline, which is what it needs anyway.
+
+    **Quiet workers.**  That import replays the startup banner — 60 lines per
+    worker, 700+ for a full pool, interleaved into the run log the UI is
+    parsing.  The env var is read at the top of this file by the child.
+
+    Both are held for the pool's whole lifetime rather than just its
+    construction, so that a worker respawned mid-run comes up the same way as
+    its siblings.  The restore writes back to the module object captured here,
+    not to whatever `sys.modules["__main__"]` says later, so a concurrent
+    Streamlit rerun swapping in a fresh `__main__` cannot be clobbered by it.
+    """
+    prev_env = os.environ.get("ASTEROID_PIPELINE_WORKER")
+    os.environ["ASTEROID_PIPELINE_WORKER"] = "1"
+
+    main = sys.modules.get("__main__")
+    own  = sys.modules.get(__name__)
+    spec = getattr(own, "__spec__", None)
+    # Leave it alone when __main__ is already this module (running as a script),
+    # or already carries a spec of its own (`python -m ...`), or when we have no
+    # spec to offer (this module is itself __main__, or was exec'd).
+    pin = (main is not None and own is not None and main is not own
+           and spec is not None and getattr(main, "__spec__", None) is None)
+    if pin:
+        main.__spec__ = spec
+    try:
+        yield
+    finally:
+        if pin:
+            main.__spec__ = None
+        if prev_env is None:
+            os.environ.pop("ASTEROID_PIPELINE_WORKER", None)
+        else:
+            os.environ["ASTEROID_PIPELINE_WORKER"] = prev_env
+
+
+def _evaluate_in_parallel(
+    work_df:     pd.DataFrame,
+    catalogs:    Dict[str, pd.DataFrame],
+    config:      CalcConfig,
+    combos:      List[Tuple[Dict[str, Any], Dict[str, Any]]],
+    n_workers:   int,
+    on_progress,
+) -> Optional[List[dict]]:
+    """Run the per-asteroid search across `n_workers` processes.
+
+    Returns the result list, or None if no pool could be started — the caller
+    then falls back to the serial loop.  Only pool CONSTRUCTION is guarded that
+    way: a failure once the work is under way propagates, because a bug in the
+    search silently costing half an hour of redone serial work is worse than a
+    crash.
+
+    Chunks are consumed with `imap`, which yields in submission order, so the
+    result list is exactly what the serial loop would have appended.  That
+    matters beyond tidiness: the caller sorts on `profit_usd` with pandas'
+    default quicksort, which is not stable, so a different arrival order could
+    permute tied rows and make two runs of the same code disagree.
+    """
+    chunks = _chunk_frame(work_df, n_workers)
+
+    with _spawn_environment():
+        try:
+            pool = mp.get_context("spawn").Pool(
+                processes   = n_workers,
+                initializer = _worker_init,
+                initargs    = (catalogs["minerals"], catalogs["ops"],
+                               combos, config),
+            )
+        except (OSError, ValueError, RuntimeError, ImportError) as exc:
+            print(f"     ⚠️   Could not start worker processes ({exc}) — "
+                  f"evaluating in a single process")
+            return None
+
+        results: List[dict] = []
+        try:
+            for chunk, found in zip(chunks, pool.imap(_evaluate_chunk, chunks)):
+                results.extend(found)
+                on_progress(len(chunk))
+            pool.close()
+        except BaseException:
+            pool.terminate()
+            raise
+        finally:
+            pool.join()
+    return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN PIPELINE
 # ─────────────────────────────────────────────────────────────────────────────
 def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFrame:
@@ -10326,27 +10722,50 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
     print(f"     🔧  {len(combos):,} vehicle × propellant combinations per asteroid")
 
     n = len(work_df)
-    results = []
-    last_report = 0
-    for i, (_, asteroid) in enumerate(work_df.iterrows(), 1):
-        result = evaluate_asteroid(asteroid, catalogs, config, combos)
-        if result is not None:
-            results.append(result)
-        # Lightweight progress report every ~1%.
-        #
-        # This was every 10% until the UI needed to draw a progress bar off it.
-        # A full beneficiated catalog takes ~20 minutes, so ten ticks is one
-        # every two minutes, and a bar that sits still that long is
-        # indistinguishable from a hung process.  Every 1% costs 100 lines of
-        # stdout on a long run, nothing at all on a run under 100 rows, and no
-        # measurable time -- the print is dwarfed by evaluate_asteroid().
-        #
-        # The message FORMAT is load-bearing: ui.py parses "i / n evaluated"
-        # out of the stream to size its bar.  Change the wording and the bar
-        # silently falls back to indeterminate.
-        if n >= 100 and (i * 100) // n != last_report:
-            last_report = (i * 100) // n
-            print(f"     … {i:,} / {n:,} evaluated  ({last_report}%)")
+
+    # Lightweight progress report every ~1%.
+    #
+    # This was every 10% until the UI needed to draw a progress bar off it.
+    # A full beneficiated catalog takes ~20 minutes, so ten ticks is one
+    # every two minutes, and a bar that sits still that long is
+    # indistinguishable from a hung process.  Every 1% costs 100 lines of
+    # stdout on a long run, nothing at all on a run under 100 rows, and no
+    # measurable time -- the print is dwarfed by evaluate_asteroid().
+    #
+    # The message FORMAT is load-bearing: ui.py parses "i / n evaluated"
+    # out of the stream to size its bar.  Change the wording and the bar
+    # silently falls back to indeterminate.
+    #
+    # v1.10.1: driven by a callback, because the parallel path reports a chunk
+    # at a time rather than a row at a time.  Both paths tick the same counter
+    # and print the same line; only the granularity differs.
+    progress = {"done": 0, "pct": 0}
+
+    def report(rows_done: int) -> None:
+        progress["done"] += rows_done
+        i = progress["done"]
+        if n >= 100 and (i * 100) // n != progress["pct"]:
+            progress["pct"] = (i * 100) // n
+            print(f"     … {i:,} / {n:,} evaluated  ({progress['pct']}%)")
+
+    results = None
+    n_workers = _resolve_worker_count(config, n)
+    if n_workers > 1:
+        print(f"     ⚡  {n_workers} worker processes "
+              f"({os.cpu_count()} logical CPUs, parallel_workers="
+              f"{config.parallel_workers or 'auto'})")
+        results = _evaluate_in_parallel(
+            work_df, catalogs, config, combos, n_workers, report,
+        )
+
+    if results is None:                       # serial path, or no pool started
+        progress["done"] = progress["pct"] = 0
+        results = []
+        for _, asteroid in work_df.iterrows():
+            result = evaluate_asteroid(asteroid, catalogs, config, combos)
+            if result is not None:
+                results.append(result)
+            report(1)
 
     if not results:
         print("\n❌  No viable evaluations — every asteroid failed.")
@@ -10542,7 +10961,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.13.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.13.1")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
