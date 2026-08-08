@@ -62,8 +62,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.0.9`, mineral_value `1.7.0`, transportation `1.9.0`,
-calc `1.11.0`, master `1.14.0` (the master version is a literal in
+Current: catalog `1.0.9`, mineral_value `1.7.0`, transportation `1.10.0`,
+calc `1.12.0`, master `1.15.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
 calc `1.10.1` was the one stamp that did **not** mean the numbers moved. It
@@ -71,20 +71,50 @@ was a pure performance release, verified bit-identical, and it was bumped
 anyway so that a CSV still names the code that produced it — the rule above is
 "changing a number means bumping", not "bumping means a number changed".
 
-> ⚠️  **The five-destination tables below were re-measured on
-> transportation `1.9.0` + calc `1.11.0` on 2026-08-08.** All ten cells, one
-> destination at a time, Stage 2 re-run for each. The catalog was NOT
-> re-downloaded — Stage 1 is untouched by this release, and re-fetching would
-> only add live-quote drift to a comparison that is about the mission model.
+> 🚨  **v1.12.0 MOVED EVERY NUMBER AND ONLY `cislunar` HAS BEEN RE-MEASURED.**
+> Measured 2026-08-08 on transportation `1.10.0` + calc `1.12.0`, full
+> catalog, against the same on-disk Stage 2 catalog the `1.11.0` cislunar
+> cells were measured on:
 >
-> **`cislunar` remains the best case at 22.4665×**, and it is one of the cells
-> that got *better*. The direction is mixed by destination and that is the
-> interesting part — see "The v1.11.0 matrix" below.
+> | | `1.11.0` | **`1.12.0`** | Δ |
+> |---|---|---|---|
+> | `cislunar` raw | 31.7712× | **33.2342×** | **+4.60%** |
+> | `cislunar` beneficiated | 22.4665× | **23.9169×** | **+6.46%** |
+>
+> **`cislunar` is still the best case, now at 23.9169×**, and the winner is
+> unchanged — 7753 (B), concentrating 5.311× against 4.955×. Both cells got
+> *worse*, which is the expected direction: every item in v1.12.0 is a term
+> that existed on one side of the model and not the other. See "What v1.12.0
+> changed".
+>
+> ⚠️  **Evaluable rows roughly HALVED**, 31,186 → 15,407 raw and 31,510 →
+> 15,566 beneficiated. That is the thrust-scalability gate: about half the
+> catalog was only closing its mass budget on a micronewton thruster flown as
+> a cargo tug. A population change that large invalidates any per-row
+> comparison against an earlier run, not just the headline.
+>
+> ⚠️  **"Chemical propulsion is extinct in this model" is RETIRED.** It was an
+> artefact of the same gap — hydrolox now wins 5.5% of rows at cislunar and
+> methalox another 0.1%. Do not restore that claim from an older revision of
+> this file.
+>
+> ⚠️  **The other EIGHT cells of the matrix below are `1.11.0` figures and are
+> now stale.** They were not re-run: each needs its own Stage 2 pass and the
+> full sweep is ~70 minutes. Do not quote them as current, and do not compare
+> a fresh run at `leo` / `lunar_surface` / `mars_surface` / `earth_surface`
+> against them — the two changes that move numbers (argon storage, the
+> cargo-water array) are properties of the *mission*, so they move every
+> destination, and `earth_surface` is **not** a control for either.
+>
+> ⚠️  **Every propellant-share figure in this file predates the argon split**
+> and is stale for the same reason — argon's storage class changed, so "iodine
+> 52% / argon 36%" and "Mars is the one destination that wins on argon" are
+> both claims about a propellant that no longer exists in that form.
 >
 > Superseded: the 2026-08-07 reproduction's ten cells (they remain correct for
 > calc `1.10.0`/`1.10.1` and are kept below for comparison), and the
 > programme-scale curve 22.93× → 9.85× → 7.28×, which was measured at the old
-> N=1 anchor of 22.93× and has **not** been rebuilt on `1.11.0`.
+> N=1 anchor of 22.93× and has **not** been rebuilt on `1.11.0` or `1.12.0`.
 >
 > Still stale and not fixable by re-running: the historical progression
 > 2.2× → 14× → 39× → 34× → 25×, and any figure in the version-history comment
@@ -259,9 +289,9 @@ weakly dominant.
 Note this makes the beneficiation path several times slower than raw.
 `concentration_search_steps` is the dial.
 
-⚠️  **The timings in this file have moved three times, twice for reasons that
-had nothing to do with each other.** Current, on calc `1.11.0` / six physical
-cores, full catalog, measured 2026-08-08:
+⚠️  **The timings in this file have moved four times, for four unrelated
+reasons.** The table below is calc `1.11.0` / six physical cores, full
+catalog, measured 2026-08-08:
 
 | | raw | beneficiated | ratio |
 |---|---|---|---|
@@ -273,6 +303,14 @@ cores, full catalog, measured 2026-08-08:
 
 The whole ten-cell sweep is **about 70 minutes** including a Stage 2 re-run per
 destination.
+
+On calc `1.12.0`, cislunar measures **88 s raw / 502 s beneficiated** against
+89 s / 462 s — raw unchanged, beneficiated up ~9%. That is `_cargo_water_kg`
+calling the payload knapsack inside the fixed-point loop instead of once after
+it, which is the price of sizing the array that bakes the cargo water. It was
+measured before it was accepted (250-body sample: 19.8 s → 21.4 s, +8%). Only
+cislunar has been re-timed; assume the rest of the table is ~10% low on
+beneficiated, and the sweep **~75 minutes**.
 
 The history, because each step is a different kind of change and conflating
 them is how a stale timing gets quoted as evidence:
@@ -354,7 +392,45 @@ accordingly; don't restore the 0.80/5.30 values.
 A default run produces zero viable missions. That is the correct answer, not
 a regression. So does every other combination currently in the model.
 
-### The v1.11.0 matrix (current)
+### The v1.12.0 cislunar cells (current)
+
+| | `1.11.0` | **`1.12.0`** | Δ |
+|---|---|---|---|
+| `cislunar` raw | 31.7712× | **33.2342×** | **+4.60%** |
+| `cislunar` beneficiated | 22.4665× | **23.9169×** | **+6.46%** |
+
+Full catalog, **15,407 evaluable raw / 15,566 beneficiated** (against ~31,000
+on `1.11.0` — see below), measured 2026-08-08 on transportation `1.10.0` +
+calc `1.12.0` against the same on-disk Stage 2 catalog. Winner unchanged at
+7753 (B), now concentrating **5.311×** against 4.955×; the raw winner is still
+4660 Nereus, on iodine and a Falcon Heavy rather than electrospray and a New
+Glenn. **`cislunar` is still the best case.**
+
+Both cells got worse, and every item in the release pushes that way — see
+"What v1.12.0 changed".
+
+⚠️  **The evaluable population halved, and that is the headline result of this
+release rather than the ratios.** ~15,700 bodies were closing their mass
+budget only because the model would sell them a micronewton thruster as a
+cargo tug. They are not marginal missions that got more expensive; they are
+missions that were never physical. Any per-row comparison against a `1.11.0`
+catalog is comparing different populations.
+
+⚠️  **The argon correction moved neither headline cell and still changed the
+answer for a quarter of the catalog.** Both ratios above are bit-identical to
+a run made against the pre-argon tables — the best missions at cislunar were
+never flying argon — while argon's share of chosen propellants collapsed from
+25.0% to 2.4% raw and from 27.3% to 0.0% beneficiated, and 1,059 bodies became
+infeasible outright. This is worth internalising before trusting any single
+cell as a regression test: **the best case is a terrible detector for a change
+that is wrong everywhere except at the top.** The propellant-share table and
+the evaluable-row count caught it; the headline did not.
+
+⚠️  **The other four destinations have NOT been re-measured on `1.12.0`.** The
+table below is `1.11.0` and is kept because its *structure* is still the right
+way to read the model, not because its numbers are current.
+
+### The v1.11.0 matrix (superseded for `cislunar`, stale for the rest)
 
 Best cost/revenue (lower is better, 1.0 is breakeven), measured 2026-08-08 on
 transportation `1.9.0` + calc `1.11.0`, full catalog, 30,458–32,442 evaluable
@@ -362,7 +438,7 @@ rows per destination. The prior column is the 2026-08-07 reproduction on calc
 `1.10.0`/`1.10.1`, so the delta is the mission-model change: tank mass, the
 tanker bill, the RTG option, and a propellant search 4.6× wider.
 
-| destination | raw `1.10.x` | **raw `1.11.0`** | Δ | benef `1.10.x` | **benef `1.11.0`** | Δ |
+| destination | raw `1.10.x` | raw `1.11.0` | Δ | benef `1.10.x` | benef `1.11.0` | Δ |
 |---|---|---|---|---|---|---|
 | `earth_surface` | 45,893.7× | 45,236.50× | −1.43% | 25,038.5× | 26,256.72× | **+4.87%** |
 | `leo` | 72.4520× | 71.0459× | −1.94% | 48.1286× | 51.2223× | **+6.43%** |
@@ -370,8 +446,9 @@ tanker bill, the RTG option, and a propellant search 4.6× wider.
 | `lunar_surface` | 75.8315× | 75.5110× | −0.42% | 40.6132× | 37.8133× | **−6.89%** |
 | `mars_surface` | 70.4063× | 70.4346× | +0.04% | 51.8161× | 51.9597× | +0.28% |
 
-**`cislunar` is still the best case, at 22.4665×**, and it is one of the cells
-that improved.
+**`cislunar` was still the best case at `1.11.0`, at 22.4665×**, and it was one
+of the cells that improved. It is still the best case on `1.12.0`, at
+22.7353×.
 
 Winners, `1.11.0` beneficiated: 4660 Nereus (Xe, 2.469×) at `earth_surface`,
 5620 (D, 4.444×) at `leo`, 7753 (B, 4.955×) at `cislunar`, 7753 (B, 4.816×) at
@@ -396,18 +473,31 @@ term bites; raw is where the wider search shows through cleanly.
 **Iodine wins almost everywhere, and that is the tank term talking.** Nine of
 the ten cells are won on iodine, which stores as a solid at ambient pressure at
 4.93 kg/L and therefore pays **0.2%** of its own mass in tankage against
-xenon's 1.9%. Across a full `earth_surface` run iodine takes 52% of winners and
-argon 36%; hydrolox wins 7 rows out of 32,442 and methalox 30. Chemical
-propulsion is essentially extinct in this model. Note what this means: the tank
-term is only ~0.7% of launch mass in the *winning* missions, because the search
-routes around it. Its effect is not a cost it adds, it is **which propellant it
-disqualifies**.
+xenon's 1.9%. Chemical propulsion is essentially extinct in this model. Note
+what this means: the tank term is only ~0.7% of launch mass in the *winning*
+missions, because the search routes around it. Its effect is not a cost it
+adds, it is **which propellant it disqualifies**.
 
-**Mars barely moved (+0.04% raw, +0.28% beneficiated), and it is the only
-destination that did not adopt iodine** — it wins on argon at both settings.
+> ⚠️  The propellant SHARES that used to be quoted here — "iodine takes 52% of
+> winners and argon 36%" across `earth_surface` — are stale as of `1.12.0`,
+> because argon's storage class changed and its tank fraction went 2.1% →
+> 22.9%. The mechanism above is unaffected and is in fact the point: argon was
+> taking a third of the winners on a tank exemption it should never have had.
+> On `1.12.0` at cislunar the split is iodine 58.6% / PPT 29.0% /
+> electrospray 11.0% / xenon 1.0% beneficiated, and PPT 31.8% / iodine 26.8% /
+> electrospray 24.3% / xenon 8.9% / krypton 4.9% raw. **Argon goes from 27.3%
+> of beneficiated winners to 0.0%, and 25.0% of raw winners to 2.4%.**
+
+**Mars barely moved (+0.04% raw, +0.28% beneficiated), and it was the only
+destination that did not adopt iodine** — it won on argon at both settings.
 That is a compositional/architectural result, not noise: the Mars leg is a
 separate heliocentric transfer, and its winner identity (8651 M raw, 6178 P
 beneficiated) reproduces `1.10.x` exactly.
+
+> ⚠️  **That Mars result is the single cell most likely to have moved on
+> `1.12.0`, and it has not been re-measured.** Mars was winning on argon at
+> both settings, and argon is exactly what v1.12.0 corrected. Assume the Mars
+> figures and the argon claim are both wrong until someone re-runs them.
 
 **`earth_surface` moved 1.4-4.9%, and that is NOT drift.** It is not a control
 for this release — see the note below the older table.
@@ -593,17 +683,44 @@ was left alone in v1.10.0 because sizing it per target changes the meaning of
 `max_payload_by_throughput_kg` everywhere it is read.
 
 v1.11.0 closed three more, none of them by tuning: propellant tankage,
-orbital refuelling, and the RTG option. What that release **also** established
-is that the reference tables themselves were a source of error, not just the
-code reading them — sixteen flown propellants were missing, and the model was
-therefore choosing the best of seven options while the report claimed it had
-chosen the best available. Three storage gaps remain open and all three run
-optimistic: **volatile cargo is never kept cold**, **the sun never sets** on
-the processing plant, and **boil-off cannot be bought down** with a
-cryocooler. They are listed with their citations in `STORAGE_REFERENCE` — the
-data is there, the consumer is not.
+orbital refuelling, and the RTG option. Two of those three did not survive
+v1.12.0's audit intact — the refuelling charge was billed against the wrong
+scenario and is now gated off, and the RTG branch turns out to be reachable by
+2 rows of 31,510. Only tankage did what it claimed. That is worth remembering
+when reading any release note in this file, including this one: **a term
+being implemented is not the same as a term being reached.**
 
-## The fourteen things the model stopped giving away
+What v1.11.0 **also** established is that the reference tables themselves were
+a source of error, not just the code reading them — sixteen flown propellants
+were missing, and the model was choosing the best of seven options while the
+report claimed it had chosen the best available. v1.12.0 found the sharper
+version of the same lesson: a table row can be wrong not by omission but by
+**internal contradiction**, holding two incompatible physical states at once
+and collecting the benefit of both. See argon.
+
+Three storage gaps remain open and all three run optimistic: **volatile cargo
+is never kept cold**, **the sun never sets** on the processing plant, and
+**boil-off cannot be bought down** with a cryocooler. They are listed with
+their citations in `STORAGE_REFERENCE` — the data is there, the consumer is
+not. Note that the first of those is now the largest single unpriced item in
+the model: v1.12.0 charged the *energy* to bake water out of the rock and to
+fly the array that does it, and still charges nothing to stop that water
+subliming away across a four-year cruise.
+
+✅  **Thrust scalability is gated as of v1.12.0**, and closing it was the
+single largest correction in this release. It is written up under "What
+v1.12.0 changed"; the short version is that Module 4 sized an electric stage
+by POWER alone, so buying enough kilowatts turned any row in the propellant
+table into a cargo tug. A third of winning missions at cislunar were on pulsed
+plasma thrusters and a quarter on electrospray — devices that have flown, and
+have flown producing MICRONEWTONS.
+
+The gate is mass, not a threshold: Module 3 now carries `thruster_kg_per_n`
+per technology and Module 4 derives the thrust its mission needs, so a device
+that makes µN per kilogram reports thousands of tonnes of thruster and dies in
+the rocket equation on its own. Same shape as propellant tankage.
+
+## The eighteen things the model stopped giving away
 
 Each defaults ON and each moved every number. They are corrections, not
 options; the flags exist to isolate effects, not to be left off.
@@ -613,17 +730,38 @@ than repeated here: the **electric propulsion stage**, which was flown as mass
 and never billed, and the **return vehicle's structure**, which did not grow
 with its cargo.
 
-Two more arrived in v1.11.0 and are under "What v1.11.0 changed": **propellant
+One more arrived in v1.11.0 and is under "What v1.11.0 changed": **propellant
 tankage**, which is mass in the rocket equation that scales with volume rather
-than with the propellant inside it, and **orbital refuelling**, where a
-vehicle quoting a refuelled escape payload was not being charged for the
-tanker flights that payload assumes.
+than with the propellant inside it. (v1.11.0's **orbital refuelling** charge
+was the fourteenth item and it has been *withdrawn* — see "What v1.12.0
+changed". It was billing a real cost against a scenario this module does not
+have, which makes it an error rather than a correction, and it is now gated
+off.)
 
-Notice the shape all four share. The mass cascade and the cost cascade are
-written in different places, and nothing checks that every kilogram in one has
-a price in the other — or that every kilogram the cost model pays for is
-actually being flown. That is the bug class to look for in this codebase
-first.
+Four arrived in v1.12.0 and are under "What v1.12.0 changed": **thruster
+scalability**, the biggest of them, where the in-space stage was sized on
+power alone so a micronewton device could be bought as a cargo tug; **argon's
+storage**, which took a cryogenic liquid's density and an ambient gas's zero
+boil-off at the same time; the **cargo-water power plant**, which was billed
+and never launched; and **propellant tank fabrication**, which was launched
+and never billed.
+
+Notice the shape almost all of them share. The mass cascade and the cost
+cascade are written in different places, and nothing checks that every
+kilogram in one has a price in the other — or that every kilogram the cost
+model pays for is actually being flown. That is the bug class to look for in
+this codebase first, and v1.11.0 introduced three fresh instances of it while
+fixing three older ones. The one-line assertion that catches the whole family:
+
+```
+hardware_total_kg == mining_hardware_kg + power_system_kg + ep_system_kg
+```
+
+Argon is the exception and it has its own shape, worth learning separately: a
+reference row that was internally inconsistent, holding two mutually exclusive
+storage states at once. Neither number was crazy on its own. **Check that a
+row's fields describe a single physical article** — the giveaway there was two
+comments contradicting each other three lines apart.
 
 **Low-thrust trip time.** `T = 2*eta*P/(Isp*g0)`, so burning m_prop takes
 `m_prop*(Isp*g0)^2/(2*eta*P)` -- high Isp buys propellant mass at a QUADRATIC
@@ -919,7 +1057,7 @@ consider, or a real cost the model never got to charge.
 Module 3 goes `1.8.2 → 1.9.0` (data and schema), Module 4 `1.10.1 → 1.11.0`
 (the code that reads them), master `1.13.1 → 1.14.0`.
 
-### Propellants: 7 rows → 40
+### Propellants: 7 rows → 40 (41 as of v1.12.0, which split argon)
 
 Sixteen of the additions **have flown** and were simply absent — solid APCP,
 UDMH/NTO, Aerozine-50, green monopropellant, HTP as monoprop and as
@@ -1153,6 +1291,333 @@ told you to run before trusting a parallel number after adding to the search,
 and it is the one that would catch a worker seeing different reference data
 from the parent.
 
+## What v1.12.0 changed
+
+A realism audit of the model's physical assumptions, prompted by v1.11.0's own
+additions. Six findings, and **most of them are the same defect**: a term that
+exists on one side of the model and not the other. That is the bug class this
+file already tells you to look for first.
+
+All of them move the answer the **same way: worse**. Cislunar raw 31.7712× →
+33.2342× (+4.60%), beneficiated 22.4665× → 23.9169× (+6.46%). Cislunar is
+still the best case and its winner is unchanged.
+
+**The ratios are not the headline. The population is.** Evaluable rows halved,
+~31,000 → ~15,500, because half the catalog was closing its mass budget on a
+micronewton thruster the model was happy to sell as a cargo tug. Those are not
+missions that got more expensive; they were never physical.
+
+Transportation goes `1.9.0 → 1.10.0` (the tables), calc `1.11.0 → 1.12.0` (the
+code that reads them), master `1.14.0 → 1.15.0`.
+
+### The device was never modelled, only the propellant
+
+The largest correction in this release, and the one that halved the evaluable
+catalog. It is also the cleanest example of the asymmetry this whole project
+keeps rediscovering, so it is worth stating in its general form first:
+
+> **LAUNCH was modelled as an integrated vehicle with a payload it can
+> actually lift. IN-SPACE propulsion was modelled as a bare specific impulse.**
+> One side had a capacity limit and the other did not.
+
+`PROPELLANTS_REFERENCE` has always been half a propellant table and half a
+propulsion-system table — `isp_vac_s`, `restartable` and `dv_penalty_factor`
+are all properties of the *device*, not the chemical. What it never carried
+was anything about whether the device can be **built at the size this pipeline
+flies**. So `_evaluate_combo_at_ratio` sized the electric stage on power:
+
+```
+P = m_prop·ve² / (2·η·t)      →  array mass, PPU mass, done
+```
+
+Buy enough kilowatts and any row became a cargo tug. The result, on a full
+`1.11.0` cislunar run:
+
+| propellant | raw winners | benef winners | largest unit ever flown |
+|---|---|---|---|
+| PPT (PTFE pulsed plasma) | **31.8%** | **29.0%** | EO-1, **860 µN** |
+| Electrospray (ionic liquid) | **24.3%** | 11.0% | ST7-DRS, **5-30 µN** each |
+| FEEP (indium) | <0.1% | <0.1% | IFM Nano, **0.35 mN** |
+
+The pipeline was asking those devices for **~7-10 N**. Electrospray's own
+notes field in this table said scaling it to a cargo stage "means millions of
+emitters", and nothing read that sentence — the same
+prescriptive-comment-nobody-applied trap as the Starship tanker note.
+
+**The fix is mass, not a threshold**, which matters because a threshold would
+have been a judgement call and this is not one. Thrust is momentum flux:
+
+```
+T = ṁ·ve = m_prop·(Isp·g0)/t          # owes NOTHING to efficiency
+```
+
+`ep_thrust_required_n()` computes it, Module 3's `_THRUSTER_SYSTEMS` supplies
+`thruster_kg_per_n` per technology, and the product goes into the rocket
+equation. A device that makes micronewtons per kilogram reports thousands of
+tonnes of thruster and fails to close. Nobody names a cutoff, exactly as with
+propellant tankage and `t(R−1) ≥ 1`.
+
+The physical divide the table now records as `thrust_scaling`:
+
+- **`continuous`** — thrust comes from a discharge or beam whose area you can
+  enlarge. Scaling up means a BIGGER device, so kg/N stays roughly flat with
+  size: 6 kg/N (hydrazine arcjet, MR-509) to 90 (NSTAR), everything mature
+  landing in that band.
+- **`replicated`** — thrust comes from discrete emitters, needles or pulses.
+  Scaling up means MORE devices, so kg/N is fixed by the single unit and never
+  improves: 2,500 (FEEP), 5,000 (PPT), 10,000 (electrospray).
+
+**Efficiency was also one shared constant**, 0.60 for every electric row, and
+it is nearly as decisive. A PPT converts ~8% of its input into jet power
+against a gridded ion thruster's 70%, so it needs ~9× the array — and the
+array is mass too. Now per-technology and measurably varying in output: 0.70
+on 10,809 rows, 0.45 on 1,997, 0.35 on 1,878.
+
+The old lumped `8 kg/kW` "thruster + PPU" row is what allowed this, because a
+per-kW figure cannot express a per-newton constraint. It is split: the PPU
+scales with power (4.7 kg/kW, NEXT-C's 34.5 kg at 7.4 kW) and the thruster
+head scales with thrust. Together they reproduce NEXT-C to within 1% —
+4.7×7.4 + 54×0.236 = 47.5 kg against 47.2 measured.
+
+Four things worth not undoing:
+
+**The thruster term is small for everything that survives.** Median 2.7% of EP
+system mass, max 16%. As with tankage, its effect is not a cost it adds — it
+is **which device it disqualifies**. Zero `replicated` rows survive anywhere in
+either full run.
+
+**Chemical propulsion is no longer extinct.** Hydrolox takes 5.5% of cislunar
+rows and methalox 0.1%. The old "chemical is extinct in this model" line was
+never a physical result; it was micronewton thrusters winning races they could
+not enter.
+
+**The guard in `_apply_thruster_data` raises rather than defaulting**, and it
+tests `dv_penalty_factor > 1` — the same test Module 4 uses for `is_electric`.
+Keying it off `type == "electric"` would have silently missed
+`nuclear_electric`, direct fusion drive and antimatter. It caught all three
+while this was being written.
+
+**Iodine is the judgement call and it is load-bearing.** Its only flight unit
+is ThrustMe's 1.1 mN cubesat thruster, which works out near 1,100 kg/N — but
+that is an artefact of a 1U device, not a property of iodine, which runs in
+Hall and gridded bodies that are the same hardware xenon uses. Entered at
+60 kg/N against xenon Hall's 30, penalised for the heated feed and corrosion
+tolerance it really needs. `status` cannot express "flown, but three orders of
+magnitude below the scale we are modelling", and that is a gap in the schema
+rather than in this number.
+
+### Argon was a free resource, and the row said so itself
+
+This is the one that moves the numbers, and it is worth reading in full
+because nothing about it required any physics to spot — the row contradicted
+itself in its own comments, three lines apart:
+
+```python
+"density_kg_per_L":    1.395,   # liquid NBP (cryogenic storage)
+"boiloff_pct_per_day": 0.0,     # Stored supercritical at ambient temperature
+```
+
+1.395 kg/L is liquid argon, which exists only at 87.3 K. At 87.3 K it boils.
+The row took the cryogenic liquid's **density** — hence the lightest tank of
+any gas in the table, 2.1% of propellant mass — and the ambient gas's
+**zero boil-off**, and paid for neither.
+
+Measured at cislunar, argon was chosen for **25.0% of raw winners and 27.3% of
+beneficiated winners**; correctly bottled it takes 2.4% and 0.0%, and 1,059
+bodies stop being feasible at all. It also carried the entire Mars result at
+both settings, which has not been re-run.
+
+Split into the two articles that actually exist, and let the per-asteroid
+search decide, which is this codebase's usual answer to "which one?":
+
+| | storage | ρ (kg/L) | tank / propellant | boil-off | status |
+|---|---|---|---|---|---|
+| `Argon (Hall / ion)` | COPV, 18 MPa, ambient | 0.30 | **22.9%** | 0 | operational |
+| `Argon (Hall / ion, cryogenic)` | liquid, 87.3 K, MLI | 1.395 | 2.1% | 0.024%/day | development |
+
+The supercritical row is the one tagged operational because it is what has
+**flown**. Every noble-gas EP system ever launched — xenon on Dawn,
+BepiColombo and SMART-1, krypton on Starlink v1, argon on Starlink V2 — stores
+its propellant supercritical in a COPV. No spacecraft has ever carried a
+cryogen for an electric thruster. Tagging the liquid row `development` is the
+same call the table already makes for VASIMR, and it is what stops the default
+search flying an article nobody has built — which is exactly what the old row
+did by accident.
+
+Three things here not to "fix":
+
+**22.9% is not a punishment, it is 1/M.** Tank fraction for a COPV is
+`1.5·Z·R·T / (M·(PV/W))` — pressure cancels, because the bottle gets heavier
+in proportion to what it holds. So xenon 1.9% / krypton 12.5% / argon 22.9% is
+just M = 131.3 / 83.8 / 39.9 read backwards. Argon at 30 MPa pays 22.3%
+against 22.9% at 18 MPa; the answer barely moves, and that robustness is the
+tell that it is physics rather than a tuned constant.
+
+**The density is derived twice, not asserted.** Peng-Robinson at 293.15 K /
+18 MPa gives Z = 0.919, ρ = 0.321 kg/L; a generalised-compressibility reading
+at Tr = 1.945, Pr = 3.70 gives Z ≈ 0.99, ρ = 0.298. 0.30 is between them. PR
+reproduces the table's existing xenon row (1.86 against 2.00) but overstates
+krypton, which is why two methods were used rather than one.
+
+**The boil-off is derived from this table's own LOX figure.** Kerolox is
+0.015%/day and its comment says only the LOX half boils, weighted by the mix
+ratio; at O/F 2.30 that makes LOX alone 0.0215%/day. Scaling to argon at the
+same tank and MLI is two ratios — heat leak ∝ ΔT, (300−87.3)/(300−90.2) =
+1.014, and energy to boil ∝ ρ·h_fg, (1.141×213.1)/(1.395×161.1) = 1.082 —
+giving 0.024%/day. Argon boils slightly **faster** than oxygen: 3 K colder,
+and 8% less latent heat per litre.
+
+### The cargo-water array was priced and never flown
+
+The mirror image of the free EP stage. v1.7.0 charges liberation energy for
+water sold as cargo, ~2,500 Wh/kg, and that energy sizes a power plant. The
+term was added to `processing_power_watts` **after** `actual_cascade` had
+already been built, so the array was billed in the ledger and never entered
+the rocket equation. The comment there said "that extra power needs extra
+array, **which the cascade already flew**". It had not.
+
+The diagnostic is a one-liner and it is worth keeping:
+
+```
+hardware_total_kg == mining_hardware_kg + power_system_kg + ep_system_kg
+```
+
+On a fixed 400-body raw cislunar sample that failed on **97 of 357 rows**, by
+up to 408 kg; beneficiated, 59 of 227 rows by up to 757 kg. It now holds on
+every row of both full-catalog runs, exactly.
+
+The worse half was the **raw** case: the sizing loop skipped the liberation
+term entirely unless beneficiating or making propellant, so a raw mission to
+an icy body paid for an array it flew none of. Fixed by moving the term inside
+the fixed point, ungating it, and factoring the water estimate into
+`_cargo_water_kg` so the loop and the post-loop settle-up cannot use different
+expressions — which is what they were doing.
+
+The settle-up now also runs **before** the cascade is rebuilt rather than
+after, and `_downstream_of_hardware` is evaluated twice: once to learn how much
+ISRU propellant the mission makes (which sets dig time, which sets the plant,
+which is itself hardware), and again with the settled plant mass. The launch
+stack is re-checked against the vehicle afterwards, because the closed-form
+payload guarantee only holds at the hardware mass it was solved for.
+
+This is the term that moves the **median** far more than the best case: 243.2 →
+307.5 on the raw sample, +26.4%, because it lands on volatile-rich bodies and
+the best cislunar mission is not one.
+
+### Three smaller asymmetries
+
+**Propellant tankage had no cost line.** Flown through the rocket equation
+since v1.11.0, charged its launch $/kg because it sits inside `m_launch`, and
+manufactured for free. New Module 3 row at $6,000/kg, Centaur-derived
+(~1,880 kg of structure, ~$30M stage less ~$20M of RL10). It is 0.004–0.6% of
+mission cost, median 0.012%, and it is kept precisely because it is small:
+these are only ever found by checking every term rather than the big ones.
+
+**Launch insurance under-booked the spacecraft.** Book value was rig +
+capsule, which *was* the whole vehicle in v1.4.0. It never picked up the
+v1.5.0 power plant, the electric stage v1.10.0 finally priced at $1.5M/kW, or
+v1.11.0 tankage. A 300 kW electric stage is a nine-figure article and it was
+flying uninsured. The rig enters at full build cost, not its amortised share —
+losing it on ascent destroys the whole unit however many missions meant to
+share it.
+
+**`max_accel_g` was exported and read by nobody.** Module 3 added it in v1.9.0
+expressly to disqualify the kinetic launchers and said so in the column's own
+documentation. Only *maturity* was excluding them, which works today because
+SpinLaunch and the light-gas gun are tagged `concept` — turn
+`operational_vehicles_only` off and a 10,000 g slingshot at $6,250/kg enters
+the search and wins on price, because nothing knew it would powder the rig.
+`max_payload_accel_g` = 15 g: every real launcher in the table is 6 g or less,
+SpinLaunch is 10,000, a light-gas gun 30,000, StarTram 30.
+
+### And one that ran the other way
+
+**The tanker charge was keyed to the wrong scenario.** Module 3's Starship
+note asked for `$90M × N_tankers` **"in the escape-direct scenario"**; v1.11.0
+implemented the arithmetic and dropped the scenario, levying it on every
+mission.
+
+This module has no escape-direct scenario. Grep it: Stage 4 reads
+`payload_leo_kg` and `usd_per_kg_to_leo` and nothing else — the vehicle is a
+LEO lifter, and the stack departs on its own outbound stage, which the rocket
+equation sizes. Starship's 100 t to LEO needs no tankers; refuelling is what
+buys the *escape* figure, which is never read. So the charge was $1.08B for a
+capability the mission does not use.
+
+Gated behind `escape_direct_launch`, which nothing sets, rather than deleted —
+the day this module gains a direct-injection architecture the charge becomes
+correct and the column is already wired. It is currently inert either way,
+because Starship is the only vehicle with a non-zero tanker count and it is
+`development`.
+
+Note the shape: this is the *same* failure as the prescriptive-comment class
+described above, but committed while fixing one. The note said what to do and
+where to do it; v1.11.0 read the first half.
+
+### The RTG option is correctly wired and very nearly unreachable
+
+Worth recording because it looks like a feature and behaves like a rounding
+error. v1.11.0 added radioisotope power so distant bodies would stop being
+punished by a 1/r²-starved array. The crossover is 3.46 AU and 864 catalog
+bodies (2.41%) sit beyond it, 856 with positive mass.
+
+**It fires on exactly one row** of 15,566 — 18916, at 3.857 AU, drawing 4.4 W
+into an 0.87 kg plant. Every other row is `solar`. The distant population is
+not eliminated by array mass or by the 25-year duration cap (those bodies come
+out at 4–5 years); it fails in the mass cascade on a 10–12 km/s outbound Δv
+that an electric stage's 1.5× penalty turns into 15–18. The array was never the
+binding constraint.
+
+(It fired on *zero* rows before the thrust gate; the gate changed which
+missions close, and one distant body came through. That is the correct
+behaviour and it is also a good illustration of how little of the catalog this
+branch touches.)
+
+That is not an argument for removing it — the code is right, and it will
+matter the moment the Δv model or the vehicle set changes. It is an argument
+against quoting "the RTG option" as something that improved these numbers.
+
+### Verification (2026-08-08)
+
+Same three checks as v1.11.0, on the rebuilt `master.py` at cislunar.
+
+**1. Full-catalog cislunar, both settings:**
+
+| | `1.11.0` | `1.12.0` | Δ | winner | evaluable |
+|---|---|---|---|---|---|
+| raw | 31.7712× | **33.2342×** | +4.60% | 4660 Nereus, iodine | **15,407** |
+| beneficiated | 22.4665× | **23.9169×** | +6.46% | 7753 (B), 5.311× | **15,566** |
+
+**2. Never-worse holds, and holds exactly:**
+
+```
+pairs 15,407 | max benef/raw 1.000000 | exceptions 0 | declined (== 1.0) 591
+```
+
+This one mattered more than usual. The thrust gate REMOVES options, and a
+strictly smaller option set cannot make a correctly-implemented search better
+— the mirror of the never-worse argument that v1.11.0's wider search relied
+on. Both cells moved the right way and the invariant still holds exactly.
+
+**3. Serial and parallel are byte-identical:**
+
+| | serial | 8 workers | speed-up | sha256 |
+|---|---|---|---|---|
+| raw, 4,000 rows | 43.2 s | 23.5 s | 1.84× | MATCH |
+| beneficiated, 2,000 rows | 197.6 s | 54.0 s | 3.66× | MATCH |
+
+**4. No `replicated`-scaling device survives anywhere**, in either full run —
+the direct check that the gate did what it claims. Thruster mass is a median
+2.7% of EP system mass among survivors (max 16%), which is the tankage
+signature again: the term disqualifies rather than taxes.
+
+Full-catalog wall clock at cislunar: **86 s raw / 463 s beneficiated**, against
+89 s / 462 s on `1.11.0` — unchanged, because the extra knapsack calls are
+offset by half the catalog now failing early. The beneficiated figure is up ~18% because
+`_cargo_water_kg` calls the payload knapsack inside the fixed-point loop rather
+than once after it. That was measured before it was accepted: on the 250-body
+beneficiated sample the whole run went 19.8 s → 21.4 s, +8%.
+
 ## Config discipline
 
 Configs are dataclasses instantiated once at module scope. Edit the field
@@ -1196,6 +1661,27 @@ Undoing any of these silently corrupts the output:
   missing column and the behaviour it reverts; do not weaken it into a
   generic "columns changed" warning, because the consequence is the useful
   part.
+
+  ⚠️  **`schema_check()` checks COLUMNS, not VALUES, and that is a real hole.**
+  Editing a number in a Module 3 table — a density, a status, a boil-off rate
+  — leaves the schema identical, so nothing warns and Stage 4 quietly runs on
+  the old figure. This cost a full measurement pass during v1.12.0: the argon
+  rows were rewritten, Stage 3 was re-run, the CSV did not actually land, and
+  two full-catalog runs plus a determinism sweep were measured against the
+  table that was being replaced. Nothing anywhere said so.
+
+  The cheap habit that catches it: **Stage 4's loader prints row counts for
+  every Module 3 table it reads** (`📥 Module 3 propellants  41 rows`). Read
+  those against what Stage 3 said it wrote. A count that has not moved after
+  you added a row is the whole diagnosis. When only values changed and no
+  count moved, spot-check the field itself out of the CSV before trusting a
+  number — one `read_csv` on the row you edited.
+
+  The deeper lesson from that pass is in "What v1.12.0 changed": the headline
+  cislunar ratios were **bit-identical** with the stale table and the correct
+  one, because the best mission was not affected by the change. A best-case
+  cell is a poor detector for anything wrong below the top; the
+  propellant-share breakdown and the evaluable-row count are what caught it.
 
 ## Data sources fail softly by design
 
