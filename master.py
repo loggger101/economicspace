@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.14.0)
+"""Master Asteroid Profitability Pipeline (1.15.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom — the orchestrator at the bottom executes everything.
 
-    Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.0.8)
+    Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.0.9)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
-    Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.6.0)
+    Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.7.0)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
                 + destination pricing for EVERY commodity
-    Stage 3  →  Transportation Data     (modules/transportation.py 1.8.1)
+    Stage 3  →  Transportation Data     (modules/transportation.py 1.10.0)
                 Launch vehicles + propellants + Δv segments + ops costs
                 (UNCREWED autonomous mining — no crew costs)
-    Stage 4  →  Profitability Calc      (modules/calc.py 1.9.1)
+    Stage 4  →  Profitability Calc      (modules/calc.py 1.12.0)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2×, V-type 0.2×)
                 + delivery architecture: earth_surface / leo / cislunar /
@@ -4926,7 +4926,61 @@ class TransportConfig:
     #           — present since v1.2.0 and never read by anything — is now
     #           consumed by Module 4.  Crossover against the 60 W/kg solar row
     #           is 3.46 AU, and this catalog runs well past it.
-    pipeline_version: str = "1.9.0"
+    # 1.10.0 — realism audit of the v1.9.0 tables.  Three changes, two of which
+    #         move every number.
+    #         • THRUSTER SYSTEMS: the DEVICE, as distinct from the propellant.
+    #           This table has always been half propellant and half propulsion
+    #           system (isp_vac_s, restartable and dv_penalty_factor are device
+    #           properties), and it carried nothing about whether the device can
+    #           be BUILT at the size Module 4 flies.  So Module 4 sized an
+    #           electric stage on power alone and a third of its winning
+    #           missions were pulsed plasma thrusters — 860 uN in flight, asked
+    #           for ~10 N.  New `_THRUSTER_SYSTEMS` block supplies
+    #           `thruster_kg_per_n`, `thruster_efficiency` and `thrust_scaling`
+    #           per technology, every figure anchored on a flight or ground
+    #           article.  The `continuous` / `replicated` split is the physics:
+    #           a discharge or beam you can enlarge stays at 6-90 kg/N however
+    #           big you build it; discrete emitters, needles and pulses are
+    #           stuck at 2,500-10,000 kg/N forever.  `_apply_thruster_data`
+    #           RAISES on an electric row with no entry rather than defaulting,
+    #           and tests dv_penalty_factor > 1 to match Module 4's own
+    #           is_electric test — keying off `type` would have missed
+    #           nuclear_electric, direct fusion drive and antimatter, and it
+    #           caught all three.
+    #         • NEW OPS ROW "Power processing unit specific mass" 4.7 kg/kW,
+    #           splitting the lumped 8 kg/kW "thruster + PPU".  A per-kW figure
+    #           cannot express a per-newton constraint, which is what allowed
+    #           the above.
+    #         • ARGON WAS A FREE RESOURCE, and the row said so itself.  It
+    #           carried liquid-argon density (1.395 kg/L, which only exists at
+    #           its 87.3 K boiling point) with a boil-off of ZERO, and its own
+    #           two comments — "liquid NBP (cryogenic storage)" and "stored
+    #           supercritical at ambient temperature" — sat three lines apart.
+    #           The combination bought the lightest tank of any gas here, 2.1%
+    #           of propellant mass, AND exemption from the hold-time penalty
+    #           every other cryogen pays.  Measured at cislunar, argon was
+    #           chosen for 25.0% of raw winners and 27.3% of beneficiated ones;
+    #           correctly bottled it takes 2.4% and 0.0%, and 1,059 bodies stop
+    #           being feasible.  It also carried the whole Mars result at both
+    #           settings, which has not been re-run.  Note what did NOT move:
+    #           both cislunar headline ratios are bit-identical either way,
+    #           because the best missions were never flying argon.
+    #           Split into the two real articles: `ArgonSC`, supercritical in a
+    #           COPV at 18 MPa and 0.30 kg/L, which is what has FLOWN (no
+    #           spacecraft has ever carried cryogenic argon), and `ArgonLIQ`,
+    #           the liquid feed a multi-tonne stage would want, tagged
+    #           `development` and paying derived boil-off.  Honestly bottled,
+    #           argon pays 22.9% of its own mass in tankage — worse than
+    #           krypton's 12.5% and xenon's 1.9%, because it is the LIGHTEST of
+    #           the three and tank fraction goes as 1/M once pressure cancels.
+    #           Density derived two ways (Peng-Robinson and generalised
+    #           compressibility), boil-off derived from this table's own LOX
+    #           figure.  See _COMPONENTS and _LAR_BOILOFF_PCT_PER_DAY.
+    #         • NEW OPS ROW "Propellant tank recurring cost", $6,000/kg,
+    #           Centaur-derived.  Module 3 has produced tank MASS since v1.9.0
+    #           and Module 4 has flown it since, and nothing ever bought one.
+    #         Propellants 40 → 41 (23 operational, 8 development).
+    pipeline_version: str = "1.10.0"
     preview_rows:     int = 15
 
 
@@ -5914,6 +5968,169 @@ _TANK_BASE_KG_PER_L = 0.025
 # NASA-STD-(I)-5019 class hardware.  Burst is taken at 1.5 × operating.
 _COPV_PERFORMANCE_J_PER_KG = 392_000.0
 
+# Passive boil-off for LIQUID argon, %/day.  Derived from the LOX rate already
+# in this table rather than asserted, because the whole point of the v1.10.0
+# argon split is that a cryogen has to pay what a cryogen costs.
+#
+# The kerolox row is 0.015%/day and its own comment says why: RP-1 is storable
+# and only the LOX half boils, weighted by the mix ratio.  At O/F 2.30 the LOX
+# mass fraction is 2.30/3.30 = 0.697, so LOX alone is 0.015/0.697 = 0.0215%/day.
+#
+# Scaling that to argon at the same tank and the same MLI, boil-off is heat leak
+# over the energy it takes to boil the contents, so two ratios:
+#
+#   heat leak        ∝ ΔT     (300 − 87.3) / (300 − 90.2)      = 1.014
+#   energy to boil   ∝ ρ·h_fg  (1.141 × 213.1) / (1.395 × 161.1) = 1.082
+#
+# giving 0.0215 × 1.014 × 1.082 = 0.0236, rounded to 0.024%/day.  Argon boils
+# slightly FASTER than oxygen: 3 K colder, and its latent heat per litre is 8%
+# lower.  Over a four-year hold that is a factor of 1.41 on the return
+# propellant — small next to hydrolox's 2.1, and not nothing.
+_LAR_BOILOFF_PCT_PER_DAY = 0.024
+
+# ─────────────────────────────────────────────────────────────────────────────
+# THRUSTER SYSTEMS  (v1.10.0) — the DEVICE, as distinct from the propellant
+# ─────────────────────────────────────────────────────────────────────────────
+# PROPELLANTS_REFERENCE has always been half a propellant table and half a
+# propulsion-system table — `isp_vac_s`, `restartable` and `dv_penalty_factor`
+# are properties of the DEVICE, not of the chemical.  What it never carried was
+# anything about whether the device can be built at the size this pipeline
+# flies, and that omission ran one way:
+#
+#     Module 4 sized an electric stage by POWER alone.  Buy enough kilowatts
+#     and any entry in the table became a cargo tug.
+#
+# So a full cislunar run had a third of its winning missions on PULSED PLASMA
+# THRUSTERS and a quarter on ELECTROSPRAY — devices that have flown, and have
+# flown producing MICRONEWTONS.  EO-1's PPT was 860 µN.  LISA Pathfinder's
+# colloid thrusters were 5-30 µN each.  The pipeline was asking them for ~10 N.
+#
+# Note the asymmetry this closes, and it is the same one the user spotted:
+# LAUNCH is modelled as an integrated vehicle with a payload it can actually
+# lift, while IN-SPACE propulsion was modelled as a bare specific impulse.  One
+# side had a capacity limit and the other did not.
+#
+# Two columns fix it, and neither is a threshold — the mass does the work, the
+# same way propellant tankage disqualifies low-density propellants without
+# anyone naming a cutoff:
+#
+#   thruster_kg_per_n   Thruster-head mass per newton of thrust.  Module 4
+#                       derives the thrust its mission needs (T = ṁ·ve, which
+#                       is just momentum flux and owes nothing to efficiency)
+#                       and multiplies.  A device that makes µN per kilogram
+#                       reports thousands of tonnes of thruster and dies in the
+#                       rocket equation.  No cutoff, no judgement call.
+#
+#   thruster_efficiency Total thrust efficiency, replacing the single global
+#                       0.60 that every electric row shared.  This one is
+#                       nearly as decisive as the mass: a PPT converts about
+#                       8% of its input into jet power against a gridded ion
+#                       thruster's 70%, so it needs ~9x the array for the same
+#                       thrust — and the array is mass too.
+#
+# `thrust_scaling` records WHY a device lands where it does, and it is the real
+# physical divide:
+#
+#   continuous   Thrust comes from a plasma discharge or a beam whose area you
+#                can enlarge.  Scaling up means building a BIGGER device, so
+#                kg/N stays roughly flat with size and lands at 6-90 kg/N
+#                across every mature technology here.
+#   replicated   Thrust comes from discrete emitters, needles or pulses.
+#                Scaling up means building MORE devices, so kg/N is fixed by
+#                the single unit and never improves — 2,500-10,000 kg/N.
+#                Accion's own literature puts a cargo-scale electrospray at
+#                "millions of emitters"; that sentence was already in this
+#                table's notes field and nothing read it.
+#
+# Every figure below is thruster HEAD mass over demonstrated thrust, from a
+# flight or ground article.  The PPU is separate and scales with power — see
+# the "Power processing unit specific mass" ops row — because a PPU is a power
+# converter and does not care what it is feeding.
+#
+# ⚠️  The replicated figures are deliberately GENEROUS to the technology.
+# Electrospray is entered at 10,000 kg/N when ST7-DRS heads work out nearer
+# 20,000-100,000; the conclusion does not depend on which end you take, and
+# taking the favourable end means nobody can claim the result was engineered.
+#
+# ⚠️  Iodine is the judgement call in this table, and it matters because iodine
+# wins most of the catalog.  Its only FLIGHT unit is ThrustMe's 1.1 mN cubesat
+# thruster, which works out near 1,100 kg/N — but that is a scale artifact of a
+# 1U device, not a property of iodine.  Iodine runs in Hall and gridded
+# thrusters whose bodies are the same hardware xenon uses; what it genuinely
+# costs is a heated feed line and corrosion-tolerant materials.  So it is
+# entered as Hall-class mass with a penalty (60 against xenon Hall's 30), and
+# `status` cannot express that its cargo-scale heritage is ground-test only.
+# If you want to be harsh with iodine, this is the number to move — but move it
+# for a reason, and record the reason.
+_THRUSTER_SYSTEMS = {
+    # name fragment           kg/N     η     scaling        anchor
+    "Xenon  (Hall / ion)":      (54.0, 0.70, "continuous"),  # NEXT-C 12.7 kg / 236 mN, 70% total
+    "Krypton  (Hall)":          (35.0, 0.45, "continuous"),  # SPT-140 body, Kr ~85% of Xe thrust and ~10 pts less efficient
+    "Argon  (Hall / ion)":      (40.0, 0.40, "continuous"),  # same body again; Ar lower still
+    "Argon  (Hall / ion, cryogenic)": (40.0, 0.40, "continuous"),
+    "Iodine  (Hall / gridded)": (60.0, 0.45, "continuous"),  # see the iodine caveat above
+    "Water  (gridded ion / ECR)": (80.0, 0.35, "continuous"),  # ECR ion; water is hard to ionise cleanly
+    "Water  (electrothermal / resistojet)": (10.0, 0.75, "continuous"),  # resistojet: high thrust density, low Isp
+    "Hydrazine arcjet":         ( 6.0, 0.35, "continuous"),  # MR-509 1.5 kg / 258 mN
+    "Mercury ion  (RETIRED)":   (54.0, 0.65, "continuous"),  # gridded-ion class
+    "Nuclear electric  (NEP, xenon)": (54.0, 0.70, "continuous"),
+    "VASIMR  (argon, variable Isp)":  (53.0, 0.50, "continuous"),  # VX-200 ~300 kg / 5.7 N
+    "MPD  (lithium magnetoplasmadynamic)": (40.0, 0.40, "continuous"),
+    # ── Concepts.  UNANCHORED, and they are here so the guard below cannot be
+    # satisfied by silence.  Both are gated out of the default search by
+    # `operational_propellants_only`; if you ever ungate them, these two
+    # numbers are the ones to distrust first.  Direct fusion drive is pinned to
+    # Princeton's PFRC-2 sketch (a few newtons from a ~10 t engine).  For
+    # antimatter there is no engineering basis whatsoever, so it is given the
+    # same figures rather than anything flattering — an unanchored row should
+    # never be the reason something wins.
+    "Direct fusion drive":      (2_000.0, 0.50, "continuous"),
+    "Antimatter-catalysed":     (2_000.0, 0.50, "continuous"),
+    # ── Replicated: thrust per EMITTER, so mass is linear in thrust forever ──
+    "Electrospray  (ionic liquid)": (10_000.0, 0.65, "replicated"),  # TILE-3 ~100 µN/kg-class; generous end
+    "FEEP  (indium field emission)": (2_500.0, 0.60, "replicated"),  # Enpulsion IFM Nano 0.35 mN / 0.9 kg
+    "PPT  (PTFE pulsed plasma)":     (5_000.0, 0.08, "replicated"),  # EO-1 PPT 860 µN / 4.9 kg; PPT efficiency is 5-13%
+}
+
+
+def _apply_thruster_data(df: pd.DataFrame) -> None:
+    """Attach device-level columns to the propellant frame, in place.
+
+    Chemical and propellantless rows get NaN — they are not electric, Module 4
+    never sizes a power plant for them, and a number there would imply a
+    constraint that does not apply.  Any ELECTRIC row missing from
+    `_THRUSTER_SYSTEMS` raises rather than defaulting: a silent default is how
+    a micronewton thruster got flown as a cargo tug in the first place.
+
+    "Electric" is tested as `dv_penalty_factor > 1`, which is the SAME test
+    Module 4 uses to decide whether to size a power plant (`is_electric` in
+    `_evaluate_combo_at_ratio`).  Keying off `type` instead would have let
+    `nuclear_electric` through — it is electric propulsion, it draws the
+    penalty, and it is not spelled "electric".
+    """
+    kg_per_n, eff, scaling = [], [], []
+    for _, row in df.iterrows():
+        name = str(row["name"])
+        entry = _THRUSTER_SYSTEMS.get(name)
+        if entry is None:
+            if float(row.get("dv_penalty_factor", 1.0) or 1.0) > 1.0:
+                raise KeyError(
+                    f"electric propellant {name!r} has no _THRUSTER_SYSTEMS "
+                    f"entry — add one with an anchor rather than letting "
+                    f"Module 4 size it on power alone"
+                )
+            kg_per_n.append(float("nan"))
+            eff.append(float("nan"))
+            scaling.append(None)
+            continue
+        kg_per_n.append(entry[0])
+        eff.append(entry[1])
+        scaling.append(entry[2])
+    df["thruster_kg_per_n"]   = kg_per_n
+    df["thruster_efficiency"] = eff
+    df["thrust_scaling"]      = scaling
+
+
 _STORAGE_CLASS_TANK_MULT = {
     # class            × base   anchor
     "storable_liquid":   1.00,  # 0.025 kg/L → NTO at 1.45 kg/L is 1.7% of propellant mass
@@ -6040,7 +6257,41 @@ _COMPONENTS = {
     "MMH":       {"density_kg_per_L": 0.870, "cost_usd_per_kg":    100.00, "storage_class": "storable_liquid"},
     "Hydrazine": {"density_kg_per_L": 1.010, "cost_usd_per_kg":     75.00, "storage_class": "storable_liquid"},  # DOD ref + handling
     "Xenon":     {"density_kg_per_L": 2.000, "cost_usd_per_kg": 10_000.00, "storage_class": "supercritical_gas", "pressure_mpa": 10.0},
-    "Argon":     {"density_kg_per_L": 1.395, "cost_usd_per_kg":     10.00, "storage_class": "mild_cryogen"},     # liquid NBP (cryogenic storage)
+    # v1.10.0.  Argon used to be ONE component carrying liquid-argon density
+    # (1.395 kg/L, normal boiling point 87.3 K) with the storage class of a
+    # cryogen and a boil-off of zero — the row's own two comments said "liquid
+    # NBP (cryogenic storage)" and "stored supercritical at ambient
+    # temperature" three lines apart.  You cannot have both: 1.395 kg/L only
+    # exists at 87 K, and at 87 K it boils.  The combination handed argon the
+    # lightest tank of any gas in the table AND exemption from the hold-time
+    # penalty every other cryogen pays, which is a free resource rather than a
+    # propellant.  Split into the two real articles instead, and let Module 4's
+    # per-asteroid search decide which one a mission flies.
+    #
+    #   ArgonSC   what has actually flown.  Every noble-gas EP system ever
+    #             launched — xenon on Dawn/BepiColombo/SMART-1, krypton on
+    #             Starlink v1, argon on Starlink V2 — stores its propellant
+    #             supercritical in a COPV at ambient temperature.  Density is
+    #             derived below, not asserted.
+    #   ArgonLIQ  the large-stage architecture: liquid at 87.3 K under MLI,
+    #             which is how you would really feed a multi-tonne NEP stage.
+    #             Studied, never flown, so the propellant row built on it is
+    #             tagged `development` and the default search excludes it.
+    #
+    # ArgonSC density: Peng-Robinson at 293.15 K / 18 MPa (the same bottle
+    # pressure as the krypton row) gives Z = 0.919 and ρ = 0.321 kg/L; a
+    # generalised-compressibility reading at Tr = 1.945, Pr = 3.70 gives
+    # Z ≈ 0.99 and ρ = 0.298.  0.30 is the round figure between them.
+    #
+    # Note the result barely moves with pressure, and that is the physics
+    # rather than a coincidence: COPV mass goes as 1.5·p/(PV/W) and stored
+    # density goes as p·M/(ZRT), so the tank FRACTION is ~1.5·Z·R·T/(M·(PV/W))
+    # — pressure cancels and molar mass is what is left.  Argon at 30 MPa pays
+    # 22.3% against 22.9% at 18 MPa.  Xenon 1.9% / krypton 12.5% / argon 22.9%
+    # is just M = 131.3 / 83.8 / 39.9 read backwards, and it is the whole
+    # reason a cheap propellant is not automatically a good one.
+    "ArgonSC":   {"density_kg_per_L": 0.300, "cost_usd_per_kg":     10.00, "storage_class": "supercritical_gas", "pressure_mpa": 18.0},
+    "ArgonLIQ":  {"density_kg_per_L": 1.395, "cost_usd_per_kg":     10.00, "storage_class": "mild_cryogen"},     # liquid at NBP 87.3 K
 
     # ── v1.9.0 additions ─────────────────────────────────────────────────────
     "UDMH":      {"density_kg_per_L": 0.793, "cost_usd_per_kg":     80.00, "storage_class": "storable_liquid"},
@@ -6289,23 +6540,33 @@ PROPELLANTS_REFERENCE: List[dict] = [
         "first_flight":          2023,   # Starlink V2 mini
         "restartable":           True,
         "propellantless":        False,
-        "storage_class":         "mild_cryogen",
-        "tank_kg_per_L":         _tank_kg_per_L("mild_cryogen"),
+        "storage_class":         "supercritical_gas",
+        "tank_kg_per_L":         _tank_kg_per_L("supercritical_gas", 18.0),
         "isru_feed_kg_per_kg":   None,
         "isru_feed_material":    None,
         "dv_penalty_factor":     _LOW_THRUST_DV_PENALTY,
-        "boiloff_pct_per_day":   0.0,   # Stored supercritical at ambient temperature; no boil-off.
+        "boiloff_pct_per_day":   0.0,   # Ambient-temperature COPV; nothing to boil.
         "isp_vac_s":             1_500,
         "exhaust_vel_m_per_s":   1_500 * G0_M_S2,
-        "density_kg_per_L":      _COMPONENTS["Argon"]["density_kg_per_L"],
-        "ref_cost_usd_per_kg":   _COMPONENTS["Argon"]["cost_usd_per_kg"],
-        "ref_cost_usd_per_L":    _COMPONENTS["Argon"]["cost_usd_per_kg"]
-                                 * _COMPONENTS["Argon"]["density_kg_per_L"],
+        "density_kg_per_L":      _COMPONENTS["ArgonSC"]["density_kg_per_L"],
+        "ref_cost_usd_per_kg":   _COMPONENTS["ArgonSC"]["cost_usd_per_kg"],
+        "ref_cost_usd_per_L":    _COMPONENTS["ArgonSC"]["cost_usd_per_kg"]
+                                 * _COMPONENTS["ArgonSC"]["density_kg_per_L"],
         "yfinance_proxy":        None,
         "reference_year":        _REF_YEAR_PROP,
         "notes": "Starlink-V2 thruster choice (SpaceX claims 2.4× thrust, 1.5× Isp "
                  "of their previous Kr design).  Bulk industrial $7-15/kg per "
-                 "SETS Space 2024; used $10/kg midpoint.",
+                 "SETS Space 2024; used $10/kg midpoint.\n"
+                 "v1.10.0: stored SUPERCRITICAL at 18 MPa and ambient "
+                 "temperature, 0.30 kg/L, which is what has flown — no spacecraft "
+                 "has ever carried cryogenic argon.  Until v1.10.0 this row took "
+                 "liquid-argon density (1.395 kg/L, 87.3 K) and a boil-off of "
+                 "zero at the same time, which gave it the lightest tank of any "
+                 "gas here and no cryogenic hold penalty.  Honestly stored it "
+                 "pays 22.9% of its own mass in COPV against krypton's 12.5% and "
+                 "xenon's 1.9% — argon is the LIGHTEST noble gas, so it is the "
+                 "worst of the three to bottle, and $10/kg does not buy that "
+                 "back.  The cryogenic article is a separate row below.",
     },
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -6971,13 +7232,13 @@ PROPELLANTS_REFERENCE: List[dict] = [
         "isru_feed_kg_per_kg":   None,
         "isru_feed_material":    None,
         "dv_penalty_factor":     _LOW_THRUST_DV_PENALTY,
-        "boiloff_pct_per_day":   0.0,
+        "boiloff_pct_per_day":   _LAR_BOILOFF_PCT_PER_DAY,
         "isp_vac_s":             4_000,
         "exhaust_vel_m_per_s":   4_000 * G0_M_S2,
-        "density_kg_per_L":      _COMPONENTS["Argon"]["density_kg_per_L"],
-        "ref_cost_usd_per_kg":   _COMPONENTS["Argon"]["cost_usd_per_kg"],
-        "ref_cost_usd_per_L":    _COMPONENTS["Argon"]["cost_usd_per_kg"]
-                                 * _COMPONENTS["Argon"]["density_kg_per_L"],
+        "density_kg_per_L":      _COMPONENTS["ArgonLIQ"]["density_kg_per_L"],
+        "ref_cost_usd_per_kg":   _COMPONENTS["ArgonLIQ"]["cost_usd_per_kg"],
+        "ref_cost_usd_per_L":    _COMPONENTS["ArgonLIQ"]["cost_usd_per_kg"]
+                                 * _COMPONENTS["ArgonLIQ"]["density_kg_per_L"],
         "yfinance_proxy":        None,
         "reference_year":        _REF_YEAR_PROP,
         "notes": "Ad Astra's VX-200SS ran 100 hours at 80 kW in 2021.  RF-heated "
@@ -6986,7 +7247,49 @@ PROPELLANTS_REFERENCE: List[dict] = [
                  "which is precisely the freedom a fixed-Isp table cannot "
                  "express.  Modelled here at a single 4,000 s point, which "
                  "understates it; capturing the variable-Isp advantage needs the "
-                 "same trajectory optimiser the sails do.",
+                 "same trajectory optimiser the sails do.\n"
+                 "Cryogenic argon feed, because a 100 kW-class stage moves "
+                 "propellant by the tonne and no COPV is a sensible way to carry "
+                 "tonnes of a gas this light.  v1.10.0: it therefore pays "
+                 "cryogenic boil-off, which it was exempt from before.",
+    },
+    {
+        "name":                  "Argon  (Hall / ion, cryogenic)",
+        "type":                  "electric",
+        "status":                "development",
+        "trl":                   4,
+        "first_flight":          None,
+        "restartable":           True,
+        "propellantless":        False,
+        "storage_class":         "mild_cryogen",
+        "tank_kg_per_L":         _tank_kg_per_L("mild_cryogen"),
+        "isru_feed_kg_per_kg":   None,
+        "isru_feed_material":    None,
+        "dv_penalty_factor":     _LOW_THRUST_DV_PENALTY,
+        "boiloff_pct_per_day":   _LAR_BOILOFF_PCT_PER_DAY,
+        "isp_vac_s":             1_500,
+        "exhaust_vel_m_per_s":   1_500 * G0_M_S2,
+        "density_kg_per_L":      _COMPONENTS["ArgonLIQ"]["density_kg_per_L"],
+        "ref_cost_usd_per_kg":   _COMPONENTS["ArgonLIQ"]["cost_usd_per_kg"],
+        "ref_cost_usd_per_L":    _COMPONENTS["ArgonLIQ"]["cost_usd_per_kg"]
+                                 * _COMPONENTS["ArgonLIQ"]["density_kg_per_L"],
+        "yfinance_proxy":        None,
+        "reference_year":        _REF_YEAR_PROP,
+        "notes": "v1.10.0.  The other half of the argon split — same 1,500 s Hall "
+                 "thruster as the operational row, fed from a liquid tank at "
+                 "87.3 K instead of an 18 MPa bottle.  It is the architecture a "
+                 "multi-tonne stage would actually want: 1.395 kg/L against "
+                 "0.30 buys a 2.1% tank against 22.9%, which is the single "
+                 "biggest storage swing in this table.\n"
+                 "DEVELOPMENT, not operational, and the distinction is the point. "
+                 "Liquid argon is routine on the ground and has never flown on a "
+                 "spacecraft; no EP system has ever carried a cryogen.  Tagging "
+                 "it operational would let the default search fly an article "
+                 "nobody has built, which is exactly what the pre-v1.10.0 argon "
+                 "row did by accident.  The honest version of that row is these "
+                 "two, and the tank saving now costs what it really costs: "
+                 "boil-off over a multi-year hold, on the same terms as every "
+                 "other cryogen here.",
     },
     {
         "name":                  "MPD  (lithium magnetoplasmadynamic)",
@@ -7606,6 +7909,35 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
         "reference_year":   _REF_YEAR_OPS,
     },
     {
+        "category":         "Propellant tank recurring cost",
+        "unit":             "USD per kg of tank dry mass",
+        "value":              6_000,
+        "range_low":          3_000,
+        "range_high":        25_000,
+        "notes": "v1.10.0.  Module 3 has derived tank MASS per propellant since "
+                 "v1.9.0 (tank_kg_per_L) and Module 4 has flown it through the "
+                 "rocket equation since then — but nothing ever priced it, so "
+                 "the tank paid its launch $/kg and cost nothing to build.  That "
+                 "is the same mass-without-a-price asymmetry as the free "
+                 "electric-propulsion stage, just smaller.\n"
+                 "Derived from Centaur III, the closest flight article: ~1,880 kg "
+                 "of stage structure, ~$30M for the stage against ~$20M for the "
+                 "RL10 it carries, so ~$10M of structure ≈ $5,300/kg.  Rounded "
+                 "up to $6,000 and quoted as a LOWER BOUND, consistent with the "
+                 "rest of this table: Centaur is a mature production article and "
+                 "a deep-space tank holding propellant for four years needs "
+                 "insulation Centaur does not carry.  The upper end of the range "
+                 "is where a one-off, long-duration cryogenic tank plausibly "
+                 "lands.\n"
+                 "It is deliberately the CHEAPEST hardware rate here — below the "
+                 "$60k/kg passive berthing adapter — because a tank is the "
+                 "simplest article in the mission: no mechanisms, no docking "
+                 "interface, no re-entry.  Do not read its small effect as a "
+                 "reason to drop it; the point of the line is that every "
+                 "kilogram in the mass cascade has one.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
         "category":         "Mission operations",
         "unit":             "USD per mission-year",
         "value":             31_400_000,        # OSIRIS-REx $283M / 9 yr
@@ -7729,7 +8061,32 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
                  "is carried separately by the 'Power system specific mass' row "
                  "and scales 1/r^2.  NASA NEXT-C: 7 kW thruster ~13.5 kg + PPU "
                  "~34 kg ≈ 7 kg/kW.  Gateway AEPS: 12.5 kW Hall, similar class. "
-                 "8 kg/kW allows for feed system and structure.",
+                 "8 kg/kW allows for feed system and structure.\n"
+                 "⚠️  SUPERSEDED for Module 4 v1.12.0 and retained as the "
+                 "fallback for a stale catalog.  Lumping thruster and PPU into "
+                 "one per-kW figure is what let a micronewton device be sized "
+                 "as a cargo tug: buy the kilowatts and you got the thrust.  "
+                 "They scale on different quantities — a PPU is a power "
+                 "converter (kg/kW, the row below) and a thruster head makes "
+                 "momentum (kg/N, per technology, in _THRUSTER_SYSTEMS).",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Power processing unit specific mass",
+        "unit":             "kg per kW of input electrical power",
+        "value":            4.7,
+        "range_low":        3.0,
+        "range_high":       8.0,
+        "notes": "v1.10.0.  The PPU alone, split out of the combined row above. "
+                 "NASA NEXT-C: 34.5 kg of PPU at 7.4 kW = 4.66 kg/kW.  A PPU "
+                 "converts bus power to the discharge and does not care what it "
+                 "is feeding, so it is the half of the old 8 kg/kW that really "
+                 "does scale with POWER.  The other half — the thruster head — "
+                 "scales with THRUST and is per-technology, because that is "
+                 "exactly where a pulsed plasma thruster and a gridded ion "
+                 "engine stop being interchangeable.  Together they reproduce "
+                 "NEXT-C: 4.7 x 7.4 + 54 x 0.236 = 47.5 kg against 47.2 kg "
+                 "measured (12.7 kg thruster + 34.5 kg PPU).",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
@@ -8598,7 +8955,10 @@ def load_launch_vehicles() -> pd.DataFrame:
 def load_propellants() -> pd.DataFrame:
     print("\n🔥  Loading propellants reference …")
     df = pd.DataFrame(PROPELLANTS_REFERENCE)
-    print(f"     ✅  {len(df)} propellant systems")
+    _apply_thruster_data(df)
+    n_rep = int((df["thrust_scaling"] == "replicated").sum())
+    print(f"     ✅  {len(df)} propellant systems "
+          f"({n_rep} thrust by replication — see _THRUSTER_SYSTEMS)")
     return df
 
 
@@ -9419,7 +9779,24 @@ class CalcConfig:
     # has asked for this since v1.4.0 — its 27 t to escape EXCEEDS its 21 t to
     # GTO precisely because it assumes refuelling — and until now its escape
     # payload was priced at one $90M launch.
+    #
+    # v1.12.0: the charge is real but it belongs to the ESCAPE-DIRECT scenario,
+    # which is what the Module 3 note actually asked for and which this module
+    # does not have.  Stage 4 reads `payload_leo_kg` / `usd_per_kg_to_leo` and
+    # nothing else — the vehicle is a LEO lifter and the stack departs on its
+    # own outbound stage — so no mission here is ever refuelled, and v1.11.0
+    # was billing $1.08B for a capability it never used.  Setting
+    # `escape_direct_launch` True re-arms it, and nothing does that yet.
     charge_tanker_flights:     bool  = True
+    escape_direct_launch:      bool  = False
+
+    # LAUNCH ACCELERATION (v1.12.0).  Module 3's `max_accel_g` exists to
+    # disqualify the kinetic launchers and was read by nothing.  Spacecraft
+    # structures qualify to single-digit g and every rocket in the table is
+    # 6 g or less; SpinLaunch is 10,000 g, a light-gas gun 30,000, StarTram 30.
+    # 15 g leaves every real launcher untouched with margin and excludes all
+    # three, which is exactly what the column was added for.
+    max_payload_accel_g:       float = 15.0
 
     # ─── PER-ASTEROID Δv  (v1.4.0) ───────────────────────────────────────────
     # When True, each asteroid's Δv is derived from its own orbital elements
@@ -10114,7 +10491,81 @@ class CalcConfig:
     #         New output columns: tank_mass_frac, m_tank_return_kg,
     #         m_tank_outbound_kg, propellant_storage_class, power_source,
     #         tanker_flights, tanker_cost_usd, isru_feed_material.
-    pipeline_version: str = "1.11.0"
+    # 1.12.0 — a realism audit.  Every item is a term that existed on one side
+    #         of the model and not the other, and all of them move the answer
+    #         the same way: WORSE.  Full catalog at cislunar, raw 31.7712x ->
+    #         33.2342x (+4.60%), beneficiated 22.4665x -> 23.9169x (+6.46%).
+    #         Cislunar is still the best case and its winner is unchanged
+    #         (7753 B, now concentrating 5.311x).
+    #         ⚠️  THE RATIOS ARE NOT THE HEADLINE.  Evaluable rows HALVED,
+    #         ~31,000 -> ~15,500, because half the catalog was closing its mass
+    #         budget on a micronewton thruster sized as a cargo tug.  Those
+    #         missions were never physical.  Any per-row comparison against a
+    #         v1.11.0 catalog compares different populations.
+    #         • THE DEVICE WAS NEVER MODELLED, ONLY THE PROPELLANT — the
+    #           largest correction here.  Launch is an integrated vehicle with
+    #           a payload it can lift; in-space propulsion was a bare Isp.  One
+    #           side had a capacity limit and the other did not.  The EP stage
+    #           was sized on POWER alone, so 31.8% of raw winners were PULSED
+    #           PLASMA THRUSTERS (EO-1: 860 uN) and 24.3% ELECTROSPRAY (ST7-DRS:
+    #           5-30 uN each), being asked for ~7-10 N.  Fixed by MASS, not by a
+    #           threshold: `ep_thrust_required_n` (T = m_prop*ve/t, which owes
+    #           nothing to efficiency) times Module 3's per-technology
+    #           `thruster_kg_per_n`.  A uN/kg device reports thousands of tonnes
+    #           of thruster and fails to close on its own, exactly as a
+    #           low-density propellant does on tankage.  `thruster_efficiency`
+    #           likewise replaces one shared 0.60 — a PPT is ~8%, a gridded ion
+    #           thruster 70%, so the array differs ~9x.  The lumped 8 kg/kW
+    #           "thruster + PPU" row is split: PPU scales with POWER (4.7 kg/kW,
+    #           NEXT-C), thruster head with THRUST.  Zero replicated-scaling
+    #           devices survive; chemical propulsion stops being extinct
+    #           (hydrolox 5.5% of rows).
+    #         ⚠️  The ARGON fix below moved NEITHER headline cell — the best
+    #         missions at cislunar were never flying argon — while changing the
+    #         chosen propellant for a quarter of the catalog (argon 25.0% ->
+    #         2.4% of raw winners, 27.3% -> 0.0% beneficiated) and making 1,059
+    #         bodies infeasible.  Read that before using a single best-case
+    #         cell as a regression test: it is blind to a change that is wrong
+    #         everywhere except at the top.  The propellant-share breakdown and
+    #         the evaluable-row count are what caught it.
+    #         • THE CARGO-WATER ARRAY WAS PRICED AND NEVER FLOWN.  Liberation
+    #           energy for water sold as cargo was added to `processing_power_w`
+    #           AFTER the cascade had been built, so `power_system_kg` came out
+    #           0.8-2.7% above the figure inside `hardware_total_kg` on every
+    #           row that liberated any — and the comment there asserted the
+    #           cascade had already flown it.  97 of 357 sample rows violated
+    #           `hardware_total_kg == mining_hardware_kg + power_system_kg +
+    #           ep_system_kg`, by up to 408 kg.  Now zero.  This is the free-EP
+    #           -stage bug pointing the other way: a price with no mass.
+    #           A RAW mission to an icy body was the worse case — it paid for an
+    #           array and flew none of it, because the sizing loop skipped the
+    #           term entirely unless beneficiating.
+    #         • PROPELLANT TANKAGE HAD NO COST LINE.  Flown through the rocket
+    #           equation since v1.11.0, charged its launch $/kg, and built for
+    #           free.  ~0.003-0.1% of mission cost; kept because the recurring
+    #           defect in this codebase is a mass in one cascade with no entry
+    #           in the other, and those are only found by checking every term.
+    #         • LAUNCH INSURANCE UNDER-BOOKED THE SPACECRAFT.  Book value was
+    #           rig + capsule, which was the whole vehicle in v1.4.0.  It never
+    #           picked up the v1.5.0 power plant, the v1.10.0-priced electric
+    #           stage or v1.11.0 tankage — a 300 kW electric stage is a
+    #           nine-figure article and it was flying uninsured.
+    #         • THE TANKER CHARGE WAS KEYED TO THE WRONG SCENARIO.  Module 3's
+    #           note asked for it "in the ESCAPE-DIRECT scenario"; v1.11.0
+    #           levied it on every mission.  This module reads `payload_leo_kg`
+    #           and `usd_per_kg_to_leo` and nothing else, so the vehicle is a
+    #           LEO lifter and the stack departs on its own stage — no mission
+    #           here is refuelled.  Gated behind `escape_direct_launch`, which
+    #           nothing sets.  This is the one item that runs the other way, and
+    #           it is currently inert because Starship is `development`.
+    #         • `max_accel_g` WAS EXPORTED AND READ BY NOBODY.  Module 3 added
+    #           it in v1.9.0 expressly to disqualify the kinetic launchers.
+    #           Only maturity was excluding them; ungated, a 10,000 g slingshot
+    #           at $6,250/kg wins on price and powders the rig.
+    #           `max_payload_accel_g` = 15 g.
+    #         New config: escape_direct_launch, max_payload_accel_g.
+    #         New output column: tank_cost_usd.
+    pipeline_version: str = "1.12.0"
 
 
 CALC_CONFIG = CalcConfig()
@@ -10294,6 +10745,8 @@ _MODULE3_REQUIRED = {
         "status":         "the maturity gate cannot fire; development and concept rows may enter the search",
         "restartable":    "solid motors are not excluded, and a solid cannot fire a return burn",
         "propellantless": "sails are not excluded and report an unbounded payload",
+        "thruster_kg_per_n":   "the electric stage is sized on POWER alone — micronewton devices (PPT, electrospray, FEEP) fly as multi-tonne cargo tugs",
+        "thruster_efficiency": "every electric thruster reverts to one shared 60% efficiency; a PPT is really ~8% and needs ~9x the array",
     },
     "vehicles": {
         "tanker_flights_for_escape": "orbital refuelling is not charged; a refuelled escape payload is priced at one launch",
@@ -10847,6 +11300,33 @@ def ep_power_required_w(
     return m_prop_kg * ve * ve / (2.0 * efficiency * seconds)
 
 
+def ep_thrust_required_n(
+    m_prop_kg: float,
+    isp_s:     float,
+    thrust_yr: float,
+) -> float:
+    """Thrust needed to expend `m_prop_kg` within `thrust_yr` (newtons).
+
+        ṁ = m_prop / t        T = ṁ · ve
+
+    v1.12.0.  This is the quantity the DEVICE has to produce, and it is worth
+    noticing that it owes nothing to efficiency — thrust is momentum flux, so
+    T = m_prop·ve/t exactly.  Efficiency only decides how much electrical power
+    you must supply to get it, which is why the two constraints are separate
+    and why sizing on power alone missed one of them entirely.
+
+    Until v1.12.0 nothing computed this. The EP stage was sized on power, and
+    power buys thrust at a rate the rocket equation was happy to assume any
+    device could deliver — so the search flew pulsed plasma thrusters and
+    electrospray emitters, which have flown producing MICRONEWTONS, as
+    ten-newton cargo tugs.  See `_THRUSTER_SYSTEMS` in Module 3.
+    """
+    if thrust_yr <= 0 or m_prop_kg <= 0 or isp_s <= 0:
+        return 0.0
+    seconds = thrust_yr * 365.25 * 24.0 * 3600.0
+    return m_prop_kg * (isp_s * G0_M_S2) / seconds
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # LAUNCH WINDOWS  (v1.7.0)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -10903,6 +11383,44 @@ def processing_power_w(
         return 0.0
     energy_wh = dig_wh_per_kg * max(feed_kg, 0.0) + benef_wh_per_kg * max(concentrate_kg, 0.0)
     return energy_wh / (duration_yr * 365.25 * 24.0)
+
+
+def _cargo_water_kg(
+    asteroid_row: Row,
+    phases:       list,
+    payload_kg:   float,
+    feed_kg:      float,
+    beneficiate:  bool,
+    config:       CalcConfig,
+) -> float:
+    """Water in the delivered CARGO, which has to be baked out of the rock.
+
+    v1.12.0.  Factored out of `_evaluate_combo_at_ratio` because it is now
+    needed in two places — inside the sizing loop, where it sets how much array
+    the mission has to FLY, and again after the loop, where the mission
+    actually flown is priced.  Those two were previously different expressions
+    and the second one was larger, so the array for baking cargo water was
+    charged in the ledger and never launched.  One function, called twice, is
+    what stops that recurring.
+
+    Concentrating changes the answer: the knapsack decides how much water ends
+    up in the hold, and it will happily leave water behind for a denser-value
+    phase.  Not concentrating means the cargo is the body's own composition, so
+    the ice fraction applies directly.
+    """
+    if payload_kg <= 0:
+        return 0.0
+    if beneficiate:
+        if not phases:
+            return 0.0
+        mix = optimal_payload_mix(
+            payload_kg, feed_kg, phases, config.beneficiation_recovery,
+        )
+        return float(mix["mix_kg"].get("water", 0.0))
+    ice_frac = asteroid_row.get("comp_ice_fraction")
+    if ice_frac is None or pd.isna(ice_frac):
+        return 0.0
+    return payload_kg * float(ice_frac)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -11939,11 +12457,16 @@ def _ops_value(ops_df: pd.DataFrame, category: str, default: float = 0.0) -> flo
 _OPS_SIZING_CACHE: Tuple[Optional[pd.DataFrame], Optional[Tuple[float, ...]]] = (None, None)
 
 
-def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, float, float, float, float, float]:
-    """The six Module 3 rows the coupled sizing loop needs, resolved once.
+def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, float, float, float, float, float, float]:
+    """The seven Module 3 rows the coupled sizing loop needs, resolved once.
 
         (dig Wh/kg, beneficiation Wh/kg, array W/kg at 1 AU,
-         EP efficiency, EP thruster+PPU kg/kW, RTG W/kg)
+         EP efficiency, EP thruster+PPU kg/kW, RTG W/kg, PPU-only kg/kW)
+
+    The last two of those are fallbacks rather than the primary path as of
+    v1.12.0: EP efficiency and thruster mass are per-technology now (Module 3's
+    `_THRUSTER_SYSTEMS`), and the shared constants are what a stale Module 3
+    catalog reverts to.
 
     None of them depends on the asteroid, the vehicle or the propellant, but
     they were being looked up inside `_evaluate_combo_at_ratio` — which runs
@@ -11964,6 +12487,7 @@ def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, float, float, fl
         _ops_value(ops_df, "Electric propulsion efficiency", default=0.60),
         _ops_value(ops_df, "Electric thruster + PPU specific mass", default=8.0),
         _ops_value(ops_df, "RTG specific power", default=5.0),
+        _ops_value(ops_df, "Power processing unit specific mass", default=4.7),
     )
     _OPS_SIZING_CACHE = (ops_df, vals)
     return vals
@@ -12023,25 +12547,37 @@ def mission_cost_usd(
     cost_per_kg_prop = float(propellant["cost_usd_per_kg"])
     launch_cost      = float(mass_cascade["m_launch"]) * float(vehicle["usd_per_kg_to_leo"])
 
-    # ── Orbital refuelling (v1.11.0) ─────────────────────────────────────────
+    # ── Orbital refuelling (v1.11.0, re-keyed v1.12.0) ───────────────────────
     # Some vehicles quote a beyond-LEO payload that assumes being refuelled in
     # orbit first.  Starship is the case in this table, and the tell is in its
     # own numbers: 27 t to escape against 21 t to GTO.  A payload cannot grow
     # with departure energy under any propulsion system — unless the escape
     # figure is for a vehicle that was topped up after reaching orbit.
     #
-    # Module 3's row has said so in prose since v1.4.0, including the fix
-    # ("Module 4 should add ~$90M × N_tankers"), and Module 4 never did.  The
-    # count is now a column, `tanker_flights_for_escape`, and each tanker is a
-    # full flight of the same vehicle at its own list price.  At 12 flights
-    # that is $1.08B on top of a $90M launch — which is the difference between
-    # Starship being the obvious answer for a deep-space mission and being one
-    # candidate among several.
+    # Module 3's row has said so in prose since v1.4.0 and named the fix:
+    # "Module 4 should add ~$90M × N_tankers to the ESCAPE-DIRECT SCENARIO for
+    # an apples-to-apples comparison."  v1.11.0 implemented the arithmetic and
+    # missed the scenario — it levied the charge on every mission.
+    #
+    # This module has no escape-direct scenario.  It reads `payload_leo_kg` and
+    # `usd_per_kg_to_leo` and nothing else (grep the file): the launch vehicle
+    # delivers the stack to LEO, and the stack departs on its own outbound
+    # stage, which is sized by the rocket equation a few dozen lines up.
+    # Starship's 100 t to LEO needs no tankers — refuelling is what buys the
+    # ESCAPE figure, which is never read.  So charging 12 flights was billing
+    # $1.08B for a capability the mission does not use.
+    #
+    # It is kept, wired and gated rather than deleted, because the day this
+    # module gains a direct-injection architecture the charge becomes correct
+    # and the column is already there.  `escape_direct_launch` is the switch;
+    # nothing sets it today, which is the honest state of affairs.
     tanker_flights = int(vehicle.get("tanker_flights_for_escape", 0) or 0)
-    if config.charge_tanker_flights and tanker_flights > 0:
+    escape_direct  = bool(getattr(config, "escape_direct_launch", False))
+    if config.charge_tanker_flights and escape_direct and tanker_flights > 0:
         tanker_cost = tanker_flights * float(vehicle.get("list_price_usd", 0.0) or 0.0)
     else:
         tanker_cost = 0.0
+        tanker_flights = 0 if not escape_direct else tanker_flights
     launch_cost += tanker_cost
 
     outbound_prop_cost = float(mass_cascade["m_outbound_prop"]) * cost_per_kg_prop
@@ -12147,8 +12683,29 @@ def mission_cost_usd(
                           + ep_kw * ep_drive_per_kw) * lc
     else:
         ep_system_cost = 0.0
+    # ── Propellant tankage (v1.12.0) ─────────────────────────────────────────
+    # Module 3 has derived tank mass per propellant since v1.9.0 and this
+    # module has flown it through the rocket equation ever since — outbound
+    # tank staged at the asteroid, return tank carried home — but nothing ever
+    # bought one.  The tank paid its launch $/kg (it is inside `m_launch`) and
+    # was manufactured for free.
+    #
+    # It is a small number, ~0.003-0.1% of mission cost, and that is not the
+    # point: the recurring defect in this codebase is a mass in one cascade
+    # with no entry in the other, and it is only ever found by checking every
+    # term rather than the big ones.  The rate is the cheapest hardware line in
+    # Module 3 because a tank is the simplest article in the mission.
+    tank_mass = (float(mass_cascade.get("m_tank_return", 0.0))
+                 + float(mass_cascade.get("m_tank_outbound", 0.0)))
+    if tank_mass > 0:
+        tank_per_kg = _ops_value(
+            ops_df, "Propellant tank recurring cost", default=6_000.0,
+        )
+        tank_cost = tank_mass * tank_per_kg * lc
+    else:
+        tank_cost = 0.0
     hardware_cost           = (mining_rig_cost + capsule_cost + power_system_cost
-                               + ep_system_cost)
+                               + ep_system_cost + tank_cost)
 
     # Mission ops × duration  (per-asteroid duration from Δv estimator)
     ops_per_year = _ops_value(ops_df, "Mission operations", default=31_400_000.0)
@@ -12175,11 +12732,22 @@ def mission_cost_usd(
     liability_cost  = _ops_value(ops_df, "Third-party liability insurance",  default=1_500_000.0)
 
     # Launch insurance — percent of (launch + spacecraft book value).
-    # Spacecraft book value at launch = recurring hardware cost (mining rig +
-    # capsule).  Gross value of future revenue is NOT insured — insurance
-    # underwriters cover replacement cost of the launched asset only.
+    # Gross value of future revenue is NOT insured — underwriters cover the
+    # replacement cost of the launched asset only.
+    #
+    # v1.12.0: that asset is everything on the rocket, and the book value had
+    # drifted behind the mass cascade.  It listed the mining rig and the
+    # capsule, which was the whole spacecraft in v1.4.0 — but v1.5.0 added a
+    # beneficiation power plant, v1.7.0 an electric stage that v1.10.0 finally
+    # priced at $1.5M/kW, and v1.9.0 propellant tankage.  A 300 kW electric
+    # stage is a nine-figure article and it was being flown uninsured.
+    #
+    # Note the rig enters at its FULL build cost, not the amortised share:
+    # losing it on ascent destroys the whole unit however many missions were
+    # meant to share it.  Everything else is per-mission already.
     launch_ins_pct        = _ops_value(ops_df, "Launch insurance", default=10.0) / 100.0
-    spacecraft_book_value = mining_rig_cost_total + capsule_cost
+    spacecraft_book_value = (mining_rig_cost_total + capsule_cost
+                             + power_system_cost + ep_system_cost + tank_cost)
     launch_insurance_cost = launch_ins_pct * (launch_cost + spacecraft_book_value)
 
     # Spacecraft bus NRE amortised across N missions, less the share already
@@ -12261,6 +12829,8 @@ def mission_cost_usd(
         "capsule_cost":          capsule_cost,           # per-mission portion
         "power_system_cost":     power_system_cost,      # beneficiation plant
         "ep_system_cost":        ep_system_cost,         # electric stage
+        "tank_cost":             tank_cost,              # propellant tankage
+        "tank_mass_kg":          tank_mass,
         "rig_terminal_value":    rig_terminal_value,
         "missions_sharing_rig":  float(missions_sharing_rig),
         "ops_cost":              ops_cost,
@@ -12393,7 +12963,7 @@ def _evaluate_combo_at_ratio(
     # 2,000 kg rig figure already carries its own power implicitly, and this
     # keeps a default run bit-identical to v1.4.0.
     (dig_wh, benef_wh, base_w_per_kg, ep_eff, ep_kg_per_kw,
-     rtg_w_per_kg) = _ops_sizing_constants(ops_df)
+     rtg_w_per_kg, ppu_only_kg_per_kw) = _ops_sizing_constants(ops_df)
     # Solar for the electric-propulsion array always (see power_source_for_target
     # for why a radioisotope source cannot serve hundreds of kilowatts), and for
     # the processing plant until the loop below learns how much power it needs.
@@ -12420,6 +12990,30 @@ def _evaluate_combo_at_ratio(
     # propellants with dv_penalty_factor > 1.
     is_electric = (config.model_low_thrust_time
                    and float(propellant.get("dv_penalty_factor", 1.0) or 1.0) > 1.0)
+
+    # ── The DEVICE, as distinct from the propellant (v1.12.0) ────────────────
+    # Two per-technology figures from Module 3's `_THRUSTER_SYSTEMS`, and the
+    # reason they are per-technology rather than one shared constant is that
+    # sharing constants is exactly how this went wrong.  Every electric row
+    # used to take efficiency 0.60 and a lumped 8 kg/kW, so a pulsed plasma
+    # thruster — 8% efficient, 5,000 kg of hardware per newton — was priced
+    # identically to a gridded ion engine at 70% and 54 kg/N.  A third of the
+    # winning missions in a full cislunar run were PPT.
+    #
+    # Both fall back to the old shared constants when the column is absent, so
+    # a pre-Module-3-v1.10.0 catalog reproduces v1.11.0.  `schema_check()`
+    # names them, because the fallback is silent and flattering.
+    eff_used            = ep_eff
+    thruster_kg_per_n   = 0.0
+    ppu_kg_per_kw       = ep_kg_per_kw
+    if is_electric:
+        p_eff = propellant.get("thruster_efficiency")
+        if p_eff is not None and not pd.isna(p_eff) and float(p_eff) > 0:
+            eff_used = float(p_eff)
+        p_kgn = propellant.get("thruster_kg_per_n")
+        if p_kgn is not None and not pd.isna(p_kgn) and float(p_kgn) >= 0:
+            thruster_kg_per_n = float(p_kgn)
+            ppu_kg_per_kw     = ppu_only_kg_per_kw   # thruster now counted separately
 
     isp_s_val   = float(propellant["isp_vac_s"])
     boiloff_pct = float(propellant.get("boiloff_pct_per_day", 0.0) or 0.0)
@@ -12466,6 +13060,7 @@ def _evaluate_combo_at_ratio(
     ep_system_kg    = 0.0
     ep_power_watts  = 0.0
     ep_thrust_yr    = 0.0
+    ep_thrust_n     = 0.0
     processing_power_watts = 0.0
     isru_feed_kg    = 0.0
     isru_prop_kg    = 0.0
@@ -12506,13 +13101,22 @@ def _evaluate_combo_at_ratio(
             m_prop_total = (float(cascade.get("m_outbound_prop", 0.0))
                             + float(cascade.get("m_return_prop", 0.0)))
             ep_power_watts = ep_power_required_w(
-                m_prop_total, isp_s_val, config.ep_target_thrust_yr, ep_eff,
+                m_prop_total, isp_s_val, config.ep_target_thrust_yr, eff_used,
+            )
+            ep_thrust_n = ep_thrust_required_n(
+                m_prop_total, isp_s_val, config.ep_target_thrust_yr,
             )
             ep_thrust_yr = config.ep_target_thrust_yr if m_prop_total > 0 else 0.0
-            # Array (scales 1/r²) plus thruster + PPU (does not).
-            array_kg  = ep_power_watts / ep_w_per_kg if ep_w_per_kg > 0 else 0.0
-            drive_kg  = ep_power_watts / 1000.0 * ep_kg_per_kw
-            new_ep_kg = array_kg + drive_kg
+            # Three masses on three different quantities, and keeping them
+            # apart is the whole point of v1.12.0:
+            #   array      scales with POWER, and 1/r² with distance
+            #   PPU        scales with POWER, flat with distance
+            #   thruster   scales with THRUST — this is the device constraint,
+            #              and it is what a per-kW figure cannot express.
+            array_kg    = ep_power_watts / ep_w_per_kg if ep_w_per_kg > 0 else 0.0
+            ppu_kg      = ep_power_watts / 1000.0 * ppu_kg_per_kw
+            thruster_kg = ep_thrust_n * thruster_kg_per_n
+            new_ep_kg   = array_kg + ppu_kg + thruster_kg
 
         # Propellant made on site is dug before it is burnt, so it takes its
         # share of the rig's throughput before any ore does.
@@ -12540,21 +13144,53 @@ def _evaluate_combo_at_ratio(
                         config.station_keeping_floor_yr)
 
         new_power_kg = power_system_kg
+        # The dig / concentrate draw is raised only when there is a processing
+        # plant to raise it for — with beneficiation off, the 2,000 kg rig's
+        # own power is already implicit in its $/kg recurring rate, which is
+        # what keeps a raw run identical to v1.4.0.  Water LIBERATION is not
+        # covered by that: baking 25 t of water out of phyllosilicate at
+        # 2,500 Wh/kg is kilowatts the rig was never sized for, and the cost
+        # model has always charged it.  So the draw below is computed whenever
+        # either term is non-zero, and the array is sized from the total.
+        processing_power_watts = 0.0
         if beneficiate or isru:
             processing_power_watts = processing_power_w(
                 trial_feed + new_isru_feed,
                 trial_payload if beneficiate else 0.0,
                 trial_dur, dig_wh, benef_wh,
             )
-            if isru and new_isru_prop > 0 and trial_dur > 0:
-                # Baking the water out of the rock, on top of digging it.
-                water_wh = _ops_value(
-                    ops_df, "Water liberation energy (bound water)", default=2_500.0,
-                )
+        if trial_dur > 0 and config.model_water_liberation:
+            # Baking water out of rock, on top of digging it.  Two sources and
+            # they are charged at the same rate: the water turned into ISRU
+            # propellant, and the water sold as CARGO.
+            #
+            # v1.12.0: the cargo half used to be added AFTER this loop had
+            # already sized and flown the array, so its array mass was priced
+            # in the ledger and never entered the rocket equation — the mirror
+            # image of the free-EP-stage bug, and the comment there asserted
+            # the cascade had already flown it.  It had not: `power_system_kg`
+            # came out 0.8-2.7% above the figure inside `hardware_total_kg` on
+            # every row that liberated cargo water.  Sizing it here closes the
+            # loop the same way every other feedback term in this ring is
+            # closed, and it is why the term is no longer gated on
+            # `beneficiate or isru` — a RAW mission to an icy body liberates
+            # cargo water too, and used to pay for that array without flying
+            # any of it.
+            water_wh = _ops_value(
+                ops_df, "Water liberation energy (bound water)", default=2_500.0,
+            )
+            trial_water = (new_isru_prop * isru_water_per_kg_prop
+                           if isru else 0.0)
+            trial_water += _cargo_water_kg(
+                asteroid_row, phases, trial_payload, trial_feed,
+                beneficiate, config,
+            )
+            if trial_water > 0:
                 processing_power_watts += (
-                    water_wh * new_isru_prop * isru_water_per_kg_prop
-                    / (trial_dur * 365.25 * 24.0)
+                    water_wh * trial_water / (trial_dur * 365.25 * 24.0)
                 )
+
+        if processing_power_watts > 0:
             # v1.11.0: pick the lighter power source for the plant now that its
             # draw is known.  Inside 3.46 AU this returns solar unchanged, so a
             # near-Earth run is untouched; beyond it, a starved photovoltaic
@@ -12577,6 +13213,8 @@ def _evaluate_combo_at_ratio(
                 )
             new_power_kg = (processing_power_watts / plant_w_per_kg
                             if plant_w_per_kg > 0 else 0.0)
+        else:
+            new_power_kg = 0.0
 
         new_stay_yr = trial_dur + window_wait_yr
         converged = (
@@ -12693,14 +13331,27 @@ def _evaluate_combo_at_ratio(
         m_payload * (1.0 + structure_frac) + config.return_vehicle_dry_kg)
     m_return_prop   = m_after_return * (r_ret - 1.0)
     m_tank_return   = tank_frac * m_return_prop
-    # The return TANK is launched from Earth even under ISRU — you can make
-    # propellant at an asteroid, not a pressure vessel — so it is inside
-    # m_at_asteroid in both branches, and only the propellant itself drops out.
-    m_at_asteroid   = (hardware_total_kg + m_dry_return + m_tps + m_tank_return
+
+    def _downstream_of_hardware(hardware_kg: float):
+        """Everything from the asteroid outwards, given the hardware delivered.
+
+        Only the pieces that depend on `hardware_kg` — the payload, the return
+        vehicle, its heat shield and its tank are all fixed by m_payload above.
+        Factored out because it has to be evaluated TWICE: once to learn how
+        much ISRU propellant the mission makes (which sets the dig time, which
+        sets the power plant, which is itself hardware), and once more with the
+        settled plant mass.  Two hand-written copies of this arithmetic drifting
+        apart is precisely how a mass ends up in the rocket equation without a
+        matching entry in the ledger.
+        """
+        # The return TANK is launched from Earth even under ISRU — you can make
+        # propellant at an asteroid, not a pressure vessel — so it is inside
+        # m_at_asteroid in both branches, and only the propellant drops out.
+        at_asteroid = (hardware_kg + m_dry_return + m_tps + m_tank_return
                        + (0.0 if isru else m_return_prop))
-    m_outbound_prop = m_at_asteroid * k_out_c * (r_out - 1.0)
-    m_tank_outbound = tank_frac * m_outbound_prop
-    m_launch        = m_at_asteroid + m_tank_outbound + m_outbound_prop
+        out_prop    = at_asteroid * k_out_c * (r_out - 1.0)
+        tank_out    = tank_frac * out_prop
+        return at_asteroid, out_prop, tank_out, at_asteroid + tank_out + out_prop
 
     # Settle the ISRU books at the payload actually flown, so the reported feed
     # and the dig time below describe the same mission the cost model prices.
@@ -12710,6 +13361,65 @@ def _evaluate_combo_at_ratio(
         if isru_feed_kg + feed_kg > throughput_cap_kg + 1e-6:
             return None
     isru_water_kg = isru_prop_kg * isru_water_per_kg_prop if isru else 0.0
+
+    # ── Settle the power plant against the mission actually flown (v1.12.0) ──
+    # The sizing loop caps the payload by the body's mass and by rig throughput
+    # but not by return-capsule VOLUME, and it estimates the ISRU feed before
+    # the final cascade fixes it.  Both are now known, so the plant is
+    # re-derived here — and, critically, the cascade is rebuilt afterwards from
+    # the result.
+    #
+    # Until v1.12.0 this ran ~60 lines further down, after `actual_cascade` had
+    # already been built.  The array for baking CARGO water was therefore
+    # priced in the ledger and never launched: `power_system_kg` came out
+    # 0.8-2.7% above the figure inside `hardware_total_kg` on every row that
+    # liberated any, and a raw mission to an icy body paid for an array it flew
+    # none of.  The comment there claimed "the cascade already flew" it.  It
+    # had not.  This is the same asymmetry as the free EP stage, pointing the
+    # other way — a price with no mass rather than a mass with no price.
+    mining_yr = mining_duration_yr(feed_kg + isru_feed_kg, config)
+    processing_power_watts = 0.0
+    if beneficiate or isru:
+        processing_power_watts = processing_power_w(
+            feed_kg + isru_feed_kg, m_payload if beneficiate else 0.0,
+            mining_yr, dig_wh, benef_wh,
+        )
+    water_kg = isru_water_kg
+    if config.model_water_liberation:
+        # Same helper the sizing loop used, so the array this mission pays for
+        # is the array it flew.  These were two separate expressions before.
+        water_kg += _cargo_water_kg(
+            asteroid_row, phases, m_payload, feed_kg, beneficiate, config,
+        )
+    if water_kg > 0 and mining_yr > 0:
+        processing_power_watts += (
+            _ops_value(ops_df, "Water liberation energy (bound water)",
+                       default=2_500.0)
+            * water_kg / (mining_yr * 365.25 * 24.0)
+        )
+    if processing_power_watts > 0:
+        # v1.11.0: the source can flip here, since the liberation term is a
+        # real addition to the plant's draw and the RTG cap is an absolute one.
+        if config.allow_rtg_power:
+            plant_w_per_kg, power_source = power_source_for_target(
+                asteroid_row.get("semi_major_axis_au"),
+                base_w_per_kg, rtg_w_per_kg,
+                processing_power_watts, config.rtg_max_power_w,
+            )
+        power_system_kg = (processing_power_watts / plant_w_per_kg
+                           if plant_w_per_kg > 0 else 0.0)
+    else:
+        power_system_kg = 0.0
+    hardware_total_kg = config.mining_hardware_kg + power_system_kg + ep_system_kg
+
+    (m_at_asteroid, m_outbound_prop,
+     m_tank_outbound, m_launch) = _downstream_of_hardware(hardware_total_kg)
+    # The cascade solved the payload against the loop's hardware estimate.  If
+    # settling the plant made the hardware HEAVIER, the launch stack has to be
+    # rechecked against the vehicle — the closed-form guarantee only holds at
+    # the mass it was solved for.
+    if m_launch > leo_cap:
+        return None
 
     actual_cascade = {
         "max_payload_kg":  m_payload,
@@ -12751,7 +13461,8 @@ def _evaluate_combo_at_ratio(
     # Time is charged on the FEED, not the product: the rig has to dig all
     # of it, and that stay time flows into ops cost and WACC.  ISRU feed counts
     # — propellant made on site is rock the same rig had to move.
-    mining_yr = mining_duration_yr(feed_kg + isru_feed_kg, config)
+    # (`mining_yr` was computed above, where the power plant was settled; it
+    # depends only on the feed, which the cascade rebuild does not change.)
 
     # The launch-window wait was computed above the sizing loop (it depends
     # only on the target and the destination) because it is part of the stay,
@@ -12770,13 +13481,6 @@ def _evaluate_combo_at_ratio(
     if mission_duration_yr > config.max_mission_duration_yr:
         return None                     # not a mission, a bequest
 
-    # Re-derive the plant's power at the final feed / payload / duration so the
-    # cost matches the mission actually flown, not the sizing pass.
-    if beneficiate or isru:
-        processing_power_watts = processing_power_w(
-            feed_kg + isru_feed_kg, m_payload if beneficiate else 0.0,
-            mining_yr, dig_wh, benef_wh,
-        )
     # ── Bound-water liberation (v1.7.0) ──────────────────────────────────────
     # C/B/D-type "ice" is water locked into phyllosilicates.  Selling it as
     # water means baking it out at ~700 K first, and that energy was free
@@ -12786,33 +13490,10 @@ def _evaluate_combo_at_ratio(
     # v1.10.0: and on the water turned into propellant, which is the same bake
     # for the same reason.  ISRU that pays no liberation energy is ISRU that
     # boils water out of rock for free.
-    water_kg = isru_water_kg
-    if config.model_water_liberation:
-        if beneficiate and payload_mix:
-            water_kg += float(payload_mix.get("water", 0.0))
-        elif not beneficiate:
-            ice_frac = asteroid_row.get("comp_ice_fraction")
-            if ice_frac is not None and not pd.isna(ice_frac):
-                water_kg += m_payload * float(ice_frac)
-    if water_kg > 0 and mining_yr > 0:
-        water_wh = _ops_value(
-            ops_df, "Water liberation energy (bound water)", default=2_500.0,
-        )
-        processing_power_watts += (
-            water_wh * water_kg / (mining_yr * 365.25 * 24.0)
-        )
-        # That extra power needs extra array, which the cascade already
-        # flew; recording it keeps the reported plant honest.  v1.11.0: and it
-        # can flip the source, since the liberation term is a real addition to
-        # the plant's draw and the RTG cap is an absolute one.
-        if config.allow_rtg_power and (beneficiate or isru):
-            plant_w_per_kg, power_source = power_source_for_target(
-                asteroid_row.get("semi_major_axis_au"),
-                base_w_per_kg, rtg_w_per_kg,
-                processing_power_watts, config.rtg_max_power_w,
-            )
-        if plant_w_per_kg > 0:
-            power_system_kg = processing_power_watts / plant_w_per_kg
+    #
+    # Both terms — and the array they size — were settled above, before the
+    # cascade was rebuilt, so that the plant in the ledger is the plant in the
+    # rocket equation.  `water_kg` is carried down here only to be reported.
     cost                = mission_cost_usd(
         mass_cascade        = actual_cascade,
         vehicle             = vehicle,
@@ -12945,6 +13626,12 @@ def _evaluate_combo_at_ratio(
         "ep_power_w":               ep_power_watts,
         "ep_system_kg":             ep_system_kg,
         "ep_thrust_yr":             ep_thrust_yr,
+        # ── v1.12.0 device-level sizing ────────────────────────────────────
+        "ep_thrust_n":              ep_thrust_n,
+        "thruster_kg_per_n":        thruster_kg_per_n,
+        "thruster_kg":              ep_thrust_n * thruster_kg_per_n,
+        "thruster_efficiency":      eff_used if is_electric else float("nan"),
+        "thrust_scaling":           propellant.get("thrust_scaling"),
         "synodic_period_yr":        synodic_yr,
         "launch_window_wait_yr":    window_wait_yr,
         "water_liberated_kg":       water_kg,
@@ -12993,6 +13680,7 @@ def _evaluate_combo_at_ratio(
         "capsule_cost_usd":          cost["capsule_cost"],      # per mission
         "power_system_cost_usd":     cost["power_system_cost"],
         "ep_system_cost_usd":        cost["ep_system_cost"],
+        "tank_cost_usd":             cost["tank_cost"],
         "rig_terminal_value_usd":    cost["rig_terminal_value"],
         "missions_sharing_rig":      cost["missions_sharing_rig"],
         "ops_cost_usd":              cost["ops_cost"],
@@ -13254,6 +13942,29 @@ def candidate_combos(
     # not merely be optimistic, it would be a unit error.
     if "origin" in vdf.columns:
         vdf = vdf[vdf["origin"] == "earth_surface"]
+    # ── Launch acceleration (v1.12.0) ────────────────────────────────────────
+    # Module 3 added `max_accel_g` in v1.9.0 specifically to disqualify the
+    # kinetic launchers, and said so in the column's own documentation — "it is
+    # in this table because it is DISQUALIFYING for the kinetic launchers" —
+    # and then nothing read it.  The gate was maturity alone, which happens to
+    # exclude them today only because SpinLaunch and the light-gas gun are
+    # tagged `concept`.  Flip `operational_vehicles_only` off and a 10,000 g
+    # slingshot at $6,250/kg enters the search and wins on price, because
+    # nothing in this module knows it would powder the mining rig.
+    #
+    # That is not a cost trade.  Spacecraft structures qualify to single-digit
+    # g; the kinetic launchers run 10,000-30,000 g and StarTram 30 g.  They can
+    # pass propellant, water and steel billets, and they destroy every optic,
+    # reaction wheel, radio and rig in the catalog.  A launcher that can lift
+    # only consumables genuinely changes a mining programme's economics — but
+    # this pipeline flies ONE manifest and cannot express the split, so the
+    # honest answer is to exclude them rather than to fly hardware on them.
+    if "max_accel_g" in vdf.columns:
+        accel = pd.to_numeric(vdf["max_accel_g"], errors="coerce")
+        # NaN passes: a row that does not state its acceleration is an ordinary
+        # rocket by omission, not a railgun.  Same defensive default as the
+        # rest of the Module 3 reads.
+        vdf = vdf[~(accel > config.max_payload_accel_g)]
     if config.candidate_vehicles is not None:
         vdf = vdf[vdf["name"].isin(config.candidate_vehicles)]
 
@@ -13920,7 +14631,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.14.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.15.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
