@@ -141,7 +141,8 @@ class Stage:
             sub = os.path.join(out, MASTER.transport.subdir)
             return [os.path.join(sub, name) for name in (
                 "launch_vehicles.csv", "propellants.csv",
-                "delta_v_segments.csv", "operational_costs.csv")]
+                "delta_v_segments.csv", "operational_costs.csv",
+                "storage_systems.csv")]
         return [os.path.join(out, MASTER.calc.output_filename)]
 
     def cache_status(self) -> Optional[Tuple[float, float]]:
@@ -161,8 +162,11 @@ STAGES = [
           "Live prices + mineralogy, priced FOR THE CHOSEN DESTINATION. Must "
           "be re-run whenever the destination changes."),
     Stage("transport", 3, "Transportation",
-          "Launch vehicles, propellants, Δv segments, ops costs. Reference "
-          "tables: fast, and rarely needs re-running."),
+          "Launch vehicles, propellants (with storage class and tankage), Δv "
+          "segments, ops costs, storage systems. Reference tables: fast, and "
+          "rarely needs re-running — but it MUST be re-run after a v1.9.0 "
+          "upgrade, or Stage 4 reads a propellants.csv with no tankage "
+          "columns and silently flies every tank for free."),
     Stage("calc",      4, "Profitability",
           "The headline output. ~20 min for a full beneficiated catalog, "
           "seconds with eval_row_cap set low."),
