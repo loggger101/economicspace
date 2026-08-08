@@ -124,7 +124,16 @@ for label, after in (("catalog", m1), ("mineral_value", m2),
                      ("transportation", m3), ("calc", m4)):
     check("# INSTALLATION" not in after, f"{label}: INSTALLATION block survived")
     check("# RUN & PREVIEW" not in after, f"{label}: RUN & PREVIEW block survived")
-    check("__main__" not in after, f"{label}: __main__ guard leaked into master")
+    # Catches a RUN & PREVIEW block that survived the strip.  This tested for
+    # the bare substring "__main__" until calc v1.10.1, when the parallel
+    # evaluator started referring to the name on purpose: a spawned worker
+    # rebuilds the parent from sys.modules["__main__"], so _spawn_environment
+    # has to read and repoint it.  The guard's actual signature is the `if`,
+    # and every other mention in the four modules is either that comment or a
+    # `type(exc).__name__` in an error message — so test for the guard rather
+    # than for the word, which is what the failure message always claimed.
+    check("if __name__ ==" not in after,
+          f"{label}: __main__ guard leaked into master")
     # The docstring strip is anchored to the coding line; if it silently
     # no-opped, the module's own docstring becomes a bare string expression
     # partway down master.py and its title contradicts the master's.
@@ -165,7 +174,7 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # ─────────────────────────────────────────────────────────────────────────────
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.13.0)
+"""Master Asteroid Profitability Pipeline (1.13.1)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -243,6 +252,27 @@ for _stream in (_sys.stdout, _sys.stderr):
         _stream.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SPAWNED-WORKER QUIET MODE
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 4 evaluates asteroids across a process pool.  Windows has no fork, so
+# every worker re-imports this file and would replay all four module banners --
+# 60 lines each, 700+ for a full pool, interleaved into the run log the UI
+# parses.  Stage 4's parent sets ASTEROID_PIPELINE_WORKER before creating the
+# pool; children inherit it.  Must sit above the first print(), which is why it
+# is here rather than in the calc section far below.
+#
+# Flipped to "silenced" rather than cleared so that calc's own copy of this
+# guard -- the modules each carry one, for when they are run standalone -- is a
+# no-op here instead of leaking a second handle.
+#
+# stderr is deliberately left alone: a worker that dies should still say so.
+
+import os as _os
+if _os.environ.get("ASTEROID_PIPELINE_WORKER") == "1":
+    _os.environ["ASTEROID_PIPELINE_WORKER"] = "silenced"
+    _sys.stdout = open(_os.devnull, "w", encoding="utf-8")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSOLIDATED INSTALLATION
@@ -379,7 +409,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.13.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.13.1")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 

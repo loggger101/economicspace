@@ -88,8 +88,8 @@ tune the orchestrator, with a browser attached. Three things worth knowing:
   field is scraped from that field's own comment block in the module source.
   A curated ⭐ Common tab pins the dials that actually move results.
 - **Stages are individually selectable and reuse the CSVs on disk.** Re-running
-  Stage 4 alone against a cached catalog is the normal working loop: seconds
-  rather than the ~20 minutes a full beneficiated run costs. Skipping Stage 2
+  Stage 4 alone against a cached catalog is the normal working loop: seconds to
+  a couple of minutes, against the catalog download a full run repeats. Skipping Stage 2
   after changing the destination is blocked rather than merely warned about,
   because a mineral catalog priced for one destination and a mission flown to
   another produces meaningless numbers that still look plausible.
@@ -159,6 +159,7 @@ that actually move the answer:
 | `.catalog.require_spectral_type` | `False` | `True` drops untyped rows — fewer asteroids, but every one has a composition |
 | `.catalog.use_jpl` / `use_mp3c` / `use_ssodnet` / `use_neowise` | all `True` | Per-source toggles. Turning off SsODNet skips the 500 MB download |
 | `.calc.eval_row_cap` | `5_000` | Stage-4 evaluation cap; `0` evaluates every row |
+| `.calc.parallel_workers` | `0` | Stage-4 worker processes. `0` picks a count from the CPU count and the amount of work; `1` forces the single-core path. See [Parallel evaluation](#parallel-evaluation) |
 | `.calc.max_mining_fraction` | `0.05` | Share of asteroid mass one mission may remove |
 | `.calc.use_aerocapture_return` | `True` | Makes aerocapture *available*. Trades return Δv for a TPS mass penalty (15% of payload); Stage 4 prices both and flies whichever pays, per asteroid |
 | `.calc.use_isru_return_propellant` | `True` | Makes ISRU *available*: hydrolox only, at bodies with water, with the extra rock dug, timed and charged |
@@ -192,6 +193,49 @@ Importing `master.py` is side-effect free, so you can drive it yourself:
 import master
 results = master.run_full_pipeline()
 ```
+
+### Parallel evaluation
+
+Stage 4 evaluates each asteroid independently of every other one, so since calc
+**v1.10.1** it does that across a process pool instead of on one core. On a
+6-core / 12-thread machine a full beneficiated destination went from ~2,120 s
+to **137 s**, and raw from ~140 s to **33 s**.
+
+**No number changes.** v1.10.1 is a performance release and its output is
+bit-identical to v1.10.0's — verified by sha256-diffing serial against parallel
+CSVs over the same rows, and by reproducing the committed cislunar cells from
+the full catalog (22.9336× beneficiated, same winner and concentration ratio;
+31.8269× raw). Chunks are consumed in submission order specifically so that the
+row order, and therefore the ordering of `profit_usd` ties under a non-stable
+sort, is unchanged.
+
+Roughly 1.9× of the gain is single-threaded and applies even at
+`parallel_workers = 1`: catalog rows are converted to plain dicts before the
+inner search (pandas resolved ~7,400 index lookups per asteroid, ~38% of the
+whole run), and the sizing loop's five Stage-3 constants are memoised rather
+than looked up ~24 million times.
+
+Leave `parallel_workers` at `0` unless you have a reason:
+
+- **`1`** forces the serial path — for profiling, or when an outer harness is
+  already running one process per destination and the cores are spoken for.
+- **A specific count** is obeyed, clamped to the CPU count.
+
+Auto mode will not start a worker that cannot repay its own startup, so short
+interactive runs stay serial. That matters more than it sounds: startup is
+~1.1 s per worker and **linear**, because each worker re-imports the 590 kB
+`master.py` (Windows has no fork), and on a Google Drive working copy those
+reads serialise. At 3,000 beneficiated rows, twelve workers is slower end to
+end than six. The useful ceiling is the **physical** core count — hyperthreading
+adds ~17% on this branch-heavy pure-Python workload, not 2×.
+
+One trap worth knowing if you extend this. A spawned worker rebuilds the parent
+by importing `__main__`, and under Streamlit `__main__` is a synthetic module
+whose `__file__` points at `ui.py` — so a plain `Pool()` executes the entire
+Streamlit app once per worker. `_spawn_environment` in `modules/calc.py`
+repoints `__main__.__spec__` at the pipeline module to prevent it, and sets an
+env var that keeps the workers' re-import from replaying the startup banner
+sixty lines at a time into the run log the UI is parsing.
 
 ## Rebuilding master.py
 
@@ -605,19 +649,27 @@ Costs charged, all of which the search trades against:
   equation as everything else. Payload → feed → power → mass → payload is a
   real circular dependency, solved by fixed-point iteration.
 
-⚠️ The search costs runtime: roughly **15× slower** on the beneficiation path.
-On the v1.0.9 catalog (35,778 asteroids) one destination is ~140 s raw against
-~2,120 s beneficiated, so re-measuring all ten cells is most of an afternoon —
-the 2026-08-07 reproduction took about three and a half hours. Tune with
+⚠️ The search costs runtime: roughly **4× slower** on the beneficiation path.
+On the v1.0.9 catalog (35,778 asteroids) one destination is ~33 s raw against
+~137 s beneficiated, so re-measuring all ten cells is a coffee break. Tune with
 `.calc.concentration_search_steps`.
 
-That beneficiated figure was **1,100 s until it was measured again**, and the
-ratio 8×. Both were written before v1.10.0 made the architecture search
-per-asteroid, and the two searches multiply: every concentration ratio is now
-priced against every vehicle × propellant × return mode × ISRU choice × apsis
-rather than against one nominal architecture. Two independent runs on
-2026-08-07 gave 2,122 s and 2,124 s, so it is the model that got more
-expensive, not the measurement that was noisy.
+Those are calc **v1.10.1** figures, on twelve threads. The same two runs took
+~140 s and ~2,120 s on v1.10.0, when Stage 4 ran on a single core — the ten-cell
+reproduction on 2026-08-07 took about three and a half hours. v1.10.1 is a pure
+performance release and changes no output; see
+[Parallel evaluation](#parallel-evaluation).
+
+The beneficiated figure has now moved twice, for opposite reasons, and only one
+of them touched a result. It was **1,100 s until it was measured again** (ratio
+8×), both written before v1.10.0 made the architecture search per-asteroid: the
+two searches multiply, because every concentration ratio is priced against
+every vehicle × propellant × return mode × ISRU choice × apsis rather than
+against one nominal architecture. Two independent runs on 2026-08-07 gave
+2,122 s and 2,124 s, so that one was the model getting more expensive rather
+than the measurement being noisy. Then v1.10.1 took it to 137 s by using the
+other eleven threads and by not looking every catalog row up through a pandas
+index a few thousand times per asteroid.
 
 The 1/r² term punishes distant targets hard (cislunar delivery, measured on a
 1,959-body pre-v1.0.9 run; the ratios between rows are the point, not the
