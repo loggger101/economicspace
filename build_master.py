@@ -174,7 +174,7 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # ─────────────────────────────────────────────────────────────────────────────
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.13.1)
+"""Master Asteroid Profitability Pipeline (1.14.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -383,7 +383,9 @@ print(f"      Pipeline output  : {MASTER_CONFIG.output_dir}")
 print(f"      JPL limit        : {MASTER_CONFIG.catalog.jpl_limit:,} asteroids")
 print(f"      Eval row cap     : {MASTER_CONFIG.calc.eval_row_cap:,}")
 print(f"      Delivery dest    : {MASTER_CONFIG.delivery_destination}")
-print(f"      ISRU return      : {'available (hydrolox, water-bearing bodies)' if MASTER_CONFIG.calc.use_isru_return_propellant else 'off'}")
+print(f"      ISRU return      : {'available where the rock supplies the propellant' if MASTER_CONFIG.calc.use_isru_return_propellant else 'off'}")
+print(f"      Propellants      : {'flown hardware only' if MASTER_CONFIG.calc.operational_propellants_only else 'INCLUDING development / concept'}")
+print(f"      Tank mass        : {'in the rocket equation' if MASTER_CONFIG.calc.model_tank_mass else 'off'}")
 print(f"      Architecture     : {'searched per asteroid' if MASTER_CONFIG.calc.optimise_architecture_per_asteroid else 'fixed by config'}")
 print(f"      NRE amortise     : over {MASTER_CONFIG.calc.nre_amortization_missions} mission(s)")
 print(f"      Contingency      : {MASTER_CONFIG.calc.contingency_fraction:.0%}")
@@ -409,7 +411,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.13.1")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.14.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
