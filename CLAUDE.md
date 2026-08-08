@@ -67,12 +67,16 @@ calc `1.10.0`, master `1.13.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
 > ⚠️  **The five-destination tables below were re-measured on calc `1.10.0` +
-> mineral_value `1.7.0`** and are current, except the `earth_surface`
-> beneficiated cell, which is marked pending. Everything else quoting a result
-> — the programme-scale curve (N=1/10/100), the historical progression
+> mineral_value `1.7.0`, and independently reproduced end to end on
+> 2026-08-07** — all ten cells, from a freshly downloaded catalog. There is no
+> longer a pending cell. The **programme-scale curve was rebuilt in the same
+> sweep**, at cislunar: 22.93× → 9.85× → 7.28× for N = 1 / 10 / 100.
+>
+> What still predates `1.10.0` and is superseded: the historical progression
 > 2.2× → 14× → 39× → 34× → 25×, and any figure in the version-history comment
-> blocks — still predates `1.10.0` and is superseded. Treat those digits as
-> stale and the *shape* as sound. See "What v1.10.0 changed" below.
+> blocks. Treat those digits as stale and the *shape* as sound. That series is
+> per-release, so rebuilding it means running old code — it is not something a
+> re-run of the current model can fix. See "What v1.10.0 changed" below.
 >
 > ⚠️  **`mars_surface` is no longer the best case — `cislunar` is.** That
 > reverses `1a5e0c8` and it is the single most important stale claim to watch
@@ -219,6 +223,15 @@ other asteroid wanted it. If you add another architecture choice, add it to
 this search rather than to `CalcConfig` as a global — and check the
 never-worse invariant afterwards.
 
+The check is a one-liner over two archived runs, and it had never actually been
+run until 2026-08-07. Join the raw and beneficiated catalogs for a destination
+on `designation` and assert `benef_ratio <= raw_ratio` row by row. Across all
+five destinations — 165,843 asteroid × destination pairs — it holds with zero
+exceptions, and the worst case is exactly 1.0000, which is beneficiation
+declining and falling back on the `beneficiate=False` baseline. That is the
+signature to expect: never worse, and equal wherever it declines. A max above
+1.0 means the search is optimising something other than what gets reported.
+
 **How hard to concentrate is searched, not derived.** Grade saturates at
 `saturation_ratio` = 1/(frac_best × recovery); costs keep climbing. So the
 optimum is usually strictly interior and `evaluate_combo` sweeps for it. Two
@@ -231,10 +244,19 @@ pay the separation recovery loss and the array mass for no grade gain.
 Without that baseline beneficiation cannot be declined, and stops being
 weakly dominant.
 
-Note this makes the beneficiation path ~8× slower — on the v1.0.9 catalog
-(35,778 asteroids) a destination costs ~140 s raw against ~1,100 s
-beneficiated, so re-measuring all five destinations is a couple of hours, not
-a coffee break. `concentration_search_steps` is the dial.
+Note this makes the beneficiation path ~15× slower — on the v1.0.9 catalog
+(35,778 asteroids) a destination costs ~140 s raw against ~2,120 s
+beneficiated, so re-measuring all ten cells is most of an afternoon, not
+a coffee break. The 2026-08-07 reproduction took about three and a half hours.
+`concentration_search_steps` is the dial.
+
+⚠️  Those read ~1,100 s and 8× until 2026-08-07, and the correction is
+structural rather than a re-timing: v1.10.0 made the architecture search
+per-asteroid, and it multiplies with the concentration sweep, because every
+ratio is now priced against every vehicle × propellant × return mode × ISRU
+choice × apsis instead of against one nominal architecture. Two independent
+beneficiated runs came in at 2,122 s and 2,124 s, so this is not measurement
+noise. Budget for it before starting a sweep.
 
 **The beneficiation power plant feeds back into the rocket equation.**
 Processing energy (Module 3: 200 Wh/kg dug, 500 Wh/kg concentrated) over the
@@ -276,7 +298,7 @@ code, so the delta is attributable to the Stage 2 change alone:
 
 | destination | mineral_value `1.6.0` | **`1.7.0`** | change | `1.7.0` winner |
 |---|---|---|---|---|
-| `earth_surface` (default) | 25,110× | _(re-run pending)_ | — | 4660 Nereus, Xe, 2.5× |
+| `earth_surface` (default) | 25,110× | 25,038.5×† | −0.3%† | 4660 Nereus, Xe, 2.5× |
 | `leo` | 47.17× | 48.13× | +2.0% | 4015 Wilson-Harrington, B, 5.5× |
 | `cislunar` | 19.02× | **22.93×** | +20.6% | 7753, B, 5.4× |
 | `lunar_surface` | 21.42× | 40.61× | +89.6% | 7753, B, 4.8× |
@@ -292,11 +314,64 @@ code, so the delta is attributable to the Stage 2 change alone:
 | `lunar_surface` | 25.54× | 75.83× | +196.9% |
 | `mars_surface` | **16.59×** | 70.41× | +324.4% |
 
+† The one cell not from the paired run. It was measured on 2026-08-07, in a
+separate process, when the whole matrix was reproduced (below). Its −0.3% is
+therefore quote drift, not the pricing change — which, `earth_surface` being the
+control, cannot touch it at all.
+
 ⚠️  **`earth_surface` is the control.** The Stage 2 change cannot touch it —
 in-space pricing does not apply there — so its raw +0.05% is the run-to-run
-noise floor from live price quotes moving between the two loops. Anything above
-~0.05% is signal. Do not "fix" a small earth_surface drift; do worry if it ever
-gets large.
+noise floor from live price quotes moving between the two loops. Do not "fix" a
+small earth_surface drift; do worry if it ever gets large.
+
+**That ~0.05% is the WITHIN-process floor, and it is the wrong yardstick for two
+runs on different days.** Across the 2026-08-07 reproduction the two
+`earth_surface` cells moved −0.39% (raw) and −0.28% (beneficiated) while every
+in-space cell reproduced to the hundredth. Same code, same catalog contents,
+about eighteen hours of metal prices in between (`12b3d9f` was committed
+2026-08-06 23:36). So the number to compare against depends on what you are
+doing: ~0.05% between two loops in one process, but a few tenths of a percent
+across a day, and both cells happening to fall is luck rather than a pattern.
+Seeing 0.4% on a re-run tomorrow is not a regression.
+
+That the in-space cells did *not* drift with it is the mechanism worth keeping:
+`earth_surface` is priced straight off live terrestrial quotes, while an
+in-space kilogram is dominated by launch-cost-avoided, which is derived through
+the rocket equation from constants. The control moves and the rest does not.
+
+### The matrix was reproduced end to end on 2026-08-07
+
+All ten cells were re-measured through the Streamlit UI, one destination at a
+time, from a catalog re-downloaded from scratch that morning. This is the first
+time the tables have been checked against a *separate* run rather than against
+the process that produced them.
+
+| destination | raw measured | table | beneficiated measured | table |
+|---|---|---|---|---|
+| `earth_surface` | 45,893.7× | 46,071.3× | 25,038.5× | _(was pending)_ |
+| `leo` | 72.4520× | 72.45× | 48.1286× | 48.13× |
+| `cislunar` | 31.8269× | 31.83× | **22.9336×** | **22.93×** |
+| `lunar_surface` | 75.8315× | 75.83× | 40.6132× | 40.61× |
+| `mars_surface` | 70.4063× | 70.41× | 51.8161× | 51.82× |
+
+Every in-space cell reproduced to the hundredth, and so did every winner
+identity and concentration ratio the beneficiated table names — 4015
+Wilson-Harrington (B, 5.5×) at LEO, 7753 (B, 5.4×) at cislunar, 7753 (B, 4.8×)
+at the lunar surface, 6178 (P, 7.1×) at Mars. The `earth_surface` beneficiated
+winner landed on 4660 Nereus (Xe, 2.5×), which is what the table had already
+predicted for the cell it could not fill.
+
+Two things this does and does not establish. It **does** show the pipeline is
+deterministic given its inputs, which was not previously demonstrated — the
+architecture search, the concentration sweep and the fixed-point power solve all
+had to land identically. It does **not** revalidate the model; reproducing a
+number says nothing about whether the number is right.
+
+The catalog also came back identical where it matters: 35,807 rows, 24,675
+measured taxonomies against 11,131 guessed from albedo, 2,614 V-types. Those are
+the v1.0.9 reference figures exactly, so SsODNet answered and the population is
+the documented one rather than a silently inflated substitute. Evaluable rows
+ran 29,634–35,048 per destination, inside the range quoted above.
 
 Four things in those tables are worth not "fixing":
 
@@ -339,12 +414,15 @@ optimiser declines to concentrate at cislunar" either. What survives is the
 weaker and still-true statement that the decision belongs to the
 (target × destination) pair, not to the target.
 
-⚠️  **Not re-measured, and therefore stale:** the programme-scale figures
-(Mars 25.2× at N=1 → 6.9× at N=10 → 5.3× at N=100) and the historical
-progression 2.2× → 14× → 39× → 34× → 25×. Each N value is its own full
-beneficiated run and they measure a different lever than this change. The N=1
-anchor is now 51.82× at Mars and 22.93× at cislunar, so the whole curve needs
-rebuilding against cislunar rather than Mars.
+✅  **The programme-scale curve was rebuilt on 2026-08-07** at cislunar,
+beneficiated: 22.93× at N=1 → 9.85× at N=10 → 7.28× at N=100, replacing the
+Mars figures 25.2× → 6.9× → 5.3×. See "Mining reliability GROWS with programme
+size" below for the full table and for the two things in it that are not
+constants.
+
+⚠️  **Still not re-measured, and therefore stale:** the historical progression
+2.2× → 14× → 39× → 34× → 25×. It is a per-release series, so rebuilding it
+means re-running old code, not just re-running the current model.
 
 Closing the remaining gap is not a tuning exercise. Rig terminal value and
 in-space manufacturing were the named candidates and both shipped in v1.8.0
@@ -446,16 +524,29 @@ already mature, and MTBF is a duration exposure, not a heritage question. Do
 not "complete" the model by adding growth to them.
 
 Note how reliability growth and the rig service-life cap pull against each
-other. Mars beneficiated, catalog v1.0.9: N=1 25.2x, N=10 6.9x, N=100 5.3x.
-The 10->100 step buys little because one rig only serves 7 missions at that
-stay length, so mission 8 buys a new rig. "Fly more missions" is real but
-sublinear, and bounded by market saturation at the far end.
+other. Rebuilt 2026-08-07 at **cislunar**, beneficiated, on calc `1.10.0` +
+mineral_value `1.7.0` -- cislunar rather than Mars because cislunar is now the
+best case, and the curve belongs at whichever destination that is:
 
-⚠️  Those three numbers were measured before calc `1.10.0` and before
-mineral_value `1.7.0`, and have NOT been re-run -- the N=1 anchor alone has
-moved from 25.2x to 51.82x. The SHAPE of the argument (sublinear, capped by rig
-service life) is what to trust here; the digits are stale, and the curve now
-wants rebuilding at cislunar, which is the best case.
+| N | best cost/revenue | p_mining | P(success) | missions sharing one rig | winning vehicle |
+|---|---|---|---|---|---|
+| 1 | 22.93x | 0.850 | 0.646 | 1 | Falcon Heavy |
+| 10 | **9.85x** | 0.902 | 0.708 | 4 (capped) | New Glenn |
+| 100 | **7.28x** | 0.943 | 0.739 | 4 (capped) | New Glenn |
+
+The winner is 7753 (B) at every N. The 10->100 step buys little because one rig
+only serves 4 missions at this stay length, so mission 5 buys a new rig. "Fly
+more missions" is real but sublinear, and bounded by market saturation at the
+far end.
+
+Two things changed against the old Mars curve (25.2x -> 6.9x -> 5.3x) beyond
+the anchor moving. The rig cap is **4 here, not 7** -- it is `life / stay`, so
+it is a property of the destination's mission profile, not a constant to quote
+across destinations. And the winning **vehicle switches** from Falcon Heavy to
+New Glenn at N >= 10: once NRE is spread across a programme, the per-mission
+launch bill stops dominating and a bigger vehicle starts paying. `p_mining`
+reproduced 0.850 / 0.902 / 0.943 exactly, as it must -- Duane/AMSAA growth is a
+function of N alone and knows nothing about where the cargo goes.
 
 **Cryogenic boil-off** (v1.8.0). Return propellant is held for years, so
 hydrolox loads 2.5x what it burns on a 5-year mission. Folded into an
