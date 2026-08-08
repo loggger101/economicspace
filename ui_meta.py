@@ -134,6 +134,7 @@ BOUNDS: Dict[str, Tuple[float, float, float]] = {
     "heat_shield_frac_of_payload":       (0.0, 2.0, 0.01),
 
     "isru_processing_usd_per_kg":        (0.0, 100_000.0, 10.0),
+    "rtg_max_power_w":                   (0.0, 1_000_000.0, 500.0),
     "nre_amortization_missions":         (1, 1_000, 1),
     "nre_recurring_overlap_fraction":    (0.0, 1.0, 0.05),
     "contingency_fraction":              (0.0, 2.0, 0.05),
@@ -148,7 +149,7 @@ BOUNDS: Dict[str, Tuple[float, float, float]] = {
 # on its module tab.
 #
 # The grouping follows CLAUDE.md: the destination, the run-size dials, the
-# architecture search, and then "the twelve things the model stopped giving
+# architecture search, and then "the fourteen things the model stopped giving
 # away", which are corrections rather than options.
 
 CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
@@ -160,10 +161,11 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
     ),
     (
         "Run size",
-        "What this run costs you in wall-clock time. Since calc v1.10.1 a full "
-        "beneficiated catalog is a couple of minutes per destination rather "
-        "than ~35, because Stage 4 now uses every core — but capping the rows "
-        "is still how you sanity-check a config change first.",
+        "What this run costs you in wall-clock time. calc v1.10.1 put Stage 4 "
+        "on every core; v1.11.0 then made the search 4.6x wider (21 "
+        "operational propellants against 7), so a full beneficiated "
+        "destination is back to double-digit minutes. Capping the rows is "
+        "still how you sanity-check a config change first.",
         [
             ("catalog", "jpl_limit"),
             ("calc", "eval_row_cap"),
@@ -184,15 +186,21 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
     (
         "Architecture availability",
         "Since v1.10.0 these mean *available*, not *mandatory*. The "
-        "per-asteroid search decides whether to use them.",
+        "per-asteroid search decides whether to use them. "
+        "`operational_propellants_only` is the gate on Stage 3's 40-row "
+        "propellant table: leave it ON unless you specifically want the run to "
+        "consider hardware that has never flown.",
         [
             ("calc", "use_aerocapture_return"),
             ("calc", "use_isru_return_propellant"),
             ("calc", "use_per_asteroid_dv"),
+            ("calc", "operational_vehicles_only"),
+            ("calc", "operational_propellants_only"),
+            ("calc", "allow_rtg_power"),
         ],
     ),
     (
-        "The twelve corrections",
+        "The fourteen corrections",
         "⚠️  These default ON and each one moved every number. They are "
         "corrections, not options: the flags exist to isolate an effect, not "
         "to be left off. Switching them off makes the model more profitable "
@@ -206,6 +214,8 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
             ("calc", "model_reliability"),
             ("calc", "model_reliability_growth"),
             ("calc", "model_propellant_boiloff"),
+            ("calc", "model_tank_mass"),
+            ("calc", "charge_tanker_flights"),
             ("calc", "apply_wacc_compounding"),
             ("calc", "learning_curve_rate"),
             ("calc", "return_structure_frac_of_payload"),
