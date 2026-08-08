@@ -98,6 +98,11 @@ CHOICES: Dict[str, Optional[List[str]]] = {
 BOUNDS: Dict[str, Tuple[float, float, float]] = {
     "jpl_limit":                         (100, 200_000, 1_000),
     "eval_row_cap":                      (0, 200_000, 500),
+    # 0 = auto.  The upper bound is deliberately generous rather than
+    # os.cpu_count(): calc clamps to the real CPU count anyway, and pinning the
+    # slider to this machine would bake a host detail into a config the UI
+    # writes to ui_run_config.json and users copy between machines.
+    "parallel_workers":                  (0, 64, 1),
     "request_timeout":                   (10, 900, 10),
     "min_diameter_km":                   (0.0, 100.0, 0.001),
     "preview_rows":                      (1, 200, 1),
@@ -155,13 +160,15 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
     ),
     (
         "Run size",
-        "What this run costs you in wall-clock time. A full beneficiated "
-        "catalog is roughly 20 minutes per destination, so capping the rows is "
-        "how you sanity-check a config change first.",
+        "What this run costs you in wall-clock time. Since calc v1.10.1 a full "
+        "beneficiated catalog is a couple of minutes per destination rather "
+        "than ~35, because Stage 4 now uses every core — but capping the rows "
+        "is still how you sanity-check a config change first.",
         [
             ("catalog", "jpl_limit"),
             ("calc", "eval_row_cap"),
             ("calc", "concentration_search_steps"),
+            ("calc", "parallel_workers"),
         ],
     ),
     (
