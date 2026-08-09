@@ -419,7 +419,38 @@ class TransportConfig:
     #           Centaur-derived.  Module 3 has produced tank MASS since v1.9.0
     #           and Module 4 has flown it since, and nothing ever bought one.
     #         Propellants 40 → 41 (23 operational, 8 development).
-    pipeline_version: str = "1.10.0"
+    # 1.11.0 — the reference DATA was right and unreachable.  Four new
+    #         OPERATIONAL_COSTS rows, and not one of them is a new measurement:
+    #         every figure already existed in STORAGE_REFERENCE, where it had
+    #         been sitting behind a "⚠️  Not modelled in Module 4" note since
+    #         v1.9.0.  Module 4 loads operational_costs.csv and does NOT load
+    #         storage_systems.csv, so the whole table was documentation.
+    #         That is a new instance of the prescriptive-comment failure this
+    #         project keeps finding, with a twist worth naming: v1.9.0 wrote
+    #         down the gap, the gap was quoted in CLAUDE.md as a known
+    #         limitation for two releases, and writing it down was mistaken for
+    #         closing it.  A table nobody reads is not a model.
+    #         • "Eclipse / night-side dark fraction" 0.50.  The sun sets on a
+    #           rig anchored to a rotating body.  This is a SIZING factor, so no
+    #           W/kg row could ever have absorbed it.
+    #         • "Energy storage usable specific energy" 104 Wh/kg — 130 Wh/kg
+    #           system-level Li-ion × 0.80 DoD, folded so a consumer cannot
+    #           forget the DoD.
+    #         • "Power-system row baseline dark period" 0.58 h.  The deduction
+    #           that stops the battery being charged twice, and the resolution
+    #           of a contradiction: "Power system specific mass" claimed to
+    #           cover both a LEO eclipse and an asteroid night, which no single
+    #           number can.  That claim is removed from its notes.  Same shape
+    #           as argon in v1.10.0 — a row asserting two incompatible physical
+    #           states — and it is worth noticing that the argon audit did not
+    #           catch it, because it was looking at propellants.
+    #         • "Volatile cargo containment" 0.05 kg/kg.  Water sold at a depot
+    #           has to still be water on arrival.  The best cislunar missions
+    #           are ~88% water by mass, so this is the largest single unpriced
+    #           item the model had left, not a rounding term.
+    #         No propellant, vehicle or Δv figure moved.  Every number Module 4
+    #         produces does, because it can now read these.
+    pipeline_version: str = "1.11.0"
     preview_rows:     int = 15
 
 
@@ -3481,12 +3512,19 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
                  "roll-out arrays demonstrate ~150 W/kg at the wing (NASA "
                  "ROSA flight demo, ISS iROSA 2021+), but batteries, "
                  "regulation and structure roughly halve that at the system "
-                 "level, and a mining rig needs power through eclipse and "
-                 "through the night side of a rotating body.  60 W/kg is "
+                 "level.  60 W/kg is "
                  "mid-range for a deep-space PV train.  Scales as 1/r^2 with "
                  "heliocentric distance — Module 4 applies that per asteroid, "
                  "which is why main-belt targets are punished so hard once "
-                 "processing power is modelled.",
+                 "processing power is modelled.\n"
+                 "v1.11.0: this row USED to claim it also covered 'power "
+                 "through eclipse and through the night side of a rotating "
+                 "body', and that claim has been removed because it was not "
+                 "true and could not be.  A specific mass cannot express a "
+                 "sizing factor, and the storage duration it implies is a LEO "
+                 "eclipse, not an asteroid night — see 'Power-system row "
+                 "baseline dark period', which names what this figure really "
+                 "carries so Module 4 can charge the increment above it.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
@@ -3633,6 +3671,129 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
                  "enough for roughly one flagship RTG a year for the entire "
                  "world, so any programme flying more than a couple of these "
                  "does not have a cost problem, it has an allocation problem.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    # ── Eclipse and night-side operation  (v1.11.0) ──────────────────────────
+    # Three rows that together let Module 4 stop assuming the sun never sets on
+    # the processing plant.  They were derivable from STORAGE_REFERENCE before
+    # this release and unreachable, because Module 4 loads operational_costs.csv
+    # and does not load storage_systems.csv — which is exactly why the "⚠️  Not
+    # modelled" note on the storage row survived a release that was looking for
+    # unread columns.
+    {
+        "category":         "Eclipse / night-side dark fraction",
+        "unit":             "fraction of the time a surface rig sees no sun",
+        "value":            0.50,
+        "range_low":        0.35,
+        "range_high":       0.55,
+        "notes": "v1.11.0.  A rig anchored to a rotating body stands on a "
+                 "surface that is lit half the time, by geometry — the same "
+                 "0.50 STORAGE_REFERENCE has carried since v1.9.0, moved here "
+                 "so Module 4 can actually read it.  Ranges below 0.5 for a "
+                 "high-latitude or near-polar emplacement on a body with "
+                 "obliquity, above it for an equatorial site with local "
+                 "horizon shadowing.\n"
+                 "This is a SIZING factor, not a specific mass, and that is why "
+                 "no W/kg figure can absorb it: to deliver P continuously "
+                 "through a dark fraction f you must INSTALL "
+                 "P·[(1−f) + f/η_rt]/(1−f) of generating capacity, because the "
+                 "sunlit hours have to run the load and recharge the store as "
+                 "well.  At f = 0.50 and η_rt = 0.90 that is 2.11×.\n"
+                 "The alternative architecture is to mine at half duty cycle "
+                 "and take twice the stay time instead; Module 4 sizes the "
+                 "storage rather than halving the duty, which is the choice "
+                 "that leaves mission duration comparable across bodies.\n"
+                 "Does NOT apply to a radioisotope source — an RTG's output is "
+                 "flat — and does not apply to the electric-propulsion array, "
+                 "which is in interplanetary cruise and in permanent sunlight.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Energy storage usable specific energy",
+        "unit":             "usable Watt-hours per kg of storage system",
+        "value":            104,
+        "range_low":         70,
+        "range_high":       160,
+        "notes": "v1.11.0.  130 Wh/kg at the system level (STORAGE_REFERENCE "
+                 "'Li-ion battery (system level)': cells reach 250-300 Wh/kg "
+                 "and packaging, harness, balancing and thermal roughly halve "
+                 "it) × 0.80 depth of discharge = 104 Wh/kg USABLE.  DoD is "
+                 "folded in here rather than carried as a fourth row because "
+                 "a consumer that forgets to apply it silently oversizes the "
+                 "mission by 25%, and this table's job is to hand Module 4 the "
+                 "number it should divide by.\n"
+                 "A regenerative fuel cell (400 Wh/kg, TRL 5) is the obvious "
+                 "architecture for a multi-hour dark period and would cut this "
+                 "term by ~4×; it is not taken, because nothing has flown one "
+                 "and this row is the operational choice.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Energy storage round-trip efficiency",
+        "unit":             "fraction of stored energy recovered",
+        "value":            0.90,
+        "range_low":        0.80,
+        "range_high":       0.95,
+        "notes": "v1.11.0.  Charge and discharge losses through the cells and "
+                 "the regulator.  Li-ion cells alone run 0.92-0.96 round trip; "
+                 "0.90 takes the loss through PMAD as well.  This is the term "
+                 "that makes the array oversize worse than the naive 1/(1−f): "
+                 "the energy that goes through the store has to be generated "
+                 "twice over, once for the load and once for the loss.  At "
+                 "f = 0.50 it is the difference between 2.00× and 2.11×.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Power-system row baseline dark period",
+        "unit":             "hours of darkness already covered by the 60 W/kg row",
+        "value":            0.58,
+        "range_low":        0.0,
+        "range_high":       1.2,
+        "notes": "v1.11.0.  The deduction that stops Module 4 double-charging "
+                 "the battery.  'Power system specific mass' is 60 W/kg "
+                 "SYSTEM-level against ROSA's ~150 W/kg at the wing, and part "
+                 "of that 2.5× is a battery — so some storage is already paid "
+                 "for and only the INCREMENT above it is new.\n"
+                 "0.58 h is the standard LEO eclipse (35 min of a ~92 min "
+                 "orbit), which is the storage duration a conventional "
+                 "deep-space PV train is specified against.  Arithmetic: 0.58 h "
+                 "of 1 W at 104 Wh/kg usable is 0.0056 kg/W, against the row's "
+                 "own 1/60 = 0.0167 kg/W of total plant — a third of it, which "
+                 "is why deducting it matters rather than being a nicety.\n"
+                 "⚠️  The 'Power system specific mass' row's own notes claim it "
+                 "covers 'power through eclipse and through the night side of a "
+                 "rotating body'.  It cannot cover both: an asteroid with a "
+                 "10 h rotation is dark for 5 h, roughly 9× the LEO figure, and "
+                 "no single specific mass can be right for both duty cycles. "
+                 "That contradiction is the argon failure in a new place — a "
+                 "reference row asserting two incompatible states at once — and "
+                 "this row resolves it by naming which of the two the 60 W/kg "
+                 "figure actually is.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Volatile cargo containment",
+        "unit":             "kg of containment per kg of volatile cargo",
+        "value":            0.05,
+        "range_low":        0.03,
+        "range_high":       0.12,
+        "notes": "v1.11.0.  Water sold at a depot has to still be water when it "
+                 "arrives.  Exposed ice in sunlight at 1 AU sits far above its "
+                 "sublimation threshold and is simply gone over a multi-year "
+                 "cruise; shaded, sealed and blanketed it is stable for "
+                 "decades.  So the charge is a sealed shaded hold — no power, "
+                 "no cryocooler, but real mass.\n"
+                 "Carried in STORAGE_REFERENCE since v1.9.0 with '⚠️  NOT "
+                 "modelled in Module 4' on it, and duplicated here because that "
+                 "table is not one Module 4 loads.  It is INCREMENTAL to the "
+                 "0.15 ore-restraint fraction Module 4 already flies as "
+                 "`return_structure_frac_of_payload`: the hopper holds the "
+                 "cargo, the seal and shade keep the volatile fraction of it "
+                 "from leaving.  That reading is what makes the storage row's "
+                 "own 'heavier than an ore hopper' true at a value below 0.15.\n"
+                 "Charged on WATER only, which is what the citation covers. "
+                 "Carbon and organics are refractory at these temperatures and "
+                 "ride in the hopper like rock.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
@@ -4034,11 +4195,14 @@ STORAGE_REFERENCE: List[dict] = [
                  "it is stable for decades.  So the cost is a sealed, shaded "
                  "hold — heavier than an ore hopper, far lighter than a cryogen "
                  "tank, and no active power.\n"
-                 "⚠️  NOT modelled in Module 4.  The pipeline prices water as a "
-                 "commodity at every in-space destination and has never charged "
-                 "anything to keep it through a four-year cruise.  Water is a "
-                 "large part of why the volatile-rich B and C types win, so this "
-                 "gap runs in the optimistic direction on the current answer.",
+                 "✅  MODELLED as of Module 4 v1.14.0, through the "
+                 "'Volatile cargo containment' OPERATIONAL_COSTS row — this "
+                 "table is not one Module 4 loads, which is why the figure sat "
+                 "here unread for two releases while the pipeline priced water "
+                 "at every in-space destination and charged nothing to keep it "
+                 "through a four-year cruise.  It was not a rounding term: the "
+                 "best cislunar missions run ~88% water by mass, so the "
+                 "commodity carrying the result was the one flying free.",
     },
     {
         "name":            "Sintered / consolidated cargo",
@@ -4145,11 +4309,15 @@ STORAGE_REFERENCE: List[dict] = [
                  "dark period is hours, not the 35 minutes of a LEO eclipse. "
                  "Sizing storage for it roughly DOUBLES the power system for a "
                  "given continuous draw.\n"
-                 "⚠️  Not modelled.  Module 4's processing_power_w() computes a "
-                 "continuous average draw and sizes the array off it, so it "
-                 "implicitly assumes the sun never sets.  A real rig either "
-                 "carries the storage or mines at half duty cycle; either way "
-                 "the current figure is optimistic.",
+                 "✅  MODELLED as of Module 4 v1.14.0, through the "
+                 "'Eclipse / night-side dark fraction', 'Energy storage usable "
+                 "specific energy' and 'Power-system row baseline dark period' "
+                 "OPERATIONAL_COSTS rows.  Module 4 now installs "
+                 "[(1−f) + f/η]/(1−f) = 2.11× the continuous draw and adds the "
+                 "storage the body's OWN rotation period demands, less what the "
+                 "60 W/kg row already carries.  Radioisotope plants are exempt "
+                 "and the EP array is exempt — one is flat with time, the other "
+                 "is in permanent sunlight.",
     },
     {
         "name":            "RTG specific power",
