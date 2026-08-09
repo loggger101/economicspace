@@ -411,24 +411,52 @@ def _stage_minutes(key: str) -> float:
     if key == "transport":
         return 0.01              # ~0.5 s: pure reference tables, no network
 
+    # Full size of the JPL asteroid table, measured 2026-08-08.  Needed as a
+    # literal because `jpl_limit = 0` means "unlimited" as of catalog v1.1.0,
+    # and `or 50_000` would have quietly estimated the largest possible run as
+    # the smallest one — the estimate would have said three minutes for
+    # something that takes an afternoon.
+    _JPL_FULL_ROWS = 1_554_321
+
     if key == "catalog":
         limit = st.session_state.get("cfg::catalog::jpl_limit",
-                                     MASTER.catalog.jpl_limit) or 50_000
+                                     MASTER.catalog.jpl_limit)
+        limit = _JPL_FULL_ROWS if not limit else min(limit, _JPL_FULL_ROWS)
         ssodnet = st.session_state.get("cfg::catalog::use_ssodnet",
                                        MASTER.catalog.use_ssodnet)
         # JPL, NEOWISE and the merge scale with the row cap; SsODNet is a flat
         # ~500 MB parquet download that dwarfs all of them when enabled.
-        return 0.15 + limit / 50_000 * 1.5 + (5.0 if ssodnet else 0.0)
+        # Slope re-fitted on the v1.1.0 unlimited run: 1,554,321 rows end to end
+        # in 224 s with a warm SsODNet cache, i.e. ~2.4 min of scaling work plus
+        # the parquet.  The old 1.5 min per 50k over-charged by ~48x at full
+        # size, which mattered once "full size" became the default.
+        return 0.15 + limit / _JPL_FULL_ROWS * 2.4 + (5.0 if ssodnet else 0.0)
 
     # Stage 4 is the long pole. `eval_row_cap` is an upper bound rather than a
     # count, so this overestimates when the catalog is smaller than the cap;
     # the stage bar self-corrects the moment the pipeline prints its first
     # "i / n evaluated" and the real n becomes known.
+    #
+    # 0 means "every row" here too, and against a v1.1.0 catalog that is ~1.55 M
+    # rows rather than the 35,000 this used to assume.
     rows = st.session_state.get("cfg::calc::eval_row_cap",
-                                MASTER.calc.eval_row_cap) or 35_000
+                                MASTER.calc.eval_row_cap) or _JPL_FULL_ROWS
     benef = st.session_state.get("cfg::calc::use_beneficiation",
                                  MASTER.calc.use_beneficiation)
-    return rows * (0.031 if benef else 0.008) / 60.0
+    # Per-row seconds, fitted to the FULL-CATALOG raw run measured 2026-08-08 at
+    # cislunar: 1,554,351 rows in 2,539 s = 1.63 ms/row on six physical cores.
+    #
+    # Deliberately NOT fitted to a small sample.  A 20,000-row run of the same
+    # code costs 5.0 ms/row, 3.1x more, because worker startup and loading a
+    # 0.88 GB catalog are fixed costs and parallel efficiency is worse on a
+    # short job.  Using the sample rate here would have told the user 2.2 hours
+    # for a 42-minute run.  The error runs the other way for genuinely small
+    # runs, which this now under-estimates -- acceptable, since the estimate
+    # only matters when it is long.
+    #
+    # Beneficiated carries the 3.12x ratio measured on the sample; the full
+    # beneficiated run has not been timed.
+    return rows * (0.00509 if benef else 0.00163) / 60.0
 
 
 # Progress signals the pipeline already emits. These are PARSED rather than

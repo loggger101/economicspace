@@ -89,6 +89,10 @@ SECRET_FIELDS = {"metals_api_key"}
 CHOICES: Dict[str, Optional[List[str]]] = {
     "delivery_destination": None,          # from master.DELIVERY_DESTINATIONS
     "selection_objective": ["cost_revenue_ratio", "profit"],
+    # Only consulted when eval_row_cap > 0.  "stride" samples the whole
+    # catalog; "head" takes the innermost N bodies, which is what a cap did
+    # before calc v1.13.0 and is kept so an old run can be reproduced.
+    "eval_row_sampling": ["stride", "head"],
     "candidate_vehicles": None,            # from transportation/launch_vehicles.csv
     "candidate_propellants": None,         # from transportation/propellants.csv
 }
@@ -96,8 +100,19 @@ CHOICES: Dict[str, Optional[List[str]]] = {
 # Explicit numeric bounds where the default heuristic would get them wrong, or
 # where a bad value wastes a 20-minute run. (min, max, step).
 BOUNDS: Dict[str, Tuple[float, float, float]] = {
-    "jpl_limit":                         (100, 200_000, 1_000),
-    "eval_row_cap":                      (0, 200_000, 500),
+    # 0 = unlimited on all four source caps, so the minimum must be 0 rather
+    # than 100 — a slider that cannot reach 0 cannot express "take the whole
+    # table", which is the v1.1.0 default.  Upper bounds are each source's real
+    # size measured 2026-08-08: JPL 1,554,321 asteroids, SsODNet ~1.2 M rows,
+    # NEOWISE 183,412, MP3C ~1.2 M.
+    "jpl_limit":                         (0, 2_000_000, 10_000),
+    "ssodnet_limit":                     (0, 2_000_000, 10_000),
+    "neowise_limit":                     (0, 200_000, 1_000),
+    "mp3c_limit":                        (0, 2_000_000, 10_000),
+    "min_derived_diameter_km":           (0.0, 100.0, 0.001),
+    # Must reach the full 1.55 M catalog, otherwise the slider itself becomes a
+    # cap the user cannot see past.
+    "eval_row_cap":                      (0, 2_000_000, 500),
     # 0 = auto.  The upper bound is deliberately generous rather than
     # os.cpu_count(): calc clamps to the real CPU count anyway, and pinning the
     # slider to this machine would bake a host detail into a config the UI
@@ -161,16 +176,38 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
     ),
     (
         "Run size",
-        "What this run costs you in wall-clock time. calc v1.10.1 put Stage 4 "
-        "on every core; v1.11.0 then made the search 4.6x wider (21 "
-        "operational propellants against 7), so a full beneficiated "
-        "destination is back to double-digit minutes. Capping the rows is "
-        "still how you sanity-check a config change first.",
+        "What this run costs you in wall-clock time. Every cap here means "
+        "UNLIMITED at 0. catalog v1.1.0 removed the shared row cap and can now "
+        "hand Stage 4 ~1.55 million asteroids instead of ~89 thousand, so these "
+        "are no longer minor dials: a full beneficiated destination goes from "
+        "minutes to hours. Cap the rows to sanity-check a config change first — "
+        "and note that calc v1.13.0 makes a capped run an evenly-spaced sample "
+        "of the whole belt rather than the innermost N bodies.",
         [
             ("catalog", "jpl_limit"),
+            ("catalog", "ssodnet_limit"),
+            ("catalog", "neowise_limit"),
+            ("catalog", "mp3c_limit"),
             ("calc", "eval_row_cap"),
+            ("calc", "eval_row_sampling"),
             ("calc", "concentration_search_steps"),
             ("calc", "parallel_workers"),
+        ],
+    ),
+    (
+        "Catalog population",
+        "How many asteroids exist at all. Only 139,582 of JPL's 1,554,321 "
+        "asteroids have a MEASURED diameter, and Stage 1 drops any body "
+        "without one. Deriving diameter from absolute magnitude H lifts the "
+        "catalog to ~1.55 million, at the cost of an assumed albedo on every "
+        "derived row — and mass scales as albedo^-1.5, so those rows are much "
+        "softer than their diameters look. Every one is tagged in "
+        "`diameter_source`.",
+        [
+            ("catalog", "derive_diameter_from_h"),
+            ("catalog", "min_derived_diameter_km"),
+            ("catalog", "min_diameter_km"),
+            ("catalog", "require_spectral_type"),
         ],
     ),
     (
