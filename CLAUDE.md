@@ -62,8 +62,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.1.0`, mineral_value `1.7.0`, transportation `1.10.0`,
-calc `1.13.0`, master `1.16.0` (the master version is a literal in
+Current: catalog `1.1.0`, mineral_value `1.7.0`, transportation `1.11.0`,
+calc `1.14.0`, master `1.17.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
 calc `1.10.1` was the one stamp that did **not** mean the numbers moved. It
@@ -71,6 +71,47 @@ was a pure performance release, verified bit-identical, and it was bumped
 anyway so that a CSV still names the code that produced it — the rule above is
 "changing a number means bumping", not "bumping means a number changed".
 
+> 🚨🚨  **calc `1.14.0` / transportation `1.11.0` MOVED EVERY NUMBER AGAIN, AND
+> NOTHING IN THIS FILE HAS BEEN RE-MEASURED ON THE FULL CATALOG.** Two terms
+> the model had never charged — a sealed hold for the water it sells, and a
+> power plant that works at night — plus a power-source choice that was being
+> made on mass while the two sources differ 625× in price.
+>
+> Measured on a **6,000-row stride sample** of the OLD 89,367-row on-disk
+> catalog at cislunar, with `1.13.0` and `1.14.0` run against the same rows in
+> the same process, so the delta is the model change alone:
+>
+> | | `1.13.0` | **`1.14.0`** | Δ |
+> |---|---|---|---|
+> | raw | 38.4050× | **38.7886×** | **+1.00%** |
+> | beneficiated | 25.7930× | **31.6556×** | **+22.73%** |
+>
+> ⚠️  **Those are SAMPLE figures and are not comparable to any full-catalog
+> number in this file.** They exist to size the change, not to replace the
+> headline. The full-catalog cells below are `1.13.0` and every one of them is
+> now stale — a full raw cislunar pass is ~42 min and has not been re-run.
+>
+> **Beneficiated moves 23× as far as raw**, which is the tank-mass signature
+> from v1.11.0 in a new place: concentrating means more feed, more power, a
+> bigger plant, and the eclipse term multiplies the plant. The winner's plant
+> goes 308 → 915 kg, its propellant switches from iodine to xenon, and it
+> concentrates **less** — 5.06× → 4.03× — because grade now costs more array.
+>
+> ⚠️  **The programme-scale curve INVERTS, and that is the headline result of
+> this release rather than the ratios.** Market saturation could not see
+> `nre_amortization_missions` at all, so "fly more missions" had no stopping
+> point — the thing the term was written to prevent. On the same sample:
+>
+> | N | `1.13.0` | **`1.14.0`** |
+> |---|---|---|
+> | 1 | 38.4050× | 38.7886× |
+> | 10 | 16.0296× | **16.4745×** |
+> | 100 | **10.8935×** | **20.3246×** |
+>
+> The optimum programme size is now **interior**, around N = 10. Every
+> programme-scale figure in this file was measured on a model in which more
+> missions were free money.
+>
 > 🚨🚨  **catalog `1.1.0` / calc `1.13.0` CHANGED THE POPULATION, SO EVERY CELL
 > IN EVERY TABLE BELOW IS STALE.** The catalog goes from 89,367 asteroids to
 > **1,554,400**. This is not a model change — not one term, coefficient or
@@ -752,14 +793,19 @@ version of the same lesson: a table row can be wrong not by omission but by
 **internal contradiction**, holding two incompatible physical states at once
 and collecting the benefit of both. See argon.
 
-Three storage gaps remain open and all three run optimistic: **volatile cargo
-is never kept cold**, **the sun never sets** on the processing plant, and
-**boil-off cannot be bought down** with a cryocooler. They are listed with
-their citations in `STORAGE_REFERENCE` — the data is there, the consumer is
-not. Note that the first of those is now the largest single unpriced item in
-the model: v1.12.0 charged the *energy* to bake water out of the rock and to
-fly the array that does it, and still charges nothing to stop that water
-subliming away across a four-year cruise.
+✅  **Two of the three storage gaps are closed as of v1.14.0** — **volatile
+cargo containment** and **eclipse / night-side power**. See "What v1.14.0
+changed". The remaining one is **boil-off cannot be bought down** with a
+cryocooler, and it is the one that runs *pessimistic*, so it is a gap rather
+than a subsidy.
+
+⚠️  Read how those two were closed before writing another "known limitation"
+into this file. Every figure was already in `STORAGE_REFERENCE`, with its
+citation, behind a "⚠️  Not modelled in Module 4" note — and Module 4 does not
+load `storage_systems.csv`. The gap was documented in Module 3, quoted in this
+file for two releases, and **writing it down was mistaken for closing it**.
+A reference table nobody reads is not a model. If you record a gap, record
+which consumer would have to change and check that it can even see the table.
 
 ✅  **Thrust scalability is gated as of v1.12.0**, and closing it was the
 single largest correction in this release. It is written up under "What
@@ -774,7 +820,7 @@ per technology and Module 4 derives the thrust its mission needs, so a device
 that makes µN per kilogram reports thousands of tonnes of thruster and dies in
 the rocket equation on its own. Same shape as propellant tankage.
 
-## The eighteen things the model stopped giving away
+## The twenty things the model stopped giving away
 
 Each defaults ON and each moved every number. They are corrections, not
 options; the flags exist to isolate effects, not to be left off.
@@ -799,6 +845,14 @@ storage**, which took a cryogenic liquid's density and an ambient gas's zero
 boil-off at the same time; the **cargo-water power plant**, which was billed
 and never launched; and **propellant tank fabrication**, which was launched
 and never billed.
+
+Two arrived in v1.14.0 and are under "What v1.14.0 changed": **volatile cargo
+containment**, where water was sold at a depot with nothing charged to keep it
+from subliming on the way, and **eclipse / night-side power**, where the
+processing plant was sized on a continuous draw as though the sun never set on
+a rig standing on a rotating body. Both figures had been sitting in
+`STORAGE_REFERENCE` since Module 3 v1.9.0 behind a note saying they were not
+modelled.
 
 Notice the shape almost all of them share. The mass cascade and the cost
 cascade are written in different places, and nothing checks that every
@@ -907,6 +961,26 @@ The winner is 7753 (B) at every N. The 10->100 step buys little because one rig
 only serves 4 missions at this stay length, so mission 5 buys a new rig. "Fly
 more missions" is real but sublinear, and bounded by market saturation at the
 far end.
+
+> 🚨  **"bounded by market saturation at the far end" WAS NOT TRUE, and every
+> curve in this section was measured without it.** Market saturation never read
+> `nre_amortization_missions` — the name appears in exactly four places in
+> `calc.py` and none of them was the saturation block — so a 100-mission
+> programme divided its NRE by 100, grew its reliability, and sold 100 payloads
+> at the price ONE payload commands. Every lever pointed the same way and
+> nothing pushed back, which is precisely what the term's own config comment
+> says it exists to prevent.
+>
+> Fixed in v1.14.0: the rate is the programme's **concurrent** output,
+> `ceil(N / missions_sharing_rig)`, derived from the rig service-life cap this
+> module already computes. Exactly 1 at N = 1, so no single-mission figure
+> moves — which is every headline figure on record.
+>
+> On a 6,000-row raw cislunar sample the curve stops being monotone and
+> **turns**: 38.41× → 16.03× → 10.89× becomes 38.79× → 16.47× → **20.32×**.
+> The optimum programme size is interior, near N = 10. **Treat the whole table
+> above as measured on a model where more missions were free money**, and
+> rebuild it before quoting any of it.
 
 Two things changed against the old Mars curve (25.2x -> 6.9x -> 5.3x) beyond
 the anchor moving. The rig cap is **4 here, not 7** -- it is `life / stay`, so
@@ -1631,6 +1705,29 @@ That is not an argument for removing it — the code is right, and it will
 matter the moment the Δv model or the vehicle set changes. It is an argument
 against quoting "the RTG option" as something that improved these numbers.
 
+> 🚨  **RETIRED BY v1.14.0, and the reason is worth more than the section.**
+> "The code is right, and it will matter the moment the Δv model changes" was
+> half correct and the wrong half was the first half. Adding the eclipse term
+> made photovoltaics roughly half as good per kilogram, which moved the
+> crossover from 3.46 AU to about **2.1 AU** and put **31% of rows** on the
+> nuclear side — and at that point the branch turned out to have been choosing
+> on **mass alone** the whole time, while the two sources differ by **625× in
+> price per watt**. It was buying a median **$1.5B** radioisotope plant, 14% of
+> mission cost, on a criterion that cannot see dollars.
+>
+> Making it a searched axis resolved against `selection_key` drops it from
+> **31% to 3.9%** of rows. So 607 of the 693 bodies that "wanted" nuclear did
+> not want it at all; they wanted the lighter plant and would have been
+> bankrupted by it.
+>
+> The general lesson, and it is the one this file already states in
+> "**a search must optimise what you report**": *an unreachable branch is not a
+> verified branch.* "Correctly wired and very nearly unreachable" was a
+> statement about how often it fired, and it was being read as a statement
+> about whether it was right. The moment something else made it reachable, a
+> latent defect became 14% of mission cost. **Check the objective of every
+> choice the model makes, not just the ones that currently fire.**
+
 ### Verification (2026-08-08)
 
 Same three checks as v1.11.0, on the rebuilt `master.py` at cislunar.
@@ -1928,6 +2025,328 @@ stride selection did not introduce order-dependence:
 The speed-ups are below v1.12.0's 1.84× / 3.66× because these caps are smaller
 and per-worker startup is fixed; the sha256 is the part that matters here.
 
+## What calc v1.14.0 / transportation v1.11.0 changed
+
+A realism audit of the whole model — every metric and every calculation, not
+one subsystem. Five findings, and the first three share a shape this project
+has not seen before and should not see again:
+
+> **The data was already there, correctly derived and correctly cited, and
+> writing the gap down had been mistaken for closing it.**
+
+Every figure below has sat in Module 3's `STORAGE_REFERENCE` since its v1.9.0,
+under a note reading "⚠️  Not modelled in Module 4". Module 4 loads
+`operational_costs.csv` and does **not** load `storage_systems.csv`. So the
+table was documentation, the gap was quoted in *this file* as a known
+limitation for two releases, and nothing ever moved. That is the
+prescriptive-comment failure with a twist: not a comment nobody applied, but a
+**whole reference table nobody could read**.
+
+All five findings move the answer the same way: worse.
+
+transportation goes `1.10.0 → 1.11.0` (four new ops rows, no propellant,
+vehicle or Δv figure moved), calc `1.13.0 → 1.14.0`, master `1.16.0 → 1.17.0`.
+
+### The pipeline sold water and never kept it
+
+The largest of the three, and the one that is not a rounding term. The model
+prices water at every in-space destination, charges the energy to bake it out
+of phyllosilicate (v1.7.0) and the array that does the baking (v1.12.0) — and
+charges **nothing at all** to stop it subliming across a four-year cruise.
+
+Exposed ice in vacuum at 1 AU sits far above its sublimation threshold and is
+simply gone. Shaded, sealed and blanketed it is stable for decades. The charge
+is a sealed shaded hold: no power, no cryocooler, but real mass.
+
+Check the size of what was flying free before deciding this is minor — the best
+cislunar missions are **~88% water by mass**:
+
+```
+water 38,415 kg; carbon 3,548 kg; nickel-iron 1,537 kg     (of a 43,500 kg hold)
+```
+
+**The commodity carrying the entire result was the one commodity with no
+containment.** Module 3's row is 0.05 kg/kg and it is **incremental** to the
+0.15 ore restraint Module 4 already flies as
+`return_structure_frac_of_payload` — the hopper holds the cargo, the seal and
+the shade keep the volatile fraction of it from leaving. That reading is what
+makes the storage row's own "heavier than an ore hopper" true at a value below
+0.15. Charged on **water only**; carbon and organics are refractory at these
+temperatures and ride in the hopper like rock.
+
+It folds into `structure_frac`, which means the closed-form solver carries it
+with **no change to its algebra** — it is already the `f` in `(1 + f)`. It is
+settled at the payload actually flown rather than the loop's estimate, and it
+joins the fixed point rather than being estimated outside it, because
+estimating a feedback term outside the loop is exactly the v1.12.0
+cargo-water-array bug.
+
+### The sun never set on the processing plant
+
+`processing_power_w()` returns a **continuous average draw** — energy over the
+time available — and the plant was sized straight off it. That is only right if
+the rig is never in shadow. It stands on a rotating body.
+
+Two terms, and it matters that they are separate:
+
+- **Array oversize.** To deliver P continuously through a dark fraction f, the
+  sunlit hours must run the load *and* recharge the store:
+  `[(1−f) + f/η_rt]/(1−f)` = **2.11×** at f = 0.50, η_rt = 0.90. This is a
+  **sizing factor, not a specific mass**, which is why no W/kg row could ever
+  have absorbed it however its notes were worded.
+- **Storage**, sized on the **body's own rotation period**. This finally makes
+  `rotation_period_h` — carried by Module 1 since v1.0.0 and read by nothing —
+  a quantity the model uses, and it means a slow rotator is genuinely a worse
+  place to mine.
+
+Both collapse **exactly** into one effective W/kg, because both are
+proportional to the draw:
+
+```
+m_plant = P·oversize/w_solar + P·Δh/e_storage = P·(oversize/w_solar + Δh/e_storage)
+```
+
+so `eclipse_effective_w_per_kg` returns a specific power the rest of the module
+uses precisely where it used the bare figure — which keeps the plant's sizing,
+its 1/r² behaviour and its comparison against a radioisotope source in one
+currency.
+
+Four things not to "fix" here:
+
+**The storage term is charged as an INCREMENT, and the deduction is not a
+nicety.** "Power system specific mass" is 60 W/kg system-level against ROSA's
+~150 W/kg at the wing, and part of that 2.5× is a battery. Module 3's new
+"Power-system row baseline dark period" names how much (0.58 h — a LEO eclipse)
+and only the excess is new mass. Without it the battery is charged twice, and
+at 0.0056 kg/W against the row's own 0.0167 kg/W that is **a third of the
+plant**.
+
+**That row was internally contradictory, and the argon audit did not catch
+it** because it was looking at propellants. "Power system specific mass"
+claimed to cover "power through eclipse **and** through the night side of a
+rotating body" — and no single specific mass can be right for both, since an
+asteroid with a 10 h rotation is dark for 5 h, roughly 9× the LEO figure. Same
+failure as argon: **a reference row asserting two incompatible physical states
+at once.** The claim is removed from its notes and replaced by a row that says
+which of the two the 60 W/kg figure actually is.
+
+**The penalty is much bigger than the storage row's own estimate.** That row
+says eclipse "roughly DOUBLES the power system"; derived, it is **4.7×** at 1
+AU and the median 10.2 h rotation, because the battery for a 5-hour night is
+heavier than the array oversize (0.044 kg/W against 0.035). The 2× is the array
+term alone. Do not restore "roughly doubles".
+
+**The exemptions are physical, not conservative.** A radioisotope plant has
+flat output and never sees a night. The **EP array** is in interplanetary
+cruise in permanent sunlight and keeps the bare 1/r² figure — it is the rig's
+plant that stands in the shadow, not the propulsion train.
+
+⚠️  **The soft part, and it runs the other way.** Module 3's row also names the
+alternative architecture: a rig can **mine at half duty cycle** instead of
+carrying storage, taking twice the stay rather than twice the plant. This model
+sizes the storage and does not price the duty-cycle option, so where digging
+slowly is cheaper the answer here is pessimistic. And a free-flying array
+station-keeping off a small body would see almost no eclipse at all — an
+architecture this pipeline cannot express. `dark_fraction` is a cited 0.50 with
+a 0.35–0.55 range; it is the softest number in this release.
+
+⚠️  Also soft: 104 Wh/kg is 130 Wh/kg system-level Li-ion at 80% depth of
+discharge, and 80% DoD over the ~2,000 charge cycles a 10 h rotation implies
+across a 2.3-year dig is aggressive for cycle life. A regenerative fuel cell
+(400 Wh/kg, TRL 5) would cut the term ~4× and is not taken, because nothing has
+flown one. Those two roughly offset.
+
+### The power source was chosen on mass, and it costs 625× more per watt
+
+This one was **latent, and this release is what made it dangerous** — which is
+the most useful thing in the audit.
+
+CLAUDE.md carried a section headed "The RTG option is correctly wired and very
+nearly unreachable", recording that the branch fired on **one row of 15,566**.
+It ended: "the code is right, and it will matter the moment the Δv model or the
+vehicle set changes."
+
+The code was not right. `power_source_for_target` picked whichever of
+photovoltaic and radioisotope was **lighter**, and an RTG costs **$500,000 per
+watt against $800** — 625×. Nothing asked whether the lighter plant paid. That
+was invisible while the branch fired on one row.
+
+Adding the eclipse term makes photovoltaics roughly half as good per kilogram,
+which moves the crossover from **3.46 AU to about 2.1 AU** and puts **31% of
+rows** on the nuclear side. At which point the model was buying a median
+**$1.5 billion** radioisotope plant — **14% of mission cost**, max 23% — on a
+criterion that cannot see dollars.
+
+So it becomes a searched architecture axis, exactly as this file requires of
+any new one, resolved by `selection_key` like everything else. RTG share falls
+**31% → 3.9%**: 607 of the 693 bodies that "wanted" nuclear did not want it at
+all. The Pu-238 ceiling is now enforced as **infeasibility** rather than as a
+preference, which is what it physically is — DOE production is ~1.5 kg/yr,
+about one flagship RTG a year for the world.
+
+`power_source_for_target` keeps its name and its docstring and changes job: it
+generates the candidate rather than making the decision, and it is what prunes
+inner-system bodies from paying for a second search pass.
+
+**The lesson, and it generalises past this branch: an unreachable branch is not
+a verified branch.** "Correctly wired and very nearly unreachable" was a
+statement about how often it fired and it was being read as a statement about
+whether it was right. Check the objective of every choice the model makes, not
+only the ones that currently fire.
+
+### Market saturation could not see the programme it was written for
+
+`model_market_saturation`'s own config comment:
+
+> "Prices were static at the point of sale, so a mission could return any
+> quantity of platinum at spot and the 'fly more missions' lever had no
+> stopping point."
+
+It never achieved that. `nre_amortization_missions` appears in exactly four
+places in `calc.py` — rig amortisation, NRE division, the learning curve and
+reliability growth — and **none of them was the saturation block**. So a
+100-mission programme divided its NRE by 100, grew its reliability under
+Duane/AMSAA, and sold 100 payloads into the market at the price **one** payload
+commands. Every lever pointed the same way and nothing pushed back.
+
+The rate that matters is how much is on the market **at once**, and the model
+already computes it: one rig serves `missions_sharing_rig` missions back to
+back, so a programme of N needs `ceil(N / that)` rigs and that many missions
+are in flight concurrently. Derived from the model's own rig service-life
+arithmetic rather than asserted, and **exactly 1 at N = 1** — so no
+single-mission figure moves, which is every headline figure on record.
+
+The curve stops being monotone and turns (6,000-row raw cislunar sample):
+
+| N | `1.13.0` | **`1.14.0`** | concurrent | saturation multiplier |
+|---|---|---|---|---|
+| 1 | 38.4050× | 38.7886× | 1 | 0.7451 |
+| 10 | 16.0296× | **16.4745×** | 1 | 0.7773 |
+| 100 | **10.8935×** | **20.3246×** | 10 | **0.4279** |
+
+**The optimum programme size is now interior, near N = 10.** That is a result
+the model could not previously express, and it is the headline of this release
+rather than the ratios.
+
+### Two ledger asymmetries, in the family this file already names
+
+**TPS had no learning curve.** The capsule, the power system, the electric
+stage and the tankage all carry `lc`; an ablative heat shield is the most
+literally per-mission article on the vehicle — consumed on entry, rebuilt every
+flight — and it was the one recurring article that did not, for no reason
+anybody wrote down.
+
+**TPS was missing from the insured book value.** v1.12.0 swept that list
+against the mass cascade and picked up the plant, the electric stage and the
+tankage. TPS is billed from a different variable and was missed — it is the one
+item on the launch stack whose cost line sits outside `hardware_cost`. On an
+Earth-return mission it is 15% of payload at $50,000/kg.
+
+Both are inert at cislunar (no atmosphere, so `tps_frac = 0`) and at N = 1,
+which is why neither moves the measured cells below and why both need
+re-measuring at `earth_surface`, `leo` and `mars_surface`.
+
+### And one hole in the safety net, half closed
+
+`schema_check()` tested Module 3 **columns**. The ops table is keyed by
+category, so every figure in it is a **row**, and a missing row was invisible —
+`_ops_value` defaults it, silently and flatteringly. Four of this release's
+five findings arrive as ops rows, so shipping them behind a check that cannot
+see them would have been the same mistake again.
+
+`_MODULE3_REQUIRED_OPS` names each row Stage 4 needs and the model term its
+absence reverts. The wrong-**value** half of the hole CLAUDE.md describes is
+still open.
+
+### Measured effect
+
+⚠️  **Everything here is a 6,000-row stride SAMPLE of the OLD 89,367-row
+on-disk catalog**, not the 1.55 M-row catalog the `1.13.0` headline was
+measured on. Both versions were run against the same rows in the same process,
+so the delta is the model change and nothing else — but **do not quote these as
+full-catalog figures**. A full raw cislunar pass is ~42 minutes and has not
+been re-run.
+
+| | `1.13.0` | **`1.14.0`** | Δ | evaluable |
+|---|---|---|---|---|
+| raw | 38.4050× | **38.7886×** | **+1.00%** | 2,256 → 2,215 |
+| beneficiated | 25.7930× | **31.6556×** | **+22.73%** | 2,278 → 2,232 |
+
+**Beneficiated moves 23× as far as raw, and that is the tank-mass signature
+from v1.11.0 in a new place.** Concentrating means more feed, more power, a
+bigger plant — and the eclipse term multiplies the plant. The winner's plant
+goes **308 → 915 kg** (×3.0), its propellant switches from iodine to xenon, and
+it concentrates **less**: 5.062× → 4.030×, because grade now costs more array.
+Raw is where the containment term shows through comparatively cleanly.
+
+The winner is 136564 (C) in all four cells.
+
+### Verification (2026-08-08)
+
+**1. The gated-off build reproduces HEAD EXACTLY.** With
+`model_eclipse_power = False` and `model_volatile_containment = False`, against
+`master.py` at HEAD, 3,000-row raw cislunar, 1,128 rows each:
+
+```
+121 shared columns compared | 120 identical | 1 differs: pipeline_version
+```
+
+That is the check that matters most for a release of this kind, and it is
+stronger than a sha256 diff would have been — the CSV gains nine columns, so
+byte-identity was never available. Every gate reproduces the release it belongs
+to, so a stale Module 3 catalog degrades to `1.13.0` rather than to something
+that never shipped.
+
+**2. Never-worse holds on the NEW axis.** Adding the power-source search cannot
+make any row's reported objective worse, because solar is always in the
+candidate set:
+
+```
+pairs 1,081 | max searched/solar-only 1.000000 | exceptions 0 | improved 23 | bodies added 24
+```
+
+**3. Never-worse holds, beneficiated ≤ raw:**
+
+```
+pairs 1,105 | max benef/raw 1.000000 | exceptions 0 | declined (== 1.0) 171
+```
+
+**4. The mass-ledger identity holds exactly**, on every row of both settings:
+
+```
+hardware_total_kg == mining_hardware_kg + power_system_kg + ep_system_kg
+max |error| 0.000000000 kg
+```
+
+**5. Serial and parallel are byte-identical** (2,500-row raw):
+
+| | serial | 8 workers | speed-up | sha256 |
+|---|---|---|---|---|
+| raw, 2,500 rows | 47.3 s | 25.5 s | 1.85× | MATCH |
+
+**6. The ops-row staleness check fires.** Removing three rows from
+`operational_costs.csv` names all three and the term each one reverts; the
+current table is clean.
+
+**Runtime roughly doubles**: 51 s → 107 s raw and 93 s → 174 s beneficiated on
+the 6,000-row sample. That is the power-source axis, and it is paid only on
+bodies where a radioisotope plant could be lighter — inner-system targets are
+pruned before the second pass. Budget a full raw cislunar pass at ~1.5 h rather
+than 42 min.
+
+### Still not measured
+
+- **Every full-catalog cell in this file.** All of them are `1.13.0`.
+- **All four other destinations**, at either setting. `earth_surface`, `leo`
+  and `mars_surface` are the ones where the two TPS fixes bite at all, and they
+  are inert everywhere they have been measured.
+- **The programme-scale curve on the full catalog.** The sample shows it turns;
+  where it turns is not established.
+- **Whether `cislunar` is still the best case.** The eclipse term is a property
+  of the *body*, not the destination, so it moves every cell — but not
+  necessarily by the same amount, because the destinations differ in how much
+  beneficiation their winners do.
+
 ## Config discipline
 
 Configs are dataclasses instantiated once at module scope. Edit the field
@@ -1982,6 +2401,12 @@ Undoing any of these silently corrupts the output:
   part.
 
   ⚠️  **`schema_check()` checks COLUMNS, not VALUES, and that is a real hole.**
+  It checks Module 3 **rows** as well since v1.14.0 — the ops table is keyed by
+  category, so a missing *figure* was invisible to a column test, and
+  `_MODULE3_REQUIRED_OPS` now names each row Stage 4 needs alongside the model
+  term its absence silently reverts. That closes the missing-row half. The
+  wrong-**value** half is still open and is the one below.
+
   Editing a number in a Module 3 table — a density, a status, a boil-off rate
   — leaves the schema identical, so nothing warns and Stage 4 quietly runs on
   the old figure. This cost a full measurement pass during v1.12.0: the argon

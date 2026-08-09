@@ -385,6 +385,50 @@ class CalcConfig:
     allow_rtg_power:           bool  = True
     rtg_max_power_w:           float = 5_000.0
 
+    # ─── MODELLING COMPLETENESS, PART 4  (v1.14.0) ───────────────────────────
+    # ECLIPSE / NIGHT-SIDE POWER.  `processing_power_w()` computes a CONTINUOUS
+    # average draw and the plant was sized straight off it, which assumes the
+    # sun never sets on a rig standing on a rotating body.  It does: a surface
+    # site is lit about half the time, and asteroid rotation periods run hours,
+    # not the 35 minutes of a LEO eclipse.
+    #
+    # Two separate terms, and only the first is large:
+    #   • the array must be OVERSIZED, because the sunlit hours have to run the
+    #     load and recharge the store — [(1−f) + f/η]/(1−f) = 2.11× at f = 0.50.
+    #     This is a sizing factor, so no W/kg figure could ever have carried it.
+    #   • the store itself has to hold the load across the dark period, which is
+    #     set by the BODY'S OWN rotation period — so this term is per-asteroid,
+    #     and a slow rotator is genuinely a worse place to mine.
+    #
+    # Exempt: a radioisotope plant (flat output, no night) and the EP array
+    # (interplanetary cruise, permanent sunlight).  Both exemptions are physical
+    # rather than conservative, and the RTG one has a visible consequence —
+    # eclipse is what finally makes the radioisotope branch worth choosing on
+    # more than a rounding number of bodies.
+    model_eclipse_power:       bool  = True
+    # Median of the 29,288 catalog bodies that have a MEASURED rotation period
+    # (2026-08-08).  Used only where the body does not state one — about two
+    # thirds of the catalog.  Sub-kilometre bodies run faster (median 6.3 h),
+    # so this default is conservative for exactly the small NEAs this model
+    # likes: a longer assumed night buys a heavier battery.
+    default_rotation_period_h: float = 10.222
+    # Slow rotators run to hundreds of hours and a few tumble on ~10,000 h.
+    # Sizing a battery for a 40-day night is not an answer, it is a different
+    # architecture question (you would fly nuclear, or accept a duty cycle), so
+    # the dark period used for STORAGE is clamped and the clamp is reported.
+    # 72 h is three days, which is the outside edge of what a chemical battery
+    # is a sane answer for.
+    max_dark_period_h:         float = 72.0
+
+    # VOLATILE CARGO CONTAINMENT.  The pipeline sells water at every in-space
+    # destination and charged nothing to keep it from subliming across a
+    # four-year cruise.  That was not a rounding term: the best cislunar
+    # missions run ~88% water by mass, so the commodity carrying the entire
+    # result was the one flying free.  Module 3's "Volatile cargo containment"
+    # row (0.05 kg/kg, sealed and shaded hold) is INCREMENTAL to the 0.15 ore
+    # restraint already carried by return_structure_frac_of_payload.
+    model_volatile_containment: bool = True
+
     # ORBITAL REFUELLING (v1.11.0).  A vehicle whose escape payload assumes
     # tanker flights has to pay for them.  Starship's own Module 3 notes field
     # has asked for this since v1.4.0 — its 27 t to escape EXCEEDS its 21 t to
@@ -1235,7 +1279,67 @@ class CalcConfig:
     #         Stride is deterministic (np.linspace over positions, no RNG), so
     #         the serial/parallel byte-identity property of v1.10.1 survives.
     #         New config: eval_row_sampling.
-    pipeline_version: str = "1.13.0"
+    # 1.14.0 — realism audit.  Five findings, and the first three are all the
+    #         same shape: a term that was WRITTEN DOWN as missing and then
+    #         quoted as a known limitation until being written down was mistaken
+    #         for being fixed.  Module 3 has carried every figure below since
+    #         its v1.9.0, in STORAGE_REFERENCE, behind "⚠️  Not modelled in
+    #         Module 4" — and Module 4 does not load storage_systems.csv, so the
+    #         whole table was documentation.  They are moved to
+    #         OPERATIONAL_COSTS, which this module does read, in Module 3 v1.11.0.
+    #         All of them move the answer the same way: worse.
+    #         • VOLATILE CARGO CONTAINMENT.  The pipeline sells water at every
+    #           in-space destination and charged NOTHING to keep it from
+    #           subliming across a multi-year cruise.  That is not a rounding
+    #           term — the best cislunar missions run ~88% water by mass, so the
+    #           commodity carrying the entire result was the one flying free.
+    #           0.05 kg/kg of sealed shaded hold, INCREMENTAL to the 0.15 ore
+    #           restraint, folded into `structure_frac` so the closed-form
+    #           solver carries it with no change to its algebra, and settled at
+    #           the payload actually flown rather than the loop's estimate.
+    #         • THE SUN NEVER SET ON THE PROCESSING PLANT.
+    #           `processing_power_w()` returns a CONTINUOUS average draw and the
+    #           plant was sized straight off it, which is only right if the rig
+    #           is never in shadow.  It stands on a rotating body.  Two terms:
+    #           an array OVERSIZE of [(1−f) + f/η]/(1−f) = 2.11×, which is a
+    #           sizing factor and therefore something no W/kg row could ever
+    #           have absorbed however its notes were worded; and storage sized
+    #           on the BODY'S OWN rotation period, which finally makes
+    #           `rotation_period_h` — carried since Module 1 v1.0.0 and read by
+    #           nothing — a quantity the model uses.  Both collapse exactly into
+    #           an effective W/kg (see `eclipse_effective_w_per_kg`), so the RTG
+    #           comparison is now decided on real plant mass and its crossover
+    #           moves well inside 3.46 AU.  Exempt: radioisotope plants (flat
+    #           output) and the EP array (permanent sunlight).
+    #         • MARKET SATURATION COULD NOT SEE THE PROGRAMME.  Its own config
+    #           comment says it exists because "the 'fly more missions' lever had
+    #           no stopping point", and it never read
+    #           `nre_amortization_missions` — that name appears in exactly four
+    #           places and none of them was here.  A 100-mission programme
+    #           divided its NRE by 100, grew its reliability, and sold 100
+    #           payloads at the price one payload commands.  The rate is now the
+    #           programme's concurrent output, ceil(N / missions_sharing_rig),
+    #           derived from the rig service-life cap this module already
+    #           computes.  Exactly 1 at N = 1, so no committed figure moves.
+    #         • TPS was the one recurring article with no learning curve, while
+    #           the capsule, power system, electric stage and tankage all carry
+    #           one.  An ablative shield is the most literally per-mission
+    #           article on the vehicle.
+    #         • TPS was also missing from the INSURED book value.  v1.12.0 swept
+    #           that list against the mass cascade and caught the plant, the
+    #           electric stage and the tankage; TPS is billed from a different
+    #           variable and was missed.
+    #         Also: `schema_check` now checks Module 3 ROWS as well as columns.
+    #         The ops table is row-keyed, so a missing figure was invisible to a
+    #         column test — the exact hole CLAUDE.md names, and the one that
+    #         cost a full measurement pass in v1.12.0.
+    #         New config: model_eclipse_power, default_rotation_period_h,
+    #         max_dark_period_h, model_volatile_containment.
+    #         New output columns: solar_w_per_kg_bare, array_oversize_factor,
+    #         dark_period_h, dark_period_clamped, rotation_period_h,
+    #         cargo_water_kg, containment_frac, m_containment_kg,
+    #         concurrent_missions.
+    pipeline_version: str = "1.14.0"
 
 
 CONFIG = CalcConfig()
@@ -1424,6 +1528,33 @@ _MODULE3_REQUIRED = {
     },
 }
 
+# ── Module 3 ops ROWS this version needs  (v1.14.0) ──────────────────────────
+# The ops table is keyed by category, not by column, so a missing figure is a
+# missing ROW and `schema_check` above — which tests columns — cannot see it.
+# CLAUDE.md names that hole explicitly ("schema_check() checks COLUMNS, not
+# VALUES, and that is a real hole"), and it has already cost one full
+# measurement pass: the v1.12.0 argon tables were rewritten, Stage 3 was
+# re-run, the CSV did not land, and two full-catalog runs were measured against
+# the table being replaced with nothing anywhere saying so.
+#
+# `_ops_value` defaults every one of these, silently and flatteringly, so the
+# rows that would revert a MODEL TERM (rather than nudge a price) are named
+# here with the behaviour their absence restores.
+_MODULE3_REQUIRED_OPS = {
+    "Eclipse / night-side dark fraction":
+        "the processing plant is sized on a continuous draw — the sun never sets on the rig",
+    "Energy storage usable specific energy":
+        "night-side energy storage has no specific energy and is not massed",
+    "Power-system row baseline dark period":
+        "the LEO-eclipse battery inside the 60 W/kg row is charged twice",
+    "Volatile cargo containment":
+        "water cargo flies with no sealed hold — it is sold at the depot and never kept cold",
+    "RTG specific power":
+        "the radioisotope branch is unreachable; every distant body flies a 1/r²-starved array",
+    "Power processing unit specific mass":
+        "the PPU reverts to the lumped 8 kg/kW thruster+PPU figure",
+}
+
 
 def schema_check(catalogs: Dict[str, pd.DataFrame]) -> None:
     """Warn when an upstream table predates the columns this module reads.
@@ -1447,10 +1578,19 @@ def schema_check(catalogs: Dict[str, pd.DataFrame]) -> None:
             if col not in df.columns:
                 stale.append((key, col, consequence))
 
+    # v1.14.0: the ops table is row-keyed, so a missing figure is a missing ROW
+    # and the column loop above cannot see it.  Same failure, same silence.
+    ops = catalogs.get("ops")
+    if ops is not None and "category" in ops.columns:
+        have = set(ops["category"].astype(str))
+        for row, consequence in _MODULE3_REQUIRED_OPS.items():
+            if row not in have:
+                stale.append(("ops", f"[{row}]", consequence))
+
     if not stale:
         return
-    print(f"\n     ⚠️  Module 3 catalog is STALE — {len(stale)} column(s) this "
-          f"version reads are missing:")
+    print(f"\n     ⚠️  Module 3 catalog is STALE — {len(stale)} column(s)/row(s) "
+          f"this version reads are missing:")
     for key, col, consequence in stale:
         print(f"          • {key}.{col}  →  {consequence}")
     print("        → Re-run Stage 3 (transportation).  It takes seconds, and "
@@ -1882,20 +2022,28 @@ def solar_specific_power_w_per_kg(
 # size.  The processing plant is kilowatts and is the honest place for this.
 
 def power_source_for_target(
-    a_au:          Optional[float],
-    base_w_per_kg: float,
-    rtg_w_per_kg:  float,
-    required_w:    float,
-    max_rtg_w:     float,
+    solar_w_per_kg: float,
+    rtg_w_per_kg:   float,
+    required_w:     float,
+    max_rtg_w:      float,
 ) -> Tuple[float, str]:
     """(specific power W/kg, source name) for the processing plant.
 
-    Picks whichever of photovoltaic and radioisotope is LIGHTER at this
-    asteroid's heliocentric distance, subject to the radioisotope cap.
-    Returns the solar figure unchanged whenever RTG is unavailable, so
-    `allow_rtg_power = False` reproduces the pre-v1.11.0 behaviour exactly.
+    Picks whichever of photovoltaic and radioisotope is LIGHTER, subject to the
+    radioisotope cap.  Returns the solar figure unchanged whenever RTG is
+    unavailable, so `allow_rtg_power = False` reproduces the pre-v1.11.0
+    behaviour exactly.
+
+    v1.14.0 — takes the solar figure ALREADY RESOLVED rather than deriving it
+    from `a_au` internally.  The caller now hands in an eclipse-effective
+    specific power (see `eclipse_effective_w_per_kg`), and that matters: with
+    the night-side term in it, a photovoltaic plant is roughly half as good per
+    kilogram as its bare 1/r² rating, so the crossover against a radioisotope
+    source moves substantially INWARD of the 3.46 AU that the two bare specific
+    powers imply.  Comparing bare figures here would have kept choosing a solar
+    plant that the mission then had to fly at twice the mass.
     """
-    solar = solar_specific_power_w_per_kg(a_au, base_w_per_kg)
+    solar = float(solar_w_per_kg)
     if rtg_w_per_kg <= 0 or required_w <= 0:
         return solar, "solar"
     if required_w > max_rtg_w:
@@ -1903,6 +2051,127 @@ def power_source_for_target(
     if rtg_w_per_kg <= solar:
         return solar, "solar"           # inside the crossover; PV is lighter
     return float(rtg_w_per_kg), "rtg"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ECLIPSE / NIGHT-SIDE POWER  (v1.14.0)
+# ─────────────────────────────────────────────────────────────────────────────
+# `processing_power_w()` returns a CONTINUOUS average draw — energy divided by
+# the time available — and the plant was sized straight off it.  That is only
+# correct if the sun never sets.  It does: the rig stands on a rotating body,
+# roughly half its sky is the ground, and asteroid rotation periods run hours.
+#
+# Module 3 has carried the 0.50 dark fraction in STORAGE_REFERENCE since v1.9.0
+# with "⚠️  Not modelled" written on it, and the note was quoted as a known
+# limitation for two releases while nothing consumed it — because Module 4
+# loads operational_costs.csv and STORAGE_REFERENCE is exported to a file it
+# does not read.  Writing a gap down is not closing it.
+#
+# Two terms, and it matters that they are separate:
+#
+#   ARRAY OVERSIZE.  To deliver P continuously through a dark fraction f, the
+#   sunlit hours must run the load AND recharge the store:
+#
+#       installed = P · [(1 − f) + f/η_rt] / (1 − f)
+#
+#   which is 2.11× at f = 0.50, η_rt = 0.90.  This is a SIZING factor, not a
+#   specific mass, which is why no W/kg row could ever have absorbed it however
+#   its notes were worded.
+#
+#   STORAGE.  The store carries the load across one dark period, and the dark
+#   period is set by the BODY'S OWN rotation.  So this term is per-asteroid and
+#   a slow rotator is genuinely a worse place to mine — a fact the model had no
+#   way to express before, despite carrying `rotation_period_h` since v1.0.0.
+#
+# Both are exempt for a radioisotope plant, whose output is flat, and neither
+# applies to the EP array, which is in interplanetary cruise and in permanent
+# sunlight.  The RTG exemption is the one with a visible consequence: eclipse
+# is what makes the radioisotope branch worth choosing on more than a rounding
+# number of bodies.
+
+def dark_period_hours(
+    rotation_period_h: Optional[float],
+    dark_fraction:     float,
+    default_period_h:  float,
+    max_dark_h:        float,
+) -> Tuple[float, bool]:
+    """(hours of darkness per rotation, whether the clamp bound).
+
+    Bodies with no measured rotation — about two thirds of the catalog — take
+    the median of the ones that have it.  Slow rotators run to hundreds of
+    hours and a few tumblers are catalogued near 10,000; sizing a chemical
+    battery for a forty-day night is not an answer but a different
+    architecture question, so the dark period is clamped and the clamp is
+    reported rather than hidden.
+    """
+    try:
+        period = float(rotation_period_h)
+    except (TypeError, ValueError):
+        period = float(default_period_h)
+    if not np.isfinite(period) or period <= 0:
+        period = float(default_period_h)
+    dark = period * max(0.0, min(1.0, dark_fraction))
+    if dark > max_dark_h:
+        return float(max_dark_h), True
+    return dark, False
+
+
+def eclipse_effective_w_per_kg(
+    solar_w_per_kg:     float,
+    dark_h:             float,
+    dark_fraction:      float,
+    storage_wh_per_kg:  float,
+    storage_efficiency: float,
+    baseline_dark_h:    float,
+) -> Tuple[float, float]:
+    """(effective W/kg for a night-side plant, array oversize factor).
+
+    Both eclipse terms collapse exactly into one effective specific power,
+    because both are proportional to the continuous draw P:
+
+        m_plant = P·oversize/w_solar + P·Δh/e_storage
+                = P · (oversize/w_solar + Δh/e_storage)
+
+    so 1/(oversize/w_solar + Δh/e_storage) is a W/kg the rest of the module can
+    use exactly where it used the bare figure.  That is why this is a specific
+    power rather than a mass: it keeps the plant's sizing, its 1/r² behaviour
+    and its comparison against a radioisotope source in one currency, and it
+    means the RTG crossover is decided on real mass instead of on bare ratings.
+
+    The storage term is charged as an INCREMENT.  "Power system specific mass"
+    is 60 W/kg system-level against ROSA's ~150 W/kg at the wing, and part of
+    that 2.5× is a battery, so some storage is already bought; Module 3's
+    "Power-system row baseline dark period" names how much (0.58 h, a LEO
+    eclipse) and only the excess is new mass.  Without that deduction the
+    battery is charged twice, and at 0.0056 kg/W against the row's own
+    0.0167 kg/W it is a third of the plant, not a nicety.
+
+    `dark_fraction = 0` returns the input unchanged and an oversize of 1.0, so
+    a stale Module 3 catalog or `model_eclipse_power = False` reproduces
+    v1.13.0 exactly.
+
+    One deliberate conservatism: the oversize factor scales the whole
+    PV+PMAD+battery+structure train, including the LEO-class battery already
+    inside the 60 W/kg figure, which does not itself need oversizing.  Second
+    order against the two terms above, and it runs in the safe direction.
+    """
+    w = float(solar_w_per_kg)
+    if w <= 0:
+        return w, 1.0
+    f = max(0.0, min(0.95, float(dark_fraction)))
+    if f <= 0.0:
+        return w, 1.0
+    eta = max(0.05, min(1.0, float(storage_efficiency)))
+    # Sunlit hours run the load AND recharge the store, and the recharge is
+    # lossy.  Exactly 1.0 at f = 0 — the permanent-sunlight case a free-flying
+    # plant enjoys, which is why the EP array never sees this term.
+    oversize = ((1.0 - f) + f / eta) / (1.0 - f)
+
+    kg_per_w = oversize / w
+    if storage_wh_per_kg > 0:
+        excess_h  = max(0.0, float(dark_h) - max(0.0, float(baseline_dark_h)))
+        kg_per_w += excess_h / float(storage_wh_per_kg)
+    return (1.0 / kg_per_w if kg_per_w > 0 else w), oversize
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3127,11 +3396,13 @@ def _ops_value(ops_df: pd.DataFrame, category: str, default: float = 0.0) -> flo
 _OPS_SIZING_CACHE: Tuple[Optional[pd.DataFrame], Optional[Tuple[float, ...]]] = (None, None)
 
 
-def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, float, float, float, float, float, float]:
-    """The seven Module 3 rows the coupled sizing loop needs, resolved once.
+def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, ...]:
+    """The twelve Module 3 rows the coupled sizing loop needs, resolved once.
 
         (dig Wh/kg, beneficiation Wh/kg, array W/kg at 1 AU,
-         EP efficiency, EP thruster+PPU kg/kW, RTG W/kg, PPU-only kg/kW)
+         EP efficiency, EP thruster+PPU kg/kW, RTG W/kg, PPU-only kg/kW,
+         dark fraction, storage Wh/kg usable, storage round-trip efficiency,
+         baseline dark hours, volatile containment kg/kg)
 
     The last two of those are fallbacks rather than the primary path as of
     v1.12.0: EP efficiency and thruster mass are per-technology now (Module 3's
@@ -3158,6 +3429,17 @@ def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, float, float, fl
         _ops_value(ops_df, "Electric thruster + PPU specific mass", default=8.0),
         _ops_value(ops_df, "RTG specific power", default=5.0),
         _ops_value(ops_df, "Power processing unit specific mass", default=4.7),
+        # v1.14.0.  The defaults here are the ones that REPRODUCE v1.13.0 rather
+        # than the physical figures, deliberately: a dark fraction of 0.0 and a
+        # containment fraction of 0.0 mean "this Module 3 catalog predates the
+        # rows", and a stale catalog should reproduce the release it belongs to
+        # instead of silently half-applying a new term.  `schema_check` names
+        # each of them, because reverting quietly is the failure mode.
+        _ops_value(ops_df, "Eclipse / night-side dark fraction", default=0.0),
+        _ops_value(ops_df, "Energy storage usable specific energy", default=0.0),
+        _ops_value(ops_df, "Energy storage round-trip efficiency", default=0.90),
+        _ops_value(ops_df, "Power-system row baseline dark period", default=0.0),
+        _ops_value(ops_df, "Volatile cargo containment", default=0.0),
     )
     _OPS_SIZING_CACHE = (ops_df, vals)
     return vals
@@ -3382,10 +3664,17 @@ def mission_cost_usd(
     ops_cost     = ops_per_year * mission_duration_yr
 
     # Heat shield — mass now comes from the actual cascade, not re-derived.
+    # v1.14.0: the learning curve applies here too.  An ablative heat shield is
+    # consumed on entry and rebuilt for every mission — it is the most literally
+    # per-mission article on the vehicle — so Wright's law applies to it exactly
+    # as it does to the capsule, the power system, the electric stage and the
+    # tankage, all of which already carry `lc`.  It was the one recurring
+    # article that did not, for no reason anybody wrote down.  Exactly 1.0 at
+    # N = 1, so no single-mission figure moves.
     tps_mass = float(mass_cascade.get("m_tps", 0.0))
     if tps_mass > 0:
         tps_per_kg       = _ops_value(ops_df, "Heat shield / TPS for Earth return", default=50_000.0)
-        heat_shield_cost = tps_mass * tps_per_kg
+        heat_shield_cost = tps_mass * tps_per_kg * lc
     else:
         heat_shield_cost = 0.0
 
@@ -3415,9 +3704,17 @@ def mission_cost_usd(
     # Note the rig enters at its FULL build cost, not the amortised share:
     # losing it on ascent destroys the whole unit however many missions were
     # meant to share it.  Everything else is per-mission already.
+    #
+    # v1.14.0: and the heat shield is on the rocket too.  v1.12.0 swept this
+    # list against the mass cascade and picked up the power plant, the electric
+    # stage and the tankage, but TPS is billed from a different variable and was
+    # missed — it is the one item on the launch stack whose cost line sits
+    # outside `hardware_cost`.  On an Earth-return mission it is a 15%-of-payload
+    # article at $50,000/kg, so it is not a rounding term where it exists at all.
     launch_ins_pct        = _ops_value(ops_df, "Launch insurance", default=10.0) / 100.0
     spacecraft_book_value = (mining_rig_cost_total + capsule_cost
-                             + power_system_cost + ep_system_cost + tank_cost)
+                             + power_system_cost + ep_system_cost + tank_cost
+                             + heat_shield_cost)
     launch_insurance_cost = launch_ins_pct * (launch_cost + spacecraft_book_value)
 
     # Spacecraft bus NRE amortised across N missions, less the share already
@@ -3544,6 +3841,7 @@ def _evaluate_combo_at_ratio(
     aero:              Optional[bool] = None,
     isru:              bool = False,
     rendezvous_apsis:  str = "",
+    power_mode:        str  = "solar",
 ) -> Optional[Dict[str, float]]:
     """Evaluate one (vehicle × propellant × architecture) mission for one asteroid.
 
@@ -3633,7 +3931,19 @@ def _evaluate_combo_at_ratio(
     # 2,000 kg rig figure already carries its own power implicitly, and this
     # keeps a default run bit-identical to v1.4.0.
     (dig_wh, benef_wh, base_w_per_kg, ep_eff, ep_kg_per_kw,
-     rtg_w_per_kg, ppu_only_kg_per_kw) = _ops_sizing_constants(ops_df)
+     rtg_w_per_kg, ppu_only_kg_per_kw,
+     dark_frac, storage_wh_per_kg, storage_eta, baseline_dark_h,
+     containment_per_kg) = _ops_sizing_constants(ops_df)
+    # ── Eclipse / night-side power (v1.14.0) ─────────────────────────────────
+    # The dark period belongs to the BODY, so it is resolved once per asteroid
+    # rather than per candidate mission.  `dark_clamped` is reported so a
+    # tumbler sized against the 72 h ceiling is visible as such.
+    if not config.model_eclipse_power:
+        dark_frac = 0.0
+    dark_h, dark_clamped = dark_period_hours(
+        asteroid_row.get("rotation_period_h"), dark_frac,
+        config.default_rotation_period_h, config.max_dark_period_h,
+    )
     # Solar for the electric-propulsion array always (see power_source_for_target
     # for why a radioisotope source cannot serve hundreds of kilowatts), and for
     # the processing plant until the loop below learns how much power it needs.
@@ -3641,8 +3951,43 @@ def _evaluate_combo_at_ratio(
         asteroid_row.get("semi_major_axis_au"), base_w_per_kg,
     )
     ep_w_per_kg   = w_per_kg
-    plant_w_per_kg = w_per_kg
+    # v1.14.0: the PROCESSING plant is the one that stands in the body's shadow.
+    # The EP array does not — it is in interplanetary cruise, in permanent
+    # sunlight — so `ep_w_per_kg` keeps the bare 1/r² figure and only the plant
+    # takes the night-side penalty.
+    w_solar_eff, array_oversize_factor = eclipse_effective_w_per_kg(
+        w_per_kg, dark_h, dark_frac,
+        storage_wh_per_kg, storage_eta, baseline_dark_h,
+    )
+    plant_w_per_kg = w_solar_eff
     power_source   = "solar"
+
+    # ── The power source is a SEARCHED architecture choice (v1.14.0) ─────────
+    # It used to be resolved inside the sizing loop by `power_source_for_target`,
+    # on MASS alone — take whichever of photovoltaic and radioisotope is lighter
+    # at this distance.  That is not the objective this module reports, and the
+    # two differ by 625× in price per watt ($500,000 against $800), so the model
+    # was buying a nine- or ten-figure radioisotope plant to save array mass and
+    # nothing ever asked whether that paid.
+    #
+    # It went unnoticed because it was unreachable: on v1.12.0 the branch fired
+    # on ONE row of 15,566.  Adding the eclipse term makes photovoltaics roughly
+    # half as good per kilogram, which moves the crossover from 3.46 AU to about
+    # 2.1 AU and puts a third of the catalog on the nuclear side — at which point
+    # a mass-only choice is charging a median $1.5B plant, 14% of mission cost,
+    # decided by a criterion that cannot see dollars.
+    #
+    # So it joins the per-asteroid search, exactly as CLAUDE.md requires of any
+    # new architecture axis, and `selection_key` resolves it against the same
+    # objective as everything else.  `power_mode` is now an instruction, not a
+    # question: "rtg" means fly a radioisotope plant or report infeasible, which
+    # keeps the two candidates genuinely distinct and leaves solar as the
+    # always-available fallback.
+    if power_mode == "rtg":
+        if rtg_w_per_kg <= 0:
+            return None
+        plant_w_per_kg = rtg_w_per_kg
+        power_source   = "rtg"
 
     # `beneficiate` lets the caller price a NON-concentrating mission even
     # when the run has beneficiation enabled, so evaluate_combo can offer
@@ -3726,6 +4071,13 @@ def _evaluate_combo_at_ratio(
     # 0.05%/day over a 4-year hold loads 2.1x what the rocket equation burns,
     # against the 1.1x the old estimate implied.  The ISRU feed is new for the
     # same reason: it is rock that has to be dug, and dug rock is time.
+    #
+    # v1.14.0 adds a seventh leg — VOLATILE CONTAINMENT.  A sealed shaded hold
+    # scales with the water in the cargo, the water in the cargo comes out of
+    # the payload knapsack, and the knapsack is solved against a payload the
+    # containment mass helps determine.  Same ring, one more term, and it is
+    # handled the same way rather than estimated once outside the loop — which
+    # is the mistake v1.12.0 found in the cargo-water array.
     power_system_kg = 0.0
     ep_system_kg    = 0.0
     ep_power_watts  = 0.0
@@ -3738,6 +4090,13 @@ def _evaluate_combo_at_ratio(
     boiloff_factor  = 1.0
     stay_est_yr     = config.station_keeping_floor_yr + window_wait_yr
     outbound_yr     = max(0.5, 0.000_23 * dv_out_m_s)
+    # Containment rides as an addition to the return vehicle's payload-scaling
+    # structure, which is exactly what it is — the hopper holds the cargo, the
+    # seal and the shade keep the volatile fraction of it from leaving.  Folding
+    # it into `structure_frac` means the closed-form solver carries it with no
+    # change to the algebra: it is already the f in (1 + f).
+    containment_frac = 0.0
+    structure_frac_eff = structure_frac
     cascade = None
     for _ in range(12):
         # Boil-off, folded into an EFFECTIVE return Δv: since m_return_prop
@@ -3760,7 +4119,7 @@ def _evaluate_combo_at_ratio(
             dry_return_kg   = config.return_vehicle_dry_kg,
             tps_frac        = tps_frac,
             isru_return     = isru,
-            structure_frac  = structure_frac,
+            structure_frac  = structure_frac_eff,
             tank_frac       = tank_frac,
         )
         if not cascade["viable"]:
@@ -3800,7 +4159,7 @@ def _evaluate_combo_at_ratio(
             r_ret = cascade["r_ret"]
             new_isru_prop = ((trial_payload
                               + config.return_vehicle_dry_kg
-                              + structure_frac * trial_payload)
+                              + structure_frac_eff * trial_payload)
                              * (1.0 + tps_frac) * (r_ret - 1.0))
             new_isru_feed = new_isru_prop * isru_feed_per_kg_prop
             if new_isru_feed >= throughput_cap_kg or new_isru_feed >= mineable_kg:
@@ -3829,6 +4188,31 @@ def _evaluate_combo_at_ratio(
                 trial_payload if beneficiate else 0.0,
                 trial_dur, dig_wh, benef_wh,
             )
+        # ── Cargo water, needed by TWO terms as of v1.14.0 ───────────────────
+        # The water in the hold sets the liberation energy (and so the array)
+        # AND the sealed-hold containment mass (and so the return vehicle's
+        # structure).  Computed once per pass and used by both, for the same
+        # reason `_cargo_water_kg` exists at all: two expressions for the same
+        # quantity is precisely how v1.12.0 ended up charging for an array it
+        # never flew.  The knapsack call is the expensive part of this loop, so
+        # it is also the reason to compute it once rather than twice.
+        need_cargo_water = (config.model_water_liberation
+                            or (config.model_volatile_containment
+                                and containment_per_kg > 0))
+        trial_cargo_water = (
+            _cargo_water_kg(asteroid_row, phases, trial_payload, trial_feed,
+                            beneficiate, config)
+            if need_cargo_water else 0.0
+        )
+        # Containment scales with the VOLATILE fraction of the cargo, so it is
+        # a payload-proportional term exactly like the ore restraint it sits on
+        # top of — which is what lets it fold into structure_frac and leaves the
+        # closed-form solver's algebra untouched.
+        new_containment_frac = 0.0
+        if config.model_volatile_containment and trial_payload > 0:
+            new_containment_frac = (containment_per_kg
+                                    * min(1.0, trial_cargo_water / trial_payload))
+
         if trial_dur > 0 and config.model_water_liberation:
             # Baking water out of rock, on top of digging it.  Two sources and
             # they are charged at the same rate: the water turned into ISRU
@@ -3851,36 +4235,22 @@ def _evaluate_combo_at_ratio(
             )
             trial_water = (new_isru_prop * isru_water_per_kg_prop
                            if isru else 0.0)
-            trial_water += _cargo_water_kg(
-                asteroid_row, phases, trial_payload, trial_feed,
-                beneficiate, config,
-            )
+            trial_water += trial_cargo_water
             if trial_water > 0:
                 processing_power_watts += (
                     water_wh * trial_water / (trial_dur * 365.25 * 24.0)
                 )
 
         if processing_power_watts > 0:
-            # v1.11.0: pick the lighter power source for the plant now that its
-            # draw is known.  Inside 3.46 AU this returns solar unchanged, so a
-            # near-Earth run is untouched; beyond it, a starved photovoltaic
-            # array stops being the only option a main-belt target has.
-            #
-            # This sits INSIDE the fixed point, so a target whose draw lands
-            # right on `rtg_max_power_w` can alternate source between passes
-            # and never satisfy the convergence test.  That is bounded (the
-            # loop runs at most 12 times and the last cascade is used) and it
-            # is deterministic — same inputs, same iterate, same answer — so
-            # the serial/parallel sha256 check still holds.  It is a real
-            # discontinuity in the model rather than a numerical defect: at the
-            # cap, adding one watt of demand genuinely forces a different
-            # power plant.
-            if config.allow_rtg_power:
-                plant_w_per_kg, power_source = power_source_for_target(
-                    asteroid_row.get("semi_major_axis_au"),
-                    base_w_per_kg, rtg_w_per_kg,
-                    processing_power_watts, config.rtg_max_power_w,
-                )
+            # v1.14.0: the SOURCE is fixed by `power_mode` before the loop, so
+            # all that remains inside it is the Pu-238 ceiling — and that is a
+            # hard constraint, not a preference.  DOE production is ~1.5 kg/yr,
+            # about one flagship RTG a year for the entire world, so a plant
+            # over the cap is not expensive, it is unavailable.  Reporting the
+            # candidate infeasible is what makes that honest; the solar
+            # candidate for the same body is evaluated alongside and survives.
+            if power_source == "rtg" and processing_power_watts > config.rtg_max_power_w:
+                return None
             new_power_kg = (processing_power_watts / plant_w_per_kg
                             if plant_w_per_kg > 0 else 0.0)
         else:
@@ -3892,10 +4262,16 @@ def _evaluate_combo_at_ratio(
             and abs(new_ep_kg - ep_system_kg) <= 0.01 * max(new_ep_kg, 1.0)
             and abs(new_isru_feed - isru_feed_kg) <= 0.01 * max(new_isru_feed, 1.0)
             and abs(new_stay_yr - stay_est_yr) <= 0.01 * max(new_stay_yr, 1.0)
+            # Containment is a fraction, not a mass, so its convergence test is
+            # absolute rather than relative — 1e-4 of a payload-scaling term is
+            # far below anything that moves a reported number.
+            and abs(new_containment_frac - containment_frac) <= 1e-4
         )
         power_system_kg, ep_system_kg = new_power_kg, new_ep_kg
         isru_feed_kg, isru_prop_kg    = new_isru_feed, new_isru_prop
         stay_est_yr                   = new_stay_yr
+        containment_frac              = new_containment_frac
+        structure_frac_eff            = structure_frac + containment_frac
         if converged:
             break
 
@@ -3986,9 +4362,28 @@ def _evaluate_combo_at_ratio(
     # reflect the actual mission, not the rocket-eq theoretical max.
     r_ret           = cascade["r_ret"]
     r_out           = cascade["r_out"]
+    # ── Settle volatile containment at the payload actually flown (v1.14.0) ──
+    # The loop capped the payload by the body's mass and by rig throughput, but
+    # the VOLUME cap above can cut it further, and the knapsack's water fraction
+    # moves with the payload.  Settled here, before anything downstream reads
+    # the structure fraction, for the same reason the power plant is settled
+    # below: the mission that gets priced has to be the mission that gets flown.
+    cargo_water_kg = 0.0
+    if config.model_water_liberation or (config.model_volatile_containment
+                                         and containment_per_kg > 0):
+        cargo_water_kg = _cargo_water_kg(
+            asteroid_row, phases, m_payload, feed_kg, beneficiate, config,
+        )
+    containment_frac = 0.0
+    if config.model_volatile_containment and m_payload > 0:
+        containment_frac = containment_per_kg * min(1.0, cargo_water_kg / m_payload)
+    structure_frac_eff = structure_frac + containment_frac
     # v1.10.0: the return vehicle grows with what it carries — see
-    # return_structure_frac_of_payload.
-    m_dry_return    = config.return_vehicle_dry_kg + structure_frac * m_payload
+    # return_structure_frac_of_payload.  v1.14.0 adds the sealed shaded hold for
+    # whatever fraction of that cargo is water, which is most of it on the
+    # bodies this model likes.
+    m_dry_return    = config.return_vehicle_dry_kg + structure_frac_eff * m_payload
+    m_containment_kg = containment_frac * m_payload
     m_tps           = tps_frac * (m_payload + m_dry_return)
     # v1.11.0: the same two tankage scalars the solver used, read back rather
     # than re-derived.  k_ret = 1/(1 − t(R_ret−1)) inflates the post-burn mass
@@ -3998,7 +4393,7 @@ def _evaluate_combo_at_ratio(
     k_ret_c         = float(cascade.get("k_ret", 1.0))
     k_out_c         = float(cascade.get("k_out", 1.0))
     m_after_return  = k_ret_c * (1.0 + tps_frac) * (
-        m_payload * (1.0 + structure_frac) + config.return_vehicle_dry_kg)
+        m_payload * (1.0 + structure_frac_eff) + config.return_vehicle_dry_kg)
     m_return_prop   = m_after_return * (r_ret - 1.0)
     m_tank_return   = tank_frac * m_return_prop
 
@@ -4056,11 +4451,10 @@ def _evaluate_combo_at_ratio(
         )
     water_kg = isru_water_kg
     if config.model_water_liberation:
-        # Same helper the sizing loop used, so the array this mission pays for
-        # is the array it flew.  These were two separate expressions before.
-        water_kg += _cargo_water_kg(
-            asteroid_row, phases, m_payload, feed_kg, beneficiate, config,
-        )
+        # v1.14.0: `cargo_water_kg` was settled above, at this same payload and
+        # feed, to size the containment.  Reused rather than recomputed — one
+        # quantity, one expression, and one (expensive) knapsack call.
+        water_kg += cargo_water_kg
     if water_kg > 0 and mining_yr > 0:
         processing_power_watts += (
             _ops_value(ops_df, "Water liberation energy (bound water)",
@@ -4068,14 +4462,12 @@ def _evaluate_combo_at_ratio(
             * water_kg / (mining_yr * 365.25 * 24.0)
         )
     if processing_power_watts > 0:
-        # v1.11.0: the source can flip here, since the liberation term is a
-        # real addition to the plant's draw and the RTG cap is an absolute one.
-        if config.allow_rtg_power:
-            plant_w_per_kg, power_source = power_source_for_target(
-                asteroid_row.get("semi_major_axis_au"),
-                base_w_per_kg, rtg_w_per_kg,
-                processing_power_watts, config.rtg_max_power_w,
-            )
+        # The settled draw is the one that has to fit under the Pu-238 ceiling,
+        # since the liberation term is a real addition to it.  Re-checked here
+        # rather than trusted from the loop, because the loop sized against an
+        # estimated payload and this is the payload actually flown.
+        if power_source == "rtg" and processing_power_watts > config.rtg_max_power_w:
+            return None
         power_system_kg = (processing_power_watts / plant_w_per_kg
                            if plant_w_per_kg > 0 else 0.0)
     else:
@@ -4178,15 +4570,39 @@ def _evaluate_combo_at_ratio(
         power_source        = power_source,
     )
 
-    # ── Market saturation (v1.7.0) ───────────────────────────────────────────
+    # ── Market saturation (v1.7.0, programme-aware v1.14.0) ──────────────────
     # Selling is not free of consequence.  A mission that returns a
     # meaningful fraction of a commodity's annual market moves the price it
     # is being valued at.  Applied to the delivered RATE (kg per mission-year)
     # against Module 2's annual_market_kg, per commodity where the payload mix
     # is known, and on the payload as a whole otherwise.
+    #
+    # ── The rate is the PROGRAMME'S, not one mission's (v1.14.0) ─────────────
+    # This term's own config comment says it exists because "prices were static
+    # at the point of sale, so a mission could return any quantity of platinum
+    # at spot and the 'fly more missions' lever had no stopping point."  It did
+    # not achieve that: `nre_amortization_missions` was read in exactly four
+    # places — rig amortisation, NRE division, the learning curve and
+    # reliability growth — and none of them was here.  So a 100-mission
+    # programme divided its NRE by 100, grew its reliability, and sold 100
+    # payloads into the market at the price one payload commands.  Every lever
+    # in the model pointed the same way and nothing pushed back, which is
+    # exactly the failure the term was written to prevent.
+    #
+    # The rate that matters is how much is on the market AT ONCE, and the model
+    # already computes that.  One rig serves `missions_sharing_rig` missions
+    # back to back (life / stay, from the rig service-life cap), so a programme
+    # of N needs ceil(N / that) rigs, and that many missions are in flight
+    # concurrently.  Derived from the model's own arithmetic rather than
+    # asserted, and exactly 1 at N = 1 — so no committed single-mission figure
+    # moves, which is every figure on record.
     saturation_mult = 1.0
+    concurrent_missions = 1.0
     if (config.model_market_saturation and mission_duration_yr > 0
             and phases and markets is not None):
+        per_rig = max(1.0, float(cost.get("missions_sharing_rig", 1.0)))
+        concurrent_missions = math.ceil(
+            max(1, config.nre_amortization_missions) / per_rig)
         # The mix actually sold: chosen by the optimiser when concentrating,
         # otherwise the body's own proportions.
         if beneficiate and payload_mix:
@@ -4198,7 +4614,7 @@ def _evaluate_combo_at_ratio(
         for phase, kg in sold.items():
             price = next((p for n, _f, p in phases if n == phase), 0.0)
             adj_value += kg * price * saturation_price_multiplier(
-                kg / mission_duration_yr,
+                kg * concurrent_missions / mission_duration_yr,
                 markets.get(phase, float("inf")),
                 config.demand_elasticity,
             )
@@ -4318,6 +4734,22 @@ def _evaluate_combo_at_ratio(
         "power_w_per_kg_at_target":  plant_w_per_kg,
         "power_source":             power_source,
         "hardware_total_kg":        hardware_total_kg,
+        # ── v1.14.0 eclipse / night-side power ─────────────────────────────
+        # `power_w_per_kg_at_target` above is now the EFFECTIVE figure (array
+        # oversize and night storage folded in); the bare 1/r² rating is kept
+        # beside it so the size of the penalty is legible per row rather than
+        # having to be reverse-engineered from two constants.
+        "solar_w_per_kg_bare":      w_per_kg,
+        "array_oversize_factor":    array_oversize_factor,
+        "dark_period_h":            dark_h,
+        "dark_period_clamped":      dark_clamped,
+        "rotation_period_h":        asteroid_row.get("rotation_period_h"),
+        # ── v1.14.0 volatile cargo containment ─────────────────────────────
+        "cargo_water_kg":           cargo_water_kg,
+        "containment_frac":         containment_frac,
+        "m_containment_kg":         m_containment_kg,
+        # ── v1.14.0 programme-aware market saturation ──────────────────────
+        "concurrent_missions":      concurrent_missions,
         # ── v1.11.0 storage and refuelling ─────────────────────────────────
         "tank_mass_frac":           tank_frac,
         "m_tank_return_kg":         float(actual_cascade.get("m_tank_return", 0.0)),
@@ -4460,6 +4892,7 @@ def evaluate_combo(
     aero:              Optional[bool] = None,
     isru:              bool = False,
     rendezvous_apsis:  str = "",
+    power_mode:        str  = "solar",
 ) -> Optional[Dict[str, float]]:
     """Best mission for one (asteroid × vehicle × propellant × architecture),
     optimising over how hard to concentrate.  "Best" is `selection_key`, which
@@ -4490,6 +4923,7 @@ def evaluate_combo(
         best_phase_value_per_kg=best_phase_value_per_kg,
         phases=phases, target_ratio=r, beneficiate=b, markets=markets,
         aero=aero, isru=isru, rendezvous_apsis=rendezvous_apsis,
+        power_mode=power_mode,
     )
 
     if not config.use_beneficiation:
@@ -4731,6 +5165,37 @@ def evaluate_asteroid(
     isru_allowed = (config.use_isru_return_propellant
                     and config.optimise_architecture_per_asteroid)
 
+    # ── Power sources worth pricing for this body (v1.14.0) ──────────────────
+    # A radioisotope plant is only ever a candidate where it would be LIGHTER
+    # than photovoltaics, which depends on the body's distance and — since the
+    # eclipse term — on its rotation.  Both are properties of the asteroid, so
+    # the filter is resolved once here rather than per candidate mission, and
+    # inner-system bodies never pay for a second pass.
+    #
+    # `power_source_for_target` keeps its job as the MASS comparator; what
+    # changed in v1.14.0 is that its answer generates a candidate instead of
+    # being the decision.  Probed at 1 W — any positive draw under the ceiling
+    # answers "could nuclear ever be lighter here", and the ceiling itself is
+    # enforced per candidate against the real draw.
+    power_modes = ["solar"]
+    if config.allow_rtg_power:
+        (_dw, _bw, _base_w, _ee, _ekw,
+         _rtg_w, _ppu, _df, _swh, _seta, _bdh, _cpk) = _ops_sizing_constants(ops_df)
+        _bare = solar_specific_power_w_per_kg(
+            asteroid_row.get("semi_major_axis_au"), _base_w)
+        _dark, _ = dark_period_hours(
+            asteroid_row.get("rotation_period_h"),
+            _df if config.model_eclipse_power else 0.0,
+            config.default_rotation_period_h, config.max_dark_period_h,
+        )
+        _eff, _ = eclipse_effective_w_per_kg(
+            _bare, _dark, _df if config.model_eclipse_power else 0.0,
+            _swh, _seta, _bdh,
+        )
+        if power_source_for_target(
+                _eff, _rtg_w, 1.0, config.rtg_max_power_w)[1] == "rtg":
+            power_modes.append("rtg")
+
     # Keep the best candidate under the selection objective — see
     # selection_key for why that is not simply the highest profit.
     best     = None
@@ -4744,22 +5209,24 @@ def evaluate_asteroid(
             isru_modes = [False, True] if isru_allowed else [True]
         for dv_opt in dv_options:
             for isru in isru_modes:
-                result = evaluate_combo(
-                    asteroid_row, vehicle, propellant,
-                    bulk_value,
-                    float(dv_opt["dv_out_m_s"]), float(dv_opt["dv_ret_m_s"]),
-                    ops_df, config,
-                    best_phase_value_per_kg=best_phase_value,
-                    phases=phases, markets=markets,
-                    aero=bool(dv_opt["aero"]), isru=isru,
-                    rendezvous_apsis=str(dv_opt["rendezvous_apsis"]),
-                )
-                if result is None:
-                    continue
-                key = selection_key(result, config)
-                if key > best_key:
-                    best_key = key
-                    best     = result
+                for power_mode in power_modes:
+                    result = evaluate_combo(
+                        asteroid_row, vehicle, propellant,
+                        bulk_value,
+                        float(dv_opt["dv_out_m_s"]), float(dv_opt["dv_ret_m_s"]),
+                        ops_df, config,
+                        best_phase_value_per_kg=best_phase_value,
+                        phases=phases, markets=markets,
+                        aero=bool(dv_opt["aero"]), isru=isru,
+                        rendezvous_apsis=str(dv_opt["rendezvous_apsis"]),
+                        power_mode=power_mode,
+                    )
+                    if result is None:
+                        continue
+                    key = selection_key(result, config)
+                    if key > best_key:
+                        best_key = key
+                        best     = result
 
     if best is None:
         return None
