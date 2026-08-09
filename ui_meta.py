@@ -164,7 +164,7 @@ BOUNDS: Dict[str, Tuple[float, float, float]] = {
 # on its module tab.
 #
 # The grouping follows CLAUDE.md: the destination, the run-size dials, the
-# architecture search, and then "the fourteen things the model stopped giving
+# architecture search, and then "the twenty things the model stopped giving
 # away", which are corrections rather than options.
 
 CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
@@ -237,7 +237,7 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         ],
     ),
     (
-        "The fourteen corrections",
+        "The sixteen corrections",
         "⚠️  These default ON and each one moved every number. They are "
         "corrections, not options: the flags exist to isolate an effect, not "
         "to be left off. Switching them off makes the model more profitable "
@@ -252,10 +252,25 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
             ("calc", "model_reliability_growth"),
             ("calc", "model_propellant_boiloff"),
             ("calc", "model_tank_mass"),
+            ("calc", "model_eclipse_power"),
+            ("calc", "model_volatile_containment"),
             ("calc", "charge_tanker_flights"),
             ("calc", "apply_wacc_compounding"),
             ("calc", "learning_curve_rate"),
             ("calc", "return_structure_frac_of_payload"),
+        ],
+    ),
+    (
+        "Night-side power (v1.14.0)",
+        "A rig anchored to a rotating body is in shadow about half the time, so "
+        "the processing plant needs an oversized array AND a battery sized on "
+        "the body's own rotation period. `default_rotation_period_h` is used "
+        "only where the catalog has no measured period — about two thirds of "
+        "rows — and `max_dark_period_h` clamps the slow rotators, where a "
+        "chemical battery stops being the right answer at all.",
+        [
+            ("calc", "default_rotation_period_h"),
+            ("calc", "max_dark_period_h"),
         ],
     ),
     (
