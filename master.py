@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.15.0)
+"""Master Asteroid Profitability Pipeline (1.16.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom — the orchestrator at the bottom executes everything.
 
-    Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.0.9)
+    Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.1.0)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
     Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.7.0)
@@ -15,7 +15,7 @@ run top-to-bottom — the orchestrator at the bottom executes everything.
     Stage 3  →  Transportation Data     (modules/transportation.py 1.10.0)
                 Launch vehicles + propellants + Δv segments + ops costs
                 (UNCREWED autonomous mining — no crew costs)
-    Stage 4  →  Profitability Calc      (modules/calc.py 1.12.0)
+    Stage 4  →  Profitability Calc      (modules/calc.py 1.13.0)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2×, V-type 0.2×)
                 + delivery architecture: earth_surface / leo / cislunar /
@@ -34,7 +34,8 @@ kilogram sells for; Stage 4 decides what it costs to put it there, and the
 answer is only meaningful when they agree.  Stage 4 checks and warns.
 
 Output tree (under MASTER_CONFIG.output_dir):
-    asteroid_catalog.csv               ← Stage 1 (~30-40 MB at 50k rows)
+    asteroid_catalog.csv               ← Stage 1 (~0.88 GB at the 1.55 M-row
+                                          default; set catalog.jpl_limit lower)
     rejected_entries.csv               ← Stage 1 (validation rejects)
     mineral_value_catalog.csv          ← Stage 2
     transportation/
@@ -173,7 +174,7 @@ import os
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -245,12 +246,32 @@ class CatalogConfig:
     # matching `use_<name>: bool = True` line here.
 
     # ─── FETCH LIMITS & NETWORK ──────────────────────────────────────────────
-    # `jpl_limit` is also reused as a row cap for the other sources.  Bigger =
-    # more complete catalog, slower run.  JPL accepts up to ~250,000.
-    # 50,000 covers all numbered asteroids through roughly the year-2000 era;
-    # the run takes a couple of minutes and the saved CSV is ~30-40 MB.
-    jpl_limit:       int = 50_000  # max rows returned per source
-    request_timeout: int = 300     # seconds per HTTP request before giving up (5 min)
+    # ONE CAP PER SOURCE, and 0 means "no cap — take the whole table".
+    #
+    # Until v1.1.0 `jpl_limit` was reused as the row cap for every source, which
+    # quietly made the catalog SMALLER than any single source.  Each fetcher
+    # takes its first N rows ordered by asteroid number, so four sources capped
+    # at the same N return substantially the SAME N bodies; the merge then
+    # collapses them and the union is ~N rather than 4N.  Raising the shared cap
+    # to reach further down one source dragged every other source along with it.
+    #
+    # Measured 2026-08-08 against the live APIs, which is what the defaults are
+    # sized from:
+    #     JPL SBDB      1,554,321 asteroids   (139,582 with a measured diameter)
+    #     SsODNet        ~1,200,000 rows      (~500 MB parquet, cached)
+    #     NEOWISE V2.0     183,412 rows       (143,318 unique bodies w/ diameter)
+    #     MP3C           varies; frequently unreachable
+    #
+    # 0 (unlimited) is the default because JPL is the only source of orbital
+    # elements, so a body it does not return cannot be evaluated no matter what
+    # the other sources know about it.  The full JPL pull is ~435 MB / ~80 s on
+    # a warm connection; NEOWISE unlimited is ~19 MB / ~30 s.  Set a cap if you
+    # want a fast interactive run — 50_000 reproduces the pre-v1.1.0 behaviour.
+    jpl_limit:       int = 0   # 0 = all 1.55 M asteroids (orbital elements)
+    ssodnet_limit:   int = 0   # 0 = whole cached ssoBFT table
+    neowise_limit:   int = 0   # 0 = all 183 k NEOWISE rows
+    mp3c_limit:      int = 0   # 0 = whatever MP3C will serve
+    request_timeout: int = 300 # seconds per HTTP request before giving up (5 min)
 
     # ─── QUALITY GATES  (enforced in validate_and_filter) ────────────────────
     # `min_diameter_km` drops anything below this size.  Default 0.001 km =
@@ -261,6 +282,29 @@ class CatalogConfig:
     # If True, asteroids with no spectral classification (Bus / Tholen) are
     # rejected.  Useful for compositional studies; False keeps more rows.
     require_spectral_type: bool = False
+
+    # ─── DERIVED DIAMETERS  (v1.1.0) ─────────────────────────────────────────
+    # validate_and_filter drops any body without a diameter, and only 139,582
+    # of JPL's 1,554,321 asteroids have one measured.  1,553,812 have an
+    # absolute magnitude H and a valid orbit, and diameter follows from H and
+    # the geometric albedo exactly:
+    #
+    #     D_km = (1329 / sqrt(p_V)) * 10**(-H/5)          (Fowler & Chillemi 1992)
+    #
+    # so the ONLY thing being estimated is p_V.  With this on, the evaluable
+    # population goes from ~139 k to ~1.55 M — an 11x larger catalog whose extra
+    # rows carry a diameter uncertain by roughly the square root of the albedo
+    # error, and a MASS uncertain by that cubed.  Every such row is tagged
+    # `diameter_source = "derived_h_*"`; a measured diameter always wins, and
+    # `derived_diameter_is_estimate` gives downstream code a single boolean to
+    # filter on.  Turn this off for a measured-only catalog.
+    derive_diameter_from_h: bool = True
+
+    # Floor on DERIVED diameters only (km).  Measured diameters are governed by
+    # `min_diameter_km` above and are never subject to this.  0.0 keeps every
+    # derived body; raise it to trim the sub-kilometre tail, which is most of
+    # the 1.4 M and is where the albedo assumption hurts most.
+    min_derived_diameter_km: float = 0.0
 
     # ─── OUTPUT  (where the CSVs land) ───────────────────────────────────────
     # `output_dir` is created at startup if it doesn't exist.  On Colab the
@@ -371,7 +415,51 @@ class CatalogConfig:
     #         3.411 / 5.342 h / V, Pallas B, Psyche X, Eros 5.27 h / S.
     #         Any CSV stamped 1.0.8 or earlier was built on the degraded
     #         catalog — re-run rather than trusting it.
-    pipeline_version: str = "1.0.9"
+    # 1.1.0 — POPULATION RELEASE.  Three things, all of which change how many
+    #         asteroids exist downstream, so every number moves.
+    #
+    #         (a) NEOWISE was contributing NOTHING, silently.  IRSA returns
+    #             `asteroid_number` as float64 whenever the result slice holds
+    #             any unnumbered body, so `.astype("string")` built the
+    #             designation "3.0" rather than "3".
+    #             _extract_canonical_designation matches neither `^(\d+)\s*$`
+    #             nor `^(\d+)\s+[A-Z][a-z]` against "3.0", so it passed the
+    #             value through unchanged and the merge key could never equal
+    #             JPL's "3".  Every NEOWISE row then died at validation for
+    #             having no semi-major axis.  The tell in a committed CSV is
+    #             all seven neowise_* columns present and 100% empty while the
+    #             fetcher printed "✅ 183,408 records fetched".
+    #             SCALE-DEPENDENT AND THEREFORE INVISIBLE: at a small cap the
+    #             slice is all-numbered, the dtype is int64, and it works.  It
+    #             broke at exactly the row counts nobody spot-checks.
+    #             Fixed at the source (format the number as an integer) and
+    #             defensively in _extract_canonical_designation, which now
+    #             strips a trailing ".0" from any source.
+    #             Population effect is small — JPL SBDB already ingests NEOWISE
+    #             diameters, so this recovers only 27 bodies JPL lacks — but it
+    #             restores IR albedo, beaming parameter and diameter
+    #             uncertainties for ~132,700 bodies that had none.
+    #
+    #         (b) ONE ROW CAP PER SOURCE, and 0 now means unlimited.  A single
+    #             shared `jpl_limit` capped four sources that each take their
+    #             lowest-numbered N bodies, so the sources overlapped almost
+    #             perfectly and the union was ~N rather than 4N.  See the
+    #             FETCH LIMITS block.  Defaults are now unlimited.
+    #
+    #         (c) DIAMETER DERIVED FROM H where none was measured, gated behind
+    #             `derive_diameter_from_h`.  See DERIVED DIAMETERS above and
+    #             ALBEDO_BY_SPECTRAL_TYPE / ALBEDO_BY_SEMI_MAJOR_AXIS_AU below.
+    #
+    #         EFFECT, measured 2026-08-08 against the live APIs:
+    #             JPL asteroids available            1,554,321
+    #             ...with a MEASURED diameter          139,582
+    #             ...with H and a valid orbit        1,553,812
+    #             catalog at jpl_limit=200,000          89,367  (v1.0.9)
+    #             catalog, measured diameters only     ~139,600  (v1.1.0, gate off)
+    #             catalog, H-derived enabled         ~1,553,800  (v1.1.0, default)
+    #         Any CSV stamped 1.0.9 or earlier was built on at most 89,367
+    #         bodies and is not comparable row-for-row with a 1.1.0 run.
+    pipeline_version: str = "1.1.0"
 
 
 # Instantiate and create the output dir.  Edit CATALOG_CONFIG values above this line
@@ -404,9 +492,20 @@ os.makedirs(_resolve_cache_dir(CATALOG_CONFIG), exist_ok=True)
 print(f"✅  Configuration loaded — output dir: {CATALOG_CONFIG.output_dir}")
 print(f"    Active sources  : "
       f"{', '.join(s for s, on in (('JPL', CATALOG_CONFIG.use_jpl), ('MP3C', CATALOG_CONFIG.use_mp3c), ('SsODNet', CATALOG_CONFIG.use_ssodnet), ('NEOWISE', CATALOG_CONFIG.use_neowise)) if on)}")
-print(f"    Fetch limit     : {CATALOG_CONFIG.jpl_limit:,} asteroids per source")
+def _fmt_limit(n: int) -> str:
+    """Render a row cap for the banner; 0 is unlimited, not zero rows."""
+    return "unlimited" if not n else f"{n:,}"
+
+
+print(f"    Fetch limits    : "
+      f"JPL {_fmt_limit(CATALOG_CONFIG.jpl_limit)}  |  "
+      f"SsODNet {_fmt_limit(CATALOG_CONFIG.ssodnet_limit)}  |  "
+      f"NEOWISE {_fmt_limit(CATALOG_CONFIG.neowise_limit)}  |  "
+      f"MP3C {_fmt_limit(CATALOG_CONFIG.mp3c_limit)}")
 print(f"    Min diameter    : {CATALOG_CONFIG.min_diameter_km} km")
 print(f"    Strict taxonomy : {CATALOG_CONFIG.require_spectral_type}")
+print(f"    H-derived diam. : "
+      f"{'on — bodies with no measured diameter are sized from H + albedo' if CATALOG_CONFIG.derive_diameter_from_h else 'off — measured diameters only'}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -908,6 +1007,13 @@ _JPL_FIELDS = [
     "ma",              # mean anomaly at epoch (deg)
     "per",             # orbital period (yr)
     "n",               # mean motion (deg/day)
+    # H — absolute magnitude.  Added in v1.1.0 and it is the single highest-
+    # coverage physical field in the whole pipeline: 1,553,817 of JPL's
+    # 1,554,321 asteroids carry one, against 139,582 with a diameter.  Every
+    # other source already supplied `absolute_magnitude_h`, so the backbone was
+    # the one place it was missing and derive_missing_diameters() needs it on
+    # exactly the rows the other sources never reach.
+    "H",
 ]
 
 _JPL_RENAME = {
@@ -931,6 +1037,7 @@ _JPL_RENAME = {
     "ma":             "mean_anomaly_deg",
     "per":            "orbital_period_yr",
     "n":              "mean_motion_deg_day",
+    "H":              "absolute_magnitude_h",
     "neo":            "is_neo",
     "pha":            "is_pha",
     "spkid":          "spk_id",
@@ -941,7 +1048,7 @@ _JPL_NUMERIC = [
     "semi_major_axis_au", "eccentricity", "perihelion_au",
     "aphelion_au", "inclination_deg", "longitude_asc_node_deg",
     "arg_perihelion_deg", "mean_anomaly_deg", "orbital_period_yr",
-    "mean_motion_deg_day",
+    "mean_motion_deg_day", "absolute_magnitude_h",
 ]
 
 
@@ -959,15 +1066,24 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
 
     # Minimal field set guaranteed to exist in every SBDB query response.
     # Used as fallback if the full list causes a 400.
-    _SAFE_FIELDS = "pdes,name,spkid,neo,pha,diameter,diameter_sigma,albedo,rot_per,e,a,q,ad,i,om,w,ma,per,n"
+    _SAFE_FIELDS = "pdes,name,spkid,neo,pha,diameter,diameter_sigma,albedo,rot_per,e,a,q,ad,i,om,w,ma,per,n,H"
 
     base_params = {
         "sb-kind":   "a",           # asteroids only
-        "limit":     config.jpl_limit,
         "full-prec": "true",
         # NOTE: sb-cond removed — the '>' operator encoding caused HTTP 400.
         #       Filtering by diameter > 0 is handled in Python (validate_and_filter).
     }
+
+    # `limit` is OMITTED entirely when the cap is 0.  SBDB has no server-side
+    # maximum — it returns all 1,554,321 asteroids for ~435 MB in ~80 s — and
+    # sending `limit=0` would be read as a literal zero-row request rather than
+    # as "no limit".
+    if config.jpl_limit:
+        base_params["limit"] = config.jpl_limit
+    else:
+        print("     ℹ️   No row cap — requesting the full SBDB asteroid table "
+              "(~1.55 M rows, ~435 MB).  Set CATALOG_CONFIG.jpl_limit for a faster run.")
 
     attempts = [
         ("full fields",  {**base_params, "fields": ",".join(_JPL_FIELDS)}),
@@ -1152,6 +1268,14 @@ def _extract_canonical_designation(s: pd.Series) -> pd.Series:
         r"^\s*\(\s*(\d+)\s*\)\s*", r"\1 ", regex=True
     )
 
+    # Pre-clean: "3.0" → "3".  A float-typed identifier column stringified by
+    # pandas is the single most likely way a caller hands us a broken key, and
+    # it is silent — "3.0" is not null, so nothing downstream complains; it just
+    # never joins.  That is exactly how NEOWISE contributed zero rows to every
+    # large run before v1.1.0 (see fetch_neowise).  Only a trailing .0 (or .000)
+    # is stripped, so a genuine identifier is never truncated.
+    cleaned = cleaned.str.replace(r"^(\d+)\.0+$", r"\1", regex=True)
+
     # Case A: numbered asteroid with a name — extract the leading number.
     # The name part must start with a capital + lowercase letter, which is
     # what distinguishes "1 Ceres" from a provisional like "2024 BX1".
@@ -1192,6 +1316,11 @@ def _extract_canonical_designation(s: pd.Series) -> pd.Series:
 # Note: this host may be unreachable from restricted-network runtimes (Colab
 # has been observed to fail DNS resolution).  The fetcher returns an empty
 # DataFrame gracefully in that case so the pipeline survives.
+
+# MP3C's REST and TAP transports both require an explicit row count, so
+# `mp3c_limit = 0` (unlimited) is expressed as a ceiling comfortably above the
+# whole catalogue rather than as an absent clause.  MP3C tracks ~1.2 M bodies.
+_MP3C_UNLIMITED_ROWS = 2_000_000
 
 _MP3C_REST_ENDPOINTS = [
     "https://mp3c.oca.eu/api/data?format=json&limit={limit}",
@@ -1257,9 +1386,14 @@ def fetch_mp3c(config: CatalogConfig) -> pd.DataFrame:
     """
     print("\n🔭  MP3C — Minor Planet Physical Properties Catalogue …")
 
+    # Both MP3C transports need a number in the query — neither has an
+    # "everything" form — so an unlimited (0) config becomes a ceiling larger
+    # than the catalogue rather than a missing clause.
+    mp3c_rows = config.mp3c_limit or _MP3C_UNLIMITED_ROWS
+
     # ── Attempt 1: REST endpoints ────────────────────────────────────────────
     for endpoint_tpl in _MP3C_REST_ENDPOINTS:
-        url = endpoint_tpl.format(limit=config.jpl_limit)
+        url = endpoint_tpl.format(limit=mp3c_rows)
         try:
             r = requests.get(url, timeout=config.request_timeout)
         except requests.exceptions.ConnectionError as exc:
@@ -1284,7 +1418,7 @@ def fetch_mp3c(config: CatalogConfig) -> pd.DataFrame:
 
     # ── Attempt 2: TAP / ADQL ────────────────────────────────────────────────
     for table in _MP3C_TAP_TABLES:
-        adql = f"SELECT TOP {config.jpl_limit} * FROM {table}"
+        adql = f"SELECT TOP {mp3c_rows} * FROM {table}"
         params = {
             "REQUEST": "doQuery",
             "LANG":    "ADQL",
@@ -1617,10 +1751,10 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
     # `sso_number`: the guard skipped the sort, and the run took an arbitrary
     # 50,000 rows starting around asteroid 367488 instead of Ceres.  The sort
     # key is required now, so the guard cannot silently no-op again.
-    if config.jpl_limit and len(df) > config.jpl_limit:
+    if config.ssodnet_limit and len(df) > config.ssodnet_limit:
         df = df.sort_values("number", ascending=True, na_position="last")
-        df = df.head(config.jpl_limit).copy()
-        print(f"     ✂️   Truncated to first {config.jpl_limit:,} rows by number ASC")
+        df = df.head(config.ssodnet_limit).copy()
+        print(f"     ✂️   Truncated to first {config.ssodnet_limit:,} rows by number ASC")
 
     # Reduce the ranked spin solutions to a single rotation_period_h column.
     # ssoBFT used to expose them as `spins.<1..3>.period.value` scalars and now
@@ -1765,14 +1899,16 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
     """
     print("\n🌡️   NEOWISE V2.0 diameters & albedos  (IRSA TAP) …")
 
-    # ADQL.  Cap to config.jpl_limit so a 50k-cap run doesn't drag in the full
-    # 150k-row catalog (and overflow the merge dedup budget for big runs).
+    # ADQL.  `neowise_limit` caps the pull; 0 drops the TOP clause and takes the
+    # whole table, which is only ~183 k rows / ~19 MB / ~30 s — small enough
+    # that capping it buys almost nothing and costs measured diameters.
     # WHERE clause filters comets server-side and skips rows without ANY
     # identifier — saves bandwidth and avoids a useless dedup pass later.
     # ORDER BY asteroid_number so small-N runs include the low-numbered
     # (most famous) bodies — Ceres, Vesta, etc.
+    top = f"TOP {int(config.neowise_limit)} " if config.neowise_limit else ""
     adql = (
-        f"SELECT TOP {int(config.jpl_limit)} {_NEOWISE_SELECT} "
+        f"SELECT {top}{_NEOWISE_SELECT} "
         f"FROM {_NEOWISE_TAP_TABLE} "
         f"WHERE type != 'comet' "
         f"  AND (asteroid_number IS NOT NULL OR prov_desig IS NOT NULL) "
@@ -1861,15 +1997,43 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
         return pd.DataFrame()
 
     # Designation: numbered → `asteroid_number`, unnumbered → `prov_desig`.
-    if "asteroid_number" in df.columns and "prov_desig" in df.columns:
-        num   = df["asteroid_number"].astype("string")
-        prov  = df["prov_desig"].astype("string")
-        chosen = num.where(num.notna() & (num != "") & (num != "<NA>"), prov)
-        df["designation"] = chosen
-    elif "asteroid_number" in df.columns:
-        df["designation"] = df["asteroid_number"].astype("string")
+    #
+    # ⚠️  `asteroid_number` MUST be rendered as an integer, and this is not a
+    # cosmetic point — it is the bug that made this entire source a no-op for
+    # every large run up to v1.1.0.
+    #
+    # IRSA types the column by what the result slice happens to contain.  A
+    # slice with no unnumbered bodies comes back int64 and `.astype("string")`
+    # gives "3"; add one row whose asteroid_number is null and the column is
+    # float64, so the same call gives "3.0".  The canonical extractor matches
+    # neither `^(\d+)\s*$` nor `^(\d+)\s+[A-Z][a-z]` against "3.0", passes it
+    # through unchanged, and the merge key can never equal JPL's "3".  Every
+    # NEOWISE row then reached validate_and_filter as a body nothing else had
+    # heard of, and was dropped for having no semi-major axis.
+    #
+    # So it worked at small caps and failed at large ones, which is the worst
+    # possible shape: the fetcher still printed its ✅ and its row count, and
+    # the only visible trace was neowise_* columns sitting 100% empty in the
+    # output CSV.  _extract_canonical_designation strips a trailing ".0"
+    # defensively now as well, but do not rely on that and remove this.
+    def _as_designation(numbers: pd.Series, prov: Optional[pd.Series]) -> pd.Series:
+        out = pd.Series(pd.NA, index=numbers.index, dtype="string")
+        num = pd.to_numeric(numbers, errors="coerce")
+        has_num = num.notna()
+        # Int64 first, so 3.0 renders as "3" and not "3.0".
+        out[has_num] = num[has_num].astype("Int64").astype("string")
+        if prov is not None:
+            fallback = prov.astype("string").str.strip()
+            out[~has_num] = fallback[~has_num]
+        return out.replace({"": pd.NA, "<NA>": pd.NA, "nan": pd.NA})
+
+    if "asteroid_number" in df.columns:
+        df["designation"] = _as_designation(
+            df["asteroid_number"],
+            df["prov_desig"] if "prov_desig" in df.columns else None,
+        )
     elif "prov_desig" in df.columns:
-        df["designation"] = df["prov_desig"].astype("string")
+        df["designation"] = df["prov_desig"].astype("string").str.strip()
 
     # Drop the source-identifier columns so the rename + merge stay tidy
     df = df.drop(columns=[c for c in ("asteroid_number", "prov_desig") if c in df.columns])
@@ -2014,9 +2178,20 @@ def merge_sources(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     # proper pd.NA for missing values (a naïve .astype(str).str.upper() would
     # turn pd.NA into the literal string "<NA>" and create a ghost dedup key).
     for name, df in available.items():
+        n_raw = len(df)
         if "designation" in df.columns:
             df["designation"] = _extract_canonical_designation(df["designation"])
         available[name] = deduplicate_catalog(df, key="designation", label=name)
+        # A source that arrives with rows and leaves with none has a broken
+        # merge key, not an empty table, and that distinction is invisible in
+        # the output: the columns still appear, filled entirely with NaN, and
+        # the fetcher has already printed its success line.  NEOWISE did this
+        # on every large run up to v1.1.0.  Fail loud.
+        if n_raw and available[name].empty:
+            print(f"     🚨  {name} fetched {n_raw:,} rows and NONE survived "
+                  f"keying — its `designation` column is unusable, so the whole "
+                  f"source is about to contribute nothing.  This is a BUG in "
+                  f"fetch_{name.split()[0].lower()}, not an empty upstream table.")
 
     # First non-empty source becomes the backbone — caller controls precedence
     # via the dict insertion order.
@@ -2046,6 +2221,12 @@ def merge_sources(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         )
 
         before_merge = len(merged)
+        # How many of this source's keys the backbone already knows.  Reported
+        # because it is the one number that separates "the source is fine and
+        # simply overlaps" from "the source's keys join nothing" — a supplement
+        # whose overlap is 0 has almost certainly built its designation wrongly,
+        # and an outer join hides that by quietly adding every row as new.
+        overlap = int(supp["designation"].isin(merged["designation"]).sum())
         merged = merged.merge(supp_renamed, on="designation", how="outer")
         new_rows = len(merged) - before_merge
 
@@ -2061,13 +2242,329 @@ def merge_sources(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
             merged.drop(columns=[src_col], inplace=True)
 
         print(f"     ✔   Merged {src_name}: {len(supp):,} supplement records "
-              f"(+{new_rows:,} new entries)")
+              f"({overlap:,} matched the backbone, +{new_rows:,} new entries)")
+        if len(supp) and not overlap:
+            print(f"     🚨  {src_name} matched ZERO backbone designations. "
+                  f"Every one of its {len(supp):,} rows entered as a new body "
+                  f"with no orbital elements, and validation will drop them "
+                  f"all.  Check how fetch_* builds `designation` — a float-typed "
+                  f"identifier stringifies to \"3.0\" and joins nothing.")
 
     # Final post-merge dedup — keeps the most-complete row in each group.
     merged = deduplicate_catalog(merged, key="designation", label="post-merge")
 
     print(f"     ✅  Combined catalog: {len(merged):,} rows × {len(merged.columns)} columns")
     return merged
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DERIVED DIAMETERS  (v1.1.0)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# validate_and_filter drops any body with no diameter, and that single rule is
+# what has bounded this pipeline's population since v1.0.0.  Of JPL's 1,554,321
+# asteroids only 139,582 have a measured diameter — 9.0%.  1,553,817 have an
+# absolute magnitude H.
+#
+# Diameter follows from H and the geometric albedo with no free parameters:
+#
+#     D_km = (1329 / sqrt(p_V)) * 10 ** (-H / 5)
+#
+# (Fowler & Chillemi 1992; the 1329 km constant is 2 AU_km * 10**(-V_sun/5)
+# with the Sun's V = -26.762, and is the same constant JPL and the MPC use.)
+#
+# So the ONLY estimated quantity is p_V, and everything below is about getting
+# the best available p_V for each row and recording which one was used.
+#
+# ⚠️  READ THIS BEFORE TRUSTING A DERIVED ROW.  D scales as p_V**-0.5, and this
+# pipeline turns D into MASS as D**3, so mass scales as p_V**-1.5.  Get the
+# albedo wrong by 2x and the mass is wrong by 2.8x.  Every consumer that ranks
+# on mass is therefore much more exposed to this than the diameter column
+# suggests, which is why `diameter_source` and `derived_diameter_is_estimate`
+# exist and why nothing here ever overwrites a measurement.
+#
+# ⚠️  AND THE ALBEDO SAMPLE BELOW IS BIASED, in the optimistic direction.  Both
+# tables are medians over the 138,437 bodies that HAVE a measured albedo, and
+# those measurements are overwhelmingly NEOWISE — a thermal-infrared survey.
+# At a fixed H a darker body must be larger, and a larger warmer body is easier
+# for a thermal survey to detect, so the measured sample over-represents dark
+# bodies relative to the 1.4 M that were never measured.  A median that is too
+# LOW yields a diameter that is too LARGE and a mass that is too large by the
+# 1.5 power.  Do not "correct" this by raising the table to taste — that is the
+# same move CLAUDE.md rejects for IN_SPACE_UTILITY.  Quantifying it needs a
+# debiased size-frequency model, which this module does not have.
+
+# Median measured geometric albedo per spectral type.  DERIVED, not asserted:
+# computed 2026-08-08 over every JPL SBDB asteroid with 0 < albedo < 1 and a
+# Bus-DeMeo (spec_B) or, failing that, Tholen (spec_T) classification — 1,897
+# bodies.  Sample size is carried on each row because it varies by two orders
+# of magnitude across the table and a reader deserves to see which entries are
+# solid.  Types with n < 5 are deliberately ABSENT rather than guessed; they
+# fall through the chain in `_albedo_for_derivation` below.
+ALBEDO_BY_SPECTRAL_TYPE: Dict[str, float] = {
+    "A":   0.2980,   # n=16
+    "B":   0.0670,   # n=65
+    "C":   0.0540,   # n=195
+    "Cb":  0.0520,   # n=35
+    "Cg":  0.0490,   # n=9
+    "Cgh": 0.0720,   # n=15
+    "Ch":  0.0504,   # n=136
+    "D":   0.0509,   # n=39
+    "F":   0.0466,   # n=20
+    "K":   0.1423,   # n=34
+    "L":   0.1680,   # n=35
+    "Ld":  0.1610,   # n=12
+    "M":   0.1310,   # n=15
+    "O":   0.1905,   # n=6
+    "P":   0.0435,   # n=22
+    "Q":   0.2475,   # n=10
+    "S":   0.2439,   # n=534
+    "Sa":  0.2650,   # n=33
+    "Sk":  0.2340,   # n=19
+    "Sl":  0.2240,   # n=51
+    "Sq":  0.2760,   # n=59
+    "Sr":  0.3180,   # n=17
+    "T":   0.0645,   # n=16
+    "V":   0.3880,   # n=36
+    "X":   0.0855,   # n=156
+    "Xc":  0.0750,   # n=61
+    "Xe":  0.2090,   # n=27
+    "Xk":  0.0955,   # n=42
+}
+
+# ⚠️  E-types are the known casualty of the n >= 5 rule.  Only four measured
+# E-types carry a JPL taxonomy, so "E" is absent, its root letter is itself, and
+# an E-type with no measured albedo therefore falls all the way to its orbital
+# bin — which will be far too dark for an enstatite surface (real E-types run
+# p_V ~ 0.4-0.5) and will size the body much too large.  It is left absent
+# rather than filled from literature so that the table stays one thing —
+# medians over this catalog — instead of a mixture nobody can audit.  E-types
+# with a MEASURED albedo are unaffected, and that is most of the ones that
+# matter.  Same applies to G and R.
+
+# Median measured geometric albedo by semi-major axis, same 138,437-body
+# sample.  THIS is the branch that actually sizes the catalog: a body with a
+# taxonomy almost always has a diameter too, so the taxonomy table above fires
+# rarely, while ~1.4 M bodies have nothing but H and an orbit.
+#
+# The gradient is the well-known compositional zoning of the belt — S-complex
+# inner, C-complex outer — and it is strong enough to be worth binning for:
+# 0.2885 at 1.3-2.0 AU against 0.0660 in the outer belt is a factor of 4.4 in
+# albedo, which is a factor of 2.1 in derived diameter and 9.4 in derived mass.
+# Bin edges are the classical Kirkwood-gap boundaries, not fitted.
+ALBEDO_BY_SEMI_MAJOR_AXIS_AU: Tuple[Tuple[float, float, float, str], ...] = (
+    # (a_min, a_max, median p_V, label)
+    (0.000,  1.300, 0.1870, "NEA"),                    # n=296
+    (1.300,  2.000, 0.2885, "Mars-crosser / inner"),   # n=906
+    (2.000,  2.500, 0.1890, "inner belt"),             # n=29,921
+    (2.500,  2.820, 0.0860, "middle belt"),            # n=45,912
+    (2.820,  3.270, 0.0660, "outer belt"),             # n=57,161
+    (3.270,  3.700, 0.0570, "Cybele"),                 # n=1,126
+    (3.700,  5.200, 0.0610, "Hilda / Trojan"),         # n=1,884
+    (5.200,  1e9,   0.0690, "Centaur / TNO"),          # n=1,228
+)
+
+# Overall median across the whole measured sample.  Last resort only — used for
+# a body with no albedo, no usable taxonomy and no semi-major axis, which in
+# practice cannot happen because validate_and_filter requires an orbit anyway.
+ALBEDO_FALLBACK = 0.0780
+
+# D_km = _H_DIAMETER_CONSTANT / sqrt(p_V) * 10**(-H/5)
+_H_DIAMETER_CONSTANT = 1329.0
+
+
+def _albedo_for_derivation(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
+    """
+    Best available geometric albedo per row, plus a label saying where it came
+    from.  Preference order, most to least trustworthy:
+
+        1. `albedo`                    — a real measurement
+        2. ALBEDO_BY_SPECTRAL_TYPE     — exact type, then root letter
+        3. ALBEDO_BY_SEMI_MAJOR_AXIS   — the belt's albedo gradient
+        4. ALBEDO_FALLBACK             — whole-sample median
+
+    Returns (albedo, source_label) aligned to df.index.
+    """
+    n = len(df)
+    albedo = pd.Series(np.nan, index=df.index, dtype="float64")
+    label  = pd.Series("",     index=df.index, dtype="object")
+
+    # ── 1. Measured ───────────────────────────────────────────────────────────
+    if "albedo" in df.columns:
+        measured = pd.to_numeric(df["albedo"], errors="coerce")
+        # An albedo outside (0, 1) is unphysical and shows up in real catalogs
+        # as a fit that did not converge.  Reject rather than propagate it into
+        # a square root.
+        measured = measured.where((measured > 0) & (measured < 1))
+        albedo   = albedo.fillna(measured)
+        label[measured.notna()] = "measured_albedo"
+
+    # ── 2. Taxonomy ───────────────────────────────────────────────────────────
+    # Consult both classification columns; Bus-DeMeo wins where present.  This
+    # runs BEFORE enrich_composition, so the albedo-inferred spectral types that
+    # step invents are not visible here — which is deliberate.  Inferring a type
+    # from albedo and then an albedo from that type would be a closed loop that
+    # launders one guess into two columns.
+    tax = pd.Series(pd.NA, index=df.index, dtype="object")
+    for col in ("spectral_type", "spectral_type_tholen"):
+        if col in df.columns:
+            candidate = df[col].astype("string").str.strip()
+            candidate = candidate.replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+            tax = tax.where(tax.notna(), candidate)
+
+    need = albedo.isna() & tax.notna()
+    if need.any():
+        def _from_taxonomy(t: object) -> float:
+            if not isinstance(t, str) or not t:
+                return np.nan
+            s = t.strip()
+            if s in ALBEDO_BY_SPECTRAL_TYPE:
+                return ALBEDO_BY_SPECTRAL_TYPE[s]
+            # Root letter, matching the fallback _lookup() already uses for
+            # composition: "Sq2" → "S".
+            return ALBEDO_BY_SPECTRAL_TYPE.get(s[0].upper(), np.nan)
+
+        derived_tax = tax[need].map(_from_taxonomy)
+        albedo.loc[need] = derived_tax
+        label[need & albedo.notna()] = "taxonomy_albedo"
+
+    # ── 3. Orbital bin ────────────────────────────────────────────────────────
+    if "semi_major_axis_au" in df.columns:
+        a = pd.to_numeric(df["semi_major_axis_au"], errors="coerce")
+        for a_min, a_max, p_v, _lbl in ALBEDO_BY_SEMI_MAJOR_AXIS_AU:
+            band = albedo.isna() & a.notna() & (a >= a_min) & (a < a_max)
+            albedo.loc[band] = p_v
+            label[band] = "orbit_albedo"
+
+    # ── 4. Whole-sample median ────────────────────────────────────────────────
+    last = albedo.isna()
+    albedo.loc[last] = ALBEDO_FALLBACK
+    label[last] = "fallback_albedo"
+
+    assert len(albedo) == n and albedo.notna().all(), \
+        "every row must end with an albedo — the fallback cannot be skipped"
+    return albedo, label
+
+
+def derive_missing_diameters(
+    df: pd.DataFrame,
+    config: CatalogConfig,
+) -> pd.DataFrame:
+    """
+    Fill `diameter_km` from absolute magnitude H where no diameter was measured.
+
+    Runs between merge and validation, because validation is what drops rows
+    with no diameter and the entire point is to have one by then.
+
+    Adds two provenance columns, following the `spectral_type_source` /
+    `density_measured` convention already used in this module:
+
+        diameter_source                 "measured"
+                                        "derived_h_measured_albedo"
+                                        "derived_h_taxonomy_albedo"
+                                        "derived_h_orbit_albedo"
+                                        "derived_h_fallback_albedo"
+                                        "none"
+        derived_diameter_is_estimate    bool — one thing to filter on
+
+    A measured diameter is NEVER overwritten, whatever the gate is set to.
+    """
+    df = df.copy()
+
+    if "diameter_km" not in df.columns:
+        df["diameter_km"] = np.nan
+    diam = pd.to_numeric(df["diameter_km"], errors="coerce")
+    measured = diam > 0
+
+    df["diameter_source"] = np.where(measured, "measured", "none")
+    df["derived_diameter_is_estimate"] = ~measured
+
+    if not config.derive_diameter_from_h:
+        print("\n📐  Diameter derivation OFF — measured diameters only "
+              f"({int(measured.sum()):,} of {len(df):,} rows will survive validation)")
+        df["diameter_km"] = diam
+        return df
+
+    print("\n📐  Deriving diameters from absolute magnitude …")
+
+    if "absolute_magnitude_h" not in df.columns:
+        # Every source supplies H, so its total absence means something upstream
+        # broke rather than that the data is simply unavailable.  Say so — a
+        # silent no-op here costs 1.4 M rows.
+        print("     ⚠️  No `absolute_magnitude_h` column — nothing to derive from. "
+              "Check that the JPL fetcher requested the H field.")
+        df["diameter_km"] = diam
+        return df
+
+    H = pd.to_numeric(df["absolute_magnitude_h"], errors="coerce")
+    target = (~measured) & H.notna()
+    n_target = int(target.sum())
+
+    if not n_target:
+        print("     ℹ️   Every row already carries a measured diameter")
+        df["diameter_km"] = diam
+        return df
+
+    albedo, albedo_label = _albedo_for_derivation(df)
+
+    derived = (
+        _H_DIAMETER_CONSTANT / np.sqrt(albedo) * np.power(10.0, -H / 5.0)
+    )
+
+    # Floor applies to DERIVED rows only.  A measured diameter below the floor
+    # is governed by `min_diameter_km` in validate_and_filter, which is a
+    # separate decision about what is worth cataloguing at all.
+    if config.min_derived_diameter_km > 0:
+        too_small = target & (derived < config.min_derived_diameter_km)
+        n_small = int(too_small.sum())
+        if n_small:
+            print(f"     ✂️   {n_small:,} derived below "
+                  f"{config.min_derived_diameter_km} km — left unfilled "
+                  f"(min_derived_diameter_km)")
+        target &= ~too_small
+
+    # Guard against a non-finite result reaching the catalog.  H is occasionally
+    # absurd in a raw catalog and 10**(-H/5) underflows to 0 for large H.
+    target &= np.isfinite(derived) & (derived > 0)
+
+    diam = diam.where(~target, derived)
+    df["diameter_km"] = diam
+    df.loc[target, "diameter_source"] = (
+        "derived_h_" + albedo_label[target].astype(str)
+    )
+    df["derived_diameter_is_estimate"] = ~measured
+
+    # Publish the albedo this step assumed, in its OWN column — never merged
+    # into `albedo`, which must keep meaning "measured".
+    #
+    # enrich_composition reads it as the last fallback for spectral type, and
+    # that is a consistency requirement rather than a convenience.  Assuming
+    # p_V = 0.066 for an outer-belt body IS assuming the body is carbonaceous;
+    # sizing it on that number and then recording its composition as "Unknown"
+    # would leave the catalog holding two incompatible beliefs about the same
+    # rock — and "Unknown" carries None for every composition fraction, so the
+    # body would get no density, no mass, and be skipped by Stage 4 anyway.
+    # That would make the whole derivation pointless: 1.4 M rows with a
+    # diameter and nothing to do with it.
+    #
+    # Note the direction of the dependency, because the reverse WOULD be
+    # circular: one assumption (albedo) produces two outputs (size, class).
+    # Inferring the class first and then reading an albedo back off the class
+    # would launder a single guess into two apparently independent columns.
+    df.loc[target, "albedo_assumed_for_diameter"] = albedo[target]
+
+    counts = df["diameter_source"].value_counts()
+    print(f"     ✅  {int(target.sum()):,} diameters derived  "
+          f"(measured kept: {int(measured.sum()):,})")
+    for src, n in counts.items():
+        if src == "none":
+            continue
+        print(f"         • {str(src):32s} → {int(n):,}")
+    still = int((pd.to_numeric(df['diameter_km'], errors='coerce').fillna(0) <= 0).sum())
+    if still:
+        print(f"         • {'no diameter (will be dropped)':32s} → {still:,}")
+
+    return df
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2199,12 +2696,17 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
       1. Normalise spectral_type strings  (Title-case, strip blank-ish values).
       2a. Where spectral_type is absent, fall back to spectral_type_tholen.
       2b. Where it's STILL absent, infer a coarse type from geometric albedo.
+      2c. Where there is no measured albedo either, fall back to the albedo
+          ASSUMED when the diameter was derived from H (v1.1.0).
           A `spectral_type_source` column records provenance:
-            • "source"  → arrived from a fetcher (JPL spec_B, SsODNet
-                          taxonomy.class, MP3C taxonomy, …)
-            • "tholen"  → filled from spectral_type_tholen (step 2a)
-            • "albedo"  → inferred from geometric albedo (step 2b)
-            • "unknown" → still missing after every fallback
+            • "source"         → arrived from a fetcher (JPL spec_B, SsODNet
+                                 taxonomy.class, MP3C taxonomy, …)
+            • "tholen"         → filled from spectral_type_tholen (step 2a)
+            • "albedo"         → inferred from measured albedo (step 2b)
+            • "albedo_assumed" → inferred from the assumed albedo behind an
+                                 H-derived diameter (step 2c) — the weakest
+                                 class, and the bulk of a default v1.1.0 run
+            • "unknown"        → still missing after every fallback
       3. Look up TAXONOMY_COMPOSITION fields for each type → `comp_*` cols.
       4. Fill density_gcm3 from taxonomy estimate where no measurement exists;
          `density_measured` flag tracks provenance.
@@ -2260,21 +2762,40 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
             print(f"     🔡  Spectral type filled from Tholen for {n_thol:,} entries")
 
     # ── 2b. Infer from albedo where type is still missing ────────────────────
+    def _infer_from_albedo(a: float) -> str:
+        """Coarse spectral-type inference from geometric albedo."""
+        if a < 0.10: return "C"     # dark      → carbonaceous
+        if a < 0.35: return "S"     # moderate  → stony
+        return "V"                  # bright    → basaltic or E-type
+
     if "albedo" in df.columns:
         alb = pd.to_numeric(df["albedo"], errors="coerce")
         infer_mask = df["spectral_type"].isna() & alb.notna()
-
-        def _infer_from_albedo(a: float) -> str:
-            """Coarse spectral-type inference from geometric albedo."""
-            if a < 0.10: return "C"     # dark      → carbonaceous
-            if a < 0.35: return "S"     # moderate  → stony
-            return "V"                  # bright    → basaltic or E-type
 
         df.loc[infer_mask, "spectral_type"]        = alb[infer_mask].apply(_infer_from_albedo)
         df.loc[infer_mask, "spectral_type_source"] = "albedo"
         n_inf = int(infer_mask.sum())
         if n_inf:
             print(f"     🔎  Spectral type inferred from albedo for {n_inf:,} entries")
+
+    # ── 2c. Infer from the albedo ASSUMED when the diameter was derived ──────
+    # Separate from 2b and separately labelled, because the input is an
+    # assumption rather than a measurement.  It exists so a derived body's size
+    # and its composition rest on the SAME assumption instead of contradicting
+    # each other — see the note in derive_missing_diameters().  Without this the
+    # 1.4 M H-derived bodies would all land on TAXONOMY_COMPOSITION["Unknown"],
+    # whose fractions are None, so they would carry no density, no mass, and be
+    # skipped by Stage 4 for having no mass at all.
+    if "albedo_assumed_for_diameter" in df.columns:
+        assumed = pd.to_numeric(df["albedo_assumed_for_diameter"], errors="coerce")
+        assume_mask = df["spectral_type"].isna() & assumed.notna()
+
+        df.loc[assume_mask, "spectral_type"]        = assumed[assume_mask].apply(_infer_from_albedo)
+        df.loc[assume_mask, "spectral_type_source"] = "albedo_assumed"
+        n_ass = int(assume_mask.sum())
+        if n_ass:
+            print(f"     🔎  Spectral type inferred from the ASSUMED albedo for "
+                  f"{n_ass:,} entries (H-derived diameters)")
 
     # ── 3. Look up composition fields ────────────────────────────────────────
     # `minerals` and `notes` are included because for a mining-profitability
@@ -2404,6 +2925,11 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
         print("\n❌  Pipeline aborted — merge produced no data")
         return pd.DataFrame()
 
+    # ── Step 2b — Derive diameters from H ────────────────────────────────────
+    # Must run BEFORE validation: validation is what drops rows with no
+    # diameter, and this is what gives them one.
+    merged = derive_missing_diameters(merged, config)
+
     # ── Step 3 — Validate & filter ────────────────────────────────────────────
     catalog, rejections = validate_and_filter(merged, config)
     if catalog.empty:
@@ -2444,6 +2970,26 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
     print(f"      Entries    : {len(catalog):,}")
     print(f"      Columns    : {len(catalog.columns)}")
     print(f"      Elapsed    : {elapsed:.1f}s")
+
+    # Diameter provenance, alongside the taxonomy provenance the run already
+    # prints.  This is the number to read before comparing against a committed
+    # result: two runs with the same row count but a different measured /
+    # derived split are not the same population.
+    if "diameter_source" in catalog.columns:
+        vc = catalog["diameter_source"].value_counts()
+        n_meas = int(vc.get("measured", 0))
+        n_der  = int(len(catalog) - n_meas)
+        print(f"      Diameter   : {n_meas:,} measured  |  {n_der:,} derived from H")
+        for src, n in vc.items():
+            if src == "measured":
+                continue
+            print(f"                   • {str(src):30s} {int(n):,}")
+        if n_der:
+            print("      ⚠️   Derived rows carry an ASSUMED albedo; mass scales as "
+                  "p_V**-1.5.\n"
+                  "          Filter on `derived_diameter_is_estimate` to get the "
+                  "measured-only\n"
+                  "          population back out of this catalog.")
     print("=" * 65)
 
     return catalog
@@ -9956,10 +10502,44 @@ class CalcConfig:
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     top_n_preview:             int = 20
-    # When the input catalog is large (>50k asteroids), evaluation can take
-    # minutes.  Cap to a manageable subset for interactive runs.  Set to 0
-    # to evaluate every row.
-    eval_row_cap:              int = 5_000
+    # Cap on rows evaluated.  0 = evaluate every row, and that is the default
+    # as of v1.13.0.
+    #
+    # It used to default to 5,000, which silently truncated any real run: Stage
+    # 1 v1.1.0 can hand this module ~1.55 M asteroids and the old default threw
+    # away 99.7% of them without the word "cap" appearing anywhere except one
+    # line of stdout.  A cap is a thing you ask for when you want a fast
+    # preview, not something a full pipeline run should discover it inherited.
+    #
+    # ⚠️  Budget before setting this to 0 on a big catalog.  MEASURED
+    # 2026-08-08 at cislunar, six physical cores / 12 workers, on the full
+    # 1,554,351-row v1.1.0 catalog:
+    #     raw           2,539 s (42 min), 668,004 evaluable rows, 1.06 GB out
+    #     beneficiated  ~2.2 h ESTIMATED, not yet measured
+    #
+    # ⚠️  DO NOT BUDGET BY SCALING A SMALL RUN.  Scaling a 20,000-row sample
+    # predicted 2.2 h for that raw run and it took 42 minutes -- a 3.1x
+    # overestimate.  Fixed costs (worker startup, loading a 0.88 GB catalog)
+    # dominate a small run, and parallel efficiency is much better on a large
+    # one, so per-row cost falls sharply with size.  It is not linear.
+    eval_row_cap:              int = 0
+
+    # HOW a cap selects its rows.  Only consulted when eval_row_cap > 0.
+    #   "stride" — take every Nth row across the whole sorted catalog
+    #   "head"   — take the first N rows (the pre-v1.13.0 behaviour)
+    #
+    # Stride is the default because the catalog reaches this module sorted by
+    # semi-major axis, so `head` was never a sample of the catalog — it was the
+    # innermost N bodies of it.  At eval_row_cap = 5,000 against a 1.55 M-row
+    # catalog that is everything inside roughly 2.1 AU: no outer belt, no
+    # Hildas, no Trojans, and a spectral mix skewed hard to S-complex.  Every
+    # "quick check before the full run" was being made on a population that
+    # does not resemble the full run.
+    #
+    # Stride keeps the cap deterministic (no RNG, no seed to record) and keeps
+    # tied-row ordering stable, which the parallel path depends on -- see the
+    # `imap` note about pandas' non-stable quicksort in v1.10.1.
+    eval_row_sampling:         str = "stride"
 
     # ─── PARALLEL EVALUATION  (v1.10.1) ──────────────────────────────────────
     # Every asteroid is evaluated independently of every other one, so the main
@@ -10565,7 +11145,32 @@ class CalcConfig:
     #           `max_payload_accel_g` = 15 g.
     #         New config: escape_direct_launch, max_payload_accel_g.
     #         New output column: tank_cost_usd.
-    pipeline_version: str = "1.12.0"
+    # 1.13.0 — POPULATION RELEASE.  No change to the mission model at all: not
+    #         one term, coefficient or search axis moved, and a run over the
+    #         same rows produces the same numbers.  What changed is how many
+    #         rows arrive and which ones a cap keeps.
+    #         • `eval_row_cap` DEFAULTS TO 0 (evaluate everything) instead of
+    #           5,000.  Module 1 v1.1.0 can hand this module ~1.55 M asteroids
+    #           and the old default discarded 99.7% of them behind a single
+    #           line of stdout.  Every published figure in CLAUDE.md was
+    #           measured with the cap explicitly set to 0 through the UI, so
+    #           this makes the default agree with documented practice rather
+    #           than changing what a documented run does.
+    #         • CAPPED RUNS NOW SAMPLE, THEY DO NOT TRUNCATE.  The catalog
+    #           arrives sorted by semi-major axis, so `.head(n)` returned the
+    #           innermost n bodies — at 5,000 rows of a 1.55 M-row catalog,
+    #           everything inside ~2.1 AU, with no outer belt, no Hildas, no
+    #           Trojans and an S-complex-skewed spectral mix.  A "quick check
+    #           before the full run" was therefore made on a population that
+    #           does not resemble the full run.  `eval_row_sampling = "stride"`
+    #           takes evenly-spaced rows across the whole catalog; "head"
+    #           restores the old behaviour exactly.
+    #           ⚠️  THIS CHANGES THE NUMBERS ANY CAPPED RUN PRODUCES.  It does
+    #           not change an uncapped one, which is every figure on record.
+    #         Stride is deterministic (np.linspace over positions, no RNG), so
+    #         the serial/parallel byte-identity property of v1.10.1 survives.
+    #         New config: eval_row_sampling.
+    pipeline_version: str = "1.13.0"
 
 
 CALC_CONFIG = CalcConfig()
@@ -14376,9 +14981,26 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
           f"(skipped {len(asteroids) - len(work_df):,} without)")
 
     if config.eval_row_cap and len(work_df) > config.eval_row_cap:
-        work_df = work_df.head(config.eval_row_cap)
-        print(f"     ✂️   Capped at {config.eval_row_cap:,} rows for this run "
-              f"(eval_row_cap in CALC_CONFIG)")
+        n_before = len(work_df)
+        if config.eval_row_sampling == "head":
+            work_df = work_df.head(config.eval_row_cap)
+            how = "first N rows"
+        else:
+            # Evenly-spaced stride across the catalog in its incoming order,
+            # which Module 1 sorts by semi-major axis.  `head` therefore sampled
+            # only the innermost bodies; a stride spans the whole belt.
+            #
+            # np.linspace over positions (not a fixed ::k step) so the requested
+            # count is hit exactly for any cap, and the endpoints are included.
+            # Deterministic, so two runs of identical code still produce
+            # identical CSVs -- the property v1.10.1 exists to protect.
+            idx = np.unique(
+                np.linspace(0, n_before - 1, config.eval_row_cap).round().astype(int)
+            )
+            work_df = work_df.iloc[idx]
+            how = f"every ~{n_before / max(len(idx), 1):.1f}th row, evenly spaced"
+        print(f"     ✂️   Capped at {len(work_df):,} of {n_before:,} rows "
+              f"({how}; eval_row_cap / eval_row_sampling in CALC_CONFIG)")
 
     # Candidate (vehicle × propellant) grid is config-driven, not asteroid-
     # driven — build it once and hand it to every evaluation.
@@ -14631,7 +15253,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.15.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.16.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
