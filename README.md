@@ -88,8 +88,11 @@ tune the orchestrator, with a browser attached. Three things worth knowing:
   field is scraped from that field's own comment block in the module source.
   A curated ⭐ Common tab pins the dials that actually move results.
 - **Stages are individually selectable and reuse the CSVs on disk.** Re-running
-  Stage 4 alone against a cached catalog is the normal working loop: seconds to
-  a couple of minutes, against the catalog download a full run repeats. Skipping Stage 2
+  Stage 4 alone against a cached catalog is the normal working loop, and it
+  saves the 224-second catalog rebuild a full run repeats. Pair it with
+  `eval_row_cap` — at the v1.1.0 catalog size an uncapped Stage 4 is hours, and
+  since calc v1.13.0 a capped one is a representative sample of the whole belt
+  rather than the innermost N bodies. Skipping Stage 2
   after changing the destination is blocked rather than merely warned about,
   because a mineral catalog priced for one destination and a mission flown to
   another produces meaningless numbers that still look plausible.
@@ -111,16 +114,34 @@ full `master.py` at least once, or run stages 1–3 individually first.
 
 ### What a first run costs
 
-- **Stage 1** dominates. At the default `jpl_limit = 50_000` it takes a couple
-  of minutes and writes a ~30–40 MB CSV.
+> ⚠️  **These figures changed by more than an order of magnitude in catalog
+> v1.1.0.** Every row cap now defaults to unlimited, and the catalog went from
+> 89,367 asteroids to **1,554,400**. A default end-to-end run is no longer a
+> coffee break — budget an afternoon, and set the caps if you want the old
+> behaviour back.
+
+- **Stage 1** takes **224 s** at the unlimited default and writes a **0.88 GB**
+  CSV (measured 2026-08-08, warm SsODNet cache, ~6 GB peak RAM). The JPL pull
+  alone is 1,554,321 asteroids / 401 MB / 24 s. Set `jpl_limit = 50_000` to
+  reproduce the pre-v1.1.0 couple-of-minutes, ~30–40 MB run.
 - SsODNet's ssoBFT table is a **~500 MB parquet bulk download** on first run.
   It is cached and re-used for `cache_max_age_days` (7 by default). The cache
   lives in the system temp directory, deliberately *not* under `output_dir` —
   on a Google Drive working copy that keeps half a gigabyte from re-syncing
   every run. Point `CATALOG_CONFIG.cache_dir` somewhere else if you want it
   co-located.
-- **Stage 4** is fast since v1.3.7 — roughly 470 asteroids/s, so the default
-  5,000-row cap finishes in ~10 s. Raising `eval_row_cap` scales linearly.
+- **Stage 4 is now the long pole by far**, because `eval_row_cap` defaults to
+  `0` (evaluate everything) and "everything" is 1.55 M rows. Measured at
+  cislunar on six physical cores / 12 workers: **2,539 s raw** (42 min,
+  668,004 evaluable rows, 1.06 GB output). Beneficiated is *estimated* at
+  ~2.2 h and is not yet measured. Set `eval_row_cap` for anything
+  interactive — as of calc v1.13.0 a capped run is an evenly-spaced sample of
+  the whole belt rather than the innermost N bodies, so it is actually
+  representative.
+- **The two big dials, if a full run is more than you want:**
+  `catalog.jpl_limit` bounds how many asteroids exist, and
+  `catalog.derive_diameter_from_h = False` drops the catalog from ~1.55 M to
+  ~149,600 by keeping only bodies with a *measured* diameter.
 - Every source is failure-tolerant: an unreachable host returns empty and the
   run continues on what it did get. MP3C in particular is often DNS-blocked
   from Colab runtimes. You do not need to flip a source toggle just because a
@@ -154,11 +175,15 @@ that actually move the answer:
 | `.calc.mining_rate_kg_per_day_per_kg_rig` | `0.10` | Extraction throughput per kg of rig; caps payload and sets time at the asteroid |
 | `.calc.max_mining_duration_yr` | `3.0` | Ceiling on time at the asteroid — binds how much you can return |
 | `.calc.nre_recurring_overlap_fraction` | `0.30` | Development share already inside the per-kg recurring rate; `0.0` books both in full |
-| `.catalog.jpl_limit` | `50_000` | Catalog size; also caps every other source. JPL accepts ~250k |
+| `.catalog.jpl_limit` | `0` | Asteroids fetched from JPL; `0` = all 1,554,321. The only source of orbital elements, so it bounds the catalog |
+| `.catalog.ssodnet_limit` / `neowise_limit` / `mp3c_limit` | `0` | Per-source caps, `0` = unlimited. One shared cap until v1.1.0, which made the catalog smaller than any single source |
+| `.catalog.derive_diameter_from_h` | `True` | Size bodies with no measured diameter from H + an assumed albedo. `False` → ~149,600 rows instead of ~1,554,400 |
+| `.catalog.min_derived_diameter_km` | `0.0` | Floor on *derived* diameters only. Trims the sub-km tail, where the albedo assumption hurts most |
 | `.catalog.min_diameter_km` | `0.001` | Size floor. Raise to `1.0` to study km-class bodies only |
 | `.catalog.require_spectral_type` | `False` | `True` drops untyped rows — fewer asteroids, but every one has a composition |
 | `.catalog.use_jpl` / `use_mp3c` / `use_ssodnet` / `use_neowise` | all `True` | Per-source toggles. Turning off SsODNet skips the 500 MB download |
-| `.calc.eval_row_cap` | `5_000` | Stage-4 evaluation cap; `0` evaluates every row |
+| `.calc.eval_row_cap` | `0` | Stage-4 evaluation cap; `0` evaluates every row. Was `5_000`, which discarded 99.7% of a v1.1.0 catalog |
+| `.calc.eval_row_sampling` | `"stride"` | How a cap picks rows. `"stride"` samples the whole belt evenly; `"head"` is the pre-v1.13.0 innermost-N behaviour |
 | `.calc.parallel_workers` | `0` | Stage-4 worker processes. `0` picks a count from the CPU count and the amount of work; `1` forces the single-core path. See [Parallel evaluation](#parallel-evaluation) |
 | `.calc.max_mining_fraction` | `0.05` | Share of asteroid mass one mission may remove |
 | `.calc.use_aerocapture_return` | `True` | Makes aerocapture *available*. Trades return Δv for a TPS mass penalty (15% of payload); Stage 4 prices both and flies whichever pays, per asteroid |
@@ -350,7 +375,8 @@ every file to CRLF.
 
 ```
 <output_dir>/
-    asteroid_catalog.csv               ← Stage 1 (~30–40 MB at 50k rows)
+    asteroid_catalog.csv               ← Stage 1 (~0.88 GB at the 1.55M default;
+                                          ~30–40 MB at jpl_limit = 50_000)
     rejected_entries.csv               ← Stage 1 (validation rejects)
     mineral_value_catalog.csv          ← Stage 2
     transportation/
@@ -853,6 +879,32 @@ absolute masses):
 | > 3.2 AU | 4.7 | 226 kg |
 
 ### Combined effect
+
+> 🚨  **Every cell in every results table in this README is STALE as of catalog
+> v1.1.0 / calc v1.13.0.** The catalog went from 89,367 asteroids to
+> **1,554,400** — 17× more bodies — so a figure that means "the best mission
+> over the bodies we had" no longer refers to the same set. No model term
+> changed; the population did, and that is enough.
+>
+> Measured at cislunar, full catalog, **raw**: **25.7035×** against the v1.12.0
+> 33.2342×, a 22.7% improvement, over 668,004 evaluable rows instead of 15,407.
+> The winner is **2021 CX5**, an 82 m D-type NEA, displacing 4660 Nereus.
+> Beneficiated is not yet measured.
+>
+> **The gain is the row cap, not the H-derived diameters.** The best body on a
+> *measured* diameter is 2016 GS2 at **27.0173×** — still 18.7% better. It and
+> third-place 678927 were excluded because of the cap, never for lacking a
+> diameter.
+>
+> And the old catalog held **zero unnumbered asteroids** — all 89,367 rows were
+> numbered, 1 to 199,994. JPL returns rows in SPK-ID order, so no
+> provisional-designation body could enter at *any* cap below the full table.
+> The new catalog has 658,490 of them. Recently-discovered NEAs are mostly
+> unnumbered, and NEAs are what this model likes.
+>
+> The tables below are kept because their *structure* — which destination wins
+> and why, what beneficiation does, which effects the model is sensitive to —
+> is still how to read this pipeline. Do not quote their numbers.
 
 Cost/revenue ratio (lower is better; 1.0 would be breakeven), catalog v1.0.9 /
 calc v1.10.0 / mineral_value v1.7.0, full catalog — 35,807 asteroids fetched,
@@ -1660,9 +1712,25 @@ their taxonomy mix, can change by an order of magnitude between runs.**
 
 Where a spectral type cannot be sourced, Stage 1 infers a coarse one from
 geometric albedo and records that in `spectral_type_source`
-(`source` / `tholen` / `albedo` / `unknown`).
+(`source` / `tholen` / `albedo` / `albedo_assumed` / `unknown`).
 
-This is not hypothetical. Until catalog v1.0.9, SsODNet was downloaded in full
+This is not hypothetical, and it has now happened twice.
+
+**NEOWISE, until catalog v1.1.0.** IRSA types its `asteroid_number` column by
+what the result slice happens to contain: all-numbered comes back `int64`, and
+one unnumbered row makes it `float64`. The fetcher stringified it, so the merge
+key became `"3.0"` instead of `"3"` and matched nothing. Every NEOWISE row then
+died at validation for having no orbital elements.
+
+The bug worked at small row caps and failed at large ones, the fetcher printed
+`✅ 183,408 records fetched` on the runs where it contributed zero, and the only
+trace in the output was seven `neowise_*` columns present and 100% empty. After
+the fix, **132,691** bodies pick up NEOWISE IR albedo, beaming parameter and
+diameter uncertainties. The population gain is small — JPL SBDB already ingests
+NEOWISE diameters, so only ~27 bodies were missing outright — but no run before
+v1.1.0 had the IR data it reported fetching.
+
+**SsODNet, until catalog v1.0.9.** Downloaded in full
 (~500 MB), parsed, and then **discarded at merge time on every run** — ssoBFT
 had renamed its identity columns, the column projection tolerated the loss,
 and the source was dropped for having no `designation`:
@@ -1683,6 +1751,66 @@ is why they quote "across 1,959 asteroids".
 number.** The run banner reporting a source as "Active" only means it was
 *enabled*, not that it returned anything — read the `Source summary: {...}`
 dict and the `Spectral type inferred from albedo for N entries` line instead.
+
+And note what `Source summary` does **not** tell you: it counts rows *fetched*,
+which is exactly the number NEOWISE reported on the runs where it contributed
+nothing. Since v1.1.0 the merge also prints how many of each supplement's keys
+**matched the backbone**, and shouts when that is zero. The equivalent check on
+a CSV you did not watch being built is one line — a `source_*` column at zero
+whose fetcher reported success is the signature:
+
+```bash
+py -c "import pandas as pd; d=pd.read_csv('asteroid_pipeline/asteroid_catalog.csv',low_memory=False); print({c:int(d[c].notna().sum()) for c in d.columns if c.startswith('source_')})"
+```
+
+### Diameters, and the 9% problem
+
+Stage 1 drops any body without a diameter, and that single rule set the size of
+this catalog for its whole history. Of JPL's **1,554,321** asteroids only
+**139,582 have a measured diameter** — 9.0%. Across every source the union is
+**149,590**.
+
+**1,553,817 have an absolute magnitude H**, and diameter follows from H and the
+geometric albedo with no free parameters:
+
+```
+D_km = (1329 / sqrt(p_V)) * 10^(-H/5)          Fowler & Chillemi 1992
+```
+
+so the only estimated quantity is `p_V`. With `derive_diameter_from_h` on (the
+default since v1.1.0) the catalog reaches **1,554,400 rows**. A measured
+diameter is never overwritten, and `diameter_source` records which is which:
+
+| `diameter_source` | rows | what it means |
+|---|---|---|
+| `measured` | 149,590 | a real measurement, from any source |
+| `derived_h_orbit_albedo` | 1,298,885 | albedo from the belt's albedo/distance gradient |
+| `derived_h_taxonomy_albedo` | 105,905 | albedo from the body's spectral class |
+| `derived_h_measured_albedo` | 20 | had an albedo but no diameter |
+
+Both albedo tables are **medians over the 138,437 bodies with a measured
+albedo**, computed rather than taken from literature, with per-entry sample
+sizes in the source. The gradient is strong enough to be worth binning for:
+0.2885 at 1.3–2.0 AU against 0.0660 in the outer belt.
+
+Three caveats, all of which run **optimistic**, and none of which should be
+"fixed" by editing the tables:
+
+- **Mass is the exposed quantity.** D scales as `p_V^-0.5` but mass as
+  `p_V^-1.5`, and mass is what the ranking runs on. A factor-2 albedo error is
+  a factor-2.8 mass error. Filter on `derived_diameter_is_estimate` before
+  treating a derived row as comparable to a measured one.
+- **The albedo sample is biased dark.** Those measurements are overwhelmingly
+  NEOWISE, a thermal-IR survey; at fixed H a darker body is larger and easier
+  to detect thermally. A median that is too low gives diameters that are too
+  large.
+- **Beyond 5.2 AU it is weakest.** The outer bin comes from 1,228 bodies
+  dominated by dark Centaurs and Trojans, applied to genuinely icy TNOs. 5,656
+  derived bodies exceed 100 km and the largest is 1,219 km — real TNOs whose
+  sizes are overstated. That is 1.09% of the catalog, and they fail Stage 4 on
+  Δv regardless.
+
+Set `derive_diameter_from_h = False` for a measured-only catalog of ~149,600.
 
 ## History
 
