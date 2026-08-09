@@ -62,14 +62,58 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.0.9`, mineral_value `1.7.0`, transportation `1.10.0`,
-calc `1.12.0`, master `1.15.0` (the master version is a literal in
+Current: catalog `1.1.0`, mineral_value `1.7.0`, transportation `1.10.0`,
+calc `1.13.0`, master `1.16.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
 calc `1.10.1` was the one stamp that did **not** mean the numbers moved. It
 was a pure performance release, verified bit-identical, and it was bumped
 anyway so that a CSV still names the code that produced it — the rule above is
 "changing a number means bumping", not "bumping means a number changed".
+
+> 🚨🚨  **catalog `1.1.0` / calc `1.13.0` CHANGED THE POPULATION, SO EVERY CELL
+> IN EVERY TABLE BELOW IS STALE.** The catalog goes from 89,367 asteroids to
+> **1,554,400**. This is not a model change — not one term, coefficient or
+> search axis moved — but nothing in this file survives it, because every
+> figure here is "the best mission over the bodies we had", and we now have
+> 17× more bodies.
+>
+> **Do not compare any run against a number below.** They were measured on a
+> catalog that was a small, systematically inner-belt-biased subset of this
+> one. Read "What catalog v1.1.0 / calc v1.13.0 changed" for what is measured
+> so far and what is not.
+>
+> Measured at cislunar, **full catalog, raw** (2026-08-08, 2,539 s,
+> 668,004 evaluable of 1,554,351):
+>
+> | | `1.12.0` | **`1.13.0`** | Δ |
+> |---|---|---|---|
+> | `cislunar` raw | 33.2342× | **25.7035×** | **−22.66%** |
+> | `cislunar` beneficiated | 23.9169× | *not measured* | — |
+>
+> **The improvement is NOT an artefact of the H-derived diameters.** The best
+> body on a **measured** diameter is 2016 GS2 at **27.0173×**, still −18.7%
+> against `1.12.0`. Both it and the third-place 678927 were excluded by the old
+> row cap rather than by the diameter requirement. **Removing the cap is what
+> moved the headline; the derivation mostly deepens the population below it.**
+>
+> 🚨  **And the old catalog contained ZERO unnumbered asteroids** — all 89,367
+> rows were numbered, 1 to 199,994. That is worse than a truncation and it was
+> never noticed: JPL returns rows in SPK-ID order and numbered bodies come
+> first, so **no provisional-designation body could enter the catalog at any
+> cap below the full table**, whatever the cap was set to. The new catalog has
+> **658,490** of them, plus 695,916 numbered bodies past the old ceiling.
+> Recently-discovered NEAs are overwhelmingly unnumbered, and NEAs are what
+> this model likes — 2021 CX5, 2016 GS2 and 2002 AT4 are all in that class.
+> Every result this project has ever published was blind to it.
+>
+> The winner is **2021 CX5**, a D-type NEA at a = 1.63 AU and 82 m across, on
+> xenon and a New Glenn. 7753 (B) and 4660 Nereus are both displaced. The top
+> ten are all C/D/B/X-types between 1.34 and 1.87 AU and eight of them are
+> under 500 m — small dark accessible NEAs, which is exactly the population a
+> number-ordered row cap truncates.
+>
+> **26 bodies now beat the old best case of 33.2342×.**
 
 > 🚨  **v1.12.0 MOVED EVERY NUMBER AND ONLY `cislunar` HAS BEEN RE-MEASURED.**
 > Measured 2026-08-08 on transportation `1.10.0` + calc `1.12.0`, full
@@ -289,9 +333,19 @@ weakly dominant.
 Note this makes the beneficiation path several times slower than raw.
 `concentration_search_steps` is the dial.
 
-⚠️  **The timings in this file have moved four times, for four unrelated
-reasons.** The table below is calc `1.11.0` / six physical cores, full
-catalog, measured 2026-08-08:
+⚠️  **The timings in this file have moved five times, for five unrelated
+reasons, and the fifth dwarfs the other four.** Everything below is per
+*catalog*, and catalog `1.1.0` made the catalog **17× bigger** — 89,367 rows
+to 1,554,400. A full cislunar destination **measures 2,539 s raw** (42 min,
+2026-08-08) and is *estimated* at ~2.2 h beneficiated, which has not been run —
+so the ten-cell sweep is most of a day rather than 75 minutes. Cap
+`eval_row_cap` (which now *samples* rather than truncating — see calc
+`1.13.0`) for anything interactive.
+
+The table below is calc `1.11.0` / six physical cores, on the **old ~31,000-row
+catalog**, measured 2026-08-08. It is kept because the *ratios* between cells
+are still the right way to reason about relative cost; the absolute seconds
+are two orders of magnitude out of date:
 
 | | raw | beneficiated | ratio |
 |---|---|---|---|
@@ -1618,6 +1672,262 @@ offset by half the catalog now failing early. The beneficiated figure is up ~18%
 than once after it. That was measured before it was accepted: on the 250-body
 beneficiated sample the whole run went 19.8 s → 21.4 s, +8%.
 
+## What catalog v1.1.0 / calc v1.13.0 changed
+
+**Nothing in the model. Everything in the population.** Not one term,
+coefficient, table value or search axis moved; a run over the same rows
+produces the same numbers. The catalog went from **89,367 asteroids to
+1,554,400**, and that is enough on its own to invalidate every figure in this
+file.
+
+Read this section as the counterweight to the rest of the document. Every
+other release here made the answer *worse* by removing something the model was
+getting for free. This one makes it **better**, and for a reason that is not a
+concession: the model was always searching for the best rock in a bag that
+held 5.7% of the rocks.
+
+catalog goes `1.0.9 → 1.1.0`, calc `1.12.0 → 1.13.0`, master `1.15.0 → 1.16.0`.
+
+### The bag was small for three unrelated reasons
+
+**1. NEOWISE was contributing literally nothing, silently, and only at scale.**
+
+IRSA returns `asteroid_number` as `float64` whenever the result slice contains
+any unnumbered body. `.astype("string")` then builds `"3.0"`, and
+`_extract_canonical_designation` matches neither `^(\d+)\s*$` nor
+`^(\d+)\s+[A-Z][a-z]` against `"3.0"`, so it passes the value through
+unchanged. The merge key could never equal JPL's `"3"`. Every NEOWISE row
+arrived at validation as a body nothing else had heard of and was dropped for
+having no semi-major axis.
+
+Three things about the shape of this bug are worth internalising, because they
+are the reason it survived four releases:
+
+- **It works at small caps.** A slice with no unnumbered bodies is `int64` and
+  renders `"3"`. So every quick test passed and the production run failed.
+- **The fetcher still printed its success line**, `✅ 183,408 records fetched
+  from NEOWISE V2.0`, on the run where it contributed zero.
+- **The only trace in the output was an absence** — all seven `neowise_*`
+  columns present in `asteroid_catalog.csv` and 100% empty. A column full of
+  NaN does not look like a bug, it looks like missing data.
+
+This is the `.astype(bool)` / `regex=False` trap again in a new costume, and
+CLAUDE.md already states the general rule: **the wrong behaviour is the quiet
+one.** The specific new instance: *a float-typed identifier stringifies to a
+key that is not null and not right.*
+
+Fixed in three places, deliberately redundant:
+`fetch_neowise` formats through `Int64`; `_extract_canonical_designation`
+strips a trailing `.0` from any source; and `merge_sources` now **fails loud**
+when a source arrives with rows and either survives keying with none or matches
+zero backbone designations. That third one is the general defence — it would
+have caught this on the first run.
+
+⚠️  The population gain from this fix alone is **small**: JPL SBDB already
+ingests NEOWISE diameters, so it recovers only ~27 bodies JPL lacked. What it
+recovers is *data*, not rows — IR albedo, beaming parameter and diameter
+uncertainties for **132,691** bodies that had none.
+
+**2. One row cap was shared by four sources, which made the catalog smaller
+than any single source.**
+
+`jpl_limit` capped every fetcher. Each takes its lowest-numbered N bodies, so
+four sources capped at the same N return substantially the *same* N bodies;
+the merge collapses them and the union is ~N rather than 4N. Raising the cap
+to reach further into one source dragged every other source along with it.
+This is what the request that prompted this release described as "a lot of
+them are duplicates which are removed" — the duplicates were real and the
+dedup was correct; the mistake was upstream, in asking four sources the same
+question.
+
+Now one cap per source (`jpl_limit`, `ssodnet_limit`, `neowise_limit`,
+`mp3c_limit`) and **0 means unlimited**, which is the default. Measured
+2026-08-08: JPL serves all 1,554,321 asteroids for 401 MB in 24 s.
+
+**3. Only 9% of asteroids have a measured diameter, and validation drops the
+rest.**
+
+This is the real ceiling and it always was. Of JPL's 1,554,321 asteroids,
+**139,582 have a measured diameter** — and `validate_and_filter` drops any body
+without one. The union across every source is **149,590**.
+
+**1,553,817 have an absolute magnitude H**, and diameter follows from H and
+albedo with no free parameters:
+
+```
+D_km = (1329 / sqrt(p_V)) * 10**(-H/5)         Fowler & Chillemi 1992
+```
+
+so the only estimated quantity is `p_V`. `derive_missing_diameters()` fills
+it, gated behind `derive_diameter_from_h` (default on), and a measured
+diameter is never overwritten.
+
+### The albedo tables are derived, and they are the soft part
+
+Both are medians over the **138,437** bodies that have a measured albedo,
+computed 2026-08-08 rather than taken from literature, with per-row sample
+sizes in the source. `ALBEDO_BY_SPECTRAL_TYPE` covers 28 classes (n ≥ 5;
+S 0.2439 at n=534, C 0.0540 at n=195, V 0.3880 at n=36).
+`ALBEDO_BY_SEMI_MAJOR_AXIS_AU` is the belt's albedo gradient — 0.2885 at
+1.3-2.0 AU falling to 0.0660 in the outer belt.
+
+Four things not to "fix" here:
+
+**The orbit table is what actually sizes the catalog, not the taxonomy table.**
+A body with a taxonomy almost always has a diameter too, so the taxonomy branch
+fires on 105,905 rows against the orbital gradient's **1,298,885**.
+
+**The sample is biased, and the bias runs optimistic.** Those albedos are
+overwhelmingly NEOWISE, a thermal-infrared survey. At fixed H a darker body is
+larger, and a larger warmer body is easier to detect thermally, so the measured
+sample over-represents dark bodies relative to the 1.4 M never measured. A
+median that is too low gives a diameter that is too large. Quantifying it needs
+a debiased size-frequency model, which this pipeline does not have. **Do not
+correct it by raising the table** — that is the move CLAUDE.md rejects for
+`IN_SPACE_UTILITY`, and for the same reason.
+
+**Mass is the exposed quantity, not diameter.** D scales as `p_V^-0.5` and mass
+as `p_V^-1.5`. A factor-2 albedo error is a factor-2.8 mass error, and mass is
+what the ranking runs on. `diameter_source` and
+`derived_diameter_is_estimate` exist so this is filterable; filter on them
+before treating a derived row as comparable to a measured one.
+
+**The derived albedo also sets the composition, deliberately.** Assuming
+p_V = 0.066 for an outer-belt body *is* assuming it is carbonaceous, so
+`enrich_composition` reads the assumed albedo as its last spectral-type
+fallback (`spectral_type_source = "albedo_assumed"`). Without that, all 1.4 M
+derived bodies land on `TAXONOMY_COMPOSITION["Unknown"]`, whose fractions are
+`None`, so they get no density, no mass, and Stage 4 skips them — 1.4 M rows
+with a diameter and nothing to do with it. Note the direction: **one
+assumption produces two outputs.** Inferring the class first and reading an
+albedo back off it would launder one guess into two apparently independent
+columns, and that *would* be circular.
+
+⚠️  **Beyond 5.2 AU the derived diameters are the weakest in the catalog.** The
+outer bin's 0.069 comes from 1,228 measured bodies dominated by dark Centaurs
+and Trojans, and it is applied to genuinely icy TNOs that run brighter. 5,656
+derived bodies come out above 100 km and the largest is 1,219 km, which is
+bigger than Ceres — those are real TNOs (2014 UZ224, 2012 VP113, 2018 VG18)
+whose sizes are overstated. It affects **1.09%** of the catalog and they fail
+Stage 4 on Δv anyway, so it is documented rather than fixed.
+
+### Stage 4: the cap defaulted to throwing away 99.7% of the run
+
+`eval_row_cap` defaulted to **5,000**. Against a 1.55 M-row catalog that is
+0.3%, discarded behind one line of stdout. Every published figure in this file
+was measured with the cap explicitly set to 0 through the UI, so defaulting it
+to 0 makes the code agree with documented practice rather than changing what a
+documented run does.
+
+**And a capped run was never a sample.** The catalog reaches Stage 4 sorted by
+semi-major axis, so `.head(n)` returned the *innermost* n bodies — at 5,000
+rows of this catalog, everything inside roughly 2.1 AU: no outer belt, no
+Hildas, no Trojans, and an S-complex-skewed spectral mix. Every "quick check
+before the full run" was made on a population that does not resemble the full
+run. `eval_row_sampling = "stride"` takes evenly-spaced rows across the whole
+catalog; `"head"` restores the old behaviour exactly. Stride is `np.linspace`
+over positions — no RNG, no seed to record — so v1.10.1's determinism holds.
+
+⚠️  This changes the numbers any **capped** run produces. It does not change an
+uncapped one, which is every figure on record.
+
+### Measured effect
+
+Catalog, full, measured 2026-08-08 (224 s end to end, ~6 GB peak, 0.88 GB CSV,
+warm SsODNet cache):
+
+| | v1.0.9 @ `jpl_limit=200_000` | **v1.1.0 unlimited** |
+|---|---|---|
+| catalog rows | 89,367 | **1,554,400** |
+| measured diameters | 89,367 | 149,590 |
+| H-derived diameters | — | 1,404,810 |
+| NEOWISE rows merged | **0** | **132,691** |
+| taxonomy from a source | 52,881 | 171,007 |
+| NEAs (a < 1.3 AU) | ~1,000 | **10,897** |
+| rows with positive mass | 89,333 | 1,554,351 |
+| numbered bodies | 89,367 (max 199,994) | 895,910 |
+| **unnumbered bodies** | **0** | **658,490** |
+
+That last row is the one to notice, and it is a *third* silent failure
+alongside NEOWISE and the shared cap. JPL returns rows in SPK-ID order and
+numbered bodies come first, so at any cap below the full table a provisional
+designation could never appear — the cap was not truncating the tail of the
+population, it was **excluding an entire class of it**. Recently-discovered
+NEAs are overwhelmingly unnumbered, and NEAs are the bodies this model finds
+best. Nobody had to make a mistake for this to happen; `limit=N` on an ordered
+API is simply not a sample.
+
+Stage 4 at cislunar, **full catalog, raw**, measured 2026-08-08 — 2,539 s,
+668,004 evaluable of 1,554,351 (43.0%), 1.06 GB output:
+
+| | `1.12.0` | **`1.13.0`** | Δ | evaluable |
+|---|---|---|---|---|
+| raw | 33.2342× | **25.7035×** | **−22.66%** | 15,407 → **668,004** |
+| beneficiated | 23.9169× | *not measured* | — | — |
+
+**The best case is 2021 CX5**, a D-type NEA at a = 1.63 AU, 82 m across, on
+xenon and a New Glenn. The top ten are all C/D/B/X-types between 1.34 and
+1.87 AU, eight of them under 500 m, and **26 bodies beat the old best case**.
+
+⚠️  **The gain is the cap, not the derivation, and the split matters.** The
+best body on a **measured** diameter is 2016 GS2 at **27.0173×** — still
+−18.7% against `1.12.0`. So H-derivation is worth only ~1.3× of ratio at the
+very top; almost all of the improvement comes from **fetching bodies the row
+cap was hiding**. 2016 GS2 is unnumbered and 678927 (third place, also
+measured) has an IAU number past the 200,000 the previous run fetched. Neither
+was ever excluded for lacking a diameter.
+
+That is the right way to read this release: **derivation deepens the
+population, the cap removal is what found better rocks.** Quote 25.7035× as
+the model's answer and 27.0173× as the measurement-only answer, and never
+present the first without the second.
+
+**Chemical propulsion is emphatically not extinct, and xenon has taken over.**
+Full raw shares: xenon 41.7%, iodine 24.4%, **hydrolox 16.0%**, water ion
+9.2%, krypton 8.2%, methalox 0.2%, argon 0.2%. Against `1.12.0` raw that is a
+different table entirely — iodine has more than halved and hydrolox has
+roughly tripled. No `replicated`-scaling device appears anywhere, which is the
+v1.12.0 thrust gate still doing its job on a 43×-larger population. Vehicles:
+Falcon Heavy 66.6%, SLS Block 1B 31.9%, New Glenn 1.3%.
+
+⚠️  **Still not measured, and each needs its own run:** cislunar
+beneficiated, all four other destinations at either setting, the
+programme-scale curve, and every winner identity in the tables above.
+
+⚠️  **Do not budget from a sample — this release proved that wrong.** Scaling
+the 20,000-row stride sample predicted 2.2 h for the full raw run; it took
+**42 minutes**, a 3.1× overestimate, because fixed costs (worker startup, the
+0.88 GB catalog load) dominate a small run and parallel efficiency is far
+better on a large one. The measured raw figure is **2,539 s**; beneficiated is
+*estimated* at ~2.2 h from the sample's 3.12× raw:beneficiated ratio, and that
+estimate carries the same warning.
+
+### Verification (2026-08-08)
+
+**1. Literature spot-check on the full 1,554,400-row catalog** — the same five
+bodies CLAUDE.md names for the v1.0.9 SsODNet fix, all exact:
+Ceres 939.400 km / 2.162 / 9.074 h / C, Vesta 522.770 / 3.411 / 5.342 h / V,
+Pallas 513.000 / 2.911 / 7.813 h / B, Psyche 222.000 / 4.143 / 4.196 h / X,
+Eros 5.270 h / S. All five report `diameter_source = measured`, which is the
+check that derivation is not overwriting measurements.
+
+**2. Never-worse holds, and holds exactly** (20,000-row stride sample):
+
+```
+pairs 8,612 | max benef/raw 1.000000 | exceptions 0 | declined (== 1.0) 429
+```
+
+**3. Serial and parallel are byte-identical**, which is the check that the new
+stride selection did not introduce order-dependence:
+
+| | serial | 8 workers | speed-up | sha256 |
+|---|---|---|---|---|
+| raw, 4,000 rows | 67.0 s | 48.1 s | 1.39× | MATCH |
+| beneficiated, 1,500 rows | 139.0 s | 62.0 s | 2.24× | MATCH |
+
+The speed-ups are below v1.12.0's 1.84× / 3.66× because these caps are smaller
+and per-worker startup is fixed; the sha256 is the part that matters here.
+
 ## Config discipline
 
 Configs are dataclasses instantiated once at module scope. Edit the field
@@ -1632,6 +1942,15 @@ Undoing any of these silently corrupts the output:
 - **Designation extraction** must not use a naive `^\d+` regex. For
   `"2024 BX1"` that yields `"2024"`, which cross-matches unrelated bodies.
   See `_extract_canonical_designation` in `catalog.py`.
+- **Never build a merge key by stringifying a float column.** A numeric
+  identifier that pandas has typed `float64` renders as `"3.0"`, which is not
+  null, not obviously wrong, and joins nothing. Go through `Int64` first. This
+  cost NEOWISE four releases of contributing zero rows — and note the shape,
+  because it generalises past this one column: **the dtype depends on the
+  data**, so a source that returns only numbered bodies in a small test slice
+  is `int64` and works, and the same code silently breaks the moment one
+  unnumbered row appears. Anything that tests clean at a small row cap and is
+  only ever run at a large one is a candidate for this. See the v1.1.0 entry.
 - **`str.contains` needs `regex=False`** in every lookup helper. Designations
   and mineral names carry regex metacharacters, so `"(1) Ceres"` matched
   `"1 Ceres"` and unbalanced brackets raised `re.PatternError`.
@@ -1698,10 +2017,30 @@ that will invalidate a comparison without warning.** Missing spectral types
 are backfilled by inferring a coarse type from albedo, so an outage does not
 shrink the catalog — it *inflates* it with guessed taxonomy.
 
-Check `spectral_type_source` (`source` / `tholen` / `albedo` / `unknown`)
-before comparing any run to a committed number. The startup banner's "Active
-sources" line lists what was *enabled*, not what answered — read the
-`Source summary: {...}` dict instead.
+Check `spectral_type_source` (`source` / `tholen` / `albedo` / `albedo_assumed`
+/ `unknown`) before comparing any run to a committed number. The startup
+banner's "Active sources" line lists what was *enabled*, not what answered —
+read the `Source summary: {...}` dict instead.
+
+⚠️  **`Source summary` reports what was FETCHED, not what was USED, and the gap
+between those is where NEOWISE hid for four releases.** It printed 183,408 on
+runs where the source contributed zero rows, because the failure was in the
+merge key rather than the fetch. Since v1.1.0 `merge_sources` also reports how
+many of each supplement's designations **matched the backbone**, and shouts
+when that number is zero or when a source loses every row to keying. Read the
+`Merged <source>: N supplement records (M matched the backbone, +K new
+entries)` line — `M = 0` on a source that fetched rows is always a bug in that
+fetcher, never an empty upstream table.
+
+The corresponding check on the output CSV is one line, and it is worth running
+against any catalog you did not watch being built:
+
+```bash
+py -c "import pandas as pd; d=pd.read_csv('asteroid_pipeline/asteroid_catalog.csv',low_memory=False); print({c:int(d[c].notna().sum()) for c in d.columns if c.startswith('source_')})"
+```
+
+A `source_*` column sitting at 0 while its fetcher reported success is the
+signature.
 
 ### The SsODNet outage that wasn't an outage (fixed in v1.0.9)
 

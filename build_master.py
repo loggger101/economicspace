@@ -174,13 +174,13 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # ─────────────────────────────────────────────────────────────────────────────
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.15.0)
+"""Master Asteroid Profitability Pipeline (1.16.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom — the orchestrator at the bottom executes everything.
 
-    Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.0.9)
+    Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.1.0)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
     Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.7.0)
@@ -190,7 +190,7 @@ run top-to-bottom — the orchestrator at the bottom executes everything.
     Stage 3  →  Transportation Data     (modules/transportation.py 1.10.0)
                 Launch vehicles + propellants + Δv segments + ops costs
                 (UNCREWED autonomous mining — no crew costs)
-    Stage 4  →  Profitability Calc      (modules/calc.py 1.12.0)
+    Stage 4  →  Profitability Calc      (modules/calc.py 1.13.0)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2×, V-type 0.2×)
                 + delivery architecture: earth_surface / leo / cislunar /
@@ -209,7 +209,8 @@ kilogram sells for; Stage 4 decides what it costs to put it there, and the
 answer is only meaningful when they agree.  Stage 4 checks and warns.
 
 Output tree (under MASTER_CONFIG.output_dir):
-    asteroid_catalog.csv               ← Stage 1 (~30-40 MB at 50k rows)
+    asteroid_catalog.csv               ← Stage 1 (~0.88 GB at the 1.55 M-row
+                                          default; set catalog.jpl_limit lower)
     rejected_entries.csv               ← Stage 1 (validation rejects)
     mineral_value_catalog.csv          ← Stage 2
     transportation/
@@ -411,7 +412,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.15.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.16.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 

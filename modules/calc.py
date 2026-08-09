@@ -567,10 +567,44 @@ class CalcConfig:
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     top_n_preview:             int = 20
-    # When the input catalog is large (>50k asteroids), evaluation can take
-    # minutes.  Cap to a manageable subset for interactive runs.  Set to 0
-    # to evaluate every row.
-    eval_row_cap:              int = 5_000
+    # Cap on rows evaluated.  0 = evaluate every row, and that is the default
+    # as of v1.13.0.
+    #
+    # It used to default to 5,000, which silently truncated any real run: Stage
+    # 1 v1.1.0 can hand this module ~1.55 M asteroids and the old default threw
+    # away 99.7% of them without the word "cap" appearing anywhere except one
+    # line of stdout.  A cap is a thing you ask for when you want a fast
+    # preview, not something a full pipeline run should discover it inherited.
+    #
+    # ⚠️  Budget before setting this to 0 on a big catalog.  MEASURED
+    # 2026-08-08 at cislunar, six physical cores / 12 workers, on the full
+    # 1,554,351-row v1.1.0 catalog:
+    #     raw           2,539 s (42 min), 668,004 evaluable rows, 1.06 GB out
+    #     beneficiated  ~2.2 h ESTIMATED, not yet measured
+    #
+    # ⚠️  DO NOT BUDGET BY SCALING A SMALL RUN.  Scaling a 20,000-row sample
+    # predicted 2.2 h for that raw run and it took 42 minutes -- a 3.1x
+    # overestimate.  Fixed costs (worker startup, loading a 0.88 GB catalog)
+    # dominate a small run, and parallel efficiency is much better on a large
+    # one, so per-row cost falls sharply with size.  It is not linear.
+    eval_row_cap:              int = 0
+
+    # HOW a cap selects its rows.  Only consulted when eval_row_cap > 0.
+    #   "stride" — take every Nth row across the whole sorted catalog
+    #   "head"   — take the first N rows (the pre-v1.13.0 behaviour)
+    #
+    # Stride is the default because the catalog reaches this module sorted by
+    # semi-major axis, so `head` was never a sample of the catalog — it was the
+    # innermost N bodies of it.  At eval_row_cap = 5,000 against a 1.55 M-row
+    # catalog that is everything inside roughly 2.1 AU: no outer belt, no
+    # Hildas, no Trojans, and a spectral mix skewed hard to S-complex.  Every
+    # "quick check before the full run" was being made on a population that
+    # does not resemble the full run.
+    #
+    # Stride keeps the cap deterministic (no RNG, no seed to record) and keeps
+    # tied-row ordering stable, which the parallel path depends on -- see the
+    # `imap` note about pandas' non-stable quicksort in v1.10.1.
+    eval_row_sampling:         str = "stride"
 
     # ─── PARALLEL EVALUATION  (v1.10.1) ──────────────────────────────────────
     # Every asteroid is evaluated independently of every other one, so the main
@@ -1176,7 +1210,32 @@ class CalcConfig:
     #           `max_payload_accel_g` = 15 g.
     #         New config: escape_direct_launch, max_payload_accel_g.
     #         New output column: tank_cost_usd.
-    pipeline_version: str = "1.12.0"
+    # 1.13.0 — POPULATION RELEASE.  No change to the mission model at all: not
+    #         one term, coefficient or search axis moved, and a run over the
+    #         same rows produces the same numbers.  What changed is how many
+    #         rows arrive and which ones a cap keeps.
+    #         • `eval_row_cap` DEFAULTS TO 0 (evaluate everything) instead of
+    #           5,000.  Module 1 v1.1.0 can hand this module ~1.55 M asteroids
+    #           and the old default discarded 99.7% of them behind a single
+    #           line of stdout.  Every published figure in CLAUDE.md was
+    #           measured with the cap explicitly set to 0 through the UI, so
+    #           this makes the default agree with documented practice rather
+    #           than changing what a documented run does.
+    #         • CAPPED RUNS NOW SAMPLE, THEY DO NOT TRUNCATE.  The catalog
+    #           arrives sorted by semi-major axis, so `.head(n)` returned the
+    #           innermost n bodies — at 5,000 rows of a 1.55 M-row catalog,
+    #           everything inside ~2.1 AU, with no outer belt, no Hildas, no
+    #           Trojans and an S-complex-skewed spectral mix.  A "quick check
+    #           before the full run" was therefore made on a population that
+    #           does not resemble the full run.  `eval_row_sampling = "stride"`
+    #           takes evenly-spaced rows across the whole catalog; "head"
+    #           restores the old behaviour exactly.
+    #           ⚠️  THIS CHANGES THE NUMBERS ANY CAPPED RUN PRODUCES.  It does
+    #           not change an uncapped one, which is every figure on record.
+    #         Stride is deterministic (np.linspace over positions, no RNG), so
+    #         the serial/parallel byte-identity property of v1.10.1 survives.
+    #         New config: eval_row_sampling.
+    pipeline_version: str = "1.13.0"
 
 
 CONFIG = CalcConfig()
@@ -4987,9 +5046,26 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
           f"(skipped {len(asteroids) - len(work_df):,} without)")
 
     if config.eval_row_cap and len(work_df) > config.eval_row_cap:
-        work_df = work_df.head(config.eval_row_cap)
-        print(f"     ✂️   Capped at {config.eval_row_cap:,} rows for this run "
-              f"(eval_row_cap in CONFIG)")
+        n_before = len(work_df)
+        if config.eval_row_sampling == "head":
+            work_df = work_df.head(config.eval_row_cap)
+            how = "first N rows"
+        else:
+            # Evenly-spaced stride across the catalog in its incoming order,
+            # which Module 1 sorts by semi-major axis.  `head` therefore sampled
+            # only the innermost bodies; a stride spans the whole belt.
+            #
+            # np.linspace over positions (not a fixed ::k step) so the requested
+            # count is hit exactly for any cap, and the endpoints are included.
+            # Deterministic, so two runs of identical code still produce
+            # identical CSVs -- the property v1.10.1 exists to protect.
+            idx = np.unique(
+                np.linspace(0, n_before - 1, config.eval_row_cap).round().astype(int)
+            )
+            work_df = work_df.iloc[idx]
+            how = f"every ~{n_before / max(len(idx), 1):.1f}th row, evenly spaced"
+        print(f"     ✂️   Capped at {len(work_df):,} of {n_before:,} rows "
+              f"({how}; eval_row_cap / eval_row_sampling in CONFIG)")
 
     # Candidate (vehicle × propellant) grid is config-driven, not asteroid-
     # driven — build it once and hand it to every evaluation.
