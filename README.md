@@ -34,10 +34,10 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
-| 1 | `modules/catalog.py` | 1.0.9 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
+| 1 | `modules/catalog.py` | 1.1.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.7.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.10.0 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
-| 4 | `modules/calc.py` | 1.12.0 | Per-asteroid Δv **and mission architecture**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 3 | `modules/transportation.py` | 1.11.0 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
+| 4 | `modules/calc.py` | 1.14.0 | Per-asteroid Δv **and mission architecture**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 
@@ -1154,8 +1154,77 @@ ISRU, apsis and propellant per asteroid is worth more than the EP stage and
 the return structure cost.
 
 If a change suddenly improves these by an order of magnitude, suspect it has
-switched one of the eighteen models off rather than found something. See
+switched one of the twenty models off rather than found something. See
 [What the model charges for](#what-the-model-charges-for).
+
+### What changed in v1.14.0
+
+Another realism audit, and the result is more uncomfortable than v1.12.0's,
+because three of the five findings were **already written down**. Every figure
+below had been sitting in Stage 3's storage table since v1.9.0 under a note
+reading "not modelled in Module 4" — and Stage 4 does not load that file. The
+gap was documented, quoted as a known limitation for two releases, and never
+closed. *Writing a gap down is not closing it.*
+
+Measured on a 6,000-row stride sample of the 89,367-row on-disk catalog at
+cislunar, both versions run against the same rows in the same process. **These
+are sample figures, not full-catalog headlines** — the full-catalog cells
+elsewhere in this file are v1.13.0 and are now stale.
+
+| | v1.13.0 | **v1.14.0** | Δ |
+|---|---|---|---|
+| raw | 38.4050× | **38.7886×** | **+1.00%** |
+| beneficiated | 25.7930× | **31.6556×** | **+22.73%** |
+
+- **The pipeline sold water and never kept it.** Water is priced at every
+  in-space destination, its liberation energy is charged and the array that
+  bakes it is flown — and nothing kept it from subliming across a four-year
+  cruise. The best cislunar missions are **~88% water by mass**, so the
+  commodity carrying the entire result was the one with no containment. A
+  sealed shaded hold at 0.05 kg/kg, incremental to the ore restraint, folded
+  into the payload-scaling structure so the closed-form solver carries it with
+  no change to its algebra.
+- **The sun never set on the processing plant.** Processing power is a
+  *continuous average* draw and the plant was sized straight off it, which is
+  only right if the rig is never in shadow. It stands on a rotating body. Two
+  terms: an array oversize of `[(1−f) + f/η]/(1−f)` = **2.11×**, which is a
+  sizing factor no W/kg figure could ever have absorbed; and storage sized on
+  the **body's own rotation period**, which finally makes `rotation_period_h` —
+  carried by Stage 1 since v1.0.0 and read by nothing — a quantity the model
+  uses. Together they cost **4.7×** at 1 AU and the median 10.2 h rotation, not
+  the "roughly doubles" the storage table itself estimated.
+- **The power source was chosen on mass, and it costs 625× more per watt.**
+  This one was latent and this release is what made it dangerous. The
+  radioisotope branch used to fire on *one row of 15,566*, so nobody noticed it
+  was picking whichever plant was **lighter** while an RTG costs $500,000/W
+  against $800. Adding the eclipse term moved the crossover from 3.46 AU to
+  ~2.1 AU and put 31% of rows on the nuclear side — buying a median **$1.5B**
+  plant, 14% of mission cost, on a criterion that cannot see dollars. Made a
+  searched architecture axis resolved by the reported objective, it drops to
+  **3.9%**. *An unreachable branch is not a verified branch.*
+- **Market saturation could not see the programme it was written for.** Its own
+  comment says it exists so "fly more missions" has a stopping point; it never
+  read `nre_amortization_missions`, so a 100-mission programme sold 100
+  payloads at the price one payload commands. Now charged on the programme's
+  concurrent output, and the curve **turns**: 38.41× → 16.03× → 10.89× becomes
+  38.79× → 16.47× → **20.32×** at N = 1/10/100. The optimum programme size is
+  now interior, near N = 10.
+- **Two ledger asymmetries.** The heat shield was the one recurring article
+  with no learning curve — it is the most literally per-mission thing on the
+  vehicle — and it was missing from the insured book value, the one item on the
+  launch stack whose cost line sits outside `hardware_cost`. Both are inert at
+  cislunar and at N = 1.
+
+Also: `schema_check()` now checks Stage 3 **rows** as well as columns. The
+operational-costs table is keyed by category, so a missing *figure* was
+invisible to a column test — and four of this release's five findings arrive as
+rows in it.
+
+Verification: with both new flags off, the build reproduces HEAD across all 121
+shared output columns; never-worse holds on the new power axis (max 1.000000,
+zero exceptions) and for beneficiated ≤ raw; the mass-ledger identity holds
+exactly; serial and parallel remain byte-identical. Runtime roughly doubles,
+paid only on bodies where a radioisotope plant could be lighter.
 
 ### What changed in v1.12.0
 
@@ -1377,15 +1446,19 @@ Stated plainly so results aren't over-read:
 - **C-type "ice" is bound water** in phyllosilicates, not accessible ice. The
   energy to liberate it is now charged (2,500 Wh/kg), but the extraction
   hardware — kilns, condensers, cold traps — is not sized or costed.
-- **Volatile cargo is never kept cold.** Water is priced as a commodity at
-  every in-space destination, and nothing charges for keeping it from
-  subliming through a four-year cruise. Water is a large part of why the
-  volatile-rich B and C types win, so this runs optimistic. Stage 3's storage
-  table carries the containment figure; Stage 4 does not read it.
-- **The sun never sets.** Processing power is computed as a continuous average
-  draw and the array is sized off that. A rig anchored to a body with a
-  2-20 hour rotation is in shadow about half the time, and either carries the
-  energy storage or mines at half duty cycle. Neither is modelled.
+- ~~**Volatile cargo is never kept cold.**~~ **Closed in v1.14.0.** Water is
+  now flown in a sealed shaded hold at 0.05 kg/kg, incremental to the ore
+  restraint. It was not a rounding term — the best cislunar missions are ~88%
+  water by mass, so the commodity carrying the result was the one flying free.
+- ~~**The sun never sets.**~~ **Closed in v1.14.0.** The processing plant now
+  installs 2.11× its continuous draw and carries storage sized on the body's
+  own rotation period. Radioisotope plants and the EP array are exempt — one
+  is flat with time, the other is in permanent sunlight.
+  - ⚠️  **Still not modelled: the duty-cycle alternative.** A rig can mine
+    slowly in daylight instead of carrying a battery, taking twice the stay
+    rather than twice the plant. Where digging slowly is cheaper, the model is
+    now pessimistic. A free-flying array off a small body would see almost no
+    eclipse at all, and the pipeline cannot express that architecture either.
 - **Boil-off cannot be bought down.** It is applied passively, so hydrolox
   pays the full 0.05%/day with no option to spend array mass and power on a
   zero-boil-off cryocooler. Conservative for hydrolox, but a gap rather than a
@@ -1411,18 +1484,24 @@ Stated plainly so results aren't over-read:
 
 ## What the model charges for
 
-Eighteen models in total, added across six releases. Each defaults ON; set
+Twenty models in total, added across seven releases. Each defaults ON; set
 the flag to `False` to isolate its effect. The five below closed gaps in
 v1.7.0 that all pushed the answer the same way — towards optimism; the five
 after them arrived in v1.8.0 and v1.9.0, and one of those pushed back the
 other way.
 
-The last seven are v1.10.0 through v1.12.0 and are a different species: not
+The next seven are v1.10.0 through v1.12.0 and are a different species: not
 gaps in what the model charged for, but **masses it flew and never billed at
 all**, or bills it presented for mass it never flew. v1.12.0 found three more
 of them inside v1.11.0's own additions, which is why the count keeps moving —
 and it also *withdrew* one (the tanker charge), so "seventeen" is not simply
 the old fourteen plus three.
+
+The last two are v1.14.0 and are a third species again: **terms whose figures
+were already written down, cited and correct, in a Stage 3 table that Stage 4
+does not load.** Volatile cargo containment and night-side power had both been
+recorded as known limitations for two releases. Writing a gap down had been
+mistaken for closing it.
 
 **Low-thrust trip time** (`model_low_thrust_time`). Electric propulsion used
 to pay a Δv penalty and nothing else — it flew its burns instantly on power
