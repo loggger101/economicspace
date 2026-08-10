@@ -132,10 +132,16 @@ anyway so that a CSV still names the code that produced it — the rule above is
 >
 > The optimum programme size is **interior**, around N = 10. Every other
 > programme-scale figure in this file was measured on a model in which more
-> missions were free money. ⚠️  **This curve has NOT been rebuilt on the full
-> catalog** — the sample establishes that it turns, not where. That is ~3 h of
-> raw cislunar runs (N = 10 and N = 100) and it is the cheapest measurement
-> still outstanding.
+> missions were free money.
+>
+> ✅  **Rebuilt on the full catalog 2026-08-10, raw, and the turn reproduces:**
+> **26.7863× → 13.5836× → 18.3605×** at N = 1 / 10 / 100. At N = 10 one rig
+> serves all ten missions back to back so `concurrent_missions` is still **1**
+> and the saturation multiplier *improves*; at N = 100 the rig cap (12 at this
+> stay length) forces **9 concurrent rigs** and the multiplier collapses to
+> 0.5423. See "Mining reliability GROWS with programme size" for the full table
+> — including that the winning vehicle gets *smaller* with scale, which the old
+> model could not express. The beneficiated curve remains unmeasured.
 >
 
 > ℹ️  *Superseded by the v1.14.0 full-catalog block above, which re-measures
@@ -1173,6 +1179,53 @@ best case, and the curve belongs at whichever destination that is:
 | 1 | 22.93x | 0.850 | 0.646 | 1 | Falcon Heavy |
 | 10 | **9.85x** | 0.902 | 0.708 | 4 (capped) | New Glenn |
 | 100 | **7.28x** | 0.943 | 0.739 | 4 (capped) | New Glenn |
+
+✅  **REBUILT ON THE FULL CATALOG 2026-08-10** — cislunar, **raw**, all
+1,554,400 rows, calc `1.14.0`. N = 1 is the measured headline cell; N = 10 and
+N = 100 are 5,236 s and 5,489 s runs against the same catalog and Stage 2 pass:
+
+| N | best cost/revenue | p_mining | saturation multiplier | concurrent missions | rig serves | winner | vehicle / propellant | payload |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 26.7863x | 0.850 | 0.6873 | 1 | 1 | 2021 CX5 (D) | New Glenn / xenon | 93,312 kg |
+| 10 | **13.5836x** | 0.902 | 0.7785 | 1 | 10 | 2002 AT4 (D) | New Glenn / krypton | 42,597 kg |
+| 100 | 18.3605x | 0.943 | 0.5423 | **9** | 12 | 2021 CX5 (D) | H3 (24L) / iodine | 19,495 kg |
+
+**The curve turns, and the optimum is interior** — −49.3% at N = 10, then back
+up to −31.5% at N = 100. That is the v1.14.0 sample result reproduced on the
+real population rather than inferred from 6,000 rows.
+
+The mechanism is legible in the columns, and this is the part to understand
+before touching `model_market_saturation`:
+
+- **At N = 10 nothing is concurrent.** One rig serves all ten missions back to
+  back (`missions_sharing_rig` = 10, `concurrent_missions` = **1**), so the
+  market never sees two payloads at once and the saturation multiplier
+  *improves*, 0.6873 → 0.7785. NRE per mission falls 10x and `p_mining` grows
+  0.850 → 0.902. Every lever points the same way, which is why the old model
+  looked right here.
+- **At N = 100 the rig cap binds and saturation bites.** One rig serves 12
+  missions at this stay length, so a hundred-mission programme needs
+  ceil(100/12) = **9 rigs flying at once**, and the multiplier collapses to
+  0.5423. That is what turns the curve, and it is exactly the term v1.14.0
+  added.
+
+Two things here that are NOT constants and were quoted as such above:
+
+**The rig cap is 12, not 4.** It is `life / stay`, and this winner's mission is
+4.2-4.4 yr rather than the older profile's. Do not carry "4 (capped)" forward.
+
+**The winning vehicle gets SMALLER with scale**, reversing the old curve's
+Falcon Heavy → New Glenn. Payload falls 93,312 → 42,597 → 19,495 kg and the
+vehicle goes New Glenn → New Glenn → **H3 (24L)**. Saturation punishes volume,
+so at programme scale the model prefers more, smaller missions. The old curve
+could not express this at all, because saturation could not see N.
+
+⚠️  **Three points, so "near N = 10" is the lowest of the points sampled, not a
+located optimum.** The minimum lies somewhere between 1 and 100 and nothing
+here pins it more tightly.
+
+⚠️  **This is the RAW curve.** The beneficiated curve above is not superseded by
+it — it is unmeasured. Two beneficiated cislunar runs are ~21 h.
 
 ⚠️  Calc `1.10.0`. The N = 1 cell is 22.4665x on `1.11.0` and **20.5895x** on
 `1.14.0` full catalog (measured 2026-08-09), so the cost/revenue column is
