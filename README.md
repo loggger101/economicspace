@@ -474,10 +474,44 @@ is the best case, and that is no longer Mars:
 >
 > **The optimum programme size is interior, around N = 10.** "Fly more
 > missions" is not an unbounded lever and never should have looked like one.
->
-> ⚠️  Not rebuilt on the full catalog — the sample establishes that it turns,
-> not where. That is two raw cislunar runs (~3 h) and it is the cheapest
-> measurement still outstanding in this repo.
+
+#### Rebuilt on the full catalog, 2026-08-10 — cislunar, raw
+
+All 1,554,400 rows, calc v1.14.0. N = 1 is the measured headline cell; N = 10
+and N = 100 are separate full runs against the same catalog and Stage 2 pass.
+
+| N | best cost/revenue | `p_mining` | saturation multiplier | concurrent missions | rig serves | winner | vehicle / propellant | payload |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 26.7863× | 0.850 | 0.6873 | 1 | 1 | 2021 CX5 (D) | New Glenn / xenon | 93,312 kg |
+| 10 | **13.5836×** | 0.902 | 0.7785 | 1 | 10 | 2002 AT4 (D) | New Glenn / krypton | 42,597 kg |
+| 100 | 18.3605× | 0.943 | 0.5423 | **9** | 12 | 2021 CX5 (D) | H3 (24L) / iodine | 19,495 kg |
+
+**The curve turns, and the optimum is interior** — −49.3% at N = 10, then back
+up to −31.5% at N = 100. Scale still helps overall; it just stops helping
+monotonically.
+
+Why, reading the columns:
+
+- **At N = 10 nothing is concurrent.** One rig serves all ten missions back to
+  back, so `concurrent_missions` is still **1**, the market never sees two
+  payloads at once, and the saturation multiplier actually *improves* (0.6873 →
+  0.7785). NRE per mission falls 10×, `p_mining` grows 0.850 → 0.902. Every
+  lever points the same way — which is why the pre-v1.14.0 model looked
+  plausible here.
+- **At N = 100 the rig cap binds.** One rig serves 12 missions at this stay
+  length, so a hundred-mission programme needs ⌈100/12⌉ = **9 rigs flying at
+  once** and the multiplier collapses to 0.5423. That is the turn.
+
+Two things not to read as constants: **the rig cap is 12 here, not the 4 of the
+older curve** (it is `life / stay`, and this winner flies 4.2–4.4 yr), and **the
+winning vehicle gets *smaller* with scale** — New Glenn → New Glenn → H3 (24L),
+with payload falling 93,312 → 42,597 → 19,495 kg. Saturation punishes volume,
+so at programme scale the model prefers more, smaller missions. The old model
+could not express that, because saturation could not see N at all.
+
+⚠️  Three points, so "near N = 10" is the lowest of the points sampled, not a
+located optimum. And this is the **raw** curve — the beneficiated one above is
+not superseded by it, it is simply unmeasured (~21 h for the pair).
 
 ⚠️  **This curve has also not been rebuilt since v1.11.0.** Its N = 1 anchor is
 the old 22.93×; that cell measured 22.4665× on v1.11.0 and now measures
@@ -1509,10 +1543,10 @@ Stated plainly so results aren't over-read:
   four in-space destinations at 74.6748× raw.) Scale does not rescue it either
   — and as of v1.14.0 scale no longer even helps monotonically: market
   saturation now sees the programme's concurrent output, so the cost/revenue
-  curve **turns**, with an interior optimum near N = 10. On a 6,000-row sample
-  it reads 38.79× → 16.47× → 20.32× at N = 1 / 10 / 100. ⚠️ That curve has not
-  been rebuilt on the full catalog, so treat the *shape* as established and the
-  levels as not.
+  curve **turns**, with an interior optimum near N = 10. Measured on the full
+  catalog 2026-08-10 (cislunar, raw): **26.7863× → 13.5836× → 18.3605×** at
+  N = 1 / 10 / 100. So the most favourable programme in the model still comes
+  in **~14× short**, and flying a hundred missions is worse than flying ten.
 - **Rank by `total_cost_usd / gross_value_usd`, not `profit_usd`.** Revenue is
   orders of magnitude below cost in most configurations, so `profit_usd`
   reduces to `-total_cost_usd` and `top_profitable()` becomes a pure cost
