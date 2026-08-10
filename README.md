@@ -250,11 +250,12 @@ that the row order, and therefore the ordering of `profit_usd` ties under a
 non-stable sort, is unchanged.
 
 ⚠️  **Both the timings and the cislunar figures in the two paragraphs above
-belong to v1.10.1.** v1.11.0 made the search 4.6× wider, so a full
-beneficiated destination is back to 437-1,017 s depending on destination, and
-the cislunar cells are now 22.4665× / 31.7712×. That is not a performance
-regression — the per-combination cost is unchanged and there are 357
-combinations per asteroid against 77. Current timings are in
+belong to v1.10.1 and the old 89,367-row catalog.** v1.11.0 made the search
+4.6× wider (357 combinations per asteroid against 77), catalog v1.1.0 then made
+the catalog 17× bigger, and v1.14.0 added a power-source search axis. None of
+that is a performance regression. As of 2026-08-09 a full cislunar destination
+measures **5,350 s raw / 38,072 s beneficiated**, and the cislunar cells are
+**26.7863× / 20.5895×**. Current timings are in
 [Beneficiation](#beneficiation).
 
 Roughly 1.9× of the gain is single-threaded and applies even at
@@ -453,12 +454,37 @@ is the best case, and that is no longer Mars:
 | 10 missions | 0.902 | 0.708 | 4 (capped) | 9.85× | New Glenn |
 | 100 missions | 0.943 | 0.739 | 4 (capped) | **7.28×** | New Glenn |
 
-⚠️  **This curve has not been rebuilt on v1.11.0.** Its N = 1 anchor is the
-old 22.93×, and that cell now measures **22.4665×** — so the whole curve is
-about 2% optimistic in level. The *shape* is unaffected: `p_mining` is a
-function of N alone, and the rig cap is a property of the mission profile, so
-neither depends on anything v1.11.0 touched. Rebuilding it is three full
-beneficiated cislunar runs (~25 minutes) if you need the levels exact.
+> 🚨  **THE SHAPE OF THIS TABLE IS WRONG, not just its levels.** It was
+> measured on a model in which market saturation could not see
+> `nre_amortization_missions` at all — so a 100-mission programme divided its
+> NRE by 100, grew its reliability, and sold 100 payloads at the price **one**
+> payload commands. Every lever pointed the same way and nothing pushed back,
+> which is exactly what that term was written to prevent.
+>
+> Fixed in v1.14.0: the rate is the programme's **concurrent** output,
+> `ceil(N / missions_sharing_rig)`. Exactly 1 at N = 1, so no single-mission
+> figure moves. On a 6,000-row raw cislunar sample the curve stops being
+> monotone and **turns**:
+>
+> | N | v1.13.0 | **v1.14.0** | concurrent | saturation multiplier |
+> |---|---|---|---|---|
+> | 1 | 38.4050× | 38.7886× | 1 | 0.7451 |
+> | 10 | 16.0296× | **16.4745×** | 1 | 0.7773 |
+> | 100 | **10.8935×** | **20.3246×** | 10 | **0.4279** |
+>
+> **The optimum programme size is interior, around N = 10.** "Fly more
+> missions" is not an unbounded lever and never should have looked like one.
+>
+> ⚠️  Not rebuilt on the full catalog — the sample establishes that it turns,
+> not where. That is two raw cislunar runs (~3 h) and it is the cheapest
+> measurement still outstanding in this repo.
+
+⚠️  **This curve has also not been rebuilt since v1.11.0.** Its N = 1 anchor is
+the old 22.93×; that cell measured 22.4665× on v1.11.0 and now measures
+**20.5895×** on v1.14.0, so the levels are ~10% optimistic on top of the shape
+problem above. `p_mining` and the rig cap are the two columns that do carry
+over — `p_mining` is a function of N alone, and the rig cap is a property of
+the mission profile.
 
 Going from 10 to 100 missions buys much less than going from 1 to 10, and the
 reason is the rig service-life cap: at this stay length one rig serves four
@@ -831,20 +857,35 @@ Costs charged, all of which the search trades against:
   equation as everything else. Payload → feed → power → mass → payload is a
   real circular dependency, solved by fixed-point iteration.
 
-⚠️ The search costs runtime: roughly **5-6× slower** on the beneficiation path.
-Current figures, calc **v1.11.0** on six physical cores, full catalog,
-measured 2026-08-08:
+⚠️ The search costs runtime: roughly **7× slower** on the beneficiation path.
+Current figures, calc **v1.14.0** on six physical cores / 12 workers, the full
+1,554,400-row catalog, measured 2026-08-09:
 
 | destination | raw | beneficiated |
 |---|---|---|
-| `cislunar` | 89 s | 462 s |
-| `lunar_surface` | 84 s | 437 s |
-| `mars_surface` | 158 s | 966 s |
-| `leo` | 177 s | 948 s |
-| `earth_surface` | 174 s | 1,017 s |
+| `cislunar` | **5,350 s** (89 min) | **38,072 s** (10.6 h) |
+| `lunar_surface` | 5,118 s | not run |
+| `leo` | 10,063 s | not run |
+| `mars_surface` | 10,275 s | not run |
+| `earth_surface` | 10,670 s | not run |
 
-The whole ten-cell sweep is about **70 minutes**, including a Stage 2 re-run
-per destination. Tune with `.calc.concentration_search_steps`.
+The complete raw row is 11.5 h; the whole ten-cell sweep is **~3.5 days**,
+including a Stage 2 re-run per destination. Tune with
+`.calc.concentration_search_steps`, and cap `.calc.eval_row_cap` for anything
+interactive.
+
+🚨 **Do not budget these from a sample.** A stride sample has now mispredicted
+full-catalog runtime on this pipeline by **3.1× high** (v1.13.0's raw estimate)
+and **4.8× low** (v1.14.0's beneficiated estimate — ~2.2 h predicted against
+10.6 h measured), for opposite reasons: fixed costs dominate a small run, while
+a stride sample under-represents the expensive tail of the concentration sweep.
+Budget from a measured full run of the same cell.
+
+The older figures, calc **v1.11.0** on the old 89,367-row catalog, are kept
+only because the *ratios between destinations* are still roughly how to reason
+about relative cost — the absolute seconds are two orders of magnitude out of
+date: cislunar 89 s / 462 s, lunar_surface 84 / 437, mars_surface 158 / 966,
+leo 177 / 948, earth_surface 174 / 1,017.
 
 These have moved three times for three unrelated reasons, so always check
 which release a quoted timing belongs to:
@@ -880,31 +921,95 @@ absolute masses):
 
 ### Combined effect
 
-> 🚨  **Every cell in every results table in this README is STALE as of catalog
-> v1.1.0 / calc v1.13.0.** The catalog went from 89,367 asteroids to
-> **1,554,400** — 17× more bodies — so a figure that means "the best mission
-> over the bodies we had" no longer refers to the same set. No model term
-> changed; the population did, and that is enough.
+#### Current results — full catalog, calc v1.14.0, measured 2026-08-09
+
+The 1,554,400-row catalog v1.1.0 (1,554,353 with positive mass), Stage 2 re-run
+per destination, transportation v1.11.0, calc v1.14.0, master v1.17.0, on
+`master.py` rebuilt from the modules with a clean `git status`. 12 workers.
+
+| destination | raw | evaluable | beneficiated | evaluable |
+|---|---|---|---|---|
+| **`cislunar`** | **26.7863×** | 650,516 | **20.5895×** | 659,847 |
+| `lunar_surface` | 63.3505× | 585,710 | *not measured* | — |
+| `leo` | 71.1055× | 776,266 | *not measured* | — |
+| `mars_surface` | 74.6748× | 730,858 | *not measured* | — |
+| `earth_surface` | 43,721.0072× | 783,742 | *not measured* | — |
+
+**Cislunar is still the best case, at 20.5895×** — 2.4× clear of the next
+destination on raw. Still **zero viable missions** anywhere.
+
+Winners, raw: **2021 CX5** (D, 82 m, a = 1.626 AU) at both `cislunar` and
+`lunar_surface`, **2018 DT** (M) at `leo`, **8651** (M) at `mars_surface`,
+**2016 PN38** (M) at `earth_surface`. Beneficiated at cislunar it is 2021 CX5
+again, concentrating 3.519× on iodine where raw flies xenon.
+
+⚠️  **Only the cislunar raw cell is a delta.** 25.7035× → **26.7863×
+(+4.21%)** against v1.13.0 on the same catalog — the expected direction, since
+every item in v1.14.0 removes something the model was getting free. The other
+four raw cells had **never been run on this catalog**, so they are first
+measurements, not changes. And cislunar beneficiated had never been run either:
+20.5895× is **not** a move from 23.9169×, which was measured on 15,566 rows
+against this cell's 659,847.
+
+⚠️  **The four non-cislunar beneficiated cells are still unmeasured** — 10 to
+20 hours each on six cores, and they were not run. The v1.11.0 table below is
+the last figure they have; it is three releases and a 17× population behind, so
+read it for structure and not as a number.
+
+**8651 (M) is still the Mars raw winner**, the same body as v1.10.x and
+v1.11.0. Surviving a 17× population increase *and* three releases of model
+change is a stronger statement about the separate Mars heliocentric transfer
+than any ratio here.
+
+**The destination ordering has shifted** — cislunar < lunar < leo < mars, where
+v1.11.0 raw ran cislunar < mars < leo < lunar. Mars went from best-of-the-rest
+to worst, which is v1.14.0's containment charge landing on exactly the
+volatile-rich missions the Mars result used to be carried by.
+
+**Xenon has taken over from iodine.** Raw shares by destination:
+
+| destination | xenon | iodine | water ion | krypton | hydrolox |
+|---|---|---|---|---|---|
+| `cislunar` | 42.6% | 25.2% | 15.6% | 8.0% | 8.1% |
+| `lunar_surface` | 42.3% | 10.3% | 20.7% | 22.6% | 3.8% |
+| `mars_surface` | 57.8% | 19.9% | — | 15.4% | 2.1% |
+| `leo` | 76.0% | 13.6% | — | 4.4% | 1.9% |
+| `earth_surface` | 74.7% | 13.5% | — | 5.5% | 1.9% |
+
+That retires v1.11.0's "iodine wins nine of the ten cells". Chemical propulsion
+is **not** extinct — hydrolox holds 1.9–8.1% everywhere.
+
+**Aerocapture resolves per destination on its own**: 95.8% of `earth_surface`
+rows, 93.1% of `leo`, 82.0% of `mars_surface`, and **0.00% at `cislunar` and
+`lunar_surface`**, which is the airless-destination behaviour falling out of
+the search rather than being asserted.
+
+**RTG share** runs 3.96% (`lunar_surface`) to 8.46% (`earth_surface`) raw, and
+10.83% at cislunar beneficiated. v1.14.0 measured 3.9% on a 6,000-row sample —
+which turns out to be almost exactly right for one destination and less than
+half the true figure for another, so quote the range rather than the sample.
+
+Verification, all passing: never-worse holds exactly on the cislunar pair
+(650,516 pairs, max benef/raw 1.000000, zero exceptions, 102,703 declined); the
+mass-ledger identity `hardware_total_kg == mining + power + ep` holds to
+**0.000000000 kg** on every row of all six cells; serial and parallel output is
+byte-identical (sha256 MATCH).
+
+> 🚨  **Every cell in every results table BELOW this point is stale**, for two
+> compounding reasons: catalog v1.1.0 took the population from 89,367 to
+> 1,554,400 bodies, and calc v1.14.0 then changed the model. They are kept
+> because their *structure* — which destination wins and why, what
+> beneficiation does, which effects the model is sensitive to — is still how to
+> read this pipeline. Do not quote their numbers.
 >
-> Measured at cislunar, full catalog, **raw**: **25.7035×** against the v1.12.0
-> 33.2342×, a 22.7% improvement, over 668,004 evaluable rows instead of 15,407.
-> The winner is **2021 CX5**, an 82 m D-type NEA, displacing 4660 Nereus.
-> Beneficiated is not yet measured.
->
-> **The gain is the row cap, not the H-derived diameters.** The best body on a
-> *measured* diameter is 2016 GS2 at **27.0173×** — still 18.7% better. It and
-> third-place 678927 were excluded because of the cap, never for lacking a
-> diameter.
->
-> And the old catalog held **zero unnumbered asteroids** — all 89,367 rows were
-> numbered, 1 to 199,994. JPL returns rows in SPK-ID order, so no
+> On the catalog change specifically: **the gain was the row cap, not the
+> H-derived diameters.** The best body on a *measured* diameter was 2016 GS2 at
+> 27.0173×, and it was excluded by the cap, never for lacking a diameter. The
+> old catalog also held **zero unnumbered asteroids** — all 89,367 rows were
+> numbered, 1 to 199,994 — because JPL returns rows in SPK-ID order, so no
 > provisional-designation body could enter at *any* cap below the full table.
-> The new catalog has 658,490 of them. Recently-discovered NEAs are mostly
-> unnumbered, and NEAs are what this model likes.
->
-> The tables below are kept because their *structure* — which destination wins
-> and why, what beneficiation does, which effects the model is sensitive to —
-> is still how to read this pipeline. Do not quote their numbers.
+> The new catalog has 658,490 of them, and recently-discovered NEAs are mostly
+> unnumbered.
 
 Cost/revenue ratio (lower is better; 1.0 would be breakeven), catalog v1.0.9 /
 calc v1.10.0 / mineral_value v1.7.0, full catalog — 35,807 asteroids fetched,
@@ -981,7 +1086,13 @@ the mission model.
 **Cislunar was still the best case at v1.11.0, at 22.4665×, and it improved.**
 Four of the five beneficiated winners keep their v1.10.x identity *and*
 concentration ratio; only `leo` moved, from 4015 Wilson-Harrington (B, 5.5×).
-(On v1.12.0 cislunar is 22.7353× and still the best case.)
+On v1.12.0 cislunar is **23.9169×** and still the best case; on v1.14.0 it is
+**20.5895×** and still the best case.
+
+⚠️  That sentence read "on v1.12.0 cislunar is 22.7353×" until 2026-08-09.
+**That number was never measured** — it appears in no table in either file and
+contradicts v1.12.0's own verification block, which records 23.9169×. Corrected
+rather than carried forward.
 
 Two mechanisms pull against each other here and the split between the raw and
 beneficiated columns is the evidence for both:
@@ -1390,14 +1501,18 @@ Stated plainly so results aren't over-read:
   (development NRE, autonomy NRE, rig, capsule, contingency, WACC) run to
   billions, while the best bulk material is worth a few dollars per kg. The
   best case the model can currently reach — `cislunar` delivery plus
-  beneficiation — still comes in **~22× short** at a single mission (22.4665×
-  on v1.11.0). There is no "don't fly" option, so the ranking is really *which
-  target loses least*. (This was `mars_surface` at ~25× until mineral_value
-  v1.7.0 priced the local resources a planetary surface already has; Mars is
-  now ~52×.) Scale does not rescue it either: a hundred-mission cislunar
-  programme, the most favourable case in the model, comes in **~7× short** —
-  measured at 7.28× on v1.10.0 against an N = 1 anchor that has since improved
-  ~2%, so treat it as approximate until that curve is rebuilt.
+  beneficiation — still comes in **~21× short** at a single mission
+  (**20.5895×**, full catalog, calc v1.14.0, measured 2026-08-09). There is no
+  "don't fly" option, so the ranking is really *which target loses least*.
+  (This was `mars_surface` at ~25× until mineral_value v1.7.0 priced the local
+  resources a planetary surface already has; Mars is now the *worst* of the
+  four in-space destinations at 74.6748× raw.) Scale does not rescue it either
+  — and as of v1.14.0 scale no longer even helps monotonically: market
+  saturation now sees the programme's concurrent output, so the cost/revenue
+  curve **turns**, with an interior optimum near N = 10. On a 6,000-row sample
+  it reads 38.79× → 16.47× → 20.32× at N = 1 / 10 / 100. ⚠️ That curve has not
+  been rebuilt on the full catalog, so treat the *shape* as established and the
+  levels as not.
 - **Rank by `total_cost_usd / gross_value_usd`, not `profit_usd`.** Revenue is
   orders of magnitude below cost in most configurations, so `profit_usd`
   reduces to `-total_cost_usd` and `top_profitable()` becomes a pure cost
