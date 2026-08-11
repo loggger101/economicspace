@@ -908,6 +908,17 @@ including a Stage 2 re-run per destination. Tune with
 `.calc.concentration_search_steps`, and cap `.calc.eval_row_cap` for anything
 interactive.
 
+⚠️ **Every figure in that table is calc v1.14.0. calc v1.14.1 makes the search
+1.7–1.9× faster and changes no output**, so they are all high by roughly that
+factor — deliberately not scaled, because these are measurements and no cell has
+been re-run on v1.14.1. v1.14.1 skips candidates that provably cannot close
+their mass budget instead of re-deriving that fact once per power source and
+once per point of the concentration sweep; on the full catalog it prunes
+**75.9%** of them. Note that 75.9% pruned is only 1.7–1.9× faster, because the
+quarter that survive are the expensive ones. The control is on the Common tab
+under **Hopeless candidates**; `.calc.prune_infeasible_combos = False` restores
+the v1.14.0 search exactly.
+
 🚨 **Do not budget these from a sample.** A stride sample has now mispredicted
 full-catalog runtime on this pipeline by **3.1× high** (v1.13.0's raw estimate)
 and **4.8× low** (v1.14.0's beneficiated estimate — ~2.2 h predicted against
@@ -1301,6 +1312,55 @@ the return structure cost.
 If a change suddenly improves these by an order of magnitude, suspect it has
 switched one of the twenty models off rather than found something. See
 [What the model charges for](#what-the-model-charges-for).
+
+### What changed in v1.14.1
+
+**No number.** A performance release on the same contract as v1.10.1: the stamp
+moves so a CSV still names the code that produced it, and every measured cell in
+this file stands as measured on v1.14.0.
+
+The search was spending ~90% of itself proving missions infeasible the
+expensive way. Of 134,538 candidate solves for 200 raw asteroids at cislunar,
+**8,292 reached the cost model — 6.2%**; beneficiated it is 7.3%. The rest paid
+a ~20 µs prologue (eclipse geometry, synodic period, ISRU chemistry, tankage,
+electric-stage sizing) to reach a solver that rejected them on a dozen flops.
+
+Those flops now come first. The trick is that the sizing loop's **first**
+iteration runs at zero plant mass, zero containment and the shortest possible
+hold, so it is the most optimistic pass the loop will ever take — and it is
+closed form. If it does not close, nothing downstream does. It is also blind to
+the power source (no plant yet) and to the concentration ratio (no feed yet),
+which is why the identical refutation was being recomputed up to eighteen times
+for one dead candidate.
+
+The second half of the release is the same lesson in a different place: the dark
+period, the eclipse-corrected specific power, the 1/r² solar figure, the synodic
+period, the mineable mass and the throughput cap are functions of the **body**
+alone, and all six were being recomputed for every candidate — 38,643 times
+apiece for 200 asteroids. `AsteroidContext` computes them once per asteroid.
+
+| | v1.14.0 | **v1.14.1** | speed-up | output |
+|---|---|---|---|---|
+| raw, 400 rows | 7.86 s | **4.07 s** | **1.93×** | 124/124 columns identical, sha256 MATCH |
+| beneficiated, 150 rows | 28.07 s | **16.73 s** | **1.68×** | 124/124 columns identical, sha256 MATCH |
+
+On the full catalog it prunes **75.9%** of candidates. ⚠️ **That is not a 4×.**
+The quarter that survive are the expensive ones — full cascade, cost model,
+whole concentration sweep — so three quarters of the candidates are well under
+half of the work. Do not quote the prune rate as a speed-up.
+
+Soundness was checked three ways rather than argued: 68,136 (candidate × Δv ×
+ISRU) tuples were pruned *and* solved in full, and none of the pruned ones
+produced a result; calls to `mission_cost_usd` are **8,292 before and 8,292
+after** while total solves fall 134,538 → 38,443; and serial vs 8 workers is
+byte-identical. `.calc.prune_infeasible_combos = False` restores the v1.14.0
+search exactly, and is the diff to run if an output ever moves.
+
+**The GPU was tested and rejected**, on an RTX 2080 Ti: fp64 `exp` over 40M
+elements is **1.695 s on the card against 0.222 s on the CPU** — 7.6× slower,
+which is the consumer 1:32 FP64 rate. fp32 is faster and unusable, because every
+check this project relies on is a bit-identity check. RAM is not a constraint
+either: the run peaks near 6 GB of 64 GB.
 
 ### What changed in v1.14.0
 

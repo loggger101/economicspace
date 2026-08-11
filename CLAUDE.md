@@ -63,10 +63,15 @@ See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.1.0`, mineral_value `1.7.0`, transportation `1.11.0`,
-calc `1.14.0`, master `1.17.0` (the master version is a literal in
+calc `1.14.1`, master `1.17.1` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
-calc `1.10.1` was the one stamp that did **not** mean the numbers moved. It
+calc `1.14.1` is the **second** stamp that does not mean the numbers moved —
+same contract as `1.10.1`, and verified the same way. See "What calc v1.14.1
+changed". Every measured cell in this file was produced by `1.14.0` and stands
+unaltered; do not re-measure anything on account of it.
+
+calc `1.10.1` was the first stamp that did **not** mean the numbers moved. It
 was a pure performance release, verified bit-identical, and it was bumped
 anyway so that a CSV still names the code that produced it — the rule above is
 "changing a number means bumping", not "bumping means a number changed".
@@ -416,6 +421,12 @@ weakly dominant.
 
 Note this makes the beneficiation path several times slower than raw.
 `concentration_search_steps` is the dial.
+
+⚠️  **Every wall clock below was measured on calc `1.14.0`. calc `1.14.1` makes
+the search 1.5–1.7× faster and changes no output**, so the seconds here are all
+high by roughly that factor and the *ratios between cells* are unaffected. They
+have deliberately not been scaled: this file quotes measurements, and nobody has
+re-run a full cell on `1.14.1`. See "What calc v1.14.1 changed".
 
 ⚠️  **The timings in this file have moved six times, for six unrelated
 reasons, and the fifth dwarfs the other four.** Everything below is per
@@ -2688,6 +2699,212 @@ What genuinely remains:
 - **The historical progression 2.2× → 14× → 39× → 34× → 25×.** Still not
   fixable by re-running: it is a per-release series, so rebuilding it means
   running old code.
+
+## What calc v1.14.1 changed
+
+**Nothing you can measure.** It is a performance release, same contract as
+`1.10.1`: every number it produces is identical to `1.14.0`, and the stamp moves
+only so that a CSV still names the code that produced it. **Do not re-measure
+any table in this file on account of it.**
+
+The finding is one sentence: **the search was spending ~90% of itself proving
+missions infeasible, the hard way.** Profiled at cislunar on the real catalog:
+
+| | calls to `_evaluate_combo_at_ratio` | reached the cost model | |
+|---|---|---|---|
+| raw, 200 rows | 134,538 | 8,292 | **6.2%** |
+| beneficiated, 60 rows | 266,584 | 19,445 | **7.3%** |
+
+The other ~93% paid the function's full ~20 µs prologue — eclipse geometry,
+synodic period, ISRU chemistry, tankage, electric-stage sizing — to reach
+`max_return_payload_kg`, which then refused them on about a dozen flops.
+
+### Pass 1 of the fixed point is its most optimistic pass, and it is closed form
+
+That is the whole argument, and it is what makes this exact rather than a
+heuristic. The sizing loop enters its first iteration at
+
+```
+hardware_kg    = config.mining_hardware_kg      # plant and EP stage are both 0
+structure_frac = return_structure_frac_of_payload   # containment not yet added
+stay_est_yr    = station_keeping_floor_yr + window_wait_yr   # the minimum
+```
+
+and every later pass can only **add** hardware and **lengthen** the hold. More
+hardware shrinks the launch bracket; a longer hold raises the boil-off factor,
+which raises `R_ret`, which shrinks it again. So `if not cascade["viable"]:
+return None` on pass 1 is a decision no later pass can overturn, and
+`_combo_can_close` evaluates that condition directly.
+
+**And it is blind to two axes the loop was re-running it for.** Pass 1 cannot
+see `power_mode` — the plant it would size does not exist yet — and it cannot
+see the concentration ratio, because no feed has been dug. So the identical
+refutation was being recomputed once per power source *and* once per point of
+the concentration sweep. That is why a dead candidate costs **305 µs
+beneficiated against 32 µs raw**: the sweep re-proved it dead nine times over.
+The test therefore sits **above** both loops, not inside them.
+
+### And the per-body constants were re-derived per candidate
+
+The second finding, and it is the v1.10.1 lesson again in a place that release
+did not look. Six quantities are functions of (asteroid × config) and of
+nothing else — the dark period, the eclipse-corrected specific power, the 1/r²
+solar figure, the synodic period, the mineable mass, the throughput cap — and
+every one of them was being computed inside `_evaluate_combo_at_ratio`, i.e.
+**38,643 times apiece for 200 asteroids**, re-answering the same question about
+the same rock.
+
+`AsteroidContext` computes them once per body and `evaluate_asteroid` threads it
+down. The arithmetic is untouched; the **repetition** was the cost, which is
+exactly the argument v1.10.1 made for memoising the ops constants and for
+unboxing catalog rows to dicts. Worth ~0.2× on raw on top of the pre-filter.
+
+⚠️  `synodic_period_yr` is carried on the context **separately from the wait it
+usually implies**, because `window_wait_yr` is zero when `model_launch_windows`
+is off while the synodic period is still reported. Deriving one from the other
+would silently zero an output column on that setting.
+
+### Measured
+
+Working tree against `git HEAD`, same rows, same process structure, serial:
+
+| | HEAD `1.14.0` | tree `1.14.1` | speed-up | output |
+|---|---|---|---|---|
+| raw, 400 rows | 7.86 s | **4.07 s** | **1.93×** | 124/124 columns identical, sha256 MATCH |
+| beneficiated, 150 rows | 28.07 s | **16.73 s** | **1.68×** | 124/124 columns identical, sha256 MATCH |
+
+On a 200-row stride probe of the **full** 1.55 M catalog the pre-filter keeps
+**24.1%** of candidates — 59,040 of 77,826 pruned per asteroid-batch. That is a
+larger prune rate than the 30% the 150-row sample showed, so the sample
+understated it; treat 24.1% as the population figure.
+
+⚠️  **The speed-up is 1.7–1.9×, NOT the ~4× the prune rate suggests**, and the
+gap is the point. The 24% that survive are the expensive ones — they run the
+full cascade, the cost model and the whole concentration sweep. Pruning three
+quarters of the candidates removes well under half the work. Do not quote the
+prune rate as if it were a speed-up.
+
+Extrapolated to the measured full-catalog cells (**projection, not a
+measurement** — and this file's own rule is that a sample predicts full-catalog
+runtime here to no better than a factor of ~5): cislunar raw 5,350 s → ~2,800 s,
+cislunar beneficiated 38,072 s → ~6.3 h. **Nobody has run either.**
+
+### Verification (2026-08-10)
+
+**1. Pruned and unpruned builds agree exactly.** `prune_infeasible_combos =
+False` restores the `1.14.0` search, and both settings were run over the same
+rows in the same process:
+
+```
+raw, 400 rows          252 viable both ways | 124/124 columns identical | sha256 MATCH
+beneficiated, 150 rows 148 viable both ways | 124/124 columns identical | sha256 MATCH
+```
+
+Both were also diffed against `git HEAD` itself, which is the stronger check
+and the one that covers the `AsteroidContext` refactor as well as the pruner —
+a hoist that dropped a term would not show up in a prune-on/prune-off diff,
+because both sides would have dropped it.
+
+**2. Not one mission was lost, and the profiler says so directly.** Calls to
+`mission_cost_usd` — the function only a candidate that survives the cascade
+ever reaches — are **8,292 before the change and 8,292 after**, while calls to
+`_evaluate_combo_at_ratio` fall 134,538 → 38,443. That is a cleaner statement
+of soundness than the row counts, because it counts *survivors* rather than
+*winners*: a pruner could drop a viable-but-losing candidate without moving any
+headline, and this would catch it.
+
+**3. Soundness was checked pairwise before the change was wired in**, on 68,136
+(candidate × Δv × ISRU) tuples across both settings: every tuple the pre-filter
+killed was also solved in full, and **zero of them produced a result**.
+
+**4. Serial and parallel are byte-identical** — the check this file requires
+after any change to the search, and it matters more than usual here because
+v1.14.1 attaches derived state to the propellant rows that get pickled to
+workers:
+
+| | serial | 8 workers | sha256 |
+|---|---|---|---|
+| raw, 2,500-row stride | 57.3 s | 53.9 s | MATCH |
+| beneficiated, 1,200-row stride | 116.2 s | 66.7 s | MATCH |
+
+⚠️  The raw wall clocks are dominated by the 19.7 s CSV catalog load, which both
+paths pay; do not read a parallel speed-up out of that row.
+
+**Both hashes also match the runs made before the `AsteroidContext` hoist** —
+`4cdf16ae…` raw over 1,052 output rows and `948d6538…` beneficiated over 502 —
+which is a second, wider check on the hoist than the 400/150-row HEAD diffs,
+and on a stride sample of the real catalog rather than of a cached subset.
+
+### Two things not to "fix"
+
+**`_combo_can_close` and `max_return_payload_kg` are two statements of the same
+algebra**, which is exactly the duplication this file warns about under the mass
+ledger ("two copies of this algebra drifting apart is how a mass ends up in one
+cascade and not the other"). They are kept adjacent in the source for that
+reason. The defence is `prune_infeasible_combos = False` plus a column-by-column
+diff: if they ever disagree, the pruned build drops rows the unpruned one keeps
+and the diff says so on the first run. **Change one, re-run that diff.**
+
+**`AsteroidContext`'s membership test is "does it vary with the candidate",
+not a field count.** If a quantity varies only with the body it belongs on the
+context; if it varies with the vehicle, propellant, return mode, power source or
+concentration ratio it must not, because the context is built once and every
+candidate reads the same copy. `synodic_period_yr` is carried on it *separately*
+from `window_wait_yr` for a related reason: the wait is zero when
+`model_launch_windows` is off, and the synodic period is still an output column.
+
+**The pre-filter is deliberately one-sided and deliberately loose.** True means
+"solve it properly", not "this is a mission" — the throughput cap, the duration
+limit, the volume cap and the post-settle launch recheck all still apply, and
+about a quarter of the survivors die on one of them. Tightening it to catch
+those would mean duplicating four more downstream conditions, i.e. four more
+copies of the same drift hazard, for a fraction of the remaining time. Cheap
+and sound beats tight and clever here.
+
+### Why the GPU is not the answer, measured rather than assumed
+
+This came up as "the CPU is maxed but the GPU is idle". It was tested rather
+than reasoned about, on the reference machine's RTX 2080 Ti:
+
+```
+numpy  fp64 exp, 40M elements   0.222 s
+cupy   fp64 exp, 40M elements   1.695 s     <- 7.6x SLOWER than the CPU
+cupy   fp32 exp, 40M elements   0.137 s
+host->device, 320 MB            0.055 s
+```
+
+**The card is 7.6× slower than the CPU at the arithmetic this model is made
+of.** That is the TU102's 1:32 FP64 rate, and it is a property of every
+consumer GeForce, not a tuning problem. fp32 is 1.6× faster than the CPU — and
+unusable, because every verification this project relies on is a bit-identity
+check: sha256 CSV diffs, `max |error| 0.000000000 kg`, "120 of 121 columns
+identical". Single precision would break all of them for a 1.6× that the PCIe
+round trip mostly eats.
+
+The workload is also the wrong *shape* — branchy scalar Python with early exits,
+a fixed-point loop, a knapsack with a `sorted()` in it — so the port is a
+rewrite, not an annotation. And the piece that IS GPU-shaped, this pre-filter,
+is ~10 flops per candidate: ~14 GFLOP for the entire 1.55 M-row catalog, which
+is under a second on **either** processor and irrelevant against a 5,350 s run.
+
+**RAM is not a constraint either.** The run peaks around 6 GB against 64 GB
+installed. The only honest RAM/IO win found was the catalog load — `read_csv`
+on the 883 MB catalog is **19.7 s** against **2.1 s** for the same frame as
+Parquet — which is real, free, and worth ~0.4% of a full destination run. It is
+noted here rather than implemented because it changes Module 1's output
+contract, and no measured cell in this file would move by a detectable amount.
+
+### What is left on the table
+
+- **Branch-and-bound on the objective**, i.e. pruning candidates that *can*
+  close but cannot beat the incumbent. That would attack the remaining 24%,
+  which is where the time now is. It needs an **admissible** upper bound on
+  `selection_key`, and `selection_key` is lexicographic over profit and
+  cost/revenue with revenue coming out of the payload knapsack — so a bound
+  that is provably never optimistic is real work. **Do not approximate it.** A
+  bound that is occasionally too tight silently drops winners, and it would
+  drop them without changing the row count, which is the one failure mode none
+  of the checks above would catch.
 
 ## Config discipline
 
