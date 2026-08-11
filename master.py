@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.17.1)
+"""Master Asteroid Profitability Pipeline (1.17.2)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -11510,7 +11510,45 @@ class CalcConfig:
     #         ever moves).
     #         New stdout line: the pruned-candidate count, so that a population
     #         where the pre-filter stops firing is visible rather than silent.
-    pipeline_version: str = "1.14.1"
+    # 1.14.2  PERFORMANCE ONLY — every number identical to 1.14.1, same contract
+    #         as 1.10.1 and 1.14.1. The stamp moves so a CSV still names the code
+    #         that produced it. DO NOT re-measure any table on account of it.
+    #         Four findings, and the first is the largest single item ever found
+    #         in this module:
+    #         • SCALAR ARITHMETIC WAS GOING THROUGH NUMPY. `max_return_payload_kg`
+    #           and `_combo_can_close` called `np.isfinite` and `np.exp` on
+    #           Python floats. Measured here: np.isfinite 698 ns against
+    #           math.isfinite 32 ns, float(np.exp(x)) 694 ns against math.exp
+    #           47 ns — ufunc dispatch on a scalar, 15-22x. Seven of them per
+    #           call to a function invoked 496,000 times per 150 beneficiated
+    #           asteroids was about half that function and a quarter of the
+    #           search. math.exp was checked BITWISE against np.exp over 400,000
+    #           samples spanning this model's (Δv, Isp) range: zero mismatches.
+    #         • THE KNAPSACK RE-SORTED THE SAME PHASE LIST ~2,100 times per
+    #           asteroid. Memoised per list (`_PHASE_ORDER_CACHE`) rather than
+    #           sorted at source — see the warning in `optimal_payload_mix`, the
+    #           table's natural order is load-bearing on the last ULP.
+    #         • SIX PER-PROPELLANT CONSTANTS AND ONE PER-VEHICLE were re-parsed
+    #           per surviving candidate, each through `pd.isna` — ~980,000
+    #           pd.isna calls per 150 rows. Attached to the row dict in
+    #           `candidate_combos` like the pre-filter constants, so they cross
+    #           the worker boundary too. `tank_frac` had been derived twice from
+    #           the same two columns; one derivation now, two readers.
+    #         • THE PRE-FILTER IS MONOTONE IN LAUNCH CAPACITY, so seventeen
+    #           vehicles were re-deriving one propellant's exponentials, boil-off
+    #           and tankage closure. Split into `_combo_close_terms` (no vehicle)
+    #           and `_closes_with` (vehicle). The coefficients are hoisted rather
+    #           than the threshold they imply, because rearranging `bracket > 0`
+    #           re-associates the arithmetic and would move the prune boundary.
+    #         Measured against HEAD, same rows, one process, serial: raw 2.70 s →
+    #         1.13 s (2.39x), beneficiated 9.19 s → 4.51 s (2.04x), every one of
+    #         124 output columns identical and sha256 matching in both.
+    #         Measured and NOT taken: hoisting the ratio-independent prologue out
+    #         of the concentration sweep. Instrumented at 7.6% of a beneficiated
+    #         run, so ~6.7% recoverable — too little to justify splitting a
+    #         570-line function with ~40 locals crossing the seam. Items above
+    #         removed most of what made that prologue expensive.
+    pipeline_version: str = "1.14.2"
 
 
 CALC_CONFIG = CalcConfig()
@@ -12023,6 +12061,26 @@ def saturation_price_multiplier(
     return (1.0 + ratio) ** (-1.0 / elasticity)
 
 
+# Single-slot memo for the knapsack's price ordering (v1.14.2).  The phase table
+# is built once per asteroid and never mutated, but `optimal_payload_mix` is
+# called ~2,100 times per asteroid in a beneficiated run and re-sorted it every
+# time — 325,000 `sorted()` calls plus 1.4 million key-lambda calls per 150
+# rows, all re-deriving the same order for the same rock.
+#
+# Same shape and the same justification as `_OPS_CACHE` below: keyed by object
+# identity, with the list itself held in the slot so its id cannot be recycled
+# onto a different object, and single-slot rather than a growing dict so a
+# long-lived session cannot leak.  A caller that mutates a phase list IN PLACE
+# rather than rebinding would read a stale order — nothing in this module does,
+# and `asteroid_phase_table` returns a fresh list per asteroid.
+#
+# ⚠️  What this deliberately does NOT do is sort the phase table at source.  See
+# the warning in `optimal_payload_mix` — the table's natural order is
+# load-bearing elsewhere, on the last ULP.
+_PHASE_ORDER_CACHE: Tuple[Optional[List[Tuple[str, float, float]]],
+                          List[Tuple[str, float, float]]] = (None, [])
+
+
 def optimal_payload_mix(
     payload_kg: float,
     feed_kg:    float,
@@ -12044,15 +12102,40 @@ def optimal_payload_mix(
     Returns value, blended $/kg, the chosen mix in kg, and the mass fraction
     the best phase makes up — which is the natural read on how well
     concentrated the load actually is.
+
+    ⚠️  **Do not "fix" this by sorting the phase table at source.**  The greedy
+    order is needed HERE and nowhere else, and `phases` arrives in its natural
+    (Module 1 fraction) order because the market-saturation block in
+    `_evaluate_combo_at_ratio` builds `sold` from it and then accumulates
+    `adj_value` by iterating that dict.  Floating-point addition is not
+    associative, so reordering the table reorders that sum and moves
+    `saturation_multiplier`, `gross_value_usd`, `profit_usd`, `roi` and
+    `delivered_value_usd_per_kg` in their last bit.
+
+    Measured, on a 150-row beneficiated cislunar sample: max relative change
+    2.8e-16 on 3 of 60 rows, and no vehicle, propellant, concentration ratio or
+    power source moved.  Numerically that is nothing.  It is still fatal, because
+    every verification this project relies on is a bit-identity check — the
+    sha256 CSV diffs, `max |error| 0.000000000 kg`, "124 of 124 columns
+    identical".  A sort at source reads like a free cleanup and silently costs
+    you the ability to prove a release changed nothing.
+
+    So the ordering is memoised per phase list instead, which leaves the table
+    itself untouched.
     """
     if payload_kg <= 0 or not phases:
         return {"value_usd": 0.0, "usd_per_kg": 0.0, "mix_kg": {},
                 "dominant_phase": None, "dominant_frac": 0.0}
 
+    global _PHASE_ORDER_CACHE
+    if _PHASE_ORDER_CACHE[0] is not phases:
+        _PHASE_ORDER_CACHE = (phases, sorted(phases, key=lambda p: -p[2]))
+    by_price = _PHASE_ORDER_CACHE[1]
+
     remaining = float(payload_kg)
     total     = 0.0
     mix: Dict[str, float] = {}
-    for name, frac, price in sorted(phases, key=lambda p: -p[2]):
+    for name, frac, price in by_price:
         if remaining <= 0:
             break
         available = float(feed_kg) * frac * recovery
@@ -13268,6 +13351,82 @@ def asteroid_mission_duration_yr(
 # diff says so immediately.  Change one, re-run that diff.
 _PREFILTER_CONSTS_KEY = "_prefilter_consts"
 
+# Cache-miss sentinel for the search's `_combo_close_terms` memo (v1.14.2).
+# `None` is a legitimate CACHED value there — it means "no vehicle in the table
+# could close this candidate" — so a plain `.get(key)` returning None cannot
+# distinguish a miss from a stored refusal, and would recompute every refusal on
+# every vehicle, i.e. exactly the work the memo exists to remove.
+_UNCACHED = object()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PER-ROW CONSTANTS FOR THE SIZING PATH  (v1.14.2)
+# ─────────────────────────────────────────────────────────────────────────────
+# The same finding as `_PREFILTER_CONSTS_KEY` one level further in: six
+# quantities that `_evaluate_combo_at_ratio` derived on entry are functions of
+# (propellant row × config) alone, and one is a function of the vehicle row
+# alone.  They were re-parsed out of the row for every SURVIVING candidate —
+# 218,000 times per 150 beneficiated asteroids — and each parse goes through
+# `pd.isna`, which is ~700 ns because it is a pandas dispatch on a Python
+# scalar.  That alone was ~980,000 `pd.isna` calls per 150 rows.
+#
+# Attached to the row dict rather than memoised on `id()`, for the same reason
+# the pre-filter constants are: the dict is what crosses the multiprocessing
+# boundary, so a worker gets the derived values with the row instead of
+# rebuilding them, and there is no identity to be recycled.
+#
+# `tank_frac` is deliberately derived HERE and read by both consumers.  It was
+# computed twice from the same two columns — once in
+# `_prefilter_propellant_consts`, once in `_evaluate_combo_at_ratio` — which is
+# the drift hazard this file keeps naming.  One derivation now, two readers.
+_SIZING_CONSTS_KEY  = "_sizing_consts"
+_VEHICLE_CONSTS_KEY = "_vehicle_consts"
+
+
+def _sizing_propellant_consts(
+    propellant: Row,
+    config:     CalcConfig,
+) -> Tuple[float, Optional[float], Optional[float], float, float, float]:
+    """(dv_penalty, thruster_eff, thruster_kg_per_n, tank_frac, isp, boiloff).
+
+    `thruster_eff` and `thruster_kg_per_n` are None where the row does not state
+    a usable figure, which is what makes the caller fall back to Module 3's
+    shared constants exactly as it did before — the two-part test they replace
+    ("not null AND in range") collapses to one identity check, and a
+    pre-Module-3-v1.10.0 catalog still reproduces v1.11.0.
+    """
+    eff = propellant.get("thruster_efficiency")
+    eff = (float(eff) if eff is not None and not pd.isna(eff) and float(eff) > 0
+           else None)
+
+    kgn = propellant.get("thruster_kg_per_n")
+    kgn = (float(kgn) if kgn is not None and not pd.isna(kgn) and float(kgn) >= 0
+           else None)
+
+    tank_frac = 0.0
+    if config.model_tank_mass:
+        tank_per_L = propellant.get("tank_kg_per_L")
+        rho        = propellant.get("density_kg_per_L")
+        if (tank_per_L is not None and rho is not None
+                and not pd.isna(tank_per_L) and not pd.isna(rho)
+                and float(rho) > 0):
+            tank_frac = max(0.0, float(tank_per_L) / float(rho))
+
+    return (
+        float(propellant.get("dv_penalty_factor", 1.0) or 1.0),
+        eff,
+        kgn,
+        tank_frac,
+        float(propellant["isp_vac_s"]),
+        float(propellant.get("boiloff_pct_per_day", 0.0) or 0.0),
+    )
+
+
+def _vehicle_consts(vehicle: Row) -> float:
+    """Usable fairing volume in m³, defaulted for a row that does not state one."""
+    fairing_m3 = vehicle.get("fairing_volume_m3")
+    return (float(fairing_m3)
+            if fairing_m3 is not None and not pd.isna(fairing_m3) else 100.0)
+
 
 def _prefilter_propellant_consts(
     propellant: Row,
@@ -13306,6 +13465,105 @@ def _prefilter_propellant_consts(
     return isp, dv_penalty, tank_frac, boiloff_pct
 
 
+def _combo_close_terms(
+    consts:          Tuple[float, float, float, float],
+    dv_out_m_s:      float,
+    dv_ret_m_s:      float,
+    tps_frac:        float,
+    isru:            bool,
+    window_wait_yr:  float,
+    config:          CalcConfig,
+) -> Optional[Tuple[bool, float, float, float]]:
+    """The vehicle-independent half of the pre-filter, or None if nothing closes.
+
+    v1.14.2.  The launch capacity enters this test in exactly one place — the
+    final comparison — and it enters MONOTONICALLY: a bigger rocket can never
+    turn a candidate that closes into one that does not.  Everything else is a
+    function of (propellant × Δv × ISRU).
+
+    That matters because the combo grid is vehicle-major, so the question was
+    asked once per vehicle: seventeen evaluations per propellant row per
+    asteroid, computing the same two exponentials, the same boil-off inflation
+    and the same tankage closure, and differing only in the last line.
+
+    ⚠️  This returns the COEFFICIENTS of that last line rather than the launch
+    capacity it implies, and the difference is not stylistic.  `bracket > 0`
+    rearranges algebraically to `leo > (hw + k·s·d0·R_ret)·k_out·R_out`, but not
+    in floating point — the rearrangement re-associates the arithmetic and moves
+    the boundary in the last bit, which for a candidate sitting on it changes
+    whether the row survives the prune.  Keeping the same operations in the same
+    order on the same values makes the hoist exactly transparent, and the
+    per-vehicle remainder (one divide, two subtractions) is not what cost.
+
+    `denom` is vehicle-independent too, so a candidate that fails it returns None
+    here rather than being re-refuted per vehicle.
+    """
+    isp, dv_penalty, t, boiloff_pct = consts
+    dv_out = dv_out_m_s * dv_penalty
+    dv_ret = dv_ret_m_s * dv_penalty
+    if not (math.isfinite(dv_out) and math.isfinite(dv_ret)):
+        return None
+    if dv_out < 0 or dv_ret < 0:
+        return None
+
+    ve = isp * G0_M_S2
+    try:
+        r_out = math.exp(dv_out / ve)
+        r_ret = math.exp(dv_ret / ve)
+    except OverflowError:
+        return False        # Δv/Isp so extreme the mass ratio overflows
+
+    # Boil-off, at the SHORTEST hold the loop can settle on.  The loop folds it
+    # into an effective return Δv and then re-exponentiates; doing both here
+    # would be a log/exp round trip to recover the number we already have, so
+    # inflate R_ret directly — `r_ret_eff = 1 + (r_ret - 1) · factor` is the
+    # substitution the loop makes.  ISRU is exempt: the propellant is made at
+    # the asteroid on departure rather than held from launch.
+    if config.model_propellant_boiloff and boiloff_pct > 0 and not isru:
+        outbound_yr = max(0.5, 0.000_23 * dv_out)
+        hold_yr     = outbound_yr + config.station_keeping_floor_yr + window_wait_yr
+        r_ret = 1.0 + (r_ret - 1.0) * math.exp(
+            boiloff_pct / 100.0 * hold_yr * 365.25)
+
+    if not (math.isfinite(r_out) and math.isfinite(r_ret)):
+        return None
+
+    # Tankage closure — t·(R − 1) ≥ 1 means the tank outweighs the propellant's
+    # own contribution.  Infeasible, not expensive.
+    if t * (r_ret - 1.0) >= 1.0 or t * (r_out - 1.0) >= 1.0:
+        return None
+    k     = 1.0 / (1.0 - t * (r_ret - 1.0))
+    k_out = 1.0 / (1.0 - t * (r_out - 1.0))
+
+    s  = 1.0 + tps_frac
+    f  = max(0.0, float(config.return_structure_frac_of_payload))
+    d0 = float(config.return_vehicle_dry_kg)
+    hw = float(config.mining_hardware_kg)          # the floor: no plant, no EP
+
+    if isru:
+        # Return propellant is made on site, but the heat shield, the
+        # payload-scaling structure and the empty return tank still launch.
+        # Test: base_launch <= leo_capacity_kg.
+        return (True, (hw + k * s * d0) * k_out * r_out, 0.0, 0.0)
+
+    denom = k * s * r_ret * (1.0 + f) - 1.0
+    if denom <= 0:
+        return None
+    # Test: leo_capacity_kg / a - b - c > 0, written in exactly that order.
+    return (False, k_out * r_out, hw, k * s * d0 * r_ret)
+
+
+def _closes_with(
+    leo_capacity_kg: float,
+    terms:           Tuple[bool, float, float, float],
+) -> bool:
+    """Apply `_combo_close_terms`' coefficients to one vehicle's LEO capacity."""
+    isru_form, a, b, c = terms
+    if isru_form:
+        return a <= leo_capacity_kg
+    return leo_capacity_kg / a - b - c > 0
+
+
 def _combo_can_close(
     leo_capacity_kg: float,
     consts:          Tuple[float, float, float, float],
@@ -13327,60 +13585,18 @@ def _combo_can_close(
     throughput cap, the duration limit, the volume cap and the post-settle
     launch recheck all still apply downstream, and about a quarter of the
     survivors die on one of them.  Cheap and sound beats tight and clever here.
+
+    v1.14.2 split the work in two — `_combo_close_terms` for the part that does
+    not depend on the vehicle, `_closes_with` for the part that does — because
+    the search asks this once per vehicle over a vehicle-major grid.  This
+    remains the whole test in one call, for callers outside that loop and as the
+    single readable statement of what the pre-filter is.
     """
-    if not (np.isfinite(leo_capacity_kg) and leo_capacity_kg > 0):
+    if not (math.isfinite(leo_capacity_kg) and leo_capacity_kg > 0):
         return False
-
-    isp, dv_penalty, t, boiloff_pct = consts
-    dv_out = dv_out_m_s * dv_penalty
-    dv_ret = dv_ret_m_s * dv_penalty
-    if not (np.isfinite(dv_out) and np.isfinite(dv_ret)):
-        return False
-    if dv_out < 0 or dv_ret < 0:
-        return False
-
-    ve = isp * G0_M_S2
-    try:
-        r_out = math.exp(dv_out / ve)
-        r_ret = math.exp(dv_ret / ve)
-    except OverflowError:
-        return False        # Δv/Isp so extreme the mass ratio overflows
-
-    # Boil-off, at the SHORTEST hold the loop can settle on.  The loop folds it
-    # into an effective return Δv and then re-exponentiates; doing both here
-    # would be a log/exp round trip to recover the number we already have, so
-    # inflate R_ret directly — `r_ret_eff = 1 + (r_ret - 1) · factor` is the
-    # substitution the loop makes.  ISRU is exempt: the propellant is made at
-    # the asteroid on departure rather than held from launch.
-    if config.model_propellant_boiloff and boiloff_pct > 0 and not isru:
-        outbound_yr = max(0.5, 0.000_23 * dv_out)
-        hold_yr     = outbound_yr + config.station_keeping_floor_yr + window_wait_yr
-        r_ret = 1.0 + (r_ret - 1.0) * math.exp(
-            boiloff_pct / 100.0 * hold_yr * 365.25)
-
-    if not (np.isfinite(r_out) and np.isfinite(r_ret)):
-        return False
-
-    # Tankage closure — t·(R − 1) ≥ 1 means the tank outweighs the propellant's
-    # own contribution.  Infeasible, not expensive.
-    if t * (r_ret - 1.0) >= 1.0 or t * (r_out - 1.0) >= 1.0:
-        return False
-    k     = 1.0 / (1.0 - t * (r_ret - 1.0))
-    k_out = 1.0 / (1.0 - t * (r_out - 1.0))
-
-    s  = 1.0 + tps_frac
-    f  = max(0.0, float(config.return_structure_frac_of_payload))
-    d0 = float(config.return_vehicle_dry_kg)
-    hw = float(config.mining_hardware_kg)          # the floor: no plant, no EP
-
-    if isru:
-        # Return propellant is made on site, but the heat shield, the
-        # payload-scaling structure and the empty return tank still launch.
-        return (hw + k * s * d0) * k_out * r_out <= leo_capacity_kg
-
-    denom   = k * s * r_ret * (1.0 + f) - 1.0
-    bracket = leo_capacity_kg / (k_out * r_out) - hw - k * s * d0 * r_ret
-    return bracket > 0 and denom > 0
+    terms = _combo_close_terms(
+        consts, dv_out_m_s, dv_ret_m_s, tps_frac, isru, window_wait_yr, config)
+    return terms is not None and _closes_with(leo_capacity_kg, terms)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -13471,18 +13687,32 @@ def max_return_payload_kg(
                 "m_at_asteroid": 0, "m_tps": 0, "m_dry_return": 0,
                 "m_tank_return": 0, "m_tank_outbound": 0}
 
-    if not np.isfinite(isp_s) or isp_s <= 0:
+    # ── Scalar arithmetic uses `math`, not numpy (v1.14.2) ───────────────────
+    # Every argument here is a Python float, and numpy's ufunc dispatch costs
+    # ~700 ns on a scalar against ~30-50 ns for the `math` equivalent.  This
+    # function is called ~2.2 times per surviving candidate — 387,000 times per
+    # 150 beneficiated asteroids — so seven ufunc dispatches were about half its
+    # runtime and roughly a quarter of the whole search.
+    #
+    # `math.exp` and `np.exp` were checked bitwise over 400,000 samples across
+    # the (Δv, Isp) range this model spans: zero mismatches.  They differ only
+    # in how they OVERFLOW — numpy returns inf and warns, `math` raises — which
+    # is why the guard below becomes a try/except rather than an isfinite test.
+    # That is the form `_combo_can_close` has always used, so the two statements
+    # of this algebra now also agree on their error handling.
+    if not math.isfinite(isp_s) or isp_s <= 0:
         return _infeasible()
-    if not (np.isfinite(dv_out_m_s) and np.isfinite(dv_ret_m_s)):
+    if not (math.isfinite(dv_out_m_s) and math.isfinite(dv_ret_m_s)):
         return _infeasible()
     if dv_out_m_s < 0 or dv_ret_m_s < 0:
         return _infeasible()
-    if not np.isfinite(leo_capacity_kg) or leo_capacity_kg <= 0:
+    if not math.isfinite(leo_capacity_kg) or leo_capacity_kg <= 0:
         return _infeasible()
 
-    r_out = float(np.exp(dv_out_m_s / (isp_s * G0_M_S2)))
-    r_ret = float(np.exp(dv_ret_m_s / (isp_s * G0_M_S2)))
-    if not (np.isfinite(r_out) and np.isfinite(r_ret)):
+    try:
+        r_out = math.exp(dv_out_m_s / (isp_s * G0_M_S2))
+        r_ret = math.exp(dv_ret_m_s / (isp_s * G0_M_S2))
+    except OverflowError:
         return _infeasible()      # Δv/Isp so extreme the mass ratio overflows
     s     = 1.0 + tps_frac
     f     = max(0.0, float(structure_frac))
@@ -14294,7 +14524,19 @@ def _evaluate_combo_at_ratio(
     # out of LEO costs roughly twice what an impulsive escape does.  Without
     # this, a 3,000 s Isp thruster wins the mass cascade on a Δv budget it
     # could never actually achieve.
-    dv_penalty = float(propellant.get("dv_penalty_factor", 1.0) or 1.0)
+    # ── Per-row constants (v1.14.2) ──────────────────────────────────────────
+    # `candidate_combos` attaches these, but a caller that hand-builds `combos`
+    # will not have.  Derived on demand in that case rather than defaulted —
+    # absent means unknown, not zero, and defaulting a tank fraction to zero
+    # here would silently un-charge tankage, which is the quiet-wrong-answer
+    # failure this repo keeps finding.
+    sizing_consts = propellant.get(_SIZING_CONSTS_KEY)
+    if sizing_consts is None:
+        sizing_consts = _sizing_propellant_consts(propellant, config)
+        propellant[_SIZING_CONSTS_KEY] = sizing_consts
+    (dv_penalty, thruster_eff_row, thruster_kg_per_n_row,
+     tank_frac, isp_s_val, boiloff_pct) = sizing_consts
+
     dv_out_m_s = dv_out_m_s * dv_penalty
     dv_ret_m_s = dv_ret_m_s * dv_penalty
 
@@ -14423,8 +14665,7 @@ def _evaluate_combo_at_ratio(
     # that plant is mass in the same rocket equation.  Sized to finish its
     # thrusting inside ep_target_thrust_yr.  Module 3 tags electric
     # propellants with dv_penalty_factor > 1.
-    is_electric = (config.model_low_thrust_time
-                   and float(propellant.get("dv_penalty_factor", 1.0) or 1.0) > 1.0)
+    is_electric = (config.model_low_thrust_time and dv_penalty > 1.0)
 
     # ── The DEVICE, as distinct from the propellant (v1.12.0) ────────────────
     # Two per-technology figures from Module 3's `_THRUSTER_SYSTEMS`, and the
@@ -14441,30 +14682,24 @@ def _evaluate_combo_at_ratio(
     eff_used            = ep_eff
     thruster_kg_per_n   = 0.0
     ppu_kg_per_kw       = ep_kg_per_kw
+    # v1.14.2: both figures are parsed once per run by
+    # `_sizing_propellant_consts`, which reports None where the row states no
+    # usable value — so the fallback to Module 3's shared constants is unchanged
+    # and a pre-Module-3-v1.10.0 catalog still reproduces v1.11.0.
     if is_electric:
-        p_eff = propellant.get("thruster_efficiency")
-        if p_eff is not None and not pd.isna(p_eff) and float(p_eff) > 0:
-            eff_used = float(p_eff)
-        p_kgn = propellant.get("thruster_kg_per_n")
-        if p_kgn is not None and not pd.isna(p_kgn) and float(p_kgn) >= 0:
-            thruster_kg_per_n = float(p_kgn)
+        if thruster_eff_row is not None:
+            eff_used = thruster_eff_row
+        if thruster_kg_per_n_row is not None:
+            thruster_kg_per_n = thruster_kg_per_n_row
             ppu_kg_per_kw     = ppu_only_kg_per_kw   # thruster now counted separately
 
-    isp_s_val   = float(propellant["isp_vac_s"])
-    boiloff_pct = float(propellant.get("boiloff_pct_per_day", 0.0) or 0.0)
+    # `isp_s_val`, `boiloff_pct` and `tank_frac` all arrive on `sizing_consts`.
     # ── Tankage (v1.11.0) ────────────────────────────────────────────────────
     # Module 3 quotes tank mass per LITRE, because that is what it scales with;
     # the cascade wants it per kilogram of propellant, so divide by density.
     # A propellant row predating Module 3 v1.9.0 has neither column and comes
     # through as 0.0, which reproduces v1.10.1 exactly.
-    tank_frac = 0.0
-    if config.model_tank_mass:
-        tank_per_L = propellant.get("tank_kg_per_L")
-        rho        = propellant.get("density_kg_per_L")
-        if (tank_per_L is not None and rho is not None
-                and not pd.isna(tank_per_L) and not pd.isna(rho)
-                and float(rho) > 0):
-            tank_frac = max(0.0, float(tank_per_L) / float(rho))
+    #
     # ISRU is exempt from boil-off — the propellant is made at the asteroid on
     # departure rather than held from launch.
     models_boiloff = (config.model_propellant_boiloff and boiloff_pct > 0
@@ -14720,8 +14955,10 @@ def _evaluate_combo_at_ratio(
         bulk_density = 2.0    # default: rocky-asteroid average
     bulk_density_kg_per_L = float(bulk_density)         # g/cm³ ≡ kg/L
 
-    fairing_m3 = vehicle.get("fairing_volume_m3")
-    fairing_m3 = float(fairing_m3) if fairing_m3 is not None and not pd.isna(fairing_m3) else 100.0
+    fairing_m3 = vehicle.get(_VEHICLE_CONSTS_KEY)     # v1.14.2, see candidate_combos
+    if fairing_m3 is None:
+        fairing_m3 = _vehicle_consts(vehicle)
+        vehicle[_VEHICLE_CONSTS_KEY] = fairing_m3
     usable_return_m3   = 0.25 * fairing_m3
     volume_capacity_kg = usable_return_m3 * 1000.0 * bulk_density_kg_per_L
 
@@ -15529,9 +15766,16 @@ def candidate_combos(
     for propellant in propellant_rows:
         propellant[_PREFILTER_CONSTS_KEY] = _prefilter_propellant_consts(
             propellant, config)
+        # v1.14.2: and the six the SIZING path needs, for the same reason and
+        # by the same route.  See `_sizing_propellant_consts`.
+        propellant[_SIZING_CONSTS_KEY] = _sizing_propellant_consts(
+            propellant, config)
+    vehicle_rows = [_row_to_dict(v) for _, v in vdf.iterrows()]
+    for vehicle in vehicle_rows:
+        vehicle[_VEHICLE_CONSTS_KEY] = _vehicle_consts(vehicle)
     return [
         (vehicle, propellant)
-        for vehicle in (_row_to_dict(v) for _, v in vdf.iterrows())
+        for vehicle in vehicle_rows
         for propellant in propellant_rows
     ]
 
@@ -15571,6 +15815,11 @@ def _prefilter_probe(
         for dv_opt in dv_options:
             for isru in isru_modes:
                 seen += 1
+                # `_combo_can_close` rather than the split form the search uses
+                # (v1.14.2): this is a diagnostic, it runs once per asteroid, and
+                # composing the two halves here would put a third copy of the
+                # test in the file.  The one-call form is defined as exactly that
+                # composition, so the rate it reports is still the search's.
                 if pf_consts is not None and _combo_can_close(
                         leo_cap, pf_consts,
                         float(dv_opt["dv_out_m_s"]), float(dv_opt["dv_ret_m_s"]),
@@ -15697,6 +15946,13 @@ def evaluate_asteroid(
     # `candidate_combos` builds one dict per propellant row and shares it across
     # every vehicle pairing (v1.14.1).
     isru_mode_cache: Dict[int, List[bool]] = {}
+    # And the vehicle-independent half of the pre-filter, for the same reason
+    # (v1.14.2).  Keyed by (propellant identity × Δv option × ISRU), which is
+    # everything `_combo_close_terms` reads — so seventeen vehicles now share one
+    # evaluation instead of recomputing it each.  `dv_options` is this asteroid's
+    # own list, so the index is a stable key within this call.
+    close_terms_cache: Dict[Tuple[int, int, bool],
+                            Optional[Tuple[bool, float, float, float]]] = {}
 
     best     = None
     best_key = (-np.inf, -np.inf)
@@ -15720,7 +15976,9 @@ def evaluate_asteroid(
                 propellant, config)
         pf_consts = propellant.get(_PREFILTER_CONSTS_KEY) if prefilter else None
         leo_cap   = float(vehicle.get("payload_leo_kg", 0) or 0)
-        for dv_opt in dv_options:
+        leo_ok    = math.isfinite(leo_cap) and leo_cap > 0
+        pkey      = id(propellant)
+        for dv_i, dv_opt in enumerate(dv_options):
             for isru in isru_modes:
                 # Sits ABOVE the power-source loop on purpose: pass 1 of the
                 # sizing loop runs at zero plant mass, so it cannot tell the two
@@ -15730,13 +15988,25 @@ def evaluate_asteroid(
                 # Isp, which `max_return_payload_kg` rejects on entry too — so
                 # pruning it here agrees with the solver rather than pre-empting
                 # it.
-                if prefilter and not (pf_consts is not None and _combo_can_close(
-                        leo_cap, pf_consts,
-                        float(dv_opt["dv_out_m_s"]), float(dv_opt["dv_ret_m_s"]),
-                        (config.heat_shield_frac_of_payload
-                         if bool(dv_opt["aero"]) else 0.0),
-                        isru, window_wait_yr, config)):
-                    continue
+                #
+                # v1.14.2 splits the test at the vehicle boundary — see
+                # `_combo_close_terms`.  The composition is exactly
+                # `_combo_can_close`, in the same operations in the same order.
+                if prefilter:
+                    if pf_consts is None or not leo_ok:
+                        continue
+                    ckey  = (pkey, dv_i, isru)
+                    terms = close_terms_cache.get(ckey, _UNCACHED)
+                    if terms is _UNCACHED:
+                        terms = _combo_close_terms(
+                            pf_consts,
+                            float(dv_opt["dv_out_m_s"]), float(dv_opt["dv_ret_m_s"]),
+                            (config.heat_shield_frac_of_payload
+                             if bool(dv_opt["aero"]) else 0.0),
+                            isru, window_wait_yr, config)
+                        close_terms_cache[ckey] = terms
+                    if terms is None or not _closes_with(leo_cap, terms):
+                        continue
                 for power_mode in power_modes:
                     result = evaluate_combo(
                         asteroid_row, vehicle, propellant,
@@ -16340,7 +16610,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.17.1")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.17.2")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
