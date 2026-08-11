@@ -151,6 +151,8 @@ BOUNDS: Dict[str, Tuple[float, float, float]] = {
     "isru_processing_usd_per_kg":        (0.0, 100_000.0, 10.0),
     "rtg_max_power_w":                   (0.0, 1_000_000.0, 500.0),
     "nre_amortization_missions":         (1, 1_000, 1),
+    "max_fleet_ships":                   (1, 500, 1),
+    "programme_search_steps":            (2, 40, 1),
     "nre_recurring_overlap_fraction":    (0.0, 1.0, 0.05),
     "contingency_fraction":              (0.0, 2.0, 0.05),
 }
@@ -212,12 +214,42 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
     ),
     (
         "The big levers",
-        "The four settings that change what question the run is answering.",
+        "The five settings that change what question the run is answering. "
+        "`optimise_programme_scale` is the newest and the sharpest: OFF, a run "
+        "answers \"the best single mission to this rock at N missions\"; ON, it "
+        "answers \"the best programme built around it\", sizing the fleet and "
+        "letting N follow. Every committed figure in CLAUDE.md and the README "
+        "was measured OFF at N = 1, so turning it on does not make them wrong — "
+        "it changes the question. It costs ~1.1x runtime, not 8x, because "
+        "programme size touches nothing in the mass cascade.",
         [
             ("calc", "use_beneficiation"),
             ("calc", "nre_amortization_missions"),
+            ("calc", "optimise_programme_scale"),
             ("calc", "selection_objective"),
             ("calc", "optimise_architecture_per_asteroid"),
+        ],
+    ),
+    (
+        "Programme scale and fleet size",
+        "The dials behind `optimise_programme_scale` in the group above. One rig "
+        "serves `min(service life / stay, maximum trips)` missions back to back, "
+        "so a programme of N needs ceil(N / that) rigs and that many payloads "
+        "hit the market at once — which is the only thing pushing back on scale. "
+        "The search is over the FLEET and N follows, because the optimum N is "
+        "provably always a whole multiple of the rig's trip life; that is what "
+        "makes it cost ~1.1x runtime instead of one full run per N. "
+        "`max_fleet_ships` bounds the ladder — if rows pile up against it the "
+        "run says so, and it means those payloads have no finite market rather "
+        "than that bigger is better. `model_rig_trip_limit` is a correction "
+        "rather than an option — a rig wears out on duty cycles, not only on a "
+        "calendar — and it sits here rather than with the others below because "
+        "it sets the trip life this whole search is built on. It is inert at "
+        "N = 1.",
+        [
+            ("calc", "max_fleet_ships"),
+            ("calc", "programme_search_steps"),
+            ("calc", "model_rig_trip_limit"),
         ],
     ),
     (

@@ -36,8 +36,8 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.1.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.7.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.11.0 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
-| 4 | `modules/calc.py` | 1.14.0 | Per-asteroid Δv **and mission architecture**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 3 | `modules/transportation.py` | 1.12.0 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
+| 4 | `modules/calc.py` | 1.15.0 | Per-asteroid Δv **and mission architecture** — and, optionally, **programme size and fleet size** — in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 
@@ -195,7 +195,11 @@ that actually move the answer:
 | `.calc.optimise_architecture_per_asteroid` | `True` | Search return mode and propellant sourcing per target rather than fixing them catalog-wide |
 | `.calc.selection_objective` | `"cost_revenue_ratio"` | What the per-asteroid search maximises. `"profit"` restores pre-v1.10.0 behaviour |
 | `.calc.return_structure_frac_of_payload` | `0.15` | Return-vehicle structure as a fraction of the haul, on top of the 500 kg base |
-| `.calc.nre_amortization_missions` | `1` | Spread ~$588M development NRE across a fleet |
+| `.calc.nre_amortization_missions` | `1` | Programme size N. With the search on it is the FLOOR rather than the answer |
+| `.calc.optimise_programme_scale` | `False` | Search programme size and fleet size per asteroid instead of setting N. Changes the question the run answers, so it is off by default — every figure here is off, at N = 1 |
+| `.calc.max_fleet_ships` | `64` | Where the fleet ladder stops. Rows piling up against it mean their payloads have no finite market, not that bigger is better — the run says so |
+| `.calc.programme_search_steps` | `8` | Rungs in the coarse fleet sweep, before one refinement pass. Same idiom as `concentration_search_steps` |
+| `.calc.model_rig_trip_limit` | `True` | Cap rig life in duty CYCLES as well as calendar years. Inert at N = 1 |
 | `.calc.contingency_fraction` | `0.20` | Flat contingency on the cost cascade |
 | `.calc.apply_wacc_compounding` | `True` | Time-value of money, bucketed by when each cost is incurred |
 | `.mineral.metals_api_key` | `"DEMO"` | Set a real metals.dev key to enable that source; `"DEMO"` silently skips |
@@ -513,6 +517,26 @@ could not express that, because saturation could not see N at all.
 located optimum. And this is the **raw** curve — the beneficiated one above is
 not superseded by it, it is simply unmeasured (~21 h for the pair).
 
+> ✅  **v1.15.0 locates the optimum instead of sampling it**, and three points
+> was never the right tool: **the best N is always an exact whole multiple of
+> the rig's trip life**, so 1 / 10 / 100 sample a grid whose points mostly
+> cannot be optimal. Within one fleet band the concurrent output — and so the
+> saturation multiplier — is constant while NRE/N, the learning curve, the rig
+> share and `p_mining` all improve, which puts the band's best at its top,
+> N = F × trips.
+>
+> So `optimise_programme_scale` searches the **fleet** and lets N follow. It
+> costs **1.04–1.13× runtime, not 12×**, because programme size touches nothing
+> in the mass cascade — the rocket equation, the power fixed point, the payload
+> knapsack and the concentration sweep are all solved once per candidate and the
+> whole ladder is priced off the result.
+>
+> On a 2,500-row raw cislunar sample it moves the best cell **42.0081× →
+> 21.7341×**, choosing fleets of 1–8 ships (N = 5–40). ⚠️  That is a sample, and
+> it is **default OFF**: turning it on changes the question from "the best
+> single mission to this rock" to "the best programme built around it". Every
+> figure in this README is the former.
+
 ⚠️  **This curve has also not been rebuilt since v1.11.0.** Its N = 1 anchor is
 the old 22.93×; that cell measured 22.4665× on v1.11.0 and now measures
 **20.5895×** on v1.14.0, so the levels are ~10% optimistic on top of the shape
@@ -524,6 +548,16 @@ Going from 10 to 100 missions buys much less than going from 1 to 10, and the
 reason is the rig service-life cap: at this stay length one rig serves four
 missions, so the 5th buys a whole new rig. NRE keeps amortising, reliability
 keeps growing, but the hardware does not get cheaper past that point.
+
+⚠️  **That cap was a calendar, and it was doing less work than it looks.**
+"Mining rig service life" is 15 **years** — corrosion, thermal cycling,
+radiation — and dividing it by the stay was the only bound on how many missions
+one rig served, so at a short stay it stretched to twelve consecutive digs.
+Nothing bounded duty cycles. v1.15.0 adds Module 3's "Mining rig maximum trips"
+(5, a documented judgement) and takes the min, so short-stay missions are now
+cycle-limited and long-stay ones stay calendar-limited. Inert at N = 1 — the
+same 60.9284× either way on a 400-row sample — so no figure in this README
+moves for it.
 
 That is the honest shape of the "just fly more missions" argument — real, but
 sublinear, and bounded by market saturation at the far end. Note it does not
@@ -1362,6 +1396,65 @@ elements is **1.695 s on the card against 0.222 s on the CPU** — 7.6× slower,
 which is the consumer 1:32 FP64 rate. fp32 is faster and unusable, because every
 check this project relies on is a bit-identity check. RAM is not a constraint
 either: the run peaks near 6 GB of 64 GB.
+
+### What changed in v1.15.0
+
+**Programme size stopped being an input.** Two items, both inert at N = 1, so
+every measured cell in this file stands.
+
+**The rig wore out on a calendar, and the calendar was never the bound.**
+`missions_sharing_rig` was `min(N, life / stay)`, and `life` is "Mining rig
+service life" = **15 YEARS** — a figure whose own Stage 3 notes describe
+corrosion, thermal cycling and radiation dose. Dividing it by the stay gave a
+mission count, and nothing anywhere bounded **duty cycles**, so at the ~1.25 yr
+stay the winning cislunar mission flies, one rig was good for **twelve
+consecutive digs** on the strength of a number that only ever promised it would
+not have rusted meanwhile. A rig parked between campaigns ages slowly; one
+cutting rock does not.
+
+Stage 3 v1.12.0 adds **"Mining rig maximum trips" = 5** (range 2–12) and the min
+of the two bounds is taken, so long stays stay calendar-limited and short ones
+are now cycle-limited. ⚠️ The 5 is a **judgement** — nothing has ever mined an
+asteroid twice — bracketed between terrestrial mining plant (overhaul at ~2–3 yr
+of continuous duty, in a workshop that does not exist at an asteroid) and the
+flight record for regolith-contact mechanisms (single-campaign by design, or
+failed inside one: TAGSAM, Philae, InSight's mole, Curiosity's drill). It also
+stops terminal value refunding a mechanically-finished rig for its unused
+calendar years.
+
+**Programme size and fleet size became a searched axis.** v1.14.0 made market
+saturation see N and thereby made the scale curve *turn*; nothing then searched
+for the turn, and the curve was mapped by re-running the whole pipeline at
+N = 1, 10, 100. Two structural facts make searching it cost **1.04–1.13×
+runtime, not 12×**:
+
+1. **N enters nothing in the mass cascade.** It appears in the cost model,
+   the saturation block and the reliability block, and in none of the rocket
+   equation, the power fixed point, the payload knapsack or the concentration
+   sweep. The expensive half is solved once and the whole ladder priced off it.
+2. **The optimum N is always an exact multiple of the rig's trip life.** Within
+   one fleet band the concurrent output — and so the saturation multiplier — is
+   constant while NRE/N, the learning curve, the rig share and `p_mining` all
+   improve, so the band's best is its top, N = F × trips. **So the search is over
+   the FLEET and N follows**, and every N that cannot be optimal is skipped
+   without being priced.
+
+That is also the answer to the question in plain terms: **the number of ships is
+the decision variable and programme size is its consequence.**
+
+Brute-forced rather than asserted, because it is the load-bearing claim: every
+integer N from 1 to 60 was evaluated exhaustively for 20 raw bodies and 1 to 24
+for 32 beneficiated ones. Raw is exact everywhere — 0 exceptions, ratios matching
+to four decimals. Beneficiated has **one genuine miss in 52 bodies, at 0.97%**,
+and it is not the band argument: it is the concentration sweep's greedy
+refinement, which now depends on N, failing to price a ratio that would have won
+at a different programme size. Raising `concentration_search_steps` from 7 to 25
+makes the ladder return the brute-force optimum exactly, which is what identifies
+the grid rather than the fleet argument as the cause.
+
+⚠️ **Default OFF**, and it is the one axis in Stage 4 that is not a correction:
+it changes the question from "the best single mission to this rock" to "the best
+programme built around it". Every figure in this README is the former, at N = 1.
 
 ### What changed in v1.14.2
 
