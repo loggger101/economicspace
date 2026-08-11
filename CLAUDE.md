@@ -62,9 +62,17 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.1.0`, mineral_value `1.7.0`, transportation `1.11.0`,
-calc `1.14.2`, master `1.17.2` (the master version is a literal in
+Current: catalog `1.1.0`, mineral_value `1.7.0`, transportation `1.12.0`,
+calc `1.15.0`, master `1.18.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
+
+⚠️  **calc `1.15.0` moves numbers only for programmes, not for single missions,
+and every measured cell in this file is a single mission.** Its two items — a
+duty-cycle cap on rig life, and a searched programme size — are both inert at
+N = 1, and the search is default OFF. See "What calc v1.15.0 changed" for the
+measurement that says so (60.9284× both ways at N = 1). Do not re-measure
+anything on account of it; do not read any table below as covering a
+`optimise_programme_scale = True` run, because none of them does.
 
 calc `1.14.1` and `1.14.2` are the **second and third** stamps that do not mean
 the numbers moved — same contract as `1.10.1`, and verified the same way. See
@@ -292,6 +300,20 @@ These were found by a realism audit and are easy to silently break again.
 there. Disagreement prices the cargo at a depot while paying to land it in
 Utah — Stage 4's `destination_check()` catches it and shouts, and in
 `master.py` use `MASTER_CONFIG.delivery_destination`, which writes both.
+
+⚠️  **It shouts on STDOUT, which is where a measurement harness is least likely
+to be listening**, and `CALC_CONFIG.delivery_destination` defaults to
+`earth_surface` while the on-disk Stage 2 catalog is usually the last
+destination somebody ran — `cislunar`, for every measured cell in this file. So
+importing `calc` and calling `build_profitability_catalog` straight off gives a
+mismatched run, and a harness that pipes the output through `grep` for its own
+result lines will filter the warning away and print a clean-looking number.
+
+This was hit while measuring v1.15.0: two figures were recorded as "cislunar"
+that were run against `earth_surface` prices, and the paired comparisons they
+came from were still valid — both sides saw identical inputs — while the LEVELS
+were not. **Set the destination explicitly in any harness**, and if you must
+filter stdout, keep `MISMATCH` in the pattern.
 
 **Every commodity is priced by destination, not just water** (Stage 2
 v1.3.0). At an in-space destination a kilogram is worth its terrestrial price
@@ -1072,10 +1094,23 @@ per technology and Module 4 derives the thrust its mission needs, so a device
 that makes µN per kilogram reports thousands of tonnes of thruster and dies in
 the rocket equation on its own. Same shape as propellant tankage.
 
-## The twenty things the model stopped giving away
+## The twenty-one things the model stopped giving away
 
 Each defaults ON and each moved every number. They are corrections, not
 options; the flags exist to isolate effects, not to be left off.
+
+One arrived in v1.15.0 and is under "What calc v1.15.0 changed": **the rig's
+duty cycles**, where `missions_sharing_rig` divided a fifteen-**year** calendar
+life by the stay and treated the quotient as the machine's whole life, so one
+rig was good for twelve consecutive digs on a number that only ever promised it
+would not corrode. It is the one item on this list that is inert at N = 1 — it
+bounds programmes, not missions — which is why no measured cell in this file
+moves for it.
+
+⚠️  **`optimise_programme_scale` is NOT on this list and must not be added to
+it.** It is a search axis, not a correction: it defaults OFF, and turning it on
+changes the question the run answers rather than fixing something the model was
+getting free. The distinction is the whole reason this section exists.
 
 Two arrived in v1.10.0 and are documented under "What v1.10.0 changed" rather
 than repeated here: the **electric propulsion stage**, which was flown as mass
@@ -1157,12 +1192,28 @@ across commodity classes rather than a figure each commodity gets to itself,
 and it follows the value route — see "The import budget is split per
 commodity" above.
 
-**Rig service life caps amortisation** (v1.8.0). A 15-year rig cannot serve
-100 missions of 2 years each. `missions_sharing_rig` is capped at
+**Rig service life caps amortisation** (v1.8.0, cycles v1.15.0). A 15-year rig
+cannot serve 100 missions of 2 years each. `missions_sharing_rig` is capped at
 `life / stay`, and at long stays this makes the rig 13.8x MORE expensive per
 mission than the old flat division, not less. Terminal value is credited only
 when nre_amortization_missions > 1 -- a rig nobody returns to is stranded, not
 an asset, which is what keeps a single-mission run unchanged.
+
+⚠️  **`life / stay` alone was never the bound, and at SHORT stays it was barely
+a bound at all.** `life` is fifteen *years* and describes corrosion, thermal
+cycling and radiation dose; nothing bounded duty cycles, so a 1.25 yr stay made
+one rig good for twelve consecutive digs. v1.15.0 adds Module 3's "Mining rig
+maximum trips" (5) and takes the **min** of the two, so long stays stay
+calendar-limited and short ones are cycle-limited. `rig_trips_per_ship` is the
+single derivation; `rig_trip_limit_binds` reports which bound fired, per row,
+because the two swap over at a stay of `life / trips` (3 yr at 15 and 5) and
+neither is "the" cap. Terminal value now runs off whichever bound is binding —
+paying salvage on remaining calendar years while the machine is mechanically
+finished would refund a worn-out rig.
+
+⚠️  **`trips` is a property of the MISSION, not of the asteroid.** The stay
+depends on how hard the candidate concentrates, so two concentration ratios on
+one rock are two trip lives. Do not cache it per body.
 
 **Mission reliability multiplies REVENUE ONLY** (v1.8.0). Costs are charged in
 full because you spend the money either way. Launch insurance replaces
@@ -1239,6 +1290,30 @@ Two things here that are NOT constants and were quoted as such above:
 **The rig cap is 12, not 4.** It is `life / stay`, and this winner's mission is
 4.2-4.4 yr rather than the older profile's. Do not carry "4 (capped)" forward.
 
+> 🚨  **RETIRED BY calc `1.15.0`, and the reason is that 12 was never a life at
+> all.** `life / stay` divides a **CALENDAR** figure — "Mining rig service
+> life", 15 *years*, whose own Module 3 notes describe corrosion, thermal
+> cycling and radiation dose — by the stay, and the result was treated as the
+> rig's whole life. Nothing anywhere bounded **duty cycles**. So one rig was
+> good for twelve consecutive digs on the strength of a number that only ever
+> promised it would not have rusted meanwhile.
+>
+> Module 3 `1.12.0` adds "Mining rig maximum trips" (**5**, range 2-12) and
+> `rig_trips_per_ship` takes the min of the two, so a long-stay mission stays
+> calendar-limited and a short-stay one is now cycle-limited — which is the
+> correct way round and was the entire gap. ⚠️  The 5 is a **judgement** and the
+> row says so at length: nothing has ever mined an asteroid twice, so it is
+> bracketed between terrestrial mining plant (overhaul at ~2-3 yr of continuous
+> duty, in a workshop that does not exist at an asteroid) and the flight record
+> for regolith-contact mechanisms (single-campaign by design, or failed inside
+> one).
+>
+> **Every N = 1 figure in this file is untouched**, because at N = 1
+> `missions_sharing_rig` is `min(1, trips)` either way. Measured: with the cap
+> on and off at N = 1, the best cislunar raw cell is **60.9284× both ways** on
+> the same 400-row sample. The cap changes the answer only for programmes, which
+> is the whole point of it. `model_rig_trip_limit = False` restores `1.14.2`.
+
 **The winning vehicle gets SMALLER with scale**, reversing the old curve's
 Falcon Heavy → New Glenn. Payload falls 93,312 → 42,597 → 19,495 kg and the
 vehicle goes New Glenn → New Glenn → **H3 (24L)**. Saturation punishes volume,
@@ -1248,6 +1323,29 @@ could not express this at all, because saturation could not see N.
 ⚠️  **Three points, so "near N = 10" is the lowest of the points sampled, not a
 located optimum.** The minimum lies somewhere between 1 and 100 and nothing
 here pins it more tightly.
+
+> ✅  **calc `1.15.0` locates it instead of sampling it**, and the reason three
+> points was always the wrong tool is structural rather than a matter of
+> budget: **the optimum N is provably an exact multiple of the rig's trip
+> life**, so 1 / 10 / 100 were sampling a grid whose points mostly *cannot* be
+> optimal. Within a fleet band the saturation multiplier is constant while every
+> other lever improves with N, so the best N in a band is its top, N = F × trips.
+>
+> `optimise_programme_scale` searches the FLEET and lets N follow, jointly with
+> every other architecture axis, at **1.04-1.13× runtime** — not 12× — because
+> N enters nothing in the mass cascade. On a 2,500-row raw cislunar sample it
+> moves the best cell **42.0081× → 21.7341×**, with fleets of 1-8 ships (N = 5
+> to 40) and a median of 8 ladder rungs priced per mission.
+>
+> ⚠️  That is a **sample**, not this table's full-catalog population, and the
+> table above is not superseded by it — it is a different measurement. What the
+> table's three points cannot tell you is where the minimum is, and that is now
+> answerable without re-running anything.
+>
+> ⚠️  And **`trips` is not a constant across this table's rows either.** It is
+> `min(life / stay, max_trips)` and the stay depends on how hard the mission
+> concentrates, so it varies per candidate, not just per body. See "What calc
+> v1.15.0 changed".
 
 ⚠️  **This is the RAW curve.** The beneficiated curve above is not superseded by
 it — it is unmeasured. Two beneficiated cislunar runs are ~21 h.
@@ -2710,6 +2808,14 @@ What genuinely remains:
 - **The programme-scale curve on the full catalog.** The sample shows it turns;
   where it turns is not established. This is the cheapest thing left — two raw
   cislunar runs at N = 10 and N = 100, ~3 h.
+
+  ⚠️  **Superseded as a method by calc `1.15.0`, though not as a measurement.**
+  Re-running at N = 10 and N = 100 samples a grid whose points mostly cannot be
+  optimal — the optimum N is always a whole multiple of the rig's trip life, so
+  N = 10 and N = 100 are the right answer only by coincidence.
+  `optimise_programme_scale` locates it per body inside ONE run, at 1.04-1.13×
+  runtime rather than 2×. What genuinely remains here is a **full-catalog run
+  with the search on**, which is one raw cislunar pass and has not been done.
 - **The historical progression 2.2× → 14× → 39× → 34× → 25×.** Still not
   fixable by re-running: it is a per-release series, so rebuilding it means
   running old code.
@@ -3108,6 +3214,263 @@ population is the same one those hashes were taken over.
 ⚠️  The raw wall clocks are dominated by the 19.7 s CSV catalog load, which both
 paths pay; do not read a parallel speed-up out of that row. It is now most of
 that row — which is the one place the Parquet note below has started to matter.
+
+## What calc v1.15.0 / transportation v1.12.0 changed
+
+Two findings. The first is a correction and runs the usual direction (worse);
+the second is a new search axis and can only run the other way. Paired with
+Module 3 `1.12.0`, master `1.17.2 → 1.18.0`.
+
+⚠️  **NOTHING MEASURED IN THIS FILE MOVES.** Every committed cell is N = 1, and
+both items are inert there: the trip cap only binds when a rig serves more than
+one mission, and the programme search is **default OFF**. That was a deliberate
+choice and it is the one to understand before flipping it — see below.
+
+### The rig wore out on a calendar, and the calendar was never the bound
+
+`missions_sharing_rig` was `min(N, life_yr // stay_yr)`, and `life_yr` is
+**"Mining rig service life" = 15 YEARS**, whose own Module 3 notes describe a
+calendar mechanism: corrosion, thermal cycling, radiation dose. Dividing it by
+the stay produced a mission count, and that count was treated as the whole life
+of the machine.
+
+**Nothing anywhere bounded duty cycles.** At the ~1.25 yr stay the winning
+cislunar mission actually flies, one rig was good for **twelve consecutive
+mining campaigns** on the strength of a number that only ever promised it would
+not have rusted meanwhile. A rig parked between campaigns ages slowly. One
+cutting rock does not.
+
+Module 3 `1.12.0` adds **"Mining rig maximum trips" = 5** (range 2-12) and
+`rig_trips_per_ship` takes the **min** of the two bounds, so a long-stay mission
+stays calendar-limited and a short-stay one is now cycle-limited — which is the
+correct way round and was the entire gap. `rig_trip_limit_binds` reports which
+bound retired the rig, per row; on a 400-row raw cislunar sample the cycle bound
+binds on **97.0%** of rows against a median calendar cap of 15.
+
+⚠️  **The 5 is a JUDGEMENT and the ops row says so at length.** Nothing has ever
+mined an asteroid twice, so it is bracketed between two analogues that disagree
+in the useful direction: terrestrial mobile mining plant reaches major overhaul
+near 15,000-25,000 operating hours (~2 campaigns at this model's stay) and
+survives 2-3 rebuilds — *in a workshop that does not exist at an asteroid* —
+while every regolith-contact mechanism ever flown was single-campaign by design
+or failed inside one (TAGSAM fired once; Philae's harpoons did not fire;
+InSight's mole never buried itself; Curiosity's drill lost its feed mechanism).
+**5 is already the optimistic reading of both.**
+
+One consequence worth not "fixing": **terminal value is now credited against
+whichever bound is binding.** Paying salvage on remaining calendar years while
+the rig is mechanically finished would refund a worn-out machine — the same
+shape of subsidy this file keeps cataloguing — so `life_used_frac` is the max of
+the calendar and cycle fractions. Gated with the cap itself, so
+`model_rig_trip_limit = False` is the `1.14.2` expression exactly.
+
+### Programme size was an input to a model that knows what it costs
+
+v1.14.0 made market saturation see `nre_amortization_missions` and thereby made
+the programme-scale curve **turn** — the optimum N became interior. Nothing then
+searched for it. N stayed a config field, and the curve was mapped by re-running
+the whole pipeline at N = 1, 10, 100, which this file's own tables already flag
+as "three points, so near N = 10 is the lowest of the points sampled, not a
+located optimum."
+
+`optimise_programme_scale` searches it jointly with every other architecture
+axis, resolved by `selection_key` like all of them. Two structural facts make
+that cost **1.04-1.13× runtime rather than 8-12×**:
+
+**1. N ENTERS NOTHING IN THE MASS CASCADE.** It appears in `mission_cost_usd`,
+the saturation block and the reliability block, and in none of the rocket
+equation, the fixed-point power solve, the payload knapsack or the concentration
+sweep. So the expensive half of the mission is solved **once** per candidate and
+the whole ladder is priced off the same cascade. Re-running the pipeline at
+another N re-solves all of it to change three numbers.
+
+**2. THE OPTIMUM N IS ALWAYS AN EXACT MULTIPLE OF `trips_per_ship`.** Within one
+fleet band — every N with the same `ceil(N / trips)` — the concurrent output and
+therefore the saturation multiplier are **constant**, while NRE/N falls,
+autonomy NRE/N falls, the learning curve falls, the rig's per-mission share
+falls or holds, and `p_mining` rises. Every lever improves and none pushes back,
+so the best N in a band is its **top**, N = F × trips. The search is therefore
+over the **FLEET**, and N follows.
+
+That also answers the question directly: **the number of ships is the decision
+variable and programme size is its consequence.**
+
+Two further consequences worth keeping:
+
+- **N = 1 is never skipped in effect.** It sits in band 1, whose top is
+  N = trips, and by the argument above N = trips dominates it. So a searched run
+  can never report worse than the N = 1 run every committed figure was measured
+  at — the never-worse invariant holds **by construction** here, not by
+  measurement. Measured anyway: 1,052 pairs, zero exceptions.
+- **N = F × trips is the only N the cost model is exactly right at.**
+  `mining_rig_cost` charges every mission the same share of a fully-used rig, so
+  a programme of 13 with trips = 12 books its second rig — used once — as though
+  it were worn out. At a whole multiple there is no part-worn rig to mis-book.
+
+⚠️  **DEFAULT OFF, and this is the one axis in the module that is not a
+correction.** Every measured cell on record is N = 1. Turning this on does not
+make those numbers wrong — it changes the **question**, from "the best single
+mission to this rock" to "the best programme built around it". Two answers to
+two different questions; a default flip would retire every committed figure at
+once with no way to reproduce them.
+
+### Measured
+
+⚠️  **2,500-row stride SAMPLE at cislunar, raw**, on the on-disk Stage 2 catalog.
+Not a full-catalog cell — this file's own rule is that a sample predicts
+full-catalog runtime to no better than a factor of ~5, and nobody has run a full
+cell on this release.
+
+| | search off (N = 1) | **search on** | Δ |
+|---|---|---|---|
+| best cost/revenue | 42.0081× | **21.7341×** | **−48.3%** |
+| pairs improved | — | **1,052 / 1,052** | — |
+| max searched/unsearched | — | **0.8096** | — |
+| wall clock | 42.7 s | 48.1 s | **1.13×** |
+
+Fleet sizes chosen run **1 to 8 ships** (N = 5 to 40), with 500 of 1,052 bodies
+at a single ship. Median **8 rungs** of the ladder priced per mission, max 12.
+
+**The winner keeps its identity and changes its propellant.** 152679 (Cb) wins
+both ways on a Falcon Heavy, but on **xenon at N = 1 and iodine at N = 10**.
+That is the whole argument for searching N jointly rather than at a pivot: the
+best architecture is a function of programme size, so a two-phase search that
+picks the architecture first and sizes the programme afterwards would pick the
+wrong one.
+
+### Verification (2026-08-11)
+
+**1. The gated build reproduces HEAD EXACTLY**, both settings. With
+`model_rig_trip_limit = False` and `optimise_programme_scale = False`, against
+`git HEAD` in the same process on the same rows:
+
+```
+raw, 400 rows           129/129 shared columns identical | sha256 a59f871595b228d6 MATCH
+beneficiated, 150 rows  129/129 shared columns identical | sha256 ef93b7287dbb49fa MATCH
+```
+
+The CSV gains six columns, so byte-identity of the whole file was never
+available — the hash is over the shared columns, which is the same construction
+v1.14.0 used for the same reason.
+
+**2. 🚨  THE BAND ARGUMENT WAS BRUTE-FORCED, NOT ASSERTED**, because it is the
+load-bearing claim of the whole release. Every integer N from 1 to N_max was
+evaluated exhaustively per body and compared against the ladder:
+
+| | bodies | N swept | optimum not a multiple of trips | ladder worse than brute force |
+|---|---|---|---|---|
+| raw | 20 | 1-60 | **0** | **0** |
+| beneficiated | 12 | 1-40 | 1 | **1** |
+| beneficiated | 32 | 1-24 | 4 → **1 real** | **1** |
+
+Raw is exact everywhere, and the ratios match to four decimals on all 20.
+
+⚠️  **Three of that last row's four "exceptions" are the harness, not the
+model**, and the shape is worth recording because it is the standing trap in
+this file wearing a new hat. All three report a brute-force optimum of exactly
+**N = 24** — the top of the swept range — while the ladder went *past* the sweep
+and returned a **better** answer (2018 NB76: brute 250.6962× at N = 24 against
+the ladder's 247.7041× at N = 35). The check counted "not a multiple of trips"
+without asking whether the brute force had simply run out of room, so a
+truncated sweep read as a counter-example to the thing it was truncating. **A
+capped search is not a sample of an uncapped one** — the same lesson this file
+already records for `eval_row_cap` and for `jpl_limit`, found again in a
+verification harness rather than in the pipeline.
+
+⚠️  **The one beneficiated exception is real, and it is NOT the band argument.**
+On 2014 JT2 the brute force finds N = 4 at **30.2597×** while the ladder reports
+N = 3 at **30.5535×** — 0.97% worse. The trace says why: at N = 4 the winner is a
+*different concentration ratio* (3.216 rather than 5.518), which is a different
+mission with a shorter stay and therefore a **trip life of 4 rather than 3** —
+and N = 4 is a band top for *that* candidate. The ladder handles that correctly.
+What it never did was **price that ratio at all**, because `evaluate_combo`
+sweeps the ratio coarsely and refines around the winner, and the winner now
+depends on N.
+
+Raising `concentration_search_steps` from 7 to 25 makes the ladder return
+**30.2597× on ratio 3.216 exactly** — which is what identifies the grid, rather
+than the fleet argument, as the cause.
+
+It is documented rather than patched. Refining around the best two ratios is a
+heuristic stacked on a heuristic for a sub-1% effect that the existing dial
+already closes, and `concentration_search_steps` is the dial this project
+already points at for this trade. **It bites only where beneficiation is on AND
+the optimum stay sits near a `life / stay` step**, which is why raw is clean.
+
+**One genuine miss in 52 bodies brute-forced, at 0.97%.** 2014 JT2 is the same
+body in both beneficiated runs; no other body in either sweep, at either N
+range, produced one.
+
+**3. `trips_per_ship` is NOT a property of the body** and the table above is how
+that was found. It is `min(life / stay, max_trips)` and the stay depends on how
+hard the candidate concentrates, so two ratios on one rock are two mission
+profiles with two trip lives and two ladders. Observed directly: 2014 JT2 reports
+trips of 3, 4 and 5 at different N, and across the raw sample bodies report 2, 4
+and 5. Do not cache a trip life per asteroid.
+
+**4. Never-worse holds, and holds exactly**, with the search on:
+
+```
+pairs 120 | max benef/raw 1.000000 | exceptions 0 | declined (== 1.0) 21
+```
+
+**5. The mass-ledger identity holds exactly**, both settings, with the search on:
+
+```
+hardware_total_kg == mining_hardware_kg + power_system_kg + ep_system_kg
+max |error| 0.000000000 kg   (120 raw + 123 beneficiated rows)
+```
+
+**6. Serial and parallel are byte-identical** with the search on — required
+after any change to the search, and the check that would catch a worker seeing a
+different ladder from the parent (v1.15.0 attaches nothing new to the pickled
+rows, but the two reliability memos are per-process and would show here if the
+ladder were order-dependent):
+
+```
+raw, 1,200-row stride   serial 65.3 s | 8 workers 75.6 s | 495 rows | sha256 MATCH
+```
+
+⚠️  Eight workers are SLOWER than serial on that row, which is v1.10.1's
+"more workers is not always faster" note showing up rather than anything new:
+495 output rows is a small run, worker startup is ~1.1 s each and the 883 MB
+catalog load is paid by both. Do not read a parallel regression out of it — the
+sha256 is what this row is for.
+
+**7. At N = 1 the trip cap changes nothing**, which is what protects every
+committed figure. On the same 400-row raw sample, `model_rig_trip_limit` on and
+off both give **60.9284×** — while the median trip life moves 15 → 5 and the
+cycle bound binds on 97.0% of rows. The cap changes the answer only for
+programmes, which is the point of it.
+
+**8. The ops-row staleness check fires.** "Mining rig maximum trips" is named in
+`_MODULE3_REQUIRED_OPS` with the behaviour its absence reverts, because a
+missing row silently restores the calendar-only cap. Module 3's ops table goes
+43 → **44 rows**; read that count out of Stage 4's loader line, which is the
+habit this file already prescribes.
+
+### What this release does NOT close
+
+**Programme calendar time is still free.** The fleet is only ever the *minimum*
+that can fly N missions, `ceil(N / trips)`, because nothing charges for the
+decades a serialised programme spends waiting: WACC compounds over
+`mission_duration_yr`, per mission, and there is no programme-level discount. So
+a 5-ship, 25-mission programme is priced as though its five sequential campaigns
+per ship happened at once.
+
+That makes fleet size a **one-sided** decision — more ships only ever adds
+saturation, never buys schedule — and it is the reason F never exceeds the
+minimum. Closing it means discounting the programme over
+`ceil(N / F) × mission_duration`, which would make F a genuine two-sided trade
+and would move every cost in the model. It is named here rather than
+implemented, and it is the obvious next item.
+
+**The full-catalog cells are unmeasured on this release.** Everything above is a
+sample. Since both items are inert at N = 1, the existing tables stand — but
+"what is the best programme at cislunar on 1.55 M bodies" has never been run.
+
+**Nothing has been re-measured at the other four destinations.** The trip cap is
+a property of the mission profile, so it moves every destination once N > 1.
 
 ## Config discipline
 
