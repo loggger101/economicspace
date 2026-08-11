@@ -606,21 +606,14 @@ class CalcConfig:
     # silently retire every committed figure at once with no way to reproduce
     # them.  Turn it on to ask the programme question.
     #
-    # ⚠️  KNOWN GAP, and it is the reason the fleet is only ever the MINIMUM that
-    # can fly N missions.  A programme of F ships flying `trips` campaigns each
-    # spans `trips × mission_duration` of CALENDAR, and nothing charges for it:
-    # WACC compounds over `mission_duration_yr`, per mission, and there is no
-    # programme-level discount anywhere in this module.  So five sequential
-    # campaigns are priced as though they happened at once, buying a second ship
-    # only ever adds market saturation, and F therefore never wants to exceed
-    # ceil(N / trips).
-    #
-    # That makes fleet size a ONE-SIDED decision here.  Closing it means
-    # discounting the programme over ceil(N / F) × mission_duration, which would
-    # make F a genuine two-sided trade — ships bought to compress a schedule
-    # against the price of selling into a market all at once — and would move
-    # every cost in the model.  Named rather than implemented, and it is the
-    # obvious next item.
+    # ✅  THE KNOWN GAP THIS COMMENT USED TO DESCRIBE IS CLOSED IN v1.16.0 by
+    # `model_programme_calendar` below.  It read: the fleet is only ever the
+    # MINIMUM that can fly N missions, because a programme of F ships flying
+    # `trips` campaigns each spans `trips × mission_duration` of calendar and
+    # nothing charged for it — so buying a second ship only ever added market
+    # saturation, and F never wanted to exceed ceil(N / trips).  Fleet size was
+    # a one-sided decision.  It is now two-sided, and the search is
+    # two-dimensional over (F, W) rather than a ladder over F.
     optimise_programme_scale:  bool  = False
     # Upper bound on the fleet search.  Not a physical limit — it is where the
     # ladder stops.  Market saturation drives revenue toward zero as concurrent
@@ -645,6 +638,30 @@ class CalcConfig:
     # missing half; `rig_trips_per_ship` takes the min of the two.  False
     # restores the calendar-only cap and reproduces 1.14.2 exactly.
     model_rig_trip_limit:      bool  = True
+    # ─── PROGRAMME CALENDAR TIME (v1.16.0) ───────────────────────────────────
+    # A programme takes YEARS, and until v1.16.0 it took none of them.  WACC
+    # compounds each mission's up-front costs over `mission_duration_yr` and
+    # stops, which is right for one mission and wrong for a programme: the bus
+    # NRE, the autonomy NRE and the rig are bought ONCE, at t = 0, and then
+    # amortised across W campaigns that a single rig can only fly one after
+    # another.  Those three lines are carried across the whole programme span
+    # and were being compounded over one mission's worth of it.
+    #
+    # True charges the difference — see `programme_calendar_multipliers` for
+    # the derivation and for why the rig's salvage credit is compounded the
+    # OTHER way.  Exactly 1.0 at W = 1, so every single-mission figure in this
+    # project is untouched, which is every committed figure except the
+    # N = 10 / N = 100 curve.
+    #
+    # It also makes the programme search two-dimensional.  Campaigns-per-ship
+    # was not previously a decision — every lever improved with N, so the
+    # optimum was always the top of a fleet band — and the calendar charge is
+    # the term that pushes back.  See `programme_options`.
+    #
+    # False restores 1.15.0 exactly: the calendar multipliers become 1.0, the
+    # fleet ladder goes back to one dimension at N = F × trips, and
+    # `missions_sharing_rig` goes back to `min(N, trips)`.
+    model_programme_calendar:  bool  = True
     # Share of the NRE line already paid for inside the per-kg recurring
     # hardware rate.  The Module 3 recurring brackets ($100k-$1M/kg, from
     # NICM / SSCM / Aerospace Corp SMCM) are regressions fitted to total
@@ -1579,7 +1596,50 @@ class CalcConfig:
     #         New output columns: programme_missions, fleet_ships, trips_per_ship,
     #         rig_trips_calendar_cap, rig_trip_limit_binds,
     #         programme_options_priced.
-    pipeline_version: str = "1.15.0"
+    # v1.16.0 PROGRAMME CALENDAR TIME.  A programme took years and was charged for
+    #         none of them, and that was the last item this module's own config
+    #         comment named as an open gap.
+    #         • THE AMORTISED LINES WERE CARRIED FOR FREE.  WACC compounds each
+    #           mission's up-front costs over `mission_duration_yr` — right for one
+    #           mission, wrong for a programme.  The bus NRE, the autonomy NRE and
+    #           the rig are bought ONCE at t = 0 and amortised across W campaigns
+    #           that one rig can only fly one after another, so they are carried
+    #           across `T + (W-1) x cadence` of calendar and were compounded over
+    #           `T`.  `programme_calendar_multipliers` charges the difference as a
+    #           closed-form mean over the programme, exactly 1.0 at W = 1.
+    #           Terminal value gets the RECIPROCAL series, because salvage is
+    #           collected at the END: compounding a refund forward alongside the
+    #           cost it is netted against would pay a bonus for taking longer to
+    #           collect it.
+    #         • CADENCE IS THE DIG, OR THE WINDOW, WHICHEVER IS SLOWER.  Successive
+    #           campaigns on one rig are paced by the stay — but a capsule can only
+    #           be dispatched when a window opens, so `campaign_cadence_yr` takes
+    #           the max of the stay and the synodic period.  That lands hardest on
+    #           NEAs, whose synodic periods run to a decade, and they are what this
+    #           model likes.  A single mission pays that wait once; a programme of
+    #           W pays it W-1 more times.
+    #         • THE BAND ARGUMENT IS RETIRED AND THE SEARCH IS 2-D.  v1.15.0 could
+    #           search fleet size alone because within a band every lever improved
+    #           with N and none pushed back.  The calendar charge is the lever that
+    #           pushes back — it grows like y^W against NRE/N falling like 1/N — so
+    #           campaigns-per-ship is now a real decision with an interior optimum.
+    #           F stays a ladder; W is ENUMERATED EXHAUSTIVELY, because it is at
+    #           most `max_trips` integers and a dimension small enough to enumerate
+    #           should not be argued about.  N = 1 is consequently IN the search
+    #           set rather than dominated by it.
+    #         • `missions_sharing_rig` is derived from the fleet, min(trips,
+    #           ceil(N/F)), rather than min(N, trips) — which claimed 5 campaigns
+    #           on a rig that flies 4 whenever N was not a whole multiple.
+    #         Gated by `model_programme_calendar` (default True); False restores
+    #         1.15.0 exactly, in all four respects.
+    #         ⚠️  INERT AT W = 1, hence at N = 1, hence on every committed cell in
+    #         CLAUDE.md and the README except the N = 10 / N = 100 curve, which is
+    #         a 1.14.0 measurement and moves.
+    #         New config: model_programme_calendar.
+    #         New output columns: missions_per_ship, campaign_cadence_yr,
+    #         cadence_window_bound, programme_span_yr,
+    #         programme_calendar_multiplier.
+    pipeline_version: str = "1.16.0"
 
 
 CONFIG = CalcConfig()
@@ -1597,10 +1657,14 @@ print(f"    Architecture   : "
 print(f"    Contingency    : {CONFIG.contingency_fraction:.0%}  |  "
       f"NRE amortised over {CONFIG.nre_amortization_missions} mission(s)")
 print(f"    Programme      : "
-      + (f"fleet searched to {CONFIG.max_fleet_ships} ship(s); N follows"
+      + (f"(fleet ≤ {CONFIG.max_fleet_ships}) × (campaigns/ship) searched; N follows"
          if CONFIG.optimise_programme_scale else
          f"fixed at N = {CONFIG.nre_amortization_missions} "
          f"(set optimise_programme_scale to search it)"))
+print(f"    Calendar       : "
+      + ("programme span charged — amortised NRE and rig compound over "
+         "T + (W−1)×cadence" if CONFIG.model_programme_calendar else
+         "NOT charged (model_programme_calendar off — reproduces 1.15.0)"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4033,6 +4097,102 @@ def rig_trips_per_ship(
     return trips, calendar_cap, trip_cap
 
 
+def campaign_cadence_yr(
+    stay_yr: float, synodic_yr: float, config: CalcConfig,
+) -> float:
+    """How often one rig can start another campaign.
+
+    A rig stays at the asteroid and successive campaigns run back to back, so
+    the cadence is the DIG, not the whole mission: campaign w+1 begins as soon
+    as campaign w's feed is out of the ground, while campaign w's capsule is
+    still flying home.  That is `stay_yr`.
+
+    But you can only dispatch the next capsule when a window opens, and this
+    module already knows how rarely that is.  If the rig can dig faster than
+    Earth and the target line up, the rig idles and the SYNODIC PERIOD is what
+    sets the cadence — so the bound is the max of the two, not the stay.
+
+    ⚠️  That lands hardest on exactly the bodies this model likes.  A synodic
+    period goes to infinity as a → 1 AU, so a NEA at 1.05 AU can only be
+    revisited every ~14 years however fast its rig works, while a main-belt
+    body at 3 AU comes round every ~1.6.  Δv accessibility and CADENCE are
+    anticorrelated for the same reason Δv accessibility and trip time already
+    are — see `synodic_period_yr` — and a programme is where that finally
+    costs something, because a single mission pays the wait once and a
+    programme of W campaigns pays it W − 1 more times.
+
+    Follows `model_launch_windows`: with windows off the synodic term is not
+    merely zeroed here, it is not consulted, exactly as `window_wait_yr` is.
+    """
+    stay = max(0.0, float(stay_yr))
+    if not config.model_launch_windows:
+        return stay
+    return max(stay, max(0.0, float(synodic_yr)))
+
+
+def programme_calendar_multipliers(
+    missions_per_ship: int, cadence_yr: float, wacc: float,
+) -> Tuple[float, float]:
+    """Time-value multipliers for the programme-level up-front lines.
+
+    Returns `(cost_multiplier, credit_multiplier)`, both exactly 1.0 at
+    W = 1 — which is every single-mission figure this project has ever
+    published.
+
+    ── What is actually wrong without this ─────────────────────────────────
+
+    This module compounds costs FORWARD to the point of sale and compares them
+    against undiscounted revenue; that is the convention `mission_cost_usd`
+    already implements with `(1 + W)^T` on the up-front bucket.  Applied to one
+    mission it is right.  Applied to a programme it quietly assumes every
+    mission in the programme happens at once.
+
+    It does not.  F ships fly W campaigns each, and the campaigns on one ship
+    are strictly sequential — one rig, one hole, one dig at a time.  So the
+    programme spans `T + (W − 1) × cadence` of calendar, and the articles that
+    are bought ONCE at the start and amortised across all of it — the bus NRE,
+    the autonomy NRE, and the rig itself — are being carried for far longer
+    than one mission duration before the missions they paid for sell anything.
+
+    Note which lines this is and is not.  A per-mission article (the launch,
+    the capsule, the propellant, the plant, the electric stage) is bought for
+    its own campaign, and that campaign's costs AND its revenue both sit at the
+    same point in the programme — shift a whole cash flow and its cost/revenue
+    ratio does not move.  Only the amortised lines are stretched, because only
+    they are paid at t = 0 for a mission that sells at t = w × cadence.
+
+    ── The arithmetic ──────────────────────────────────────────────────────
+
+    Campaign w (w = 0 … W−1) sells at `T + w × cadence`, so its share of an
+    article bought at t = 0 compounds by `(1+W)^(T + w·cadence)`.  Factor out
+    the `(1+W)^T` the caller already applies and average over the programme:
+
+        cost   = mean of y^w  for w = 0 … W−1        y = (1 + wacc)^cadence
+               = (y^W − 1) / ((y − 1) · W)
+
+    Terminal value runs the other way and must not be given the same factor.
+    The rig's salvage credit is received once, at the END of the programme, so
+    relative to a campaign that sold at `T + w·cadence` it arrives LATE and is
+    worth less, not more:
+
+        credit = mean of y^(w − (W−1))              = (1 − y^-W) / ((1 − 1/y) · W)
+
+    which is ≤ 1 and falls with W.  Compounding a credit forward alongside the
+    cost it is netted against would inflate a refund for taking longer to
+    collect it — the exact shape of subsidy this module keeps finding, arriving
+    this time through a term added to remove one.
+    """
+    w = max(1, int(missions_per_ship))
+    if w == 1 or wacc <= 0.0 or cadence_yr <= 0.0:
+        return 1.0, 1.0
+    y = (1.0 + wacc) ** cadence_yr
+    if y <= 1.0:
+        return 1.0, 1.0
+    cost   = (y ** w - 1.0) / ((y - 1.0) * w)
+    credit = (1.0 - y ** -w) / ((1.0 - 1.0 / y) * w)
+    return cost, credit
+
+
 def fleet_search_ladder(f_min: int, f_max: int, steps: int) -> List[int]:
     """Coarse geometric sweep over fleet size.  Endpoints always included.
 
@@ -4077,10 +4237,50 @@ def fleet_refinement(
 
 def programme_options(
     rig_trips: Optional[Tuple[int, int, Optional[int]]], config: CalcConfig,
-) -> List[Tuple[int, int]]:
-    """The `(n_missions, fleet_ships)` programmes worth pricing for one mission.
+) -> List[Tuple[int, int, int]]:
+    """The `(n_missions, fleet_ships, missions_per_ship)` programmes to price.
 
-    ── Why this is a search over FLEET SIZE, and N follows ──────────────────
+    ⚠️  **v1.16.0 RETIRES THE BAND ARGUMENT BELOW, and it is worth reading what
+    it said before reading what replaced it.** The argument was sound on the
+    model it was written for: within a fleet band every lever improved with N
+    and none pushed back, so the best N in a band was its top, N = F × trips,
+    and the search could be one-dimensional over F.
+
+    Charging programme calendar time adds the lever that pushes back.  A
+    programme of W campaigns per ship carries its NRE and its rig across
+    `(W − 1) × cadence` of extra calendar (see
+    `programme_calendar_multipliers`), and that cost grows like `y^W` while
+    NRE/N falls like 1/N.  An exponential against a hyperbola has an interior
+    optimum, so **W is now a genuine decision and the top of the band is
+    usually not it.**
+
+    So the search is two-dimensional, over (F, W), with N = F × W:
+
+      • **F is a ladder** — geometric, refined, capped by `max_fleet_ships`,
+        exactly as v1.15.0 built it.  It runs to 64 and cannot be enumerated.
+      • **W is ENUMERATED EXHAUSTIVELY**, 1 … trips.  No ladder, no refinement
+        pass, no unimodality assumption, because `trips` is
+        `min(life / stay, max_trips)` and `max_trips` is 5 — the whole
+        dimension is at most a dozen integers and typically five.  A dimension
+        small enough to enumerate should be enumerated rather than argued
+        about; v1.15.0's own verification found its one real miss in exactly
+        the gap a heuristic leaves.
+
+    Two things this buys beyond correctness:
+
+      • **N = 1 is now literally in the search set** (F = 1, W = 1), rather
+        than being dominated by N = trips through the band argument.  The
+        never-worse invariant against every committed figure therefore holds
+        by inspection instead of by proof.
+      • **Non-rectangular programmes stop being mis-booked.**
+        `missions_sharing_rig` was `min(N, trips)`, which for N = 7 over 2
+        ships claims 5 campaigns on a rig that only ever flies 4.  It is now
+        `min(trips, ceil(N / F))`, derived from the fleet like everything else.
+
+    With `model_programme_calendar` off, both of those revert and this function
+    returns the v1.15.0 ladder exactly, N = F × trips and all.
+
+    ── Why v1.15.0 searched FLEET SIZE, and N followed (superseded) ─────────
 
     N — `nre_amortization_missions` — is the programme size, and it enters this
     model in exactly six places: the NRE division, the autonomy-NRE division,
@@ -4152,6 +4352,7 @@ def programme_options(
     """
     n_cfg = max(1, int(config.nre_amortization_missions))
     trips = rig_trips[0] if rig_trips is not None else None
+    calendar = config.model_programme_calendar
 
     if trips is None:
         # No service-life cap at all: one rig serves the whole programme, so
@@ -4161,20 +4362,37 @@ def programme_options(
         # failure v1.14.0 closed.  Searching an unbounded monotone axis reports
         # the ladder's top rung as a result, so it is refused rather than run.
         # `build_profitability_catalog` says so out loud at startup.
-        return [(n_cfg, 1)]
+        #
+        # ⚠️  The calendar charge does NOT rescue this.  With one rig serving
+        # everything, W = N and the charge grows without bound too — but so
+        # does the amortisation it is charged against, and neither is bounded
+        # by anything physical, so the optimum would be an artefact of whichever
+        # diverges faster.  Still refused.  (W = N here is not read anyway:
+        # `mission_cost_usd` only consults it inside the rig block, which this
+        # branch means is switched off.)
+        return [(n_cfg, 1, n_cfg)]
 
     if not config.optimise_programme_scale:
-        return [(n_cfg, max(1, math.ceil(n_cfg / trips)))]
+        f = max(1, math.ceil(n_cfg / trips))
+        # v1.16.0: campaigns per ship is derived from the fleet.  Off, it is
+        # the v1.15.0 expression `min(N, trips)` — which over-counts a
+        # non-rectangular programme, and is kept under the gate so the flag
+        # reproduces that release rather than something between the two.
+        w = min(trips, math.ceil(n_cfg / f)) if calendar else min(n_cfg, trips)
+        return [(n_cfg, f, max(1, w))]
 
     # The configured N is the FLOOR of the search, not the answer: a caller who
     # sets N = 50 is stating a programme they have already committed to, and the
     # search should size the fleet for it and upward rather than propose a
     # smaller one.
-    f_min = max(1, math.ceil(n_cfg / trips))
-    f_max = max(f_min, int(config.max_fleet_ships))
-    return [(f * trips, f)
-            for f in fleet_search_ladder(f_min, f_max,
-                                         config.programme_search_steps)]
+    f_min  = max(1, math.ceil(n_cfg / trips))
+    f_max  = max(f_min, int(config.max_fleet_ships))
+    ladder = fleet_search_ladder(f_min, f_max, config.programme_search_steps)
+    if not calendar:
+        return [(f * trips, f, trips) for f in ladder]
+    # Two-dimensional: the F ladder × every W.  See the docstring for why W is
+    # enumerated rather than laddered — it is at most `max_trips` integers.
+    return [(f * w, f, w) for f in ladder for w in range(1, trips + 1)]
 
 
 def _ops_table(ops_df: pd.DataFrame) -> Dict[str, Optional[float]]:
@@ -4281,6 +4499,8 @@ def mission_cost_usd(
     ep_power_w:          float = 0.0,
     power_source:        str   = "solar",
     n_missions:          Optional[int] = None,
+    missions_per_ship:   Optional[int] = None,
+    cadence_yr:          Optional[float] = None,
 ) -> Dict[str, float]:
     """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
 
@@ -4391,7 +4611,13 @@ def mission_cost_usd(
         trips, _calendar_cap, trip_cap = rig_trips
         life_yr = _ops_value(ops_df, "Mining rig service life", default=15.0)
         salvage = _ops_value(ops_df, "Rig salvage fraction", default=0.50)
-        missions_sharing_rig = min(n_missions, trips)
+        # v1.16.0: how many campaigns one rig actually flies is a property of
+        # the FLEET, not of N alone — F ships split N between them.  The caller
+        # supplies it because the caller is what searched (F, W).  None keeps
+        # the v1.15.0 expression, which is what `model_programme_calendar` off
+        # and every pre-v1.16.0 caller get.
+        missions_sharing_rig = (min(n_missions, trips) if missions_per_ship is None
+                                else max(1, min(int(missions_per_ship), trips)))
         if n_missions > 1:
             # Life USED, and there are now two ways to use it up.  Crediting
             # salvage on remaining calendar years while the rig is mechanically
@@ -4407,6 +4633,15 @@ def mission_cost_usd(
             rig_terminal_value = mining_rig_cost_total * (1.0 - life_used_frac) * salvage
     mining_rig_cost = ((mining_rig_cost_total - rig_terminal_value)
                        / max(1, missions_sharing_rig))
+    # The same two halves again, kept apart rather than netted, because the
+    # programme calendar term compounds them in OPPOSITE directions: the rig is
+    # bought at t = 0 and the salvage is collected at the end.  Netting first
+    # and applying one multiplier would credit the refund for arriving late.
+    # Read only by the calendar block below, which is skipped outright when the
+    # multipliers are 1.0 — so `mining_rig_cost` above stays the arithmetic
+    # v1.15.0 performed, in the order it performed it.
+    rig_gross_share  = mining_rig_cost_total / max(1, missions_sharing_rig)
+    rig_credit_share = rig_terminal_value    / max(1, missions_sharing_rig)
     # v1.4.0: the capsule is priced off its OWN rate.  It used to be billed at
     # the mining-payload rate, which treats a parachute-and-heat-shield can as
     # though it were regolith-contact machinery.
@@ -4606,11 +4841,37 @@ def mission_cost_usd(
         wacc = 0.0
         mult_upfront = mult_ongoing = mult_end = 1.0
 
+    # ── Programme calendar time (v1.16.0) ────────────────────────────────────
+    # The bucket above compounds every up-front line over ONE mission duration,
+    # which silently prices a programme as though all of its missions happened
+    # at once.  They cannot: one rig digs one hole at a time, so W campaigns per
+    # ship span `T + (W-1) x cadence`, and the three articles bought once at
+    # t = 0 and amortised across all of them — bus NRE, autonomy NRE, the rig —
+    # are carried for that whole span.  See `programme_calendar_multipliers`
+    # for why only those three, and why the salvage credit runs the other way.
+    #
+    # Written as a DELTA on top of the untouched v1.15.0 expression rather than
+    # as a rebuilt sum.  Both multipliers are exactly 1.0 at W = 1, so the
+    # branch is skipped, no term is re-associated, and the released arithmetic
+    # is bit-identical — which is the only form this project's verification can
+    # actually check, and the reason the phase-table sort was rejected in
+    # v1.14.2.
+    cadence   = (stay_yr if cadence_yr is None else max(0.0, float(cadence_yr)))
+    cal_cost  = cal_credit = 1.0
+    if config.model_programme_calendar and missions_sharing_rig > 1:
+        cal_cost, cal_credit = programme_calendar_multipliers(
+            missions_sharing_rig, cadence, wacc)
+
     total_cost = (
         upfront_with_cont * mult_upfront
         + ongoing_with_cont * mult_ongoing
         + end_with_cont     * mult_end
     )
+    if cal_cost != 1.0 or cal_credit != 1.0:
+        programme_upfront = nre_cost + autonomy_nre_cost + rig_gross_share
+        total_cost += ((programme_upfront * (cal_cost - 1.0)
+                        - rig_credit_share * (cal_credit - 1.0))
+                       * cont * mult_upfront)
 
     # Weighted-average WACC multiplier for diagnostic display
     pre_wacc_total = upfront_with_cont + ongoing_with_cont + end_with_cont
@@ -4637,6 +4898,11 @@ def mission_cost_usd(
         "rig_terminal_value":    rig_terminal_value,
         "missions_sharing_rig":  float(missions_sharing_rig),
         "n_missions":            float(n_missions),
+        "campaign_cadence_yr":   cadence,
+        "programme_span_yr":     (mission_duration_yr
+                                  + max(0, missions_sharing_rig - 1) * cadence),
+        "programme_calendar_multiplier":        cal_cost,
+        "programme_calendar_credit_multiplier": cal_credit,
         "learning_curve_factor": lc,
         "ops_cost":              ops_cost,
         "heat_shield_cost":      heat_shield_cost,
@@ -5509,13 +5775,20 @@ def _evaluate_combo_at_ratio(
     # programme-scale figure in this project was produced — re-solves all of it
     # to change three numbers.
     #
-    # See `programme_options` for why the ladder is over FLEET SIZE rather than
-    # over N, and why restricting N to whole multiples of the rig's trip life
-    # loses nothing.
+    # See `programme_options` for the search's shape: a LADDER over fleet size
+    # crossed with an EXHAUSTIVE enumeration of campaigns-per-ship.  v1.15.0
+    # searched fleet size alone, on the argument that the optimum N is always a
+    # whole multiple of the rig's trip life; v1.16.0 retires that argument,
+    # because programme calendar time is a lever that pushes back inside a band.
     rig_trips        = rig_trips_per_ship(ops_df, config, stay_yr)
     trips_per_ship   = rig_trips[0] if rig_trips is not None else 0
     rig_calendar_cap = rig_trips[1] if rig_trips is not None else 0
     rig_trip_cap     = rig_trips[2] if rig_trips is not None else None
+    # v1.16.0.  How often the rig can start again — the dig, unless windows open
+    # more slowly than it digs.  Derived once here because it depends on the
+    # stay, which is a property of this candidate, and it is read by every rung
+    # of the programme search below.
+    cadence_yr       = campaign_cadence_yr(stay_yr, synodic_yr, config)
 
     # ── Market saturation (v1.7.0, programme-aware v1.14.0) ──────────────────
     # The saleable mix and its prices do not depend on the programme either, so
@@ -5559,7 +5832,7 @@ def _evaluate_combo_at_ratio(
     gross_base           = gross_value
     delivered_base       = delivered_value_per_kg
 
-    def _price_programme(n_missions: int, fleet: int):
+    def _price_programme(n_missions: int, fleet: int, per_ship: Optional[int] = None):
         """Everything downstream of the cascade, for one programme size.
 
         Returns `(cost, gross, saturation_mult, concurrent, p_success,
@@ -5580,6 +5853,8 @@ def _evaluate_combo_at_ratio(
             ep_power_w          = ep_power_watts,
             power_source        = power_source,
             n_missions          = n_missions,
+            missions_per_ship   = per_ship,
+            cadence_yr          = cadence_yr,
         )
         g         = gross_base
         sat       = 1.0
@@ -5632,35 +5907,42 @@ def _evaluate_combo_at_ratio(
         return c, g, sat, concurrent, ps, pm, delivered
 
     programmes   = programme_options(rig_trips, config)
-    best_n, best_f = programmes[0]
-    best_priced  = _price_programme(best_n, best_f)
+    best_n, best_f, best_w = programmes[0]
+    best_priced  = _price_programme(best_n, best_f, best_w)
     best_pkey    = _objective_key(
         best_priced[1] - best_priced[0]["total_cost"],
         best_priced[1], best_priced[0]["total_cost"], config)
     priced_count = 1
 
-    for n_missions, fleet in programmes[1:]:
-        cand = _price_programme(n_missions, fleet)
+    for n_missions, fleet, per_ship in programmes[1:]:
+        cand = _price_programme(n_missions, fleet, per_ship)
         priced_count += 1
         key = _objective_key(cand[1] - cand[0]["total_cost"],
                              cand[1], cand[0]["total_cost"], config)
         if key > best_pkey:
-            best_pkey, best_priced, best_n, best_f = key, cand, n_missions, fleet
+            best_pkey, best_priced = key, cand
+            best_n, best_f, best_w = n_missions, fleet, per_ship
 
     # One refinement pass around the coarse winner, on the same geometric
     # spacing plus both integer neighbours — see `fleet_refinement`.  Skipped
     # entirely when the programme is not being searched, which is the default
     # and the path every committed figure was measured on.
+    #
+    # v1.16.0: refined at the winner's OWN campaigns-per-ship.  W is enumerated
+    # exhaustively, so it needs no refinement of its own — but it does need to
+    # be held fixed while F moves, because N = F × W and refining F against some
+    # other W would price a programme the search never proposed.
     if len(programmes) > 1:
-        ladder = [f for _n, f in programmes]
+        ladder = sorted({f for _n, f, _w in programmes})
         for fleet in fleet_refinement(best_f, ladder, ladder[0], ladder[-1]):
-            n_missions = fleet * trips_per_ship
-            cand = _price_programme(n_missions, fleet)
+            n_missions = fleet * best_w
+            cand = _price_programme(n_missions, fleet, best_w)
             priced_count += 1
             key = _objective_key(cand[1] - cand[0]["total_cost"],
                                  cand[1], cand[0]["total_cost"], config)
             if key > best_pkey:
-                best_pkey, best_priced, best_n, best_f = key, cand, n_missions, fleet
+                best_pkey, best_priced = key, cand
+                best_n, best_f = n_missions, fleet
 
     (cost, gross_value, saturation_mult, concurrent_missions,
      p_success, p_mining, delivered_value_per_kg) = best_priced
@@ -5784,6 +6066,26 @@ def _evaluate_combo_at_ratio(
         # How many rungs of the fleet ladder this mission actually paid for.
         # 1 means the programme was set, not searched.
         "programme_options_priced": float(priced_count),
+        # ── v1.16.0 programme calendar time ────────────────────────────────
+        # `missions_per_ship` is W, the second dimension of the programme
+        # search, and the invariant is N = F × W wherever the search is on.
+        # It is NOT `trips_per_ship`: trips is what the rig could do, W is what
+        # the programme chose to ask of it, and the gap between them is the
+        # calendar charge declining to use up the machine.
+        "missions_per_ship":        cost["missions_sharing_rig"],
+        "campaign_cadence_yr":      cost["campaign_cadence_yr"],
+        # Cadence is the DIG unless windows open more slowly than the rig digs,
+        # in which case it is the synodic period.  True where the window binds,
+        # which is where a programme to this body is paced by orbital mechanics
+        # rather than by mining rate.
+        "cadence_window_bound":     bool(
+            config.model_launch_windows
+            and cost["campaign_cadence_yr"] > stay_yr + 1e-12),
+        "programme_span_yr":        cost["programme_span_yr"],
+        # 1.0 means no calendar charge was levied — either W = 1, or the term
+        # is switched off.  This is the multiplier on the AMORTISED up-front
+        # lines only (bus NRE, autonomy NRE, rig), not on mission cost.
+        "programme_calendar_multiplier": cost["programme_calendar_multiplier"],
         # ── v1.11.0 storage and refuelling ─────────────────────────────────
         "tank_mass_frac":           tank_frac,
         "m_tank_return_kg":         float(actual_cascade.get("m_tank_return", 0.0)),
