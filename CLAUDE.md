@@ -69,10 +69,21 @@ calc `1.15.0`, master `1.18.0` (the master version is a literal in
 ⚠️  **calc `1.15.0` moves numbers only for programmes, not for single missions,
 and every measured cell in this file is a single mission.** Its two items — a
 duty-cycle cap on rig life, and a searched programme size — are both inert at
-N = 1, and the search is default OFF. See "What calc v1.15.0 changed" for the
-measurement that says so (60.9284× both ways at N = 1). Do not re-measure
-anything on account of it; do not read any table below as covering a
-`optimise_programme_scale = True` run, because none of them does.
+N = 1, and the search is default OFF. Do not re-measure anything on account of
+it; do not read any table below as covering an `optimise_programme_scale = True`
+run, because only the one under "Measured — FULL CATALOG" does.
+
+✅  **That inertness is not an argument, it is a full-catalog measurement.** A
+1,554,353-row cislunar raw run on `1.15.0` returns **26.7863× on 650,516
+evaluable rows with 2021 CX5 winning on xenon and a New Glenn** — the committed
+`1.14.0` cell, reproduced down to the payload in kilograms and the propellant
+split. It also puts `1.14.1` + `1.14.2` at a measured **4.10×** on a full cell
+(5,350 s → 1,306 s), inside their projected 3.4–4.6×.
+
+🚨  **The programme search costs 1.51× runtime, not the 1.04–1.13× this file
+first recorded** from a 2,500-row sample. Third sample-mispredicts-runtime
+finding in this project, and the first to apply to a *ratio* rather than an
+absolute. See "Measured — FULL CATALOG".
 
 calc `1.14.1` and `1.14.2` are the **second and third** stamps that do not mean
 the numbers moved — same contract as `1.10.1`, and verified the same way. See
@@ -449,20 +460,37 @@ weakly dominant.
 Note this makes the beneficiation path several times slower than raw.
 `concentration_search_steps` is the dial.
 
-⚠️  **Every wall clock below was measured on calc `1.14.0`. `1.14.1` made the
-search 1.7–1.9× faster and `1.14.2` a further 2.0–2.4×, neither changing any
-output**, so the seconds here are high by a compounded factor of roughly
-**3.4–4.6×** and the *ratios between cells* are unaffected. They have
-deliberately not been scaled: this file quotes measurements, and **nobody has
-re-run a full cell on either release**. See "What calc v1.14.1 changed" and
-"What calc v1.14.2 changed".
+✅  **ONE CELL HAS NOW BEEN RE-RUN, AND THE PROJECTION HELD.** Measured
+2026-08-11 on calc `1.15.0`, full 1,554,353-row catalog, cislunar, raw, 12
+workers, programme search OFF:
 
-⚠️  Do not multiply those two factors and quote the product as a runtime. Both
-were measured on stride samples, and this file's own rule is that a sample
-predicts full-catalog runtime here to no better than a factor of ~5 — the two
-speed-ups are ratios measured on identical rows in one process, which is a much
-better-conditioned quantity than a projected wall clock, but the wall clock they
-imply is still a projection.
+| | calc `1.14.0` | **calc `1.15.0`** | speed-up |
+|---|---|---|---|
+| `cislunar` raw, full catalog | 5,350 s | **1,306 s** | **4.10×** |
+
+**4.10× lands inside the projected 3.4–4.6× band**, which is the first time a
+compounded sample-derived projection in this file has been checked against a
+full run — and it is the *narrow* kind of projection (a ratio over identical
+rows), not the wall-clock kind the note below warns about. Every other wall
+clock in this section is still `1.14.0` and still high by roughly that factor.
+
+🚨  **And the run reproduced the committed cell EXACTLY, across three
+releases.** `26.7863×` on `650,516` evaluable rows with **2021 CX5** winning, all
+three identical to the `1.14.0` figures at the top of this file. That is the
+strongest form the "performance only" claim has ever been checked in: `1.14.1`
+and `1.14.2` each asserted bit-identity on 150–2,500-row samples, and `1.15.0`
+asserted inertness at N = 1 on 400 rows. **All three now hold on 1.55 million
+bodies at once.** Do not re-measure the raw cislunar cell on account of any of
+them.
+
+⚠️  Do not multiply those two factors and quote the product as a runtime *in
+general*. Both were measured on stride samples, and this file's own rule is that
+a sample predicts full-catalog runtime here to no better than a factor of ~5 —
+the two speed-ups are ratios measured on identical rows in one process, which is
+a much better-conditioned quantity than a projected wall clock, but the wall
+clock they imply is still a projection. It happened to hold **for this cell**;
+that is one data point, and the beneficiated cell is still unmeasured on
+anything past `1.14.0`.
 
 ⚠️  **The timings in this file have moved seven times, for seven unrelated
 reasons, and the fifth dwarfs the others.** Everything below is per
@@ -1332,7 +1360,8 @@ here pins it more tightly.
 > other lever improves with N, so the best N in a band is its top, N = F × trips.
 >
 > `optimise_programme_scale` searches the FLEET and lets N follow, jointly with
-> every other architecture axis, at **1.04-1.13× runtime** — not 12× — because
+> every other architecture axis, at **1.51× runtime measured on the full
+> catalog** — against one full run per N — because
 > N enters nothing in the mass cascade. On a 2,500-row raw cislunar sample it
 > moves the best cell **42.0081× → 21.7341×**, with fleets of 1-8 ships (N = 5
 > to 40) and a median of 8 ladder rungs priced per mission.
@@ -2813,8 +2842,8 @@ What genuinely remains:
   Re-running at N = 10 and N = 100 samples a grid whose points mostly cannot be
   optimal — the optimum N is always a whole multiple of the rig's trip life, so
   N = 10 and N = 100 are the right answer only by coincidence.
-  `optimise_programme_scale` locates it per body inside ONE run, at 1.04-1.13×
-  runtime rather than 2×. What genuinely remains here is a **full-catalog run
+  `optimise_programme_scale` locates it per body inside ONE run, at 1.51×
+  runtime (measured, full catalog) rather than 2×. What genuinely remains here is a **full-catalog run
   with the search on**, which is one raw cislunar pass and has not been done.
 - **The historical progression 2.2× → 14× → 39× → 34× → 25×.** Still not
   fixable by re-running: it is a per-release series, so rebuilding it means
@@ -3275,7 +3304,8 @@ located optimum."
 
 `optimise_programme_scale` searches it jointly with every other architecture
 axis, resolved by `selection_key` like all of them. Two structural facts make
-that cost **1.04-1.13× runtime rather than 8-12×**:
+that cost **1.51× runtime rather than 8-12×** — measured on the full catalog,
+and see the correction below, because the sample said 1.13×:
 
 **1. N ENTERS NOTHING IN THE MASS CASCADE.** It appears in `mission_cost_usd`,
 the saturation block and the reliability block, and in none of the rocket
@@ -3314,29 +3344,101 @@ mission to this rock" to "the best programme built around it". Two answers to
 two different questions; a default flip would retire every committed figure at
 once with no way to reproduce them.
 
-### Measured
+### Measured — FULL CATALOG (2026-08-11)
 
-⚠️  **2,500-row stride SAMPLE at cislunar, raw**, on the on-disk Stage 2 catalog.
-Not a full-catalog cell — this file's own rule is that a sample predicts
-full-catalog runtime to no better than a factor of ~5, and nobody has run a full
-cell on this release.
+✅  Both cells run on the **full 1,554,353-row catalog** at cislunar, raw, 12
+workers, in ONE process against the same Stage 2 pass, through the built
+`master.py`. **650,516 evaluable rows** in both.
 
 | | search off (N = 1) | **search on** | Δ |
 |---|---|---|---|
-| best cost/revenue | 42.0081× | **21.7341×** | **−48.3%** |
-| pairs improved | — | **1,052 / 1,052** | — |
-| max searched/unsearched | — | **0.8096** | — |
-| wall clock | 42.7 s | 48.1 s | **1.13×** |
+| best cost/revenue | **26.7863×** | **14.1730×** | **−47.1%** |
+| winner | 2021 CX5 (D) | 2021 CX5 (D) | same body |
+| vehicle / propellant | New Glenn / **xenon** | New Glenn / **iodine** | — |
+| N | 1 | **5** | — |
+| fleet | 1 | **1** | — |
+| payload | 93,312 kg | 68,432 kg | −26.7% |
+| saturation multiplier | 0.6873 | 0.7253 | — |
+| `p_mining` | 0.850 | 0.8858 | — |
+| wall clock | **1,306 s** | **1,978 s** | **1.51×** |
 
-Fleet sizes chosen run **1 to 8 ships** (N = 5 to 40), with 500 of 1,052 bodies
-at a single ship. Median **8 rungs** of the ladder priced per mission, max 12.
+🚨  **RUN 1 REPRODUCES THE COMMITTED v1.14.0 CELL EXACTLY, ACROSS THREE
+RELEASES.** Not just the ratio — `26.7863×`, `650,516` evaluable rows, **2021
+CX5 (D)** on **xenon** and a **New Glenn**, payload **93,312 kg**, saturation
+**0.6873**, `p_mining` **0.850**, RTG share **5.44%**, aerocapture **0.00%**, and
+the propellant split **xenon 42.65 / iodine 25.19 / water ion 15.58 / hydrolox
+8.11 / krypton 8.01%** against the committed 42.6 / 25.2 / 15.6 / 8.1 / 8.0.
 
-**The winner keeps its identity and changes its propellant.** 152679 (Cb) wins
-both ways on a Falcon Heavy, but on **xenon at N = 1 and iodine at N = 10**.
-That is the whole argument for searching N jointly rather than at a pivot: the
-best architecture is a function of programme size, so a two-phase search that
-picks the architecture first and sizes the programme afterwards would pick the
-wrong one.
+`1.14.1` and `1.14.2` each argued bit-identity from 150–2,500-row samples, and
+`1.15.0` argued inertness at N = 1 from 400 rows. **All three now hold on 1.55
+million bodies simultaneously.** This is the first time a "performance only"
+claim in this project has been checked at full scale.
+
+🚨  **THE RUNTIME CLAIM WAS WRONG, AND IT IS THE SAME LESSON A THIRD TIME.**
+This release originally recorded **1.04–1.13×** from a 2,500-row stride sample.
+Measured on the full catalog it is **1.51×** — the sample understated the cost of
+the search by ~1.4×, in the *same direction* as v1.13.0's beneficiated estimate
+and the opposite direction to its raw one.
+
+That is now **three** full-catalog runtime predictions this pipeline has gotten
+wrong from stride samples, in both directions, and this file already states the
+rule: *a sample predicts full-catalog runtime here to no better than a factor of
+~5.* It applies to a **ratio between two settings**, not only to an absolute
+wall clock, which is the part this release adds. The reason is population: the
+ladder is priced per *surviving* candidate, and the full catalog's survivors are
+not the sample's.
+
+**Every other number in this release came out where the sample said** — the
+never-worse invariant, the band structure, the fleet distribution's shape. Only
+the runtime moved.
+
+**Never-worse holds exactly on the whole population:**
+
+```
+pairs 650,516 | max searched/unsearched 1.000000 | worse 0
+improved 650,515 | unchanged 1 | median improvement 45.3%
+```
+
+The single unchanged row is the expected signature, not a miss: a body whose
+stay is long enough that its calendar cap is 1 trip, so N = 1 is the only
+programme on its ladder.
+
+**Fleet sizes chosen**, of 650,516 bodies: 1 ship 304,164 (46.8%), 2 ships
+122,905, 3 ships 55,464, then a long tail to the ceiling. Median **2**, max
+**64**. N follows exactly — **N = F × trips on every single row**, and N is a
+whole multiple of `trips_per_ship` on every single row. Median **8** ladder rungs
+priced per mission, max 12.
+
+⚠️  **2,393 rows (0.37%) sit AT `max_fleet_ships` = 64**, and the run says so on
+stdout. Those are bodies whose payloads have no finite market to saturate, so
+the objective is monotone in N and the ladder's top rung is where the loop
+stopped — not an optimum. Read them as a diagnostic, not a result.
+
+**The winner keeps its identity and changes its propellant**: 2021 CX5 both
+ways, on a New Glenn both ways, but **xenon at N = 1 and iodine at N = 5**, with
+payload falling 93,312 → 68,432 kg. That is the argument for searching N jointly
+rather than at a pivot — the best architecture is a function of programme size,
+so picking the architecture first and sizing the programme afterwards would pick
+the wrong one.
+
+**Propellant shares move with the search**, and in a direction consistent with
+saturation punishing volume: water ion 15.58% → 18.39% and krypton 8.01% →
+9.29%, while hydrolox falls 8.11% → 5.33% and xenon 42.65% → 40.27%. Vehicles
+shift toward Falcon Heavy, 66.4% → 71.0%, against SLS Block 1B 31.6% → 25.7%.
+
+**The trip cap binds on 96.1% of rows** (98.1% with the search on) against a
+median calendar cap of **15** and a median trip life of **5** — so on the real
+population the cycle bound is what retires almost every rig, and the calendar
+bound it replaced was doing almost nothing.
+
+**RTG share** 5.44% → 6.66%; **aerocapture 0.00%** both ways, as cislunar must.
+
+**The mass-ledger identity holds** on all 650,516 rows of both cells to
+**7.3e-12 kg**, which is 0.000000000 kg at the precision this file quotes it and
+is float noise from the *check's* own re-association — it computes
+`h − a − b − c` where the model computes `h = a + b + c`. Worth naming rather
+than rounding away: it is the same non-associativity that makes the phase-table
+order load-bearing.
 
 ### Verification (2026-08-11)
 
@@ -3465,12 +3567,28 @@ minimum. Closing it means discounting the programme over
 and would move every cost in the model. It is named here rather than
 implemented, and it is the obvious next item.
 
-**The full-catalog cells are unmeasured on this release.** Everything above is a
-sample. Since both items are inert at N = 1, the existing tables stand — but
-"what is the best programme at cislunar on 1.55 M bodies" has never been run.
+✅  **The cislunar RAW cells are now measured on the full catalog**, both
+settings — see "Measured — FULL CATALOG" above. What remains:
+
+**The beneficiated cell has not been run on this release, at any destination.**
+`cislunar` beneficiated was 38,072 s on `1.14.0`; at the 4.10× this release
+measured on raw it projects to ~2.6 h, and **that is a projection, from the same
+class of estimate this file has now gotten wrong three times.** Budget from a
+measured run or do not budget.
 
 **Nothing has been re-measured at the other four destinations.** The trip cap is
-a property of the mission profile, so it moves every destination once N > 1.
+a property of the mission profile, so it moves every destination once N > 1, and
+the four non-cislunar raw cells in the v1.14.0 matrix are N = 1 — so they stand
+as measured, and say nothing about what a *programme* to those destinations
+looks like. `leo` and `mars_surface` are the interesting ones: they are where the
+two v1.14.0 TPS fixes first become non-zero, and both are inert at `cislunar`.
+
+**The programme-scale curve is superseded as a method but not as a table.** The
+N = 1 / 10 / 100 curve above was measured on `1.14.0` and its N = 1 anchor
+(26.7863×) reproduces here exactly, so the table stands. What the search adds is
+that it locates the optimum per body instead of sampling three points — and on
+the real population the answer is a **median of 2 ships and N = 10**, not the
+single N = 10 that curve happened to sample.
 
 ## Config discipline
 
