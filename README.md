@@ -37,7 +37,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | 1 | `modules/catalog.py` | 1.1.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.7.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.12.0 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
-| 4 | `modules/calc.py` | 1.15.0 | Per-asteroid Δv **and mission architecture** — and, optionally, **programme size and fleet size** — in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.16.0 | Per-asteroid Δv **and mission architecture** — and, optionally, **programme size, fleet size and schedule** — in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ## Running it
 
@@ -200,6 +200,7 @@ that actually move the answer:
 | `.calc.max_fleet_ships` | `64` | Where the fleet ladder stops. Rows piling up against it mean their payloads have no finite market, not that bigger is better — the run says so |
 | `.calc.programme_search_steps` | `8` | Rungs in the coarse fleet sweep, before one refinement pass. Same idiom as `concentration_search_steps` |
 | `.calc.model_rig_trip_limit` | `True` | Cap rig life in duty CYCLES as well as calendar years. Inert at N = 1 |
+| `.calc.model_programme_calendar` | `True` | Charge the calendar a programme actually spans — the NRE and rig are bought once and carried across every campaign. Inert at N = 1; also what makes the programme search two-dimensional |
 | `.calc.contingency_fraction` | `0.20` | Flat contingency on the cost cascade |
 | `.calc.apply_wacc_compounding` | `True` | Time-value of money, bucketed by when each cost is incurred |
 | `.mineral.metals_api_key` | `"DEMO"` | Set a real metals.dev key to enable that source; `"DEMO"` silently skips |
@@ -536,6 +537,18 @@ not superseded by it, it is simply unmeasured (~21 h for the pair).
 > it is **default OFF**: turning it on changes the question from "the best
 > single mission to this rock" to "the best programme built around it". Every
 > figure in this README is the former.
+>
+> 🚨  **v1.16.0 RETIRES THE BAND ARGUMENT IN THAT PARAGRAPH.** "Within one fleet
+> band every lever improves and none pushes back" was true of a model in which
+> a programme took no time. Charging programme calendar time adds the lever that
+> pushes back — it grows like `y^W` against NRE/N falling like `1/N` — so
+> campaigns-per-ship has an interior optimum and the band's top is often not it.
+> The search is now two-dimensional over (fleet × campaigns-per-ship), with the
+> second dimension **enumerated exhaustively** rather than laddered, because it
+> is at most five integers. Measured on a 400-row raw cislunar sample: the
+> searched cell goes **31.0693× → 33.7977×** (+8.8%), the median fleet grows
+> from **1 ship to 2**, and **12 of 168 bodies now decline to use up the rig**
+> where none did before. Still default OFF, and still inert at N = 1.
 
 ⚠️  **This curve has also not been rebuilt since v1.11.0.** Its N = 1 anchor is
 the old 22.93×; that cell measured 22.4665× on v1.11.0 and now measures
@@ -1397,6 +1410,61 @@ which is the consumer 1:32 FP64 rate. fp32 is faster and unusable, because every
 check this project relies on is a bit-identity check. RAM is not a constraint
 either: the run peaks near 6 GB of 64 GB.
 
+### What changed in v1.16.0
+
+**A programme took decades and was charged for none of them.** One correction,
+inert at N = 1 — verified as 141 of 141 columns identical, sha256 MATCH, with
+the term on and off — so every measured cell in this file stands.
+
+Stage 4 compounds a mission's up-front costs by `(1+W)^T` over that mission's
+own duration. For one mission that is right. For a programme it assumes every
+mission happens at once, and they cannot: one rig digs one hole at a time, so W
+campaigns on a ship are strictly sequential. The lines that were being carried
+free are the **amortised** ones — the bus NRE, the autonomy NRE and the rig —
+because those alone are bought once, at t = 0, and divided across missions that
+sell years apart. A mission's own articles are unaffected: shift a whole cash
+flow later and its cost/revenue ratio does not move.
+
+The charge is a closed-form mean over the programme, exactly 1.0 at one campaign
+per ship. **Salvage gets the reciprocal series**, because it is collected at the
+*end* — compounding a refund forward alongside the cost it is netted against
+would pay a bonus for taking longer to collect it.
+
+**The cadence is the dig, or the launch window, whichever is slower** — and on
+a 400-row raw cislunar sample **the window binds on 165 of 168 rows**. The rig
+stays at the asteroid, so campaign w+1 starts as soon as w's feed is out of the
+ground; but a capsule can only be dispatched when Earth and the target line up,
+and a synodic period diverges as *a* → 1 AU. A NEA at 1.05 AU can only be
+revisited every ~14 years however fast its rig works. A single mission pays that
+wait once; a programme of W pays it W−1 more times.
+
+**It retires the band argument and makes the programme search two-dimensional.**
+v1.15.0 could ladder fleet size alone because within a band every lever improved
+with N and none pushed back. Calendar time is the lever that pushes back, so
+campaigns-per-ship became a real decision: fleet stays a ladder, campaigns-per-
+ship is **enumerated exhaustively** (it is at most five integers). Measured on
+the sample: the searched cell **31.0693× → 33.7977×**, median penalty 5.3%, no
+row improved, median fleet **1 → 2 ships**, median N **5 → 10**.
+
+⚠️  **On that sample the band argument would still have given the right answer**
+— campaigns-per-ship comes out at the rig's trip life on all 168 rows. The proof
+is what broke, not the answer: once a lever pushes back, a dimension whose
+optimum is no longer guaranteed has to be searched rather than assumed. It does
+bite when trips are longer — against the older Stage 3 table, where nothing
+capped duty cycles and trips reached 20, 12 of 168 bodies choose to retire a rig
+early rather than pay the calendar to use it up.
+
+Brute-forced rather than argued: every (fleet × campaigns-per-ship) on a 20 × 8
+grid, priced exhaustively, per body. **Campaigns-per-ship is exact on 49 of 49
+bodies**; the search is worse than brute force on 5, by at most **0.027%**, and
+every one of those is the inherited fleet ladder landing one ship off.
+
+⚠️  **Read the loader's `Module 3 operational costs  44 rows` line before
+trusting any programme figure.** Against the archived 43-row table from the
+v1.14.0 campaign the trip cap is silently absent, campaigns-per-ship runs to 20
+instead of 5, and every programme number changes. `schema_check()` names it on
+stdout; this bit during measurement.
+
 ### What changed in v1.15.0
 
 **Programme size stopped being an input.** Two items, both inert at N = 1, so
@@ -1438,6 +1506,11 @@ not 12×** (measured on the full catalog; a 2,500-row sample said 1.13×):
    improve, so the band's best is its top, N = F × trips. **So the search is over
    the FLEET and N follows**, and every N that cannot be optimal is skipped
    without being priced.
+
+> 🚨  **Point 2 is retired by v1.16.0 — "always" is now "usually".** The proof
+> was "every lever improves and none pushes back", and programme calendar time
+> pushes back. Campaigns-per-ship is searched now, exhaustively, and the search
+> is two-dimensional. Point 1 is untouched and is what still makes it cheap.
 
 That is also the answer to the question in plain terms: **the number of ships is
 the decision variable and programme size is its consequence.**
@@ -1644,6 +1717,17 @@ Every item below moves the answer the same way, *worse*. Cislunar raw
   are per-technology now. **Zero replicated-scaling devices survive anywhere**,
   the evaluable catalog halves, and chemical propulsion comes back.
 
+  > 🚨  **"Zero survive anywhere" was a property of the 15,566-row population,
+  > not of the gate, and it is retired.** On the full 1.55 M-row catalog, FEEP
+  > survives in seven of eight measured cells — 0 rows at `lunar_surface`, 13 at
+  > `cislunar` raw, 5,479 at `earth_surface`. That is the gate working as
+  > designed: `thruster_kg_per_n` is a mass penalty, not a cutoff, so the right
+  > test is whether one ever **wins**. It never does, in any of the eight. But
+  > the margin is not comfortable everywhere — at `mars_surface` the best FEEP
+  > mission is the catalog's **fifth**-ranked body and at `earth_surface` its
+  > **seventh**. PPT and electrospray, which won 31.8% and 24.3% of cislunar
+  > rows before the gate, now survive nowhere at all.
+
 - **Argon was a free resource, and the row said so itself.** It carried
   liquid-argon density — 1.395 kg/L, which exists only at its 87.3 K boiling
   point, and buys the lightest tank of any gas in the table at 2.1% of
@@ -1699,7 +1783,9 @@ catalog reproduces both cells; never-worse holds exactly (15,407 pairs, max
 benef/raw 1.000000, 0 exceptions, 591 declined) — which mattered more than
 usual here, since the thrust gate *removes* options and a strictly smaller
 option set cannot make a correct search better; no `replicated`-scaling device
-survives in either run, the direct check that the gate did what it claims; and
+survives in either run, the direct check that the gate did what it claims
+(**retired on the full catalog — see the note above; the check that survives is
+whether one ever wins, and it never does**); and
 serial vs 8-worker runs are byte-identical (raw 4,000 rows 43.2 s → 23.5 s,
 beneficiated 2,000 rows 197.6 s → 54.0 s, sha256 MATCH on both). Full-catalog
 wall clock is 86 s raw / 463 s beneficiated, essentially unchanged from
