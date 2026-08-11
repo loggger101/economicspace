@@ -908,10 +908,11 @@ including a Stage 2 re-run per destination. Tune with
 `.calc.concentration_search_steps`, and cap `.calc.eval_row_cap` for anything
 interactive.
 
-⚠️ **Every figure in that table is calc v1.14.0. calc v1.14.1 makes the search
-1.7–1.9× faster and changes no output**, so they are all high by roughly that
-factor — deliberately not scaled, because these are measurements and no cell has
-been re-run on v1.14.1. v1.14.1 skips candidates that provably cannot close
+⚠️ **Every figure in that table is calc v1.14.0. v1.14.1 made the search 1.7–1.9×
+faster and v1.14.2 a further 2.0–2.4×, neither changing any output**, so they are
+all high by a compounded factor of roughly **3.4–4.6×** — deliberately not
+scaled, because these are measurements and no cell has been re-run on either
+release. v1.14.1 skips candidates that provably cannot close
 their mass budget instead of re-deriving that fact once per power source and
 once per point of the concentration sweep; on the full catalog it prunes
 **75.9%** of them. Note that 75.9% pruned is only 1.7–1.9× faster, because the
@@ -1361,6 +1362,58 @@ elements is **1.695 s on the card against 0.222 s on the CPU** — 7.6× slower,
 which is the consumer 1:32 FP64 rate. fp32 is faster and unusable, because every
 check this project relies on is a bit-identity check. RAM is not a constraint
 either: the run peaks near 6 GB of 64 GB.
+
+### What changed in v1.14.2
+
+**No number.** The third performance-only stamp, same contract as v1.10.1 and
+v1.14.1. Every measured cell in this file stands as measured on v1.14.0.
+
+| | v1.14.1 | **v1.14.2** | speed-up | output |
+|---|---|---|---|---|
+| raw, 400 rows | 2.70 s | **1.13 s** | **2.39×** | 124/124 columns identical, sha256 MATCH |
+| beneficiated, 150 rows | 9.19 s | **4.51 s** | **2.04×** | 124/124 columns identical, sha256 MATCH |
+
+A bigger step than v1.14.1's, and **none of it came from the algorithm** — the
+search does the same work in the same order. It had been doing it through the
+wrong machinery.
+
+**The model's arithmetic was going through numpy, one scalar at a time.** The
+two most-called functions in the module applied `np.isfinite` and `np.exp` to
+plain Python floats. On the reference machine `np.isfinite` costs **698 ns**
+against `math.isfinite`'s **32 ns**, and `float(np.exp(x))` **694 ns** against
+`math.exp`'s **47 ns** — 15–22×, because a ufunc call on a scalar builds a 0-d
+array, resolves a dtype loop and boxes the result. That is the right price
+amortised over a million elements and the wrong one for a single float. The
+solver makes seven of them per call and is called half a million times per 150
+beneficiated asteroids. `math.exp` was checked **bitwise** against `np.exp` over
+400,000 samples spanning the model's Δv/Isp range before the swap: zero
+mismatches.
+
+**Three hoists.** The payload knapsack re-sorted the same phase list ~2,100
+times per asteroid; six per-propellant constants and one per-vehicle were
+re-parsed for every surviving candidate, each through `pd.isna` (another pandas
+dispatch on a scalar — ~980,000 calls per 150 rows); and the infeasibility
+pre-filter turns out to be **monotone in launch capacity**, so seventeen vehicles
+were each re-deriving one propellant's exponentials, boil-off and tankage
+closure only to differ on the final comparison.
+
+🚨 **One of those hoists is a trap, and it is the most transferable thing in this
+release.** Sorting the phase table at source — the obvious way to hoist the
+knapsack's sort — *changes the output*. The market-saturation block accumulates
+value by iterating a dict built from that table, and floating-point addition is
+not associative, so the table's natural order is load-bearing on the last ULP.
+The measured effect is **2.8e-16** on 3 of 60 rows with no winner moving:
+numerically nothing, and still fatal, because every claim this project makes
+about a release is argued from bit-identity. *A change can be numerically
+negligible and still destroy the evidence.* The same reasoning is why the
+pre-filter hoist carries the coefficients of its final comparison rather than the
+launch capacity they algebraically imply — that rearrangement would move the
+prune boundary in the last bit, and there it would change a row count.
+
+**Measured and not taken:** hoisting the ratio-independent prologue out of the
+concentration sweep, which looked like the largest remaining item and instruments
+at **7.6%** of a beneficiated run — the three hoists above had already removed
+what made it expensive. Measure the remainder *after* taking the cheap items.
 
 ### What changed in v1.14.0
 

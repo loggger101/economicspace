@@ -63,13 +63,18 @@ See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.1.0`, mineral_value `1.7.0`, transportation `1.11.0`,
-calc `1.14.1`, master `1.17.1` (the master version is a literal in
+calc `1.14.2`, master `1.17.2` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
-calc `1.14.1` is the **second** stamp that does not mean the numbers moved —
-same contract as `1.10.1`, and verified the same way. See "What calc v1.14.1
-changed". Every measured cell in this file was produced by `1.14.0` and stands
-unaltered; do not re-measure anything on account of it.
+calc `1.14.1` and `1.14.2` are the **second and third** stamps that do not mean
+the numbers moved — same contract as `1.10.1`, and verified the same way. See
+"What calc v1.14.1 changed" and "What calc v1.14.2 changed". Every measured cell
+in this file was produced by `1.14.0` and stands unaltered; do not re-measure
+anything on account of either.
+
+Three of the five stamps in the `1.14.x` line are therefore performance-only,
+which is worth noticing before reading a version number as evidence that a
+result changed. The rule is one-directional: changing a number means bumping.
 
 calc `1.10.1` was the first stamp that did **not** mean the numbers moved. It
 was a pure performance release, verified bit-identical, and it was bumped
@@ -422,14 +427,23 @@ weakly dominant.
 Note this makes the beneficiation path several times slower than raw.
 `concentration_search_steps` is the dial.
 
-⚠️  **Every wall clock below was measured on calc `1.14.0`. calc `1.14.1` makes
-the search 1.5–1.7× faster and changes no output**, so the seconds here are all
-high by roughly that factor and the *ratios between cells* are unaffected. They
-have deliberately not been scaled: this file quotes measurements, and nobody has
-re-run a full cell on `1.14.1`. See "What calc v1.14.1 changed".
+⚠️  **Every wall clock below was measured on calc `1.14.0`. `1.14.1` made the
+search 1.7–1.9× faster and `1.14.2` a further 2.0–2.4×, neither changing any
+output**, so the seconds here are high by a compounded factor of roughly
+**3.4–4.6×** and the *ratios between cells* are unaffected. They have
+deliberately not been scaled: this file quotes measurements, and **nobody has
+re-run a full cell on either release**. See "What calc v1.14.1 changed" and
+"What calc v1.14.2 changed".
 
-⚠️  **The timings in this file have moved six times, for six unrelated
-reasons, and the fifth dwarfs the other four.** Everything below is per
+⚠️  Do not multiply those two factors and quote the product as a runtime. Both
+were measured on stride samples, and this file's own rule is that a sample
+predicts full-catalog runtime here to no better than a factor of ~5 — the two
+speed-ups are ratios measured on identical rows in one process, which is a much
+better-conditioned quantity than a projected wall clock, but the wall clock they
+imply is still a projection.
+
+⚠️  **The timings in this file have moved seven times, for seven unrelated
+reasons, and the fifth dwarfs the others.** Everything below is per
 *catalog*, and catalog `1.1.0` made the catalog **17× bigger** — 89,367 rows
 to 1,554,400. Cap `eval_row_cap` (which now *samples* rather than truncating —
 see calc `1.13.0`) for anything interactive.
@@ -2845,6 +2859,15 @@ reason. The defence is `prune_infeasible_combos = False` plus a column-by-column
 diff: if they ever disagree, the pruned build drops rows the unpruned one keeps
 and the diff says so on the first run. **Change one, re-run that diff.**
 
+⚠️  As of v1.14.2 the pre-filter side is written in **three** pieces:
+`_combo_close_terms` (everything independent of the vehicle), `_closes_with`
+(the one comparison that is not), and `_combo_can_close` — which is now defined
+as exactly their composition and exists so there is still one readable statement
+of the whole test, and so `_prefilter_probe` does not become a fourth copy. The
+search calls the split pair; everything else calls the composed one. That diff
+is therefore *more* important than it was, not less, and it was re-run for
+v1.14.2 on both settings.
+
 **`AsteroidContext`'s membership test is "does it vary with the candidate",
 not a field count.** If a quantity varies only with the body it belongs on the
 context; if it varies with the vehicle, propellant, return mode, power source or
@@ -2905,6 +2928,186 @@ contract, and no measured cell in this file would move by a detectable amount.
   bound that is occasionally too tight silently drops winners, and it would
   drop them without changing the row count, which is the one failure mode none
   of the checks above would catch.
+
+⚠️  Four of the other items this section listed were taken in **v1.14.2** and
+none of them was branch-and-bound. Read that section before assuming the
+remaining time is where this one says it is.
+
+## What calc v1.14.2 changed
+
+**Nothing you can measure.** Third performance-only stamp, same contract as
+`1.10.1` and `1.14.1`: every number identical, the stamp moves only so a CSV
+still names the code that produced it. **Do not re-measure any table in this
+file on account of it.**
+
+Measured against `git HEAD`, same rows, one process, serial:
+
+| | HEAD `1.14.1` | tree `1.14.2` | speed-up | output |
+|---|---|---|---|---|
+| raw, 400 rows | 2.70 s | **1.13 s** | **2.39×** | 124/124 columns identical, sha256 MATCH |
+| beneficiated, 150 rows | 9.19 s | **4.51 s** | **2.04×** | 124/124 columns identical, sha256 MATCH |
+
+That is a larger step than `1.14.1`'s own 1.93× / 1.68×, and **none of it came
+from the algorithm**. The search does exactly the same work in the same order;
+it had been paying to do it through the wrong machinery.
+
+### The model's arithmetic was going through numpy, one scalar at a time
+
+The single largest item ever found in this module, and it had been sitting in
+the two most-called functions since they were written.
+
+`max_return_payload_kg` and `_combo_can_close` called `np.isfinite` and `np.exp`
+on **Python floats**. Measured on the reference machine:
+
+| | per call |
+|---|---|
+| `np.isfinite(x)` | **698 ns** |
+| `math.isfinite(x)` | **32 ns** |
+| `float(np.exp(x))` | **694 ns** |
+| `math.exp(x)` | **47 ns** |
+
+15–22×, and it is not a numpy defect: a ufunc call on a scalar builds a 0-d
+array, resolves a dtype loop and boxes the result, which is the right price for
+an operation designed to be amortised over a million elements and the wrong one
+for a single float. `max_return_payload_kg` makes **seven** of them per
+invocation and is called 496,000 times per 150 beneficiated asteroids — about
+half that function, and roughly a quarter of the whole search.
+
+**`math.exp` was checked bitwise against `np.exp`**, not assumed equal: 400,000
+samples spanning this model's (Δv, Isp) range, zero mismatches. The two differ
+only in how they *overflow* — numpy returns `inf` and warns, `math` raises — so
+the `isfinite` guard becomes a `try/except OverflowError`. That is the form
+`_combo_can_close` has always used, so the two statements of this algebra now
+agree on their error handling as well as their arithmetic.
+
+⚠️  **This generalises past these two functions.** Anywhere in this codebase
+that a numpy name is applied to a scalar, it is costing ~20× for nothing. The
+tell is `np.` inside a function called per candidate rather than per catalog.
+
+### Three hoists, one of which is a trap
+
+**The knapsack re-sorted the same phase list ~2,100 times per asteroid.**
+`optimal_payload_mix` did `sorted(phases, key=lambda p: -p[2])` on every call —
+325,000 sorts plus 1.4 M key-lambda calls per 150 beneficiated rows, all
+re-deriving one order for one rock. Memoised per list in `_PHASE_ORDER_CACHE`,
+the same single-slot identity-keyed shape as `_OPS_CACHE`.
+
+> 🚨  **Do NOT "fix" this by sorting the phase table at source.** That was tried
+> first and it **changes the output**: `saturation_multiplier`,
+> `gross_value_usd`, `profit_usd`, `roi` and `delivered_value_usd_per_kg` all
+> move. The market-saturation block builds `sold` from `phases` and accumulates
+> `adj_value` by iterating that dict, and floating-point addition is not
+> associative — so **the phase table's natural order is load-bearing on the last
+> ULP** and nothing in the code said so.
+>
+> Measured: max relative change **2.8e-16** on 3 of 60 rows, and no vehicle,
+> propellant, concentration ratio or power source moved. Numerically that is
+> nothing. It is still fatal, because **every verification this project relies
+> on is a bit-identity check** — the sha256 CSV diffs, `max |error|
+> 0.000000000 kg`, "124 of 124 columns identical". A sort at source reads like a
+> free cleanup and silently costs you the ability to prove a release changed
+> nothing.
+>
+> The general lesson, which is new to this file: *a change can be numerically
+> negligible and still destroy the evidence.* This repo's releases are argued
+> from bit-identity, so an operation-reordering "cleanup" is a change to the
+> proof, not just to the number.
+
+**Six per-propellant constants and one per-vehicle were re-parsed per surviving
+candidate.** `thruster_efficiency`, `thruster_kg_per_n`, `tank_frac`, `isp`,
+`boiloff`, `dv_penalty` and the vehicle's fairing volume — each through
+`pd.isna`, which is another pandas dispatch on a Python scalar, so this alone
+was ~980,000 `pd.isna` calls per 150 rows. Derived once per run in
+`candidate_combos` and attached to the row dict, exactly as
+`_PREFILTER_CONSTS_KEY` is and for the same reason: the dict is what crosses the
+multiprocessing boundary, so a worker receives the derived values instead of
+rebuilding them.
+
+This is the v1.14.1 finding one level further in, and it closed a live drift
+hazard on the way: **`tank_frac` was being derived twice from the same two
+columns**, once in `_prefilter_propellant_consts` and once in
+`_evaluate_combo_at_ratio`. One derivation now, two readers.
+
+**The pre-filter is monotone in launch capacity.** `_combo_can_close` reads the
+vehicle in exactly one place — the final comparison — and a bigger rocket can
+never turn a candidate that closes into one that does not. The combo grid is
+vehicle-major, so seventeen vehicles were each re-deriving one propellant's
+exponentials, boil-off inflation and tankage closure to differ only on the last
+line. Split into `_combo_close_terms` (no vehicle) and `_closes_with` (vehicle),
+memoised per (propellant × Δv × ISRU).
+
+⚠️  **The COEFFICIENTS are hoisted, not the launch capacity they imply**, and
+that is not a stylistic choice. `bracket > 0` rearranges algebraically to
+`leo > (hw + k·s·d0·R_ret)·k_out·R_out` — but not in floating point. The
+rearrangement re-associates the arithmetic and moves the boundary in the last
+bit, which for a candidate sitting on it changes whether the row survives the
+prune. Same lesson as the phase sort, in a place where it would have changed a
+row count rather than a decimal.
+
+### Measured and deliberately NOT taken
+
+**Hoisting the ratio-independent prologue out of the concentration sweep.**
+`_evaluate_combo_at_ratio` re-runs its whole prologue for each of the ~8 solves
+`evaluate_combo` makes per candidate, and none of it depends on `target_ratio`.
+That looked like the biggest remaining item and it is not: instrumented, the
+prologue is **7.6%** of a beneficiated run, so ~6.7% is recoverable — too little
+to justify splitting a 570-line function with ~40 locals crossing the seam.
+
+The reason it shrank is the three hoists above: the `pd.isna` parsing *was* the
+prologue's cost. **Measure the remainder after taking the cheap items, not
+before** — the ranking changes.
+
+**Inlining `max(0.0, x)`.** `builtins.max` is 4.5 M calls and ~7.9% of a
+beneficiated profile, and `x if x > 0.0 else 0.0` is ~6× cheaper per call. Left
+alone: it is spread over dozens of sites in the mass cascade, where readability
+is doing real work, for a single-digit gain.
+
+### Verification (2026-08-10)
+
+**1. NEW vs HEAD, column by column and by hash**, at both the search level and
+through `build_profitability_catalog`:
+
+```
+raw, 400 rows           124/124 columns identical | sha256 MATCH
+beneficiated, 150 rows  124/124 columns identical | sha256 MATCH
+raw, 2,500-row stride   1,052 rows | 129 columns | sha256 MATCH less version stamp
+```
+
+That last row is the stronger one: it is the full output CSV, and the **only**
+byte that differs between `1.14.1` and `1.14.2` is the `pipeline_version` column.
+
+**2. Pruned and unpruned builds still agree exactly**, which is the check
+v1.14.1 requires after touching `_combo_can_close` — and this release touched it:
+
+```
+raw, 400 rows           124/124 columns identical | sha256 MATCH
+beneficiated, 150 rows  124/124 columns identical | sha256 MATCH
+```
+
+**3. The mass-ledger identity holds exactly**, both settings, `max |error|
+0.000000000 kg`.
+
+**4. Never-worse holds, and holds exactly:**
+
+```
+pairs 162 | max benef/raw 1.000000 | exceptions 0 | declined (== 1.0) 31
+```
+
+**5. Serial and parallel are byte-identical** — required after any change to the
+search, and doubly so here because `candidate_combos` now attaches a second
+derived tuple to the rows that get pickled to workers:
+
+| | serial | 8 workers | sha256 |
+|---|---|---|---|
+| raw, 2,500-row stride | 43.6 s | 48.5 s | MATCH |
+| beneficiated, 1,200-row stride | 70.8 s | 53.6 s | MATCH |
+
+Row counts (1,052 raw / 502 beneficiated) reproduce v1.14.1's exactly, so the
+population is the same one those hashes were taken over.
+
+⚠️  The raw wall clocks are dominated by the 19.7 s CSV catalog load, which both
+paths pay; do not read a parallel speed-up out of that row. It is now most of
+that row — which is the one place the Parquet note below has started to matter.
 
 ## Config discipline
 
