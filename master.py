@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.17.0)
+"""Master Asteroid Profitability Pipeline (1.17.1)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -10205,7 +10205,7 @@ import sys
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, NamedTuple, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -10782,6 +10782,24 @@ class CalcConfig:
     # If you change anything in the search, re-run the first of those before
     # trusting a parallel number.
     parallel_workers:          int = 0
+
+    # Skip (vehicle × propellant × return mode × propellant sourcing) candidates
+    # that provably cannot close their mass budget, instead of proving it again
+    # inside the sizing loop for every power source and every concentration
+    # ratio.  See `_combo_can_close` for why this is exact rather than a
+    # heuristic: it is the loop's OWN first iteration, evaluated in closed form.
+    #
+    # The answer does not depend on this setting.  A candidate it prunes is one
+    # `max_return_payload_kg` would have reported infeasible on entry, so there
+    # is no mission behind it to lose — measured on 68,136 (combo × dv × ISRU)
+    # tuples across both settings at cislunar, zero of the pruned candidates
+    # produced a result when solved in full.
+    #
+    # Turn it OFF to check that claim on a population this repo has not tried,
+    # or to profile the unpruned search.  Do not turn it off because a number
+    # looks wrong; if pruning ever changes an output, that is a BUG in the
+    # pre-filter and the two builds should be diffed column by column.
+    prune_infeasible_combos:   bool = True
 
     # ─── PIPELINE VERSION ────────────────────────────────────────────────────
     # 1.3.0 — initial profitability calculator
@@ -11442,7 +11460,57 @@ class CalcConfig:
     #         dark_period_h, dark_period_clamped, rotation_period_h,
     #         cargo_water_kg, containment_frac, m_containment_kg,
     #         concurrent_missions.
-    pipeline_version: str = "1.14.0"
+    # 1.14.1 — PERFORMANCE ONLY.  NO NUMBER IN THIS MODULE'S OUTPUT CHANGES.
+    #         Same contract as 1.10.1, and verified the same way rather than
+    #         asserted: a pruned build and an unpruned one produce byte-
+    #         identical CSVs, and the stamp moves only so that a CSV still names
+    #         the code that produced it.  Do NOT re-measure the v1.14.0 tables
+    #         on account of this version.
+    #         • THE SEARCH SPENT ~85-94% OF ITSELF PROVING MISSIONS INFEASIBLE.
+    #           Profiled at cislunar: of 134,538 calls to
+    #           `_evaluate_combo_at_ratio` for 200 raw asteroids, 8,292 reached
+    #           the cost model — 6.2%.  Beneficiated, 19,445 of 266,584 — 7.3%.
+    #           The other 90-odd per cent paid ~20 us of prologue (eclipse,
+    #           synodic period, ISRU chemistry, tankage, EP sizing) so that
+    #           `max_return_payload_kg` could tell them what a dozen flops
+    #           already knew.
+    #         • THE FIXED POINT'S FIRST ITERATION IS ITS MOST OPTIMISTIC ONE,
+    #           and it is closed form.  It runs at hardware = mining_hardware_kg
+    #           (the plant and the electric stage are both still zero), at
+    #           containment_frac = 0, and at the shortest stay the model allows.
+    #           Every later pass only adds mass and lengthens the hold, both of
+    #           which shrink the launch bracket.  So if pass 1 does not close,
+    #           nothing downstream does.  `_combo_can_close` evaluates exactly
+    #           that condition up front.
+    #         • AND IT IS INDEPENDENT OF TWO AXES THE LOOP WAS RE-RUNNING IT
+    #           FOR.  Pass 1 cannot see `power_mode` (no plant yet) or the
+    #           concentration ratio (no feed yet), so a combo that could not
+    #           close was being re-refuted once per power source and once per
+    #           point of the concentration sweep — nine times over, which is
+    #           why a dead candidate costs 305 us beneficiated against 32 us
+    #           raw.  Hoisting the test above both loops kills the sweep whole.
+    #         Measured at cislunar: 70.6% of raw (combo × dv × ISRU) tuples
+    #         pruned and 69.5% of beneficiated ones, with ZERO of them
+    #         producing a result when solved in full.
+    #         • PER-BODY CONSTANTS WERE RE-DERIVED PER CANDIDATE.  The dark
+    #           period, the eclipse-corrected specific power, the 1/r² solar
+    #           figure, the synodic period, the mineable mass and the throughput
+    #           cap are functions of (asteroid × config) and of nothing else,
+    #           and all six were computed inside `_evaluate_combo_at_ratio` —
+    #           38,643 times apiece for 200 asteroids, re-answering the same
+    #           question about the same rock. `AsteroidContext` computes them
+    #           once per body. Same shape and same justification as 1.10.1's
+    #           ops-constant memo: the arithmetic is unchanged, the REPETITION
+    #           was the cost.
+    #         Measured against HEAD, same rows, serial: raw 7.86 s → 4.07 s
+    #         (1.93x), beneficiated 28.07 s → 16.73 s (1.68x), every one of 124
+    #         output columns identical and sha256 matching in both.
+    #         New config: prune_infeasible_combos (default True — off restores
+    #         the 1.14.0 search exactly, and is the diff to run if an output
+    #         ever moves).
+    #         New stdout line: the pruned-candidate count, so that a population
+    #         where the pre-filter stops firing is visible rather than silent.
+    pipeline_version: str = "1.14.1"
 
 
 CALC_CONFIG = CalcConfig()
@@ -13161,6 +13229,161 @@ def asteroid_mission_duration_yr(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CANDIDATE PRE-FILTER  (v1.14.1)
+# ─────────────────────────────────────────────────────────────────────────────
+# The search was spending ~90% of itself proving missions infeasible, and paying
+# the full ~20 us prologue of `_evaluate_combo_at_ratio` — eclipse geometry,
+# synodic period, ISRU chemistry, tankage, electric-stage sizing — to reach a
+# solver that then rejected the candidate on a dozen flops it could have done
+# first.  This does those flops first.
+#
+# It is EXACT, and the reason is worth stating precisely, because a pruner that
+# is merely usually right would be the worst thing that could be added to this
+# module.  The sizing loop in `_evaluate_combo_at_ratio` enters its first
+# iteration with:
+#
+#     hardware_kg      = config.mining_hardware_kg   (plant and EP stage are 0)
+#     structure_frac   = config.return_structure_frac_of_payload  (no containment)
+#     stay_est_yr      = station_keeping_floor_yr + window_wait_yr  (the minimum)
+#
+# and every subsequent pass can only ADD hardware and LENGTHEN the hold.  More
+# hardware shrinks the launch bracket; a longer hold raises the boil-off factor,
+# which raises R_ret, which shrinks it again.  So pass 1 is the most optimistic
+# cascade the loop will ever evaluate, and `if not cascade["viable"]: return
+# None` on pass 1 is a decision no later pass can overturn.
+#
+# Two further properties are what make it worth hoisting rather than merely
+# reordering.  Pass 1 cannot see `power_mode`, because the plant it would size
+# does not exist yet; and it cannot see the concentration ratio, because no feed
+# has been dug yet.  So the identical refutation was being recomputed once per
+# power source and once per point of the concentration sweep — up to eighteen
+# times for one dead candidate.
+#
+# ⚠️  This function and `max_return_payload_kg` are two statements of the same
+# algebra, which is exactly the duplication CLAUDE.md warns about ("two copies
+# of this algebra drifting apart is how a mass ends up in one cascade and not
+# the other").  They are kept adjacent for that reason, and the defence is
+# `prune_infeasible_combos = False` plus a column-by-column diff — if the two
+# ever disagree, the pruned build drops rows the unpruned one keeps and the
+# diff says so immediately.  Change one, re-run that diff.
+_PREFILTER_CONSTS_KEY = "_prefilter_consts"
+
+
+def _prefilter_propellant_consts(
+    propellant: Row,
+    config:     CalcConfig,
+) -> Optional[Tuple[float, float, float, float]]:
+    """(isp, dv_penalty, tank_frac, boiloff_pct) for one propellant, or None.
+
+    These depend only on the propellant row and the config, so they are derived
+    once per run in `candidate_combos` rather than per (asteroid × candidate).
+    None means the row cannot fly at all — no usable Isp — which is the same
+    thing `max_return_payload_kg` reports on `isp_s <= 0`.
+    """
+    try:
+        isp = float(propellant["isp_vac_s"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not np.isfinite(isp) or isp <= 0:
+        return None
+
+    dv_penalty = float(propellant.get("dv_penalty_factor", 1.0) or 1.0)
+
+    # Tank mass per kg of propellant, exactly as `_evaluate_combo_at_ratio`
+    # derives it: Module 3 quotes it per LITRE because that is what it scales
+    # with, and a row predating Module 3 v1.9.0 has neither column and comes
+    # through as 0.0.
+    tank_frac = 0.0
+    if config.model_tank_mass:
+        tank_per_L = propellant.get("tank_kg_per_L")
+        rho        = propellant.get("density_kg_per_L")
+        if (tank_per_L is not None and rho is not None
+                and not pd.isna(tank_per_L) and not pd.isna(rho)
+                and float(rho) > 0):
+            tank_frac = max(0.0, float(tank_per_L) / float(rho))
+
+    boiloff_pct = float(propellant.get("boiloff_pct_per_day", 0.0) or 0.0)
+    return isp, dv_penalty, tank_frac, boiloff_pct
+
+
+def _combo_can_close(
+    leo_capacity_kg: float,
+    consts:          Tuple[float, float, float, float],
+    dv_out_m_s:      float,
+    dv_ret_m_s:      float,
+    tps_frac:        float,
+    isru:            bool,
+    window_wait_yr:  float,
+    config:          CalcConfig,
+) -> bool:
+    """Could this candidate close its mass budget under ANY downstream choice?
+
+    True means "solve it properly"; False means no power source and no
+    concentration ratio can rescue it, because the cascade is already infeasible
+    at zero plant mass and the shortest hold.  False is therefore a decision,
+    not a guess — see the section header above for why pass 1 dominates.
+
+    Deliberately one-sided.  True does not promise a viable mission: the
+    throughput cap, the duration limit, the volume cap and the post-settle
+    launch recheck all still apply downstream, and about a quarter of the
+    survivors die on one of them.  Cheap and sound beats tight and clever here.
+    """
+    if not (np.isfinite(leo_capacity_kg) and leo_capacity_kg > 0):
+        return False
+
+    isp, dv_penalty, t, boiloff_pct = consts
+    dv_out = dv_out_m_s * dv_penalty
+    dv_ret = dv_ret_m_s * dv_penalty
+    if not (np.isfinite(dv_out) and np.isfinite(dv_ret)):
+        return False
+    if dv_out < 0 or dv_ret < 0:
+        return False
+
+    ve = isp * G0_M_S2
+    try:
+        r_out = math.exp(dv_out / ve)
+        r_ret = math.exp(dv_ret / ve)
+    except OverflowError:
+        return False        # Δv/Isp so extreme the mass ratio overflows
+
+    # Boil-off, at the SHORTEST hold the loop can settle on.  The loop folds it
+    # into an effective return Δv and then re-exponentiates; doing both here
+    # would be a log/exp round trip to recover the number we already have, so
+    # inflate R_ret directly — `r_ret_eff = 1 + (r_ret - 1) · factor` is the
+    # substitution the loop makes.  ISRU is exempt: the propellant is made at
+    # the asteroid on departure rather than held from launch.
+    if config.model_propellant_boiloff and boiloff_pct > 0 and not isru:
+        outbound_yr = max(0.5, 0.000_23 * dv_out)
+        hold_yr     = outbound_yr + config.station_keeping_floor_yr + window_wait_yr
+        r_ret = 1.0 + (r_ret - 1.0) * math.exp(
+            boiloff_pct / 100.0 * hold_yr * 365.25)
+
+    if not (np.isfinite(r_out) and np.isfinite(r_ret)):
+        return False
+
+    # Tankage closure — t·(R − 1) ≥ 1 means the tank outweighs the propellant's
+    # own contribution.  Infeasible, not expensive.
+    if t * (r_ret - 1.0) >= 1.0 or t * (r_out - 1.0) >= 1.0:
+        return False
+    k     = 1.0 / (1.0 - t * (r_ret - 1.0))
+    k_out = 1.0 / (1.0 - t * (r_out - 1.0))
+
+    s  = 1.0 + tps_frac
+    f  = max(0.0, float(config.return_structure_frac_of_payload))
+    d0 = float(config.return_vehicle_dry_kg)
+    hw = float(config.mining_hardware_kg)          # the floor: no plant, no EP
+
+    if isru:
+        # Return propellant is made on site, but the heat shield, the
+        # payload-scaling structure and the empty return tank still launch.
+        return (hw + k * s * d0) * k_out * r_out <= leo_capacity_kg
+
+    denom   = k * s * r_ret * (1.0 + f) - 1.0
+    bracket = leo_capacity_kg / (k_out * r_out) - hw - k * s * d0 * r_ret
+    return bracket > 0 and denom > 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCKET-EQUATION RETURN-MISSION SOLVER
 # ─────────────────────────────────────────────────────────────────────────────
 def max_return_payload_kg(
@@ -13927,6 +14150,104 @@ def mission_cost_usd(
 # ─────────────────────────────────────────────────────────────────────────────
 # (VEHICLE × PROPELLANT) EVALUATOR FOR ONE ASTEROID
 # ─────────────────────────────────────────────────────────────────────────────
+class AsteroidContext(NamedTuple):
+    """Everything the mission search re-derives that depends only on the BODY.
+
+    v1.14.1.  Every field here is a function of (asteroid × config) and of
+    nothing else — not the vehicle, not the propellant, not the return mode, not
+    the power source, not the concentration ratio — and every one of them was
+    being recomputed inside `_evaluate_combo_at_ratio`, i.e. once per surviving
+    candidate.  Profiled at cislunar that is 38,643 calls apiece for 200
+    asteroids: `dark_period_hours`, `eclipse_effective_w_per_kg`,
+    `solar_specific_power_w_per_kg` and `synodic_period_yr` re-answering the
+    same question about the same rock ~190 times over.
+
+    The membership test for this class is that last sentence, not the field
+    count: if a quantity varies with the CANDIDATE it does not belong here, and
+    if it varies only with the body it should.
+
+    Same shape as v1.10.1's ops-constant memo and the dict-row conversion, and
+    the same justification: the arithmetic is unchanged, so the output is
+    unchanged, and it is the REPETITION that was costing.
+
+    `ops` is `_ops_sizing_constants`' twelve-tuple, carried through rather than
+    unpacked so that adding a Module 3 row does not have to touch this class.
+    """
+    mineable_kg:           float
+    throughput_cap_kg:     float
+    structure_frac:        float
+    synodic_yr:            float
+    window_wait_yr:        float
+    ops:                   Tuple[float, ...]
+    dark_frac:             float
+    dark_h:                float
+    dark_clamped:          bool
+    solar_w_per_kg:        float
+    plant_w_per_kg_solar:  float
+    array_oversize_factor: float
+
+
+def asteroid_context(
+    asteroid_row: Row,
+    ops_df:       pd.DataFrame,
+    config:       CalcConfig,
+) -> Optional[AsteroidContext]:
+    """Build the per-body constants for one asteroid, or None if it cannot fly.
+
+    None means the row has no usable mass, which is the same thing
+    `_evaluate_combo_at_ratio` used to report by returning None on every
+    candidate in turn — so the caller bails on the whole asteroid instead of
+    discovering it 673 times.
+    """
+    asteroid_mass = asteroid_row.get("estimated_mass_kg")
+    if asteroid_mass is None or pd.isna(asteroid_mass) or asteroid_mass <= 0:
+        return None
+
+    ops = _ops_sizing_constants(ops_df)
+    base_w_per_kg    = ops[2]
+    dark_frac        = ops[7] if config.model_eclipse_power else 0.0
+    storage_wh_per_kg, storage_eta, baseline_dark_h = ops[8], ops[9], ops[10]
+
+    # The launch-window wait depends only on the target and the destination, but
+    # it is part of the stay, and the stay is how long cryogenic return
+    # propellant sits in the tank boiling off.
+    a_dest_au = (A_MARS_AU
+                 if str(config.delivery_destination).strip().lower() == "mars_surface"
+                 else 1.0)
+    synodic_yr = synodic_period_yr(asteroid_row.get("semi_major_axis_au"), a_dest_au)
+
+    # The dark period belongs to the BODY.  `dark_clamped` is carried so that a
+    # tumbler sized against the ceiling stays visible as such in the output.
+    dark_h, dark_clamped = dark_period_hours(
+        asteroid_row.get("rotation_period_h"), dark_frac,
+        config.default_rotation_period_h, config.max_dark_period_h,
+    )
+    w_per_kg = solar_specific_power_w_per_kg(
+        asteroid_row.get("semi_major_axis_au"), base_w_per_kg,
+    )
+    w_solar_eff, array_oversize_factor = eclipse_effective_w_per_kg(
+        w_per_kg, dark_h, dark_frac,
+        storage_wh_per_kg, storage_eta, baseline_dark_h,
+    )
+
+    return AsteroidContext(
+        mineable_kg           = float(asteroid_mass) * config.max_mining_fraction,
+        throughput_cap_kg     = max_payload_by_throughput_kg(config),
+        structure_frac        = max(0.0, float(config.return_structure_frac_of_payload)),
+        # Reported in full even when launch windows are switched off, which is
+        # why it is carried separately from the wait it usually implies.
+        synodic_yr            = synodic_yr,
+        window_wait_yr        = 0.5 * synodic_yr if config.model_launch_windows else 0.0,
+        ops                   = ops,
+        dark_frac             = dark_frac,
+        dark_h                = dark_h,
+        dark_clamped          = dark_clamped,
+        solar_w_per_kg        = w_per_kg,
+        plant_w_per_kg_solar  = w_solar_eff,
+        array_oversize_factor = array_oversize_factor,
+    )
+
+
 def _evaluate_combo_at_ratio(
     asteroid_row:      Row,
     vehicle:           Row,
@@ -13945,6 +14266,7 @@ def _evaluate_combo_at_ratio(
     isru:              bool = False,
     rendezvous_apsis:  str = "",
     power_mode:        str  = "solar",
+    ctx:               Optional[AsteroidContext] = None,
 ) -> Optional[Dict[str, float]]:
     """Evaluate one (vehicle × propellant × architecture) mission for one asteroid.
 
@@ -14005,23 +14327,24 @@ def _evaluate_combo_at_ratio(
         elif propellant.get("isru_feed_material") is None:
             isru_water_per_kg_prop = WATER_KG_PER_KG_HYDROLOX   # pre-v1.9.0 row
 
-    # Cap the returned payload by what the asteroid can supply
-    asteroid_mass = asteroid_row.get("estimated_mass_kg")
-    if asteroid_mass is None or pd.isna(asteroid_mass) or asteroid_mass <= 0:
-        return None
-    mineable_kg = float(asteroid_mass) * config.max_mining_fraction
-    throughput_cap_kg = max_payload_by_throughput_kg(config)
-    structure_frac = max(0.0, float(config.return_structure_frac_of_payload))
+    # ── Per-body constants (v1.14.1) ─────────────────────────────────────────
+    # Mineable mass, the throughput cap, the launch-window wait, the ops-table
+    # constants, the dark period and the eclipse-corrected specific power are
+    # all functions of (asteroid × config) alone.  They used to be derived here,
+    # which meant re-deriving them for every candidate mission — see
+    # `AsteroidContext` for the call counts.  `ctx` is built once per asteroid
+    # by `evaluate_asteroid`; rebuilding it when a caller does not supply one
+    # keeps this function usable on its own.
+    if ctx is None:
+        ctx = asteroid_context(asteroid_row, ops_df, config)
+        if ctx is None:
+            return None      # no usable mass — nothing to cap the payload with
 
-    # ── Launch window (v1.7.0) ───────────────────────────────────────────────
-    # Hoisted above the sizing loop in v1.10.0: the wait depends only on the
-    # target and the destination, but it is part of the stay, and the stay is
-    # how long cryogenic return propellant sits in the tank boiling off.
-    a_dest_au = (A_MARS_AU
-                 if str(config.delivery_destination).strip().lower() == "mars_surface"
-                 else 1.0)
-    synodic_yr     = synodic_period_yr(asteroid_row.get("semi_major_axis_au"), a_dest_au)
-    window_wait_yr = 0.5 * synodic_yr if config.model_launch_windows else 0.0
+    mineable_kg       = ctx.mineable_kg
+    throughput_cap_kg = ctx.throughput_cap_kg
+    structure_frac    = ctx.structure_frac
+    synodic_yr        = ctx.synodic_yr
+    window_wait_yr    = ctx.window_wait_yr
 
     # ── Power-plant feedback loop (v1.5.0, beneficiation only) ───────────────
     # The processing plant's array mass rides in the same rocket equation as
@@ -14035,33 +14358,27 @@ def _evaluate_combo_at_ratio(
     # keeps a default run bit-identical to v1.4.0.
     (dig_wh, benef_wh, base_w_per_kg, ep_eff, ep_kg_per_kw,
      rtg_w_per_kg, ppu_only_kg_per_kw,
-     dark_frac, storage_wh_per_kg, storage_eta, baseline_dark_h,
-     containment_per_kg) = _ops_sizing_constants(ops_df)
+     _dark_frac_raw, storage_wh_per_kg, storage_eta, baseline_dark_h,
+     containment_per_kg) = ctx.ops
     # ── Eclipse / night-side power (v1.14.0) ─────────────────────────────────
     # The dark period belongs to the BODY, so it is resolved once per asteroid
     # rather than per candidate mission.  `dark_clamped` is reported so a
     # tumbler sized against the 72 h ceiling is visible as such.
-    if not config.model_eclipse_power:
-        dark_frac = 0.0
-    dark_h, dark_clamped = dark_period_hours(
-        asteroid_row.get("rotation_period_h"), dark_frac,
-        config.default_rotation_period_h, config.max_dark_period_h,
-    )
+    dark_frac    = ctx.dark_frac        # already zeroed if model_eclipse_power is off
+    dark_h       = ctx.dark_h
+    dark_clamped = ctx.dark_clamped
     # Solar for the electric-propulsion array always (see power_source_for_target
     # for why a radioisotope source cannot serve hundreds of kilowatts), and for
     # the processing plant until the loop below learns how much power it needs.
-    w_per_kg = solar_specific_power_w_per_kg(
-        asteroid_row.get("semi_major_axis_au"), base_w_per_kg,
-    )
-    ep_w_per_kg   = w_per_kg
+    #
     # v1.14.0: the PROCESSING plant is the one that stands in the body's shadow.
     # The EP array does not — it is in interplanetary cruise, in permanent
     # sunlight — so `ep_w_per_kg` keeps the bare 1/r² figure and only the plant
     # takes the night-side penalty.
-    w_solar_eff, array_oversize_factor = eclipse_effective_w_per_kg(
-        w_per_kg, dark_h, dark_frac,
-        storage_wh_per_kg, storage_eta, baseline_dark_h,
-    )
+    w_per_kg              = ctx.solar_w_per_kg
+    ep_w_per_kg           = w_per_kg
+    w_solar_eff           = ctx.plant_w_per_kg_solar
+    array_oversize_factor = ctx.array_oversize_factor
     plant_w_per_kg = w_solar_eff
     power_source   = "solar"
 
@@ -14996,6 +15313,7 @@ def evaluate_combo(
     isru:              bool = False,
     rendezvous_apsis:  str = "",
     power_mode:        str  = "solar",
+    ctx:               Optional[AsteroidContext] = None,
 ) -> Optional[Dict[str, float]]:
     """Best mission for one (asteroid × vehicle × propellant × architecture),
     optimising over how hard to concentrate.  "Best" is `selection_key`, which
@@ -15026,7 +15344,7 @@ def evaluate_combo(
         best_phase_value_per_kg=best_phase_value_per_kg,
         phases=phases, target_ratio=r, beneficiate=b, markets=markets,
         aero=aero, isru=isru, rendezvous_apsis=rendezvous_apsis,
-        power_mode=power_mode,
+        power_mode=power_mode, ctx=ctx,
     )
 
     if not config.use_beneficiation:
@@ -15201,11 +15519,66 @@ def candidate_combos(
         pdf = pdf[pdf["name"].isin(config.candidate_propellants)]
 
     propellant_rows = [_row_to_dict(row) for _, row in pdf.iterrows()]
+    # v1.14.1: the four scalars the candidate pre-filter needs depend only on
+    # the propellant row and the config, so they are derived here — once per
+    # run, on the same dict every asteroid will read — rather than re-parsed out
+    # of the row for each of the ~1.4 billion (asteroid × candidate) tuples a
+    # full catalog produces.  Stashed on the row itself so it crosses the worker
+    # boundary with everything else; `_PREFILTER_CONSTS_KEY` is private and
+    # nothing else in the module reads it.
+    for propellant in propellant_rows:
+        propellant[_PREFILTER_CONSTS_KEY] = _prefilter_propellant_consts(
+            propellant, config)
     return [
         (vehicle, propellant)
         for vehicle in (_row_to_dict(v) for _, v in vdf.iterrows())
         for propellant in propellant_rows
     ]
+
+
+def _prefilter_probe(
+    asteroid_row: Row,
+    combos:       List[Tuple[Dict[str, Any], Dict[str, Any]]],
+    config:       CalcConfig,
+) -> Tuple[int, int]:
+    """(candidates considered, candidates kept) for one asteroid.
+
+    Mirrors the loop nest in `evaluate_asteroid` exactly — same axes, same
+    order, same test — so the printed rate describes the search that is about
+    to run rather than an approximation of it.  Diagnostic only; nothing in the
+    pipeline consumes the answer.
+    """
+    window_wait_yr = 0.0
+    if config.model_launch_windows:
+        a_dest_au = (A_MARS_AU
+                     if str(config.delivery_destination).strip().lower() == "mars_surface"
+                     else 1.0)
+        window_wait_yr = 0.5 * synodic_period_yr(
+            asteroid_row.get("semi_major_axis_au"), a_dest_au)
+
+    dv_options   = asteroid_dv_options(asteroid_row, config)
+    isru_allowed = (config.use_isru_return_propellant
+                    and config.optimise_architecture_per_asteroid)
+
+    seen = kept = 0
+    for vehicle, propellant in combos:
+        isru_modes = [False]
+        if config.use_isru_return_propellant and isru_feed_kg_per_kg_propellant(
+                asteroid_row, propellant, config) is not None:
+            isru_modes = [False, True] if isru_allowed else [True]
+        pf_consts = propellant.get(_PREFILTER_CONSTS_KEY)
+        leo_cap   = float(vehicle.get("payload_leo_kg", 0) or 0)
+        for dv_opt in dv_options:
+            for isru in isru_modes:
+                seen += 1
+                if pf_consts is not None and _combo_can_close(
+                        leo_cap, pf_consts,
+                        float(dv_opt["dv_out_m_s"]), float(dv_opt["dv_ret_m_s"]),
+                        (config.heat_shield_frac_of_payload
+                         if bool(dv_opt["aero"]) else 0.0),
+                        isru, window_wait_yr, config):
+                    kept += 1
+    return seen, kept
 
 
 def evaluate_asteroid(
@@ -15241,6 +15614,14 @@ def evaluate_asteroid(
     # Bulk $/kg for this asteroid's blended composition
     bulk_value = asteroid_bulk_value_usd_per_kg(asteroid_row, minerals)
     if bulk_value <= 0:
+        return None
+
+    # Everything about this BODY that the mission search would otherwise
+    # re-derive per candidate — mineable mass, throughput cap, launch-window
+    # wait, ops constants, dark period, eclipse-corrected specific power
+    # (v1.14.1).  None means no usable mass, which no candidate could rescue.
+    ctx = asteroid_context(asteroid_row, ops_df, config)
+    if ctx is None:
         return None
     # Purity bound for beneficiation — the richest concentrate obtainable.
     # Computed once per asteroid rather than per combo; it depends only on
@@ -15299,19 +15680,63 @@ def evaluate_asteroid(
                 _eff, _rtg_w, 1.0, config.rtg_max_power_w)[1] == "rtg":
             power_modes.append("rtg")
 
+    # ── Candidate pre-filter (v1.14.1) ───────────────────────────────────────
+    # The launch-window wait is part of the shortest stay the sizing loop can
+    # settle on, so the pre-filter has to price boil-off at the same hold the
+    # loop's first pass would.  Taken from `ctx` rather than recomputed, so the
+    # two cannot drift.
+    prefilter      = bool(getattr(config, "prune_infeasible_combos", True))
+    window_wait_yr = ctx.window_wait_yr
+
     # Keep the best candidate under the selection objective — see
     # selection_key for why that is not simply the highest profit.
+    # Whether ISRU chemistry closes is a (target × PROPELLANT) question and the
+    # combo grid is vehicle-major, so asking it per combo asked it once per
+    # vehicle — 36 times for each of the 41 propellant rows, for every asteroid
+    # in the catalog.  Memoised on the propellant's identity, which is stable:
+    # `candidate_combos` builds one dict per propellant row and shares it across
+    # every vehicle pairing (v1.14.1).
+    isru_mode_cache: Dict[int, List[bool]] = {}
+
     best     = None
     best_key = (-np.inf, -np.inf)
     for vehicle, propellant in combos:
-        isru_modes = [False]
-        if config.use_isru_return_propellant and isru_feed_kg_per_kg_propellant(
-                asteroid_row, propellant, config) is not None:
-            # Feasible here.  Price both when searching; otherwise take ISRU as
-            # the config's instruction and fly it wherever it is possible.
-            isru_modes = [False, True] if isru_allowed else [True]
+        isru_modes = isru_mode_cache.get(id(propellant))
+        if isru_modes is None:
+            isru_modes = [False]
+            if config.use_isru_return_propellant and isru_feed_kg_per_kg_propellant(
+                    asteroid_row, propellant, config) is not None:
+                # Feasible here.  Price both when searching; otherwise take ISRU
+                # as the config's instruction and fly it wherever it is possible.
+                isru_modes = [False, True] if isru_allowed else [True]
+            isru_mode_cache[id(propellant)] = isru_modes
+        # `candidate_combos` attaches these, but a caller that hand-builds
+        # `combos` will not have.  Derive on demand rather than treating the
+        # missing key as "no usable Isp" — that reads as infeasible and would
+        # prune the ENTIRE search silently, which is the quiet-wrong-answer
+        # failure this repo keeps finding.  Absent means unknown, not dead.
+        if prefilter and _PREFILTER_CONSTS_KEY not in propellant:
+            propellant[_PREFILTER_CONSTS_KEY] = _prefilter_propellant_consts(
+                propellant, config)
+        pf_consts = propellant.get(_PREFILTER_CONSTS_KEY) if prefilter else None
+        leo_cap   = float(vehicle.get("payload_leo_kg", 0) or 0)
         for dv_opt in dv_options:
             for isru in isru_modes:
+                # Sits ABOVE the power-source loop on purpose: pass 1 of the
+                # sizing loop runs at zero plant mass, so it cannot tell the two
+                # power sources apart and would refute both identically.
+                #
+                # pf_consts is None only when the propellant states no usable
+                # Isp, which `max_return_payload_kg` rejects on entry too — so
+                # pruning it here agrees with the solver rather than pre-empting
+                # it.
+                if prefilter and not (pf_consts is not None and _combo_can_close(
+                        leo_cap, pf_consts,
+                        float(dv_opt["dv_out_m_s"]), float(dv_opt["dv_ret_m_s"]),
+                        (config.heat_shield_frac_of_payload
+                         if bool(dv_opt["aero"]) else 0.0),
+                        isru, window_wait_yr, config)):
+                    continue
                 for power_mode in power_modes:
                     result = evaluate_combo(
                         asteroid_row, vehicle, propellant,
@@ -15322,7 +15747,7 @@ def evaluate_asteroid(
                         phases=phases, markets=markets,
                         aero=bool(dv_opt["aero"]), isru=isru,
                         rendezvous_apsis=str(dv_opt["rendezvous_apsis"]),
-                        power_mode=power_mode,
+                        power_mode=power_mode, ctx=ctx,
                     )
                     if result is None:
                         continue
@@ -15646,6 +16071,33 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
         return pd.DataFrame()
     print(f"     🔧  {len(combos):,} vehicle × propellant combinations per asteroid")
 
+    # ── How much the pre-filter is actually removing (v1.14.1) ───────────────
+    # Probed rather than tallied.  A running count would have to come back from
+    # every worker, which means changing what a chunk returns, and the number is
+    # a property of the POPULATION — a stride probe answers it to well inside
+    # the precision anyone reads it at.
+    #
+    # Print it because the failure mode is silence.  If a future Δv model, ops
+    # table or vehicle set makes the pre-filter stop firing, the run simply gets
+    # slower and nothing says why; and a rate that jumps to ~100% means it is
+    # eating the catalog, which is the shape of a genuine bug.  Both are visible
+    # here and nowhere else.
+    if config.prune_infeasible_combos and len(work_df) > 0:
+        probe_idx = np.unique(
+            np.linspace(0, len(work_df) - 1, min(200, len(work_df)))
+            .round().astype(int)
+        )
+        seen = kept = 0
+        for _, prow in work_df.iloc[probe_idx].iterrows():
+            seen_row, kept_row = _prefilter_probe(_row_to_dict(prow),
+                                                  combos, config)
+            seen += seen_row
+            kept += kept_row
+        if seen:
+            print(f"     ✂️   Pre-filter keeps {kept / seen * 100:.1f}% of "
+                  f"candidates ({seen - kept:,} of {seen:,} pruned on a "
+                  f"{len(probe_idx)}-row probe; prune_infeasible_combos)")
+
     n = len(work_df)
 
     # Lightweight progress report every ~1%.
@@ -15888,7 +16340,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.17.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.17.1")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
