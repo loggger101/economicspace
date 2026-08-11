@@ -237,6 +237,26 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         ],
     ),
     (
+        "Hopeless candidates (v1.14.1)",
+        "⚠️  Leave this ON. Roughly **76% of the (vehicle × propellant × return "
+        "mode × propellant sourcing) candidates the search generates cannot "
+        "close their mass budget at all** — they are not bad missions, they are "
+        "not missions. Before v1.14.1 each one paid the full sizing prologue to "
+        "be told so, once per power source and once per point of the "
+        "concentration sweep: up to eighteen times for the same dead candidate. "
+        "Skipping them makes the search 1.5–1.7× faster and changes NO output, "
+        "because the test is the sizing loop's own first iteration in closed "
+        "form, and that iteration is the most optimistic one it will ever take. "
+        "Turn it OFF only to reproduce the v1.14.0 search, or to check the "
+        "pruner on a population nobody has tried — if an output ever moves, "
+        "that is a bug in the pre-filter, not a result. The run log prints how "
+        "much it is actually removing; a rate near 0% or near 100% is worth "
+        "investigating either way.",
+        [
+            ("calc", "prune_infeasible_combos"),
+        ],
+    ),
+    (
         "The sixteen corrections",
         "⚠️  These default ON and each one moved every number. They are "
         "corrections, not options: the flags exist to isolate an effect, not "
