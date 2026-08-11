@@ -526,7 +526,7 @@ not superseded by it, it is simply unmeasured (~21 h for the pair).
 > N = F × trips.
 >
 > So `optimise_programme_scale` searches the **fleet** and lets N follow. It
-> costs **1.04–1.13× runtime, not 12×**, because programme size touches nothing
+> costs **1.51× runtime, not 12×** — measured on the full catalog — because programme size touches nothing
 > in the mass cascade — the rocket equation, the power fixed point, the payload
 > knapsack and the concentration sweep are all solved once per candidate and the
 > whole ladder is priced off the result.
@@ -1425,8 +1425,8 @@ calendar years.
 **Programme size and fleet size became a searched axis.** v1.14.0 made market
 saturation see N and thereby made the scale curve *turn*; nothing then searched
 for the turn, and the curve was mapped by re-running the whole pipeline at
-N = 1, 10, 100. Two structural facts make searching it cost **1.04–1.13×
-runtime, not 12×**:
+N = 1, 10, 100. Two structural facts make searching it cost **1.51× runtime,
+not 12×** (measured on the full catalog; a 2,500-row sample said 1.13×):
 
 1. **N enters nothing in the mass cascade.** It appears in the cost model,
    the saturation block and the reliability block, and in none of the rocket
@@ -1451,6 +1451,40 @@ refinement, which now depends on N, failing to price a ratio that would have won
 at a different programme size. Raising `concentration_search_steps` from 7 to 25
 makes the ladder return the brute-force optimum exactly, which is what identifies
 the grid rather than the fleet argument as the cause.
+
+#### Measured on the full catalog (2026-08-11)
+
+Both cells, all **1,554,353 rows** at cislunar raw, one process, 12 workers,
+**650,516 evaluable** in each:
+
+| | search off (N = 1) | search on |
+|---|---|---|
+| best cost/revenue | **26.7863×** | **14.1730×** (−47.1%) |
+| winner | 2021 CX5 (D), New Glenn, **xenon** | 2021 CX5 (D), New Glenn, **iodine** |
+| N / fleet | 1 / 1 | **5 / 1** |
+| wall clock | 1,306 s | 1,978 s (**1.51×**) |
+
+Never-worse holds on the whole population — **650,516 pairs, 0 worse, 650,515
+improved, median improvement 45.3%.** `N = F × trips` on every single row. Fleet
+sizes: 46.8% of bodies want one ship, median 2, and 0.37% pile up against
+`max_fleet_ships` (bodies whose payloads have no finite market — the run flags
+them).
+
+🚨 **Run 1 reproduces the committed v1.14.0 cell exactly** — ratio, evaluable
+rows, winner, vehicle, propellant, payload to the kilogram, saturation
+multiplier, `p_mining`, RTG share, and the whole propellant split. v1.14.1 and
+v1.14.2 argued bit-identity from ≤2,500-row samples and v1.15.0 argued inertness
+from 400; **all three now hold on 1.55 million bodies at once.** The run also
+measures those two performance releases at **4.10×** on a full cell, inside the
+projected 3.4–4.6×.
+
+🚨 **And one claim did not survive.** This release originally recorded
+**1.04–1.13×** runtime for the search, from a 2,500-row sample. On the full
+catalog it is **1.51×** — the sample understated it by ~1.4×. That is the third
+time a stride sample has mispredicted full-catalog runtime here, in both
+directions, and it extends the standing rule from absolute wall clocks to
+*ratios between two settings*. Every other number in the release came out where
+the sample said; only the runtime moved.
 
 ⚠️ **Default OFF**, and it is the one axis in Stage 4 that is not a correction:
 it changes the question from "the best single mission to this rock" to "the best
