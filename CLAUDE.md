@@ -63,8 +63,17 @@ See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.1.0`, mineral_value `1.7.0`, transportation `1.12.0`,
-calc `1.15.0`, master `1.18.0` (the master version is a literal in
+calc `1.16.0`, master `1.19.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
+
+⚠️  **calc `1.16.0` charges programme calendar time, and like `1.15.0` it moves
+numbers only for programmes.** It is exactly inert at W = 1 — one campaign per
+ship — which is every N = 1 run, which is every measured cell in this file
+except the N = 10 / N = 100 curve. Verified rather than argued: at N = 1 the
+400-row raw cislunar sample is **141 of 141 columns identical, sha256 MATCH**
+with the term on and off. Do not re-measure a single-mission cell on account of
+it. The N = 10 / N = 100 curve **does** move and is now a `1.14.0` measurement
+of a model that has been superseded twice.
 
 ⚠️  **calc `1.15.0` moves numbers only for programmes, not for single missions,
 and every measured cell in this file is a single mission.** Its two items — a
@@ -704,6 +713,45 @@ extinct — hydrolox holds 1.9–8.1% everywhere.
 **0.00% at `cislunar` and `lunar_surface`**. Nobody asserted that; the airless
 destinations ignore the flag and the search declines it on its own.
 
+Launch vehicles, raw, per destination — measured on the same runs and never
+recorded until 2026-08-11:
+
+| destination | Falcon Heavy | SLS Block 1B | New Glenn | Vulcan VC6 | rest |
+|---|---|---|---|---|---|
+| `cislunar` | 66.43% | 31.59% | 1.68% | 0.13% | 0.17% |
+| `lunar_surface` | 67.98% | 30.95% | 0.64% | 0.19% | 0.23% |
+| `leo` | 69.56% | 21.33% | 8.80% | 0.24% | 0.07% |
+| `earth_surface` | 66.47% | 23.34% | 9.86% | 0.25% | 0.07% |
+| `mars_surface` | 79.94% | 10.72% | 5.70% | 2.61% | 1.03% |
+| `cislunar` benef | 64.87% | 30.20% | 4.28% | 0.33% | 0.33% |
+
+**Two vehicles carry 88–98% of every cell**, and the spread that does exist is
+Mars': it takes the least SLS (10.7% against 21–32%) and the most Vulcan and
+Ariane. That is the separate heliocentric transfer showing up in the vehicle
+column — a Mars delivery pays no Earth capture, so its stacks are lighter and a
+mid-class vehicle closes missions that need SLS anywhere else.
+
+⚠️  **The winner's vehicle is not the population's.** Every raw winner in the
+matrix above flies a New Glenn or a Falcon Heavy while New Glenn takes 0.6–9.9%
+of rows. Do not read a share table as a statement about the best mission, or a
+winner as a statement about the fleet.
+
+**ISRU return propellant, share of rows**: `cislunar` 8.11%, `lunar_surface`
+3.76%, `mars_surface` 2.06%, `leo` 1.93%, `earth_surface` 1.89%, and `cislunar`
+beneficiated 10.33%. Each tracks its cell's **hydrolox** share to within
+**0.03 pp** — 8.1097 against 8.1106 at `cislunar`, exact to four decimals at
+`lunar_surface` — which is the consistency to expect rather than a coincidence,
+since hydrolox is the ISRU route the search overwhelmingly takes.
+
+⚠️  They are near-equal, not equal, and the residual runs **both** ways: at
+`leo` and `earth_surface` hydrolox slightly *exceeds* ISRU (1.9493 vs 1.9292),
+so a few missions buy hydrolox on Earth rather than make it, while at
+`mars_surface` ISRU exceeds hydrolox (2.0606 vs 2.0522), so a few make
+something else. Neither residual has been traced to a propellant, and the
+water-ion share is not the place to look for it — `cislunar` runs 15.58% water
+ion against 8.11% ISRU, so most water-propelled missions are carrying their
+water up from Earth.
+
 **Power source, RTG share**: `lunar_surface` 3.96%, `cislunar` 5.44%,
 `mars_surface` 6.50%, `leo` 8.24%, `earth_surface` 8.46%, and `cislunar`
 beneficiated **10.83%**.
@@ -729,6 +777,11 @@ pairs 650,516 | max benef/raw 1.000000 | exceptions 0 | declined (== 1.0) 102,70
 
 That is the documented signature and nothing else: never worse, and equal
 wherever beneficiation declines. 15.8% of bodies decline to concentrate.
+
+ℹ️  That 15.8% is over the **650,516 joined pairs**. The beneficiated run's own
+`concentration_ratio <= 1.0` column reports **15.61%**, over its **659,847**
+rows — the 9,331 bodies that are evaluable beneficiated but not raw are in one
+denominator and not the other. Both are right; quote which one.
 
 **2. The mass-ledger identity holds exactly**, on every row of all six cells:
 
@@ -761,6 +814,42 @@ the answer is no. Restating it as a count is what made a 15,566-row result
 sound like a physical law. Same lesson this file already records for the RTG
 branch: *how often a branch fires is a statement about the population, not
 about whether the branch is right.*
+
+✅  **THAT CHECK IS NOW ANSWERED AT EVERY DESTINATION** (2026-08-11), read off
+the archived full-catalog CSVs rather than re-run. **A `replicated` device never
+wins anywhere** — eight cells, zero wins:
+
+| cell | survivors | share | best replicated | its rank | vs the cell's best |
+|---|---|---|---|---|---|
+| `lunar_surface` raw | **0** | — | — | — | — |
+| `cislunar` raw | 13 | 0.002% | 34.6263× | 39 | 1.29× worse |
+| `cislunar` benef | 327 | 0.050% | 44.6634× | 8,602 | 2.17× |
+| `cislunar` raw, N = 10 | 378 | 0.058% | 28.0197× | 5,741 | 2.06× |
+| `cislunar` raw, N = 100 | 471 | 0.072% | 46.0062× | 19,233 | 2.51× |
+| `mars_surface` raw | 835 | 0.114% | **78.9916×** | **5** | **1.06×** |
+| `leo` raw | 4,710 | 0.607% | 93.6443× | 62 | 1.32× |
+| `earth_surface` raw | 5,479 | 0.699% | 47,861.1154× | **7** | 1.10× |
+
+⚠️  **The honest statement is "never wins", NOT "never comes near", and the
+cislunar cell is the one that makes it look comfortable.** At `mars_surface` a
+FEEP mission is the **fifth-best body in the catalog**, 5.8% off the winner; at
+`earth_surface` it is **seventh**, 9.5% off. Quoting cislunar's rank 39 and
+1.29× as the margin overstates how much room the gate has. It holds at every
+destination — but on half the cells it holds by a few percent, not by a factor,
+and a modest change to thruster mass or to the population could flip one.
+
+⚠️  **The survivor count spans 400× across destinations** — 0 at
+`lunar_surface` against 5,479 at `earth_surface` — on one model, one catalog and
+one release. That is the population argument far more sharply than a
+15,566-row result could ever have made it, and it is exactly why the count is
+not the test.
+
+**Every survivor in every cell is FEEP**, 12,213 rows of it. Not one PPT and not
+one electrospray row survives anywhere, at any destination or programme size —
+where v1.12.0's pre-gate run had PPT winning **31.8%** of cislunar rows and
+electrospray **24.3%**. Both are now absent from the model's output entirely;
+only the lightest of the three `replicated` technologies (2,500 kg/N against
+5,000 and 10,000) ever closes a mass budget at all.
 
 ### The v1.12.0 cislunar cells (superseded — measured on 15,407 / 15,566 rows)
 
@@ -1122,18 +1211,27 @@ per technology and Module 4 derives the thrust its mission needs, so a device
 that makes µN per kilogram reports thousands of tonnes of thruster and dies in
 the rocket equation on its own. Same shape as propellant tankage.
 
-## The twenty-one things the model stopped giving away
+## The twenty-two things the model stopped giving away
 
 Each defaults ON and each moved every number. They are corrections, not
 options; the flags exist to isolate effects, not to be left off.
+
+One arrived in v1.16.0 and is under "What calc v1.16.0 changed": **programme
+calendar time**, where a programme took decades and was charged for none of
+them — the NRE and the rig are bought once at t = 0 and amortised across
+campaigns one rig can only fly one after another, and every one of those shares
+was compounded over a single mission duration.
 
 One arrived in v1.15.0 and is under "What calc v1.15.0 changed": **the rig's
 duty cycles**, where `missions_sharing_rig` divided a fifteen-**year** calendar
 life by the stay and treated the quotient as the machine's whole life, so one
 rig was good for twelve consecutive digs on a number that only ever promised it
-would not corrode. It is the one item on this list that is inert at N = 1 — it
-bounds programmes, not missions — which is why no measured cell in this file
-moves for it.
+would not corrode.
+
+⚠️  **Those two are the only items on this list that are inert at N = 1.** Both
+bound programmes rather than missions, which is why no single-mission cell in
+this file moves for either — and why neither can be checked by re-running a
+headline. The rest of the list moves every number in the model.
 
 ⚠️  **`optimise_programme_scale` is NOT on this list and must not be added to
 it.** It is a search axis, not a correction: it defaults OFF, and turning it on
@@ -1348,6 +1446,40 @@ vehicle goes New Glenn → New Glenn → **H3 (24L)**. Saturation punishes volum
 so at programme scale the model prefers more, smaller missions. The old curve
 could not express this at all, because saturation could not see N.
 
+✅  **And the WHOLE POPULATION moves the same way, not just the winner** —
+recorded 2026-08-11 off the same three runs, never previously read out:
+
+| | N = 1 | N = 10 | N = 100 |
+|---|---|---|---|
+| Falcon Heavy (57 t) | 66.43% | 69.76% | 58.99% |
+| SLS Block 1B (105 t) | 31.59% | 25.66% | 25.06% |
+| New Glenn (45 t) | 1.68% | 3.58% | **13.91%** |
+| H3 24L (16.5 t) | 0.07% | 0.32% | **1.25%** |
+| *capacity-weighted mean* | *71.8 t* | *68.5 t* | *66.6 t* |
+
+New Glenn is **smaller** than Falcon Heavy in this table (45 t against 57 t), so
+its 8× rise and SLS's fall are the same effect as the winner's, and the
+capacity-weighted mean falls monotonically. The winner moves much further than
+the fleet does — 93.3 t of vehicle to 16.5 t against the mean's −7.4% — which is
+what you would expect from a term that bites hardest on the largest payloads.
+
+**Propellant follows, and iodine takes over at scale:**
+
+| | N = 1 | N = 10 | N = 100 |
+|---|---|---|---|
+| xenon | 42.65% | 39.90% | **15.46%** |
+| iodine | 25.19% | 26.10% | **49.64%** |
+| water ion | 15.58% | 18.71% | 19.39% |
+| krypton | 8.01% | 9.45% | 9.53% |
+| hydrolox | 8.11% | 5.00% | 4.89% |
+
+Xenon loses two thirds of its share and iodine roughly doubles. Note this is the
+*reverse* of what the eclipse term did in v1.14.0, which is what took xenon from
+iodine in the first place — so the xenon/iodine ranking is not a property of the
+model, it is a property of the model **at N = 1**, and every propellant-share
+table in this file is a single-mission table. RTG share drifts 5.44% → 6.11% →
+6.34%.
+
 ⚠️  **Three points, so "near N = 10" is the lowest of the points sampled, not a
 located optimum.** The minimum lies somewhere between 1 and 100 and nothing
 here pins it more tightly.
@@ -1358,6 +1490,16 @@ here pins it more tightly.
 > life**, so 1 / 10 / 100 were sampling a grid whose points mostly *cannot* be
 > optimal. Within a fleet band the saturation multiplier is constant while every
 > other lever improves with N, so the best N in a band is its top, N = F × trips.
+>
+> 🚨  **"Provably" is RETIRED by calc `1.16.0`.** The proof rested on "every
+> lever improves with N and none pushes back", and programme calendar time is a
+> lever that pushes back — it grows like `y^W` while NRE/N falls like `1/N`. So
+> the optimum N need not be a multiple of the trip life, campaigns-per-ship is
+> searched (exhaustively, not laddered), and the claim above is now only a
+> *usually*. Measured: on the 400-row raw cislunar sample it still comes out at
+> the band top on all 168 rows, so the answer survives even though the argument
+> does not — but against a Module 3 table without the trip cap, 12 of 168 rows
+> break it. **Do not restore "provably" from this or any earlier revision.**
 >
 > `optimise_programme_scale` searches the FLEET and lets N follow, jointly with
 > every other architecture axis, at **1.51× runtime measured on the full
@@ -1957,6 +2099,12 @@ either full run.
 > **none of them competitive** (best 34.6× against 26.7863×). Survival was
 > never the right test, because `thruster_kg_per_n` is a mass penalty rather
 > than a threshold. **Test whether one wins.**
+>
+> That test is answered at all five destinations as of 2026-08-11 — **never, in
+> eight cells** — and the margin is much tighter than cislunar suggests: rank 5
+> at `mars_surface` and rank 7 at `earth_surface`, 5.8% and 9.5% off the
+> winner. Survivors run 0 to 5,479 rows depending only on the destination, and
+> every one of them is FEEP. See the v1.14.0 verification block near the top.
 
 **Chemical propulsion is no longer extinct.** Hydrolox takes 5.5% of cislunar
 rows and methalox 0.1%. The old "chemical is extinct in this model" line was
@@ -2214,6 +2362,12 @@ signature again: the term disqualifies rather than taxes.
 > a mass penalty rather than a threshold, exactly as designed, so survival was
 > never the thing to test. **Test whether one WINS.** Do not restore "zero
 > survive anywhere" from this or any earlier revision.
+>
+> ✅  As of 2026-08-11 that test is run at every destination and a `replicated`
+> device wins **none of eight cells** — but at `mars_surface` the best one is
+> the catalog's **fifth**-ranked body and at `earth_surface` its **seventh**, so
+> do not restore "none is remotely competitive" as a general claim either. It is
+> true at cislunar and nowhere else.
 
 Full-catalog wall clock at cislunar: **86 s raw / 463 s beneficiated**, against
 89 s / 462 s on `1.11.0` — unchanged, because the extra knapsack calls are
@@ -2840,11 +2994,17 @@ What genuinely remains:
 
   ⚠️  **Superseded as a method by calc `1.15.0`, though not as a measurement.**
   Re-running at N = 10 and N = 100 samples a grid whose points mostly cannot be
-  optimal — the optimum N is always a whole multiple of the rig's trip life, so
-  N = 10 and N = 100 are the right answer only by coincidence.
+  optimal — the optimum N is *usually* a whole multiple of the rig's trip life,
+  so N = 10 and N = 100 are the right answer only by coincidence.
   `optimise_programme_scale` locates it per body inside ONE run, at 1.51×
-  runtime (measured, full catalog) rather than 2×. What genuinely remains here is a **full-catalog run
-  with the search on**, which is one raw cislunar pass and has not been done.
+  runtime (measured, full catalog on `1.15.0`) rather than 2×. What genuinely
+  remains here is a **full-catalog run with the search on**, which is one raw
+  cislunar pass and has not been done — and it should now be done on `1.16.0`,
+  whose search is two-dimensional and has only been timed on a 400-row sample.
+  ⚠️  "Always a whole multiple" was `1.15.0`'s wording and calc `1.16.0` demoted
+  it to "usually" — programme calendar time pushes back inside a band. The N =
+  10 / N = 100 curve is also a `1.14.0` measurement and **does** move under
+  `1.16.0`, unlike every N = 1 cell in this file.
 - **The historical progression 2.2× → 14× → 39× → 34× → 25×.** Still not
   fixable by re-running: it is a per-release series, so rebuilding it means
   running old code.
@@ -3553,19 +3713,23 @@ habit this file already prescribes.
 
 ### What this release does NOT close
 
-**Programme calendar time is still free.** The fleet is only ever the *minimum*
-that can fly N missions, `ceil(N / trips)`, because nothing charges for the
-decades a serialised programme spends waiting: WACC compounds over
-`mission_duration_yr`, per mission, and there is no programme-level discount. So
-a 5-ship, 25-mission programme is priced as though its five sequential campaigns
-per ship happened at once.
+✅  **CLOSED IN v1.16.0 — see "What calc v1.16.0 changed".** The gap read:
 
-That makes fleet size a **one-sided** decision — more ships only ever adds
-saturation, never buys schedule — and it is the reason F never exceeds the
-minimum. Closing it means discounting the programme over
-`ceil(N / F) × mission_duration`, which would make F a genuine two-sided trade
-and would move every cost in the model. It is named here rather than
-implemented, and it is the obvious next item.
+> **Programme calendar time is still free.** The fleet is only ever the
+> *minimum* that can fly N missions, `ceil(N / trips)`, because nothing charges
+> for the decades a serialised programme spends waiting: WACC compounds over
+> `mission_duration_yr`, per mission, and there is no programme-level discount.
+> So a 5-ship, 25-mission programme is priced as though its five sequential
+> campaigns per ship happened at once. That makes fleet size a **one-sided**
+> decision — more ships only ever adds saturation, never buys schedule — and it
+> is the reason F never exceeds the minimum.
+
+Two things about closing it that the note above did not anticipate. The trade it
+predicted is real and measured — the median fleet grows from **1 ship to 2**.
+But the charge also lands *inside* a fleet band, which **retires the band
+argument this release was built on**, so the search had to become
+two-dimensional rather than gaining a term. And the cadence turned out not to be
+the mission duration at all: see below.
 
 ✅  **The cislunar RAW cells are now measured on the full catalog**, both
 settings — see "Measured — FULL CATALOG" above. What remains:
@@ -3589,6 +3753,280 @@ N = 1 / 10 / 100 curve above was measured on `1.14.0` and its N = 1 anchor
 that it locates the optimum per body instead of sampling three points — and on
 the real population the answer is a **median of 2 ships and N = 10**, not the
 single N = 10 that curve happened to sample.
+
+## What calc v1.16.0 changed
+
+One correction, and it forced a structural change to the search that was not
+part of the plan. calc `1.15.0 → 1.16.0`, master `1.18.0 → 1.19.0`. **No Module
+3 row moved and no other module changed**, so no Stage 1/2/3 re-run is needed —
+but see the warning about which Module 3 catalog you are pointing at, below.
+
+⚠️  **INERT AT N = 1, and therefore on every measured cell in this file except
+the N = 10 / N = 100 curve.** Verified, not asserted: 141 of 141 columns
+identical and sha256 MATCH with the term on and off. Do not re-measure a
+single-mission cell.
+
+### A programme took decades and was charged for none of them
+
+`mission_cost_usd` compounds each mission's up-front costs by `(1 + W)^T` over
+that mission's own duration and stops. For one mission that is exactly right.
+For a programme it quietly assumes **every mission in the programme happens at
+the same time**, and they cannot: one rig digs one hole at a time, so W
+campaigns on a ship are strictly sequential.
+
+The lines that were being carried for free are the **amortised** ones — the bus
+NRE, the autonomy NRE, and the rig — because they are the only ones bought
+*once, at t = 0* and then divided across missions that sell years apart. A
+mission's own articles are not affected, and the reason is worth keeping,
+because it is what makes the correction small enough to state exactly:
+
+> Shift one mission's whole cash flow later and **its cost/revenue ratio does
+> not move** — its costs and its revenue shift together. Only a line paid at
+> t = 0 for a mission that sells at t = w × cadence is stretched.
+
+So the charge is one closed-form scalar on three cost lines:
+
+```
+cost   = mean of y^w   over w = 0 … W−1        y = (1 + wacc)^cadence
+       = (y^W − 1) / ((y − 1) · W)
+```
+
+**Terminal value gets the reciprocal series, and that is not a nicety.** Salvage
+is collected once, at the *end* of the programme, so relative to a campaign that
+sold earlier it arrives late and is worth **less**:
+`credit = (1 − y^-W) / ((1 − 1/y) · W)`, which is ≤ 1 and falls with W. Netting
+the credit against the purchase first and applying one multiplier to the pair
+would have paid a bonus for taking longer to collect a refund — the exact shape
+of subsidy this file spends thirty pages cataloguing, arriving inside the term
+written to remove one.
+
+Both multipliers are **exactly 1.0 at W = 1**, which is what makes the release
+inert on the committed figures, and the charge is applied as a *delta* on top of
+the untouched v1.15.0 expression rather than as a rebuilt sum — so no term is
+re-associated and the released arithmetic is bit-identical rather than
+numerically-equal. Same discipline as the v1.14.2 phase-sort rejection.
+
+### The cadence is the DIG — or the WINDOW, and usually the window
+
+The obvious cadence is `mission_duration_yr`, and it is wrong twice over.
+
+**Too long:** the rig stays at the asteroid. Campaign w+1 starts as soon as
+campaign w's feed is out of the ground, while campaign w's capsule is still
+flying home. So the cadence is the **stay**, not the round trip.
+
+**Too short:** you can only dispatch the next capsule when a window opens, and
+this module has known how rarely that is since v1.5.0. If the rig digs faster
+than Earth and the target line up, the rig **idles** and the synodic period sets
+the pace. `campaign_cadence_yr` takes the max of the two.
+
+🚨  **The window binds on 165 of 168 rows** in the 400-row raw cislunar sample —
+so on this population a programme's pace is set by orbital mechanics, not by
+mining rate, and the stay is almost never the constraint. That inverts the
+intuition the term was built on.
+
+It also lands hardest on exactly the bodies this model likes. A synodic period
+diverges as a → 1 AU, so a NEA at 1.05 AU can only be revisited every ~14 years
+however fast its rig works. This file has recorded since v1.5.0 that "Δv
+accessibility and time accessibility are anticorrelated"; a single mission pays
+that wait **once**, and a programme of W campaigns pays it **W − 1 more times**.
+Programme scale is where that anticorrelation finally costs something.
+
+### It retires the band argument, and the search becomes 2-D
+
+This is the part that was not planned for. v1.15.0's whole case for a
+one-dimensional ladder was:
+
+> within one fleet band, the saturation multiplier is constant while NRE/N
+> falls, the learning curve falls, the rig's share falls and `p_mining` rises —
+> **every lever improves and none pushes back** — so the best N in a band is its
+> top, N = F × trips.
+
+Programme calendar time **is** a lever that pushes back inside a band, and it is
+not a small one: it grows like `y^W` while NRE/N falls like `1/N`. An exponential
+against a hyperbola has an interior optimum, so campaigns-per-ship is now a real
+decision and the top of the band is frequently not it.
+
+The search is therefore over **(F, W)** with N = F × W:
+
+- **F stays a ladder** — geometric, refined, capped by `max_fleet_ships` — because
+  it runs to 64 and cannot be enumerated.
+- **W is ENUMERATED EXHAUSTIVELY**, 1 … trips. No ladder, no refinement, no
+  unimodality assumption, because `trips` is `min(life / stay, max_trips)` and
+  `max_trips` is **5**: the whole dimension is typically five integers. A
+  dimension small enough to enumerate should be enumerated rather than argued
+  about — and v1.15.0's own verification found its single real miss in exactly
+  the gap a heuristic leaves.
+
+⚠️  **That "typically five" depends on a current Module 3 catalog**, and this is
+where it bit during measurement. Against the *archived* 43-row
+`operational_costs.csv` from the v1.14.0 campaign, "Mining rig maximum trips" is
+absent, `rig_trips_per_ship` silently reverts to calendar-only, and `trips` runs
+to **20** — quadrupling the enumeration and changing every programme figure.
+`schema_check()` caught it, by name, on stdout. **Read the loader's
+`Module 3 operational costs  44 rows` line before trusting any number here**;
+43 means the trip cap is not in the run.
+
+Two consequences worth keeping:
+
+**N = 1 is now literally in the search set** (F = 1, W = 1) rather than being
+*dominated* by N = trips through the band argument. The never-worse invariant
+against every committed figure therefore holds by inspection rather than by
+proof — which is a strictly better place to be, given that the proof it replaces
+has just been retired.
+
+**Non-rectangular programmes stop being mis-booked.** `missions_sharing_rig` was
+`min(N, trips)`, which for 7 missions over 2 ships claims 5 campaigns on a rig
+that only ever flies 4. It is `min(trips, ceil(N / F))` now, derived from the
+fleet like everything else.
+
+### Measured — 400-row raw cislunar stride sample
+
+⚠️  **A SAMPLE, on the current 44-row Module 3 catalog.** This file's own rule is
+that a sample predicts a full-catalog *runtime* here to no better than a factor
+of ~5, and v1.15.0 established that the rule applies to *ratios between two
+settings* too. Nothing below is a full-catalog measurement.
+
+| | search off (N = 1) | search on |
+|---|---|---|
+| calendar off (`1.15.0`) | **60.9283×** | **31.0693×** |
+| calendar on (`1.16.0`) | **60.9283×** | **33.7977×** |
+| | *identical, 141/141 cols* | **+8.78% worse** |
+
+**Every row gets worse and none gets better**, which is the direction a
+correction must run: median penalty **5.26%**, max **19.72%**, **zero** rows
+improved. Median calendar multiplier on the amortised lines **1.323**, max
+**2.093**, against a median programme span of **11.5 years**.
+
+**The fleet grows, which is exactly the two-sidedness the gap note predicted**:
+median F goes **1 → 2**, and median N **5 → 10**, once a ship can buy schedule
+instead of only adding saturation.
+
+🚨  **But W = trips on all 168 rows, so on THIS sample the band argument would
+still have given the right answer.** That is worth stating plainly rather than
+buried, because it is the one place this release could be over-sold:
+
+- The band argument was a **proof** — "every lever improves and none pushes
+  back". Programme calendar time is a lever that pushes back, so **the proof is
+  invalid**, and a dimension whose optimum is no longer guaranteed has to be
+  searched rather than assumed.
+- On this sample the improving levers still win at every body, so the search
+  returns the band top anyway. **The 2-D search is necessary but not yet
+  load-bearing here.**
+- ⚠️  Whether it bites depends on `trips`, and therefore on **v1.15.0's cap**.
+  Re-run against the *stale* 43-row Module 3 table — where the trip cap is
+  absent and trips reaches 20 — and `y^W` has room to work: **12 of 168 rows
+  then choose W < trips**, the median multiplier is 2.918 and the median span
+  25.3 years. So the two corrections interact, and capping trips at 5 is most of
+  what keeps the calendar charge from overturning the band top.
+
+Runtime on the sample: **37.6 s → 41.5 s**, and the programmes priced per
+mission go **8 → 40** (median). That wall clock is ~20 s of catalog load both
+paths pay, so the search itself costs considerably more than the 1.1× ratio
+suggests. **Do not budget a full run from it** — this file has now mispredicted
+full-catalog runtime from a sample three times, including once for a ratio.
+
+### Verification (2026-08-11)
+
+**1. The gated build reproduces HEAD EXACTLY.** `model_programme_calendar =
+False`, against `git HEAD` in the same process on the same rows:
+
+```
+raw, 400 rows   135/136 shared columns identical | the 1 that differs is pipeline_version
+                135/135 less the version stamp   | sha256 842f4026ae9a9f46 MATCH
+```
+
+The CSV gains five columns, so byte-identity of the whole file was never
+available — the hash is over the shared columns, the same construction v1.14.0
+and v1.15.0 used for the same reason.
+
+**2. The term is exactly inert at N = 1**, which is what protects every
+committed figure in this file:
+
+```
+raw, 400 rows, calendar ON vs OFF   141/141 columns identical | sha256 MATCH
+```
+
+Note this is a *stronger* check than item 1 and the one to re-run first if this
+release is ever suspected: it compares the new code against itself with only the
+gate moved, so it isolates the term from the refactor around it.
+
+**3. Never-worse holds, and now by construction.** Searched against N = 1, both
+with the calendar charged:
+
+```
+pairs 168 | max searched/N=1 0.909928 | worse 0 | improved 168 | median improvement 50.9%
+```
+
+Every row improves because (1, 1) is in the search set, so the search cannot
+report worse than the programme every committed figure was measured at.
+
+**4. 🚨  THE 2-D SEARCH WAS BRUTE-FORCED, because the argument it replaced was.**
+v1.15.0 brute-forced the band argument since that argument was load-bearing for
+its ladder; this release retires the argument, so the search that replaced it
+had to be checked in its own right. Every (F, W) on a 20 × 8 grid was pinned and
+priced exhaustively — 160 full evaluations against one catalog load — and
+compared per body against what the search reported:
+
+```
+bodies compared 49 | grid F 1..20 x W 1..8 (W clamped to trips)
+searched WORSE than brute force : 5 | max searched/brute 1.000274  (0.027%)
+W chosen == brute-force W       : 49 of 49
+F chosen == brute-force F       : 42 of 49   (every miss is |dF| = 1)
+```
+
+**The new dimension is exact on every body.** All five misses have the right W
+and the wrong F by exactly one ship, so the residual is **not** the 2-D
+extension — it is the **inherited F ladder's spacing**, unchanged from v1.15.0,
+and it costs **0.027%**. Compare v1.15.0's own brute force, which found one real
+miss at **0.97%** from the concentration grid: this is a factor of 35 smaller and
+in a different mechanism.
+
+⚠️  Two rows come out *better* than the brute force. That is the grid running out
+of room at F > 20, not a defect — the same "a capped search is not a sample of an
+uncapped one" trap this file records for `eval_row_cap`, `jpl_limit` and
+v1.15.0's own truncated sweep. The harness reports it as its own line rather than
+counting it as an exception.
+
+**5. The mass-ledger identity holds exactly**, every setting, `max |error|
+0.000000000 kg` — as it must, since N enters nothing in the mass cascade.
+
+**6. Serial and parallel are byte-identical WITH THE SEARCH ON** — required
+after any change to the search, and the check that would catch a worker seeing a
+different ladder from the parent:
+
+```
+raw, 1,200-row stride, calendar ON, search ON
+serial 58.6 s | 8 workers 58.5 s | 495 rows | sha256 221b4d4bf4441ed8 MATCH
+```
+
+⚠️  The two wall clocks being equal is the catalog load dominating a small run,
+not a parallel regression — v1.10.1's "more workers is not always faster" note.
+The sha256 is what this row is for.
+
+**7. Beneficiated reproduces too**, both checks, on a 150-row sample:
+
+```
+gated off vs HEAD       135/135 shared columns less the version stamp | sha256 63326e750efeee87 MATCH
+calendar ON vs OFF, N=1 141/141 columns identical                     | sha256 MATCH
+```
+
+### What this release does NOT close
+
+**Every ship is identical and every campaign is the same length.** The programme
+is a rectangle, F × W, priced off one cascade. A real programme would fly a
+first mission, learn, and size the second differently — and this model's own
+learning curve and reliability growth say so. Rectangles are what make the
+search affordable; they are not what a programme looks like.
+
+**The fleet is still built at t = 0.** F ships are bought up front and each
+flies W campaigns. Staggering acquisition — buy the second ship out of the
+first's revenue — is the obvious next refinement and it would cut the charge
+this release adds, so **the direction of the remaining error is optimistic for
+small fleets and pessimistic for large ones.**
+
+**Nothing is measured on the full catalog.** Every figure above is a 400-row
+stride sample. The cislunar raw cell with the search on is one ~2,000 s run on
+`1.15.0` and has not been repeated here.
 
 ## Config discipline
 

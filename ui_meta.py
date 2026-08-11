@@ -217,12 +217,16 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "The five settings that change what question the run is answering. "
         "`optimise_programme_scale` is the newest and the sharpest: OFF, a run "
         "answers \"the best single mission to this rock at N missions\"; ON, it "
-        "answers \"the best programme built around it\", sizing the fleet and "
-        "letting N follow. Every committed figure in CLAUDE.md and the README "
-        "was measured OFF at N = 1, so turning it on does not make them wrong — "
-        "it changes the question. It costs 1.51x runtime measured on the full "
-        "catalog, against one whole run per N, because "
-        "programme size touches nothing in the mass cascade.",
+        "answers \"the best programme built around it\", sizing the fleet, the "
+        "schedule and N together. Every committed figure in CLAUDE.md and the "
+        "README was measured OFF at N = 1, so turning it on does not make them "
+        "wrong — it changes the question. It is affordable because programme "
+        "size touches nothing in the mass cascade: the rocket equation, the "
+        "power fixed point and the concentration sweep are solved once per "
+        "candidate and every programme is priced off the result. (The 1.51x "
+        "runtime measured on the full catalog is a v1.15.0 figure, for a search "
+        "that was one-dimensional; v1.16.0's is two-dimensional and has not been "
+        "measured on the full catalog.)",
         [
             ("calc", "use_beneficiation"),
             ("calc", "nre_amortization_missions"),
@@ -236,21 +240,26 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "The dials behind `optimise_programme_scale` in the group above. One rig "
         "serves `min(service life / stay, maximum trips)` missions back to back, "
         "so a programme of N needs ceil(N / that) rigs and that many payloads "
-        "hit the market at once — which is the only thing pushing back on scale. "
-        "The search is over the FLEET and N follows, because the optimum N is "
-        "provably always a whole multiple of the rig's trip life; that is what "
-        "makes it cost 1.51x runtime instead of one full run per N. "
+        "hit the market at once. Since v1.16.0 that is no longer the only thing "
+        "pushing back on scale: `model_programme_calendar` charges the calendar "
+        "the programme actually spans, and a programme that flies more campaigns "
+        "per ship carries its NRE and its rig for longer before they sell "
+        "anything. So the search is two-dimensional — a ladder over the FLEET, "
+        "and every campaigns-per-ship value enumerated exhaustively, because "
+        "there are at most a handful of them. "
         "`max_fleet_ships` bounds the ladder — if rows pile up against it the "
         "run says so, and it means those payloads have no finite market rather "
-        "than that bigger is better. `model_rig_trip_limit` is a correction "
-        "rather than an option — a rig wears out on duty cycles, not only on a "
-        "calendar — and it sits here rather than with the others below because "
-        "it sets the trip life this whole search is built on. It is inert at "
+        "than that bigger is better. `model_rig_trip_limit` and "
+        "`model_programme_calendar` are corrections rather than options — a rig "
+        "wears out on duty cycles as well as on a calendar, and a programme "
+        "takes years — and they sit here because between them they set the trip "
+        "life and the schedule this whole search is built on. Both are inert at "
         "N = 1.",
         [
             ("calc", "max_fleet_ships"),
             ("calc", "programme_search_steps"),
             ("calc", "model_rig_trip_limit"),
+            ("calc", "model_programme_calendar"),
         ],
     ),
     (
