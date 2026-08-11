@@ -1552,6 +1552,28 @@ class CalcConfig:
     #           Which also answers the user-facing question directly: the number
     #           of ships in the fleet IS the decision variable, and programme size
     #           is its consequence.
+    #         MEASURED, full 1,554,353-row catalog, cislunar, raw, 12 workers,
+    #         both cells in one process (2026-08-11), 650,516 evaluable each:
+    #           search OFF  26.7863x  1,306 s   2021 CX5, New Glenn, xenon,  N=1
+    #           search ON   14.1730x  1,978 s   2021 CX5, New Glenn, iodine, N=5
+    #         Never-worse on the whole population: 650,516 pairs, 0 worse,
+    #         650,515 improved, median improvement 45.3%.  N = F x trips on every
+    #         row.  Fleet median 2, max 64; 2,393 rows (0.37%) sit AT
+    #         max_fleet_ships and are flagged on stdout — those are bodies with no
+    #         finite market, where the objective is monotone and the ladder's top
+    #         rung is where the loop stopped rather than an optimum.
+    #         The OFF cell REPRODUCES the committed 1.14.0 figures exactly — ratio,
+    #         evaluable rows, winner, vehicle, propellant, payload to the kg,
+    #         saturation multiplier, p_mining, RTG share and the propellant split —
+    #         so 1.14.1's and 1.14.2's bit-identity claims and this release's
+    #         inertness at N = 1 all now hold on 1.55 M bodies at once, rather than
+    #         on the 150-2,500-row samples each was argued from.
+    #         ⚠️  The search costs 1.51x runtime, NOT the 1.04-1.13x a 2,500-row
+    #         sample showed.  Third time a stride sample has mispredicted
+    #         full-catalog runtime here, and the first time it did so for a RATIO
+    #         between two settings rather than an absolute wall clock — the ladder
+    #         is priced per SURVIVING candidate, and the sample's survivors are not
+    #         the population's.
     #         New config: model_rig_trip_limit, optimise_programme_scale,
     #         max_fleet_ships, programme_search_steps.
     #         New output columns: programme_missions, fleet_ships, trips_per_ship,

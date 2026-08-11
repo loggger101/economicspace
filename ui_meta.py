@@ -220,7 +220,8 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "answers \"the best programme built around it\", sizing the fleet and "
         "letting N follow. Every committed figure in CLAUDE.md and the README "
         "was measured OFF at N = 1, so turning it on does not make them wrong — "
-        "it changes the question. It costs ~1.1x runtime, not 8x, because "
+        "it changes the question. It costs 1.51x runtime measured on the full "
+        "catalog, against one whole run per N, because "
         "programme size touches nothing in the mass cascade.",
         [
             ("calc", "use_beneficiation"),
@@ -238,7 +239,7 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "hit the market at once — which is the only thing pushing back on scale. "
         "The search is over the FLEET and N follows, because the optimum N is "
         "provably always a whole multiple of the rig's trip life; that is what "
-        "makes it cost ~1.1x runtime instead of one full run per N. "
+        "makes it cost 1.51x runtime instead of one full run per N. "
         "`max_fleet_ships` bounds the ladder — if rows pile up against it the "
         "run says so, and it means those payloads have no finite market rather "
         "than that bigger is better. `model_rig_trip_limit` is a correction "
