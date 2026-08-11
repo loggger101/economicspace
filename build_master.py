@@ -174,7 +174,7 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # ─────────────────────────────────────────────────────────────────────────────
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.17.2)
+"""Master Asteroid Profitability Pipeline (1.18.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -389,6 +389,10 @@ print(f"      Propellants      : {'flown hardware only' if MASTER_CONFIG.calc.op
 print(f"      Tank mass        : {'in the rocket equation' if MASTER_CONFIG.calc.model_tank_mass else 'off'}")
 print(f"      Architecture     : {'searched per asteroid' if MASTER_CONFIG.calc.optimise_architecture_per_asteroid else 'fixed by config'}")
 print(f"      NRE amortise     : over {MASTER_CONFIG.calc.nre_amortization_missions} mission(s)")
+print(f"      Programme        : "
+      + (f"fleet searched to {MASTER_CONFIG.calc.max_fleet_ships} ship(s); N follows"
+         if MASTER_CONFIG.calc.optimise_programme_scale else
+         "fixed size (set calc.optimise_programme_scale to search it)"))
 print(f"      Contingency      : {MASTER_CONFIG.calc.contingency_fraction:.0%}")
 print("=" * 75)
 
@@ -412,7 +416,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.17.2")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.18.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 

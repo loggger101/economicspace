@@ -450,7 +450,25 @@ class TransportConfig:
     #           item the model had left, not a rounding term.
     #         No propellant, vehicle or Δv figure moved.  Every number Module 4
     #         produces does, because it can now read these.
-    pipeline_version: str = "1.11.0"
+    # 1.12.0 — ONE new OPERATIONAL_COSTS row, and it is the missing half of a
+    #         bound this table has carried since v1.7.0.
+    #         • "Mining rig maximum trips" 5 (range 2-12).  "Mining rig service
+    #           life" is 15 YEARS, and Module 4 turned that into a mission count
+    #           by dividing by the stay — so at the ~1.25 yr stay the winning
+    #           cislunar mission actually flies, one rig served 12 consecutive
+    #           campaigns.  Calendar time is not what wears out a machine that
+    #           cuts rock; duty cycles are, and nothing in this table said how
+    #           many.  A rig idle between campaigns ages slowly and one digging
+    #           continuously does not.
+    #           ⚠️  JUDGEMENT, and the row says so at length.  Nothing has ever
+    #           mined an asteroid twice, so it is bracketed between terrestrial
+    #           mining plant (major overhaul at ~2-3 yr of continuous duty, 2-3
+    #           rebuilds before retirement — in a workshop that does not exist
+    #           at an asteroid) and the flight record for regolith-contact
+    #           mechanisms (single-campaign by design, or failed inside one).
+    #           5 is the optimistic reading of both.
+    #         No propellant, vehicle, Δv or storage figure moved.
+    pipeline_version: str = "1.12.0"
     preview_rows:     int = 15
 
 
@@ -3963,6 +3981,42 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
                  "hardware is rated 15-30 years; a machine chewing rock is at "
                  "the low end.  Whatever life is left when the programme ends "
                  "is credited back as terminal value.",
+        "reference_year":   _REF_YEAR_OPS,
+    },
+    {
+        "category":         "Mining rig maximum trips",
+        "unit":             "mining campaigns before wear-out",
+        "value":            5,
+        "range_low":        2,
+        "range_high":       12,
+        "notes": "v1.12.0.  The SECOND half of rig service life, and the half "
+                 "that was missing: 'Mining rig service life' above is a "
+                 "CALENDAR bound, and calendar time is not what wears out a "
+                 "machine that cuts rock.  Duty cycles are.  A rig sitting idle "
+                 "between campaigns ages slowly; one digging continuously eats "
+                 "cutting surfaces, seals and bearings on unweathered, angular, "
+                 "never-water-rounded regolith.  Module 4 took min(years/stay) "
+                 "alone, so at a short stay one rig served 12 consecutive "
+                 "campaigns on the strength of a number that only ever said it "
+                 "would not corrode meanwhile.  ⚠️  JUDGEMENT, and there is no "
+                 "flight heritage for it — nothing has ever mined an asteroid "
+                 "twice.  Bracketed from the two nearest analogues, which "
+                 "disagree in the useful direction.  TERRESTRIAL: mobile mining "
+                 "plant reaches major overhaul near 15,000-25,000 operating "
+                 "hours (~2-3 yr of continuous duty, i.e. ~2 campaigns at this "
+                 "model's ~1.25 yr stay) and survives 2-3 rebuilds before the "
+                 "frame is retired — but every one of those rebuilds happens in "
+                 "a workshop, and there is no workshop at an asteroid.  FLIGHT: "
+                 "every regolith-contact mechanism ever flown was single-"
+                 "campaign by design or failed inside one — TAGSAM fired once, "
+                 "Philae's harpoons did not fire, InSight's mole never buried "
+                 "itself, and Curiosity's drill lost its feed mechanism partway "
+                 "through its first decade.  5 is therefore already the "
+                 "optimistic reading of both: rebuild-interval life, achieved "
+                 "un-rebuilt.  range_low 2 is one overhaul interval; "
+                 "range_high 12 restores the pre-v1.12.0 behaviour, where the "
+                 "calendar bound was the only bound.  Set Module 4's "
+                 "`model_rig_trip_limit = False` for that exactly.",
         "reference_year":   _REF_YEAR_OPS,
     },
     {
