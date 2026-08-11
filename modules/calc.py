@@ -583,6 +583,68 @@ class CalcConfig:
     # Spacecraft development NRE (~$588M for OSIRIS-REx class).  If 1, the
     # first mission carries the full NRE; raise N to spread across a fleet.
     nre_amortization_missions: int   = 1
+    # ─── PROGRAMME SCALE AND FLEET SIZE (v1.15.0) ────────────────────────────
+    # `nre_amortization_missions` above is N, the programme size, and until
+    # v1.15.0 it was an INPUT — the curve of answer-against-N was mapped by
+    # re-running the entire pipeline at N = 1, 10, 100.  Three points do not
+    # locate an optimum, and since v1.14.0 there IS an interior optimum to
+    # locate: making market saturation see the programme's concurrent output
+    # turned a monotone curve into one that comes back up.
+    #
+    # True searches N jointly with vehicle, propellant, return mode, propellant
+    # sourcing, rendezvous apsis, power source and concentration ratio, exactly
+    # as this module already requires of any architecture axis, and resolves it
+    # with `selection_key` like all the others.  `nre_amortization_missions`
+    # then becomes the FLOOR of the search rather than the answer.
+    #
+    # ⚠️  DEFAULT FALSE, deliberately, and this is the one axis in the module
+    # that is not a correction.  Every measured cell on record — every table in
+    # CLAUDE.md and the README — is N = 1, and turning this on does not make
+    # those numbers wrong, it changes the QUESTION from "the best single
+    # mission to this rock" to "the best programme built around it".  Two
+    # different answers to two different questions; a default flip would
+    # silently retire every committed figure at once with no way to reproduce
+    # them.  Turn it on to ask the programme question.
+    #
+    # ⚠️  KNOWN GAP, and it is the reason the fleet is only ever the MINIMUM that
+    # can fly N missions.  A programme of F ships flying `trips` campaigns each
+    # spans `trips × mission_duration` of CALENDAR, and nothing charges for it:
+    # WACC compounds over `mission_duration_yr`, per mission, and there is no
+    # programme-level discount anywhere in this module.  So five sequential
+    # campaigns are priced as though they happened at once, buying a second ship
+    # only ever adds market saturation, and F therefore never wants to exceed
+    # ceil(N / trips).
+    #
+    # That makes fleet size a ONE-SIDED decision here.  Closing it means
+    # discounting the programme over ceil(N / F) × mission_duration, which would
+    # make F a genuine two-sided trade — ships bought to compress a schedule
+    # against the price of selling into a market all at once — and would move
+    # every cost in the model.  Named rather than implemented, and it is the
+    # obvious next item.
+    optimise_programme_scale:  bool  = False
+    # Upper bound on the fleet search.  Not a physical limit — it is where the
+    # ladder stops.  Market saturation drives revenue toward zero as concurrent
+    # output grows, so the objective is eventually monotone WORSE in fleet size
+    # and the optimum is interior for any sane market; this exists so a body
+    # with an effectively bottomless market cannot run the ladder forever.
+    # `build_profitability_catalog` reports how often the winner landed ON this
+    # bound, which is the signal that it is binding rather than bounding.
+    max_fleet_ships:           int   = 64
+    # Points in the coarse geometric sweep over fleet size, before the
+    # refinement pass.  Same idiom and same reason as
+    # `concentration_search_steps`: geometric so the cheap end is sampled as
+    # finely as the expensive end, endpoints always evaluated, one refinement
+    # pass around the winner.  Raise it if the fleet curve is being reported at
+    # the ladder's spacing rather than at an integer that means something.
+    programme_search_steps:    int   = 8
+    # v1.15.0.  A rig wears out on DUTY CYCLES as well as on a calendar.
+    # "Mining rig service life" is 15 years and this module turned it into a
+    # mission count by dividing by the stay, so at a short stay one rig served
+    # 12 consecutive campaigns — a bound derived entirely from a figure about
+    # not corroding.  Module 3 v1.12.0's "Mining rig maximum trips" is the
+    # missing half; `rig_trips_per_ship` takes the min of the two.  False
+    # restores the calendar-only cap and reproduces 1.14.2 exactly.
+    model_rig_trip_limit:      bool  = True
     # Share of the NRE line already paid for inside the per-kg recurring
     # hardware rate.  The Module 3 recurring brackets ($100k-$1M/kg, from
     # NICM / SSCM / Aerospace Corp SMCM) are regressions fitted to total
@@ -1445,7 +1507,57 @@ class CalcConfig:
     #         run, so ~6.7% recoverable — too little to justify splitting a
     #         570-line function with ~40 locals crossing the seam. Items above
     #         removed most of what made that prologue expensive.
-    pipeline_version: str = "1.14.2"
+    # 1.15.0 — PROGRAMME SCALE BECOMES A SEARCHED AXIS, and the rig finally wears
+    #         out on something other than a calendar.  Paired with Module 3
+    #         v1.12.0.  Two findings, and the first is a correction that runs the
+    #         usual direction (worse) while the second is an optimisation that
+    #         can only run the other way.
+    #         • THE RIG HAD NO CYCLE LIMIT.  `missions_sharing_rig` was
+    #           min(N, life_yr // stay_yr) and `life_yr` is a CALENDAR figure —
+    #           15 years of "will not have corroded meanwhile".  At the ~1.25 yr
+    #           stay the winning cislunar mission actually flies that made one rig
+    #           good for 12 consecutive campaigns, on the strength of a number
+    #           that never claimed to bound duty cycles.  Calendar time is not
+    #           what wears out a machine that cuts rock.  Module 3's new "Mining
+    #           rig maximum trips" (5, range 2-12) is the other bound, and
+    #           `rig_trips_per_ship` takes the MIN of the two — so a long-stay
+    #           mission is still calendar-limited and a short-stay one is now
+    #           cycle-limited, which is the correct way round.
+    #           Gated by `model_rig_trip_limit` (default True); False restores
+    #           1.14.2 exactly.
+    #         • PROGRAMME SIZE WAS AN INPUT TO A MODEL THAT KNOWS WHAT IT COSTS.
+    #           v1.14.0 made market saturation see `nre_amortization_missions`
+    #           and thereby made the programme-scale curve TURN — the optimum N
+    #           became interior.  Nothing then searched for it: N stayed a config
+    #           field and the curve was mapped by re-running the whole pipeline at
+    #           N = 1, 10, 100.  Three points do not locate an optimum, and this
+    #           file's own tables say so.
+    #           `optimise_programme_scale` (default False) searches it instead,
+    #           jointly with every other architecture axis.  Two structural facts
+    #           make that nearly free rather than |N| times the work:
+    #             1. N ENTERS NOTHING IN THE MASS CASCADE.  It appears in
+    #                `mission_cost_usd`, the saturation block and the reliability
+    #                block, and nowhere else — so the rocket equation, the fixed
+    #                point, the knapsack and the concentration sweep are all
+    #                solved ONCE per candidate and the whole programme ladder is
+    #                priced off the result.
+    #             2. THE OPTIMUM N IS ALWAYS AN EXACT MULTIPLE OF trips_per_ship.
+    #                Within one fleet band the concurrent output — and therefore
+    #                the saturation multiplier — is constant, while NRE/N, the
+    #                learning curve, the rig share and p_mining all improve
+    #                strictly with N.  So the best N in the band is its top, N =
+    #                F × trips.  The search is therefore over the FLEET, F, and N
+    #                follows; every N that cannot be optimal is skipped without
+    #                being evaluated.  See `programme_options`.
+    #           Which also answers the user-facing question directly: the number
+    #           of ships in the fleet IS the decision variable, and programme size
+    #           is its consequence.
+    #         New config: model_rig_trip_limit, optimise_programme_scale,
+    #         max_fleet_ships, programme_search_steps.
+    #         New output columns: programme_missions, fleet_ships, trips_per_ship,
+    #         rig_trips_calendar_cap, rig_trip_limit_binds,
+    #         programme_options_priced.
+    pipeline_version: str = "1.15.0"
 
 
 CONFIG = CalcConfig()
@@ -1462,6 +1574,11 @@ print(f"    Architecture   : "
       f"{'searched per asteroid' if CONFIG.optimise_architecture_per_asteroid else 'fixed by config'}")
 print(f"    Contingency    : {CONFIG.contingency_fraction:.0%}  |  "
       f"NRE amortised over {CONFIG.nre_amortization_missions} mission(s)")
+print(f"    Programme      : "
+      + (f"fleet searched to {CONFIG.max_fleet_ships} ship(s); N follows"
+         if CONFIG.optimise_programme_scale else
+         f"fixed at N = {CONFIG.nre_amortization_missions} "
+         f"(set optimise_programme_scale to search it)"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1659,6 +1776,9 @@ _MODULE3_REQUIRED_OPS = {
         "the radioisotope branch is unreachable; every distant body flies a 1/r²-starved array",
     "Power processing unit specific mass":
         "the PPU reverts to the lumped 8 kg/kW thruster+PPU figure",
+    "Mining rig maximum trips":
+        "the rig wears out on a calendar alone — 12 consecutive campaigns at a short stay, "
+        "so the fleet never has to grow and programme scale is bounded by nothing",
 }
 
 
@@ -3810,6 +3930,231 @@ def learning_curve_factor(n_units: int, rate: float) -> float:
     return sum(k ** b for k in range(1, n + 1)) / n
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# PROGRAMME SCALE AND FLEET SIZE  (v1.15.0)
+# ─────────────────────────────────────────────────────────────────────────────
+# Both functions above are O(N) sums, and until v1.15.0 that cost nothing
+# because N was a config field read a handful of times per run.  It is now a
+# searched axis, so they are called once per (candidate × programme) — and at
+# the top of the ladder N runs into the hundreds, which would put a
+# several-hundred-iteration Python loop inside the innermost loop of the search.
+#
+# Memoised by VALUE, not by identity, because that is what the arguments are:
+# `p_first`, `alpha`, `p_mature` and `rate` are constants for a whole run, so
+# these caches hold at most one entry per rung of the ladder.  Nothing about the
+# arithmetic changes — same function, same arguments, same result — which is the
+# only kind of speed-up this module accepts on a release that also moves numbers.
+_LEARNING_CURVE_CACHE: Dict[Tuple[int, float], float] = {}
+_MINING_RELIABILITY_CACHE: Dict[Tuple[int, float, float, float], float] = {}
+
+
+def _learning_curve_cached(n_units: int, rate: float) -> float:
+    key = (int(n_units), float(rate))
+    val = _LEARNING_CURVE_CACHE.get(key)
+    if val is None:
+        val = learning_curve_factor(n_units, rate)
+        _LEARNING_CURVE_CACHE[key] = val
+    return val
+
+
+def _mining_reliability_cached(
+    n_missions: int, p_first: float, alpha: float, p_mature: float,
+) -> float:
+    key = (int(n_missions), float(p_first), float(alpha), float(p_mature))
+    val = _MINING_RELIABILITY_CACHE.get(key)
+    if val is None:
+        val = mining_success_probability(n_missions, p_first, alpha, p_mature)
+        _MINING_RELIABILITY_CACHE[key] = val
+    return val
+
+
+def rig_trips_per_ship(
+    ops_df: pd.DataFrame, config: CalcConfig, stay_yr: float,
+) -> Optional[Tuple[int, int, Optional[int]]]:
+    """How many consecutive campaigns one rig is good for, at this stay length.
+
+    Returns `(trips, calendar_cap, trip_cap)`, or None when rig service life is
+    not modelled at all — in which case one rig serves the entire programme,
+    which is what this module did before v1.8.0.
+
+    v1.15.0 adds the second of the two bounds, and the reason it is second
+    rather than a refinement of the first is worth stating plainly:
+
+      • `Mining rig service life` is **15 YEARS**.  It is a calendar figure and
+        its own Module 3 notes describe a calendar mechanism — corrosion,
+        thermal cycling, radiation dose.  Dividing it by the stay produced a
+        mission count, and that count was treated as the rig's whole life.
+      • Nothing bounded DUTY CYCLES.  At the ~1.25 yr stay the winning cislunar
+        mission actually flies, the calendar bound made one rig good for 12
+        consecutive mining campaigns — twelve full digs out of a number that
+        only ever promised the machine would not have rusted meanwhile.
+
+    A rig parked between campaigns ages slowly.  One cutting rock does not.  So
+    the two bounds are independent and the binding one is the MIN: a long-stay
+    mission is still calendar-limited, a short-stay one is now cycle-limited,
+    which is the correct way round and was the whole gap.
+
+    A missing Module 3 row reverts to calendar-only, silently, exactly as every
+    other `_ops_value` default does — which is why the row is named in
+    `_MODULE3_REQUIRED_OPS` with the consequence spelled out.
+    """
+    if not config.model_rig_service_life or stay_yr <= 0:
+        return None
+    life_yr      = _ops_value(ops_df, "Mining rig service life", default=15.0)
+    calendar_cap = max(1, int(life_yr // stay_yr))
+    trip_cap: Optional[int] = None
+    if config.model_rig_trip_limit:
+        raw = _ops_value(ops_df, "Mining rig maximum trips", default=0.0)
+        if raw > 0:
+            trip_cap = max(1, int(raw))
+    trips = calendar_cap if trip_cap is None else min(calendar_cap, trip_cap)
+    return trips, calendar_cap, trip_cap
+
+
+def fleet_search_ladder(f_min: int, f_max: int, steps: int) -> List[int]:
+    """Coarse geometric sweep over fleet size.  Endpoints always included.
+
+    Same idiom, and the same argument, as the concentration sweep in
+    `evaluate_combo`: geometric rather than linear so the cheap end is sampled
+    as finely as the expensive end, because going from one ship to two is a
+    doubling of concurrent output and going from 63 to 64 is not.
+    """
+    f_min = max(1, int(f_min))
+    f_max = max(f_min, int(f_max))
+    steps = max(2, int(steps))
+    if f_max - f_min + 1 <= steps:
+        return list(range(f_min, f_max + 1))
+    span = f_max / f_min
+    out  = {f_min, f_max}
+    for i in range(steps):
+        out.add(max(f_min, min(f_max, int(round(f_min * span ** (i / (steps - 1)))))))
+    return sorted(out)
+
+
+def fleet_refinement(
+    f_best: int, ladder: List[int], f_min: int, f_max: int,
+) -> List[int]:
+    """The one refinement pass around the coarse winner.
+
+    Two geometric midpoints — the interval between the bracketing rungs is
+    exactly what the coarse sweep left unexamined — plus both immediate integer
+    neighbours.  The neighbours are not decoration: the answer is a COUNT OF
+    SHIPS, and reporting a fleet of 23 when the optimum is 22 is reporting an
+    artefact of the ladder's spacing as if it were a result.
+    """
+    seen = set(ladder)
+    out  = {f_best - 1, f_best + 1}
+    prev = max((f for f in ladder if f < f_best), default=None)
+    nxt  = min((f for f in ladder if f > f_best), default=None)
+    if prev is not None:
+        out.add(int(round(math.sqrt(prev * f_best))))
+    if nxt is not None:
+        out.add(int(round(math.sqrt(f_best * nxt))))
+    return sorted(f for f in out if f_min <= f <= f_max and f not in seen)
+
+
+def programme_options(
+    rig_trips: Optional[Tuple[int, int, Optional[int]]], config: CalcConfig,
+) -> List[Tuple[int, int]]:
+    """The `(n_missions, fleet_ships)` programmes worth pricing for one mission.
+
+    ── Why this is a search over FLEET SIZE, and N follows ──────────────────
+
+    N — `nre_amortization_missions` — is the programme size, and it enters this
+    model in exactly six places: the NRE division, the autonomy-NRE division,
+    the rig amortisation, the learning curve, reliability growth, and (since
+    v1.14.0) the concurrent output that market saturation prices against.  Group
+    them by how they behave and the search collapses:
+
+      • ONE RIG SERVES `trips` MISSIONS BACK TO BACK, so a programme of N needs
+        `ceil(N / trips)` rigs and that many missions are in flight at once.
+        The saturation multiplier is a function of that COUNT and of nothing
+        else about N.
+      • WITHIN ONE FLEET BAND — every N with the same `ceil(N / trips)` — the
+        multiplier is therefore constant, while NRE/N falls, autonomy NRE/N
+        falls, the learning curve falls, the rig's per-mission share falls (or
+        holds), and p_mining rises.  Every single lever improves and none
+        pushes back.
+
+    So the best N in a band is always the TOP of the band, N = F × trips, and no
+    other N can ever be optimal.  The search is over F, exactly `max_fleet_ships`
+    integers of which only ~12 are ever evaluated — rather than over N, which
+    would be `max_fleet_ships × trips` of them, and which is what "just run it at
+    1, 10 and 100" was sampling blindly.
+
+    That is not an approximation and it is not a heuristic.  It is also the
+    answer to the question the user asked in the first place: the number of ships
+    is the decision variable, and programme size is its consequence.
+
+    Two further consequences worth keeping:
+
+      • N = 1 IS NEVER SKIPPED IN EFFECT.  It sits in band 1, whose top is
+        N = trips, and by the argument above N = trips dominates it.  So a
+        searched run can never report a worse objective than the N = 1 run every
+        committed figure in this project was measured at — which is the
+        never-worse invariant this module requires of any new axis, and here it
+        holds by construction rather than by measurement.
+      • N = F × trips IS ALSO THE ONLY N THE COST MODEL IS EXACTLY RIGHT AT.
+        `mining_rig_cost` charges every mission the same share of a fully-used
+        rig, so a programme of 13 with trips = 12 books its second rig — used
+        once — as though it were worn out.  At a whole multiple there is no
+        part-worn rig to mis-book.
+
+    ⚠️  THE BAND ARGUMENT IS PER CANDIDATE, AND `trips` IS NOT A PROPERTY OF THE
+    BODY.  It is `min(life / stay, max_trips)`, and the stay depends on how hard
+    that candidate concentrates — so two concentration ratios on the same rock
+    are two different mission profiles with two different trip lives and two
+    different ladders.  That is handled correctly, because this function is
+    called per candidate with that candidate's own stay.
+
+    What it exposes is a pre-existing heuristic one level up.  `evaluate_combo`
+    sweeps the concentration ratio coarsely and then refines around the WINNER,
+    and the winner now depends on N — so a ratio that would have won at some
+    other programme size can fall outside the refined region and never be
+    priced.  Measured on 2014 JT2 beneficiated: brute-forcing every N from 1 to
+    40 finds N = 4 at 30.2597x on a ratio of 3.216 (stay 1.74 yr, trips 4),
+    while the ladder reports N = 3 at 30.5535x on a ratio of 5.518 (trips 3) —
+    0.97% worse, because 3.216 was never on the grid it searched.  Raising
+    `concentration_search_steps` from 7 to 25 makes the ladder return 30.2597x
+    on ratio 3.216 exactly, which is what identifies the grid rather than this
+    argument as the cause.
+
+    It is documented rather than patched.  Refining around the best two ratios
+    would be a heuristic stacked on a heuristic, for a sub-1% effect that the
+    existing dial already closes — and `concentration_search_steps` is the dial
+    this project already points at for exactly this trade.  It bites only where
+    beneficiation is on AND the optimum stay sits near a `life / stay` step.
+
+    With `optimise_programme_scale` off this returns the single configured
+    programme, which is the pre-v1.15.0 behaviour exactly.
+    """
+    n_cfg = max(1, int(config.nre_amortization_missions))
+    trips = rig_trips[0] if rig_trips is not None else None
+
+    if trips is None:
+        # No service-life cap at all: one rig serves the whole programme, so
+        # `concurrent_missions` is 1 for every N and saturation never pushes
+        # back.  The objective is then monotone improving in N without bound —
+        # "fly more missions" is free money again, which is precisely the
+        # failure v1.14.0 closed.  Searching an unbounded monotone axis reports
+        # the ladder's top rung as a result, so it is refused rather than run.
+        # `build_profitability_catalog` says so out loud at startup.
+        return [(n_cfg, 1)]
+
+    if not config.optimise_programme_scale:
+        return [(n_cfg, max(1, math.ceil(n_cfg / trips)))]
+
+    # The configured N is the FLOOR of the search, not the answer: a caller who
+    # sets N = 50 is stating a programme they have already committed to, and the
+    # search should size the fleet for it and upward rather than propose a
+    # smaller one.
+    f_min = max(1, math.ceil(n_cfg / trips))
+    f_max = max(f_min, int(config.max_fleet_ships))
+    return [(f * trips, f)
+            for f in fleet_search_ladder(f_min, f_max,
+                                         config.programme_search_steps)]
+
+
 def _ops_table(ops_df: pd.DataFrame) -> Dict[str, Optional[float]]:
     """category → value mapping for `ops_df`, built once and memoised."""
     global _OPS_CACHE
@@ -3913,6 +4258,7 @@ def mission_cost_usd(
     isru_return:         Optional[bool] = None,
     ep_power_w:          float = 0.0,
     power_source:        str   = "solar",
+    n_missions:          Optional[int] = None,
 ) -> Dict[str, float]:
     """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
 
@@ -4005,22 +4351,37 @@ def mission_cost_usd(
     # and the return capsule (fresh per mission — fly-and-die).
     hw_per_kg               = _ops_value(ops_df, "Mining payload recurring cost", default=300_000.0)
     mining_rig_cost_total   = config.mining_hardware_kg * hw_per_kg
-    n_missions              = max(1, config.nre_amortization_missions)
+    # v1.15.0: programme size is a searched axis, so it arrives as an argument.
+    # None falls back to the config for every caller that has not been updated,
+    # which keeps a single-programme run bit-identical.
+    n_missions              = max(1, int(n_missions if n_missions is not None
+                                         else config.nre_amortization_missions))
 
-    # ── Rig service life and terminal value (v1.8.0) ─────────────────────────
+    # ── Rig service life and terminal value (v1.8.0, cycles v1.15.0) ─────────
     # A rig cannot serve more missions than its life allows.  Whatever life
     # remains when the programme ends is credited at the salvage fraction —
     # but only if there IS a programme; a rig at an asteroid nobody revisits
     # is stranded, not an asset.
     rig_terminal_value = 0.0
     missions_sharing_rig = n_missions
-    if config.model_rig_service_life and stay_yr > 0:
+    rig_trips = rig_trips_per_ship(ops_df, config, stay_yr)
+    if rig_trips is not None:
+        trips, _calendar_cap, trip_cap = rig_trips
         life_yr = _ops_value(ops_df, "Mining rig service life", default=15.0)
         salvage = _ops_value(ops_df, "Rig salvage fraction", default=0.50)
-        missions_rig_can_serve = max(1, int(life_yr // stay_yr))
-        missions_sharing_rig   = min(n_missions, missions_rig_can_serve)
+        missions_sharing_rig = min(n_missions, trips)
         if n_missions > 1:
-            life_used_frac = min(1.0, missions_sharing_rig * stay_yr / life_yr)
+            # Life USED, and there are now two ways to use it up.  Crediting
+            # salvage on remaining calendar years while the rig is mechanically
+            # finished would pay a refund on a worn-out machine — the same shape
+            # of subsidy this module keeps finding — so the binding utilisation
+            # is the larger of the two fractions.  Gated with the cycle cap
+            # itself: with `model_rig_trip_limit` off this is exactly the
+            # calendar-only expression v1.14.2 used.
+            life_used_frac = missions_sharing_rig * stay_yr / life_yr
+            if trip_cap is not None:
+                life_used_frac = max(life_used_frac, missions_sharing_rig / trips)
+            life_used_frac = min(1.0, life_used_frac)
             rig_terminal_value = mining_rig_cost_total * (1.0 - life_used_frac) * salvage
     mining_rig_cost = ((mining_rig_cost_total - rig_terminal_value)
                        / max(1, missions_sharing_rig))
@@ -4046,7 +4407,7 @@ def mission_cost_usd(
     # nre_amortization_missions > 1 it is modelled as ONE unit shared across
     # missions, not N units built, so a curve on it would double-count.
     # Exactly 1.0 at N = 1, so a single-mission run is untouched.
-    lc = learning_curve_factor(config.nre_amortization_missions, config.learning_curve_rate)
+    lc = _learning_curve_cached(n_missions, config.learning_curve_rate)
     # v1.10.0: bill the return vehicle actually flown.  Its dry mass grows with
     # the haul (return_structure_frac_of_payload), and the cascade records what
     # it came to; charging the 500 kg base rate for a vehicle that massed
@@ -4253,6 +4614,8 @@ def mission_cost_usd(
         "tank_mass_kg":          tank_mass,
         "rig_terminal_value":    rig_terminal_value,
         "missions_sharing_rig":  float(missions_sharing_rig),
+        "n_missions":            float(n_missions),
+        "learning_curve_factor": lc,
         "ops_cost":              ops_cost,
         "heat_shield_cost":      heat_shield_cost,
         "tps_mass_kg":           tps_mass,
@@ -5110,53 +5473,42 @@ def _evaluate_combo_at_ratio(
     # Both terms — and the array they size — were settled above, before the
     # cascade was rebuilt, so that the plant in the ledger is the plant in the
     # rocket equation.  `water_kg` is carried down here only to be reported.
-    cost                = mission_cost_usd(
-        mass_cascade        = actual_cascade,
-        vehicle             = vehicle,
-        propellant          = propellant,
-        ops_df              = ops_df,
-        config              = config,
-        mission_duration_yr = mission_duration_yr,
-        processing_power_w  = processing_power_watts,
-        stay_yr             = stay_yr,
-        isru_return         = isru,
-        ep_power_w          = ep_power_watts,
-        power_source        = power_source,
-    )
+    # ── PROGRAMME SCALE AND FLEET SIZE (v1.15.0) ─────────────────────────────
+    # Everything above this line is the MASS CASCADE, and none of it depends on
+    # how many missions the programme flies.  N enters this module in exactly
+    # three places downstream — the cost model, market saturation and
+    # reliability growth — and in none of the rocket equation, the fixed-point
+    # power solve, the payload knapsack or the concentration sweep.
+    #
+    # That asymmetry is what makes programme size affordable to SEARCH rather
+    # than merely to set: the expensive half of the mission is solved once, and
+    # every rung of the fleet ladder is priced off the same cascade.  Running
+    # the whole pipeline again at another N — which is how every
+    # programme-scale figure in this project was produced — re-solves all of it
+    # to change three numbers.
+    #
+    # See `programme_options` for why the ladder is over FLEET SIZE rather than
+    # over N, and why restricting N to whole multiples of the rig's trip life
+    # loses nothing.
+    rig_trips        = rig_trips_per_ship(ops_df, config, stay_yr)
+    trips_per_ship   = rig_trips[0] if rig_trips is not None else 0
+    rig_calendar_cap = rig_trips[1] if rig_trips is not None else 0
+    rig_trip_cap     = rig_trips[2] if rig_trips is not None else None
 
     # ── Market saturation (v1.7.0, programme-aware v1.14.0) ──────────────────
-    # Selling is not free of consequence.  A mission that returns a
-    # meaningful fraction of a commodity's annual market moves the price it
-    # is being valued at.  Applied to the delivered RATE (kg per mission-year)
-    # against Module 2's annual_market_kg, per commodity where the payload mix
-    # is known, and on the payload as a whole otherwise.
+    # The saleable mix and its prices do not depend on the programme either, so
+    # they are assembled once, outside the ladder.
     #
-    # ── The rate is the PROGRAMME'S, not one mission's (v1.14.0) ─────────────
-    # This term's own config comment says it exists because "prices were static
-    # at the point of sale, so a mission could return any quantity of platinum
-    # at spot and the 'fly more missions' lever had no stopping point."  It did
-    # not achieve that: `nre_amortization_missions` was read in exactly four
-    # places — rig amortisation, NRE division, the learning curve and
-    # reliability growth — and none of them was here.  So a 100-mission
-    # programme divided its NRE by 100, grew its reliability, and sold 100
-    # payloads into the market at the price one payload commands.  Every lever
-    # in the model pointed the same way and nothing pushed back, which is
-    # exactly the failure the term was written to prevent.
-    #
-    # The rate that matters is how much is on the market AT ONCE, and the model
-    # already computes that.  One rig serves `missions_sharing_rig` missions
-    # back to back (life / stay, from the rig service-life cap), so a programme
-    # of N needs ceil(N / that) rigs, and that many missions are in flight
-    # concurrently.  Derived from the model's own arithmetic rather than
-    # asserted, and exactly 1 at N = 1 — so no committed single-mission figure
-    # moves, which is every figure on record.
-    saturation_mult = 1.0
-    concurrent_missions = 1.0
-    if (config.model_market_saturation and mission_duration_yr > 0
-            and phases and markets is not None):
-        per_rig = max(1.0, float(cost.get("missions_sharing_rig", 1.0)))
-        concurrent_missions = math.ceil(
-            max(1, config.nre_amortization_missions) / per_rig)
+    # ⚠️  Built by iterating `sold` in its own insertion order, and accumulated
+    # in that same order inside the loop below.  Floating-point addition is not
+    # associative and every verification this project relies on is a
+    # bit-identity check, so the ORDER of these terms is load-bearing — the same
+    # trap documented at length in `optimal_payload_mix`.
+    saturation_applies = bool(
+        config.model_market_saturation and mission_duration_yr > 0
+        and phases and markets is not None)
+    sale_terms: List[Tuple[float, float, float]] = []
+    if saturation_applies:
         # The mix actually sold: chosen by the optimiser when concentrating,
         # otherwise the body's own proportions.
         if beneficiate and payload_mix:
@@ -5164,51 +5516,132 @@ def _evaluate_combo_at_ratio(
         else:
             frac_sum = sum(f for _n, f, _p in phases)
             sold = {n: m_payload * f / frac_sum for n, f, _p in phases} if frac_sum > 0 else {}
-        adj_value = 0.0
         for phase, kg in sold.items():
             price = next((p for n, _f, p in phases if n == phase), 0.0)
-            adj_value += kg * price * saturation_price_multiplier(
-                kg * concurrent_missions / mission_duration_yr,
-                markets.get(phase, float("inf")),
-                config.demand_elasticity,
-            )
-        if gross_value > 0:
-            saturation_mult = adj_value / gross_value
-        gross_value = adj_value
-        delivered_value_per_kg = gross_value / m_payload if m_payload > 0 else 0.0
+            sale_terms.append((kg, price, markets.get(phase, float("inf"))))
 
     # ── Mission reliability (v1.8.0) ─────────────────────────────────────────
-    # Revenue was certain.  It is not.  Three independent ways to get nothing:
-    # the launch fails, the spacecraft dies on the way, or the mining chain —
-    # which has never been demonstrated anywhere — does not work when it
-    # arrives.  Costs are still charged in FULL, which is both conservative
-    # and correct: you spend the money either way.  The launch insurance
-    # already in the cost model replaces hardware, not revenue, so this is not
-    # a double count.
-    p_success = 1.0
+    # The terms that do not move with programme size, hoisted for the same
+    # reason.  Only `p_mining` grows with N.
+    p_launch = p_cruise = p_first = rel_alpha = p_mature = 1.0
     if config.model_reliability:
-        p_launch = _ops_value(ops_df, "Launch vehicle reliability", default=0.97)
-        mtbf_yr  = _ops_value(ops_df, "Spacecraft mean time between failures", default=30.0)
-        # v1.9.0: the mining chain LEARNS.  A programme's second rig is not as
-        # likely to jam as its first, so p_mining is the fleet average over
-        # nre_amortization_missions rather than the first-of-kind figure held
-        # flat forever.  Launch and cruise reliability do not grow here —
-        # launch vehicles are already mature, and MTBF is a duration exposure
-        # rather than a heritage question.
-        p_first = _ops_value(
-            ops_df, "Mining system first-of-kind success probability", default=0.85,
+        p_launch  = _ops_value(ops_df, "Launch vehicle reliability", default=0.97)
+        mtbf_yr   = _ops_value(ops_df, "Spacecraft mean time between failures", default=30.0)
+        p_first   = _ops_value(
+            ops_df, "Mining system first-of-kind success probability", default=0.85)
+        rel_alpha = _ops_value(ops_df, "Mining reliability growth exponent", default=0.30)
+        p_mature  = _ops_value(
+            ops_df, "Mining system mature success probability", default=0.95)
+        p_cruise  = math.exp(-mission_duration_yr / mtbf_yr) if mtbf_yr > 0 else 1.0
+
+    gross_base           = gross_value
+    delivered_base       = delivered_value_per_kg
+
+    def _price_programme(n_missions: int, fleet: int):
+        """Everything downstream of the cascade, for one programme size.
+
+        Returns `(cost, gross, saturation_mult, concurrent, p_success,
+        p_mining, delivered_per_kg)`.  Nothing here re-enters the rocket
+        equation; it is one pass of straight-line arithmetic over a cascade
+        that is already solved.
+        """
+        c = mission_cost_usd(
+            mass_cascade        = actual_cascade,
+            vehicle             = vehicle,
+            propellant          = propellant,
+            ops_df              = ops_df,
+            config              = config,
+            mission_duration_yr = mission_duration_yr,
+            processing_power_w  = processing_power_watts,
+            stay_yr             = stay_yr,
+            isru_return         = isru,
+            ep_power_w          = ep_power_watts,
+            power_source        = power_source,
+            n_missions          = n_missions,
         )
-        if config.model_reliability_growth:
-            p_mining = mining_success_probability(
-                config.nre_amortization_missions, p_first,
-                _ops_value(ops_df, "Mining reliability growth exponent", default=0.30),
-                _ops_value(ops_df, "Mining system mature success probability", default=0.95),
-            )
-        else:
-            p_mining = p_first
-        p_cruise = math.exp(-mission_duration_yr / mtbf_yr) if mtbf_yr > 0 else 1.0
-        p_success = max(0.0, min(1.0, p_launch * p_cruise * p_mining))
-        gross_value *= p_success
+        g         = gross_base
+        sat       = 1.0
+        delivered = delivered_base
+        # ── The rate is the PROGRAMME'S, not one mission's (v1.14.0) ─────────
+        # This term's own config comment says it exists because "prices were
+        # static at the point of sale, so a mission could return any quantity of
+        # platinum at spot and the 'fly more missions' lever had no stopping
+        # point."  Until v1.14.0 it did not achieve that:
+        # `nre_amortization_missions` was read in four places and none of them
+        # was here, so a 100-mission programme divided its NRE by 100, grew its
+        # reliability, and sold 100 payloads at the price one payload commands.
+        #
+        # What is on the market at once is the FLEET: one rig serves
+        # `trips_per_ship` missions back to back, so F rigs put F payloads in
+        # flight concurrently.  v1.15.0 takes that count from the ladder rather
+        # than re-deriving it from `missions_sharing_rig`, which is the same
+        # number by construction — N = F × trips — and one derivation fewer.
+        concurrent = 1.0
+        if saturation_applies:
+            concurrent = fleet
+            adj = 0.0
+            for kg, price, mkt in sale_terms:
+                adj += kg * price * saturation_price_multiplier(
+                    kg * concurrent / mission_duration_yr,
+                    mkt,
+                    config.demand_elasticity,
+                )
+            if gross_base > 0:
+                sat = adj / gross_base
+            g = adj
+            delivered = g / m_payload if m_payload > 0 else 0.0
+        # Revenue was certain.  It is not: the launch fails, the spacecraft dies
+        # on the way, or the mining chain does not work when it arrives.  Costs
+        # are charged in FULL, which is correct — you spend the money either way
+        # — and launch insurance replaces hardware, not revenue, so this is not
+        # a double count.
+        ps = 1.0
+        pm = 1.0
+        if config.model_reliability:
+            # v1.9.0: the mining chain LEARNS, so p_mining is the fleet average
+            # over the programme rather than the first-of-kind figure held flat.
+            # Launch and cruise reliability deliberately do not grow — launch
+            # vehicles are mature, and MTBF is a duration exposure rather than a
+            # heritage question.
+            pm = (_mining_reliability_cached(n_missions, p_first, rel_alpha, p_mature)
+                  if config.model_reliability_growth else p_first)
+            ps = max(0.0, min(1.0, p_launch * p_cruise * pm))
+            g *= ps
+        return c, g, sat, concurrent, ps, pm, delivered
+
+    programmes   = programme_options(rig_trips, config)
+    best_n, best_f = programmes[0]
+    best_priced  = _price_programme(best_n, best_f)
+    best_pkey    = _objective_key(
+        best_priced[1] - best_priced[0]["total_cost"],
+        best_priced[1], best_priced[0]["total_cost"], config)
+    priced_count = 1
+
+    for n_missions, fleet in programmes[1:]:
+        cand = _price_programme(n_missions, fleet)
+        priced_count += 1
+        key = _objective_key(cand[1] - cand[0]["total_cost"],
+                             cand[1], cand[0]["total_cost"], config)
+        if key > best_pkey:
+            best_pkey, best_priced, best_n, best_f = key, cand, n_missions, fleet
+
+    # One refinement pass around the coarse winner, on the same geometric
+    # spacing plus both integer neighbours — see `fleet_refinement`.  Skipped
+    # entirely when the programme is not being searched, which is the default
+    # and the path every committed figure was measured on.
+    if len(programmes) > 1:
+        ladder = [f for _n, f in programmes]
+        for fleet in fleet_refinement(best_f, ladder, ladder[0], ladder[-1]):
+            n_missions = fleet * trips_per_ship
+            cand = _price_programme(n_missions, fleet)
+            priced_count += 1
+            key = _objective_key(cand[1] - cand[0]["total_cost"],
+                                 cand[1], cand[0]["total_cost"], config)
+            if key > best_pkey:
+                best_pkey, best_priced, best_n, best_f = key, cand, n_missions, fleet
+
+    (cost, gross_value, saturation_mult, concurrent_missions,
+     p_success, p_mining, delivered_value_per_kg) = best_priced
 
     profit               = gross_value - cost["total_cost"]
     roi                  = profit / cost["total_cost"] if cost["total_cost"] > 0 else np.nan
@@ -5280,9 +5713,10 @@ def _evaluate_combo_at_ratio(
         "p_mining":                 p_mining if config.model_reliability else 1.0,
         "boiloff_factor":           boiloff_factor,
         "dv_ret_effective_m_s":     dv_ret_eff,
-        "learning_curve_factor":    learning_curve_factor(
-                                        config.nre_amortization_missions,
-                                        config.learning_curve_rate),
+        # v1.15.0: read back out of the winning programme rather than
+        # re-derived from the config, which would report the curve for a
+        # programme size the mission was not priced at the moment N is searched.
+        "learning_curve_factor":    cost["learning_curve_factor"],
         "processing_power_w":       processing_power_watts,
         "power_system_kg":          power_system_kg,
         "power_w_per_kg_at_target":  plant_w_per_kg,
@@ -5303,7 +5737,31 @@ def _evaluate_combo_at_ratio(
         "containment_frac":         containment_frac,
         "m_containment_kg":         m_containment_kg,
         # ── v1.14.0 programme-aware market saturation ──────────────────────
+        # Kept with its exact v1.14.0 semantics — 1.0 whenever the saturation
+        # term is switched off — so that a gated-off build still reproduces
+        # that release byte for byte.  `fleet_ships` below is the unconditional
+        # count and is the one to read.
         "concurrent_missions":      concurrent_missions,
+        # ── v1.15.0 programme scale and fleet size ─────────────────────────
+        # `programme_missions` is N and `fleet_ships` is F, and the invariant
+        # between them is N = F × trips_per_ship whenever the search is on.
+        # With it off, N is whatever the config said and F is the fleet that
+        # size implies — the two columns still describe the same programme,
+        # they are just not being chosen.
+        "programme_missions":       float(best_n),
+        "fleet_ships":              float(best_f),
+        "trips_per_ship":           float(trips_per_ship),
+        "rig_trips_calendar_cap":   float(rig_calendar_cap),
+        # True where the CYCLE bound is what retires the rig rather than the
+        # calendar one.  Worth reporting per row rather than assuming: the two
+        # bounds swap over at a stay of life/trips (3 yr at 15 yr and 5 trips),
+        # so a long-stay mission is still calendar-limited and reads False here.
+        "rig_trip_limit_binds":     bool(
+            rig_trip_cap is not None and trips_per_ship == rig_trip_cap
+            and rig_trip_cap < rig_calendar_cap),
+        # How many rungs of the fleet ladder this mission actually paid for.
+        # 1 means the programme was set, not searched.
+        "programme_options_priced": float(priced_count),
         # ── v1.11.0 storage and refuelling ─────────────────────────────────
         "tank_mass_frac":           tank_frac,
         "m_tank_return_kg":         float(actual_cascade.get("m_tank_return", 0.0)),
@@ -5399,13 +5857,31 @@ def selection_key(
     """
     if result is None:
         return (-np.inf, -np.inf)
-    profit = float(result.get("profit_usd", -np.inf))
+    return _objective_key(
+        float(result.get("profit_usd", -np.inf)),
+        float(result.get("gross_value_usd", 0.0) or 0.0),
+        float(result.get("total_cost_usd", 0.0) or 0.0),
+        config,
+    )
+
+
+def _objective_key(
+    profit: float, gross: float, cost: float, config: CalcConfig,
+) -> Tuple[float, float]:
+    """`selection_key`'s ranking algebra, over loose scalars.
+
+    v1.15.0 split this out because the programme-scale search ranks candidates
+    before any result dict exists — building one per rung of the fleet ladder
+    just to read three fields back out of it would allocate a ~130-key dict per
+    comparison.  It is a split for the caller's convenience and NOT a second
+    statement of the rule: `selection_key` is defined as this function, so the
+    two cannot drift, which is the failure mode this file warns about wherever
+    algebra appears twice (see `_combo_can_close`).
+    """
     if str(config.selection_objective).strip().lower() == "profit":
         return (0.0, profit)
     if profit > 0:
         return (1.0, profit)
-    gross = float(result.get("gross_value_usd", 0.0) or 0.0)
-    cost  = float(result.get("total_cost_usd", 0.0) or 0.0)
     if gross <= 0:
         return (-1.0, -cost)          # no revenue at all — lose the least
     return (0.0, -(cost / gross))
@@ -6350,6 +6826,44 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
                 bits.append(f"{n_peri:,} rendezvous at perihelion")
         if bits:
             print(f"     🧭  Architecture chosen: {'  |  '.join(bits)}")
+
+    # ── What the programme search chose (v1.15.0) ────────────────────────────
+    # Same argument as the block above, and it matters more here, because the
+    # two ways this axis can be reported as a result while being an artefact are
+    # both visible from these three numbers:
+    #
+    #   • EVERY ROW AT THE LADDER'S TOP means `max_fleet_ships` is BINDING, not
+    #     bounding.  That happens when nothing pushes back on scale — a payload
+    #     whose commodities have no `annual_market_kg` entry gets an infinite
+    #     market, market saturation returns 1.0 forever, and the objective is
+    #     then monotone in N.  Reporting the top rung of a monotone ladder is
+    #     reporting where the loop stopped, and it is exactly the failure
+    #     v1.14.0 closed.
+    #   • EVERY ROW AT F = 1 means the fleet never wanted to grow, so the axis
+    #     is costing runtime and buying nothing.
+    if config.optimise_programme_scale and not config.model_rig_service_life:
+        print("     ⚠️   optimise_programme_scale is ON but model_rig_service_life "
+              "is OFF, so one rig serves any programme, nothing is ever "
+              "concurrent, and market saturation cannot push back. The search "
+              "is refused rather than run — it would report the ladder's top "
+              "rung as a result. See programme_options().")
+    elif config.optimise_programme_scale and "fleet_ships" in df.columns:
+        f = df["fleet_ships"]
+        at_cap = int((f >= config.max_fleet_ships).sum())
+        print(f"     🚢  Programme chosen: fleet median {f.median():.0f} ship(s), "
+              f"max {f.max():.0f}  |  N median {df['programme_missions'].median():.0f}, "
+              f"max {df['programme_missions'].max():.0f}  |  "
+              f"{int((f <= 1).sum()):,} single-ship")
+        if "trips_per_ship" in df.columns:
+            binds = df["rig_trip_limit_binds"]
+            print(f"     🔧  Rig life: {df['trips_per_ship'].median():.0f} trips median "
+                  f"(calendar cap {df['rig_trips_calendar_cap'].median():.0f})  |  "
+                  f"cycle bound binds on {binds.mean():.1%} of rows")
+        if at_cap:
+            print(f"     ⚠️   {at_cap:,} row(s) ({at_cap/len(df):.1%}) sit AT "
+                  f"max_fleet_ships = {config.max_fleet_ships}. The ladder is "
+                  f"binding, not bounding — check those rows have a finite "
+                  f"market before reading their N as an optimum.")
 
     n_viable = int(df["viable"].sum())
     elapsed  = (datetime.now() - t0).total_seconds()
