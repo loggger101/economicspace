@@ -11,8 +11,9 @@ Three things it does:
                 the module's own explanatory comment attached as help text.
     Run         any subset of the four stages, reusing the CSVs already on disk
                 for the stages you skip. Stage 1 downloads ~500 MB and a full
-                beneficiated Stage 4 takes ~20 minutes, so re-running Stage 4
-                alone against a cached catalog is the normal working loop.
+                Stage 4 runs 22 min to 6.8 h depending on two flags (see below),
+                so re-running Stage 4 alone against a cached catalog is the
+                normal working loop.
     Inspect     the profitability catalog ranked by cost/revenue, charted, and
                 drilled into one asteroid at a time.
 
@@ -168,8 +169,12 @@ STAGES = [
           "upgrade, or Stage 4 reads a propellants.csv with no tankage "
           "columns and silently flies every tank for free."),
     Stage("calc",      4, "Profitability",
-          "The headline output. ~20 min for a full beneficiated catalog, "
-          "seconds with eval_row_cap set low."),
+          "The headline output, and the only stage whose runtime you choose. "
+          "Measured on the full 1.55 M-row catalog at cislunar, 12 workers: "
+          "22 min raw at N = 1, 65 min with optimise_programme_scale, 2.6 h "
+          "with use_beneficiation, and 6.8 h with both — and both of those "
+          "flags DEFAULT ON as of calc v1.17.0, so budget for the 6.8 h unless "
+          "you turn one off. Seconds with eval_row_cap set low."),
 ]
 
 

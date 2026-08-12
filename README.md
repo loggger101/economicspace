@@ -527,16 +527,25 @@ not superseded by it, it is simply unmeasured (~21 h for the pair).
 > N = F × trips.
 >
 > So `optimise_programme_scale` searches the **fleet** and lets N follow. It
-> costs **1.51× runtime, not 12×** — measured on the full catalog — because programme size touches nothing
+> costs **2.98× runtime, not 12×** — measured on the full raw cislunar cell,
+> 1,307 s → 3,890 s, on the two-dimensional v1.16.0 search; v1.15.0's
+> one-dimensional ladder measured 1.51× and that figure does not carry over —
+> because programme size touches nothing
 > in the mass cascade — the rocket equation, the power fixed point, the payload
 > knapsack and the concentration sweep are all solved once per candidate and the
 > whole ladder is priced off the result.
 >
 > On a 2,500-row raw cislunar sample it moves the best cell **42.0081× →
 > 21.7341×**, choosing fleets of 1–8 ships (N = 5–40). ⚠️  That is a sample, and
-> it is **default OFF**: turning it on changes the question from "the best
-> single mission to this rock" to "the best programme built around it". Every
-> figure in this README is the former.
+> turning it on changes the question from "the best single mission to this rock"
+> to "the best programme built around it". Almost every figure in this README is
+> the former.
+>
+> 🚨  **"default OFF" was true until calc v1.17.0 — it is now default ON**,
+> along with `use_beneficiation`. Set both False to reproduce the tables in this
+> README. The full cislunar 2×2 is measured on the full catalog and both
+> search-OFF cells reproduce exactly; see
+> [Combined effect](#combined-effect).
 >
 > 🚨  **v1.16.0 RETIRES THE BAND ARGUMENT IN THAT PARAGRAPH.** "Within one fleet
 > band every lever improves and none pushes back" was true of a model in which
@@ -547,8 +556,19 @@ not superseded by it, it is simply unmeasured (~21 h for the pair).
 > second dimension **enumerated exhaustively** rather than laddered, because it
 > is at most five integers. Measured on a 400-row raw cislunar sample: the
 > searched cell goes **31.0693× → 33.7977×** (+8.8%), the median fleet grows
-> from **1 ship to 2**, and **12 of 168 bodies now decline to use up the rig**
-> where none did before. Still default OFF, and still inert at N = 1.
+> from **1 ship to 2**. Still inert at N = 1.
+>
+> ⚠️  **The "12 of 168 bodies decline to use up the rig" figure that used to end
+> that sentence was the STALE-TABLE variant and did not belong here.** It comes
+> from re-running the sample against the archived 43-row Module 3 ops table, in
+> which the v1.15.0 trip cap is absent and `trips` reaches 20. On the **current
+> 44-row table** the sample gives W = `trips` on all 168 rows, which is why
+> CLAUDE.md records the 2-D search as "necessary but not yet load-bearing".
+>
+> ✅  **Settled on the full catalog, 2026-08-11: W < `trips` on 2,077 of 650,921
+> rows (0.319%).** The effect is real on the current table and simply too rare
+> for 400 bodies to show. The search is load-bearing; the sample could not see
+> it.
 
 ⚠️  **This curve has also not been rebuilt since v1.11.0.** Its N = 1 anchor is
 the old 22.93×; that cell measured 22.4665× on v1.11.0 and now measures
@@ -1013,6 +1033,53 @@ absolute masses):
 | > 3.2 AU | 4.7 | 226 kg |
 
 ### Combined effect
+
+#### The full cislunar 2×2 — full catalog, calc v1.16.0, measured 2026-08-11
+
+Both settings of beneficiation × both settings of the programme search, at
+`cislunar`, on a 1,555,667-row catalog (1,555,618 with positive mass), 12
+workers, one Stage 1/2/3 pass. **These supersede the cislunar row of the
+destination table below**, which they also reproduce.
+
+| | search OFF (N = 1) | search ON |
+|---|---|---|
+| **raw** | **26.7863×** | **15.4273×** |
+| **beneficiated** | **20.5895×** | **13.1443×** |
+
+Evaluable 650,921 raw / 660,253 beneficiated. Runtimes 1,307 s / 3,890 s raw and
+9,300 s / 24,587 s beneficiated — beneficiation is ~7× and the programme search
+~3×, so the 2×2 spans **18.8×** in wall clock corner to corner.
+
+**13.1443× is the best cislunar figure this model has produced**, and it is what
+calc v1.17.0's two flipped defaults return **at cislunar**. It is still a factor
+of 13 from breakeven, so the project's headline is unchanged: **a default run
+produces zero viable missions, and that is the correct answer.**
+
+⚠️  It is **not** "the default run" — `delivery_destination` still defaults to
+`earth_surface`, so a configure-nothing v1.17.0 run is beneficiated + searched
+at `earth_surface`, which has never been measured. Only the two flags moved.
+
+⚠️  The two columns are **not comparable** — one is the best single mission to a
+rock, the other the best programme built around it (here: 10 missions, 2 ships,
+17 years). The improvement is a change of question, not a saving.
+
+The same body, **2021 CX5** (D-type, 82 m, a = 1.626 AU), wins all four cells on
+a New Glenn — while its propellant goes xenon → iodine → iodine → **argon** and
+its payload falls **93,312 → 34,573 kg**, which is market saturation preferring
+more, smaller missions at programme scale.
+
+**Both search-OFF cells reproduce their committed v1.14.0 values exactly**, four
+releases later and on a catalog that has grown by 1,267 bodies — same winner
+(2021 CX5, D-type), same vehicle, same propellant, same payload in kilograms,
+same concentration ratio, same propellant shares. That is a stronger check than
+the byte-identity diffs v1.14.1/v1.14.2/v1.15.0 argued from, because those
+compared identical rows and this compares a different population.
+
+As of **calc v1.17.0 the bottom-right cell is what the default FLAGS produce**
+(at this destination — the default destination is still `earth_surface`); the
+top-left is what almost every other table in this README is. Set
+`use_beneficiation = False` and `optimise_programme_scale = False` to reproduce
+them.
 
 #### Current results — full catalog, calc v1.14.0, measured 2026-08-09
 
@@ -1559,9 +1626,11 @@ directions, and it extends the standing rule from absolute wall clocks to
 *ratios between two settings*. Every other number in the release came out where
 the sample said; only the runtime moved.
 
-⚠️ **Default OFF**, and it is the one axis in Stage 4 that is not a correction:
-it changes the question from "the best single mission to this rock" to "the best
-programme built around it". Every figure in this README is the former, at N = 1.
+⚠️ **Default ON as of calc v1.17.0** (it was OFF at this release), and it is
+still the one axis in Stage 4 that is not a correction: it changes the question
+from "the best single mission to this rock" to "the best programme built around
+it". Almost every figure in this README is the former, at N = 1 — set
+`optimise_programme_scale = False` to reproduce them.
 
 ### What changed in v1.14.2
 
@@ -1861,9 +1930,10 @@ Stated plainly so results aren't over-read:
   (development NRE, autonomy NRE, rig, capsule, contingency, WACC) run to
   billions, while the best bulk material is worth a few dollars per kg. The
   best case the model can currently reach — `cislunar` delivery plus
-  beneficiation — still comes in **~21× short** at a single mission
-  (**20.5895×**, full catalog, calc v1.14.0, measured 2026-08-09). There is no
-  "don't fly" option, so the ranking is really *which target loses least*.
+  beneficiation plus a searched programme — still comes in **~13× short**
+  (**13.1443×**, full catalog, calc v1.16.0, measured 2026-08-11; **20.5895×**
+  at a single mission). There is no "don't fly" option, so the ranking is
+  really *which target loses least*.
   (This was `mars_surface` at ~25× until mineral_value v1.7.0 priced the local
   resources a planetary surface already has; Mars is now the *worst* of the
   four in-space destinations at 74.6748× raw.) Scale does not rescue it either

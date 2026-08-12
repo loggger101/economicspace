@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.19.0)
+"""Master Asteroid Profitability Pipeline (1.20.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -10421,7 +10421,25 @@ class CalcConfig:
     # rows), the energy costs a power plant, the power plant costs mass, and
     # the mass comes straight out of the payload budget through the same
     # rocket equation.  Module 4 solves that feedback rather than ignoring it.
-    use_beneficiation:         bool  = False
+    #
+    # ⚠️  DEFAULT TRUE as of v1.17.0, and unlike the flag below this one is
+    # safe to flip on a weak-dominance argument rather than on a measurement:
+    # `evaluate_combo` always also prices NOT concentrating (via
+    # `beneficiate=False`, which is not the same as ratio 1.0 — see the
+    # concentration search), so turning this on can only widen the option set.
+    # A correctly-implemented search cannot get worse for that, which is the
+    # never-worse invariant this project checks after every release.
+    #
+    # Checked anyway, on the full catalog at cislunar (2026-08-11, calc
+    # 1.16.0): 650,921 pairs, max benef/raw 1.000000, ZERO exceptions, and
+    # 102,765 bodies (15.79%) declining to concentrate at exactly 1.0 — the
+    # documented signature, never worse and equal wherever it declines.
+    #
+    # What it costs is TIME, and that is the only reason it was ever off: a
+    # full beneficiated cislunar pass measured 9,300 s against raw's 1,307 s,
+    # a ratio of 7.1x.  Set False for the raw cell (26.7863x), which is what
+    # most of the older tables in CLAUDE.md were measured at.
+    use_beneficiation:         bool  = True
     # Fraction of the valuable phase that actually reports to concentrate.
     # Terrestrial PGM / sulphide flotation circuits run 85-95%; magnetic
     # separation of a metal phase from silicate gangue is mechanically simpler
@@ -10754,14 +10772,33 @@ class CalcConfig:
     # with `selection_key` like all the others.  `nre_amortization_missions`
     # then becomes the FLOOR of the search rather than the answer.
     #
-    # ⚠️  DEFAULT FALSE, deliberately, and this is the one axis in the module
-    # that is not a correction.  Every measured cell on record — every table in
-    # CLAUDE.md and the README — is N = 1, and turning this on does not make
-    # those numbers wrong, it changes the QUESTION from "the best single
-    # mission to this rock" to "the best programme built around it".  Two
-    # different answers to two different questions; a default flip would
-    # silently retire every committed figure at once with no way to reproduce
-    # them.  Turn it on to ask the programme question.
+    # ⚠️  DEFAULT TRUE as of v1.17.0, and this is STILL the one axis in the
+    # module that is not a correction.  Everything else on the "stopped giving
+    # away" list fixes something the model was getting free; this one changes
+    # the QUESTION, from "the best single mission to this rock at N missions"
+    # to "the best programme built around it", sizing the fleet, the schedule
+    # and N together.  Two different answers to two different questions, and
+    # the flag is how you say which you are asking.
+    #
+    # ⚠️  READ THIS BEFORE QUOTING ANY OLDER TABLE.  Almost every figure in
+    # CLAUDE.md and the README predates this default and is N = 1, so a default
+    # run no longer reproduces them — set this False to do that.  This comment
+    # used to argue the flip would "silently retire every committed figure at
+    # once with no way to reproduce them", and the second half of that was the
+    # real objection: the two settings had never been measured side by side on
+    # the real population, so OFF was the only anchor anyone had.
+    #
+    # That is no longer true.  The full cislunar 2x2 was measured on the full
+    # 1.55 M-row catalog on 2026-08-11 (calc 1.16.0) and is in CLAUDE.md, and
+    # the OFF cells reproduce their committed values exactly — 26.7863x raw and
+    # 20.5895x beneficiated, both unmoved across four releases.  The N = 1
+    # answer is now a recorded measurement rather than a thing you would lose.
+    #
+    # It is NOT free.  Measured at 2.98x runtime on the full raw cislunar cell
+    # (1,307 s -> 3,890 s), because the 2-D (F, W) search prices a median of 40
+    # programmes per surviving candidate against the 1-D ladder's 8.  The
+    # sample this release was developed on predicted 1.10x, and v1.15.0's
+    # 1-D ladder measured 1.51x; neither carries over.
     #
     # ✅  THE KNOWN GAP THIS COMMENT USED TO DESCRIBE IS CLOSED IN v1.16.0 by
     # `model_programme_calendar` below.  It read: the fleet is only ever the
@@ -10771,7 +10808,7 @@ class CalcConfig:
     # saturation, and F never wanted to exceed ceil(N / trips).  Fleet size was
     # a one-sided decision.  It is now two-sided, and the search is
     # two-dimensional over (F, W) rather than a ladder over F.
-    optimise_programme_scale:  bool  = False
+    optimise_programme_scale:  bool  = True
     # Upper bound on the fleet search.  Not a physical limit — it is where the
     # ladder stops.  Market saturation drives revenue toward zero as concurrent
     # output grows, so the objective is eventually monotone WORSE in fleet size
@@ -11796,7 +11833,35 @@ class CalcConfig:
     #         New output columns: missions_per_ship, campaign_cadence_yr,
     #         cadence_window_bound, programme_span_yr,
     #         programme_calendar_multiplier.
-    pipeline_version: str = "1.16.0"
+    # v1.17.0 DEFAULTS: BENEFICIATION ON, PROGRAMME SEARCH ON.  No model term,
+    #         coefficient, table value or search axis moved.  An explicitly
+    #         configured run produces bit-identical output to 1.16.0; what moves
+    #         is what you get when you configure NOTHING, which is the whole
+    #         point of the bump — the rule in CLAUDE.md is that changing any
+    #         number a run produces means bumping, and the default run's numbers
+    #         change.  Same contract as 1.10.1 / 1.14.1 / 1.14.2 (a stamp that
+    #         does not mean the model moved), for a different reason: those were
+    #         performance, this is configuration.
+    #         • `use_beneficiation` False -> True.  Weakly dominant by
+    #           construction — the search always also prices `beneficiate=False`
+    #           — so this cannot make any row's objective worse.  Verified on
+    #           the full catalog: 650,921 cislunar pairs, max benef/raw
+    #           1.000000, zero exceptions, 15.79% declining at exactly 1.0.
+    #           Costs 7.1x runtime (1,307 s -> 9,300 s raw -> beneficiated).
+    #         • `optimise_programme_scale` False -> True.  NOT weakly dominant
+    #           in the same sense — it is a change of QUESTION, from the best
+    #           single mission to the best programme — but never-worse against
+    #           N = 1 holds by construction since v1.16.0 put (F, W) = (1, 1) in
+    #           the search set.  Verified: 650,921 pairs, max searched/unsearched
+    #           1.000000, zero worse, median improvement 42.4%.
+    #           Costs 2.98x runtime (1,307 s -> 3,890 s).
+    #         ⚠️  A DEFAULT RUN NO LONGER REPRODUCES THE OLDER TABLES, because
+    #         almost all of them are N = 1 raw.  Both flags restore them, and
+    #         both OFF cells were re-measured on the full catalog on 2026-08-11
+    #         and reproduce EXACTLY: 26.7863x raw (unmoved across 1.14.0 ->
+    #         1.16.0) and 20.5895x beneficiated.  Nothing was retired; the
+    #         defaults just stopped answering the smallest question by default.
+    pipeline_version: str = "1.17.0"
 
 
 CALC_CONFIG = CalcConfig()
@@ -11806,6 +11871,12 @@ print(f"✅  Configuration loaded — output dir: {CALC_CONFIG.output_dir}")
 print(f"    Hardware       : {CALC_CONFIG.mining_hardware_kg:,.0f} kg mining rig "
       f"+ {CALC_CONFIG.return_vehicle_dry_kg:,.0f} kg return-capsule dry")
 print(f"    Mining cap     : {CALC_CONFIG.max_mining_fraction:.0%} of asteroid mass per mission")
+# Default ON as of v1.17.0 and worth ~7x the runtime of a raw pass, so say so
+# up front rather than leaving a two-and-a-half-hour run unexplained.
+print(f"    Beneficiation  : "
+      + ("concentrate (search also prices not concentrating at all)"
+         if CALC_CONFIG.use_beneficiation else
+         "off — run-of-mine ore at bulk grade"))
 print(f"    Return mode    : "
       f"{'aerocapture available (per-asteroid Δv saving vs TPS mass)' if CALC_CONFIG.use_aerocapture_return else 'propulsive only'}")
 print(f"    ISRU           : {'available where the rock has water' if CALC_CONFIG.use_isru_return_propellant else 'off'}")
@@ -17479,8 +17550,16 @@ print(f"      Propellants      : {'flown hardware only' if MASTER_CONFIG.calc.op
 print(f"      Tank mass        : {'in the rocket equation' if MASTER_CONFIG.calc.model_tank_mass else 'off'}")
 print(f"      Architecture     : {'searched per asteroid' if MASTER_CONFIG.calc.optimise_architecture_per_asteroid else 'fixed by config'}")
 print(f"      NRE amortise     : over {MASTER_CONFIG.calc.nre_amortization_missions} mission(s)")
+# Both of the next two default ON as of calc v1.17.0 and between them cost
+# ~20x the runtime of the raw single-mission run most of the older tables in
+# CLAUDE.md were measured at.  Print them so a long run is never a mystery.
+print(f"      Beneficiation    : "
+      + ("ON — concentrate, not run-of-mine ore (~7x runtime; False for the raw cell)"
+         if MASTER_CONFIG.calc.use_beneficiation else
+         "off — flying run-of-mine ore at bulk grade"))
 print(f"      Programme        : "
-      + (f"fleet searched to {MASTER_CONFIG.calc.max_fleet_ships} ship(s); N follows"
+      + (f"(fleet ≤ {MASTER_CONFIG.calc.max_fleet_ships}) x (campaigns/ship) searched; "
+         f"N follows (~3x runtime)"
          if MASTER_CONFIG.calc.optimise_programme_scale else
          "fixed size (set calc.optimise_programme_scale to search it)"))
 print(f"      Contingency      : {MASTER_CONFIG.calc.contingency_fraction:.0%}")
@@ -17506,7 +17585,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.19.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.20.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
