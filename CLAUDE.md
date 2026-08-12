@@ -63,8 +63,13 @@ See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.1.0`, mineral_value `1.7.0`, transportation `1.12.0`,
-calc `1.17.0`, master `1.20.0` (the master version is a literal in
+calc `1.17.1`, master `1.20.1` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
+
+ℹ️  **calc `1.17.1` is the FOURTH stamp that does not mean the numbers moved**
+— performance only, same contract as `1.10.1`, `1.14.1` and `1.14.2`. Every
+measured cell in this file stands unaltered; do not re-measure anything on
+account of it. See "What calc v1.17.1 changed".
 
 🚨  **calc `1.17.0` FLIPPED TWO DEFAULTS, so a default run no longer reproduces
 almost any table in this file.** `use_beneficiation` and
@@ -755,11 +760,22 @@ clock they imply is still a projection. It happened to hold **for this cell**;
 that is one data point, and the beneficiated cell is still unmeasured on
 anything past `1.14.0`.
 
-⚠️  **The timings in this file have moved seven times, for seven unrelated
+⚠️  **The timings in this file have moved EIGHT times, for eight unrelated
 reasons, and the fifth dwarfs the others.** Everything below is per
 *catalog*, and catalog `1.1.0` made the catalog **17× bigger** — 89,367 rows
 to 1,554,400. Cap `eval_row_cap` (which now *samples* rather than truncating —
 see calc `1.13.0`) for anything interactive.
+
+⚠️  **The eighth move is calc `1.17.1`, and NONE of the wall clocks below have
+been re-measured on it.** It is performance-only and it lands hardest on the
+cells that call the cost model most — a stride-sample A/B puts it at 1.04×
+(raw, search off) to **1.35×** (beneficiated + search, the `1.17.0` default).
+**Do not scale the numbers below by those ratios.** This file's own rule is
+that a sample predicts full-catalog runtime to no better than a factor of ~5,
+and v1.15.0 established that the rule covers *ratios* too — four
+mispredictions so far, two of them ratios. Every figure below is still the
+`1.14.0`/`1.15.0`/`1.16.0` measurement it says it is, and those are the only
+measured ones.
 
 **Measured on calc `1.14.0`, full catalog, 12 workers, 2026-08-09** — these are
 the real numbers, and the sixth move is v1.14.0's power-source search axis:
@@ -4423,6 +4439,194 @@ before 2026-08-11:
 CALC_CONFIG.use_beneficiation = False          # raw cells
 CALC_CONFIG.optimise_programme_scale = False   # N = 1 cells
 ```
+
+## What calc v1.17.1 changed
+
+**Nothing you can measure.** Fourth performance-only stamp, same contract as
+`1.10.1`, `1.14.1` and `1.14.2`: every number identical, the stamp moves only
+so a CSV still names the code that produced it. **Do not re-measure any table
+in this file on account of it.** calc `1.17.0 → 1.17.1`, master
+`1.20.0 → 1.20.1`; no other module changed, so no Stage 1/2/3 re-run.
+
+The finding is one sentence, and it is v1.17.0's own doing: **turning
+`optimise_programme_scale` on by default multiplied every per-call cost in the
+COST cascade by forty.** Every previous performance release in this project
+went after the mass cascade — the search, the pre-filter, the sizing loop.
+Nobody had looked at `mission_cost_usd`, because until `1.17.0` it ran once per
+surviving candidate. It now runs once per *programme option*, and the ladder
+prices a median of 40 of them.
+
+Measured at cislunar on a 150-row beneficiated sample with the search on:
+
+| | calls | was |
+|---|---|---|
+| `mission_cost_usd` | 447,390 | 50% of the profile |
+| **`_ops_value`** | **8,057,499** | **11.7%** |
+| `rig_trips_per_ship` | 458,187 | — |
+| `delivery_architecture` | 458,337 | — |
+
+**8.06 million lookups of twenty-two numbers that never move.** That is
+v1.10.1's finding — "the five ops-table constants the sizing loop needs were
+looked up per (asteroid × vehicle × propellant × architecture × ratio)" — in
+the other half of the model, six releases later.
+
+### What was taken
+
+- **`_ops_cost_constants(ops_df)`**, the 22 Module 3 rows the cost cascade
+  reads, memoised on `ops_df` identity exactly as `_ops_sizing_constants` is,
+  and unpacked in one statement at the top of `mission_cost_usd`.
+  `rig_trips_per_ship` reads the same tuple. Every row is resolved **eagerly**,
+  including branches only one destination takes — `_ops_value` is total (absent
+  row and NaN both fall back to the default), so an untaken branch costs one
+  dict lookup at run start and cannot fail.
+- **`optimal_payload_mix(want_phase=...)`.** `_cargo_water_kg` is **97.3%** of
+  that function's callers and reads exactly one key, `mix_kg["water"]` — so it
+  was building the mix dict, accumulating the value sum, and running
+  `max(mix.items(), key=…)` over 1.06 M lambda calls, then discarding all
+  three. It is a short circuit in the existing walk, **not a second knapsack**:
+  writing a water-only copy would have been the "two copies of this algebra
+  drifting apart" hazard for no extra speed, because the loop is not what costs.
+- **`AsteroidContext.cargo_ice_frac`.** The raw arm of `_cargo_water_kg` was
+  re-deriving a per-BODY quantity — `.get` + `pd.isna` + `float` — once per
+  candidate per pass of the sizing loop. Same class as v1.14.1's context hoist
+  and v1.14.2's "a numpy name applied to a scalar costs ~20× for nothing", in a
+  place both releases missed.
+- **`mission_cost_usd(totals_only=True)`.** The ladder compares options on
+  `total_cost` and nothing else; the other ~39 keys are read only for the option
+  that wins. Building a 40-key dict to throw 39 away measures **~3.4 µs a call**
+  on the reference machine. Early return before the dict, winner re-priced once
+  in full — one extra call out of forty.
+- **`rig_trips` passed into `mission_cost_usd`** rather than re-derived. It is
+  `(ops_df, config, stay_yr)` and all three are held fixed across a ladder; the
+  caller that searched (F, W) already has it.
+- **`delivery_architecture` memoised on its raw argument.** ⚠️  The warning path
+  is deliberately NOT memoised, so an unknown destination still shouts on every
+  call — that loudness is the whole point of the warning.
+
+### Measured
+
+Interleaved A/B, **both builds imported into one process** and the cells
+alternated A,B,A,B…, best of 5. That construction matters: this host swings
+~20% run to run, and measuring the two builds in separate processes minutes
+apart is not a measurement — the first attempt at this reported the default
+cell as 0.88× (a *slowdown*) purely from drift.
+
+| cell | HEAD | `1.17.1` | speed-up |
+|---|---|---|---|
+| raw, search off | 1.704 s | 1.631 s | **1.04×** |
+| beneficiated, search off | 5.950 s | 4.623 s | **1.29×** |
+| raw, search on | 5.989 s | 4.792 s | **1.25×** |
+| **beneficiated + search** (the `1.17.0` **default**) | **14.504 s** | **10.765 s** | **1.35×** |
+
+The gradient across that table is the release in one picture: the cells that
+gained least are the ones that call the cost model least.
+
+🚨  **THESE ARE STRIDE-SAMPLE RATIOS AND THIS FILE'S OWN RULE SAYS NOT TO TRUST
+THEM AS FULL-CATALOG FIGURES.** A sample predicts full-catalog runtime here to
+no better than a factor of ~5, and v1.15.0 established that the rule applies to
+a **ratio between two settings**, not only to a wall clock — that is now four
+mispredictions, two of them ratios. **Nobody has run a full-catalog cell on
+`1.17.1`.** Do not update any wall clock in this file from the table above; the
+timings elsewhere are `1.14.0`/`1.15.0`/`1.16.0` measurements and remain the
+only measured ones.
+
+The direction is nonetheless safe to state, because it is structural rather
+than statistical: the work removed is per-*call* overhead on functions whose
+call counts scale with the catalog, so the ratio should if anything hold better
+at scale than the pre-filter's did. That is an argument, not a measurement, and
+it is labelled as one.
+
+### Verification (2026-08-12)
+
+**1. Four cells, 135/135 columns bit-identical against `git HEAD`**, same rows,
+same process structure, serial — the check that matters most for a release of
+this kind:
+
+```
+raw,          400 rows   135/135 identical | sha16 2593f8cb6f7db04f MATCH
+beneficiated, 150 rows   135/135 identical | sha16 146498dc0b9b7697 MATCH
+raw+search,   400 rows   135/135 identical | sha16 f5d1c86e70a2d148 MATCH
+benef+search, 150 rows   135/135 identical | sha16 ac613cef5f3f7777 MATCH
+```
+
+Re-run after **every** individual item, not only at the end, which is what
+localises a break to the change that caused it.
+
+⚠️  A parquet round-trip renders a `None` in an object column back as `nan`, so
+a naive per-column `astype(str)` comparison reports `thrust_scaling`,
+`isru_feed_material` and `name` as differing when they are identical. Normalise
+the null representation before comparing, or trust the CSV hash — which is what
+caught it here. **A broken checker looks exactly like a broken release.**
+
+**2. Serial and parallel are byte-identical**, required after any change to the
+search and doubly so here: this release adds two module-level memos
+(`_OPS_COST_CACHE`, `_ARCH_BY_RAW_KEY`) that are per-process, which is precisely
+the shape of change that makes a worker disagree with its parent.
+
+| | serial | 8 workers | rows | sha256 |
+|---|---|---|---|---|
+| benef + search, 1,500-row stride | 119.9 s | 42.8 s | 632 | MATCH |
+| raw + search, 2,500-row stride | 37.4 s | 24.9 s | 1,044 | MATCH |
+
+**3. The mass-ledger identity holds exactly**, every cell — as it must, since
+nothing in the mass cascade was touched:
+
+```
+hardware_total_kg == mining_hardware_kg + power_system_kg + ep_system_kg
+max |error| 0.000000000 kg   (raw, beneficiated, raw+search)
+```
+
+**4. Both never-worse invariants hold, and hold exactly** (2,000-row stride):
+
+```
+beneficiated vs raw      pairs 852 | max 1.000000 | worse 0 | declined 151
+searched vs unsearched   pairs 852 | max 0.916014 | worse 0 | median +42.4%
+```
+
+✅  That **42.4%** median is the committed full-catalog figure for the same
+comparison, reproduced on a stride sample three releases later — see "THE FULL
+CISLUNAR 2×2". Worth more than it looks: it is the one number in this
+verification that could have moved without any hash changing.
+
+### Two things not to "fix"
+
+**`want_phase` must stay a short circuit inside the one walk.** The temptation
+is to write a small water-only function next to `optimal_payload_mix`. Don't:
+the greedy walk is cheap and the *bookkeeping* is what costs, so a copy buys
+nothing and costs a drift hazard on the one function this file already documents
+as load-bearing on the last ULP (see the phase-sort warning). The answer is
+bit-identical **by construction** — `remaining` is decremented in the same order
+by the same `min`, and the requested phase's take is returned before anything
+downstream could perturb it.
+
+**`totals_only` is an early return, not a second code path.** Every line above
+it is the same arithmetic in the same order, so the float `_objective_key`
+compares is the same float the full dict would have carried, and nothing below
+the early return touches `total_cost`. If a term is ever added to `total_cost`
+*after* the diagnostics, that early return silently starts pricing the ladder on
+a different number from the one it reports. **Keep `total_cost` final before it**
+— and note the failure would not change a row count, so of the checks above only
+the four-cell bit-identity diff would catch it.
+
+### What this release does NOT close
+
+**`mission_cost_usd` still recomputes its N-independent half forty times.** The
+ladder varies only `n_missions`, `missions_per_ship` and `cadence_yr`; the
+launch cost, both propellant costs, mission ops, recovery, licensing and
+liability do not depend on any of them, and are re-derived per option. Splitting
+the function into an N-independent prologue and an N-dependent tail is the
+obvious next win and it is deliberately **not** taken here: it re-associates the
+final sums, and this project's releases are argued from bit-identity, so a
+numerically-negligible reordering would destroy the evidence rather than the
+answer — exactly the trap recorded under v1.14.2's phase-sort rejection. It
+needs its own release, with the "identical to N decimal places" contract stated
+up front instead of a sha256.
+
+**`builtins.max` is now the third-largest leaf**, 11.4 M calls on the
+beneficiated+search sample. v1.14.2 measured it and declined to inline it
+because it is spread over dozens of sites where readability is doing real work.
+That judgement was made when the cost model ran once per candidate; it is worth
+re-measuring now that it runs forty times, but it was not revisited here.
 
 ## Config discipline
 
