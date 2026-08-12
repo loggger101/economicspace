@@ -63,13 +63,20 @@ See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.1.0`, mineral_value `1.7.0`, transportation `1.12.0`,
-calc `1.17.1`, master `1.20.1` (the master version is a literal in
+calc `1.17.2`, master `1.20.2` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
-ℹ️  **calc `1.17.1` is the FOURTH stamp that does not mean the numbers moved**
-— performance only, same contract as `1.10.1`, `1.14.1` and `1.14.2`. Every
-measured cell in this file stands unaltered; do not re-measure anything on
-account of it. See "What calc v1.17.1 changed".
+ℹ️  **calc `1.17.1` and `1.17.2` are the FOURTH and FIFTH stamps that do not
+mean the numbers moved** — performance only, same contract as `1.10.1`,
+`1.14.1` and `1.14.2`. Every measured cell in this file stands unaltered; do
+not re-measure anything on account of either. See "What calc v1.17.1 changed"
+and "What calc v1.17.2 changed".
+
+⚠️  **`1.17.2` is the first performance release in this project that is INERT
+on some cells and worth 1.45× on others**, and the split is not subtle: it
+removes work that only exists when a programme LADDER exists, so both
+search-OFF cells measure 0.99–1.02× and both search-ON cells 1.35–1.46×. Every
+previous perf stamp moved every cell. Do not quote a single number for it.
 
 🚨  **calc `1.17.0` FLIPPED TWO DEFAULTS, so a default run no longer reproduces
 almost any table in this file.** `use_beneficiation` and
@@ -766,16 +773,22 @@ reasons, and the fifth dwarfs the others.** Everything below is per
 to 1,554,400. Cap `eval_row_cap` (which now *samples* rather than truncating —
 see calc `1.13.0`) for anything interactive.
 
-⚠️  **The eighth move is calc `1.17.1`, and NONE of the wall clocks below have
-been re-measured on it.** It is performance-only and it lands hardest on the
-cells that call the cost model most — a stride-sample A/B puts it at 1.04×
-(raw, search off) to **1.35×** (beneficiated + search, the `1.17.0` default).
-**Do not scale the numbers below by those ratios.** This file's own rule is
-that a sample predicts full-catalog runtime to no better than a factor of ~5,
-and v1.15.0 established that the rule covers *ratios* too — four
-mispredictions so far, two of them ratios. Every figure below is still the
-`1.14.0`/`1.15.0`/`1.16.0` measurement it says it is, and those are the only
-measured ones.
+⚠️  **The eighth and ninth moves are calc `1.17.1` and `1.17.2`, and NONE of
+the wall clocks below have been re-measured on either.** Both are
+performance-only and both land hardest on the cells that call the cost model
+most — a stride-sample A/B puts `1.17.1` at 1.04× (raw, search off) to
+**1.35×** (beneficiated + search, the `1.17.0` default), and `1.17.2` at
+**0.99–1.02× with the search OFF** against **1.45×** raw-searched and
+**1.37×** on the default cell. **Do not scale the numbers below by any of
+those ratios.** This file's own rule is that a sample predicts full-catalog
+runtime to no better than a factor of ~5, and v1.15.0 established that the rule
+covers *ratios* too — four mispredictions so far, two of them ratios. Every
+figure below is still the `1.14.0`/`1.15.0`/`1.16.0` measurement it says it is,
+and those are the only measured ones.
+
+⚠️  **And do not compound them.** `1.17.1` × `1.17.2` on the default cell is
+1.35 × 1.37 = 1.85×, which nobody has measured; the two were measured against
+different HEADs on a host whose absolute times moved 30–45% between passes.
 
 **Measured on calc `1.14.0`, full catalog, 12 workers, 2026-08-09** — these are
 the real numbers, and the sixth move is v1.14.0's power-source search axis:
@@ -4385,6 +4398,14 @@ change, so the stamp moves. This is the fourth stamp in the project that does
 not mean the model moved — after `1.10.1`, `1.14.1` and `1.14.2` — and the
 first where the reason is configuration rather than performance.
 
+⚠️  **Two sequences are being counted in this file and they are one apart.**
+Stamps where *the model* did not move are `1.10.1`, `1.14.1`, `1.14.2`,
+`1.17.0`, `1.17.1`, `1.17.2` — six, and `1.17.0` is the fourth of them, which
+is what the sentence above says. Stamps that are *performance only* exclude
+`1.17.0`, because its reason was a default flip — five, of which `1.17.1` and
+`1.17.2` are the fourth and fifth, which is what the header at the top of this
+file says. Both are right; neither is a typo for the other.
+
 ### Why the flip is defensible now and was not before
 
 The `optimise_programme_scale` comment used to argue that a default flip "would
@@ -4610,23 +4631,190 @@ the four-cell bit-identity diff would catch it.
 
 ### What this release does NOT close
 
-**`mission_cost_usd` still recomputes its N-independent half forty times.** The
-ladder varies only `n_missions`, `missions_per_ship` and `cadence_yr`; the
-launch cost, both propellant costs, mission ops, recovery, licensing and
-liability do not depend on any of them, and are re-derived per option. Splitting
-the function into an N-independent prologue and an N-dependent tail is the
-obvious next win and it is deliberately **not** taken here: it re-associates the
-final sums, and this project's releases are argued from bit-identity, so a
-numerically-negligible reordering would destroy the evidence rather than the
-answer — exactly the trap recorded under v1.14.2's phase-sort rejection. It
-needs its own release, with the "identical to N decimal places" contract stated
-up front instead of a sha256.
+✅  **CLOSED IN v1.17.2, and the reason it was refused here was WRONG.** The
+note read:
+
+> **`mission_cost_usd` still recomputes its N-independent half forty times.**
+> The ladder varies only `n_missions`, `missions_per_ship` and `cadence_yr`;
+> the launch cost, both propellant costs, mission ops, recovery, licensing and
+> liability do not depend on any of them, and are re-derived per option.
+> Splitting the function into an N-independent prologue and an N-dependent tail
+> is the obvious next win and it is deliberately **not** taken here: it
+> re-associates the final sums, and this project's releases are argued from
+> bit-identity, so a numerically-negligible reordering would destroy the
+> evidence rather than the answer — exactly the trap recorded under v1.14.2's
+> phase-sort rejection. It needs its own release, with the "identical to N
+> decimal places" contract stated up front instead of a sha256.
+
+🚨  **It did not need that contract, because the split is bit-identical.** The
+premise is right — re-associating a sum would indeed destroy the evidence — and
+the conclusion does not follow, because **every N-dependent line in the cascade
+factors as `<N-independent base> * lc`**, and Python already evaluates
+`a * b * lc` as `(a * b) * lc`. Hoisting `a * b` into a name is therefore the
+*same two operations in the same order*, not an algebraically-equal
+rearrangement. Same for `nre_total * (1.0 - overlap) / n_missions`.
+
+What genuinely cannot be hoisted is a **partial sum interleaved with
+N-dependent terms** — `hardware_cost`, `spacecraft_book_value` and
+`upfront_lines` — and those three are restated verbatim in the tail, term for
+term. Four cells came back 135/135 columns identical with sha256 MATCH.
+
+⚠️  The lesson is not "the note was too cautious". It is that
+**"re-associates the sums" was asserted about a function nobody had factored**,
+and one reading was enough to see which lines do and do not. This file records
+several claims that were true of the code as written and false of the code as
+it could be written; this is another, and the tell is the same — a *mechanism*
+stated in prose with no line of arithmetic quoted next to it.
+
+⚠️  `cadence_yr` is in the list above and does **not** belong there: it is
+derived from the stay and the synodic period *outside* the closure, so it is
+fixed across the ladder like everything else. Only two arguments move.
 
 **`builtins.max` is now the third-largest leaf**, 11.4 M calls on the
 beneficiated+search sample. v1.14.2 measured it and declined to inline it
 because it is spread over dozens of sites where readability is doing real work.
 That judgement was made when the cost model ran once per candidate; it is worth
 re-measuring now that it runs forty times, but it was not revisited here.
+
+## What calc v1.17.2 changed
+
+**Nothing you can measure.** Fifth performance-only stamp, same contract as
+`1.10.1`, `1.14.1`, `1.14.2` and `1.17.1`: every number identical, the stamp
+moves only so a CSV still names the code that produced it. **Do not re-measure
+any table in this file on account of it.** calc `1.17.1 → 1.17.2`, master
+`1.20.1 → 1.20.2`; no other module changed, so no Stage 1/2/3 re-run.
+
+It is the second release in a row aimed at the programme ladder, because that
+is where `1.17.0`'s default flip put the work — and `1.17.1` cut the ladder's
+per-call cost while leaving the ladder pricing the same thing forty times over.
+
+🚨  **THE HEADLINE IS THE SHAPE OF THE TABLE, NOT ITS BEST NUMBER.** This is
+the first performance release in the project that is *inert* on some cells and
+worth 1.45× on others:
+
+| cell | HEAD | `1.17.2` | speed-up |
+|---|---|---|---|
+| raw, search off | 1.928 s | 1.944 s | **0.99×** |
+| beneficiated, search off | 5.052 s | 5.064 s | **1.00×** |
+| raw, search on | 5.222 s | 3.597 s | **1.45×** |
+| **beneficiated + search** (the `1.17.0` **default**) | **12.686 s** | **9.250 s** | **1.37×** |
+
+Both items remove work that only exists when a **ladder** exists, so a run with
+`optimise_programme_scale` off gains nothing and should not be expected to.
+Every earlier perf stamp moved every cell; **do not quote one number for this
+one.**
+
+### `mission_cost_usd` was solving the same problem forty times
+
+The ladder varies `n_missions` and `missions_per_ship` and **nothing else** —
+`cadence_yr` is derived outside the closure, and `1.17.1` had already stopped
+`rig_trips` being re-derived — yet the whole cost cascade ran per option: ~10
+`max()` calls, ~6 dict lookups, ~15 `float()` conversions, a
+`delivery_architecture` call and a 22-tuple unpack, forty times over, to change
+three numbers.
+
+Split into `_mission_cost_prologue` (everything that does not move with
+programme size) and `_mission_cost_tail` (~30 arithmetic ops that do).
+`mission_cost_usd` is now exactly their composition and keeps its signature, so
+every other caller is untouched; `_price_programme` builds the prologue once.
+
+🚨  **`1.17.1` NAMED THIS CHANGE AND REFUSED IT, ON A CLAIM THAT WAS WRONG**,
+and the correction is written up under that release's "What this release does
+NOT close" rather than repeated here. The short version: "it re-associates the
+final sums" is true of a naive split and false of the arithmetic as written,
+because every N-dependent line factors as `<N-independent base> * lc` and
+`a * b * lc` is *already* `(a * b) * lc`. The three sums that genuinely
+interleave N-dependent and N-independent terms — `hardware_cost`,
+`spacecraft_book_value`, `upfront_lines` — are restated verbatim in the tail.
+
+### The saturation sum was a function of F and was priced per (F, W)
+
+`programme_options` returns the F ladder **crossed with** W, so a median 40
+options run over ~8 distinct fleets. The market-saturation block inside
+`_price_programme` reads `fleet` and nothing else the ladder varies — the sale
+terms, gross base, payload and mission duration all belong to the candidate —
+so four out of five passes re-derived a sum they had already made. Memoised per
+candidate on the integer F.
+
+Bit-identical by construction rather than by rounding: the same F re-runs the
+same `+=` over the same list in the same order. That matters more here than
+almost anywhere else in the module — this is the accumulation v1.14.2 found to
+be **load-bearing on the last ULP**, which is why the phase table must not be
+sorted at source.
+
+Also: `max(1, missions_sharing_rig)` is computed once in the tail rather than
+three times. Deliberately *not* dropped altogether — it is provably redundant
+given `trips ≥ 1`, but that is a property of `rig_trips_per_ship`'s current
+return rather than of anything asserted locally.
+
+### Verification (2026-08-12)
+
+**1. Four cells, 135/135 columns bit-identical against `git HEAD`**, same rows,
+one process, serial — the check this release lives or dies on, and it was
+re-run after *each* of the three items rather than only at the end:
+
+```
+raw,          400-row stride  135/135 identical | sha16 b9faead27b21be52 MATCH
+beneficiated, 150-row stride  135/135 identical | sha16 566a5b403f21ea4e MATCH
+raw+search,   400-row stride  135/135 identical | sha16 1722132fac54bc97 MATCH
+benef+search, 150-row stride  135/135 identical | sha16 a3ab49e554f00952 MATCH
+```
+
+**2. Serial and parallel are byte-identical**, required after any change to the
+search and pointed here because this release adds a memo *inside the
+per-candidate closure* — the shape of change that makes a worker disagree with
+its parent:
+
+```
+benef + search, 1,500-row stride  serial vs 8 workers | 645 rows   | 8f244e194704f696 MATCH
+raw   + search, 2,500-row stride  serial vs 8 workers | 1,015 rows | 2745c8cad2cd326a MATCH
+```
+
+**3. The mass-ledger identity holds exactly**, all four cells — as it must,
+since nothing in the mass cascade was touched:
+
+```
+hardware_total_kg == mining_hardware_kg + power_system_kg + ep_system_kg
+max |error| 0.000000000 kg   (835 / 847 / 835 / 847 rows)
+```
+
+**4. Both never-worse invariants hold, and hold exactly** (2,000-row stride):
+
+```
+beneficiated vs raw      pairs 835 | max 1.000000 | worse 0 | declined 130
+searched vs unsearched   pairs 835 | max 0.913741 | worse 0
+```
+
+### Two things not to "fix"
+
+**The three interleaved sums must stay written out term by term.**
+`hardware_cost`, `spacecraft_book_value` and `upfront_lines` each mix
+N-dependent terms with N-independent ones, and pre-adding the N-independent
+members in the prologue would re-associate the addition. It would be
+numerically negligible and fatal — the v1.14.2 phase-sort lesson exactly: *a
+change can be numerically negligible and still destroy the evidence.* The four
+or five adds this costs are not what the function was slow for.
+
+**The prologue's tuple order is load-bearing**, and it is unpacked in one
+statement at the top of the tail. Same discipline `_ops_cost_constants` and its
+consumer already follow, and the same failure mode: a field inserted in one
+place and not the other silently shifts every value after it, which would not
+change a row count — so of the checks above, only the bit-identity diff would
+catch it.
+
+### What this release does NOT close
+
+**`_evaluate_combo_at_ratio` is now the largest single item**, 3.9 s tottime of
+a 16.2 s profiled beneficiated+search sample, and v1.14.2's rejected hoist —
+lifting the ratio-independent prologue out of the concentration sweep — is
+still rejected for the reasons that release gives (7.6% of the run, against
+splitting a 570-line function with ~40 locals crossing the seam). What *has*
+changed is the denominator: with the cost cascade cut roughly in half, the mass
+cascade is now most of what is left, so the next real win is there and not in
+the ladder.
+
+**Branch-and-bound on the objective** remains the one big structural item, and
+v1.14.1's warning against approximating the bound stands unaltered.
 
 ## Config discipline
 
