@@ -218,15 +218,20 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "`optimise_programme_scale` is the newest and the sharpest: OFF, a run "
         "answers \"the best single mission to this rock at N missions\"; ON, it "
         "answers \"the best programme built around it\", sizing the fleet, the "
-        "schedule and N together. Every committed figure in CLAUDE.md and the "
+        "schedule and N together. Almost every figure in CLAUDE.md and the "
         "README was measured OFF at N = 1, so turning it on does not make them "
-        "wrong — it changes the question. It is affordable because programme "
-        "size touches nothing in the mass cascade: the rocket equation, the "
-        "power fixed point and the concentration sweep are solved once per "
-        "candidate and every programme is priced off the result. (The 1.51x "
-        "runtime measured on the full catalog is a v1.15.0 figure, for a search "
-        "that was one-dimensional; v1.16.0's is two-dimensional and has not been "
-        "measured on the full catalog.)",
+        "wrong — it changes the question. ⚠️  BOTH IT AND `use_beneficiation` "
+        "DEFAULT ON as of calc v1.17.0, so a default run is no longer any of "
+        "those figures; set both False to reproduce them. The full cislunar "
+        "2x2 is measured on the full catalog (26.7863x / 15.4273x raw, "
+        "20.5895x / 13.1443x beneficiated) and both OFF cells reproduce their "
+        "committed values exactly. Programme size is comparatively cheap "
+        "because it touches nothing in the mass cascade: the rocket equation, "
+        "the power fixed point and the concentration sweep are solved once per "
+        "candidate and every programme is priced off the result — but it is "
+        "not free, and v1.15.0's widely-quoted 1.51x was for a search that was "
+        "one-dimensional. v1.16.0's is two-dimensional and measures 2.98x raw "
+        "/ 2.64x beneficiated on the full catalog.",
         [
             ("calc", "use_beneficiation"),
             ("calc", "nre_amortization_missions"),

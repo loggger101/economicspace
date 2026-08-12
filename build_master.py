@@ -174,7 +174,7 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # ─────────────────────────────────────────────────────────────────────────────
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.19.0)
+"""Master Asteroid Profitability Pipeline (1.20.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -389,8 +389,16 @@ print(f"      Propellants      : {'flown hardware only' if MASTER_CONFIG.calc.op
 print(f"      Tank mass        : {'in the rocket equation' if MASTER_CONFIG.calc.model_tank_mass else 'off'}")
 print(f"      Architecture     : {'searched per asteroid' if MASTER_CONFIG.calc.optimise_architecture_per_asteroid else 'fixed by config'}")
 print(f"      NRE amortise     : over {MASTER_CONFIG.calc.nre_amortization_missions} mission(s)")
+# Both of the next two default ON as of calc v1.17.0 and between them cost
+# ~20x the runtime of the raw single-mission run most of the older tables in
+# CLAUDE.md were measured at.  Print them so a long run is never a mystery.
+print(f"      Beneficiation    : "
+      + ("ON — concentrate, not run-of-mine ore (~7x runtime; False for the raw cell)"
+         if MASTER_CONFIG.calc.use_beneficiation else
+         "off — flying run-of-mine ore at bulk grade"))
 print(f"      Programme        : "
-      + (f"fleet searched to {MASTER_CONFIG.calc.max_fleet_ships} ship(s); N follows"
+      + (f"(fleet ≤ {MASTER_CONFIG.calc.max_fleet_ships}) x (campaigns/ship) searched; "
+         f"N follows (~3x runtime)"
          if MASTER_CONFIG.calc.optimise_programme_scale else
          "fixed size (set calc.optimise_programme_scale to search it)"))
 print(f"      Contingency      : {MASTER_CONFIG.calc.contingency_fraction:.0%}")
@@ -416,7 +424,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.19.0")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.20.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
