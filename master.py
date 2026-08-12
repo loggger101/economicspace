@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.20.1)
+"""Master Asteroid Profitability Pipeline (1.20.2)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -11903,7 +11903,63 @@ class CalcConfig:
     #         stride) and raw+search (2,500-row stride); mass ledger exact at
     #         0.000000000 kg on three cells; both never-worse invariants hold
     #         (max 1.000000, zero exceptions).
-    pipeline_version: str = "1.17.1"
+    #
+    # 1.17.2  PERFORMANCE ONLY — every number identical.  FIFTH such stamp after
+    #         1.10.1 / 1.14.1 / 1.14.2 / 1.17.1, and the second in a row aimed
+    #         at the programme ladder, because that is where v1.17.0's default
+    #         flip put the work.  Measured (interleaved A/B, both builds in one
+    #         process, best of 7, cislunar stride samples, TWO independent
+    #         passes which agreed to within 0.02x on every cell):
+    #             raw, search off            1.01x / 0.99x
+    #             beneficiated, search off   1.02x / 1.00x
+    #             raw, search on             1.46x / 1.45x
+    #             beneficiated + search      1.35x / 1.37x  <- v1.17.0's DEFAULT
+    #         ⚠️  Two passes, because ONE is not a measurement on this host: a
+    #         best-of-5 pass taken while the machine was loaded put the inert
+    #         "beneficiated, search off" cell at 1.19x, and HEAD's own absolute
+    #         times moved 30-45% between passes.  The RATIOS on the searched
+    #         cells held across all of it; the inert cells did not, and would
+    #         have been reported as a gain from a single pass.
+    #         ⚠️  Note the SHAPE of that table, which is the release in one
+    #         picture and is the opposite of 1.17.1's: the two search-off cells
+    #         are inert to within noise, because both items remove work that
+    #         only exists when a LADDER exists.  A run with
+    #         `optimise_programme_scale` off gains nothing here and should not
+    #         be expected to.
+    #         • `mission_cost_usd` SPLIT into `_mission_cost_prologue` (the ~90%
+    #           that does not move with programme size) and `_mission_cost_tail`
+    #           (the ~30 arithmetic ops that do).  The ladder builds the
+    #           prologue once and calls the tail per option, instead of
+    #           re-deriving ~10 max() calls, ~6 dict lookups, ~15 float()
+    #           conversions, a `delivery_architecture` call and a 22-tuple
+    #           unpack forty times over to change three numbers.
+    #           🚨  v1.17.1's "what this release does NOT close" section named
+    #           this and REFUSED it, on the grounds that it "re-associates the
+    #           final sums" and so would cost the bit-identity every release
+    #           here is argued from.  The premise is right and the conclusion
+    #           does not follow: every N-dependent line factors as
+    #           `<N-independent base> * lc`, and `a * b * lc` is ALREADY
+    #           evaluated as `(a * b) * lc`, so hoisting `a * b` is the same two
+    #           operations in the same order rather than an algebraic
+    #           rearrangement.  What genuinely cannot be hoisted is a partial
+    #           SUM interleaved with N-dependent terms, and `hardware_cost`,
+    #           `spacecraft_book_value` and `upfront_lines` are therefore
+    #           restated verbatim in the tail.  The distinction is the whole
+    #           release; see `_mission_cost_prologue`'s docstring.
+    #         • The market-saturation sum memoised per FLEET inside
+    #           `_price_programme`.  It reads F and nothing else the ladder
+    #           varies, and the ladder is the F ladder crossed with W — so ~40
+    #           options over ~8 distinct fleets re-derived the same sum five
+    #           times each.  Bit-identical by construction: the same F re-runs
+    #           the same `+=` over the same list in the same order.
+    #         • `max(1, missions_sharing_rig)` computed once instead of three
+    #           times in the tail.
+    #         Verified: four cells (raw / benef / raw+search / benef+search)
+    #         135/135 columns bit-identical with sha256 MATCH against HEAD;
+    #         serial vs 8 workers byte-identical on benef+search and raw+search;
+    #         mass ledger exact at 0.000000000 kg; both never-worse invariants
+    #         hold (max 1.000000, zero exceptions).
+    pipeline_version: str = "1.17.2"
 
 
 CALC_CONFIG = CalcConfig()
@@ -14901,7 +14957,7 @@ def _ops_cost_constants(ops_df: pd.DataFrame) -> Tuple[float, ...]:
 # ─────────────────────────────────────────────────────────────────────────────
 # MISSION COST CASCADE
 # ─────────────────────────────────────────────────────────────────────────────
-def mission_cost_usd(
+def _mission_cost_prologue(
     mass_cascade:        Dict[str, float],
     vehicle:             Row,
     propellant:          Row,
@@ -14913,46 +14969,42 @@ def mission_cost_usd(
     isru_return:         Optional[bool] = None,
     ep_power_w:          float = 0.0,
     power_source:        str   = "solar",
-    n_missions:          Optional[int] = None,
-    missions_per_ship:   Optional[int] = None,
     cadence_yr:          Optional[float] = None,
     rig_trips:           Optional[Tuple[int, int, Optional[int]]] = None,
-    totals_only:         bool = False,
-) -> Union[Dict[str, float], float]:
-    """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
+) -> tuple:
+    """The half of `mission_cost_usd` that does not move with programme size.
 
-    Uncrewed autonomous mining mission — no crew cost line.
+    v1.17.2.  The ladder in `_price_programme` varies `n_missions` and
+    `missions_per_ship` and NOTHING else — every other argument is held fixed
+    across a median of 40 options — yet the whole cost cascade was re-derived
+    for each of them.  That is ~10 `max()` calls, ~6 dict lookups, ~15 `float()`
+    conversions, a `delivery_architecture` call and a 22-tuple unpack, run forty
+    times to change three numbers.  This is the same finding as v1.17.1's, one
+    level up: that release stopped re-READING the constants, this one stops
+    re-DERIVING everything computed from them.
 
-    v1.3.2 accuracy fixes:
-      • Heat-shield mass is now sourced from the rocket-eq cascade
-        (mass_cascade["m_tps"]) instead of re-derived from payload only —
-        the m_tps in the cascade is what actually got launched.
-      • Launch insurance now percent of (launch + hardware) = SPACECRAFT
-        book value rather than (launch + gross_value of future revenue),
-        matching how real launch insurance is underwritten.
-      • Capsule (`return_vehicle_dry_kg`) now carries its own recurring
-        manufacturing cost — previously only mining_hardware was costed.
-      • WACC compounding is time-bucketed: upfront costs compound at
-        (1+W)^T, ongoing (ops + ISRU prop) at (1+W)^(T/2), end-of-mission
-        (recovery) at 1.0.  Previous all-to-end overstated time-cost ~5%.
+    ── WHY THIS IS BIT-IDENTICAL, WHICH v1.17.1 SAID IT COULD NOT BE ───────────
 
-    Takes no payload or gross-value argument.  It used to take both, and
-    v1.3.2 left them stranded: the insurance rebasing above removed the only
-    read of gross_value_usd, and sample recovery became a flat Module 3 ops
-    lookup rather than a per-kg charge, removing the only read of
-    payload_returned_kg.  Every cost here now derives from the mass cascade,
-    the Module 3 reference tables, and config — nothing scales with the
-    revenue the mission is projected to earn, which is the point.
+    That release deferred this split because "it re-associates the final sums,
+    and this project's releases are argued from bit-identity".  The premise is
+    right and the conclusion does not follow, because every N-dependent line in
+    the cascade factors as `<N-independent base> * lc` — and Python evaluates
+    `a * b * lc` left to right, as `(a * b) * lc`.  So hoisting `a * b` into a
+    name and multiplying by `lc` in the tail is the SAME two operations in the
+    SAME order, not an algebraically-equal rearrangement.  Same for
+    `nre_total * (1.0 - overlap) / n_missions`, which is `(a * b) / n`.
 
-    Line items (every value sourced from Module 3's reference tables):
-        UPFRONT     — launch, outbound prop, return prop (if not ISRU),
-                      mining-rig hardware (amortised), capsule (per mission),
-                      heat shield, NRE (bus + autonomy, amortised),
-                      licensing, liability, launch insurance
-        ONGOING     — mission ops × duration_yr, ISRU return prop (if ISRU)
-        END-OF-MISSION — sample recovery
-        × (1 + contingency_fraction)
-        × per-bucket (1 + WACC)^T_bucket        [time-value]
+    🚨  What must NEVER be hoisted is a PARTIAL SUM whose terms interleave with
+    N-dependent ones.  `hardware_cost`, `spacecraft_book_value` and
+    `upfront_lines` all mix the two, and pre-adding their N-independent members
+    would re-associate the addition — numerically negligible and fatal, exactly
+    as the v1.14.2 phase-table sort was.  Those three sums are therefore
+    restated VERBATIM in `_mission_cost_tail`, term for term and in order, and
+    the four or five adds that costs are not what this function was slow for.
+
+    ⚠️  The returned tuple's field order is load-bearing and is unpacked in one
+    statement at the top of `_mission_cost_tail` — keep the two together, the
+    same discipline `_ops_cost_constants` and its consumer already follow.
     """
     # v1.17.1: the twenty-two Module 3 constants this cascade reads, resolved
     # once per run rather than once per call.  Order matches
@@ -15020,19 +15072,7 @@ def mission_cost_usd(
     # AMORTISABLE across multi-mission programmes since the rig stays put)
     # and the return capsule (fresh per mission — fly-and-die).
     mining_rig_cost_total   = config.mining_hardware_kg * hw_per_kg
-    # v1.15.0: programme size is a searched axis, so it arrives as an argument.
-    # None falls back to the config for every caller that has not been updated,
-    # which keeps a single-programme run bit-identical.
-    n_missions              = max(1, int(n_missions if n_missions is not None
-                                         else config.nre_amortization_missions))
 
-    # ── Rig service life and terminal value (v1.8.0, cycles v1.15.0) ─────────
-    # A rig cannot serve more missions than its life allows.  Whatever life
-    # remains when the programme ends is credited at the salvage fraction —
-    # but only if there IS a programme; a rig at an asteroid nobody revisits
-    # is stranded, not an asset.
-    rig_terminal_value = 0.0
-    missions_sharing_rig = n_missions
     # v1.17.1: `rig_trips` is `(ops_df, config, stay_yr)` and nothing else, and
     # all three are held FIXED across a programme ladder — so the caller that
     # searched (F, W) has already derived it and passes it in, instead of this
@@ -15042,39 +15082,7 @@ def mission_cost_usd(
     # two bounds are resolved.
     if rig_trips is None:
         rig_trips = rig_trips_per_ship(ops_df, config, stay_yr)
-    if rig_trips is not None:
-        trips, _calendar_cap, trip_cap = rig_trips
-        # v1.16.0: how many campaigns one rig actually flies is a property of
-        # the FLEET, not of N alone — F ships split N between them.  The caller
-        # supplies it because the caller is what searched (F, W).  None keeps
-        # the v1.15.0 expression, which is what `model_programme_calendar` off
-        # and every pre-v1.16.0 caller get.
-        missions_sharing_rig = (min(n_missions, trips) if missions_per_ship is None
-                                else max(1, min(int(missions_per_ship), trips)))
-        if n_missions > 1:
-            # Life USED, and there are now two ways to use it up.  Crediting
-            # salvage on remaining calendar years while the rig is mechanically
-            # finished would pay a refund on a worn-out machine — the same shape
-            # of subsidy this module keeps finding — so the binding utilisation
-            # is the larger of the two fractions.  Gated with the cycle cap
-            # itself: with `model_rig_trip_limit` off this is exactly the
-            # calendar-only expression v1.14.2 used.
-            life_used_frac = missions_sharing_rig * stay_yr / life_yr
-            if trip_cap is not None:
-                life_used_frac = max(life_used_frac, missions_sharing_rig / trips)
-            life_used_frac = min(1.0, life_used_frac)
-            rig_terminal_value = mining_rig_cost_total * (1.0 - life_used_frac) * salvage
-    mining_rig_cost = ((mining_rig_cost_total - rig_terminal_value)
-                       / max(1, missions_sharing_rig))
-    # The same two halves again, kept apart rather than netted, because the
-    # programme calendar term compounds them in OPPOSITE directions: the rig is
-    # bought at t = 0 and the salvage is collected at the end.  Netting first
-    # and applying one multiplier would credit the refund for arriving late.
-    # Read only by the calendar block below, which is skipped outright when the
-    # multipliers are 1.0 — so `mining_rig_cost` above stays the arithmetic
-    # v1.15.0 performed, in the order it performed it.
-    rig_gross_share  = mining_rig_cost_total / max(1, missions_sharing_rig)
-    rig_credit_share = rig_terminal_value    / max(1, missions_sharing_rig)
+
     # v1.4.0: the capsule is priced off its OWN rate.  It used to be billed at
     # the mining-payload rate, which treats a parachute-and-heat-shield can as
     # though it were regolith-contact machinery.
@@ -15091,13 +15099,6 @@ def mission_cost_usd(
         capsule_per_kg = capsule_earth_per_kg
     else:
         capsule_per_kg = berthing_per_kg
-    # v1.7.0: LEARNING CURVE.  The per-mission articles — the capsule or
-    # lander, and the power system — are built N times over a programme, and
-    # the Nth costs less than the first.  The mining rig is excluded: when
-    # nre_amortization_missions > 1 it is modelled as ONE unit shared across
-    # missions, not N units built, so a curve on it would double-count.
-    # Exactly 1.0 at N = 1, so a single-mission run is untouched.
-    lc = _learning_curve_cached(n_missions, config.learning_curve_rate)
     # v1.10.0: bill the return vehicle actually flown.  Its dry mass grows with
     # the haul (return_structure_frac_of_payload), and the cascade records what
     # it came to; charging the 500 kg base rate for a vehicle that massed
@@ -15105,7 +15106,10 @@ def mission_cost_usd(
     # out of the ledger — the same asymmetry the EP stage had.
     dry_return_flown = float(mass_cascade.get(
         "m_dry_return", config.return_vehicle_dry_kg))
-    capsule_cost            = dry_return_flown * capsule_per_kg * lc
+    # ⚠️  v1.17.2: each `*_base` below is the original expression with its
+    # trailing `* lc` removed, and nothing else.  The learning curve is applied
+    # in the tail because it is the one factor that moves with N.
+    capsule_base            = dry_return_flown * capsule_per_kg
     # v1.5.0: the beneficiation plant's solar array, priced per installed Watt
     # off Module 3's power-system row.  Zero unless beneficiation is on — the
     # baseline rig's own power is already implicit in its $/kg recurring rate.
@@ -15115,7 +15119,7 @@ def mission_cost_usd(
     # this codebase keeps finding — a mass in the rocket equation with the
     # wrong price, or none, in the ledger.
     plant_per_w             = (rtg_per_w if power_source == "rtg" else power_per_w)
-    power_system_cost       = max(0.0, float(processing_power_w)) * plant_per_w * lc
+    power_base              = max(0.0, float(processing_power_w)) * plant_per_w
     # ── Electric propulsion stage (v1.10.0) ──────────────────────────────────
     # v1.7.0 put the EP array and thruster into the ROCKET EQUATION and stopped
     # there: `ep_system_kg` was hauled as mass and never appeared in a single
@@ -15129,10 +15133,10 @@ def mission_cost_usd(
     # train, the thruster and PPU off Module 3's per-kW propulsion row.
     ep_kw = max(0.0, float(ep_power_w)) / 1000.0
     if ep_kw > 0:
-        ep_system_cost = (max(0.0, float(ep_power_w)) * power_per_w
-                          + ep_kw * ep_drive_per_kw) * lc
+        ep_base = (max(0.0, float(ep_power_w)) * power_per_w
+                   + ep_kw * ep_drive_per_kw)
     else:
-        ep_system_cost = 0.0
+        ep_base = 0.0
     # ── Propellant tankage (v1.12.0) ─────────────────────────────────────────
     # Module 3 has derived tank mass per propellant since v1.9.0 and this
     # module has flown it through the rocket equation ever since — outbound
@@ -15147,12 +15151,7 @@ def mission_cost_usd(
     # Module 3 because a tank is the simplest article in the mission.
     tank_mass = (float(mass_cascade.get("m_tank_return", 0.0))
                  + float(mass_cascade.get("m_tank_outbound", 0.0)))
-    if tank_mass > 0:
-        tank_cost = tank_mass * tank_per_kg * lc
-    else:
-        tank_cost = 0.0
-    hardware_cost           = (mining_rig_cost + capsule_cost + power_system_cost
-                               + ep_system_cost + tank_cost)
+    tank_base = tank_mass * tank_per_kg if tank_mass > 0 else 0.0
 
     # Mission ops × duration  (per-asteroid duration from Δv estimator)
     ops_cost     = ops_per_year * mission_duration_yr
@@ -15166,10 +15165,7 @@ def mission_cost_usd(
     # article that did not, for no reason anybody wrote down.  Exactly 1.0 at
     # N = 1, so no single-mission figure moves.
     tps_mass = float(mass_cascade.get("m_tps", 0.0))
-    if tps_mass > 0:
-        heat_shield_cost = tps_mass * tps_per_kg * lc
-    else:
-        heat_shield_cost = 0.0
+    tps_base = tps_mass * tps_per_kg if tps_mass > 0 else 0.0
 
     # Recovery + regulatory flat costs.  v1.5.0: an in-space delivery replaces
     # the Earth recovery campaign (search aircraft, ships, range clearance,
@@ -15204,10 +15200,6 @@ def mission_cost_usd(
     # outside `hardware_cost`.  On an Earth-return mission it is a 15%-of-payload
     # article at $50,000/kg, so it is not a rounding term where it exists at all.
     launch_ins_pct        = launch_ins_raw / 100.0
-    spacecraft_book_value = (mining_rig_cost_total + capsule_cost
-                             + power_system_cost + ep_system_cost + tank_cost
-                             + heat_shield_cost)
-    launch_insurance_cost = launch_ins_pct * (launch_cost + spacecraft_book_value)
 
     # Spacecraft bus NRE amortised across N missions, less the share already
     # embedded in the per-kg recurring rate (v1.4.0 — see
@@ -15215,25 +15207,17 @@ def mission_cost_usd(
     # regressions on total program cost, so charging full OSIRIS-REx NRE on
     # top of a $300k/kg recurring rate books part of the development twice.
     nre_overlap = min(max(config.nre_recurring_overlap_fraction, 0.0), 1.0)
-    nre_cost    = nre_total * (1.0 - nre_overlap) / n_missions
-
-    # Autonomous mining control & AI NRE — uncrewed-mission specific (Module 3
-    # v1.2.4+ replaced the legacy 'Crew' line item with this).  Amortised the
-    # same way as the bus NRE — once developed, the autonomy stack ships on
-    # every subsequent identical mission.
-    autonomy_nre_cost  = autonomy_nre_total / n_missions
+    nre_base    = nre_total * (1.0 - nre_overlap)
 
     # ── Time-bucket every line item ──────────────────────────────────────────
     # UPFRONT = paid at year 0 (or earlier — NRE accumulates pre-launch but
     # treated as year-0 lump-sum here).
     # ONGOING = spread evenly over [0, T_mission] → effective year T/2.
     # END     = paid at year T_mission.
-    upfront_lines = (
-        launch_cost + outbound_prop_cost + hardware_cost + heat_shield_cost
-        + licensing_cost + liability_cost + launch_insurance_cost
-        + nre_cost + autonomy_nre_cost
-        + (0.0 if return_prop_is_ongoing else return_prop_cost)
-    )
+    #
+    # ⚠️  Only `upfront_lines` mixes N-dependent terms; the other two buckets
+    # are wholly N-independent and are therefore finished here, contingency and
+    # all.  `upfront_lines` is restated verbatim in the tail.
     ongoing_lines = (
         ops_cost
         + (return_prop_cost if return_prop_is_ongoing else 0.0)
@@ -15243,7 +15227,6 @@ def mission_cost_usd(
     # Contingency reserve applied uniformly across buckets (it's a global
     # reserve fund, not tied to any one cost line).
     cont = 1.0 + config.contingency_fraction
-    upfront_with_cont = upfront_lines * cont
     ongoing_with_cont = ongoing_lines * cont
     end_with_cont     = end_lines    * cont
 
@@ -15257,6 +15240,148 @@ def mission_cost_usd(
     else:
         wacc = 0.0
         mult_upfront = mult_ongoing = mult_end = 1.0
+
+    cadence   = (stay_yr if cadence_yr is None else max(0.0, float(cadence_yr)))
+
+    return (
+        launch_cost, tanker_cost, tanker_flights,
+        outbound_prop_cost, return_prop_cost, return_prop_is_ongoing,
+        mining_rig_cost_total, rig_trips, life_yr, salvage,
+        config.learning_curve_rate,
+        capsule_base, power_base, ep_base, ep_kw, tank_base, tank_mass,
+        tps_base, tps_mass,
+        ops_cost, recovery_cost, licensing_cost, liability_cost, launch_ins_pct,
+        nre_base, autonomy_nre_total,
+        cont, config.contingency_fraction,
+        mult_upfront, mult_ongoing, mult_end, wacc,
+        ongoing_lines, ongoing_with_cont, end_lines, end_with_cont,
+        cadence, stay_yr, mission_duration_yr,
+        config.model_programme_calendar, config.nre_amortization_missions,
+    )
+
+
+def _mission_cost_tail(
+    pro:                 tuple,
+    n_missions:          Optional[int] = None,
+    missions_per_ship:   Optional[int] = None,
+    totals_only:         bool = False,
+) -> Union[Dict[str, float], float]:
+    """The half of `mission_cost_usd` that DOES move with programme size.
+
+    v1.17.2.  `pro` is `_mission_cost_prologue`'s tuple; the ladder builds it
+    once and calls this once per option.  See that function for why the split
+    is bit-identical rather than merely numerically equal, and for the three
+    sums that must stay written out term by term.
+    """
+    (launch_cost, tanker_cost, tanker_flights,
+     outbound_prop_cost, return_prop_cost, return_prop_is_ongoing,
+     mining_rig_cost_total, rig_trips, life_yr, salvage,
+     lc_rate,
+     capsule_base, power_base, ep_base, ep_kw, tank_base, tank_mass,
+     tps_base, tps_mass,
+     ops_cost, recovery_cost, licensing_cost, liability_cost, launch_ins_pct,
+     nre_base, autonomy_nre_total,
+     cont, contingency_fraction,
+     mult_upfront, mult_ongoing, mult_end, wacc,
+     ongoing_lines, ongoing_with_cont, end_lines, end_with_cont,
+     cadence, stay_yr, mission_duration_yr,
+     calendar_on, n_missions_cfg) = pro
+
+    # v1.15.0: programme size is a searched axis, so it arrives as an argument.
+    # None falls back to the config for every caller that has not been updated,
+    # which keeps a single-programme run bit-identical.
+    n_missions              = max(1, int(n_missions if n_missions is not None
+                                         else n_missions_cfg))
+
+    # ── Rig service life and terminal value (v1.8.0, cycles v1.15.0) ─────────
+    # A rig cannot serve more missions than its life allows.  Whatever life
+    # remains when the programme ends is credited at the salvage fraction —
+    # but only if there IS a programme; a rig at an asteroid nobody revisits
+    # is stranded, not an asset.
+    rig_terminal_value = 0.0
+    missions_sharing_rig = n_missions
+    if rig_trips is not None:
+        trips, _calendar_cap, trip_cap = rig_trips
+        # v1.16.0: how many campaigns one rig actually flies is a property of
+        # the FLEET, not of N alone — F ships split N between them.  The caller
+        # supplies it because the caller is what searched (F, W).  None keeps
+        # the v1.15.0 expression, which is what `model_programme_calendar` off
+        # and every pre-v1.16.0 caller get.
+        missions_sharing_rig = (min(n_missions, trips) if missions_per_ship is None
+                                else max(1, min(int(missions_per_ship), trips)))
+        if n_missions > 1:
+            # Life USED, and there are now two ways to use it up.  Crediting
+            # salvage on remaining calendar years while the rig is mechanically
+            # finished would pay a refund on a worn-out machine — the same shape
+            # of subsidy this module keeps finding — so the binding utilisation
+            # is the larger of the two fractions.  Gated with the cycle cap
+            # itself: with `model_rig_trip_limit` off this is exactly the
+            # calendar-only expression v1.14.2 used.
+            life_used_frac = missions_sharing_rig * stay_yr / life_yr
+            if trip_cap is not None:
+                life_used_frac = max(life_used_frac, missions_sharing_rig / trips)
+            life_used_frac = min(1.0, life_used_frac)
+            rig_terminal_value = mining_rig_cost_total * (1.0 - life_used_frac) * salvage
+    # v1.17.2: one `max(1, ·)` rather than three.  Deliberately NOT dropped
+    # altogether: `missions_sharing_rig` is ≥ 1 in every branch above given
+    # `trips` ≥ 1, but that is a property of `rig_trips_per_ship`'s current
+    # return rather than of anything asserted here, and this file's own history
+    # is full of guards that were correct until a table changed underneath them.
+    rig_share_divisor = max(1, missions_sharing_rig)
+    mining_rig_cost = ((mining_rig_cost_total - rig_terminal_value)
+                       / rig_share_divisor)
+    # The same two halves again, kept apart rather than netted, because the
+    # programme calendar term compounds them in OPPOSITE directions: the rig is
+    # bought at t = 0 and the salvage is collected at the end.  Netting first
+    # and applying one multiplier would credit the refund for arriving late.
+    # Read only by the calendar block below, which is skipped outright when the
+    # multipliers are 1.0 — so `mining_rig_cost` above stays the arithmetic
+    # v1.15.0 performed, in the order it performed it.
+    rig_gross_share  = mining_rig_cost_total / rig_share_divisor
+    rig_credit_share = rig_terminal_value    / rig_share_divisor
+
+    # v1.7.0: LEARNING CURVE.  The per-mission articles — the capsule or
+    # lander, and the power system — are built N times over a programme, and
+    # the Nth costs less than the first.  The mining rig is excluded: when
+    # nre_amortization_missions > 1 it is modelled as ONE unit shared across
+    # missions, not N units built, so a curve on it would double-count.
+    # Exactly 1.0 at N = 1, so a single-mission run is untouched.
+    lc = _learning_curve_cached(n_missions, lc_rate)
+    capsule_cost            = capsule_base * lc
+    power_system_cost       = power_base * lc
+    ep_system_cost          = ep_base * lc if ep_kw > 0 else 0.0
+    tank_cost               = tank_base * lc if tank_mass > 0 else 0.0
+    # 🚨  Term by term, in order.  `mining_rig_cost` is N-dependent and the
+    # other four are `base * lc`, so pre-adding the bases and multiplying once
+    # would re-associate this sum.  See the prologue's docstring.
+    hardware_cost           = (mining_rig_cost + capsule_cost + power_system_cost
+                               + ep_system_cost + tank_cost)
+    heat_shield_cost        = tps_base * lc if tps_mass > 0 else 0.0
+
+    # 🚨  Term by term, in order — same reason as `hardware_cost`.
+    spacecraft_book_value = (mining_rig_cost_total + capsule_cost
+                             + power_system_cost + ep_system_cost + tank_cost
+                             + heat_shield_cost)
+    launch_insurance_cost = launch_ins_pct * (launch_cost + spacecraft_book_value)
+
+    nre_cost    = nre_base / n_missions
+
+    # Autonomous mining control & AI NRE — uncrewed-mission specific (Module 3
+    # v1.2.4+ replaced the legacy 'Crew' line item with this).  Amortised the
+    # same way as the bus NRE — once developed, the autonomy stack ships on
+    # every subsequent identical mission.
+    autonomy_nre_cost  = autonomy_nre_total / n_missions
+
+    # 🚨  Term by term, in order — same reason as `hardware_cost`.  Four of
+    # these ten are N-dependent and they are interleaved with the six that are
+    # not, so there is no prefix of this sum that can be hoisted.
+    upfront_lines = (
+        launch_cost + outbound_prop_cost + hardware_cost + heat_shield_cost
+        + licensing_cost + liability_cost + launch_insurance_cost
+        + nre_cost + autonomy_nre_cost
+        + (0.0 if return_prop_is_ongoing else return_prop_cost)
+    )
+    upfront_with_cont = upfront_lines * cont
 
     # ── Programme calendar time (v1.16.0) ────────────────────────────────────
     # The bucket above compounds every up-front line over ONE mission duration,
@@ -15273,9 +15398,8 @@ def mission_cost_usd(
     # is bit-identical — which is the only form this project's verification can
     # actually check, and the reason the phase-table sort was rejected in
     # v1.14.2.
-    cadence   = (stay_yr if cadence_yr is None else max(0.0, float(cadence_yr)))
     cal_cost  = cal_credit = 1.0
-    if config.model_programme_calendar and missions_sharing_rig > 1:
+    if calendar_on and missions_sharing_rig > 1:
         cal_cost, cal_credit = programme_calendar_multipliers(
             missions_sharing_rig, cadence, wacc)
 
@@ -15312,7 +15436,7 @@ def mission_cost_usd(
     wacc_multiplier = total_cost / pre_wacc_total if pre_wacc_total > 0 else 1.0
 
     subtotal         = upfront_lines + ongoing_lines + end_lines
-    contingency_cost = subtotal * config.contingency_fraction
+    contingency_cost = subtotal * contingency_fraction
 
     return {
         "launch_cost":           launch_cost,
@@ -15358,6 +15482,75 @@ def mission_cost_usd(
         "total_cost":            total_cost,
     }
 
+
+def mission_cost_usd(
+    mass_cascade:        Dict[str, float],
+    vehicle:             Row,
+    propellant:          Row,
+    ops_df:              pd.DataFrame,
+    config:              CalcConfig,
+    mission_duration_yr: float,
+    processing_power_w:  float = 0.0,
+    stay_yr:             float = 0.0,
+    isru_return:         Optional[bool] = None,
+    ep_power_w:          float = 0.0,
+    power_source:        str   = "solar",
+    n_missions:          Optional[int] = None,
+    missions_per_ship:   Optional[int] = None,
+    cadence_yr:          Optional[float] = None,
+    rig_trips:           Optional[Tuple[int, int, Optional[int]]] = None,
+    totals_only:         bool = False,
+) -> Union[Dict[str, float], float]:
+    """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
+
+    Uncrewed autonomous mining mission — no crew cost line.
+
+    v1.17.2: the body is split into `_mission_cost_prologue` (everything that
+    does not move with programme size) and `_mission_cost_tail` (everything
+    that does), because the programme ladder varies only `n_missions` and
+    `missions_per_ship` and was re-deriving the other ~90% of the cascade for
+    each of a median 40 options.  This function is their composition and is
+    unchanged in signature, in behaviour and — the point of the exercise — in
+    the exact floats it returns.  It remains the entry point for every caller
+    that prices ONE programme; `_price_programme` builds the prologue itself.
+
+    v1.3.2 accuracy fixes:
+      • Heat-shield mass is now sourced from the rocket-eq cascade
+        (mass_cascade["m_tps"]) instead of re-derived from payload only —
+        the m_tps in the cascade is what actually got launched.
+      • Launch insurance now percent of (launch + hardware) = SPACECRAFT
+        book value rather than (launch + gross_value of future revenue),
+        matching how real launch insurance is underwritten.
+      • Capsule (`return_vehicle_dry_kg`) now carries its own recurring
+        manufacturing cost — previously only mining_hardware was costed.
+      • WACC compounding is time-bucketed: upfront costs compound at
+        (1+W)^T, ongoing (ops + ISRU prop) at (1+W)^(T/2), end-of-mission
+        (recovery) at 1.0.  Previous all-to-end overstated time-cost ~5%.
+
+    Takes no payload or gross-value argument.  It used to take both, and
+    v1.3.2 left them stranded: the insurance rebasing above removed the only
+    read of gross_value_usd, and sample recovery became a flat Module 3 ops
+    lookup rather than a per-kg charge, removing the only read of
+    payload_returned_kg.  Every cost here now derives from the mass cascade,
+    the Module 3 reference tables, and config — nothing scales with the
+    revenue the mission is projected to earn, which is the point.
+
+    Line items (every value sourced from Module 3's reference tables):
+        UPFRONT     — launch, outbound prop, return prop (if not ISRU),
+                      mining-rig hardware (amortised), capsule (per mission),
+                      heat shield, NRE (bus + autonomy, amortised),
+                      licensing, liability, launch insurance
+        ONGOING     — mission ops × duration_yr, ISRU return prop (if ISRU)
+        END-OF-MISSION — sample recovery
+        × (1 + contingency_fraction)
+        × per-bucket (1 + WACC)^T_bucket        [time-value]
+    """
+    return _mission_cost_tail(
+        _mission_cost_prologue(
+            mass_cascade, vehicle, propellant, ops_df, config,
+            mission_duration_yr, processing_power_w, stay_yr, isru_return,
+            ep_power_w, power_source, cadence_yr, rig_trips),
+        n_missions, missions_per_ship, totals_only)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # (VEHICLE × PROPELLANT) EVALUATOR FOR ONE ASTEROID
@@ -16279,6 +16472,31 @@ def _evaluate_combo_at_ratio(
     gross_base           = gross_value
     delivered_base       = delivered_value_per_kg
 
+    # ── v1.17.2: the cost cascade's N-independent half, built ONCE ───────────
+    # Every argument below is fixed for the whole ladder — `cadence_yr` included,
+    # since it is derived from the stay and the synodic period well above this
+    # closure.  Only `n_missions` and `missions_per_ship` move, so only the
+    # tail is worth re-running.  `mission_cost_usd` is exactly these two calls
+    # composed, and it stays the entry point for everyone else.
+    cost_prologue = _mission_cost_prologue(
+        mass_cascade        = actual_cascade,
+        vehicle             = vehicle,
+        propellant          = propellant,
+        ops_df              = ops_df,
+        config              = config,
+        mission_duration_yr = mission_duration_yr,
+        processing_power_w  = processing_power_watts,
+        stay_yr             = stay_yr,
+        isru_return         = isru,
+        ep_power_w          = ep_power_watts,
+        power_source        = power_source,
+        cadence_yr          = cadence_yr,
+        rig_trips           = rig_trips,
+    )
+    # Per-candidate, because everything the saturation sum reads besides the
+    # fleet belongs to this candidate.  See the read of it below.
+    sat_by_fleet: Dict[int, Tuple[float, float, float]] = {}
+
     def _price_programme(n_missions: int, fleet: int, per_ship: Optional[int] = None,
                          full: bool = True):
         """Everything downstream of the cascade, for one programme size.
@@ -16288,31 +16506,15 @@ def _evaluate_combo_at_ratio(
         rocket equation; it is one pass of straight-line arithmetic over a
         cascade that is already solved.
 
-        v1.17.1: `full=False` asks `mission_cost_usd` for the total alone and
-        leaves `cost` None.  The ladder below compares options on
-        `total_cost` and nothing else, so it prices cheaply and re-prices the
-        single winner in full — one extra call out of ~40, against a 40-key
-        dict built and discarded on every one of the other 39.  `total_cost`
-        is the same float either way; see the early return there.
+        v1.17.1: `full=False` asks for the total alone and leaves `cost` None.
+        The ladder below compares options on `total_cost` and nothing else, so
+        it prices cheaply and re-prices the single winner in full — one extra
+        call out of ~40, against a 40-key dict built and discarded on every one
+        of the other 39.  `total_cost` is the same float either way; see the
+        early return in `_mission_cost_tail`.
         """
-        c = mission_cost_usd(
-            mass_cascade        = actual_cascade,
-            vehicle             = vehicle,
-            propellant          = propellant,
-            ops_df              = ops_df,
-            config              = config,
-            mission_duration_yr = mission_duration_yr,
-            processing_power_w  = processing_power_watts,
-            stay_yr             = stay_yr,
-            isru_return         = isru,
-            ep_power_w          = ep_power_watts,
-            power_source        = power_source,
-            n_missions          = n_missions,
-            missions_per_ship   = per_ship,
-            cadence_yr          = cadence_yr,
-            rig_trips           = rig_trips,
-            totals_only         = not full,
-        )
+        c = _mission_cost_tail(cost_prologue, n_missions, per_ship,
+                               totals_only = not full)
         if full:
             total_cost = c["total_cost"]
         else:
@@ -16337,17 +16539,35 @@ def _evaluate_combo_at_ratio(
         concurrent = 1.0
         if saturation_applies:
             concurrent = fleet
-            adj = 0.0
-            for kg, price, mkt in sale_terms:
-                adj += kg * price * saturation_price_multiplier(
-                    kg * concurrent / mission_duration_yr,
-                    mkt,
-                    config.demand_elasticity,
+            # v1.17.2: this block reads `fleet` and nothing else the ladder
+            # varies — `sale_terms`, `gross_base`, `m_payload` and the mission
+            # duration are all fixed for the candidate — so it is a function of
+            # F alone, and the ladder is the F ladder CROSSED WITH W.  It was
+            # therefore being recomputed once per W: ~40 options over ~8
+            # distinct fleets, so four out of five passes re-derived a sum they
+            # had already made.  Memoised per candidate on the integer F.
+            #
+            # Bit-identical by construction rather than by rounding: the same
+            # F re-runs the same `+=` over the same list in the same order, so
+            # the cached float IS the float the loop would have produced.  That
+            # matters here more than most places — this is the accumulation
+            # v1.14.2 found to be load-bearing on the last ULP, which is why
+            # the phase table must not be sorted at source.
+            entry = sat_by_fleet.get(fleet)
+            if entry is None:
+                adj = 0.0
+                for kg, price, mkt in sale_terms:
+                    adj += kg * price * saturation_price_multiplier(
+                        kg * concurrent / mission_duration_yr,
+                        mkt,
+                        config.demand_elasticity,
+                    )
+                entry = sat_by_fleet[fleet] = (
+                    adj,
+                    adj / gross_base if gross_base > 0 else sat,
+                    adj / m_payload  if m_payload  > 0 else 0.0,
                 )
-            if gross_base > 0:
-                sat = adj / gross_base
-            g = adj
-            delivered = g / m_payload if m_payload > 0 else 0.0
+            g, sat, delivered = entry
         # Revenue was certain.  It is not: the launch fails, the spacecraft dies
         # on the way, or the mining chain does not work when it arrives.  Costs
         # are charged in FULL, which is correct — you spend the money either way
@@ -17829,7 +18049,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.20.1")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.20.2")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
