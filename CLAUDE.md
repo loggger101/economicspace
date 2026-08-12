@@ -63,8 +63,18 @@ See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.1.0`, mineral_value `1.7.0`, transportation `1.12.0`,
-calc `1.16.0`, master `1.19.0` (the master version is a literal in
+calc `1.17.0`, master `1.20.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
+
+🚨  **calc `1.17.0` FLIPPED TWO DEFAULTS, so a default run no longer reproduces
+almost any table in this file.** `use_beneficiation` and
+`optimise_programme_scale` are both **True** now. No model term, coefficient,
+table value or search axis moved — an explicitly configured run is
+bit-identical to `1.16.0` — but the question a *configured-nothing* run asks
+has changed, from "the best single mission to this rock" to "the best
+programme built around it, flying concentrate". Set both False to get the old
+answer; both OFF cells were re-measured on the full catalog on 2026-08-11 and
+**reproduce exactly**. See "What calc v1.17.0 changed".
 
 ⚠️  **calc `1.16.0` charges programme calendar time, and like `1.15.0` it moves
 numbers only for programmes.** It is exactly inert at W = 1 — one campaign per
@@ -76,11 +86,18 @@ it. The N = 10 / N = 100 curve **does** move and is now a `1.14.0` measurement
 of a model that has been superseded twice.
 
 ⚠️  **calc `1.15.0` moves numbers only for programmes, not for single missions,
-and every measured cell in this file is a single mission.** Its two items — a
-duty-cycle cap on rig life, and a searched programme size — are both inert at
-N = 1, and the search is default OFF. Do not re-measure anything on account of
-it; do not read any table below as covering an `optimise_programme_scale = True`
-run, because only the one under "Measured — FULL CATALOG" does.
+and almost every measured cell in this file is a single mission.** Its two
+items — a duty-cycle cap on rig life, and a searched programme size — are both
+inert at N = 1. Do not re-measure a single-mission cell on account of it; do not
+read any table below as covering an `optimise_programme_scale = True` run unless
+it says so, because only the ones under "Measured — FULL CATALOG" and "THE FULL
+CISLUNAR 2×2" do.
+
+🚨  **"and the search is default OFF" was true until calc `1.17.0` and is now
+wrong.** It is default **ON**, along with `use_beneficiation`. The sentence is
+corrected rather than deleted because it is exactly the failure mode this file
+exists to catch — a default named in prose, three releases from the code that
+sets it.
 
 ✅  **That inertness is not an argument, it is a full-catalog measurement.** A
 1,554,353-row cislunar raw run on `1.15.0` returns **26.7863× on 650,516
@@ -93,6 +110,16 @@ split. It also puts `1.14.1` + `1.14.2` at a measured **4.10×** on a full cell
 first recorded** from a 2,500-row sample. Third sample-mispredicts-runtime
 finding in this project, and the first to apply to a *ratio* rather than an
 absolute. See "Measured — FULL CATALOG".
+
+> 🚨  **That 1.51× is `1.15.0`'s ONE-dimensional ladder and does not carry to
+> `1.16.0`, whose search is two-dimensional. Measured on the full catalog on
+> 2026-08-11: 2.98× (1,307 s → 3,890 s).** `1.16.0`'s own section projects
+> 1.10× from a 400-row sample. That is the **fourth** full-catalog runtime
+> prediction this project has gotten wrong from a sample, and the **second**
+> for a ratio rather than a wall clock. The mechanism is legible in the output
+> and is not mysterious: `programme_options_priced` runs a median of **40**
+> against the 1-D ladder's 8, because W is enumerated exhaustively inside every
+> rung of the F ladder.
 
 calc `1.14.1` and `1.14.2` are the **second and third** stamps that do not mean
 the numbers moved — same contract as `1.10.1`, and verified the same way. See
@@ -109,12 +136,239 @@ was a pure performance release, verified bit-identical, and it was bumped
 anyway so that a CSV still names the code that produced it — the rule above is
 "changing a number means bumping", not "bumping means a number changed".
 
+### ✅ THE FULL CISLUNAR 2×2 IS MEASURED (CURRENT — 2026-08-11, calc `1.16.0`)
+
+Both settings of **beneficiation** × both settings of **programme search**, at
+`cislunar`, on a full 1,555,667-row catalog (1,555,618 with positive mass), 12
+workers, through the Streamlit UI against one Stage 1/2/3 pass. **These are the
+current numbers for this destination and they supersede every cislunar cell
+below.**
+
+| | search OFF (N = 1) | **search ON** | search cost |
+|---|---|---|---|
+| **raw** | **26.7863×** | **15.4273×** | 1,307 s → 3,890 s (2.98×) |
+| **beneficiated** | **20.5895×** | **13.1443×** | 9,300 s → 24,587 s (2.64×) |
+
+Evaluable: **650,921** raw (both settings), **660,253** beneficiated. Beneficiation
+costs **7.1×** raw at search OFF and **6.3×** at search ON; the two axes are
+close to multiplicative, and the whole 2×2 is **18.8×** corner to corner.
+
+**13.1443× is the best cislunar number this model has ever produced**, and it is
+what calc `1.17.0`'s two flipped defaults return **at cislunar**. It is still a
+factor of 13 from breakeven — the headline of this project does not change.
+
+⚠️  **It is NOT "the default run", and the difference is a whole destination.**
+`delivery_destination` still defaults to **`earth_surface`** on both Stage 2 and
+Stage 4, so a genuinely configure-nothing `1.17.0` run is beneficiated +
+searched at `earth_surface` — a cell nobody has measured. Only the two flags
+moved in `1.17.0`; the destination did not.
+
+⚠️  **It is not comparable to 20.5895× or to anything else in this file**, and
+this is the trap the whole 2×2 exists to prevent. The two columns answer
+different questions: one mission, or a ten-mission programme flown by two ships
+over 17 years. Neither is "the" answer and the improvement is not a saving.
+
+🚨  **BOTH search-OFF CELLS REPRODUCE THEIR COMMITTED VALUES EXACTLY, ACROSS
+FOUR RELEASES AND A DIFFERENT CATALOG SNAPSHOT.** Raw returns `26.7863×` with
+**2021 CX5 (D)** on **xenon** and a **New Glenn**, payload **93,312 kg**,
+saturation **0.6873**, `p_mining` **0.850**, RTG **5.44%**, aerocapture
+**0.00%**, propellant split 42.64 / 25.19 / 15.58 / 8.11 / 8.01 — every one the
+committed `1.14.0` figure. Beneficiated returns `20.5895×`, same body, iodine,
+concentrating **3.5186×**, RTG **10.83%**, and the same **327** FEEP survivors.
+
+That is a stronger check than the sha256 diffs `1.14.1`, `1.14.2` and `1.15.0`
+argued from, and for a reason worth keeping: **those compared identical rows,
+this one compares a different population.** JPL has added 1,267 bodies since
+2026-08-08, so the catalog is not the one those cells were measured on, and the
+answer does not move. A hash diff proves the code did not change; this proves
+the *result* is not balanced on the exact contents of the bag.
+
+⚠️  **Two upstream sources fetched ZERO rows on this run and it did not
+matter — but check before assuming that of the next one.** IRSA (NEOWISE) was
+returning `502 Proxy Error` from upstream all evening and MP3C contributed
+nothing, so `Source summary` read `{'JPL SBDB': 1555569, 'SsODNet': 1552868,
+'NEOWISE': 0, 'MP3C': 0}`. The catalog is unharmed, and the provenance columns
+are what say so rather than the row count: **measured diameters 149,590,
+taxonomy from a source 171,007, taxonomy-albedo derivations 105,905 — all three
+identical to the committed v1.1.0 figures.**
+
+✅  **And it quantifies what NEOWISE is actually worth here, which nobody had
+measured.** `diameter_source = derived_h_measured_albedo` is **20 rows of
+1,555,667**. A body with a measured albedo almost always has a measured
+diameter too — both fall out of the same thermal-IR fit — so the `albedo`
+column NEOWISE fills is nearly never the one `_albedo_for_derivation` ends up
+reading. The v1.1.0 note that NEOWISE recovers "IR albedo … for 132,691 bodies
+that had none" is about *columns*, and it is easy to read as though those
+132,691 rows were sized off it. They are not; 20 are.
+
+🚨  **The programme search costs 2.98×, not the 1.51× measured for `1.15.0`'s
+1-D ladder nor the 1.10× `1.16.0`'s own sample predicted.** Fourth
+sample-mispredicts-runtime finding in this project, second for a *ratio*.
+
+✅  **`1.16.0`'s calendar charge is +8.85% on the full raw cell** (14.1730× →
+15.4273×) against the **+8.78%** its 400-row sample predicted — which is the
+sample doing *well*, and worth noting alongside the runtime miss: on this
+pipeline a sample predicts a **model ratio** far better than it predicts a
+**wall clock**.
+
+🚨  **W < `trips` on 2,077 rows (0.319%), so the 2-D search is now
+load-bearing.** `1.16.0`'s own section records that W came out at the band top
+on all 168 rows of its sample and concludes "the 2-D search is necessary but not
+yet load-bearing here". On the full population it *is*: 2,077 bodies decline to
+use up the rig, because the calendar charge outweighs what another campaign
+buys. Supporting invariants hold on every row — **N = F × W everywhere**, W >
+`trips` never, and **0.37%** sitting at `max_fleet_ships` (against `1.15.0`'s
+0.37%).
+
+**The winning mission in all four cells is 2021 CX5 (D, 82 m, a = 1.626 AU) on
+a New Glenn**, and everything else about it moves:
+
+| cell | ratio | propellant | conc. | N | fleet | W | payload | span |
+|---|---|---|---|---|---|---|---|---|
+| raw, search OFF | 26.7863× | xenon | — | 1 | 1 | 1 | 93,312 kg | 5.2 yr |
+| raw, search ON | 15.4273× | iodine | — | 5 | 1 | 5 | 68,432 kg | 12.6 yr |
+| benef, search OFF | 20.5895× | iodine | 3.519× | 1 | 1 | 1 | 62,283 kg | 7.0 yr |
+| **benef, search ON** | **13.1443×** | **argon** | **3.925×** | **10** | **2** | **5** | **34,573 kg** | **17.1 yr** |
+
+One body surviving all four settings is a stronger statement about the target
+than any single ratio — and the payload falling **93,312 → 34,573 kg** across
+them is market saturation doing exactly what v1.14.0 built it to do: at
+programme scale the model prefers more, smaller missions.
+
+🚨  **The default cell wins on ARGON, which is the propellant v1.12.0 caught
+being internally contradictory.** It is the *operational* row — COPV at 18 MPa,
+0.30 kg/L, paying **22.9%** of its own mass in tankage — not the `development`
+cryogenic row, so this is not the old subsidy coming back. But argon takes
+0.24% of raw searched rows and then wins the beneficiated searched cell, which
+is precisely the pattern this file warns about under "the best case is a
+terrible detector": **check the argon rows first if this cell ever looks wrong.**
+
+✅  **New Glenn overtakes Falcon Heavy for the first time in any cell** — 36.57%
+against 36.41%, with SLS at 25.65%. Every other cell in this file runs Falcon
+Heavy at 64–71%. Same mechanism as the winner's shrinking payload, now visible
+in the whole fleet rather than one mission.
+
+**Never-worse holds exactly, on all four pairings, on the whole population:**
+
+```
+search ON vs OFF, raw          pairs 650,921 | max 1.000000 | worse 0 | median +42.4%
+search ON vs OFF, beneficiated pairs 660,253 | max 0.996770 | worse 0 | median +38.2%
+beneficiated vs raw, search OFF pairs 650,921 | max 1.000000 | worse 0 | declined 102,765
+beneficiated vs raw, search ON  pairs 650,921 | max 1.000000 | worse 0 | declined 102,427
+```
+
+The two declined counts are **15.79%** and **15.73%** of bodies refusing to
+concentrate, against the committed 15.8%.
+
+⚠️  **Two rows are unchanged on the RAW search axis and none on the
+beneficiated one**, which looks backwards and is not. An unchanged row is a
+body whose calendar cap is a single trip, so N = 1 is the only programme on its
+ladder — and beneficiation *lengthens* the stay, so it should produce more of
+them, not fewer. It produces none because those two bodies are not in the
+beneficiated evaluable set at all. Do not read the 0 as a stronger result than
+the 2.
+
+**Programme structure, both searched cells** — every invariant `1.15.0` and
+`1.16.0` assert, checked on the full population:
+
+| | raw + search | benef + search |
+|---|---|---|
+| N = F × W on every row | ✅ | ✅ |
+| W > `trips` ever | never | never |
+| **W < `trips`** | **2,077 (0.319%)** | **1,389 (0.210%)** |
+| fleet median / max | 2 / 64 | 2 / 64 |
+| at `max_fleet_ships` | 2,383 (0.37%) | 2,610 (0.40%) |
+| N median / max | 10 / 320 | 10 / 320 |
+| calendar multiplier median / max | 1.3236 / 3.4551 | 1.4832 / 2.8409 |
+| programme span median | 11.49 yr | 14.84 yr |
+| programmes priced per mission | 40 | 40 |
+
+**Mass ledger holds exactly** on every row of every cell, `max |error|
+0.000000000 kg`.
+
+**A `replicated`-scaling device still never wins**, in any of the four cells —
+which extends that check from eight cells to eleven. Every survivor is FEEP,
+as everywhere else:
+
+| cell | FEEP survivors | share | best | its rank | vs the cell's best |
+|---|---|---|---|---|---|
+| raw, search OFF | 13 | 0.002% | 34.6263× | 39 | 1.29× worse |
+| raw, search ON | 9 | 0.001% | 26.0204× | 283 | 1.69× |
+| benef, search OFF | 327 | 0.050% | 44.6634× | 8,603 | 2.17× |
+| benef, search ON | 384 | 0.058% | 27.8827× | 12,022 | 2.12× |
+
+The two search-OFF rows reproduce the committed `1.14.0` counts and ratios
+exactly (13 / 34.6263× / rank 39, and 327 / 44.6634×; the beneficiated rank
+moves 8,602 → 8,603 on the 406 extra bodies).
+
+**Propellant shares, all four cells** — every share table elsewhere in this file
+is the top-left cell only:
+
+| | raw OFF | raw ON | benef OFF | **benef ON** |
+|---|---|---|---|---|
+| xenon | 42.64% | 40.44% | 59.24% | 48.94% |
+| iodine | 25.19% | 26.00% | 17.08% | 26.48% |
+| water ion | 15.58% | 18.44% | 12.54% | 13.80% |
+| hydrolox | 8.11% | 5.29% | 10.34% | 9.80% |
+| krypton | 8.01% | 9.29% | 0.47% | 0.38% |
+
+⚠️  **Krypton collapses from ~8–9% to ~0.4% under beneficiation, on both
+settings of the search.** Krypton pays **12.5%** of its propellant mass in
+tankage against xenon's 1.9%, and beneficiation is what drives mass ratio up —
+so this is the v1.11.0 tank term biting exactly where that release says it
+bites, now visible as a population effect rather than in a winner.
+
+**Vehicle shares:** Falcon Heavy 66.42 / 71.48 / 64.86 / **36.41%**, SLS Block
+1B 31.60 / 25.67 / 30.20 / **25.65%**, New Glenn 1.67 / 2.45 / 4.28 /
+**36.57%**. **RTG share** 5.44 / 6.66 / 10.83 / **12.66%** — it rises on both
+axes independently, and the default cell reaches more than double the
+`1.14.0` sample's 3.9%. **Aerocapture is 0.00% in all four**, as an airless
+destination requires.
+
+⚠️  **`mining_hardware_kg` is NOT an output column**, so the identity as this
+file states it — `hardware_total_kg == mining_hardware_kg + power_system_kg +
+ep_system_kg` — raises `KeyError` if you run it verbatim against the CSV. Three
+of the four terms are columns; the rig is the **config constant** (2,000 kg).
+
+🚨  **THE RIG'S TWO BOUNDS SWAP OVER UNDER BENEFICIATION, AND EVERY FIGURE THIS
+FILE RECORDS FOR THEM IS THE RAW ONE.** Beneficiation lengthens the stay, which
+walks bodies across the `life / trips` crossover this file already predicts at
+3 yr:
+
+| | raw | beneficiated |
+|---|---|---|
+| **cycle** bound retires the rig | **96.11%** | **57.66%** |
+| **calendar** bound retires it | 3.89% | **42.34%** |
+| cadence set by the **window** | **92.31%** | **34.13%** |
+| cadence set by the **dig** | 7.69% | **65.87%** |
+| median cadence | 1.38 yr | 2.09 yr |
+
+(Search ON moves both the same way — 98.04% / 95.77% raw and 75.08% / 37.59%
+beneficiated — so the split is beneficiation's doing, not the programme
+search's.)
+
+Both rows retire a claim. "**The trip cap binds on 96.1% of rows** … so on the
+real population the cycle bound is what retires almost every rig, and the
+calendar bound it replaced was doing almost nothing" is **raw-only** — on
+beneficiated the calendar bound does 42% of the work. And `1.16.0`'s "**the
+window binds on 165 of 168 rows** — so on this population a programme's pace is
+set by orbital mechanics, not by mining rate" **inverts**: on beneficiated the
+dig sets the pace on 65.87% of rows. Neither claim is wrong about the
+population it was measured on; both were stated as though the population were
+the model.
+
 > ✅  **calc `1.14.0` / transportation `1.11.0` HAVE NOW BEEN MEASURED ON THE
 > FULL CATALOG — six of the ten cells.** Measured 2026-08-09, on the
 > 1,554,400-row catalog `1.1.0` (1,554,353 with positive mass), master
 > `1.17.0`, `master.py` rebuilt from the modules with `git status` clean, 12
-> workers. **These are the current numbers. Everything further down this file
-> is older than they are.**
+> workers. **These are the current numbers for the four NON-cislunar
+> destinations. Everything further down this file is older than they are.**
+>
+> ⚠️  **Both cislunar cells here are superseded by the 2×2 above**, which
+> re-measured them on `1.16.0` and got the same two numbers — 26.7863× and
+> 20.5895× — on a larger catalog. Quote the 2×2, which also has the search-ON
+> column; quote this table for `lunar_surface`, `leo`, `mars_surface` and
+> `earth_surface`, whose cells have not been re-run since.
 >
 > | destination | raw `1.14.0` | evaluable | winner | wall clock |
 > |---|---|---|---|---|
@@ -1234,9 +1488,18 @@ this file moves for either — and why neither can be checked by re-running a
 headline. The rest of the list moves every number in the model.
 
 ⚠️  **`optimise_programme_scale` is NOT on this list and must not be added to
-it.** It is a search axis, not a correction: it defaults OFF, and turning it on
-changes the question the run answers rather than fixing something the model was
-getting free. The distinction is the whole reason this section exists.
+it, and calc `1.17.0` turning it ON BY DEFAULT does not change that.** It is a
+search axis, not a correction: turning it on changes the question the run
+answers rather than fixing something the model was getting free. The
+distinction is the whole reason this section exists, and it is now the *only*
+thing separating the two — "it defaults OFF" used to carry half the argument
+and no longer can.
+
+⚠️  **`use_beneficiation` is not on this list either**, for the same reason and
+with the same caveat: `1.17.0` defaults it ON, and it is still a question
+("ship concentrate or ship ore?") rather than a subsidy being withdrawn. The
+test for this list is not "is it on by default", it is **"was the model getting
+something for free before?"**
 
 Two arrived in v1.10.0 and are documented under "What v1.10.0 changed" rather
 than repeated here: the **electric propulsion stage**, which was flown as mass
@@ -3412,8 +3675,14 @@ Module 3 `1.12.0`, master `1.17.2 → 1.18.0`.
 
 ⚠️  **NOTHING MEASURED IN THIS FILE MOVES.** Every committed cell is N = 1, and
 both items are inert there: the trip cap only binds when a rig serves more than
-one mission, and the programme search is **default OFF**. That was a deliberate
-choice and it is the one to understand before flipping it — see below.
+one mission, and the programme search was **default OFF** at this release.
+That was a deliberate choice and it is the one to understand before flipping
+it — see below.
+
+> ⚠️  **It was flipped in calc `1.17.0`**, on the strength of the full-catalog
+> 2×2 that release measured. The paragraph below still records the argument for
+> OFF, correctly, as the state of things at `1.15.0`; read it as history rather
+> than as the current default.
 
 ### The rig wore out on a calendar, and the calendar was never the bound
 
@@ -3497,12 +3766,19 @@ Two further consequences worth keeping:
   a programme of 13 with trips = 12 books its second rig — used once — as though
   it were worn out. At a whole multiple there is no part-worn rig to mis-book.
 
-⚠️  **DEFAULT OFF, and this is the one axis in the module that is not a
-correction.** Every measured cell on record is N = 1. Turning this on does not
-make those numbers wrong — it changes the **question**, from "the best single
-mission to this rock" to "the best programme built around it". Two answers to
-two different questions; a default flip would retire every committed figure at
-once with no way to reproduce them.
+⚠️  **DEFAULT OFF AT THIS RELEASE, and this is the one axis in the module that
+is not a correction.** Every measured cell on record is N = 1. Turning this on
+does not make those numbers wrong — it changes the **question**, from "the best
+single mission to this rock" to "the best programme built around it". Two
+answers to two different questions; a default flip would retire every committed
+figure at once with no way to reproduce them.
+
+> 🚨  **FLIPPED TO ON in calc `1.17.0`, and the clause that justified keeping it
+> off is what changed.** "No way to reproduce them" was the load-bearing half,
+> and it stopped being true once both settings were measured side by side on
+> the full catalog: the search-OFF cells are recorded, and they reproduce
+> exactly (26.7863× raw, 20.5895× beneficiated). The rest of the paragraph
+> stands — it is still a change of question, and it is still not a correction.
 
 ### Measured — FULL CATALOG (2026-08-11)
 
@@ -3590,6 +3866,14 @@ shift toward Falcon Heavy, 66.4% → 71.0%, against SLS Block 1B 31.6% → 25.7%
 median calendar cap of **15** and a median trip life of **5** — so on the real
 population the cycle bound is what retires almost every rig, and the calendar
 bound it replaced was doing almost nothing.
+
+> ⚠️  **That is a RAW figure and it does not hold beneficiated.** Measured
+> 2026-08-11 on the full catalog: the cycle bound binds on **57.66%** of
+> beneficiated rows, so the calendar bound does **42.34%** of the work rather
+> than "almost nothing". Beneficiation lengthens the stay — median cadence 1.38
+> yr raw against 2.09 yr beneficiated — which walks bodies across the
+> `life / trips` crossover this file already puts at 3 yr. The mechanism was
+> predicted; only the raw side had ever been counted. See the 2×2 at the top.
 
 **RTG share** 5.44% → 6.66%; **aerocapture 0.00%** both ways, as cislunar must.
 
@@ -3734,11 +4018,22 @@ the mission duration at all: see below.
 ✅  **The cislunar RAW cells are now measured on the full catalog**, both
 settings — see "Measured — FULL CATALOG" above. What remains:
 
-**The beneficiated cell has not been run on this release, at any destination.**
-`cislunar` beneficiated was 38,072 s on `1.14.0`; at the 4.10× this release
-measured on raw it projects to ~2.6 h, and **that is a projection, from the same
-class of estimate this file has now gotten wrong three times.** Budget from a
-measured run or do not budget.
+✅  **THE BENEFICIATED CELL IS NOW MEASURED — and the projection this paragraph
+warned about turned out RIGHT.** It read: "`cislunar` beneficiated was 38,072 s
+on `1.14.0`; at the 4.10× this release measured on raw it projects to ~2.6 h,
+and that is a projection, from the same class of estimate this file has now
+gotten wrong three times. Budget from a measured run or do not budget."
+
+Measured on `1.16.0` on 2026-08-11: **~9,300 s (2 h 36 min)**, which is a
+**4.09×** speed-up against the 4.10× projected. The cell returns **20.5895×**,
+reproducing the committed `1.14.0` value exactly.
+
+⚠️  **Do not read that as "the projections are fine after all."** The same
+campaign mispredicted the *search* ratio by 2.7×. The difference between the
+two is the useful part: this one extrapolated a **measured full-catalog
+speed-up on the same cell** to a different setting of the same cell, while the
+bad ones extrapolated **from a stride sample to the full catalog**. The first
+kind has held; the second kind has now failed four times.
 
 **Nothing has been re-measured at the other four destinations.** The trip cap is
 a property of the mission profile, so it moves every destination once N > 1, and
@@ -3823,6 +4118,14 @@ the pace. `campaign_cadence_yr` takes the max of the two.
 so on this population a programme's pace is set by orbital mechanics, not by
 mining rate, and the stay is almost never the constraint. That inverts the
 intuition the term was built on.
+
+> ⚠️  **Full catalog, 2026-08-11: 92.31% raw — but only 34.13% BENEFICIATED,
+> which inverts it straight back.** With concentrate the dig sets the pace on
+> **65.87%** of rows, because beneficiation is exactly the thing that makes the
+> stay long. So "a programme's pace is set by orbital mechanics" is a statement
+> about *raw single-mission* cislunar and not about the model: flip either flag
+> and the binding constraint changes hands. Do not carry the sentence forward
+> without the qualifier.
 
 It also lands hardest on exactly the bodies this model likes. A synodic period
 diverges as a → 1 AU, so a NEA at 1.05 AU can only be revisited every ~14 years
@@ -4024,9 +4327,102 @@ first's revenue — is the obvious next refinement and it would cut the charge
 this release adds, so **the direction of the remaining error is optimistic for
 small fleets and pessimistic for large ones.**
 
-**Nothing is measured on the full catalog.** Every figure above is a 400-row
-stride sample. The cislunar raw cell with the search on is one ~2,000 s run on
-`1.15.0` and has not been repeated here.
+✅  **CLOSED 2026-08-11 — every figure in this section was a 400-row stride
+sample, and all four cislunar cells are now measured on the full catalog.** See
+"THE FULL CISLUNAR 2×2" at the top of this file. What the full run changed
+about this section's own conclusions:
+
+- **The calendar charge is +8.85% on the raw searched cell** (14.1730× →
+  15.4273×) against the sample's **+8.78%**. The sample was right.
+- **The runtime ratio is 2.98×, not the 1.10× this section records** (37.6 s →
+  41.5 s on the sample). The sample was wrong by 2.7×, in the direction this
+  file has now been caught out in four times.
+- 🚨  **"W = trips on all 168 rows, so the 2-D search is necessary but not yet
+  load-bearing here" IS RETIRED.** On 650,921 rows, **W < trips on 2,077
+  (0.319%)**. The dimension this release added is doing real work on the real
+  population; it simply had no room to show it on 400 bodies.
+- **The medians all held and the tails did not.** Calendar multiplier median
+  1.3236 against the sample's 1.323 and span 11.49 yr against 11.5 — but max
+  multiplier **3.4551** against 2.093, and max span **34.34 yr** against 25.3.
+  A stride sample of this pipeline is a good estimator of the middle of a
+  distribution and a bad one of its edge.
+
+What is still not measured: the **beneficiated** searched cell at any
+destination other than cislunar, and the whole 2×2 at the other four
+destinations.
+
+## What calc v1.17.0 changed
+
+**Two defaults, and nothing else.** No model term, coefficient, table value or
+search axis moved. An explicitly configured run produces bit-identical output
+to `1.16.0`. calc `1.16.0 → 1.17.0`, master `1.19.0 → 1.20.0`; no other module
+changed, so no Stage 1/2/3 re-run is needed.
+
+```
+use_beneficiation         False -> True
+optimise_programme_scale  False -> True
+```
+
+**It is bumped anyway, and the reason is the rule this file already states**:
+changing any number a run produces means bumping. A *default* run's numbers
+change, so the stamp moves. This is the fourth stamp in the project that does
+not mean the model moved — after `1.10.1`, `1.14.1` and `1.14.2` — and the
+first where the reason is configuration rather than performance.
+
+### Why the flip is defensible now and was not before
+
+The `optimise_programme_scale` comment used to argue that a default flip "would
+silently retire every committed figure at once **with no way to reproduce
+them**", and the second half was the real objection. It is answered by
+measurement rather than by argument: the full cislunar 2×2 at the top of this
+file measures both settings of both flags on the full catalog, and **both
+search-OFF cells reproduce their committed values exactly** — 26.7863× raw and
+20.5895× beneficiated. The N = 1 answer is a recorded number, not a lost one,
+and either flag set False returns to it.
+
+The two flags are **not** defensible on the same grounds, which is worth
+keeping straight:
+
+- **`use_beneficiation` is weakly dominant by construction.** The search always
+  also prices *not concentrating* (`beneficiate=False`, which is not the same
+  as ratio 1.0 — it declines the recovery loss and the array mass too), so
+  turning it on strictly widens the option set and cannot make any row's
+  reported objective worse. Verified on 650,921 pairs: max benef/raw
+  **1.000000**, zero exceptions, 15.79% declining at exactly 1.0.
+- **`optimise_programme_scale` is not dominant in that sense at all** — it
+  changes the *question*. What makes it safe is narrower and newer: `1.16.0`
+  put (F, W) = (1, 1) **in the search set**, so never-worse against N = 1 holds
+  by inspection. Verified: max searched/unsearched **1.000000**, zero worse,
+  median improvement 42.4%.
+
+### What it costs
+
+| | raw | beneficiated |
+|---|---|---|
+| search OFF | 1,307 s | 9,300 s |
+| search ON | 3,890 s | *see the 2×2* |
+
+Beneficiation is **7.1×** and the programme search is **2.98×**, so a default
+run is roughly **twenty times** the raw single-mission run that most tables in
+this file were measured at. Both `master.py`'s and `calc.py`'s startup
+summaries now print these two settings, because a 2½-hour default run with no
+explanation on stdout is how someone concludes the pipeline has hung.
+
+### What to watch for
+
+⚠️  **Almost every table in this file and the README is N = 1 raw, and a
+default run no longer reproduces any of them.** That is not a stale-number
+problem to fix by re-measuring — the numbers are right for the question they
+answer. It is a *labelling* problem, and the fix is that any cell quoted from
+here on says which side of both flags it is on.
+
+⚠️  **The one-line reproduction recipe**, for anything in this file dated
+before 2026-08-11:
+
+```python
+CALC_CONFIG.use_beneficiation = False          # raw cells
+CALC_CONFIG.optimise_programme_scale = False   # N = 1 cells
+```
 
 ## Config discipline
 
