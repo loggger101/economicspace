@@ -102,7 +102,7 @@ import sys
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Mapping, NamedTuple, Optional, Tuple
+from typing import Any, Dict, List, Mapping, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -1704,7 +1704,49 @@ class CalcConfig:
     #         and reproduce EXACTLY: 26.7863x raw (unmoved across 1.14.0 ->
     #         1.16.0) and 20.5895x beneficiated.  Nothing was retired; the
     #         defaults just stopped answering the smallest question by default.
-    pipeline_version: str = "1.17.0"
+    #
+    # 1.17.1  PERFORMANCE ONLY — every number identical, the stamp moves only so
+    #         that a CSV still names the code that produced it.  FOURTH such
+    #         stamp after 1.10.1 / 1.14.1 / 1.14.2, and the first aimed at the
+    #         COST cascade rather than the mass cascade — because v1.17.0 made
+    #         `optimise_programme_scale` a default, and the programme ladder
+    #         prices a median of 40 options per candidate mission, so every
+    #         per-call cost in `mission_cost_usd` is now multiplied by 40.
+    #         Measured (interleaved A/B, both builds in one process, best of 5,
+    #         cislunar stride samples):
+    #             raw, search off            1.04x
+    #             beneficiated, search off   1.29x
+    #             raw, search on             1.25x
+    #             beneficiated + search      1.35x   <- the v1.17.0 DEFAULT
+    #         • `_ops_cost_constants` — the 22 Module 3 rows the cost cascade
+    #           reads, memoised on `ops_df` identity exactly as v1.10.1 did for
+    #           the sizing loop.  `_ops_value` was running 8.06 MILLION times on
+    #           a 150-row beneficiated+search sample, 11.7% of the profile, to
+    #           re-read numbers that never move.  `rig_trips_per_ship` reads the
+    #           same tuple.
+    #         • `optimal_payload_mix(want_phase=...)` — `_cargo_water_kg` is
+    #           97.3% of that function's callers and reads ONE key of the mix,
+    #           so it was building the mix dict, the value sum and the
+    #           dominant-phase max() and discarding all three.
+    #         • `AsteroidContext.cargo_ice_frac` — a per-BODY quantity that the
+    #           raw arm of `_cargo_water_kg` was re-deriving (`.get` + `pd.isna`
+    #           + `float`) per candidate per pass of the sizing loop.
+    #         • `mission_cost_usd(totals_only=True)` — the ladder compares
+    #           options on `total_cost` alone; building a 40-key dict to discard
+    #           39 of them measures ~3.4 us a call.  Early return before the
+    #           dict, winner re-priced once in full.
+    #         • `rig_trips` passed into `mission_cost_usd` — it is
+    #           (ops_df, config, stay_yr), all three fixed across a ladder.
+    #         • `delivery_architecture` memoised on its raw argument (458,337
+    #           calls to normalise one string).  Warning path deliberately not
+    #           memoised, so an unknown destination still shouts every time.
+    #         Verified: four cells (raw / benef / raw+search / benef+search)
+    #         135/135 columns bit-identical with sha256 MATCH against HEAD;
+    #         serial vs 8 workers byte-identical on benef+search (1,500-row
+    #         stride) and raw+search (2,500-row stride); mass ledger exact at
+    #         0.000000000 kg on three cells; both never-worse invariants hold
+    #         (max 1.000000, zero exceptions).
+    pipeline_version: str = "1.17.1"
 
 
 CONFIG = CalcConfig()
@@ -2260,7 +2302,8 @@ def optimal_payload_mix(
     feed_kg:    float,
     phases:     List[Tuple[str, float, float]],
     recovery:   float,
-) -> Dict[str, object]:
+    want_phase: Optional[str] = None,
+) -> Union[Dict[str, object], float]:
     """Most valuable payload obtainable from `feed_kg` of this rock (v1.6.0).
 
     The mission is not sent for a named mineral — it is sent to bring back the
@@ -2296,10 +2339,31 @@ def optimal_payload_mix(
 
     So the ordering is memoised per phase list instead, which leaves the table
     itself untouched.
+
+    ── `want_phase` (v1.17.1) ───────────────────────────────────────────────
+    Returns the kilograms of ONE named phase that the greedy walk loads, as a
+    bare float, instead of the full result dict.  `_cargo_water_kg` is 97% of
+    this function's callers and reads exactly one key — `mix_kg["water"]` —
+    so it was paying for the mix dict, the value accumulation and the
+    dominant-phase `max()` over `mix.items()` on every call, then throwing all
+    three away.
+
+    It is a short circuit, NOT a second knapsack: the walk below is the only
+    statement of the greedy algebra in this module, and `want_phase` only
+    decides how much of each pass's result is kept and when to stop.  Writing
+    it as a separate water-only function would have been the "two copies of
+    this algebra drifting apart" hazard that the mass ledger warns about, for
+    no extra speed — the loop is not what costs, the bookkeeping is.
+
+    The answer is bit-identical by construction rather than by measurement:
+    `remaining` is decremented in the same order by the same `min`, and the
+    take for the requested phase is returned before anything downstream of it
+    could perturb it.  Verified anyway — see the release notes.
     """
     if payload_kg <= 0 or not phases:
-        return {"value_usd": 0.0, "usd_per_kg": 0.0, "mix_kg": {},
-                "dominant_phase": None, "dominant_frac": 0.0}
+        return 0.0 if want_phase is not None else {
+            "value_usd": 0.0, "usd_per_kg": 0.0, "mix_kg": {},
+            "dominant_phase": None, "dominant_frac": 0.0}
 
     global _PHASE_ORDER_CACHE
     if _PHASE_ORDER_CACHE[0] is not phases:
@@ -2316,9 +2380,23 @@ def optimal_payload_mix(
         take      = min(available, remaining)
         if take <= 0:
             continue
+        if want_phase is not None:
+            # The caller wants one number.  Stop as soon as it is known —
+            # nothing after this point in the walk can change it.
+            if name == want_phase:
+                return take
+            remaining -= take
+            continue
         mix[name]  = take
         total     += take * price
         remaining -= take
+
+    if want_phase is not None:
+        # Never reached in the walk: the hold filled before this phase came up,
+        # or the feed had none of it.  `mix_kg.get(want_phase, 0.0)` in the full
+        # path returns the same 0.0, including when `loaded <= 0` below would
+        # have short-circuited to an empty mix.
+        return 0.0
 
     # Anything the feed could not fill is dead space — the hold flies partly
     # empty rather than being topped up with rock that was never dug.
@@ -2759,6 +2837,7 @@ def _cargo_water_kg(
     feed_kg:      float,
     beneficiate:  bool,
     config:       CalcConfig,
+    ice_frac:     Optional[float] = None,
 ) -> float:
     """Water in the delivered CARGO, which has to be baked out of the rock.
 
@@ -2774,19 +2853,31 @@ def _cargo_water_kg(
     up in the hold, and it will happily leave water behind for a denser-value
     phase.  Not concentrating means the cargo is the body's own composition, so
     the ice fraction applies directly.
+
+    v1.17.1, both branches, and neither changes an answer:
+
+    * the concentrating branch asks `optimal_payload_mix` for the ONE phase it
+      reads rather than building the whole mix and discarding it — see
+      `want_phase` there,
+    * `ice_frac` is a property of the BODY, so the raw branch's `.get` +
+      `pd.isna` + `float` was being re-derived once per candidate per pass of
+      the sizing loop.  `AsteroidContext` resolves it once and passes it in;
+      None still means "derive it from the row", which keeps this function
+      usable on its own.
     """
     if payload_kg <= 0:
         return 0.0
     if beneficiate:
         if not phases:
             return 0.0
-        mix = optimal_payload_mix(
+        return float(optimal_payload_mix(
             payload_kg, feed_kg, phases, config.beneficiation_recovery,
-        )
-        return float(mix["mix_kg"].get("water", 0.0))
-    ice_frac = asteroid_row.get("comp_ice_fraction")
-    if ice_frac is None or pd.isna(ice_frac):
-        return 0.0
+            want_phase="water",
+        ))
+    if ice_frac is None:
+        ice_frac = asteroid_row.get("comp_ice_fraction")
+        if ice_frac is None or pd.isna(ice_frac):
+            return 0.0
     return payload_kg * float(ice_frac)
 
 
@@ -3198,19 +3289,42 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
 }
 
 
+_ARCH_BY_RAW_KEY: Dict[Any, dict] = {}
+
+
 def delivery_architecture(destination: str) -> dict:
     """Look up the mission architecture for a delivery destination.
 
     Unknown destinations fall back to earth_surface — the conservative
     choice, and the one whose cost lines are all present.
+
+    v1.17.1: the resolved answer is memoised on the RAW argument, because
+    `mission_cost_usd` calls this once per programme option — 458,337 times on
+    a 150-row beneficiated sample with the search on — to normalise the same
+    string and index the same dict.  Only the hit path is memoised: an unknown
+    destination still falls through and still prints its warning every time,
+    which is the loud behaviour that made it a warning.
     """
+    try:
+        hit = _ARCH_BY_RAW_KEY.get(destination)
+    except TypeError:
+        hit = None                    # unhashable caller — skip the memo
+    if hit is not None:
+        return hit
+
     key = str(destination or "").strip().lower()
     if key not in DELIVERY_ARCHITECTURES:
         print(f"     ⚠️   Unknown delivery_destination {destination!r} — "
               f"falling back to 'earth_surface'.  Valid: "
               f"{', '.join(sorted(DELIVERY_ARCHITECTURES))}")
-        key = "earth_surface"
-    return DELIVERY_ARCHITECTURES[key]
+        return DELIVERY_ARCHITECTURES["earth_surface"]
+
+    arch = DELIVERY_ARCHITECTURES[key]
+    try:
+        _ARCH_BY_RAW_KEY[destination] = arch
+    except TypeError:
+        pass
+    return arch
 
 
 def uses_tps(config: CalcConfig) -> bool:
@@ -4157,11 +4271,15 @@ def rig_trips_per_ship(
     """
     if not config.model_rig_service_life or stay_yr <= 0:
         return None
-    life_yr      = _ops_value(ops_df, "Mining rig service life", default=15.0)
+    # v1.17.1: both rows come off the memoised cost tuple rather than two
+    # `_ops_value` calls apiece.  This runs once per programme option, so with
+    # `optimise_programme_scale` on it is ~40x per candidate mission.
+    ops_cost     = _ops_cost_constants(ops_df)
+    life_yr      = ops_cost[1]
     calendar_cap = max(1, int(life_yr // stay_yr))
     trip_cap: Optional[int] = None
     if config.model_rig_trip_limit:
-        raw = _ops_value(ops_df, "Mining rig maximum trips", default=0.0)
+        raw = ops_cost[3]
         if raw > 0:
             trip_cap = max(1, int(raw))
     trips = calendar_cap if trip_cap is None else min(calendar_cap, trip_cap)
@@ -4554,6 +4672,75 @@ def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, ...]:
     return vals
 
 
+_OPS_COST_CACHE: Tuple[Optional[pd.DataFrame], Optional[Tuple[float, ...]]] = (None, None)
+
+
+def _ops_cost_constants(ops_df: pd.DataFrame) -> Tuple[float, ...]:
+    """The twenty-two Module 3 rows the COST cascade needs, resolved once.
+
+    v1.17.1, and it is v1.10.1's sizing-loop memo applied to the other half of
+    the model.  `mission_cost_usd` pulled ~18 of these per call through
+    `_ops_value`, and `rig_trips_per_ship` two more — none of which depends on
+    the asteroid, the vehicle, the propellant, the architecture or the
+    programme option.  They are pure functions of `ops_df`, which is loaded
+    once per run and never mutated.
+
+    That was survivable while the cost model ran once per surviving candidate.
+    It stopped being survivable in v1.17.0, which turned `optimise_programme_scale`
+    ON BY DEFAULT: the programme ladder prices a median of 40 options per
+    mission, so every one of those lookups is now multiplied by 40.  Measured
+    on a 150-row beneficiated cislunar sample with the search on,
+    `_ops_value` was running **8.06 million times** — 11.7% of the profile, to
+    re-read twenty-two numbers that never move.
+
+    Ordered, not named, for the same reason `_ops_sizing_constants` is: the
+    callers unpack the whole tuple in one statement, which is a single opcode,
+    and every read after that is a local.  Keep this list and the unpacking in
+    `mission_cost_usd` in the same order — they are checked against each other
+    by nothing but review, so the defence is that they are adjacent and the
+    gated-off diff is bit-identical.
+
+    ⚠️  Every row is resolved EAGERLY, including the ones only one destination
+    or one power source reads.  That is deliberate and it is not a behaviour
+    change: `_ops_value` is total (an absent row and a NaN value both fall back
+    to the default), so resolving a branch that is not taken costs one dict
+    lookup at run start and cannot fail.  The value is then simply not used.
+    """
+    global _OPS_COST_CACHE
+    cached_df, vals = _OPS_COST_CACHE
+    if cached_df is ops_df:
+        return vals
+
+    vals = (
+        _ops_value(ops_df, "Mining payload recurring cost", default=300_000.0),
+        _ops_value(ops_df, "Mining rig service life", default=15.0),
+        _ops_value(ops_df, "Rig salvage fraction", default=0.50),
+        _ops_value(ops_df, "Mining rig maximum trips", default=0.0),
+        _ops_value(ops_df, "Surface lander recurring cost", default=200_000.0),
+        _ops_value(ops_df, "Return capsule recurring cost", default=150_000.0),
+        _ops_value(ops_df, "Berthing adapter recurring cost", default=60_000.0),
+        _ops_value(ops_df, "Power system (solar + battery)", default=800.0),
+        _ops_value(ops_df, "RTG (radioisotope power)", default=500_000.0),
+        _ops_value(ops_df, "Electric propulsion system recurring cost",
+                   default=1_500_000.0),
+        _ops_value(ops_df, "Propellant tank recurring cost", default=6_000.0),
+        _ops_value(ops_df, "Mission operations", default=31_400_000.0),
+        _ops_value(ops_df, "Heat shield / TPS for Earth return", default=50_000.0),
+        _ops_value(ops_df, "Sample recovery operations", default=15_000_000.0),
+        _ops_value(ops_df, "FAA Part 450 licensing compliance", default=2_500_000.0),
+        _ops_value(ops_df, "Depot berthing & handover operations", default=2_000_000.0),
+        _ops_value(ops_df, "FAA Part 450 licensing (launch only)", default=1_200_000.0),
+        _ops_value(ops_df, "Third-party liability insurance", default=1_500_000.0),
+        _ops_value(ops_df, "Launch insurance", default=10.0),
+        _ops_value(ops_df, "Spacecraft development (NRE)", default=588_500_000.0),
+        _ops_value(ops_df, "Autonomous mining control & AI (NRE)",
+                   default=200_000_000.0),
+        _ops_value(ops_df, "Cost of capital (WACC)", default=0.10),
+    )
+    _OPS_COST_CACHE = (ops_df, vals)
+    return vals
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MISSION COST CASCADE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4572,7 +4759,9 @@ def mission_cost_usd(
     n_missions:          Optional[int] = None,
     missions_per_ship:   Optional[int] = None,
     cadence_yr:          Optional[float] = None,
-) -> Dict[str, float]:
+    rig_trips:           Optional[Tuple[int, int, Optional[int]]] = None,
+    totals_only:         bool = False,
+) -> Union[Dict[str, float], float]:
     """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
 
     Uncrewed autonomous mining mission — no crew cost line.
@@ -4608,6 +4797,17 @@ def mission_cost_usd(
         × (1 + contingency_fraction)
         × per-bucket (1 + WACC)^T_bucket        [time-value]
     """
+    # v1.17.1: the twenty-two Module 3 constants this cascade reads, resolved
+    # once per run rather than once per call.  Order matches
+    # `_ops_cost_constants` — keep the two together.
+    (hw_per_kg, life_yr, salvage, _max_trips_raw,
+     lander_per_kg, capsule_earth_per_kg, berthing_per_kg,
+     power_per_w, rtg_per_w, ep_drive_per_kw, tank_per_kg,
+     ops_per_year, tps_per_kg,
+     recovery_earth, licensing_earth, recovery_depot, licensing_depot,
+     liability_cost, launch_ins_raw,
+     nre_total, autonomy_nre_total, wacc_rate) = _ops_cost_constants(ops_df)
+
     cost_per_kg_prop = float(propellant["cost_usd_per_kg"])
     launch_cost      = float(mass_cascade["m_launch"]) * float(vehicle["usd_per_kg_to_leo"])
 
@@ -4662,7 +4862,6 @@ def mission_cost_usd(
     # Recurring hardware — split into the mining rig (one-way to asteroid,
     # AMORTISABLE across multi-mission programmes since the rig stays put)
     # and the return capsule (fresh per mission — fly-and-die).
-    hw_per_kg               = _ops_value(ops_df, "Mining payload recurring cost", default=300_000.0)
     mining_rig_cost_total   = config.mining_hardware_kg * hw_per_kg
     # v1.15.0: programme size is a searched axis, so it arrives as an argument.
     # None falls back to the config for every caller that has not been updated,
@@ -4677,11 +4876,17 @@ def mission_cost_usd(
     # is stranded, not an asset.
     rig_terminal_value = 0.0
     missions_sharing_rig = n_missions
-    rig_trips = rig_trips_per_ship(ops_df, config, stay_yr)
+    # v1.17.1: `rig_trips` is `(ops_df, config, stay_yr)` and nothing else, and
+    # all three are held FIXED across a programme ladder — so the caller that
+    # searched (F, W) has already derived it and passes it in, instead of this
+    # function re-deriving the same triple once per option.  None keeps the
+    # v1.16.0 behaviour for every other caller, so this is a pass-through, not
+    # a second derivation: `rig_trips_per_ship` remains the only place the
+    # two bounds are resolved.
+    if rig_trips is None:
+        rig_trips = rig_trips_per_ship(ops_df, config, stay_yr)
     if rig_trips is not None:
         trips, _calendar_cap, trip_cap = rig_trips
-        life_yr = _ops_value(ops_df, "Mining rig service life", default=15.0)
-        salvage = _ops_value(ops_df, "Rig salvage fraction", default=0.50)
         # v1.16.0: how many campaigns one rig actually flies is a property of
         # the FLEET, not of N alone — F ships split N between them.  The caller
         # supplies it because the caller is what searched (F, W).  None keeps
@@ -4724,11 +4929,11 @@ def mission_cost_usd(
     # re-entry capsule or a berthing adapter.
     arch = delivery_architecture(config.delivery_destination)
     if arch.get("needs_lander"):
-        capsule_per_kg = _ops_value(ops_df, "Surface lander recurring cost", default=200_000.0)
+        capsule_per_kg = lander_per_kg
     elif arch["returns_to_earth"]:
-        capsule_per_kg = _ops_value(ops_df, "Return capsule recurring cost", default=150_000.0)
+        capsule_per_kg = capsule_earth_per_kg
     else:
-        capsule_per_kg = _ops_value(ops_df, "Berthing adapter recurring cost", default=60_000.0)
+        capsule_per_kg = berthing_per_kg
     # v1.7.0: LEARNING CURVE.  The per-mission articles — the capsule or
     # lander, and the power system — are built N times over a programme, and
     # the Nth costs less than the first.  The mining rig is excluded: when
@@ -4747,15 +4952,12 @@ def mission_cost_usd(
     # v1.5.0: the beneficiation plant's solar array, priced per installed Watt
     # off Module 3's power-system row.  Zero unless beneficiation is on — the
     # baseline rig's own power is already implicit in its $/kg recurring rate.
-    power_per_w             = _ops_value(ops_df, "Power system (solar + battery)", default=800.0)
     # v1.11.0: past 3.46 AU the sizing loop may have chosen a radioisotope
     # source because it is LIGHTER there.  It is also 625× more expensive per
     # watt, and charging it at the solar rate would be exactly the asymmetry
     # this codebase keeps finding — a mass in the rocket equation with the
     # wrong price, or none, in the ledger.
-    plant_per_w             = (_ops_value(ops_df, "RTG (radioisotope power)",
-                                          default=500_000.0)
-                               if power_source == "rtg" else power_per_w)
+    plant_per_w             = (rtg_per_w if power_source == "rtg" else power_per_w)
     power_system_cost       = max(0.0, float(processing_power_w)) * plant_per_w * lc
     # ── Electric propulsion stage (v1.10.0) ──────────────────────────────────
     # v1.7.0 put the EP array and thruster into the ROCKET EQUATION and stopped
@@ -4770,9 +4972,6 @@ def mission_cost_usd(
     # train, the thruster and PPU off Module 3's per-kW propulsion row.
     ep_kw = max(0.0, float(ep_power_w)) / 1000.0
     if ep_kw > 0:
-        ep_drive_per_kw = _ops_value(
-            ops_df, "Electric propulsion system recurring cost", default=1_500_000.0,
-        )
         ep_system_cost = (max(0.0, float(ep_power_w)) * power_per_w
                           + ep_kw * ep_drive_per_kw) * lc
     else:
@@ -4792,9 +4991,6 @@ def mission_cost_usd(
     tank_mass = (float(mass_cascade.get("m_tank_return", 0.0))
                  + float(mass_cascade.get("m_tank_outbound", 0.0)))
     if tank_mass > 0:
-        tank_per_kg = _ops_value(
-            ops_df, "Propellant tank recurring cost", default=6_000.0,
-        )
         tank_cost = tank_mass * tank_per_kg * lc
     else:
         tank_cost = 0.0
@@ -4802,7 +4998,6 @@ def mission_cost_usd(
                                + ep_system_cost + tank_cost)
 
     # Mission ops × duration  (per-asteroid duration from Δv estimator)
-    ops_per_year = _ops_value(ops_df, "Mission operations", default=31_400_000.0)
     ops_cost     = ops_per_year * mission_duration_yr
 
     # Heat shield — mass now comes from the actual cascade, not re-derived.
@@ -4815,7 +5010,6 @@ def mission_cost_usd(
     # N = 1, so no single-mission figure moves.
     tps_mass = float(mass_cascade.get("m_tps", 0.0))
     if tps_mass > 0:
-        tps_per_kg       = _ops_value(ops_df, "Heat shield / TPS for Earth return", default=50_000.0)
         heat_shield_cost = tps_mass * tps_per_kg * lc
     else:
         heat_shield_cost = 0.0
@@ -4825,12 +5019,11 @@ def mission_cost_usd(
     # clean-room convoy) with depot handover, and drops the re-entry half of
     # the Part 450 licence.
     if arch["returns_to_earth"]:
-        recovery_cost  = _ops_value(ops_df, "Sample recovery operations",        default=15_000_000.0)
-        licensing_cost = _ops_value(ops_df, "FAA Part 450 licensing compliance", default=2_500_000.0)
+        recovery_cost  = recovery_earth
+        licensing_cost = licensing_earth
     else:
-        recovery_cost  = _ops_value(ops_df, "Depot berthing & handover operations", default=2_000_000.0)
-        licensing_cost = _ops_value(ops_df, "FAA Part 450 licensing (launch only)", default=1_200_000.0)
-    liability_cost  = _ops_value(ops_df, "Third-party liability insurance",  default=1_500_000.0)
+        recovery_cost  = recovery_depot
+        licensing_cost = licensing_depot
 
     # Launch insurance — percent of (launch + spacecraft book value).
     # Gross value of future revenue is NOT insured — underwriters cover the
@@ -4853,7 +5046,7 @@ def mission_cost_usd(
     # missed — it is the one item on the launch stack whose cost line sits
     # outside `hardware_cost`.  On an Earth-return mission it is a 15%-of-payload
     # article at $50,000/kg, so it is not a rounding term where it exists at all.
-    launch_ins_pct        = _ops_value(ops_df, "Launch insurance", default=10.0) / 100.0
+    launch_ins_pct        = launch_ins_raw / 100.0
     spacecraft_book_value = (mining_rig_cost_total + capsule_cost
                              + power_system_cost + ep_system_cost + tank_cost
                              + heat_shield_cost)
@@ -4864,7 +5057,6 @@ def mission_cost_usd(
     # nre_recurring_overlap_fraction).  NICM / SSCM per-kg brackets are
     # regressions on total program cost, so charging full OSIRIS-REx NRE on
     # top of a $300k/kg recurring rate books part of the development twice.
-    nre_total   = _ops_value(ops_df, "Spacecraft development (NRE)", default=588_500_000.0)
     nre_overlap = min(max(config.nre_recurring_overlap_fraction, 0.0), 1.0)
     nre_cost    = nre_total * (1.0 - nre_overlap) / n_missions
 
@@ -4872,9 +5064,6 @@ def mission_cost_usd(
     # v1.2.4+ replaced the legacy 'Crew' line item with this).  Amortised the
     # same way as the bus NRE — once developed, the autonomy stack ships on
     # every subsequent identical mission.
-    autonomy_nre_total = _ops_value(
-        ops_df, "Autonomous mining control & AI (NRE)", default=200_000_000.0,
-    )
     autonomy_nre_cost  = autonomy_nre_total / n_missions
 
     # ── Time-bucket every line item ──────────────────────────────────────────
@@ -4904,7 +5093,7 @@ def mission_cost_usd(
     # WACC compounding — apply per bucket so end-of-mission costs aren't
     # wrongly inflated by the full duration's compounding factor.
     if config.apply_wacc_compounding:
-        wacc          = _ops_value(ops_df, "Cost of capital (WACC)", default=0.10)
+        wacc          = wacc_rate
         mult_upfront  = (1.0 + wacc) ** mission_duration_yr
         mult_ongoing  = (1.0 + wacc) ** (mission_duration_yr / 2.0)
         mult_end      = 1.0
@@ -4943,6 +5132,23 @@ def mission_cost_usd(
         total_cost += ((programme_upfront * (cal_cost - 1.0)
                         - rig_credit_share * (cal_credit - 1.0))
                        * cont * mult_upfront)
+
+    # ── v1.17.1: the programme ladder wants ONE number ───────────────────────
+    # `_price_programme` prices a median of 40 options per candidate mission
+    # and reads `total_cost` from every one of them; the other ~39 keys are
+    # read only for the option that WINS.  Building a 40-key dict to throw 39
+    # of them away measures at ~3.4 µs a call on the reference machine, which
+    # is a third of this function.  So the ladder asks for the total, and the
+    # winner is re-priced once in full at the end.
+    #
+    # This is an early return, NOT a second code path: every line above it is
+    # the same arithmetic in the same order, so the float compared by
+    # `_objective_key` is bit-identical to the one the full dict would have
+    # carried.  Everything below is either a diagnostic (`wacc_multiplier`,
+    # `subtotal`, `contingency_cost`) or the dict itself — nothing below
+    # touches `total_cost`.
+    if totals_only:
+        return total_cost
 
     # Weighted-average WACC multiplier for diagnostic display
     pre_wacc_total = upfront_with_cont + ongoing_with_cont + end_with_cont
@@ -5034,6 +5240,12 @@ class AsteroidContext(NamedTuple):
     solar_w_per_kg:        float
     plant_w_per_kg_solar:  float
     array_oversize_factor: float
+    # v1.17.1.  The body's ice fraction, already resolved through the
+    # absent/NaN check, so the raw arm of `_cargo_water_kg` stops paying a
+    # `pd.isna` per candidate per pass of the sizing loop.  0.0 means "no
+    # usable ice column", which multiplies out to the same 0.0 that branch
+    # used to return early.
+    cargo_ice_frac:        float
 
 
 def asteroid_context(
@@ -5079,6 +5291,10 @@ def asteroid_context(
         storage_wh_per_kg, storage_eta, baseline_dark_h,
     )
 
+    ice_frac = asteroid_row.get("comp_ice_fraction")
+    ice_frac = (0.0 if ice_frac is None or pd.isna(ice_frac)
+                else float(ice_frac))
+
     return AsteroidContext(
         mineable_kg           = float(asteroid_mass) * config.max_mining_fraction,
         throughput_cap_kg     = max_payload_by_throughput_kg(config),
@@ -5094,6 +5310,7 @@ def asteroid_context(
         solar_w_per_kg        = w_per_kg,
         plant_w_per_kg_solar  = w_solar_eff,
         array_oversize_factor = array_oversize_factor,
+        cargo_ice_frac        = ice_frac,
     )
 
 
@@ -5371,6 +5588,12 @@ def _evaluate_combo_at_ratio(
     # change to the algebra: it is already the f in (1 + f).
     containment_frac = 0.0
     structure_frac_eff = structure_frac
+    # v1.17.1: a Module 3 constant, resolved once instead of once per pass of
+    # the loop below AND again at the settle-up.  One lookup, two readers —
+    # the same shape as `tank_frac` in v1.14.2, and for the same reason.
+    water_wh = _ops_value(
+        ops_df, "Water liberation energy (bound water)", default=2_500.0,
+    )
     cascade = None
     for _ in range(12):
         # Boil-off, folded into an EFFECTIVE return Δv: since m_return_prop
@@ -5475,7 +5698,7 @@ def _evaluate_combo_at_ratio(
                                 and containment_per_kg > 0))
         trial_cargo_water = (
             _cargo_water_kg(asteroid_row, phases, trial_payload, trial_feed,
-                            beneficiate, config)
+                            beneficiate, config, ctx.cargo_ice_frac)
             if need_cargo_water else 0.0
         )
         # Containment scales with the VOLATILE fraction of the cargo, so it is
@@ -5504,9 +5727,6 @@ def _evaluate_combo_at_ratio(
             # `beneficiate or isru` — a RAW mission to an icy body liberates
             # cargo water too, and used to pay for that array without flying
             # any of it.
-            water_wh = _ops_value(
-                ops_df, "Water liberation energy (bound water)", default=2_500.0,
-            )
             trial_water = (new_isru_prop * isru_water_per_kg_prop
                            if isru else 0.0)
             trial_water += trial_cargo_water
@@ -5649,6 +5869,7 @@ def _evaluate_combo_at_ratio(
                                          and containment_per_kg > 0):
         cargo_water_kg = _cargo_water_kg(
             asteroid_row, phases, m_payload, feed_kg, beneficiate, config,
+            ctx.cargo_ice_frac,
         )
     containment_frac = 0.0
     if config.model_volatile_containment and m_payload > 0:
@@ -5733,9 +5954,7 @@ def _evaluate_combo_at_ratio(
         water_kg += cargo_water_kg
     if water_kg > 0 and mining_yr > 0:
         processing_power_watts += (
-            _ops_value(ops_df, "Water liberation energy (bound water)",
-                       default=2_500.0)
-            * water_kg / (mining_yr * 365.25 * 24.0)
+            water_wh * water_kg / (mining_yr * 365.25 * 24.0)
         )
     if processing_power_watts > 0:
         # The settled draw is the one that has to fit under the Pu-238 ceiling,
@@ -5903,13 +6122,21 @@ def _evaluate_combo_at_ratio(
     gross_base           = gross_value
     delivered_base       = delivered_value_per_kg
 
-    def _price_programme(n_missions: int, fleet: int, per_ship: Optional[int] = None):
+    def _price_programme(n_missions: int, fleet: int, per_ship: Optional[int] = None,
+                         full: bool = True):
         """Everything downstream of the cascade, for one programme size.
 
-        Returns `(cost, gross, saturation_mult, concurrent, p_success,
-        p_mining, delivered_per_kg)`.  Nothing here re-enters the rocket
-        equation; it is one pass of straight-line arithmetic over a cascade
-        that is already solved.
+        Returns `(cost, total_cost, gross, saturation_mult, concurrent,
+        p_success, p_mining, delivered_per_kg)`.  Nothing here re-enters the
+        rocket equation; it is one pass of straight-line arithmetic over a
+        cascade that is already solved.
+
+        v1.17.1: `full=False` asks `mission_cost_usd` for the total alone and
+        leaves `cost` None.  The ladder below compares options on
+        `total_cost` and nothing else, so it prices cheaply and re-prices the
+        single winner in full — one extra call out of ~40, against a 40-key
+        dict built and discarded on every one of the other 39.  `total_cost`
+        is the same float either way; see the early return there.
         """
         c = mission_cost_usd(
             mass_cascade        = actual_cascade,
@@ -5926,7 +6153,13 @@ def _evaluate_combo_at_ratio(
             n_missions          = n_missions,
             missions_per_ship   = per_ship,
             cadence_yr          = cadence_yr,
+            rig_trips           = rig_trips,
+            totals_only         = not full,
         )
+        if full:
+            total_cost = c["total_cost"]
+        else:
+            total_cost, c = c, None
         g         = gross_base
         sat       = 1.0
         delivered = delivered_base
@@ -5975,21 +6208,24 @@ def _evaluate_combo_at_ratio(
                   if config.model_reliability_growth else p_first)
             ps = max(0.0, min(1.0, p_launch * p_cruise * pm))
             g *= ps
-        return c, g, sat, concurrent, ps, pm, delivered
+        return c, total_cost, g, sat, concurrent, ps, pm, delivered
 
+    # v1.17.1: the ladder prices on totals and the winner is rebuilt in full
+    # once, below.  `single` is the common case — the search off, one option —
+    # and it skips the rebuild entirely by pricing in full straight away.
     programmes   = programme_options(rig_trips, config)
+    single       = len(programmes) == 1
     best_n, best_f, best_w = programmes[0]
-    best_priced  = _price_programme(best_n, best_f, best_w)
+    best_priced  = _price_programme(best_n, best_f, best_w, full=single)
     best_pkey    = _objective_key(
-        best_priced[1] - best_priced[0]["total_cost"],
-        best_priced[1], best_priced[0]["total_cost"], config)
+        best_priced[2] - best_priced[1],
+        best_priced[2], best_priced[1], config)
     priced_count = 1
 
     for n_missions, fleet, per_ship in programmes[1:]:
-        cand = _price_programme(n_missions, fleet, per_ship)
+        cand = _price_programme(n_missions, fleet, per_ship, full=False)
         priced_count += 1
-        key = _objective_key(cand[1] - cand[0]["total_cost"],
-                             cand[1], cand[0]["total_cost"], config)
+        key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config)
         if key > best_pkey:
             best_pkey, best_priced = key, cand
             best_n, best_f, best_w = n_missions, fleet, per_ship
@@ -6007,15 +6243,23 @@ def _evaluate_combo_at_ratio(
         ladder = sorted({f for _n, f, _w in programmes})
         for fleet in fleet_refinement(best_f, ladder, ladder[0], ladder[-1]):
             n_missions = fleet * best_w
-            cand = _price_programme(n_missions, fleet, best_w)
+            cand = _price_programme(n_missions, fleet, best_w, full=False)
             priced_count += 1
-            key = _objective_key(cand[1] - cand[0]["total_cost"],
-                                 cand[1], cand[0]["total_cost"], config)
+            key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config)
             if key > best_pkey:
                 best_pkey, best_priced = key, cand
                 best_n, best_f = n_missions, fleet
 
-    (cost, gross_value, saturation_mult, concurrent_missions,
+    # The winning programme is the only one whose full cost breakdown is
+    # reported, so it is the only one that has to be built.  Re-priced rather
+    # than cached because the ladder above carried floats: same arguments, same
+    # deterministic arithmetic, same dict the old code returned.
+    if best_priced[0] is None:
+        best_priced = _price_programme(best_n, best_f, best_w, full=True)
+
+    # `_total_cost` is the same float as `cost["total_cost"]` on the full path;
+    # the expressions below keep reading the dict so nothing downstream moved.
+    (cost, _total_cost, gross_value, saturation_mult, concurrent_missions,
      p_success, p_mining, delivered_value_per_kg) = best_priced
 
     profit               = gross_value - cost["total_cost"]
