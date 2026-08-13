@@ -63,14 +63,31 @@ See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.1.0`, mineral_value `1.7.0`, transportation `1.12.0`,
-calc `1.17.2`, master `1.20.2` (the master version is a literal in
+calc `1.17.3`, master `1.20.3` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
-ℹ️  **calc `1.17.1` and `1.17.2` are the FOURTH and FIFTH stamps that do not
-mean the numbers moved** — performance only, same contract as `1.10.1`,
-`1.14.1` and `1.14.2`. Every measured cell in this file stands unaltered; do
-not re-measure anything on account of either. See "What calc v1.17.1 changed"
-and "What calc v1.17.2 changed".
+ℹ️  **SEVEN stamps so far do NOT mean the numbers moved.** The rule is
+one-directional — *changing a number means bumping; bumping does not mean a
+number changed* — and reading a version as evidence that a result moved is the
+mistake this table exists to prevent.
+
+| stamp | why it moved | what a re-run gives |
+|---|---|---|
+| `1.10.1` | performance only | bit-identical, verified |
+| `1.14.1` | performance only | bit-identical, verified |
+| `1.14.2` | performance only | bit-identical, verified |
+| `1.17.0` | **two defaults flipped** | bit-identical *only if configured explicitly* |
+| `1.17.1` | performance only | bit-identical, verified |
+| `1.17.2` | performance only | bit-identical, verified |
+| `1.17.3` | **dead code removed** | bit-identical, verified |
+
+**Every measured cell in this file stands unaltered across all seven — do not
+re-measure anything on account of any of them.** Each release's own section
+carries its verification.
+
+⚠️  Only five of the seven are *performance* stamps: `1.17.0` was a default
+flip and `1.17.3` a cleanup, which is why this file counts two sequences that
+run apart — see "What calc v1.17.0 changed".
 
 ⚠️  **`1.17.2` is the first performance release in this project that is INERT
 on some cells and worth 1.45× on others**, and the split is not subtle: it
@@ -88,22 +105,19 @@ programme built around it, flying concentrate". Set both False to get the old
 answer; both OFF cells were re-measured on the full catalog on 2026-08-11 and
 **reproduce exactly**. See "What calc v1.17.0 changed".
 
-⚠️  **calc `1.16.0` charges programme calendar time, and like `1.15.0` it moves
-numbers only for programmes.** It is exactly inert at W = 1 — one campaign per
-ship — which is every N = 1 run, which is every measured cell in this file
-except the N = 10 / N = 100 curve. Verified rather than argued: at N = 1 the
-400-row raw cislunar sample is **141 of 141 columns identical, sha256 MATCH**
-with the term on and off. Do not re-measure a single-mission cell on account of
-it. The N = 10 / N = 100 curve **does** move and is now a `1.14.0` measurement
-of a model that has been superseded twice.
+⚠️  **`1.15.0` AND `1.16.0` MOVE NUMBERS ONLY FOR PROGRAMMES, and almost every
+measured cell in this file is a single mission.** Three items between them —
+`1.15.0`'s duty-cycle cap on rig life and its searched programme size,
+`1.16.0`'s programme calendar charge — are all exactly inert at N = 1 (W = 1,
+one campaign per ship). Verified rather than argued: on the 400-row raw
+cislunar sample at N = 1, `1.16.0`'s term on and off is **141 of 141 columns
+identical, sha256 MATCH**.
 
-⚠️  **calc `1.15.0` moves numbers only for programmes, not for single missions,
-and almost every measured cell in this file is a single mission.** Its two
-items — a duty-cycle cap on rig life, and a searched programme size — are both
-inert at N = 1. Do not re-measure a single-mission cell on account of it; do not
-read any table below as covering an `optimise_programme_scale = True` run unless
-it says so, because only the ones under "Measured — FULL CATALOG" and "THE FULL
-CISLUNAR 2×2" do.
+**Do not re-measure a single-mission cell on account of either release**, and
+do not read any table below as covering an `optimise_programme_scale = True`
+run unless it says so — only those under "Measured — FULL CATALOG" and "THE
+FULL CISLUNAR 2×2" do. The N = 10 / N = 100 curve **does** move, and is now a
+`1.14.0` measurement of a model superseded twice.
 
 🚨  **"and the search is default OFF" was true until calc `1.17.0` and is now
 wrong.** It is default **ON**, along with `use_beneficiation`. The sentence is
@@ -133,20 +147,9 @@ absolute. See "Measured — FULL CATALOG".
 > against the 1-D ladder's 8, because W is enumerated exhaustively inside every
 > rung of the F ladder.
 
-calc `1.14.1` and `1.14.2` are the **second and third** stamps that do not mean
-the numbers moved — same contract as `1.10.1`, and verified the same way. See
-"What calc v1.14.1 changed" and "What calc v1.14.2 changed". Every measured cell
-in this file was produced by `1.14.0` and stands unaltered; do not re-measure
-anything on account of either.
-
-Three of the five stamps in the `1.14.x` line are therefore performance-only,
-which is worth noticing before reading a version number as evidence that a
-result changed. The rule is one-directional: changing a number means bumping.
-
-calc `1.10.1` was the first stamp that did **not** mean the numbers moved. It
-was a pure performance release, verified bit-identical, and it was bumped
-anyway so that a CSV still names the code that produced it — the rule above is
-"changing a number means bumping", not "bumping means a number changed".
+⚠️  Three of the five stamps in the `1.14.x` line are performance-only, which
+is the sharpest illustration of why the table above is worth reading before
+treating a version bump as evidence.
 
 ### ✅ THE FULL CISLUNAR 2×2 IS MEASURED (CURRENT — 2026-08-11, calc `1.16.0`)
 
@@ -393,109 +396,40 @@ the model.
 > **Beneficiated, `cislunar` only: 20.5895×**, 659,847 evaluable, 38,072 s —
 > 2021 CX5 again, on iodine, concentrating **3.519×**.
 >
-> **`cislunar` is still the best case at 20.5895×**, and not narrowly: it is
-> 2.4× clear of the next destination on raw. That is now measured on the real
-> population rather than inferred from a 15,566-row one.
+> **`cislunar` is still the best case at 20.5895×**, and not narrowly: 2.4×
+> clear of the next destination on raw, now measured on the real population
+> rather than inferred from a 15,566-row one.
 >
-> ⚠️  **Only `cislunar` has a like-for-like anchor, and it is the ONLY cell
-> here that is a model delta.** Its raw cell moves 25.7035× → **26.7863×
-> (+4.21%)** against `1.13.0` on the same catalog, which is the expected
-> direction — v1.14.0 removes subsidies. The other four destinations had
-> **never been run on the 1.55 M catalog at all**; their standing figures were
-> `1.11.0` on ~31,000 evaluable rows. So those four rows are **first
-> measurements, not deltas**, and no percentage change against anything above
-> them is meaningful.
+> ⚠️  **Only the `cislunar` raw cell is a model delta**; the other four
+> destinations had never been run on the 1.55 M catalog at all, so they are
+> **first measurements, not deltas**. ⚠️  **The four non-cislunar BENEFICIATED
+> cells remain unmeasured** — ~10 h to ~20 h each — and must not be filled in
+> from the `1.11.0` matrix, which is a different population *and* three
+> releases behind. Winners, the shifted destination ordering, propellant and
+> vehicle shares: **"The v1.14.0 full-catalog matrix (CURRENT)"** below.
 >
-> ⚠️  **The four non-cislunar BENEFICIATED cells remain unmeasured on this
-> catalog** — they are ~10 h (`lunar_surface`) to ~20 h (the rest) each and
-> were not run. Do not fill them in from the `1.11.0` matrix below; that matrix
-> is a different population *and* three releases of model behind.
->
-> **8651 (M) is still the Mars raw winner**, exactly as on `1.10.x` and
-> `1.11.0`, through a 17× population increase and three releases of model
-> change. Winner identity surviving that is a stronger check on the Mars
-> heliocentric leg than any ratio in this file.
->
-> **The destination ordering has shifted.** `1.11.0` raw ran cislunar < mars <
-> leo < lunar; it now runs **cislunar < lunar < leo < mars**. `lunar_surface`
-> improved most in relative terms and Mars worst — consistent with v1.14.0
-> landing hardest on volatile-rich missions, which is what the Mars result used
-> to be carried by.
->
-> ⚠️  **The programme-scale curve INVERTS, and that is still the headline
-> result of this release rather than the ratios.** Market saturation could not
-> see `nre_amortization_missions` at all, so "fly more missions" had no
-> stopping point — the thing the term was written to prevent. On a **6,000-row
-> stride sample of the OLD 89,367-row catalog**:
->
-> | N | `1.13.0` | **`1.14.0`** |
-> |---|---|---|
-> | 1 | 38.4050× | 38.7886× |
-> | 10 | 16.0296× | **16.4745×** |
-> | 100 | **10.8935×** | **20.3246×** |
->
-> The optimum programme size is **interior**, around N = 10. Every other
-> programme-scale figure in this file was measured on a model in which more
-> missions were free money.
->
-> ✅  **Rebuilt on the full catalog 2026-08-10, raw, and the turn reproduces:**
-> **26.7863× → 13.5836× → 18.3605×** at N = 1 / 10 / 100. At N = 10 one rig
-> serves all ten missions back to back so `concurrent_missions` is still **1**
-> and the saturation multiplier *improves*; at N = 100 the rig cap (12 at this
-> stay length) forces **9 concurrent rigs** and the multiplier collapses to
-> 0.5423. See "Mining reliability GROWS with programme size" for the full table
-> — including that the winning vehicle gets *smaller* with scale, which the old
-> model could not express. The beneficiated curve remains unmeasured.
+> ⚠️  **The programme-scale curve INVERTS, and that is the headline result of
+> this release rather than the ratios** — market saturation could not see
+> `nre_amortization_missions`, so "fly more missions" had no stopping point.
+> The optimum programme size is **interior**, near N = 10. Rebuilt on the full
+> catalog 2026-08-10, raw: **26.7863× → 13.5836× → 18.3605×** at N = 1 / 10 /
+> 100. Mechanism and the full table: **"Mining reliability GROWS with programme
+> size"**. Every *other* programme-scale figure in this file was measured on a
+> model in which more missions were free money; the beneficiated curve remains
+> unmeasured.
 >
 
-> ℹ️  *Superseded by the v1.14.0 full-catalog block above, which re-measures
-> this release's one cell and adds five more. Kept because the population
-> argument below it is the reason those numbers are what they are — the
-> `1.13.0` cislunar raw cell is now 26.7863× rather than 25.7035×.*
+> 🚨🚨  **catalog `1.1.0` / calc `1.13.0` CHANGED THE POPULATION, SO EVERY
+> FIGURE OLDER THAN IT IS STALE.** The catalog went from 89,367 asteroids to
+> **1,554,400** — not one model term moved, and nothing survives it anyway,
+> because every figure here is "the best mission over the bodies we had".
+> **Do not compare any run against a pre-`1.13.0` number**; that catalog was a
+> small, systematically inner-belt-biased subset of this one, and contained
+> **zero unnumbered asteroids**.
 >
-> 🚨🚨  **catalog `1.1.0` / calc `1.13.0` CHANGED THE POPULATION, SO EVERY CELL
-> IN EVERY TABLE BELOW IS STALE.** The catalog goes from 89,367 asteroids to
-> **1,554,400**. This is not a model change — not one term, coefficient or
-> search axis moved — but nothing in this file survives it, because every
-> figure here is "the best mission over the bodies we had", and we now have
-> 17× more bodies.
->
-> **Do not compare any run against a number below.** They were measured on a
-> catalog that was a small, systematically inner-belt-biased subset of this
-> one. Read "What catalog v1.1.0 / calc v1.13.0 changed" for what is measured
-> so far and what is not.
->
-> Measured at cislunar, **full catalog, raw** (2026-08-08, 2,539 s,
-> 668,004 evaluable of 1,554,351):
->
-> | | `1.12.0` | **`1.13.0`** | Δ |
-> |---|---|---|---|
-> | `cislunar` raw | 33.2342× | **25.7035×** | **−22.66%** |
-> | `cislunar` beneficiated | 23.9169× | *not measured* | — |
->
-> **The improvement is NOT an artefact of the H-derived diameters.** The best
-> body on a **measured** diameter is 2016 GS2 at **27.0173×**, still −18.7%
-> against `1.12.0`. Both it and the third-place 678927 were excluded by the old
-> row cap rather than by the diameter requirement. **Removing the cap is what
-> moved the headline; the derivation mostly deepens the population below it.**
->
-> 🚨  **And the old catalog contained ZERO unnumbered asteroids** — all 89,367
-> rows were numbered, 1 to 199,994. That is worse than a truncation and it was
-> never noticed: JPL returns rows in SPK-ID order and numbered bodies come
-> first, so **no provisional-designation body could enter the catalog at any
-> cap below the full table**, whatever the cap was set to. The new catalog has
-> **658,490** of them, plus 695,916 numbered bodies past the old ceiling.
-> Recently-discovered NEAs are overwhelmingly unnumbered, and NEAs are what
-> this model likes — 2021 CX5, 2016 GS2 and 2002 AT4 are all in that class.
-> Every result this project has ever published was blind to it.
->
-> The winner is **2021 CX5**, a D-type NEA at a = 1.63 AU and 82 m across, on
-> xenon and a New Glenn. 7753 (B) and 4660 Nereus are both displaced. The top
-> ten are all C/D/B/X-types between 1.34 and 1.87 AU and eight of them are
-> under 500 m — small dark accessible NEAs, which is exactly the population a
-> number-ordered row cap truncates.
->
-> **26 bodies now beat the old best case of 33.2342×.**
+> Full write-up, tables and the three independent reasons the bag was small:
+> **"What catalog v1.1.0 / calc v1.13.0 changed"** below. Its own cislunar cell
+> (25.7035×) is in turn superseded by the v1.14.0 block above, at 26.7863×.
 
 > ℹ️  *Superseded — measured on the OLD 89,367-row catalog (15,407 / 15,566
 > evaluable). Kept for the argon and thrust-gate findings, which are about
@@ -503,58 +437,23 @@ the model.
 > still the best case" claim has since been re-checked against the real
 > population and **holds**, at 20.5895×.*
 >
-> 🚨  **v1.12.0 MOVED EVERY NUMBER AND ONLY `cislunar` HAS BEEN RE-MEASURED.**
-> Measured 2026-08-08 on transportation `1.10.0` + calc `1.12.0`, full
-> catalog, against the same on-disk Stage 2 catalog the `1.11.0` cislunar
-> cells were measured on:
+> Cells and winners: **"The v1.12.0 cislunar cells"** below. Mechanism: **"What
+> v1.12.0 changed"**. The one result worth carrying up here is the population,
+> not the ratios — **evaluable rows roughly HALVED**, 31,186 → 15,407 raw,
+> because about half the catalog was closing its mass budget only on a
+> micronewton thruster the model would sell as a cargo tug. A population change
+> that large invalidates any per-row comparison against an earlier run.
 >
-> | | `1.11.0` | **`1.12.0`** | Δ |
-> |---|---|---|---|
-> | `cislunar` raw | 31.7712× | **33.2342×** | **+4.60%** |
-> | `cislunar` beneficiated | 22.4665× | **23.9169×** | **+6.46%** |
->
-> **`cislunar` is still the best case, now at 23.9169×**, and the winner is
-> unchanged — 7753 (B), concentrating 5.311× against 4.955×. Both cells got
-> *worse*, which is the expected direction: every item in v1.12.0 is a term
-> that existed on one side of the model and not the other. See "What v1.12.0
-> changed".
->
-> ⚠️  **Evaluable rows roughly HALVED**, 31,186 → 15,407 raw and 31,510 →
-> 15,566 beneficiated. That is the thrust-scalability gate: about half the
-> catalog was only closing its mass budget on a micronewton thruster flown as
-> a cargo tug. A population change that large invalidates any per-row
-> comparison against an earlier run, not just the headline.
->
-> ⚠️  **"Chemical propulsion is extinct in this model" is RETIRED.** It was an
-> artefact of the same gap — hydrolox now wins 5.5% of rows at cislunar and
-> methalox another 0.1%. Do not restore that claim from an older revision of
-> this file.
->
-> ⚠️  **The other EIGHT cells of the matrix below are `1.11.0` figures and are
-> now stale.** They were not re-run: each needs its own Stage 2 pass and the
-> full sweep is ~70 minutes. Do not quote them as current, and do not compare
-> a fresh run at `leo` / `lunar_surface` / `mars_surface` / `earth_surface`
-> against them — the two changes that move numbers (argon storage, the
-> cargo-water array) are properties of the *mission*, so they move every
-> destination, and `earth_surface` is **not** a control for either.
->
-> ⚠️  **Every propellant-share figure in this file predates the argon split**
-> and is stale for the same reason — argon's storage class changed, so "iodine
-> 52% / argon 36%" and "Mars is the one destination that wins on argon" are
-> both claims about a propellant that no longer exists in that form.
->
-> Superseded: the 2026-08-07 reproduction's ten cells (they remain correct for
-> calc `1.10.0`/`1.10.1` and are kept below for comparison), and the
-> programme-scale curve 22.93× → 9.85× → 7.28×, which was measured at the old
-> N=1 anchor of 22.93× and has **not** been rebuilt on `1.11.0` or `1.12.0`.
->
-> Still stale and not fixable by re-running: the historical progression
-> 2.2× → 14× → 39× → 34× → 25×, and any figure in the version-history comment
-> blocks. That series is per-release, so rebuilding it means running old code.
+> ⚠️  **"Chemical propulsion is extinct in this model" is RETIRED**, and was an
+> artefact of that same gap. Do not restore it from an older revision.
 >
 > ⚠️  **`mars_surface` is not the best case — `cislunar` is.** That reverses
 > `1a5e0c8` and it is still the single most important stale claim to watch
 > for, because it is asserted in prose all over both files.
+>
+> ⚠️  Not fixable by re-running: the historical progression
+> 2.2× → 14× → 39× → 34× → 25×, and any figure in the version-history comment
+> blocks. That series is per-release, so rebuilding it means running old code.
 
 ## When a number changes, grep the prose too
 
@@ -600,6 +499,15 @@ that were run against `earth_surface` prices, and the paired comparisons they
 came from were still valid — both sides saw identical inputs — while the LEVELS
 were not. **Set the destination explicitly in any harness**, and if you must
 filter stdout, keep `MISMATCH` in the pattern.
+
+**And strip EVERY provenance column before hashing two runs.** There are two —
+`pipeline_version` and **`catalog_date`** — and only the first is obvious.
+v1.17.3 dropped the version alone, got a MATCH on the raw cells and a DIFFER on
+the beneficiated ones, and the whole difference was the date: midnight had
+fallen partway through the run. That reads exactly like a defect confined to
+the beneficiation path, and it is worth knowing in advance because a full
+beneficiated cell is ~10 h, so **a full-catalog 2×2 cannot be run inside one
+calendar date.** Any comparison of those cells will hit this.
 
 **Every commodity is priced by destination, not just water** (Stage 2
 v1.3.0). At an in-space destination a kilogram is worth its terrestrial price
@@ -759,13 +667,11 @@ bodies at once.** Do not re-measure the raw cislunar cell on account of any of
 them.
 
 ⚠️  Do not multiply those two factors and quote the product as a runtime *in
-general*. Both were measured on stride samples, and this file's own rule is that
-a sample predicts full-catalog runtime here to no better than a factor of ~5 —
-the two speed-ups are ratios measured on identical rows in one process, which is
-a much better-conditioned quantity than a projected wall clock, but the wall
-clock they imply is still a projection. It happened to hold **for this cell**;
-that is one data point, and the beneficiated cell is still unmeasured on
-anything past `1.14.0`.
+general* — see THE SAMPLING RULE. The two speed-ups are ratios measured on
+identical rows in one process, which is far better conditioned than a projected
+wall clock, but the wall clock they imply is still a projection. It happened to
+hold **for this cell**; that is one data point, and the beneficiated cell is
+still unmeasured on anything past `1.14.0`.
 
 ⚠️  **The timings in this file have moved EIGHT times, for eight unrelated
 reasons, and the fifth dwarfs the others.** Everything below is per
@@ -780,11 +686,9 @@ most — a stride-sample A/B puts `1.17.1` at 1.04× (raw, search off) to
 **1.35×** (beneficiated + search, the `1.17.0` default), and `1.17.2` at
 **0.99–1.02× with the search OFF** against **1.45×** raw-searched and
 **1.37×** on the default cell. **Do not scale the numbers below by any of
-those ratios.** This file's own rule is that a sample predicts full-catalog
-runtime to no better than a factor of ~5, and v1.15.0 established that the rule
-covers *ratios* too — four mispredictions so far, two of them ratios. Every
-figure below is still the `1.14.0`/`1.15.0`/`1.16.0` measurement it says it is,
-and those are the only measured ones.
+those ratios** — see THE SAMPLING RULE below, which covers exactly this case.
+Every figure below is still the `1.14.0`/`1.15.0`/`1.16.0` measurement it says
+it is, and those are the only measured ones.
 
 ⚠️  **And do not compound them.** `1.17.1` × `1.17.2` on the default cell is
 1.35 × 1.37 = 1.85×, which nobody has measured; the two were measured against
@@ -812,10 +716,26 @@ Read that against the v1.1.0 note directly below, which records a sample
 **over**estimating a run by 3.1×. So samples have now mispredicted full-catalog
 runtime badly in *both* directions on this pipeline, for opposite reasons —
 fixed costs dominate a small run, and the expensive tail of the concentration
-sweep is under-represented in a stride sample. **The rule is not "samples
-overestimate"; it is that a sample predicts full-catalog runtime here to no
-better than a factor of ~5.** Budget from a measured full run of the same cell
-or do not budget at all.
+sweep is under-represented in a stride sample.
+
+### THE SAMPLING RULE
+
+> **A sample predicts full-catalog runtime here to no better than a factor of
+> ~5.** It is *not* "samples overestimate" — the misses run both ways. Budget
+> from a measured full run of the same cell, or do not budget at all.
+>
+> ⚠️  It covers **ratios between two settings**, not only absolute wall clocks;
+> v1.15.0 established that half. Four mispredictions so far, two of them
+> ratios: v1.13.0 raw (3.1× high), v1.13.0 beneficiated (4.8× low), v1.15.0's
+> search cost (1.4× low), v1.16.0's search cost (2.7× low).
+>
+> ✅  The one kind of projection that HAS held is different in kind and worth
+> keeping separate: extrapolating a **measured full-catalog speed-up on one
+> cell** to another setting of that same cell. That is what put `1.15.0`'s
+> beneficiated cell inside its projected band. Extrapolating *from a stride
+> sample to the full catalog* is what has failed four times.
+
+**This is the canonical statement; everywhere else in this file points here.**
 
 The ten-cell sweep is therefore **~3.5 days**, not "most of a day": the raw row
 alone is 41,476 s (11.5 h) and the four unmeasured beneficiated cells are ~70 h
@@ -1499,65 +1419,42 @@ the rocket equation on its own. Same shape as propellant tankage.
 Each defaults ON and each moved every number. They are corrections, not
 options; the flags exist to isolate effects, not to be left off.
 
-One arrived in v1.16.0 and is under "What calc v1.16.0 changed": **programme
-calendar time**, where a programme took decades and was charged for none of
-them — the NRE and the rig are bought once at t = 0 and amortised across
-campaigns one rig can only fly one after another, and every one of those shares
-was compounded over a single mission duration.
+The ten that arrived with a release of their own are listed here rather than
+re-explained; each is written up in full under that release's section. The rest
+of the twenty-two predate v1.10.0 and are described below.
 
-One arrived in v1.15.0 and is under "What calc v1.15.0 changed": **the rig's
-duty cycles**, where `missions_sharing_rig` divided a fifteen-**year** calendar
-life by the stay and treated the quotient as the machine's whole life, so one
-rig was good for twelve consecutive digs on a number that only ever promised it
-would not corrode.
+| release | item | what was free |
+|---|---|---|
+| v1.10.0 | electric propulsion stage | flown as mass, never billed |
+| v1.10.0 | return vehicle structure | did not grow with its cargo |
+| v1.11.0 | propellant tankage | mass scaling with volume, not with propellant |
+| v1.12.0 | **thruster scalability** | stage sized on power alone, so a µN device could be bought as a cargo tug |
+| v1.12.0 | argon's storage | a cryogenic liquid's density *and* an ambient gas's zero boil-off at once |
+| v1.12.0 | cargo-water power plant | billed and never launched |
+| v1.12.0 | propellant tank fabrication | launched and never billed |
+| v1.14.0 | volatile cargo containment | water sold at a depot, nothing charged to stop it subliming |
+| v1.14.0 | eclipse / night-side power | plant sized on a continuous draw, as though the sun never set |
+| v1.15.0 | the rig's duty cycles | a 15-**year** calendar life divided by the stay and read as the machine's whole life |
+| v1.16.0 | programme calendar time | decades of programme span, charged for none of them |
 
-⚠️  **Those two are the only items on this list that are inert at N = 1.** Both
-bound programmes rather than missions, which is why no single-mission cell in
-this file moves for either — and why neither can be checked by re-running a
-headline. The rest of the list moves every number in the model.
+⚠️  v1.11.0's **orbital refuelling** charge was a twelfth item and has been
+*withdrawn* — it billed a real cost against a scenario this module does not
+have, which makes it an error rather than a correction. Gated off; see "What
+v1.12.0 changed".
 
-⚠️  **`optimise_programme_scale` is NOT on this list and must not be added to
-it, and calc `1.17.0` turning it ON BY DEFAULT does not change that.** It is a
-search axis, not a correction: turning it on changes the question the run
-answers rather than fixing something the model was getting free. The
-distinction is the whole reason this section exists, and it is now the *only*
-thing separating the two — "it defaults OFF" used to carry half the argument
-and no longer can.
+⚠️  **v1.15.0's and v1.16.0's are the only items inert at N = 1.** Both bound
+programmes rather than missions, so no single-mission cell in this file moves
+for either — and neither can be checked by re-running a headline. The rest move
+every number in the model.
 
-⚠️  **`use_beneficiation` is not on this list either**, for the same reason and
-with the same caveat: `1.17.0` defaults it ON, and it is still a question
-("ship concentrate or ship ore?") rather than a subsidy being withdrawn. The
-test for this list is not "is it on by default", it is **"was the model getting
-something for free before?"**
-
-Two arrived in v1.10.0 and are documented under "What v1.10.0 changed" rather
-than repeated here: the **electric propulsion stage**, which was flown as mass
-and never billed, and the **return vehicle's structure**, which did not grow
-with its cargo.
-
-One more arrived in v1.11.0 and is under "What v1.11.0 changed": **propellant
-tankage**, which is mass in the rocket equation that scales with volume rather
-than with the propellant inside it. (v1.11.0's **orbital refuelling** charge
-was the fourteenth item and it has been *withdrawn* — see "What v1.12.0
-changed". It was billing a real cost against a scenario this module does not
-have, which makes it an error rather than a correction, and it is now gated
-off.)
-
-Four arrived in v1.12.0 and are under "What v1.12.0 changed": **thruster
-scalability**, the biggest of them, where the in-space stage was sized on
-power alone so a micronewton device could be bought as a cargo tug; **argon's
-storage**, which took a cryogenic liquid's density and an ambient gas's zero
-boil-off at the same time; the **cargo-water power plant**, which was billed
-and never launched; and **propellant tank fabrication**, which was launched
-and never billed.
-
-Two arrived in v1.14.0 and are under "What v1.14.0 changed": **volatile cargo
-containment**, where water was sold at a depot with nothing charged to keep it
-from subliming on the way, and **eclipse / night-side power**, where the
-processing plant was sized on a continuous draw as though the sun never set on
-a rig standing on a rotating body. Both figures had been sitting in
-`STORAGE_REFERENCE` since Module 3 v1.9.0 behind a note saying they were not
-modelled.
+⚠️  **Neither `optimise_programme_scale` nor `use_beneficiation` belongs on this
+list, and `1.17.0` defaulting both ON does not change that.** They are
+questions ("how big a programme?", "ship concentrate or ore?"), not subsidies
+being withdrawn. The test for this list is not "is it on by default" — it is
+**"was the model getting something for free before?"** That distinction is the
+whole reason the section exists, and since `1.17.0` it is the *only* thing
+separating the two categories, because "it defaults OFF" used to carry half the
+argument and no longer can.
 
 Notice the shape almost all of them share. The mass cascade and the cost
 cascade are written in different places, and nothing checks that every
@@ -2385,18 +2282,12 @@ system mass, max 16%. As with tankage, its effect is not a cost it adds — it
 is **which device it disqualifies**. Zero `replicated` rows survive anywhere in
 either full run.
 
-> 🚨  **That last sentence is retired as of 2026-08-09.** On the full 1.55 M
-> catalog, 13 raw / 327 beneficiated rows *do* survive on FEEP — carrying
-> 4.4–16.7 t of thruster, closing only because their payloads are 70–128 t, and
-> **none of them competitive** (best 34.6× against 26.7863×). Survival was
-> never the right test, because `thruster_kg_per_n` is a mass penalty rather
-> than a threshold. **Test whether one wins.**
->
-> That test is answered at all five destinations as of 2026-08-11 — **never, in
-> eight cells** — and the margin is much tighter than cislunar suggests: rank 5
-> at `mars_surface` and rank 7 at `earth_surface`, 5.8% and 9.5% off the
-> winner. Survivors run 0 to 5,479 rows depending only on the destination, and
-> every one of them is FEEP. See the v1.14.0 verification block near the top.
+> 🚨  **That last sentence is retired as of 2026-08-09.** `replicated` devices
+> *do* survive on the full catalog. Survival was never the right test, because
+> `thruster_kg_per_n` is a mass penalty rather than a threshold — **test
+> whether one wins.** It never does, in eleven cells, but at two destinations
+> it lands inside the top ten, so "none is remotely competitive" is a cislunar
+> claim only. Figures in the v1.14.0 verification block near the top, item 4.
 
 **Chemical propulsion is no longer extinct.** Hydrolox takes 5.5% of cislunar
 rows and methalox 0.1%. The old "chemical is extinct in this model" line was
@@ -2647,19 +2538,12 @@ the direct check that the gate did what it claims. Thruster mass is a median
 signature again: the term disqualifies rather than taxes.
 
 > 🚨  **RETIRED 2026-08-09 — that was a property of a 15,000-row population,
-> not of the gate.** On the full 1.55 M catalog at cislunar, **13 raw and 327
-> beneficiated rows** survive on FEEP, carrying 4.4–16.7 t of thruster for
-> ~5 N. They close because their payloads are 70–128 t, and **none is
-> competitive** — best 34.6× against the catalog best of 26.7863×. The gate is
-> a mass penalty rather than a threshold, exactly as designed, so survival was
-> never the thing to test. **Test whether one WINS.** Do not restore "zero
-> survive anywhere" from this or any earlier revision.
->
-> ✅  As of 2026-08-11 that test is run at every destination and a `replicated`
-> device wins **none of eight cells** — but at `mars_surface` the best one is
-> the catalog's **fifth**-ranked body and at `earth_surface` its **seventh**, so
-> do not restore "none is remotely competitive" as a general claim either. It is
-> true at cislunar and nowhere else.
+> not of the gate.** Do not restore "zero survive anywhere" from this or any
+> earlier revision, and do not restore "none is remotely competitive" either.
+> The gate is a mass penalty rather than a threshold, so survival was never the
+> thing to test — **test whether one WINS.** Counts, ranks and margins at every
+> destination are in the v1.14.0 verification block near the top of this file,
+> under item 4.
 
 Full-catalog wall clock at cislunar: **86 s raw / 463 s beneficiated**, against
 89 s / 462 s on `1.11.0` — unchanged, because the extra knapsack calls are
@@ -2914,12 +2798,10 @@ estimate carries the same warning.
 > The true full-catalog ratio is **7.1× raw**, against the 3.12× assumed here
 > and the **1.63×** that v1.14.0's own 6,000-row sample showed.
 >
-> So on this pipeline a sample has now mispredicted full-catalog runtime by
-> 3.1× *high* and 4.8× *low*, for opposite reasons: fixed costs dominate a
-> small run, while a stride sample under-represents the expensive tail of the
-> concentration sweep. **The rule is not "samples overestimate" — it is that a
-> sample predicts full-catalog runtime here to no better than a factor of ~5.**
-> Budget from a measured full run of the same cell, or do not budget.
+> This is the pair of misses that established THE SAMPLING RULE — 3.1× *high*
+> and 4.8× *low*, for opposite reasons: fixed costs dominate a small run, while
+> a stride sample under-represents the expensive tail of the concentration
+> sweep.
 
 ### Verification (2026-08-08)
 
@@ -3303,10 +3185,8 @@ What genuinely remains:
 
 ## What calc v1.14.1 changed
 
-**Nothing you can measure.** It is a performance release, same contract as
-`1.10.1`: every number it produces is identical to `1.14.0`, and the stamp moves
-only so that a CSV still names the code that produced it. **Do not re-measure
-any table in this file on account of it.**
+**Nothing you can measure** — a performance-only stamp; see the stamp table
+under "Bump `pipeline_version`". Every number is identical to `1.14.0`.
 
 The finding is one sentence: **the search was spending ~90% of itself proving
 missions infeasible, the hard way.** Profiled at cislunar on the real catalog:
@@ -3386,8 +3266,7 @@ quarters of the candidates removes well under half the work. Do not quote the
 prune rate as if it were a speed-up.
 
 Extrapolated to the measured full-catalog cells (**projection, not a
-measurement** — and this file's own rule is that a sample predicts full-catalog
-runtime here to no better than a factor of ~5): cislunar raw 5,350 s → ~2,800 s,
+measurement** — see THE SAMPLING RULE): cislunar raw 5,350 s → ~2,800 s,
 cislunar beneficiated 38,072 s → ~6.3 h. **Nobody has run either.**
 
 ### Verification (2026-08-10)
@@ -3522,10 +3401,8 @@ remaining time is where this one says it is.
 
 ## What calc v1.14.2 changed
 
-**Nothing you can measure.** Third performance-only stamp, same contract as
-`1.10.1` and `1.14.1`: every number identical, the stamp moves only so a CSV
-still names the code that produced it. **Do not re-measure any table in this
-file on account of it.**
+**Nothing you can measure** — a performance-only stamp; see the stamp table
+under "Bump `pipeline_version`".
 
 Measured against `git HEAD`, same rows, one process, serial:
 
@@ -3613,7 +3490,23 @@ rebuilding them.
 This is the v1.14.1 finding one level further in, and it closed a live drift
 hazard on the way: **`tank_frac` was being derived twice from the same two
 columns**, once in `_prefilter_propellant_consts` and once in
-`_evaluate_combo_at_ratio`. One derivation now, two readers.
+`_evaluate_combo_at_ratio`.
+
+🚨  **"One derivation now, two readers" was this paragraph's own claim and it
+was NOT true until 2026-08-12.** v1.14.2 moved the second copy rather than
+removing it: `_sizing_propellant_consts` and `_prefilter_propellant_consts`
+each still divided `tank_kg_per_L` by `density_kg_per_L`, ten lines apart, with
+the second carrying a comment saying it matched the first "exactly". The single
+derivation is `_tank_frac_per_kg` and it exists now. Bit-identical on all four
+cells — the block was byte-for-byte the same in both places, so hoisting it
+changed no operation and no order.
+
+⚠️  The shape is worth more than the fix. This is a **note that documented an
+intention as an accomplishment**, and it survived a release whose entire
+argument was bit-identity, because nothing a hash can see was wrong. Same
+family as the `STORAGE_REFERENCE` tables of v1.14.0, where "writing the gap
+down had been mistaken for closing it" — check that a de-duplication claim
+names ONE surviving definition before believing it.
 
 **The pre-filter is monotone in launch capacity.** `_combo_can_close` reads the
 vehicle in exactly one place — the final comparison — and a bigger rocket can
@@ -3845,13 +3738,10 @@ Measured on the full catalog it is **1.51×** — the sample understated the cos
 the search by ~1.4×, in the *same direction* as v1.13.0's beneficiated estimate
 and the opposite direction to its raw one.
 
-That is now **three** full-catalog runtime predictions this pipeline has gotten
-wrong from stride samples, in both directions, and this file already states the
-rule: *a sample predicts full-catalog runtime here to no better than a factor of
-~5.* It applies to a **ratio between two settings**, not only to an absolute
-wall clock, which is the part this release adds. The reason is population: the
-ladder is priced per *surviving* candidate, and the full catalog's survivors are
-not the sample's.
+That is the third such miss, and **this release is what extended THE SAMPLING
+RULE to cover a ratio between two settings** rather than only an absolute wall
+clock. The reason is population: the ladder is priced per *surviving*
+candidate, and the full catalog's survivors are not the sample's.
 
 **Every other number in this release came out where the sample said** — the
 never-worse invariant, the band structure, the fleet distribution's shape. Only
@@ -4254,8 +4144,7 @@ buried, because it is the one place this release could be over-sold:
 Runtime on the sample: **37.6 s → 41.5 s**, and the programmes priced per
 mission go **8 → 40** (median). That wall clock is ~20 s of catalog load both
 paths pay, so the search itself costs considerably more than the 1.1× ratio
-suggests. **Do not budget a full run from it** — this file has now mispredicted
-full-catalog runtime from a sample three times, including once for a ratio.
+suggests. **Do not budget a full run from it** — see THE SAMPLING RULE.
 
 ### Verification (2026-08-11)
 
@@ -4398,13 +4287,14 @@ change, so the stamp moves. This is the fourth stamp in the project that does
 not mean the model moved — after `1.10.1`, `1.14.1` and `1.14.2` — and the
 first where the reason is configuration rather than performance.
 
-⚠️  **Two sequences are being counted in this file and they are one apart.**
+⚠️  **Two sequences are being counted in this file and they do not match.**
 Stamps where *the model* did not move are `1.10.1`, `1.14.1`, `1.14.2`,
-`1.17.0`, `1.17.1`, `1.17.2` — six, and `1.17.0` is the fourth of them, which
-is what the sentence above says. Stamps that are *performance only* exclude
-`1.17.0`, because its reason was a default flip — five, of which `1.17.1` and
-`1.17.2` are the fourth and fifth, which is what the header at the top of this
-file says. Both are right; neither is a typo for the other.
+`1.17.0`, `1.17.1`, `1.17.2`, `1.17.3` — seven, and `1.17.0` is the fourth of
+them, which is what the sentence above says. Stamps that are *performance only*
+exclude `1.17.0` (a default flip) and `1.17.3` (a cleanup) — five, of which
+`1.17.1` and `1.17.2` are the fourth and fifth. Both counts are right; neither
+is a typo for the other, and the table at the top of this file is the one to
+read.
 
 ### Why the flip is defensible now and was not before
 
@@ -4463,10 +4353,8 @@ CALC_CONFIG.optimise_programme_scale = False   # N = 1 cells
 
 ## What calc v1.17.1 changed
 
-**Nothing you can measure.** Fourth performance-only stamp, same contract as
-`1.10.1`, `1.14.1` and `1.14.2`: every number identical, the stamp moves only
-so a CSV still names the code that produced it. **Do not re-measure any table
-in this file on account of it.** calc `1.17.0 → 1.17.1`, master
+**Nothing you can measure** — a performance-only stamp; see the stamp table
+under "Bump `pipeline_version`". calc `1.17.0 → 1.17.1`, master
 `1.20.0 → 1.20.1`; no other module changed, so no Stage 1/2/3 re-run.
 
 The finding is one sentence, and it is v1.17.0's own doing: **turning
@@ -4543,13 +4431,10 @@ The gradient across that table is the release in one picture: the cells that
 gained least are the ones that call the cost model least.
 
 🚨  **THESE ARE STRIDE-SAMPLE RATIOS AND THIS FILE'S OWN RULE SAYS NOT TO TRUST
-THEM AS FULL-CATALOG FIGURES.** A sample predicts full-catalog runtime here to
-no better than a factor of ~5, and v1.15.0 established that the rule applies to
-a **ratio between two settings**, not only to a wall clock — that is now four
-mispredictions, two of them ratios. **Nobody has run a full-catalog cell on
-`1.17.1`.** Do not update any wall clock in this file from the table above; the
-timings elsewhere are `1.14.0`/`1.15.0`/`1.16.0` measurements and remain the
-only measured ones.
+THEM AS FULL-CATALOG FIGURES** — see THE SAMPLING RULE, whose ratio clause is
+exactly this case. **Nobody has run a full-catalog cell on `1.17.1`.** Do not
+update any wall clock in this file from the table above; the timings elsewhere
+are `1.14.0`/`1.15.0`/`1.16.0` measurements and remain the only measured ones.
 
 The direction is nonetheless safe to state, because it is structural rather
 than statistical: the work removed is per-*call* overhead on functions whose
@@ -4678,10 +4563,8 @@ re-measuring now that it runs forty times, but it was not revisited here.
 
 ## What calc v1.17.2 changed
 
-**Nothing you can measure.** Fifth performance-only stamp, same contract as
-`1.10.1`, `1.14.1`, `1.14.2` and `1.17.1`: every number identical, the stamp
-moves only so a CSV still names the code that produced it. **Do not re-measure
-any table in this file on account of it.** calc `1.17.1 → 1.17.2`, master
+**Nothing you can measure** — a performance-only stamp; see the stamp table
+under "Bump `pipeline_version`". calc `1.17.1 → 1.17.2`, master
 `1.20.1 → 1.20.2`; no other module changed, so no Stage 1/2/3 re-run.
 
 It is the second release in a row aimed at the programme ladder, because that
@@ -4815,6 +4698,120 @@ the ladder.
 
 **Branch-and-bound on the objective** remains the one big structural item, and
 v1.14.1's warning against approximating the bound stands unaltered.
+
+## What calc v1.17.3 changed
+
+**Nothing you can measure**, and unlike the five before it, nothing is meant to
+get faster either — see the stamp table under "Bump `pipeline_version`". calc
+`1.17.2 → 1.17.3`, master `1.20.2 → 1.20.3`; no other module changed, so no
+Stage 1/2/3 re-run. Two dead functions removed, two live duplications collapsed
+to one definition each.
+
+### Two functions had no caller
+
+`low_thrust_burn_time_yr` and `asteroid_dv_m_s`, neither referenced anywhere in
+four releases — checked against all four modules, `ui.py`, `ui_meta.py` and
+`build_master.py`, counting identifiers appearing in strings as references.
+
+⚠️  **`low_thrust_burn_time_yr`'s section comment carries the Dawn validation
+and was KEPT**, re-anchored on `ep_power_required_w` — the same relation solved
+for P rather than t. That check (5.0–9.3 yr predicted at 2.2–3.0 AU against
+~5.9 yr flown, 1.0 yr if the 1/r² term is lost) is named in this file as
+load-bearing. Do not delete the comment because the function under it went.
+
+ℹ️  `asteroid_dv_m_s` claimed in its own docstring to be kept "for interactive
+use". Nothing advertised it, which is what separates it from Module 3's
+`cheapest_launch_to` — also dead to the pipeline, but printed in that module's
+own preview output, and therefore a live documented API rather than dead code.
+
+### `tank_frac` was still derived twice, and a note said it wasn't
+
+🚨  **v1.14.2 recorded "one derivation now, two readers" and had in fact MOVED
+the second copy.** `_sizing_propellant_consts` and `_prefilter_propellant_consts`
+each divided `tank_kg_per_L` by `density_kg_per_L`, ten lines apart, the second
+under a comment saying it matched the first "exactly". One `_tank_frac_per_kg`
+now; the block was byte-for-byte identical in both places, so hoisting it
+changed no operation and no order.
+
+⚠️  **The shape is worth more than the fix, and it is new to this file: a note
+that documented an intention as an accomplishment.** It survived a release
+whose entire argument was bit-identity, because nothing a hash can see was
+wrong. Same family as v1.14.0's `STORAGE_REFERENCE` tables, where "writing the
+gap down had been mistaken for closing it" — **check that a de-duplication
+claim names ONE surviving definition before believing it.**
+
+### The phase walk existed three times
+
+`asteroid_phase_table` and `asteroid_best_phase_usd_per_kg` walked
+`FRACTION_TO_MINERAL` identically; both now call `_phase_prices`, and all three
+share `_pgm_enrichment`.
+
+⚠️  **`asteroid_bulk_value_usd_per_kg` is deliberately NOT folded in.** It
+admits a fraction of exactly 0.0 where the other two skip it. Unifying it would
+be numerically negligible — `0.0 × price` contributes nothing — and would still
+cost the bit-identity every release here is argued from, which is the v1.14.2
+phase-sort lesson exactly: *a change can be numerically negligible and still
+destroy the evidence.*
+
+### Verification (2026-08-12)
+
+**1. Four cells bit-identical against `1.17.2`**, same rows, one process,
+serial, baseline captured before any edit — 139/139 columns, less the two
+PROVENANCE columns (`pipeline_version` and `catalog_date`):
+
+```
+raw,          400-row stride  sha16 a98962a5e6208600 MATCH
+raw + search, 400-row stride  sha16 5e0563c9edba089f MATCH
+benef,        150-row stride  sha16 f66c0f43b2b9e62a MATCH
+benef+search, 150-row stride  sha16 a5413e1912f2dc3b MATCH
+```
+
+🚨  **`catalog_date` HAS TO COME OUT OF THAT COMPARISON, AND THIS RELEASE
+FOUND OUT THE HARD WAY.** An earlier pass of the same four cells matched on 140
+columns with only `pipeline_version` dropped; a later pass reported the two
+BENEFICIATED cells as differing, and the whole difference was `catalog_date`
+reading `2026-08-13` instead of `2026-08-12`. **Midnight had fallen between the
+raw cells and the beneficiated ones**, so the two halves of one run disagreed
+about the date and the split looked exactly like a real defect confined to the
+beneficiation path.
+
+⚠️  Both bit-identity claims in this file that were argued across two calendar
+days are therefore weaker than they read, and the fix is not "re-run faster" —
+it is that **a CSV diff must strip every provenance column before hashing**.
+`pipeline_version` is the one this file already names; `catalog_date` is the
+one it did not. A long beneficiated cell is ~10 h, so a full-catalog 2×2
+*cannot* be run inside one date, and any future comparison of those cells will
+hit this.
+
+**2. Serial and parallel are byte-identical** — required after any change to
+the search, and pointed here because `_prefilter_propellant_consts` output is
+attached to the propellant rows that get pickled to workers:
+
+```
+raw + search,   1,200-row stride  serial vs 8 workers | 508 rows | MATCH
+benef + search,   400-row stride  serial vs 8 workers | 158 rows | MATCH
+```
+
+**3. The mass-ledger identity holds exactly**, `max |error| 0.000000000 kg`.
+
+**4. Both never-worse invariants hold**, zero exceptions.
+
+⚠️  The harness set `delivery_destination` explicitly and kept `MISMATCH` in
+its stdout filter — the trap this file names under "Model assumptions that are
+load-bearing", since `CALC_CONFIG` defaults to `earth_surface` while the
+on-disk Stage 2 catalog is priced for `cislunar`.
+
+### What this release does NOT close
+
+**`escape_direct_launch` is still dead and still deliberate.** Nothing sets it,
+so the tanker charge is inert either way; it is gated rather than deleted
+because the day this module gains a direct-injection architecture the charge
+becomes correct. Left alone rather than counted as dead code.
+
+**A scan found no unused imports, no unused config fields, no unreachable
+statements and no duplicate top-level definitions** in any of the four modules,
+so what is above is the whole of what a mechanical pass finds. The remaining
+duplication in this codebase is semantic, not structural.
 
 ## Config discipline
 
