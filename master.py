@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.20.2)
+"""Master Asteroid Profitability Pipeline (1.20.3)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -10259,7 +10259,8 @@ import sys
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Mapping, NamedTuple, Optional, Tuple, Union
+from typing import (Any, Dict, Iterator, List, Mapping, NamedTuple, Optional,
+                    Tuple, Union)
 
 import numpy as np
 import pandas as pd
@@ -11959,7 +11960,60 @@ class CalcConfig:
     #         serial vs 8 workers byte-identical on benef+search and raw+search;
     #         mass ledger exact at 0.000000000 kg; both never-worse invariants
     #         hold (max 1.000000, zero exceptions).
-    pipeline_version: str = "1.17.2"
+    #
+    # 1.17.3  DEAD CODE AND DUPLICATION REMOVED — every number identical.  SIXTH
+    #         stamp that does not mean the numbers moved, and the first for
+    #         neither performance nor a default flip: nothing here is meant to
+    #         make the module faster, only smaller and harder to drift.
+    #         • `low_thrust_burn_time_yr` DELETED — no caller in four releases.
+    #           It is the t-form of `ep_power_required_w`, and this model always
+    #           picks a trip time and buys the array rather than the reverse.
+    #           ⚠️  Its section comment carries the DAWN VALIDATION (5.0-9.3 yr
+    #           predicted at 2.2-3.0 AU against ~5.9 yr flown, and 1.0 yr if the
+    #           1/r² term is lost), which is load-bearing and was KEPT, re-
+    #           anchored on `ep_power_required_w`.  Do not delete that comment
+    #           on the grounds that the function it sat above is gone.
+    #         • `asteroid_dv_m_s` DELETED — no caller.  Its docstring claimed it
+    #           was kept "for interactive use", and nothing advertised it, which
+    #           is the opposite of `cheapest_launch_to` in Module 3 (dead to the
+    #           pipeline, but named in that module's own preview output).
+    #         • `_tank_frac_per_kg` — ONE derivation of tank mass per kg, read by
+    #           `_sizing_propellant_consts` and `_prefilter_propellant_consts`.
+    #           🚨  v1.14.2 claimed to have closed this ("one derivation now, two
+    #           readers") and had in fact MOVED the second copy, which still
+    #           divided the same two columns ten lines away under a comment
+    #           saying it matched the first "exactly".  A note that documented an
+    #           intention as an accomplishment, and it survived a release argued
+    #           entirely from bit-identity because nothing a hash can see was
+    #           wrong.
+    #         • `_phase_prices` / `_pgm_enrichment` — the walk of
+    #           FRACTION_TO_MINERAL existed THREE times.  The two byte-identical
+    #           copies (`asteroid_phase_table`, `asteroid_best_phase_usd_per_kg`)
+    #           are now one generator.  ⚠️  `asteroid_bulk_value_usd_per_kg` is
+    #           deliberately NOT folded in: it admits a fraction of exactly 0.0
+    #           where the others skip it, and unifying it would be numerically
+    #           negligible and would still cost the bit-identity this project
+    #           argues from — the v1.14.2 phase-sort lesson.
+    #         • Five slots of the `ctx.ops` unpack in `_evaluate_combo_at_ratio`
+    #           `_`-prefixed.  They are dead HERE only — the tuple's ORDER is the
+    #           contract with `_ops_sizing_constants`, so they must still be
+    #           unpacked, and v1.14.1 moved the arithmetic that read them onto
+    #           `AsteroidContext` because it is per-body.
+    #         Verified: four cells (raw / benef / raw+search / benef+search)
+    #         139/139 columns bit-identical with sha256 MATCH against 1.17.2,
+    #         less the two PROVENANCE columns; serial vs 8 workers byte-identical
+    #         on raw+search and benef+search; mass ledger exact at
+    #         0.000000000 kg; both never-worse invariants hold.
+    #         🚨  Those provenance columns are `pipeline_version` AND
+    #         `catalog_date`, and the second one is not obvious.  An earlier
+    #         pass dropped only the version and reported the two BENEFICIATED
+    #         cells as differing; the entire difference was `catalog_date`,
+    #         because midnight fell between the raw cells and the beneficiated
+    #         ones.  Half a run dated 08-12 and half 08-13 looks precisely like
+    #         a real defect confined to the beneficiation path.  A full
+    #         beneficiated cell is ~10 h, so a 2x2 CANNOT be run inside one
+    #         date: strip every provenance column before hashing.
+    pipeline_version: str = "1.17.3"
 
 
 CALC_CONFIG = CalcConfig()
@@ -12378,6 +12432,47 @@ FRACTION_TO_MINERAL: Dict[str, str] = {
 }
 
 
+def _pgm_enrichment(asteroid_row: Row) -> float:
+    """Per-asteroid PGM enrichment, defaulted to the chondritic baseline.
+
+    Module 1 has supplied `comp_pgm_enrichment` since v1.0.4; 1.0 is what an
+    older catalog means, not a missing value to reject.
+    """
+    pgm = asteroid_row.get("comp_pgm_enrichment")
+    if pgm is None or pd.isna(pgm):
+        return 1.0
+    return float(pgm)
+
+
+def _phase_prices(
+    asteroid_row: Row, mineral_df: pd.DataFrame,
+) -> Iterator[Tuple[str, float, float]]:
+    """(phase, fraction, usd_per_kg) for every phase actually PRESENT.
+
+    The one walk of `FRACTION_TO_MINERAL` shared by `asteroid_phase_table` and
+    `asteroid_best_phase_usd_per_kg`, which had it written out twice.  Phases
+    with no fraction or no price are skipped — you cannot select what is not
+    there.
+
+    ⚠️  `asteroid_bulk_value_usd_per_kg` deliberately does NOT use this: it
+    admits a fraction of exactly 0.0 where this skips it.  Unifying the third
+    copy would be numerically negligible and would still cost the bit-identity
+    every release here is argued from — see the v1.14.2 phase-sort warning.
+    """
+    pgm_enrichment = _pgm_enrichment(asteroid_row)
+    for frac_col, mineral_name in FRACTION_TO_MINERAL.items():
+        frac = asteroid_row.get(frac_col)
+        if frac is None or pd.isna(frac) or float(frac) <= 0.0:
+            continue
+        if mineral_name == "nickel-iron":
+            price = _mineral_implied_value(mineral_df, mineral_name, pgm_enrichment)
+        else:
+            price = _mineral_implied_value(mineral_df, mineral_name)
+        if price is None:
+            continue
+        yield mineral_name, float(frac), float(price)
+
+
 def asteroid_bulk_value_usd_per_kg(
     asteroid_row: Row, mineral_df: pd.DataFrame,
 ) -> float:
@@ -12394,10 +12489,7 @@ def asteroid_bulk_value_usd_per_kg(
     across types) was silently zero-valued; now treated as bulk silicate
     at $0.05/kg floor.
     """
-    pgm_enrichment = asteroid_row.get("comp_pgm_enrichment")
-    if pgm_enrichment is None or pd.isna(pgm_enrichment):
-        pgm_enrichment = 1.0    # chondritic baseline when M1 < v1.0.4
-    pgm_enrichment = float(pgm_enrichment)
+    pgm_enrichment = _pgm_enrichment(asteroid_row)
 
     total    = 0.0
     frac_sum = 0.0
@@ -12440,25 +12532,11 @@ def asteroid_phase_table(
     Phases with zero fraction are dropped — you cannot select what is not
     there.
     """
-    pgm_enrichment = asteroid_row.get("comp_pgm_enrichment")
-    if pgm_enrichment is None or pd.isna(pgm_enrichment):
-        pgm_enrichment = 1.0
-    pgm_enrichment = float(pgm_enrichment)
-
     phases: List[Tuple[str, float, float]] = []
     frac_sum = 0.0
-    for frac_col, mineral_name in FRACTION_TO_MINERAL.items():
-        frac = asteroid_row.get(frac_col)
-        if frac is None or pd.isna(frac) or float(frac) <= 0.0:
-            continue
-        if mineral_name == "nickel-iron":
-            price = _mineral_implied_value(mineral_df, mineral_name, pgm_enrichment)
-        else:
-            price = _mineral_implied_value(mineral_df, mineral_name)
-        if price is None:
-            continue
-        phases.append((mineral_name, float(frac), float(price)))
-        frac_sum += float(frac)
+    for mineral_name, frac, price in _phase_prices(asteroid_row, mineral_df):
+        phases.append((mineral_name, frac, price))
+        frac_sum += frac
 
     if 0.0 < frac_sum < 1.0:
         silicate_price = _mineral_price(mineral_df, "silicates") or 0.05
@@ -12643,22 +12721,10 @@ def asteroid_best_phase_usd_per_kg(
     be concentrated into metal.  Returns the bulk value as a floor so the
     bound can never sit below the unconcentrated material.
     """
-    pgm_enrichment = asteroid_row.get("comp_pgm_enrichment")
-    if pgm_enrichment is None or pd.isna(pgm_enrichment):
-        pgm_enrichment = 1.0
-    pgm_enrichment = float(pgm_enrichment)
-
     best = 0.0
-    for frac_col, mineral_name in FRACTION_TO_MINERAL.items():
-        frac = asteroid_row.get(frac_col)
-        if frac is None or pd.isna(frac) or float(frac) <= 0.0:
-            continue
-        if mineral_name == "nickel-iron":
-            price = _mineral_implied_value(mineral_df, mineral_name, pgm_enrichment)
-        else:
-            price = _mineral_implied_value(mineral_df, mineral_name)
-        if price is not None and float(price) > best:
-            best = float(price)
+    for _mineral_name, _frac, price in _phase_prices(asteroid_row, mineral_df):
+        if price > best:
+            best = price
 
     bulk = asteroid_bulk_value_usd_per_kg(asteroid_row, mineral_df)
     return max(best, bulk)
@@ -12920,25 +12986,11 @@ def eclipse_effective_w_per_kg(
 # gives 5.0-9.3 years of thrusting.  Dawn actually thrust for ~5.9 years of
 # its 11-year mission.  The 1/r² term is doing the work here — evaluated at
 # the 1 AU array rating instead, the same sum gives 1.0 year and is nonsense.
-
-def low_thrust_burn_time_yr(
-    m_prop_kg:  float,
-    isp_s:      float,
-    power_w:    float,
-    efficiency: float,
-) -> float:
-    """Years of continuous thrusting to expend `m_prop_kg` at `power_w`.
-
-        t = m_prop · (Isp·g0)² / (2·η·P)
-
-    Returns inf for zero power — a thruster with no supply never finishes.
-    """
-    if power_w <= 0 or m_prop_kg <= 0 or isp_s <= 0:
-        return 0.0 if m_prop_kg <= 0 else float("inf")
-    ve = isp_s * G0_M_S2
-    seconds = m_prop_kg * ve * ve / (2.0 * efficiency * power_w)
-    return seconds / (365.25 * 24.0 * 3600.0)
-
+#
+# Run that check off `ep_power_required_w` below — the same relation solved for
+# P rather than t.  The t-form had its own function until it had gone four
+# releases with no caller: the model always picks a trip time and buys the
+# array, never the other way round.
 
 def ep_power_required_w(
     m_prop_kg:  float,
@@ -13643,21 +13695,6 @@ def asteroid_dv_options(
     return out
 
 
-def asteroid_dv_m_s(asteroid_row: Row, config: CalcConfig) -> Tuple[float, float]:
-    """(Δv_outbound, Δv_return) in m/s for one asteroid, in m/s.
-
-    Kept as the single-answer form for interactive use and for callers that
-    want the config's nominal return mode rather than the optimised one.  The
-    pipeline itself uses `asteroid_dv_options`, which returns every mode worth
-    evaluating and lets the profit search choose.
-    """
-    aero = uses_tps(config)
-    for opt in asteroid_dv_options(asteroid_row, config):
-        if bool(opt["aero"]) == aero:
-            return float(opt["dv_out_m_s"]), float(opt["dv_ret_m_s"])
-    return _dv_fallback_m_s(config, aero)
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # ISRU RETURN PROPELLANT  (v1.10.0 — made physical, and made per-asteroid)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -13883,6 +13920,25 @@ _SIZING_CONSTS_KEY  = "_sizing_consts"
 _VEHICLE_CONSTS_KEY = "_vehicle_consts"
 
 
+def _tank_frac_per_kg(propellant: Row, config: CalcConfig) -> float:
+    """Tank mass per kg of propellant, or 0.0 where the row cannot state one.
+
+    Module 3 quotes tankage per LITRE because that is what it scales with — a
+    tank encloses volume, not mass — so this is the one place the two columns
+    are divided.  A row predating Module 3 v1.9.0 has neither column and comes
+    through as 0.0, which is exactly `model_tank_mass = False`.
+    """
+    if not config.model_tank_mass:
+        return 0.0
+    tank_per_L = propellant.get("tank_kg_per_L")
+    rho        = propellant.get("density_kg_per_L")
+    if (tank_per_L is not None and rho is not None
+            and not pd.isna(tank_per_L) and not pd.isna(rho)
+            and float(rho) > 0):
+        return max(0.0, float(tank_per_L) / float(rho))
+    return 0.0
+
+
 def _sizing_propellant_consts(
     propellant: Row,
     config:     CalcConfig,
@@ -13903,20 +13959,11 @@ def _sizing_propellant_consts(
     kgn = (float(kgn) if kgn is not None and not pd.isna(kgn) and float(kgn) >= 0
            else None)
 
-    tank_frac = 0.0
-    if config.model_tank_mass:
-        tank_per_L = propellant.get("tank_kg_per_L")
-        rho        = propellant.get("density_kg_per_L")
-        if (tank_per_L is not None and rho is not None
-                and not pd.isna(tank_per_L) and not pd.isna(rho)
-                and float(rho) > 0):
-            tank_frac = max(0.0, float(tank_per_L) / float(rho))
-
     return (
         float(propellant.get("dv_penalty_factor", 1.0) or 1.0),
         eff,
         kgn,
-        tank_frac,
+        _tank_frac_per_kg(propellant, config),
         float(propellant["isp_vac_s"]),
         float(propellant.get("boiloff_pct_per_day", 0.0) or 0.0),
     )
@@ -13948,19 +13995,7 @@ def _prefilter_propellant_consts(
         return None
 
     dv_penalty = float(propellant.get("dv_penalty_factor", 1.0) or 1.0)
-
-    # Tank mass per kg of propellant, exactly as `_evaluate_combo_at_ratio`
-    # derives it: Module 3 quotes it per LITRE because that is what it scales
-    # with, and a row predating Module 3 v1.9.0 has neither column and comes
-    # through as 0.0.
-    tank_frac = 0.0
-    if config.model_tank_mass:
-        tank_per_L = propellant.get("tank_kg_per_L")
-        rho        = propellant.get("density_kg_per_L")
-        if (tank_per_L is not None and rho is not None
-                and not pd.isna(tank_per_L) and not pd.isna(rho)
-                and float(rho) > 0):
-            tank_frac = max(0.0, float(tank_per_L) / float(rho))
+    tank_frac  = _tank_frac_per_kg(propellant, config)
 
     boiloff_pct = float(propellant.get("boiloff_pct_per_day", 0.0) or 0.0)
     return isp, dv_penalty, tank_frac, boiloff_pct
@@ -15784,9 +15819,14 @@ def _evaluate_combo_at_ratio(
     # With beneficiation OFF no array mass is added at all — the existing
     # 2,000 kg rig figure already carries its own power implicitly, and this
     # keeps a default run bit-identical to v1.4.0.
-    (dig_wh, benef_wh, base_w_per_kg, ep_eff, ep_kg_per_kw,
+    # The five `_`-prefixed slots are dead HERE and must still be unpacked —
+    # the tuple's order is the contract with `_ops_sizing_constants`.  They are
+    # the eclipse inputs, and v1.14.1 moved the arithmetic that consumed them
+    # onto `AsteroidContext` because it is per-BODY.  Read `ctx.dark_*` and
+    # `ctx.plant_w_per_kg_solar` below rather than re-deriving from these.
+    (dig_wh, benef_wh, _base_w_per_kg, ep_eff, ep_kg_per_kw,
      rtg_w_per_kg, ppu_only_kg_per_kw,
-     _dark_frac_raw, storage_wh_per_kg, storage_eta, baseline_dark_h,
+     _dark_frac_raw, _storage_wh_per_kg, _storage_eta, _baseline_dark_h,
      containment_per_kg) = ctx.ops
     # ── Eclipse / night-side power (v1.14.0) ─────────────────────────────────
     # The dark period belongs to the BODY, so it is resolved once per asteroid
@@ -18049,7 +18089,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.20.2")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.20.3")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
