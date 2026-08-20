@@ -987,6 +987,12 @@ quarter that survive are the expensive ones. The control is on the Common tab
 under **Hopeless candidates**; `.calc.prune_infeasible_combos = False` restores
 the v1.14.0 search exactly.
 
+⚠️ **That same switch now controls two stages.** v1.17.4 added a second one that
+refutes at pass **2** of the sizing loop — the first pass that carries the
+electric stage — and it kills a further **84–86%** of what stage 1 lets
+through. Turning the switch off restores the pre-v1.14.1 search, not the
+v1.14.1 one.
+
 🚨 **Do not budget these from a sample.** A stride sample has now mispredicted
 full-catalog runtime on this pipeline by **3.1× high** (v1.13.0's raw estimate)
 and **4.8× low** (v1.14.0's beneficiated estimate — ~2.2 h predicted against
@@ -1428,6 +1434,93 @@ If a change suddenly improves these by an order of magnitude, suspect it has
 switched one of the twenty models off rather than found something. See
 [What the model charges for](#what-the-model-charges-for).
 
+### What changed in v1.17.4
+
+**No number.** A performance release on the same contract as v1.10.1, v1.14.1,
+v1.14.2, v1.17.1 and v1.17.2 — the stamp moves so a CSV still names the code
+that produced it, and every measured cell in this file stands as measured.
+
+Two findings, in the two places five previous performance releases never
+looked: the **catalog load**, and **pass 2** of the sizing loop.
+
+**Nobody had profiled the load.** `comp_minerals` is a list-column that pandas
+reads back as a string, and Stage 4 was `ast.literal_eval`-ing it once per row.
+Composition is assigned from the spectral taxonomy, so that column takes **25
+distinct values across all 1,555,667 rows** — 1.55 million parses to produce
+twenty-five answers, costing more than the 862 MB CSV read in front of it.
+`integrity_check` then walked the same 1.55 M lists to build a set of fourteen
+names. Both now go by distinct value: **13.0×** on the parse, **3.2×** on the
+walk, and the parsed column verified identical element for element.
+
+**The pre-filter refuted at pass 1 and never asked about pass 2.** v1.14.1's
+filter is sound and its argument is that pass 1 is the loop's most optimistic
+pass. Measured on the real population, of 219,054 candidate solves **162,816
+(74.3%) die on pass 2** — the first pass that flies the electric stage pass 1
+has just sized, which on an electric mission is tonnes. That stage is the same
+at every concentration ratio and every power source, so the identical
+refutation was being re-derived 8 to 16 times. Asking once per (vehicle ×
+propellant × Δv × ISRU) cuts candidate solves **219,054 → 32,342** and cascade
+solves **500,860 → 183,677**.
+
+🚨 **It is a decision, not a bound.** Viability is monotone decreasing in
+`hardware_kg` and in `r_ret`, and both only grow from pass 1 to pass 2 — the
+plant is ≥ 0, and the hold is floored at `station_keeping_floor_yr`. Nothing is
+approximated, which is what separates this from the branch-and-bound on the
+objective that CLAUDE.md still warns against.
+
+| cell | HEAD | **v1.17.4** | speed-up |
+|---|---|---|---|
+| raw, search off | 1.854 s | **1.223 s** | **1.52×** |
+| beneficiated, search off | 4.901 s | **2.486 s** | **1.97×** |
+| raw, search on | 3.160 s | **2.369 s** | **1.33×** |
+| beneficiated + search (the default) | 6.533 s | **4.157 s** | **1.57×** |
+| *load + integrity check* | *30.38 s* | ***15.36 s*** | ***1.98×*** |
+| *row → dict walk, per row* | *61.0 µs* | ***17.7 µs*** | ***3.44×*** |
+
+Interleaved A/B, both builds in one process, cells alternated, best of 3.
+
+**Every row was converted through a pandas Series it did not need.** Both the
+serial loop and the workers walked the catalog with `iterrows()`, and
+`_row_to_dict` threw the Series away — 61 µs a row against **17.7 µs** for
+`to_dict("records")` over a 256-row block. That is ~50 µs on every catalog row
+whether or not it is evaluable, so ~67-78 s a pass, about **5-6% of the raw cislunar
+cell**. Value- and type-preserving, checked cell by cell over 20,000 rows.
+
+**And the same finding upstream, shipped as catalog v1.1.1.**
+`enrich_composition` resolved everything keyed on `spectral_type` once per row
+— nine composition fields, two capitalisation passes, the PGM multiplier, twelve
+`.apply()` passes making ~19 M Python calls to produce the ~800 answers that 76
+taxonomy classes can give. **9.09 s → 2.35 s**, all 12 derived columns
+identical. It is the *same column* Stage 4 fixes at the other end of the CSV
+boundary, which is the useful part: the pattern to look for is **a column with
+few distinct values and one Python call per row**, and this pipeline had it on
+both sides of its own output file.
+
+🚨 **Two fast options were measured and rejected.** `pd.read_csv(engine=
+"pyarrow")` takes the 862 MB read from 17.9 s to **3.7 s** with identical
+dtypes — and rounds floats differently in the last ULP, moving
+`estimated_mass_kg` by a relative 1e-13. Physically nothing, and fatal: mass is
+what the ranking runs on and every release here is argued from bit-identity.
+And `builtins.max` is **not** worth inlining — the "~6× cheaper" figure this
+project has quoted since v1.14.2 is stale, because Python 3.13 specialises
+two-argument `max`; re-measured it is 1.2–2.4×, so the whole item is ~0.6%.
+
+⚠️ **The shape is the opposite of v1.17.2's.** That release is inert with the
+search off and worth 1.45× with it on, because it removes ladder work; this one
+lands on the mass cascade, so it is worth most where there is *no* ladder. And
+the load saving does not scale with the row cap at all — it is half the wall
+clock of a 400-row cell and 0.2% of a full beneficiated one. **A single ratio
+for this release is meaningless without the row count.**
+
+Verified: four cells 139/139 columns bit-identical with sha256 MATCH; prune on
+vs off and stage 2 active vs neutralised both identical on all four; serial vs
+8 workers byte-identical with the search on; mass ledger exact; both
+never-worse invariants hold. And pairwise — **every one of 20,533 tuples the
+new stage killed was then solved in full at every power mode and every ratio,
+and none produced a mission.** That last check is the one that matters: a
+filter that is too tight drops a candidate without changing any row count, so
+no output diff could see it.
+
 ### What changed in v1.14.1
 
 **No number.** A performance release on the same contract as v1.10.1: the stamp
@@ -1470,6 +1563,13 @@ produced a result; calls to `mission_cost_usd` are **8,292 before and 8,292
 after** while total solves fall 134,538 → 38,443; and serial vs 8 workers is
 byte-identical. `.calc.prune_infeasible_combos = False` restores the v1.14.0
 search exactly, and is the diff to run if an output ever moves.
+
+> ✅ **This is stage 1 of two as of v1.17.4**, which asked the question this
+> release did not: what happens at pass **2**. Pass 2 is the first pass that
+> flies the electric stage pass 1 has just sized, and **74.3% of everything
+> that survives stage 1 dies there** — identically at every concentration ratio
+> and every power source, because that stage is sized off a cascade blind to
+> both. Same flag, same restore, same diff. See "What changed in v1.17.4".
 
 **The GPU was tested and rejected**, on an RTX 2080 Ti: fp64 `exp` over 40M
 elements is **1.695 s on the card against 0.222 s on the CPU** — 7.6× slower,

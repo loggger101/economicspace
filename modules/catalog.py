@@ -369,7 +369,36 @@ class CatalogConfig:
     #             catalog, H-derived enabled         ~1,553,800  (v1.1.0, default)
     #         Any CSV stamped 1.0.9 or earlier was built on at most 89,367
     #         bodies and is not comparable row-for-row with a 1.1.0 run.
-    pipeline_version: str = "1.1.0"
+    #
+    # 1.1.1   PERFORMANCE ONLY — every column identical, verified on the full
+    #         1,555,667-row catalog.  `enrich_composition` resolved everything
+    #         keyed on `spectral_type` once per ROW: nine composition fields,
+    #         two capitalisation passes and the PGM multiplier — twelve
+    #         `.apply()` passes making ~19 MILLION Python calls, each running
+    #         `pd.isna` on a scalar at ~1 us, to produce the ~800 answers that
+    #         76 distinct taxonomy classes can give.  `_by_distinct` evaluates
+    #         each once per class: `enrich_composition` measures
+    #         **9.09 s -> 2.35 s, 3.87x**, on a 224 s Stage 1.
+    #         ⚠️  3.87x is the FUNCTION, not the twelve passes alone — the rest
+    #         of it (the Tholen and albedo fallbacks, the masks, the counts) is
+    #         unchanged and is what remains.  A micro-benchmark of the lookup
+    #         alone says 93x and is measuring something nobody runs.
+    #         Same finding and the same fix as calc 1.17.4's
+    #         `_parse_minerals_column`, at the other end of the same column —
+    #         which is the point.  The pattern is "a column with few distinct
+    #         values, one Python call per row", and this pipeline had it in
+    #         both directions across a CSV boundary.
+    #         🚨  Verified by running BOTH builds on the same frame in one
+    #         process.  The first attempt FAILED it: filling an object array
+    #         and stopping there kept `None` as `None` where `.apply()` gives
+    #         float64/NaN (53 rows of four fraction columns) and left
+    #         `comp_pgm_enrichment` object rather than float64.  `.infer_objects()`
+    #         runs the same conversion `apply` does.  All 12 derived columns
+    #         identical after it — including `comp_minerals`, which holds LISTS
+    #         and is why the buffer is `np.empty(..., dtype=object)` filled
+    #         rather than `np.array([...])`, which reshapes equal-length lists
+    #         into a 2-D array.
+    pipeline_version: str = "1.1.1"
 
 
 # Instantiate and create the output dir.  Edit CONFIG values above this line
@@ -860,6 +889,57 @@ PGM_ENRICHMENT_BY_TYPE: Dict[str, float] = {
     # ── Everything else: baseline 1.0× (chondritic / primitive — get via .get default) ──
     # C, Cb, Cg, Cgh, Ch, B, S, Sa, Sk, Sl, Sq, Sr, Sv, Q, K, L, D, T, P, F, G, Unknown
 }
+
+
+def _by_distinct(col: "pd.Series", fn):
+    """`col.apply(fn)` evaluated once per DISTINCT value instead of per row.
+
+    v1.1.1.  Everything this module derives from `spectral_type` is a lookup
+    keyed on a taxonomy class, and there are **76 distinct classes across
+    1,555,667 rows** — so twelve `.apply()` passes (nine composition fields,
+    two capitalisation passes, and the PGM multiplier) were making ~19 million
+    calls to produce ~800 answers.  Each of those calls ran `pd.isna` on a
+    scalar, which is a pandas dispatch at ~1 µs.  Measured on the real
+    1,555,667-row catalog, `enrich_composition` goes **9.09 s -> 2.35 s
+    (3.87x)** — that is the whole function, of which the rest (the Tholen and
+    albedo fallbacks, the masks, the counts) is unchanged.
+
+    Same finding, and the same fix, as `_parse_minerals_column` in Stage 4 —
+    which is the point: the pattern is "a column with few distinct values, one
+    Python call per row", and this pipeline has it in both directions.
+
+    `factorize` rather than `unique` + a dict because it is total: NaN is a
+    code like any other, so a missing taxonomy cannot fall through a lookup
+    that `nan != nan` would silently break.
+
+    ⚠️  The result array is built with `np.empty(..., dtype=object)` and filled,
+    NOT `np.array([...])`.  Some of these fields are LISTS (`comp_minerals`),
+    and `np.array` of equal-length lists builds a 2-D array instead of an array
+    of lists — which would reshape the column rather than fill it.
+
+    ⚠️  `.infer_objects()` at the end is NOT cosmetic, and leaving it off is
+    how this change failed its first verification. `Series.apply()` builds its
+    result through `maybe_convert_objects`, so a column of floats-and-`None`
+    comes back **float64 with NaN**, and a column of floats comes back
+    float64 rather than object. Filling an object array and stopping there
+    keeps `None` as `None` and the dtype as `object` — 53 rows of
+    `comp_metal_fraction` differed on exactly that, and `comp_pgm_enrichment`
+    changed dtype under a column whose values were all equal. `infer_objects`
+    runs the same conversion `apply` does, so lists stay lists, strings stay
+    strings, and the numeric columns land where they always did.
+
+    ⚠️  Values are SHARED across rows that share a class, exactly as
+    `.apply()` shared them: `_lookup` returns the object straight out of
+    `TAXONOMY_COMPOSITION`, so every C-type row already pointed at one list.
+    Stage 1 writes this to CSV and never mutates it.  (Stage 4 re-reads it and
+    deliberately does NOT share — see `_parse_minerals_column`.)
+    """
+    codes, uniques = pd.factorize(col, use_na_sentinel=False)
+    resolved = np.empty(len(uniques), dtype=object)
+    for i, u in enumerate(uniques):
+        resolved[i] = fn(u)
+    return pd.Series(resolved[codes], index=col.index,
+                     name=col.name).infer_objects()
 
 
 def pgm_enrichment_for_type(spec_type) -> float:
@@ -2646,7 +2726,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
         t = t.strip()
         return t[0].upper() + t[1:].lower() if t else pd.NA
 
-    df["spectral_type"] = df["spectral_type"].apply(normalise_type)
+    df["spectral_type"] = _by_distinct(df["spectral_type"], normalise_type)
 
     # `spectral_type_source` tracks WHERE the final classification came from so
     # consumers can filter on confidence:
@@ -2663,7 +2743,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
     # Bus-DeMeo directly; the Tholen-only ones (M, E, P, F, G) are now in
     # TAXONOMY_COMPOSITION too, so the lookup at step 3 handles them uniformly.
     if "spectral_type_tholen" in df.columns:
-        tholen = df["spectral_type_tholen"].apply(normalise_type)
+        tholen = _by_distinct(df["spectral_type_tholen"], normalise_type)
         fill_mask = df["spectral_type"].isna() & tholen.notna()
         df.loc[fill_mask, "spectral_type"]        = tholen[fill_mask]
         df.loc[fill_mask, "spectral_type_source"] = "tholen"
@@ -2729,15 +2809,28 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
             return TAXONOMY_COMPOSITION[root][field]
         return TAXONOMY_COMPOSITION["Unknown"][field]
 
+    # One factorisation of `spectral_type`, nine columns read off it.  The
+    # codes are identical for every field, so factorising once and indexing
+    # nine times is nine passes of C-level take instead of nine of `.apply`.
+    _spec_codes, _spec_uniques = pd.factorize(df["spectral_type"],
+                                              use_na_sentinel=False)
     for field in comp_fields:
-        df[f"comp_{field}"] = df["spectral_type"].apply(lambda t: _lookup(t, field))
+        _vals = np.empty(len(_spec_uniques), dtype=object)
+        for _i, _u in enumerate(_spec_uniques):
+            _vals[_i] = _lookup(_u, field)
+        # `.infer_objects()` for the reason `_by_distinct` documents at length:
+        # several of these fields are floats-with-`None`, and `.apply()` would
+        # have handed back float64/NaN rather than object/None.
+        df[f"comp_{field}"] = pd.Series(_vals[_spec_codes],
+                                        index=df.index).infer_objects()
 
     # ── 3b. PGM enrichment factor (v1.0.4) ────────────────────────────────────
     # Per-spectral-type multiplier applied to platinum-group-metal yields
     # in Module 2's "nickel-iron" mineral.  Differentiated bodies (M-type
     # cores) have ~2× chondritic PGM in their metal phase; basaltic-crust
     # fragments (V-type) ~0.2×.  See PGM_ENRICHMENT_BY_TYPE for the table.
-    df["comp_pgm_enrichment"] = df["spectral_type"].apply(pgm_enrichment_for_type)
+    df["comp_pgm_enrichment"] = _by_distinct(df["spectral_type"],
+                                             pgm_enrichment_for_type)
     n_enriched  = int((df["comp_pgm_enrichment"] > 1.0).sum())
     n_depleted  = int((df["comp_pgm_enrichment"] < 1.0).sum())
     if n_enriched or n_depleted:
