@@ -1804,6 +1804,97 @@ class CalcConfig:
     #         mass ledger exact at 0.000000000 kg; both never-worse invariants
     #         hold (max 1.000000, zero exceptions).
     #
+    # 1.17.4  PERFORMANCE ONLY — every number identical.  EIGHTH stamp in this
+    #         project that does not mean the model moved, and the SIXTH that is
+    #         performance.  Interleaved A/B, both builds in ONE process, cells
+    #         alternated, best of 3 (the construction v1.17.1 had to adopt after
+    #         a separate-process measurement reported a 0.88x SLOWDOWN purely
+    #         from host drift):
+    #             raw, search off            1.854 s -> 1.223 s   1.52x
+    #             beneficiated, search off   4.901 s -> 2.486 s   1.97x
+    #             raw, search on             3.160 s -> 2.369 s   1.33x
+    #             beneficiated + search      6.533 s -> 4.157 s   1.57x   (DEFAULT)
+    #         Plus a fixed ~15 s off the LOAD of every run at any row cap
+    #         (30.38 s -> 15.36 s for load + integrity_check), and 3.44x off
+    #         the per-ROW walk every catalog row pays whether or not it turns
+    #         out to be evaluable (61.0 -> 17.7 us, so ~67-78 s a full pass).
+    #         ⚠️  The shape is the OPPOSITE of 1.17.2's, which was inert with
+    #         the search off and worth 1.45x with it on.  This one lands on the
+    #         MASS cascade, so beneficiated-without-search gains most and
+    #         raw-with-search least — the searched cells dilute it because the
+    #         cost ladder is a bigger share of what is left.  Do not quote one
+    #         number for it either.
+    #
+    #         (a) THE LOAD WAS NEVER PROFILED, AND IT WAS THE BIGGEST SINGLE
+    #             ITEM IN THE RUN.  `comp_minerals` was `ast.literal_eval`'d
+    #             once per ROW — 1,555,667 parses to produce the TWENTY-FIVE
+    #             distinct compositions the taxonomy can assign, ~19 s, more
+    #             than the 862 MB CSV read in front of it.  `integrity_check`
+    #             then walked the same 1.55 M lists to build a set of fourteen
+    #             names, ~1.3 s.  Both now go by distinct value:
+    #             `_parse_minerals_column` 13.0x, the integrity walk 3.2x, and
+    #             the parsed column verified identical element for element.
+    #             Every perf release before this one (1.10.1, 1.14.1, 1.14.2,
+    #             1.17.1, 1.17.2) went after the SEARCH, because that is where a
+    #             full-catalog run spends its hours — and a fixed ~20 s that a
+    #             10-hour cell can ignore is most of the wall clock of the 150-
+    #             and 400-row cells this project actually verifies itself on.
+    #
+    #         (b) THE PRE-FILTER GAINS A SECOND STAGE — the big one.  v1.14.1
+    #             refutes at PASS 1 of the sizing loop (no plant, no electric
+    #             stage, shortest hold) and argues correctly that pass 1 is the
+    #             most optimistic pass.  It never asked what happens at pass 2.
+    #             Measured at cislunar, beneficiated, search on: of 219,054
+    #             calls to `_evaluate_combo_at_ratio`, **162,816 (74.3%) return
+    #             None on `if not cascade["viable"]` after exactly TWO cascade
+    #             solves** — on pass 2, the first pass that flies the electric
+    #             stage pass 1 has just sized, which on an electric mission is
+    #             tonnes.  And that stage is sized off a cascade that can see
+    #             neither the concentration ratio nor the power source, so the
+    #             identical refutation was being re-derived ~8 to ~16 times.
+    #             `_closes_carrying_its_own_stage` runs it ONCE per (vehicle x
+    #             propellant x Δv x ISRU).  Calls to `_evaluate_combo_at_ratio`
+    #             fall 219,054 -> 32,342 (-85%) and to `max_return_payload_kg`
+    #             500,860 -> 183,677 (-63%).
+    #             🚨  Sound rather than heuristic, and the argument is
+    #             monotonicity, not measurement: viability is `bracket > 0` /
+    #             `base_launch <= leo`, both monotone decreasing in `hardware_kg`
+    #             and in `r_ret`, and BOTH only grow from pass 1 to pass 2 (the
+    #             plant is >= 0; `trial_dur` is floored at
+    #             station_keeping_floor_yr).  `structure_frac` grows too and
+    #             appears in `denom`, where larger only helps — so the test runs
+    #             at pass 1's value, whose `denom` is already positive.
+    #
+    #         (c) `_calendar_multipliers_cached` — the ladder is the F ladder
+    #             CROSSED WITH W, and `programme_calendar_multipliers` reads W
+    #             and nothing else that varies, so ~40 options asked it for at
+    #             most `trips` (<= 5) answers: 369,166 calls, eight askings per
+    #             answer, two `**` apiece.
+    #
+    #         (d) `_iter_row_dicts` — both the serial loop and `_evaluate_chunk`
+    #             walked the catalog with `iterrows()`, building a pandas
+    #             Series per row that `_row_to_dict` then threw away: 61.0 us a
+    #             row against 17.7 for `to_dict("records")` over a 256-row
+    #             block.  ~50 us on EVERY catalog row, evaluable or not.
+    #             ⚠️  A block at a time, not one `to_dict` over 1.55 M rows —
+    #             the conversion amortises at 256 just as well and nothing
+    #             large is ever materialised.
+    #
+    #         (e) `_ep_device_consts` and `_ep_stage_kg` — extracted so the new
+    #             filter sizes the stage off ONE definition rather than a second
+    #             copy.  Same operations in the same order, so the extraction is
+    #             bit-identical rather than merely equal.  Written this way
+    #             deliberately: `tank_frac` spent three releases derived in two
+    #             places under a v1.14.2 note claiming it was derived in one.
+    #
+    #         Verified: four cells 139/139 columns bit-identical, sha256 MATCH,
+    #         less BOTH provenance columns; prune ON vs OFF identical on all
+    #         four; stage 2 ACTIVE vs NEUTRALISED identical on all four; and
+    #         pairwise — every one of 20,533 (vehicle x propellant x Δv x ISRU)
+    #         tuples stage 2 killed was then solved in full at every power mode
+    #         and every ratio, and ZERO produced a mission.  That last one is the
+    #         check that matters: a bound that is too tight drops a candidate
+    #         WITHOUT changing a row count, so no output diff could see it.
     # 1.17.3  DEAD CODE AND DUPLICATION REMOVED — every number identical.  SIXTH
     #         stamp that does not mean the numbers moved, and the first for
     #         neither performance nor a default flip: nothing here is meant to
@@ -1856,7 +1947,7 @@ class CalcConfig:
     #         a real defect confined to the beneficiation path.  A full
     #         beneficiated cell is ~10 h, so a 2x2 CANNOT be run inside one
     #         date: strip every provenance column before hashing.
-    pipeline_version: str = "1.17.3"
+    pipeline_version: str = "1.17.4"
 
 
 CONFIG = CalcConfig()
@@ -1923,6 +2014,41 @@ def _parse_minerals_list(cell):
         return []
 
 
+def _parse_minerals_column(col: pd.Series) -> pd.Series:
+    """`_parse_minerals_list` over a whole column, priced by DISTINCT value.
+
+    v1.17.4.  Composition is assigned from the spectral taxonomy, so this
+    column takes **25 distinct values over the full 1,555,667-row catalog** —
+    and it was being `ast.literal_eval`'d once per ROW.  1.55 million parses to
+    produce twenty-five answers, measured at **~28 s**: more than the 862 MB
+    CSV read that precedes it, more than `integrity_check`, and more than the
+    entire mission search on any sample-sized run.
+
+    Nobody had profiled the LOAD.  Every performance release in this project
+    (`1.10.1`, `1.14.1`, `1.14.2`, `1.17.1`, `1.17.2`) went after the search,
+    because that is where a full-catalog run spends its hours — and a fixed
+    ~30 s that a full run can ignore is most of the wall clock of the 150- and
+    400-row cells this project actually verifies itself on.
+
+    Same shape as every other memo here (`_OPS_CACHE`, `_PHASE_ORDER_CACHE`,
+    `_ops_sizing_constants`): the loop was never the cost, the repetition was.
+
+    ⚠️  Each row gets its OWN list rather than a shared one.  Nothing in this
+    module mutates the column — `integrity_check` is its only reader and it
+    only iterates — but a 62,000-way alias on a mutable object is exactly the
+    quiet kind of trap this repo keeps finding, and 1.55 M list copies cost
+    ~0.4 s against the ~28 s the parse cost.  Buy the safety.
+
+    `factorize` rather than `unique` + `map` because it is total: NaN is a
+    code like any other, so a missing composition cannot fall through a dict
+    lookup that `nan != nan` would break.
+    """
+    codes, uniques = pd.factorize(col, use_na_sentinel=False)
+    parsed = [_parse_minerals_list(u) for u in uniques]
+    return pd.Series([list(parsed[c]) for c in codes],
+                     index=col.index, name=col.name)
+
+
 def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
     """Load and lightly normalise the three upstream catalogs."""
     print("\n📂  Loading upstream catalogs …")
@@ -1958,8 +2084,8 @@ def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
 
     # Parse Module 1's comp_minerals list-column back into actual lists
     if "comp_minerals" in catalogs["asteroids"].columns:
-        catalogs["asteroids"]["comp_minerals"] = (
-            catalogs["asteroids"]["comp_minerals"].apply(_parse_minerals_list)
+        catalogs["asteroids"]["comp_minerals"] = _parse_minerals_column(
+            catalogs["asteroids"]["comp_minerals"]
         )
 
     return catalogs
@@ -2017,10 +2143,32 @@ def integrity_check(catalogs: Dict[str, pd.DataFrame]) -> None:
         print("     ⚠️  asteroid catalog has no `comp_minerals` column — skipping check")
         return
 
-    # Every unique mineral name the asteroid catalog references
+    # Every unique mineral name the asteroid catalog references.
+    #
+    # v1.17.4: over the DISTINCT compositions rather than over every row.  This
+    # walked 1.55 million lists — 6.2 million generator steps and 1.55 million
+    # `set.update` calls, ~4 s — to build a set of twelve names out of the
+    # twenty-five distinct compositions the taxonomy can produce.  Same finding
+    # as `_parse_minerals_column` directly above it, and found the same way.
+    #
+    # A list is not hashable, so the distinct compositions are keyed as tuples
+    # and `factorize` reduces them to one entry per composition present.
+    #
+    # ⚠️  The `isinstance` guard is the OLD loop's guard, kept and not folded
+    # into a bare `.map(tuple)`.  `load_all_catalogs` hands this column over
+    # already parsed, but nothing forces a caller to — and `tuple()` of the
+    # UNPARSED string explodes it into one entry per character, which would
+    # report a screenful of one-letter minerals as missing from Module 2.  A
+    # loud false alarm in the check that exists to be trusted is still a
+    # failure, and skipping non-lists is what the row-by-row walk did.
     referenced = set()
-    for mins in asteroids["comp_minerals"]:
-        if isinstance(mins, list):
+    _, comp_uniques = pd.factorize(
+        asteroids["comp_minerals"].map(
+            lambda v: tuple(v) if isinstance(v, list) else None),
+        use_na_sentinel=False,
+    )
+    for mins in comp_uniques:
+        if isinstance(mins, tuple):
             referenced.update(str(m) for m in mins if m)
 
     missing = referenced - mineral_set
@@ -3943,6 +4091,211 @@ def _closes_with(
     return leo_capacity_kg / a - b - c > 0
 
 
+def _ep_device_consts(
+    is_electric:           bool,
+    thruster_eff_row:      Optional[float],
+    thruster_kg_per_n_row: Optional[float],
+    ep_eff:                float,
+    ep_kg_per_kw:          float,
+    ppu_only_kg_per_kw:    float,
+) -> Tuple[float, float, float]:
+    """`(efficiency, thruster kg/N, PPU kg/kW)` for one propellant's device.
+
+    v1.17.4.  Split out of `_evaluate_combo_at_ratio` so the pre-filter's
+    second stage sizes the electric stage off the SAME resolution rather than a
+    second copy of it — the hazard this file names under `tank_frac`, which
+    spent three releases derived in two places beneath a note claiming it was
+    derived in one.
+
+    Both Module 3 figures fall back to the older shared constants when the row
+    states no usable value, so a pre-Module-3-v1.10.0 catalog reproduces
+    v1.11.0.  `schema_check()` names them, because the fallback is silent and
+    flattering.
+    """
+    eff_used          = ep_eff
+    thruster_kg_per_n = 0.0
+    ppu_kg_per_kw     = ep_kg_per_kw
+    if is_electric:
+        if thruster_eff_row is not None:
+            eff_used = thruster_eff_row
+        if thruster_kg_per_n_row is not None:
+            thruster_kg_per_n = thruster_kg_per_n_row
+            ppu_kg_per_kw     = ppu_only_kg_per_kw   # thruster counted separately
+    return eff_used, thruster_kg_per_n, ppu_kg_per_kw
+
+
+def _ep_stage_kg(
+    cascade:           Dict[str, float],
+    isp_s:             float,
+    eff:               float,
+    ep_w_per_kg:       float,
+    ppu_kg_per_kw:     float,
+    thruster_kg_per_n: float,
+    config:            CalcConfig,
+) -> Tuple[float, float, float, float]:
+    """Mass of the electric stage that flies `cascade`'s propellant load.
+
+    Returns `(ep_system_kg, ep_power_w, ep_thrust_n, ep_thrust_yr)`.
+
+    Three masses on three different quantities, and keeping them apart is the
+    whole point of v1.12.0:
+        array      scales with POWER, and 1/r² with distance
+        PPU        scales with POWER, flat with distance
+        thruster   scales with THRUST — this is the device constraint, and it
+                   is what a per-kW figure cannot express.
+
+    v1.17.4 made this a function rather than a block inside the sizing loop,
+    because the pre-filter's second stage needs the same number off the same
+    pass-1 cascade.  Same operations in the same order on the same values, so
+    the extraction is bit-identical rather than merely equal.
+    """
+    m_prop_total = (float(cascade.get("m_outbound_prop", 0.0))
+                    + float(cascade.get("m_return_prop", 0.0)))
+    ep_power_w = ep_power_required_w(
+        m_prop_total, isp_s, config.ep_target_thrust_yr, eff,
+    )
+    ep_thrust_n = ep_thrust_required_n(
+        m_prop_total, isp_s, config.ep_target_thrust_yr,
+    )
+    ep_thrust_yr = config.ep_target_thrust_yr if m_prop_total > 0 else 0.0
+    array_kg    = ep_power_w / ep_w_per_kg if ep_w_per_kg > 0 else 0.0
+    ppu_kg      = ep_power_w / 1000.0 * ppu_kg_per_kw
+    thruster_kg = ep_thrust_n * thruster_kg_per_n
+    return array_kg + ppu_kg + thruster_kg, ep_power_w, ep_thrust_n, ep_thrust_yr
+
+
+def _closes_carrying_its_own_stage(
+    leo_capacity_kg: float,
+    sizing_consts:   Tuple[float, Optional[float], Optional[float],
+                           float, float, float],
+    ops:             Tuple[float, ...],
+    solar_w_per_kg:  float,
+    structure_frac:  float,
+    window_wait_yr:  float,
+    dv_out_m_s:      float,
+    dv_ret_m_s:      float,
+    tps_frac:        float,
+    isru:            bool,
+    config:          CalcConfig,
+) -> bool:
+    """Pre-filter, second stage: can it still close once it carries its THRUSTER?
+
+    ── What this is for ────────────────────────────────────────────────────
+
+    v1.14.1's pre-filter refutes a candidate at PASS 1 of the sizing loop —
+    zero plant, zero electric stage, shortest hold — and its whole argument is
+    that pass 1 is the most optimistic pass, so failing it is a decision no
+    later pass can overturn.  That is true, and it leaves the obvious next
+    question unasked.  Measured at cislunar, beneficiated, programme search on:
+
+        219,054 calls to `_evaluate_combo_at_ratio`
+        162,816 of them (74.3%) return None on `if not cascade["viable"]`
+                after exactly TWO cascade solves — that is, on PASS 2
+
+    Pass 2 is the first pass that flies the electric stage pass 1 has just
+    sized, and on an electric mission that stage is tonnes.  So three quarters
+    of the surviving search was paying a ~20 µs prologue and two closed-form
+    solves — once per concentration ratio, and again per power source — to
+    re-derive one refutation that depends on neither.
+
+    ── Why refusing here is sound, and not a heuristic ─────────────────────
+
+    Viability in `max_return_payload_kg` is `bracket > 0` (no-ISRU) or
+    `base_launch <= leo` (ISRU), and BOTH are monotone decreasing in the two
+    quantities that grow between pass 1 and pass 2:
+
+      • `hardware_kg`.  Pass 2 flies `rig + plant + ep`, and the plant is >= 0
+        by construction, so `rig + ep` is a lower bound on it — and the ep term
+        is the SAME at every concentration ratio and every power source,
+        because it is sized off pass 1's cascade, which is itself ratio- and
+        power-blind.  (The plant is not; that is exactly why it is dropped.)
+
+      • `r_ret`, through boil-off.  Pass 2 holds for `trial_dur + wait`, and
+        `trial_dur` is `max(mining_duration_yr(...), station_keeping_floor_yr)`,
+        so the hold cannot fall below the floor pass 1 used.  A longer hold
+        inflates `r_ret`, which shrinks `bracket`.
+
+    `structure_frac` grows too (containment), and it appears in `denom`, not in
+    `bracket` — where a LARGER value can only help viability.  So this test
+    runs at pass 1's `structure_frac`; pass 1 was viable, so its `denom` is
+    already positive and is identical here, and the only way this returns False
+    is the monotone condition.  False therefore means pass 2 is infeasible for
+    every ratio and every power source — precisely what the code it replaces
+    would have concluded, one solve at a time.
+
+    ⚠️  One-sided, exactly like the first stage.  True still promises nothing:
+    the throughput cap, the duration limit, the volume cap and the post-settle
+    launch recheck all apply downstream.
+
+    ⚠️  Non-electric candidates return True without touching the solver.  With
+    no electric stage `ep` is 0, so this test IS the first stage, which the
+    caller has already applied.
+    """
+    (dv_penalty, thruster_eff_row, thruster_kg_per_n_row,
+     tank_frac, isp_s_val, boiloff_pct) = sizing_consts
+
+    if not (config.model_low_thrust_time and dv_penalty > 1.0):
+        return True                    # no stage to carry — stage 1 said it all
+
+    (_dig_wh, _benef_wh, _base_w, ep_eff, ep_kg_per_kw,
+     _rtg_w, ppu_only_kg_per_kw,
+     _df, _swh, _seta, _bdh, _containment) = ops
+
+    eff_used, thruster_kg_per_n, ppu_kg_per_kw = _ep_device_consts(
+        True, thruster_eff_row, thruster_kg_per_n_row,
+        ep_eff, ep_kg_per_kw, ppu_only_kg_per_kw,
+    )
+
+    # The same two lines the sizing function runs before its loop, on the same
+    # values, so the solver below sees the identical floats.
+    dv_out = dv_out_m_s * dv_penalty
+    dv_ret = dv_ret_m_s * dv_penalty
+
+    # And the same boil-off substitution pass 1 makes, at the same shortest
+    # hold.  Written in Δv space rather than `_combo_close_terms`' R space
+    # because the value has to reach `max_return_payload_kg` bit-for-bit as the
+    # loop would have handed it over.
+    dv_ret_eff = dv_ret
+    if config.model_propellant_boiloff and boiloff_pct > 0 and not isru:
+        outbound_yr = max(0.5, 0.000_23 * dv_out)
+        stay_est_yr = config.station_keeping_floor_yr + window_wait_yr
+        try:
+            boiloff_factor = math.exp(
+                boiloff_pct / 100.0 * (outbound_yr + stay_est_yr) * 365.25)
+            r_ret_raw = math.exp(dv_ret / (isp_s_val * G0_M_S2))
+        except OverflowError:
+            return True                # let the solver make its own refusal
+        r_ret_eff = 1.0 + (r_ret_raw - 1.0) * boiloff_factor
+        if not (math.isfinite(r_ret_eff) and r_ret_eff > 0.0):
+            return True
+        dv_ret_eff = isp_s_val * G0_M_S2 * math.log(r_ret_eff)
+
+    bare = dict(
+        leo_capacity_kg = leo_capacity_kg,
+        isp_s           = isp_s_val,
+        dv_out_m_s      = dv_out,
+        dv_ret_m_s      = dv_ret_eff,
+        dry_return_kg   = config.return_vehicle_dry_kg,
+        tps_frac        = tps_frac,
+        isru_return     = isru,
+        structure_frac  = structure_frac,
+        tank_frac       = tank_frac,
+    )
+    pass1 = max_return_payload_kg(hardware_kg=config.mining_hardware_kg, **bare)
+    if not pass1["viable"]:
+        return False                   # stage 1 already knew this; agree with it
+
+    ep_kg, _pw, _tn, _ty = _ep_stage_kg(
+        pass1, isp_s_val, eff_used, solar_w_per_kg,
+        ppu_kg_per_kw, thruster_kg_per_n, config,
+    )
+    if ep_kg <= 0.0:
+        return True
+
+    return bool(max_return_payload_kg(
+        hardware_kg=config.mining_hardware_kg + ep_kg, **bare)["viable"])
+
+
 def _combo_can_close(
     leo_capacity_kg: float,
     consts:          Tuple[float, float, float, float],
@@ -3963,7 +4316,12 @@ def _combo_can_close(
     Deliberately one-sided.  True does not promise a viable mission: the
     throughput cap, the duration limit, the volume cap and the post-settle
     launch recheck all still apply downstream, and about a quarter of the
-    survivors die on one of them.  Cheap and sound beats tight and clever here.
+    survivors die on one of them.
+
+    ⚠️  v1.17.4: that list named the wrong losses.  All four fire, but 74.3% of
+    what survived this test died on the PASS-2 cascade, which is not among
+    them — see `_closes_carrying_its_own_stage`, which is now the second stage
+    and catches exactly that.  Cheap and sound beats tight and clever here.
 
     v1.14.2 split the work in two — `_combo_close_terms` for the part that does
     not depend on the vehicle, `_closes_with` for the part that does — because
@@ -4471,6 +4829,39 @@ def programme_calendar_multipliers(
     cost   = (y ** w - 1.0) / ((y - 1.0) * w)
     credit = (1.0 - y ** -w) / ((1.0 - 1.0 / y) * w)
     return cost, credit
+
+
+_CALENDAR_CACHE: Dict[Tuple[int, float, float], Tuple[float, float]] = {}
+
+
+def _calendar_multipliers_cached(
+    missions_per_ship: int, cadence_yr: float, wacc: float,
+) -> Tuple[float, float]:
+    """`programme_calendar_multipliers`, memoised by value.
+
+    v1.17.4, and the same argument as `_learning_curve_cached` and
+    `_mining_reliability_cached` directly above — except that this one is not
+    an O(N) sum, so it was easy to miss.  It is two `**` calls, which are the
+    slowest float operations in the tail.
+
+    The ladder is the F ladder CROSSED WITH W, and this function reads W and
+    nothing else the ladder varies: `cadence` and `wacc` are fixed for the
+    whole candidate.  So ~40 programme options ask it for at most `trips`
+    distinct answers, and `trips` is `min(life / stay, max_trips)` with
+    `max_trips` = 5.  Measured at 369,166 calls for 10,741 candidates: about
+    eight askings per answer.
+
+    Keyed globally rather than per candidate because the arguments ARE the
+    inputs — the same (W, cadence, wacc) is the same pair of multipliers for
+    any body — and `w == 1` returns before the cache is touched, so the
+    single-mission path is untouched.
+    """
+    key = (missions_per_ship, cadence_yr, wacc)
+    hit = _CALENDAR_CACHE.get(key)
+    if hit is None:
+        hit = _CALENDAR_CACHE[key] = programme_calendar_multipliers(
+            missions_per_ship, cadence_yr, wacc)
+    return hit
 
 
 def fleet_search_ladder(f_min: int, f_max: int, steps: int) -> List[int]:
@@ -5278,7 +5669,7 @@ def _mission_cost_tail(
     # v1.14.2.
     cal_cost  = cal_credit = 1.0
     if calendar_on and missions_sharing_rig > 1:
-        cal_cost, cal_credit = programme_calendar_multipliers(
+        cal_cost, cal_credit = _calendar_multipliers_cached(
             missions_sharing_rig, cadence, wacc)
 
     total_cost = (
@@ -5748,19 +6139,16 @@ def _evaluate_combo_at_ratio(
     # Both fall back to the old shared constants when the column is absent, so
     # a pre-Module-3-v1.10.0 catalog reproduces v1.11.0.  `schema_check()`
     # names them, because the fallback is silent and flattering.
-    eff_used            = ep_eff
-    thruster_kg_per_n   = 0.0
-    ppu_kg_per_kw       = ep_kg_per_kw
     # v1.14.2: both figures are parsed once per run by
     # `_sizing_propellant_consts`, which reports None where the row states no
     # usable value — so the fallback to Module 3's shared constants is unchanged
     # and a pre-Module-3-v1.10.0 catalog still reproduces v1.11.0.
-    if is_electric:
-        if thruster_eff_row is not None:
-            eff_used = thruster_eff_row
-        if thruster_kg_per_n_row is not None:
-            thruster_kg_per_n = thruster_kg_per_n_row
-            ppu_kg_per_kw     = ppu_only_kg_per_kw   # thruster now counted separately
+    # v1.17.4: resolved by `_ep_device_consts`, which the pre-filter's second
+    # stage reads too.  ONE definition, two readers — see that function.
+    eff_used, thruster_kg_per_n, ppu_kg_per_kw = _ep_device_consts(
+        is_electric, thruster_eff_row, thruster_kg_per_n_row,
+        ep_eff, ep_kg_per_kw, ppu_only_kg_per_kw,
+    )
 
     # `isp_s_val`, `boiloff_pct` and `tank_frac` all arrive on `sizing_consts`.
     # ── Tankage (v1.11.0) ────────────────────────────────────────────────────
@@ -5857,25 +6245,13 @@ def _evaluate_combo_at_ratio(
 
         new_ep_kg = 0.0
         if is_electric:
-            m_prop_total = (float(cascade.get("m_outbound_prop", 0.0))
-                            + float(cascade.get("m_return_prop", 0.0)))
-            ep_power_watts = ep_power_required_w(
-                m_prop_total, isp_s_val, config.ep_target_thrust_yr, eff_used,
+            # v1.17.4: one definition, two readers — the pre-filter's second
+            # stage sizes the same stage off the same pass-1 cascade.
+            (new_ep_kg, ep_power_watts,
+             ep_thrust_n, ep_thrust_yr) = _ep_stage_kg(
+                cascade, isp_s_val, eff_used, ep_w_per_kg,
+                ppu_kg_per_kw, thruster_kg_per_n, config,
             )
-            ep_thrust_n = ep_thrust_required_n(
-                m_prop_total, isp_s_val, config.ep_target_thrust_yr,
-            )
-            ep_thrust_yr = config.ep_target_thrust_yr if m_prop_total > 0 else 0.0
-            # Three masses on three different quantities, and keeping them
-            # apart is the whole point of v1.12.0:
-            #   array      scales with POWER, and 1/r² with distance
-            #   PPU        scales with POWER, flat with distance
-            #   thruster   scales with THRUST — this is the device constraint,
-            #              and it is what a per-kW figure cannot express.
-            array_kg    = ep_power_watts / ep_w_per_kg if ep_w_per_kg > 0 else 0.0
-            ppu_kg      = ep_power_watts / 1000.0 * ppu_kg_per_kw
-            thruster_kg = ep_thrust_n * thruster_kg_per_n
-            new_ep_kg   = array_kg + ppu_kg + thruster_kg
 
         # Propellant made on site is dug before it is burnt, so it takes its
         # share of the rig's throughput before any ore does.
@@ -7247,6 +7623,12 @@ def evaluate_asteroid(
             propellant[_PREFILTER_CONSTS_KEY] = _prefilter_propellant_consts(
                 propellant, config)
         pf_consts = propellant.get(_PREFILTER_CONSTS_KEY) if prefilter else None
+        # v1.17.4: the pre-filter's second stage sizes the electric stage, so it
+        # reads the SIZING constants rather than the pre-filter's four.
+        # `candidate_combos` attaches these; a caller that hand-builds `combos`
+        # will not have, and absent means unknown rather than dead — so the
+        # second stage is skipped rather than allowed to refute on a default.
+        sizing_consts = propellant.get(_SIZING_CONSTS_KEY) if prefilter else None
         leo_cap   = float(vehicle.get("payload_leo_kg", 0) or 0)
         leo_ok    = math.isfinite(leo_cap) and leo_cap > 0
         pkey      = id(propellant)
@@ -7278,6 +7660,30 @@ def evaluate_asteroid(
                             isru, window_wait_yr, config)
                         close_terms_cache[ckey] = terms
                     if terms is None or not _closes_with(leo_cap, terms):
+                        continue
+                    # ── Stage 2 (v1.17.4) ────────────────────────────────────
+                    # Stage 1 refutes at pass 1 of the sizing loop, which flies
+                    # no electric stage because pass 1 is what SIZES one.  On
+                    # the real population 74.3% of the candidates that get past
+                    # stage 1 then die on pass 2, when that stage becomes mass
+                    # — and they die identically at every concentration ratio
+                    # and every power source, because the stage is sized off a
+                    # cascade that can see neither.
+                    #
+                    # Sits here rather than inside `evaluate_combo` for exactly
+                    # that reason: one evaluation per (vehicle × propellant ×
+                    # Δv × ISRU) replaces one per ratio per power source, which
+                    # is ~8 to ~16 of them.  See the function for why refusing
+                    # here is a decision rather than a guess.
+                    if sizing_consts is not None and not _closes_carrying_its_own_stage(
+                            leo_cap, sizing_consts, ctx.ops,
+                            ctx.solar_w_per_kg, ctx.structure_frac,
+                            window_wait_yr,
+                            float(dv_opt["dv_out_m_s"]),
+                            float(dv_opt["dv_ret_m_s"]),
+                            (config.heat_shield_frac_of_payload
+                             if bool(dv_opt["aero"]) else 0.0),
+                            isru, config):
                         continue
                 for power_mode in power_modes:
                     result = evaluate_combo(
@@ -7358,21 +7764,54 @@ def _worker_init(
     _WORKER_CTX["config"]   = config
 
 
+# Rows are handed to the search a BLOCK at a time, not one at a time (v1.17.4).
+# 256 is the same figure `_chunk_frame` floors a worker block at, and for the
+# same reason: big enough that the per-call overhead disappears, small enough
+# that nothing large is ever materialised.
+_ROW_DICT_BLOCK = 256
+
+
+def _iter_row_dicts(df: pd.DataFrame, block: int = _ROW_DICT_BLOCK):
+    """Yield each row of `df` as a plain dict, converting a block at a time.
+
+    v1.17.4.  `iterrows()` builds a pandas Series per row and `_row_to_dict`
+    then throws it away — 67.3 µs a row on the 46-column catalog, against
+    **17.0 µs** for `DataFrame.to_dict("records")` over a block. That is ~50 µs
+    on every row of the catalog whether or not it turns out to be evaluable:
+    ~67-78 s on a full cislunar pass, which is ~5-6% of the raw cell.
+
+    ⚠️  Value- AND type-preserving, which is the only reason it is allowed.
+    Checked cell by cell over a 20,000-row sample: **zero value mismatches and
+    zero type mismatches**. Both routes unbox numpy scalars to their Python
+    equivalents, and `np.float64` IS a C double — the same argument v1.10.1
+    made when it introduced `_row_to_dict`, and the four-cell bit-identity diff
+    is what confirms it end to end.
+
+    ⚠️  Block at a time, NOT `df.to_dict("records")` in one go. The serial path
+    hands this the whole 1.55 M-row catalog, and materialising 1.55 M dicts at
+    once would cost several GB for no gain — the conversion is amortised at
+    256 rows just as well as at 1.5 million.
+    """
+    n = len(df)
+    for i in range(0, n, block):
+        for row in df.iloc[i:i + block].to_dict("records"):
+            yield row
+
+
 def _evaluate_chunk(chunk: pd.DataFrame) -> List[dict]:
     """Evaluate one contiguous block of asteroids inside a worker.
 
-    Iterating with `iterrows()` here rather than pre-converting rows in the
-    parent is deliberate on both counts: it is the same call the serial loop
-    makes, so both paths hand `evaluate_asteroid` identical input, and the
-    conversion cost lands on a worker instead of on the single core the parent
-    has to itself.
+    Converting rows here rather than in the parent is deliberate: the cost
+    lands on a worker instead of on the single core the parent has to itself,
+    and both paths hand `evaluate_asteroid` identical input because both go
+    through `_iter_row_dicts`.
     """
     catalogs = _WORKER_CTX["catalogs"]
     combos   = _WORKER_CTX["combos"]
     config   = _WORKER_CTX["config"]
 
     out: List[dict] = []
-    for _, row in chunk.iterrows():
+    for row in _iter_row_dicts(chunk):
         result = evaluate_asteroid(row, catalogs, config, combos)
         if result is not None:
             out.append(result)
@@ -7630,9 +8069,8 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
             .round().astype(int)
         )
         seen = kept = 0
-        for _, prow in work_df.iloc[probe_idx].iterrows():
-            seen_row, kept_row = _prefilter_probe(_row_to_dict(prow),
-                                                  combos, config)
+        for prow in _iter_row_dicts(work_df.iloc[probe_idx]):
+            seen_row, kept_row = _prefilter_probe(prow, combos, config)
             seen += seen_row
             kept += kept_row
         if seen:
@@ -7680,7 +8118,7 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
     if results is None:                       # serial path, or no pool started
         progress["done"] = progress["pct"] = 0
         results = []
-        for _, asteroid in work_df.iterrows():
+        for asteroid in _iter_row_dicts(work_df):
             result = evaluate_asteroid(asteroid, catalogs, config, combos)
             if result is not None:
                 results.append(result)
