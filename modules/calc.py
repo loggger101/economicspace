@@ -2013,7 +2013,62 @@ class CalcConfig:
     #         the item is ~2% for splitting a 570-line function with ~40 locals
     #         crossing the seam.  Still correctly declined, now on a current
     #         number.
-    pipeline_version: str = "1.17.5"
+    #     v1.17.6  PERFORMANCE ONLY — every number bit-identical to 1.17.5.
+    #         The first perf release here that lands on the PER-ROW WALK rather
+    #         than on the search, so it is the first that is worth MORE on raw
+    #         than on the default cell.  Interleaved A/B, both builds in one
+    #         process, best of 3, at caps big enough that the fixed ~1.6 s
+    #         (catalog integrity walk + pre-filter probe) stops dominating:
+    #             raw, 6,000 rows           18.61 -> 16.28 s   1.14x
+    #                     (repeat pass)     19.15 -> 16.14 s   1.19x
+    #             beneficiated, 800 rows    13.49 -> 12.96 s   1.04x
+    #                     (repeat pass)     13.73 -> 12.81 s   1.07x
+    #             raw + search, 3,000 rows  16.71 -> 14.42 s   1.16x
+    #                     (repeat pass)     16.58 -> 14.33 s   1.16x
+    #             benef + search, 800 rows  22.81 -> 20.51 s   1.11x
+    #                     (repeat pass)     22.55 -> 20.45 s   1.10x
+    #         Net of that fixed cost the PER-ROW figures are 1.15 / 1.05 / 1.18
+    #         / 1.12x.  At the 150/400-row caps every previous release measured
+    #         itself on, the same build reads 1.03-1.10x — the fixed cost is half
+    #         of those cells, so quote the cap with the ratio.
+    #         ⚠️  Two full interleaved passes are recorded rather than one
+    #         because the RAW cell moved 1.14x -> 1.19x between them on an
+    #         otherwise identical build.  That is host drift, and it is the
+    #         reason v1.17.1 had to adopt the interleaved construction in the
+    #         first place; treat raw as ~1.15x, not as 1.19x.
+    #         Five findings, and the first is the one that matters:
+    #           • COMPOSITION IS A PER-TAXONOMY FACT.
+    #             `asteroid_bulk_value_usd_per_kg`, `asteroid_phase_table` and
+    #             `asteroid_best_phase_usd_per_kg` read five values off the row
+    #             and nothing else, all of them derived by Module 1 from
+    #             `spectral_type` — ~25 distinct composition tuples across
+    #             1,555,667 rows.  Measured on a 4,000-row stride of the real
+    #             catalog: 14.84 + 13.97 + 27.66 = 56.5 us/row, ~88 s of every
+    #             full BENEFICIATED pass and ~41 s of a raw one, paid by every
+    #             row whether or not it turns out to be evaluable.  Memoised on
+    #             the composition: 1.21 / 1.25 / 1.28 us, i.e. 12.3x / 11.2x /
+    #             21.6x.  Same finding as v1.17.4 made on both sides of the CSV
+    #             boundary, in the one place between them it did not look.
+    #           • `_infeasible` was a NESTED def inside `max_return_payload_kg`,
+    #             rebuilt on all 500,860 calls of the hottest function in the
+    #             mass cascade at ~99 ns a def — ~5% of a 2.1 us call.
+    #           • The programme LADDER is a function of `trips` and the config.
+    #             `programme_options` + `fleet_refinement` were rebuilt per
+    #             surviving candidate (10,741 times per 150-row sample) for one
+    #             of a handful of answers; ~3.6% of the default cell.
+    #           • ONE per-propellant cache entry in the combo loop instead of
+    #             four lookups, plus the Δv options resolved to scalars once per
+    #             asteroid, plus the vehicle's LEO capacity derived once per RUN
+    #             rather than in three places per candidate.
+    #           • Five reliability ops rows and the ranking objective, both
+    #             resolved once instead of per candidate / per ladder rung.
+    #         Verified: four cells 139/139 columns bit-identical against HEAD,
+    #         sha256 MATCH, less BOTH provenance columns — and the four hashes
+    #         are the ones committed for v1.17.4, so they reproduce across two
+    #         releases.  Pre-filter on vs off MATCH; serial vs 8 workers
+    #         byte-identical; mass ledger exact; both never-worse invariants
+    #         hold with zero exceptions.
+    pipeline_version: str = "1.17.6"
 
 
 CONFIG = CalcConfig()
@@ -2489,6 +2544,118 @@ FRACTION_TO_MINERAL: Dict[str, str] = {
 }
 
 
+# ── Composition is a per-TAXONOMY fact, not a per-row one  (v1.17.6) ────────
+# `asteroid_bulk_value_usd_per_kg`, `asteroid_phase_table` and
+# `asteroid_best_phase_usd_per_kg` read exactly five values off the row — the
+# PGM enrichment and the four taxonomy fractions — and nothing else.  All five
+# come out of Module 1's `enrich_composition`, which derives them from
+# `spectral_type` alone: 76 distinct types across 1,555,667 rows, collapsing to
+# ~25 distinct composition tuples (11 in a 4,000-row stride).
+#
+# So `evaluate_asteroid` was walking `FRACTION_TO_MINERAL` three times per
+# asteroid — with a `pd.isna` on a scalar per entry, at ~1 us each — to
+# re-derive one of a couple of dozen answers, once for every body in the
+# catalog.  Measured on a 4,000-row stride of the real catalog:
+#
+#     asteroid_bulk_value_usd_per_kg   14.84 us/row  ->  23.1 s / full pass
+#     asteroid_phase_table             13.97 us/row  ->  21.7 s / full pass
+#     asteroid_best_phase_usd_per_kg   27.66 us/row  ->  43.0 s / full pass
+#
+# ~88 s of every full-catalog pass, paid by every row whether or not it turns
+# out to be evaluable.  Exactly the pattern v1.17.4 found on both sides of the
+# CSV boundary — "a column with few distinct values and one Python call per
+# row" — in the one place between them that release did not look.
+#
+# ⚠️  `asteroid_best_phase_usd_per_kg` calls the bulk function itself, so a
+# beneficiated run computed the bulk value TWICE per asteroid.  The memo closes
+# that as a side effect; it is not a separate change.
+#
+# Bit-identical by construction: the same key re-runs the same walk over the
+# same mineral table, so the cached floats ARE the floats the walk produced.
+_COMPOSITION_CACHE: Tuple[Any, Dict[Tuple[Any, ...], Any]] = (None, {})
+
+
+def _composition_cache(mineral_df: pd.DataFrame) -> Dict[Tuple[Any, ...], Any]:
+    """The memo for `mineral_df`, cleared when the frame changes.
+
+    Single-slot on frame IDENTITY, the same shape as `_MINERAL_CACHE`,
+    `_MARKET_CACHE` and `_OPS_CACHE` — prices are what the answers are made of,
+    so a re-priced Stage 2 catalog must not read a cached value.
+    """
+    global _COMPOSITION_CACHE
+    cached_df, entries = _COMPOSITION_CACHE
+    if cached_df is not mineral_df:
+        entries = {}
+        _COMPOSITION_CACHE = (mineral_df, entries)
+    return entries
+
+
+# The five values the three functions below read, in a fixed order.
+_COMPOSITION_KEY_COLS: Tuple[str, ...] = (
+    ("comp_pgm_enrichment",) + tuple(FRACTION_TO_MINERAL)
+)
+
+
+class _CompositionValues:
+    """The three composition-derived answers, filled in as they are asked for.
+
+    A tiny `__slots__` object rather than a mutable 3-list because the three
+    fields are read by name in three different functions and a positional index
+    would be one more thing to keep in step -- the same reason
+    `_ops_cost_constants` is unpacked in a single statement.  `None` means "not
+    computed yet", which is distinguishable from every value these three can
+    legitimately return (all are floats, or a list).
+    """
+    __slots__ = ("bulk", "phases", "best")
+
+    def __init__(self) -> None:
+        self.bulk = None
+        self.phases = None
+        self.best = None
+
+
+def _composition_entry(
+    entries: Dict[Tuple[Any, ...], "_CompositionValues"], key: Tuple[Any, ...],
+) -> "_CompositionValues":
+    """The entry for `key`, created empty on first use."""
+    hit = entries.get(key)
+    if hit is None:
+        hit = entries[key] = _CompositionValues()
+    return hit
+
+
+def _composition_key(asteroid_row: Row) -> Optional[Tuple[Any, ...]]:
+    """Hashable identity of a row's composition, or None if it is not cacheable.
+
+    ⚠️  NaN and None normalise to the SAME key, and that is required rather
+    than convenient: all three consumers test `x is None or pd.isna(x)` and
+    take the identical branch either way, so two rows that differ only in how
+    their missing value is spelled must share an answer.  A bare `float('nan')`
+    key would also never hit — two NaNs are not equal — so the cache would
+    silently stop caching for exactly the rows that have gaps, which is the
+    quiet-wrong-answer shape in its performance clothing (see `_UNSET` in
+    `_isru_propellant_consts`).
+
+    ⚠️  Anything that is not a real number or None returns None, which sends
+    the caller down the uncached path rather than inventing a key for a value
+    whose branch behaviour has not been checked.  `to_dict("records")` on the
+    float64 composition columns yields plain floats, so the fast path is what
+    the pipeline actually takes; this is the door for a hand-built row.
+    """
+    key: List[Any] = []
+    for col in _COMPOSITION_KEY_COLS:
+        v = asteroid_row.get(col)
+        if v is None:
+            key.append(None)
+        elif isinstance(v, float):
+            key.append(None if v != v else v)          # NaN -> None
+        elif isinstance(v, int) and not isinstance(v, bool):
+            key.append(float(v))
+        else:
+            return None
+    return tuple(key)
+
+
 def _pgm_enrichment(asteroid_row: Row) -> float:
     """Per-asteroid PGM enrichment, defaulted to the chondritic baseline.
 
@@ -2535,6 +2702,10 @@ def asteroid_bulk_value_usd_per_kg(
 ) -> float:
     """Composite USD/kg for the bulk material of one asteroid.
 
+    v1.17.6: memoised per composition — see `_composition_key`.  The walk below
+    is unchanged and is still the only statement of the blend; this caches its
+    answer.
+
     v1.3.4 — applies per-asteroid PGM enrichment to the metal fraction.
     Module 1 v1.0.4+ provides `comp_pgm_enrichment` (default 1.0× chondritic
     baseline; 2.0× for differentiated M-type cores; 0.2× for V-type basaltic
@@ -2546,6 +2717,13 @@ def asteroid_bulk_value_usd_per_kg(
     across types) was silently zero-valued; now treated as bulk silicate
     at $0.05/kg floor.
     """
+    key = _composition_key(asteroid_row)
+    if key is not None:
+        entries = _composition_cache(mineral_df)
+        hit = entries.get(key)
+        if hit is not None and hit.bulk is not None:
+            return hit.bulk
+
     pgm_enrichment = _pgm_enrichment(asteroid_row)
 
     total    = 0.0
@@ -2573,6 +2751,8 @@ def asteroid_bulk_value_usd_per_kg(
         silicate_price = _mineral_price(mineral_df, "silicates") or 0.05
         total += other_frac * float(silicate_price)
 
+    if key is not None:
+        _composition_entry(entries, key).bulk = total
     return total
 
 
@@ -2588,7 +2768,24 @@ def asteroid_phase_table(
 
     Phases with zero fraction are dropped — you cannot select what is not
     there.
+
+    v1.17.6: memoised per composition — see `_composition_key`.
+
+    ⚠️  A COPY of the cached list is returned, deliberately.  Nothing in this
+    module mutates a phase table, but v1.17.4 records the other half of that
+    argument: handing a million rows one shared mutable object is a trap
+    whether or not today's code springs it.  A copy also keeps the aliasing
+    exactly as it is now — `_PHASE_ORDER_CACHE` is keyed on list IDENTITY, so
+    one list per asteroid is what its single slot was measured against.  The
+    copy is ~0.15 us against the ~14 us walk it replaces.
     """
+    key = _composition_key(asteroid_row)
+    if key is not None:
+        entries = _composition_cache(mineral_df)
+        hit = entries.get(key)
+        if hit is not None and hit.phases is not None:
+            return list(hit.phases)
+
     phases: List[Tuple[str, float, float]] = []
     frac_sum = 0.0
     for mineral_name, frac, price in _phase_prices(asteroid_row, mineral_df):
@@ -2599,6 +2796,8 @@ def asteroid_phase_table(
         silicate_price = _mineral_price(mineral_df, "silicates") or 0.05
         phases.append(("other (bulk silicate)", 1.0 - frac_sum, float(silicate_price)))
 
+    if key is not None:
+        _composition_entry(entries, key).phases = list(phases)
     return phases
 
 
@@ -2777,14 +2976,30 @@ def asteroid_best_phase_usd_per_kg(
     Only phases with a non-zero fraction count — a body with no metal cannot
     be concentrated into metal.  Returns the bulk value as a floor so the
     bound can never sit below the unconcentrated material.
+
+    v1.17.6: memoised per composition — see `_composition_key`.  This is the
+    most expensive of the three at 27.7 us/row, because it walks the phases AND
+    calls the bulk function, so a beneficiated run derived the bulk blend twice
+    per asteroid.
     """
+    key = _composition_key(asteroid_row)
+    if key is not None:
+        entries = _composition_cache(mineral_df)
+        hit = entries.get(key)
+        if hit is not None and hit.best is not None:
+            return hit.best
+
     best = 0.0
     for _mineral_name, _frac, price in _phase_prices(asteroid_row, mineral_df):
         if price > best:
             best = price
 
     bulk = asteroid_bulk_value_usd_per_kg(asteroid_row, mineral_df)
-    return max(best, bulk)
+    value = max(best, bulk)
+    if key is not None:
+        # Re-read the cache: the bulk call above may have created the entry.
+        _composition_entry(_composition_cache(mineral_df), key).best = value
+    return value
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4067,11 +4282,29 @@ def _sizing_propellant_consts(
     )
 
 
-def _vehicle_consts(vehicle: Row) -> float:
-    """Usable fairing volume in m³, defaulted for a row that does not state one."""
+def _vehicle_consts(vehicle: Row) -> Tuple[float, float, bool]:
+    """`(usable fairing m³, LEO capacity kg, capacity is usable)` for one vehicle.
+
+    v1.17.6 adds the second and third.  `float(vehicle.get("payload_leo_kg", 0)
+    or 0)` was written out in THREE places — the search's combo loop, the
+    pre-filter probe, and `_evaluate_combo_at_ratio` — and the first of those
+    ran it once per (vehicle × propellant) for every asteroid in the catalog:
+    142,800 derivations per 400 rows, of seventeen numbers that are fixed for
+    the whole run.  Same shape as the fairing volume beside it, and the same
+    fix: derived once in `candidate_combos`, stashed on the row so it crosses
+    the worker boundary.
+
+    ⚠️  `math.isfinite(cap) and cap > 0` is folded in as the third field rather
+    than left to each caller.  Two of the three tested it and one tested only
+    `> 0`; both survive, because the two are the same test on a value that
+    `float(... or 0)` has already made a real number — but stating it once is
+    what stops them drifting apart.
+    """
     fairing_m3 = vehicle.get("fairing_volume_m3")
-    return (float(fairing_m3)
-            if fairing_m3 is not None and not pd.isna(fairing_m3) else 100.0)
+    fairing = (float(fairing_m3)
+               if fairing_m3 is not None and not pd.isna(fairing_m3) else 100.0)
+    leo_cap = float(vehicle.get("payload_leo_kg", 0) or 0)
+    return fairing, leo_cap, (math.isfinite(leo_cap) and leo_cap > 0)
 
 
 def _prefilter_propellant_consts(
@@ -4377,18 +4610,24 @@ def _closes_carrying_its_own_stage(
             return True
         dv_ret_eff = isp_s_val * G0_M_S2 * math.log(r_ret_eff)
 
-    bare = dict(
+    # ⚠️  v1.17.6: written out twice rather than built as a dict and splatted
+    # into both calls.  Same arguments in the same order — `**` on a 9-key dict
+    # measures 558 ns a call against 146 ns for the keywords, plus 306 ns to
+    # build the dict, so the splat was ~1.1 us of a ~16 us function that runs
+    # once per surviving (vehicle × propellant × Δv × ISRU).
+    dry_return_kg = config.return_vehicle_dry_kg
+    pass1 = max_return_payload_kg(
         leo_capacity_kg = leo_capacity_kg,
         isp_s           = isp_s_val,
         dv_out_m_s      = dv_out,
         dv_ret_m_s      = dv_ret_eff,
-        dry_return_kg   = config.return_vehicle_dry_kg,
+        hardware_kg     = config.mining_hardware_kg,
+        dry_return_kg   = dry_return_kg,
         tps_frac        = tps_frac,
         isru_return     = isru,
         structure_frac  = structure_frac,
         tank_frac       = tank_frac,
     )
-    pass1 = max_return_payload_kg(hardware_kg=config.mining_hardware_kg, **bare)
     if not pass1["viable"]:
         return False                   # stage 1 already knew this; agree with it
 
@@ -4400,7 +4639,17 @@ def _closes_carrying_its_own_stage(
         return True
 
     return bool(max_return_payload_kg(
-        hardware_kg=config.mining_hardware_kg + ep_kg, **bare)["viable"])
+        leo_capacity_kg = leo_capacity_kg,
+        isp_s           = isp_s_val,
+        dv_out_m_s      = dv_out,
+        dv_ret_m_s      = dv_ret_eff,
+        hardware_kg     = config.mining_hardware_kg + ep_kg,
+        dry_return_kg   = dry_return_kg,
+        tps_frac        = tps_frac,
+        isru_return     = isru,
+        structure_frac  = structure_frac,
+        tank_frac       = tank_frac,
+    )["viable"])
 
 
 def _combo_can_close(
@@ -4446,6 +4695,22 @@ def _combo_can_close(
 # ─────────────────────────────────────────────────────────────────────────────
 # ROCKET-EQUATION RETURN-MISSION SOLVER
 # ─────────────────────────────────────────────────────────────────────────────
+def _infeasible(r_out: float = 0.0, r_ret: float = 0.0) -> Dict[str, float]:
+    """The refusal cascade `max_return_payload_kg` returns on every dead end.
+
+    ⚠️  v1.17.6: module level, not a nested def.  It was defined on every call
+    of the solver — 500,860 of them on a 150-row beneficiated+searched sample —
+    at ~99 ns a def, which is ~5% of a 2.1 us function that is the single
+    hottest thing in the mass cascade.  A fresh dict per call, exactly as
+    before; only the function object stops being rebuilt.
+    """
+    return {"max_payload_kg": 0.0, "viable": False,
+            "r_out": r_out, "r_ret": r_ret,
+            "m_launch": 0, "m_outbound_prop": 0, "m_return_prop": 0,
+            "m_at_asteroid": 0, "m_tps": 0, "m_dry_return": 0,
+            "m_tank_return": 0, "m_tank_outbound": 0}
+
+
 def max_return_payload_kg(
     leo_capacity_kg: float,
     isp_s:           float,
@@ -4524,13 +4789,6 @@ def max_return_payload_kg(
 
     Returns a dict with the full mass cascade.  All masses in kg.
     """
-    def _infeasible(r_out=0.0, r_ret=0.0):
-        return {"max_payload_kg": 0.0, "viable": False,
-                "r_out": r_out, "r_ret": r_ret,
-                "m_launch": 0, "m_outbound_prop": 0, "m_return_prop": 0,
-                "m_at_asteroid": 0, "m_tps": 0, "m_dry_return": 0,
-                "m_tank_return": 0, "m_tank_outbound": 0}
-
     # ── Scalar arithmetic uses `math`, not numpy (v1.14.2) ───────────────────
     # Every argument here is a Python float, and numpy's ufunc dispatch costs
     # ~700 ns on a scalar against ~30-50 ns for the `math` equivalent.  This
@@ -5337,6 +5595,40 @@ def _ops_cost_constants(ops_df: pd.DataFrame) -> Tuple[float, ...]:
     return vals
 
 
+_OPS_RELIABILITY_CACHE: Tuple[Optional[pd.DataFrame],
+                              Optional[Tuple[float, ...]]] = (None, None)
+
+
+def _ops_reliability_constants(ops_df: pd.DataFrame) -> Tuple[float, ...]:
+    """The five Module 3 rows the RELIABILITY block needs, resolved once.
+
+    v1.17.6, and the same finding as `_ops_cost_constants` (v1.17.1) and
+    `_ops_sizing_constants` (v1.10.1) in the one block between them that still
+    read `_ops_value` per candidate.  `_evaluate_combo_at_ratio` pulled all
+    five out of the table for every surviving (vehicle × propellant × Δv ×
+    ISRU × ratio × power source) — 10,741 times on a 150-row sample, for five
+    numbers that are fixed for the run.
+
+    Eagerly resolved, like the other two: `_ops_value` is total, so a row that
+    is absent falls back to the same default the per-call read would have used.
+    """
+    global _OPS_RELIABILITY_CACHE
+    cached_df, vals = _OPS_RELIABILITY_CACHE
+    if cached_df is ops_df:
+        return vals
+
+    vals = (
+        _ops_value(ops_df, "Launch vehicle reliability", default=0.97),
+        _ops_value(ops_df, "Spacecraft mean time between failures", default=30.0),
+        _ops_value(ops_df, "Mining system first-of-kind success probability",
+                   default=0.85),
+        _ops_value(ops_df, "Mining reliability growth exponent", default=0.30),
+        _ops_value(ops_df, "Mining system mature success probability", default=0.95),
+    )
+    _OPS_RELIABILITY_CACHE = (ops_df, vals)
+    return vals
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MISSION COST CASCADE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -6123,7 +6415,10 @@ def _evaluate_combo_at_ratio(
     propellant to make, over the duration limit), or a full result dict
     including profit, ROI, $/kg returned, and the mass + cost cascades.
     """
-    leo_cap = float(vehicle.get("payload_leo_kg", 0) or 0)
+    vconsts = vehicle.get(_VEHICLE_CONSTS_KEY)        # v1.17.6, see _vehicle_consts
+    if vconsts is None:
+        vconsts = vehicle[_VEHICLE_CONSTS_KEY] = _vehicle_consts(vehicle)
+    leo_cap = vconsts[1]
     if leo_cap <= 0:
         return None
     if best_phase_value_per_kg is None:
@@ -6562,10 +6857,10 @@ def _evaluate_combo_at_ratio(
         bulk_density = 2.0    # default: rocky-asteroid average
     bulk_density_kg_per_L = float(bulk_density)         # g/cm³ ≡ kg/L
 
-    fairing_m3 = vehicle.get(_VEHICLE_CONSTS_KEY)     # v1.14.2, see candidate_combos
-    if fairing_m3 is None:
-        fairing_m3 = _vehicle_consts(vehicle)
-        vehicle[_VEHICLE_CONSTS_KEY] = fairing_m3
+    vconsts = vehicle.get(_VEHICLE_CONSTS_KEY)        # v1.14.2, see candidate_combos
+    if vconsts is None:
+        vconsts = vehicle[_VEHICLE_CONSTS_KEY] = _vehicle_consts(vehicle)
+    fairing_m3 = vconsts[0]
     usable_return_m3   = 0.25 * fairing_m3
     volume_capacity_kg = usable_return_m3 * 1000.0 * bulk_density_kg_per_L
 
@@ -6878,13 +7173,10 @@ def _evaluate_combo_at_ratio(
     # reason.  Only `p_mining` grows with N.
     p_launch = p_cruise = p_first = rel_alpha = p_mature = 1.0
     if config.model_reliability:
-        p_launch  = _ops_value(ops_df, "Launch vehicle reliability", default=0.97)
-        mtbf_yr   = _ops_value(ops_df, "Spacecraft mean time between failures", default=30.0)
-        p_first   = _ops_value(
-            ops_df, "Mining system first-of-kind success probability", default=0.85)
-        rel_alpha = _ops_value(ops_df, "Mining reliability growth exponent", default=0.30)
-        p_mature  = _ops_value(
-            ops_df, "Mining system mature success probability", default=0.95)
+        # v1.17.6: five Module 3 rows, resolved once per run rather than once
+        # per candidate mission.  See `_ops_reliability_constants`.
+        (p_launch, mtbf_yr, p_first,
+         rel_alpha, p_mature) = _ops_reliability_constants(ops_df)
         p_cruise  = math.exp(-mission_duration_yr / mtbf_yr) if mtbf_yr > 0 else 1.0
 
     gross_base           = gross_value
@@ -6922,8 +7214,12 @@ def _evaluate_combo_at_ratio(
     # reason `sat_by_fleet` is: every other input to it lives in `cost_prologue`.
     rig_by_share: Dict[Tuple[int, bool], Tuple[float, ...]] = {}
 
-    def _price_programme(n_missions: int, fleet: int, per_ship: Optional[int] = None,
-                         full: bool = True):
+    # ⚠️  v1.17.6: NO annotations on this signature.  It is a nested def, so its
+    # annotations are evaluated every time the enclosing function runs, and
+    # `Optional[int]` is a `typing` subscript — 331 ns against 95 ns for the
+    # bare def, 10,741 times per 150-row sample.  Types: (int, int, int | None,
+    # bool).
+    def _price_programme(n_missions, fleet, per_ship=None, full=True):
         """Everything downstream of the cascade, for one programme size.
 
         Returns `(cost, total_cost, gross, saturation_mult, concurrent,
@@ -7015,19 +7311,22 @@ def _evaluate_combo_at_ratio(
     # v1.17.1: the ladder prices on totals and the winner is rebuilt in full
     # once, below.  `single` is the common case — the search off, one option —
     # and it skips the rebuild entirely by pricing in full straight away.
-    programmes   = programme_options(rig_trips, config)
+    programmes, fleet_ladder = _programme_ladder_cached(rig_trips, config)
     single       = len(programmes) == 1
+    # v1.17.6: the ranking objective is a config field, so it is resolved once
+    # here rather than re-read on every rung below.  See `_objective_key`.
+    on_profit    = _selects_on_profit(config.selection_objective)
     best_n, best_f, best_w = programmes[0]
     best_priced  = _price_programme(best_n, best_f, best_w, full=single)
     best_pkey    = _objective_key(
         best_priced[2] - best_priced[1],
-        best_priced[2], best_priced[1], config)
+        best_priced[2], best_priced[1], config, on_profit)
     priced_count = 1
 
     for n_missions, fleet, per_ship in programmes[1:]:
         cand = _price_programme(n_missions, fleet, per_ship, full=False)
         priced_count += 1
-        key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config)
+        key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config, on_profit)
         if key > best_pkey:
             best_pkey, best_priced = key, cand
             best_n, best_f, best_w = n_missions, fleet, per_ship
@@ -7042,12 +7341,11 @@ def _evaluate_combo_at_ratio(
     # be held fixed while F moves, because N = F × W and refining F against some
     # other W would price a programme the search never proposed.
     if len(programmes) > 1:
-        ladder = sorted({f for _n, f, _w in programmes})
-        for fleet in fleet_refinement(best_f, ladder, ladder[0], ladder[-1]):
+        for fleet in _fleet_refinement_cached(best_f, fleet_ladder):
             n_missions = fleet * best_w
             cand = _price_programme(n_missions, fleet, best_w, full=False)
             priced_count += 1
-            key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config)
+            key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config, on_profit)
             if key > best_pkey:
                 best_pkey, best_priced = key, cand
                 best_n, best_f = n_missions, fleet
@@ -7334,6 +7632,7 @@ def _selects_on_profit(objective: Any) -> bool:
 
 def _objective_key(
     profit: float, gross: float, cost: float, config: CalcConfig,
+    on_profit: Optional[bool] = None,
 ) -> Tuple[float, float]:
     """`selection_key`'s ranking algebra, over loose scalars.
 
@@ -7352,8 +7651,18 @@ def _objective_key(
     to re-derive one boolean from a config field that cannot change mid-solve.
     The comparison it feeds is unchanged, so both returned floats are the same
     floats.
+
+    v1.17.6: `on_profit` lets a caller that ranks many candidates against ONE
+    config hand the answer in, which is the programme ladder — it called this
+    444,353 times on that sample against 10,741 candidate missions, so even a
+    dict lookup was being made 41 times more often than the question was asked.
+    None keeps the read, so every other caller is untouched.  This is still one
+    statement of the rule: the branches and both returned floats are unchanged,
+    and `on_profit` can only carry what `_selects_on_profit` would have said.
     """
-    if _selects_on_profit(config.selection_objective):
+    if on_profit is None:
+        on_profit = _selects_on_profit(config.selection_objective)
+    if on_profit:
         return (0.0, profit)
     if profit > 0:
         return (1.0, profit)
@@ -7631,6 +7940,59 @@ def candidate_combos(
     ]
 
 
+# ── The ladder is a function of `trips` and the config  (v1.17.6) ──────────
+# `programme_options` builds ~42 tuples, and `fleet_refinement` its four more,
+# once per SURVIVING CANDIDATE — 10,741 times on a 150-row beneficiated+searched
+# sample — for a list whose only asteroid-dependent input is `trips`, which is
+# `min(life / stay, max_trips)` and therefore one of a handful of small
+# integers.  Together they measured ~3.6% of that cell.
+#
+# The sorted fleet ladder the refinement pass needs is derived from the same
+# tuples (`sorted({f for _n, f, _w in programmes})`), so it is cached alongside
+# rather than rebuilt per candidate.
+#
+# ⚠️  Private, and `programme_options` is untouched.  That function is the
+# single readable statement of the search's shape and the entry point for
+# anyone outside this loop; this only stops the loop asking it the same
+# question 10,741 times.
+#
+# ⚠️  The lists are shared, not copied, and nothing may mutate them — both are
+# iterated and indexed and nothing more.  Keyed on the config VALUES the two
+# functions read rather than on `id(config)`, so a config edited between runs
+# is answered correctly (the same argument `_selects_on_profit` makes).
+_PROGRAMME_LADDER_CACHE: Dict[Tuple[Any, ...],
+                              Tuple[List[Tuple[int, int, int]], List[int]]] = {}
+_FLEET_REFINEMENT_CACHE: Dict[Tuple[int, Tuple[int, ...]], List[int]] = {}
+
+
+def _programme_ladder_cached(
+    rig_trips: Optional[Tuple[int, int, Optional[int]]], config: CalcConfig,
+) -> Tuple[List[Tuple[int, int, int]], List[int]]:
+    """`(programme_options(...), sorted fleet ladder)`, memoised."""
+    key = (rig_trips[0] if rig_trips is not None else None,
+           int(config.nre_amortization_missions),
+           bool(config.model_programme_calendar),
+           bool(config.optimise_programme_scale),
+           int(config.max_fleet_ships),
+           int(config.programme_search_steps))
+    hit = _PROGRAMME_LADDER_CACHE.get(key)
+    if hit is None:
+        programmes = programme_options(rig_trips, config)
+        hit = _PROGRAMME_LADDER_CACHE[key] = (
+            programmes, sorted({f for _n, f, _w in programmes}))
+    return hit
+
+
+def _fleet_refinement_cached(f_best: int, ladder: List[int]) -> List[int]:
+    """`fleet_refinement(f_best, ladder, ladder[0], ladder[-1])`, memoised."""
+    key = (f_best, tuple(ladder))
+    hit = _FLEET_REFINEMENT_CACHE.get(key)
+    if hit is None:
+        hit = _FLEET_REFINEMENT_CACHE[key] = fleet_refinement(
+            f_best, ladder, ladder[0], ladder[-1])
+    return hit
+
+
 def _prefilter_probe(
     asteroid_row: Row,
     combos:       List[Tuple[Dict[str, Any], Dict[str, Any]]],
@@ -7662,7 +8024,9 @@ def _prefilter_probe(
                 asteroid_row, propellant, config) is not None:
             isru_modes = [False, True] if isru_allowed else [True]
         pf_consts = propellant.get(_PREFILTER_CONSTS_KEY)
-        leo_cap   = float(vehicle.get("payload_leo_kg", 0) or 0)
+        vconsts   = vehicle.get(_VEHICLE_CONSTS_KEY)
+        leo_cap   = (vconsts[1] if vconsts is not None
+                     else _vehicle_consts(vehicle)[1])
         for dv_opt in dv_options:
             for isru in isru_modes:
                 seen += 1
@@ -7796,7 +8160,14 @@ def evaluate_asteroid(
     # in the catalog.  Memoised on the propellant's identity, which is stable:
     # `candidate_combos` builds one dict per propellant row and shares it across
     # every vehicle pairing (v1.14.1).
-    isru_mode_cache: Dict[int, List[bool]] = {}
+    # ⚠️  v1.17.6: ONE entry carrying everything the loop below reads off a
+    # propellant, not four lookups for four of them.  The grid is vehicle-major,
+    # so `isru_modes`, the two pre-filter constant tuples and the identity key
+    # were each resolved once per (vehicle × propellant) — 714,000 lookups per
+    # 2,000 rows for 21 propellants' worth of answers.  Same shape as
+    # `sat_by_fleet` and `rig_by_share` in the ladder: the question was asked at
+    # a finer granularity than it has answers.
+    prop_cache: Dict[int, Tuple[List[bool], Any, Any, int]] = {}
     # And the vehicle-independent half of the pre-filter, for the same reason
     # (v1.14.2).  Keyed by (propellant identity × Δv option × ISRU), which is
     # everything `_combo_close_terms` reads — so seventeen vehicles now share one
@@ -7805,37 +8176,59 @@ def evaluate_asteroid(
     close_terms_cache: Dict[Tuple[int, int, bool],
                             Optional[Tuple[bool, float, float, float]]] = {}
 
+    # v1.17.6: the Δv options resolved to plain scalars once per asteroid.  All
+    # three call sites below re-read them out of the dict and re-ran `float()` /
+    # `bool()` / `str()` on every (combo × Δv × ISRU) iteration — for a list this
+    # asteroid has two or three entries in.  Values and types are unchanged; only
+    # the conversions stop repeating.
+    dv_resolved = [
+        (i,
+         float(o["dv_out_m_s"]),
+         float(o["dv_ret_m_s"]),
+         (config.heat_shield_frac_of_payload if bool(o["aero"]) else 0.0),
+         bool(o["aero"]),
+         str(o["rendezvous_apsis"]))
+        for i, o in enumerate(dv_options)
+    ]
+
     best     = None
     best_key = (-np.inf, -np.inf)
     for vehicle, propellant in combos:
-        isru_modes = isru_mode_cache.get(id(propellant))
-        if isru_modes is None:
+        pkey  = id(propellant)
+        pinfo = prop_cache.get(pkey)
+        if pinfo is None:
             isru_modes = [False]
             if config.use_isru_return_propellant and isru_feed_kg_per_kg_propellant(
                     asteroid_row, propellant, config) is not None:
                 # Feasible here.  Price both when searching; otherwise take ISRU
                 # as the config's instruction and fly it wherever it is possible.
                 isru_modes = [False, True] if isru_allowed else [True]
-            isru_mode_cache[id(propellant)] = isru_modes
-        # `candidate_combos` attaches these, but a caller that hand-builds
-        # `combos` will not have.  Derive on demand rather than treating the
-        # missing key as "no usable Isp" — that reads as infeasible and would
-        # prune the ENTIRE search silently, which is the quiet-wrong-answer
-        # failure this repo keeps finding.  Absent means unknown, not dead.
-        if prefilter and _PREFILTER_CONSTS_KEY not in propellant:
-            propellant[_PREFILTER_CONSTS_KEY] = _prefilter_propellant_consts(
-                propellant, config)
-        pf_consts = propellant.get(_PREFILTER_CONSTS_KEY) if prefilter else None
-        # v1.17.4: the pre-filter's second stage sizes the electric stage, so it
-        # reads the SIZING constants rather than the pre-filter's four.
-        # `candidate_combos` attaches these; a caller that hand-builds `combos`
-        # will not have, and absent means unknown rather than dead — so the
-        # second stage is skipped rather than allowed to refute on a default.
-        sizing_consts = propellant.get(_SIZING_CONSTS_KEY) if prefilter else None
-        leo_cap   = float(vehicle.get("payload_leo_kg", 0) or 0)
-        leo_ok    = math.isfinite(leo_cap) and leo_cap > 0
-        pkey      = id(propellant)
-        for dv_i, dv_opt in enumerate(dv_options):
+            # `candidate_combos` attaches these, but a caller that hand-builds
+            # `combos` will not have.  Derive on demand rather than treating the
+            # missing key as "no usable Isp" — that reads as infeasible and would
+            # prune the ENTIRE search silently, which is the quiet-wrong-answer
+            # failure this repo keeps finding.  Absent means unknown, not dead.
+            if prefilter and _PREFILTER_CONSTS_KEY not in propellant:
+                propellant[_PREFILTER_CONSTS_KEY] = _prefilter_propellant_consts(
+                    propellant, config)
+            # v1.17.4: the pre-filter's second stage sizes the electric stage, so
+            # it reads the SIZING constants rather than the pre-filter's four.
+            # `candidate_combos` attaches these; a caller that hand-builds
+            # `combos` will not have, and absent means unknown rather than dead —
+            # so the second stage is skipped rather than allowed to refute on a
+            # default.
+            pinfo = prop_cache[pkey] = (
+                isru_modes,
+                propellant.get(_PREFILTER_CONSTS_KEY) if prefilter else None,
+                propellant.get(_SIZING_CONSTS_KEY) if prefilter else None,
+                pkey,
+            )
+        isru_modes, pf_consts, sizing_consts, pkey = pinfo
+        vconsts   = vehicle.get(_VEHICLE_CONSTS_KEY)
+        if vconsts is None:
+            vconsts = vehicle[_VEHICLE_CONSTS_KEY] = _vehicle_consts(vehicle)
+        _fairing, leo_cap, leo_ok = vconsts
+        for dv_i, dv_out, dv_ret, dv_tps, dv_aero, dv_apsis in dv_resolved:
             for isru in isru_modes:
                 # Sits ABOVE the power-source loop on purpose: pass 1 of the
                 # sizing loop runs at zero plant mass, so it cannot tell the two
@@ -7856,10 +8249,7 @@ def evaluate_asteroid(
                     terms = close_terms_cache.get(ckey, _UNCACHED)
                     if terms is _UNCACHED:
                         terms = _combo_close_terms(
-                            pf_consts,
-                            float(dv_opt["dv_out_m_s"]), float(dv_opt["dv_ret_m_s"]),
-                            (config.heat_shield_frac_of_payload
-                             if bool(dv_opt["aero"]) else 0.0),
+                            pf_consts, dv_out, dv_ret, dv_tps,
                             isru, window_wait_yr, config)
                         close_terms_cache[ckey] = terms
                     if terms is None or not _closes_with(leo_cap, terms):
@@ -7881,23 +8271,18 @@ def evaluate_asteroid(
                     if sizing_consts is not None and not _closes_carrying_its_own_stage(
                             leo_cap, sizing_consts, ctx.ops,
                             ctx.solar_w_per_kg, ctx.structure_frac,
-                            window_wait_yr,
-                            float(dv_opt["dv_out_m_s"]),
-                            float(dv_opt["dv_ret_m_s"]),
-                            (config.heat_shield_frac_of_payload
-                             if bool(dv_opt["aero"]) else 0.0),
+                            window_wait_yr, dv_out, dv_ret, dv_tps,
                             isru, config):
                         continue
                 for power_mode in power_modes:
                     result = evaluate_combo(
                         asteroid_row, vehicle, propellant,
-                        bulk_value,
-                        float(dv_opt["dv_out_m_s"]), float(dv_opt["dv_ret_m_s"]),
+                        bulk_value, dv_out, dv_ret,
                         ops_df, config,
                         best_phase_value_per_kg=best_phase_value,
                         phases=phases, markets=markets,
-                        aero=bool(dv_opt["aero"]), isru=isru,
-                        rendezvous_apsis=str(dv_opt["rendezvous_apsis"]),
+                        aero=dv_aero, isru=isru,
+                        rendezvous_apsis=dv_apsis,
                         power_mode=power_mode, ctx=ctx,
                     )
                     if result is None:
