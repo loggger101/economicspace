@@ -1434,6 +1434,67 @@ If a change suddenly improves these by an order of magnitude, suspect it has
 switched one of the twenty models off rather than found something. See
 [What the model charges for](#what-the-model-charges-for).
 
+### What changed in v1.17.5
+
+**No number.** A performance release on the same contract as v1.10.1, v1.14.1,
+v1.14.2, v1.17.1, v1.17.2 and v1.17.4 — the stamp moves so a CSV still names
+the code that produced it, and every measured cell in this file stands as
+measured.
+
+Third release in a row aimed at the **programme ladder**, which is where
+v1.17.0's default flip put the work: it prices a median of ~42 programme
+options for every candidate mission, so anything re-derived per option is
+re-derived forty times to change three numbers.
+
+**One cache entry now carries the whole W-dependent block.** The rig cost
+shares and the programme-calendar multipliers are a function of how many
+campaigns one rig flies — of W — and of a prologue that is fixed for the
+candidate. They are not a function of N. With W running `1 … trips` and
+`trips` capped at 5, ~42 options were asking for at most ten distinct answers.
+
+🚨 **CLAUDE.md had already measured this item and declined it at 3.2%.** What
+moved it over the bar was not a re-measurement but the *neighbour*: the
+calendar multipliers sixty lines below share the same key, and v1.17.4 had just
+memoised them separately. Folding both into one entry makes the second lookup
+disappear rather than survive. **Price the block, not the line.**
+
+**Three smaller items, all of them repetition rather than arithmetic.** The two
+O(N) memos (`learning_curve_factor`, `mining_success_probability`) were building
+their dictionary keys in Python — two conversions and a tuple allocation before
+the lookup started, at 455,094 calls apiece — and now hash in C via
+`functools.lru_cache`: 159 → 92 ns and 249 → 131 ns. `_objective_key` ran
+`str(x).strip().lower()` on all 457,776 calls to re-derive one boolean from a
+config field fixed for the run. And `isru_feed_kg_per_kg_propellant` re-answered
+a per-*propellant* question once per candidate: four rows in five fall through
+to a legacy name test — a string normalisation plus a substring scan — to
+conclude "no".
+
+| cell | HEAD | **v1.17.5** | speed-up |
+|---|---|---|---|
+| raw, search off | 1.186 s | **1.175 s** | **1.01×** |
+| beneficiated, search off | 2.260 s | **2.256 s** | **1.00×** |
+| raw, search on | 2.262 s | **2.127 s** | **1.06×** |
+| beneficiated + search (the default) | 4.283 s | **4.029 s** | **1.06×** |
+
+Interleaved A/B, both builds in one process, cells alternated, best of 4.
+
+🚨 **This is the smallest performance stamp in the project, and the flatness is
+the finding.** Every item removes work that only exists when a ladder exists,
+so both search-OFF cells are inert and should be. Six perf releases have now
+run through this search; what is left in the ladder is per-option overhead
+measured in tens of nanoseconds. **Do not expect another 1.5× from this path.**
+
+Verified the way every release here is: four cells 135/135 columns
+bit-identical against HEAD with sha256 MATCH (less both provenance columns —
+`pipeline_version` *and* `catalog_date`); pre-filter on vs off identical on all
+four; serial vs 8 workers byte-identical; mass ledger exact at 0.000000000 kg;
+both never-worse invariants holding with zero exceptions.
+
+**Also: one dead constant removed** (`AU_KM`, unreferenced across all four
+modules, `ui.py`, `ui_meta.py` and `build_master.py`), and a fresh mechanical
+scan of every top-level definition, dataclass field and import found nothing
+else — v1.17.3's conclusion holding one release later.
+
 ### What changed in v1.17.4
 
 **No number.** A performance release on the same contract as v1.10.1, v1.14.1,
@@ -1783,6 +1844,11 @@ prune boundary in the last bit, and there it would change a row count.
 concentration sweep, which looked like the largest remaining item and instruments
 at **7.6%** of a beneficiated run — the three hoists above had already removed
 what made it expensive. Measure the remainder *after* taking the cheap items.
+
+⚠️ That 7.6% is a v1.14.2 figure and three later releases cut work around it
+without re-measuring it. **Re-measured on v1.17.5 it is 2.3%** of the default
+cell and 2.6% of raw, so the item is worth about 2% — still declined, now on a
+current number, and a small illustration of the advice in the sentence above.
 
 ### What changed in v1.14.0
 
