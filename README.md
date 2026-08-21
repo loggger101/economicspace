@@ -1434,6 +1434,63 @@ If a change suddenly improves these by an order of magnitude, suspect it has
 switched one of the twenty models off rather than found something. See
 [What the model charges for](#what-the-model-charges-for).
 
+### What changed in v1.17.6
+
+**No number.** A performance release on the same contract as v1.10.1, v1.14.1,
+v1.14.2, v1.17.1, v1.17.2, v1.17.4 and v1.17.5 — the stamp moves so a CSV still
+names the code that produced it, and every measured cell stands as measured.
+
+Three releases in a row went at the **programme ladder**. This one goes at the
+**per-row walk** — the work every one of 1,555,618 catalog rows pays whether or
+not it turns out to be evaluable — which makes it the first performance stamp
+here worth more on the *raw* cell than on the default one.
+
+**Composition is a per-taxonomy fact, and it was being derived per row.** The
+three functions that price an asteroid's material — the bulk blend, the phase
+table and the purity ceiling — read five values off the row and nothing else,
+and all five come from Module 1's taxonomy: 76 spectral types collapse to about
+**25 distinct composition tuples across 1.55 million rows**. They were walking
+the mineral table three times per asteroid, with a `pandas.isna` on a scalar per
+entry, to re-derive one of a couple of dozen answers. Memoised on the
+composition: **14.84 → 1.21 µs**, **13.97 → 1.25 µs** and **27.66 → 1.28 µs**
+per row, or ~88 s off every full beneficiated pass. This is the same finding
+v1.17.4 made on *both sides* of the CSV boundary, now found in the place between
+them: **a column with few distinct values and one Python call per row.**
+
+**Six smaller items, all the same sentence.** The refusal helper inside the
+rocket-equation solver was a nested `def`, rebuilt on all ~500,000 calls of the
+hottest function in the model (~5% of it). The programme ladder itself is a
+function of the rig's trip life and the config, and was being rebuilt per
+candidate (~3.6% of the default cell). The vehicle's LEO capacity was derived in
+three separate places, once per candidate, for seventeen numbers fixed for the
+run. The Δv options, the per-propellant constants, and five reliability table
+rows were each asked for at a finer granularity than they have answers.
+
+| cell | HEAD | **v1.17.6** | speed-up | per-row |
+|---|---|---|---|---|
+| raw, 6,000 rows | 18.61 / 19.15 s | **16.28 / 16.14 s** | **1.14-1.19×** | **1.15×** |
+| beneficiated, 800 rows | 13.49 / 13.73 s | **12.96 / 12.81 s** | **1.04-1.07×** | **1.05×** |
+| raw + search, 3,000 rows | 16.71 / 16.58 s | **14.42 / 14.33 s** | **1.16×** | **1.18×** |
+| beneficiated + search (default), 800 rows | 22.81 / 22.55 s | **20.51 / 20.45 s** | **1.10-1.11×** | **1.12×** |
+
+Interleaved A/B, both builds in one process, cells alternated, best of 3, run
+twice.
+
+🚨 **This is the first release here whose ratio depends on the row cap, and
+the caps above are deliberately large.** At the 150/400-row caps every previous
+release measured itself on, the same build honestly reads **1.03-1.10×** — a
+capped run pays a fixed ~1.6 s of catalog integrity check and pre-filter probe
+that does not move and does not scale. **Quote the cap with the ratio.**
+
+Verified the way every release here is: four cells 139/139 columns bit-identical
+against HEAD with sha256 MATCH (less both provenance columns), and the four
+hashes are the ones v1.17.4 committed, so they now reproduce across two
+releases; pre-filter on vs off identical on all four; serial vs 8 workers
+byte-identical on the two searched cells, matching v1.17.4's committed hashes;
+mass ledger exact at 0.000000000 kg; both never-worse invariants holding with
+zero exceptions, the searched-vs-unsearched median landing on +42.5% against the
+committed full-catalog +42.4%.
+
 ### What changed in v1.17.5
 
 **No number.** A performance release on the same contract as v1.10.1, v1.14.1,
@@ -1483,6 +1540,8 @@ the finding.** Every item removes work that only exists when a ladder exists,
 so both search-OFF cells are inert and should be. Six perf releases have now
 run through this search; what is left in the ladder is per-option overhead
 measured in tens of nanoseconds. **Do not expect another 1.5× from this path.**
+(v1.17.6 did not get one from it — its 3.6% ladder item is the ladder being
+*rebuilt* per candidate, not anything inside a rung.)
 
 Verified the way every release here is: four cells 135/135 columns
 bit-identical against HEAD with sha256 MATCH (less both provenance columns —
