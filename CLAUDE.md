@@ -63,10 +63,10 @@ See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.1.1`, mineral_value `1.7.0`, transportation `1.12.0`,
-calc `1.17.5`, master `1.20.5` (the master version is a literal in
+calc `1.17.6`, master `1.20.6` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
-ℹ️  **NINE stamps so far do NOT mean the numbers moved.** The rule is
+ℹ️  **TEN stamps so far do NOT mean the numbers moved.** The rule is
 one-directional — *changing a number means bumping; bumping does not mean a
 number changed* — and reading a version as evidence that a result moved is the
 mistake this table exists to prevent.
@@ -82,12 +82,13 @@ mistake this table exists to prevent.
 | `1.17.3` | **dead code removed** | bit-identical, verified |
 | `1.17.4` | performance only | bit-identical, verified |
 | `1.17.5` | performance only | bit-identical, verified |
+| `1.17.6` | performance only | bit-identical, verified |
 
-**Every measured cell in this file stands unaltered across all nine — do not
+**Every measured cell in this file stands unaltered across all ten — do not
 re-measure anything on account of any of them.** Each release's own section
 carries its verification.
 
-⚠️  Only seven of the nine are *performance* stamps: `1.17.0` was a default
+⚠️  Only eight of the ten are *performance* stamps: `1.17.0` was a default
 flip and `1.17.3` a cleanup, which is why this file counts two sequences that
 run apart — see "What calc v1.17.0 changed".
 
@@ -115,9 +116,36 @@ search-OFF cells measure **1.00–1.01×** and both search-ON cells **1.06×**.
 That flatness is the finding, not a disappointment: six perf releases have now
 run through this search, and what is left in the ladder is per-option overhead
 measured in tens of nanoseconds. **Do not quote a single number for it**, and
-do not expect another 1.5× from this code path. See "What calc v1.17.5
+do not expect another 1.5× from this code path. ⚠️  `1.17.6` did not, and it is
+the check on that sentence rather than a counter-example: it is worth 1.10× on
+the default cell, and the ~3.6% of it that comes from the ladder is the ladder
+being *rebuilt* per candidate rather than anything inside a rung. See "What calc v1.17.5
 changed", whose own section also re-measures the one big item this file has
 twice declined on a stale figure.
+
+🚨  **`1.17.6` IS THE FIRST PERF STAMP HERE THAT LANDS ON THE PER-ROW WALK
+RATHER THAN ON THE SEARCH, so it is the first that is worth MORE on raw than on
+the default cell — and the first whose ratio depends on the ROW CAP.** Measured
+1.14-1.19× raw / 1.04-1.07× beneficiated / 1.16× raw-searched / 1.10-1.11× on
+the default cell, at caps of 6,000 / 800 / 3,000 / 800 rows. At the
+**150/400-row caps every previous release measured itself on it reads
+1.03-1.10×**, because the fixed ~1.6 s (the catalog integrity walk plus the
+pre-filter probe) is half of those cells and does not move. **Quote the cap
+with the ratio**, and prefer the per-row figures — **1.15 / 1.05 / 1.18 /
+1.12×** — which are what a full pass actually pays.
+
+✅  **Its largest item is the third instance of v1.17.4's finding, and this
+file now has that finding on both sides of the CSV boundary AND in between.**
+`asteroid_bulk_value_usd_per_kg`, `asteroid_phase_table` and
+`asteroid_best_phase_usd_per_kg` read five values off a row and nothing else,
+all five derived by Module 1 from `spectral_type` alone — **~25 distinct
+composition tuples across 1,555,667 rows**, and eleven in a 4,000-row stride.
+They were walking `FRACTION_TO_MINERAL` three times per asteroid, with a
+`pd.isna` on a scalar per entry, to re-derive one of a couple of dozen answers:
+**56.5 µs/row, ~88 s of every full beneficiated pass and ~41 s of a raw one**,
+paid by every catalog row whether or not it turns out to be evaluable. Memoised
+on the composition they come to **3.74 µs** (12.3× / 11.2× / 21.6×). See "What
+calc v1.17.6 changed".
 
 ℹ️  **catalog `1.1.1` ships alongside it and is the same finding upstream.**
 `enrich_composition` was resolving twelve `.apply()` passes over 1.55 M rows to
@@ -703,15 +731,20 @@ wall clock, but the wall clock they imply is still a projection. It happened to
 hold **for this cell**; that is one data point, and the beneficiated cell is
 still unmeasured on anything past `1.14.0`.
 
-⚠️  **The timings in this file have moved NINE times, for nine unrelated
+⚠️  **The timings in this file have moved TEN times, for ten unrelated
 reasons, and the fifth dwarfs the others.** Everything below is per
 *catalog*, and catalog `1.1.0` made the catalog **17× bigger** — 89,367 rows
 to 1,554,400. Cap `eval_row_cap` (which now *samples* rather than truncating —
 see calc `1.13.0`) for anything interactive.
 
-⚠️  **The eighth, ninth and tenth moves are calc `1.17.1`, `1.17.2` and
-`1.17.4`, and NONE of the wall clocks below have been re-measured on any of
-them.** All three are performance-only. `1.17.1` and `1.17.2` land hardest on
+⚠️  **The eighth, ninth, tenth and eleventh moves are calc `1.17.1`,
+`1.17.2`, `1.17.4` and `1.17.6`, and NONE of the wall clocks below have been
+re-measured on any of them.** All four are performance-only. `1.17.6` measures
+**1.15 / 1.05 / 1.18 / 1.12×** per row across raw / beneficiated / raw-searched
+/ default — and it is the one whose quoted ratio *depends on the row cap*, so
+read its own section before using any number from it.
+
+`1.17.1` and `1.17.2` land hardest on
 the cells that call the COST model most — a stride-sample A/B puts `1.17.1` at
 1.04× (raw, search off) to **1.35×** (beneficiated + search, the `1.17.0`
 default), and `1.17.2` at **0.99–1.02× with the search OFF** against **1.45×**
@@ -726,13 +759,15 @@ measured ones.
 ⚠️  **And do not compound them.** `1.17.1` × `1.17.2` on the default cell is
 1.35 × 1.37 = 1.85×, which nobody has measured; the two were measured against
 different HEADs on a host whose absolute times moved 30–45% between passes.
-Compounding all three to 2.8× is worse still, and `1.17.4`'s own numbers are
-the ONE set here measured with both builds in a single process — which removes
-the host-drift objection and does nothing at all about THE SAMPLING RULE.
+Compounding all three to 2.8× is worse still, and `1.17.4`'s and `1.17.6`'s
+numbers are the two sets here measured with both builds in a single process —
+which removes the host-drift objection and does nothing at all about THE
+SAMPLING RULE. ⚠️  `1.17.6` measured the same build twice that way and got
+**1.14× and 1.19×** on the raw cell, so even the interleaved construction leaves
+a few percent of drift; that is why its section records both passes.
 
-⚠️  **`1.17.4`'s load saving is the one figure here that does NOT scale with
-the row cap**, so it is the one that behaves oppositely to everything else in
-this section: ~15 s is half the wall clock of a 400-row cell and 0.2% of a full
+⚠️  **`1.17.4`'s load saving does NOT scale with the row cap**, so it behaves
+oppositely to most of this section: ~15 s is half the wall clock of a 400-row cell and 0.2% of a full
 beneficiated one. A ratio quoted for it is meaningless without the row count.
 
 **Measured on calc `1.14.0`, full catalog, 12 workers, 2026-08-09** — these are
@@ -5546,6 +5581,274 @@ unknown:** `_selects_on_profit`'s own call overhead (~0.7%, and inlining it
 would put a bare `dict.get` inside the canonical objective function), and
 `_ep_stage_kg`'s two `float(cascade.get(...))` reads (~0.5%, and the defaults
 are load-bearing for a hand-built cascade).
+
+> ✅  **The first was taken in v1.17.6, and NOT by inlining it.** The objection
+> was right — a bare `dict.get` does not belong inside `_objective_key` — and it
+> ruled out the wrong fix rather than the item. `_objective_key` grew an
+> optional pre-resolved `on_profit`, so the ladder resolves the flag ONCE per
+> candidate and hands it in; the branches and both returned floats are
+> untouched, so it is still one statement of the rule. **A rejected
+> implementation is not a rejected item** — the same shape as v1.17.1 refusing
+> the prologue split on a mechanism it had not checked.
+
+**Branch-and-bound on the objective** remains the one big structural item, and
+v1.14.1's warning against approximating the bound stands unaltered.
+
+## What calc v1.17.6 changed
+
+**Nothing you can measure** — a performance-only stamp; see the stamp table
+under "Bump `pipeline_version`". calc `1.17.5 → 1.17.6`, master
+`1.20.5 → 1.20.6`; no other module changed, so no Stage 1/2/3 re-run.
+
+Three releases in a row went at the programme **ladder**, because `1.17.0`'s
+default flip put the work there. This one goes at the **PER-ROW WALK** instead
+— the part of a run that every one of 1,555,618 catalog rows pays whether or
+not it turns out to be evaluable — and that changes the shape of the result.
+
+🚨  **IT IS THE FIRST PERF STAMP IN THIS PROJECT WHOSE RATIO DEPENDS ON THE
+ROW CAP, AND THE FIRST WORTH MORE ON RAW THAN ON THE DEFAULT CELL.** Interleaved
+A/B, both builds imported into one process and the cells alternated A,B,A,B…,
+best of 3, at caps big enough that the fixed cost stops dominating:
+
+| cell | HEAD | `1.17.6` | speed-up | per-row |
+|---|---|---|---|---|
+| raw, 6,000 rows | 18.61 / 19.15 s | 16.28 / 16.14 s | **1.14-1.19×** | **1.15×** |
+| beneficiated, 800 rows | 13.49 / 13.73 s | 12.96 / 12.81 s | **1.04-1.07×** | **1.05×** |
+| raw + search, 3,000 rows | 16.71 / 16.58 s | 14.42 / 14.33 s | **1.16×** | **1.18×** |
+| **benef + search, 800 rows** (default) | **22.81 / 22.55 s** | **20.51 / 20.45 s** | **1.10-1.11×** | **1.12×** |
+
+⚠️  **At the 150/400-row caps every previous release measured itself on, the
+same build reads 1.03-1.10×.** That is not a contradiction and not drift: a
+capped run pays a fixed **~1.6 s** — the catalog integrity walk over 1.55 M rows
+plus the pre-filter probe — which is half of a 400-row raw cell, all of it
+unchanged, and none of it proportional to anything. **Quote the cap with the
+ratio.** The per-row column is what a full pass actually pays.
+
+⚠️  Two full interleaved passes are recorded rather than one because the raw
+cell moved **1.14× → 1.19×** between them on an otherwise identical build. That
+is host drift — the reason `1.17.1` had to adopt the interleaved construction
+in the first place — so **treat raw as ~1.15×, not as 1.19×.**
+
+### Composition is a per-TAXONOMY fact, and it was being derived per ROW
+
+The big one, and it is the **third** instance of v1.17.4's finding: *a column
+with few distinct values and one Python call per row.* That release found it on
+both sides of the CSV boundary — `enrich_composition` writing it, and
+`_parse_minerals_column` reading it back. This is the place in between.
+
+`asteroid_bulk_value_usd_per_kg`, `asteroid_phase_table` and
+`asteroid_best_phase_usd_per_kg` read exactly five values off the row —
+`comp_pgm_enrichment` and the four `FRACTION_TO_MINERAL` fractions — and
+nothing else. All five come out of Module 1's `enrich_composition`, which
+derives them from `spectral_type` alone: **76 distinct types, ~25 distinct
+composition tuples, across 1,555,667 rows** (eleven in a 4,000-row stride).
+
+So `evaluate_asteroid` walked `FRACTION_TO_MINERAL` three times per asteroid —
+with a `pd.isna` on a scalar per entry, at ~1 µs each — to re-derive one of a
+couple of dozen answers, once for every body in the catalog. Measured on a
+4,000-row stride of the real catalog:
+
+| | before | after | |
+|---|---|---|---|
+| `asteroid_bulk_value_usd_per_kg` | 14.84 µs/row | 1.21 µs | **12.3×** |
+| `asteroid_phase_table` | 13.97 µs/row | 1.25 µs | **11.2×** |
+| `asteroid_best_phase_usd_per_kg` | 27.66 µs/row | 1.28 µs | **21.6×** |
+| *as `evaluate_asteroid` calls them* | *56.5 µs* | *3.74 µs* | |
+
+**~88 s of every full beneficiated pass and ~41 s of a raw one**, paid by every
+row whether or not it is evaluable.
+
+⚠️  **That is ~1% of a full pass, not ~7%.** An evaluable row costs ~2.5-24 ms
+in the search, so 53 µs is a small share of it — the figure is worth recording
+because it is a fixed per-row charge that the *other* items in this release do
+not touch, not because it is the whole 1.15×. Do not quote "88 s" as though it
+were the release.
+
+✅  **`asteroid_best_phase_usd_per_kg` calls the bulk function itself**, so a
+beneficiated run derived the bulk blend twice per asteroid. The memo closes
+that as a side effect, which is why it is the 21.6× row.
+
+Three things not to "fix":
+
+**NaN and None must normalise to the SAME key.** All three consumers test
+`x is None or pd.isna(x)` and take the identical branch either way, so two rows
+differing only in how a missing value is spelled must share an answer. And a
+bare `float('nan')` key would never hit — two NaNs are not equal — so the cache
+would silently stop caching for exactly the rows that have gaps. That is the
+quiet-wrong-answer shape in its performance clothing, and this file already
+records it twice: the `"3.0"` merge key that cost NEOWISE four releases, and
+`_UNSET` in v1.17.5's `_isru_propellant_consts`.
+
+**Anything that is not a real number or None returns no key at all**, which
+sends the caller down the uncached path rather than inventing a key for a value
+whose branch behaviour has not been checked. `to_dict("records")` on the
+float64 composition columns yields plain floats, so the fast path is what the
+pipeline takes; this is the door for a hand-built row.
+
+**`asteroid_phase_table` returns a COPY of the cached list**, deliberately.
+Nothing in this module mutates a phase table — checked — but v1.17.4 records
+the other half of that argument when it gave every row its own `comp_minerals`
+list: handing a million rows one shared mutable object is a trap whether or not
+today's code springs it. A copy also keeps the aliasing exactly as it is now,
+which matters because `_PHASE_ORDER_CACHE` is keyed on list **identity** and its
+single slot was measured against one list per asteroid. ~0.15 µs against the
+~14 µs walk it replaces.
+
+### `_infeasible` was a nested def inside the hottest function in the model
+
+`max_return_payload_kg` defined its refusal helper on **every call** — 500,860
+of them on a 150-row beneficiated+searched sample, 589,232 on a 2,000-row raw
+one. A nested `def` with two defaults measures **~99 ns** against a ~2,105 ns
+call: **~5%** of the single most-called function in the mass cascade, for a
+function object that is identical every time. Module level now; a fresh dict per
+call, exactly as before.
+
+### The programme ladder is a function of `trips` and the config
+
+`programme_options` builds ~42 tuples and `fleet_refinement` its four more, and
+both ran **once per surviving candidate** — 10,741 times per 150-row sample —
+for a list whose only asteroid-dependent input is `trips`, which is
+`min(life / stay, max_trips)` and therefore one of a handful of small integers.
+Together **~3.6%** of the default cell. The sorted fleet ladder the refinement
+pass needs is derived from the same tuples, so it is cached alongside.
+
+⚠️  `programme_options` itself is **untouched** — it is the single readable
+statement of the search's shape and the entry point for anyone outside this
+loop. The private `_programme_ladder_cached` only stops the loop asking it the
+same question 10,741 times. Keyed on the config **values** the two functions
+read rather than on `id(config)`, so a config edited between runs is answered
+correctly — the same argument `_selects_on_profit` makes.
+
+### And four smaller readings of the same sentence
+
+Each is "the question is asked at a finer granularity than it has answers",
+which is now this codebase's most common defect shape by a wide margin.
+
+- **One per-propellant cache entry in the combo loop, not four lookups.** The
+  grid is vehicle-major, so `isru_modes`, both pre-filter constant tuples and
+  the identity key were resolved once per (vehicle × propellant) — **714,000
+  lookups per 2,000 rows** for 21 propellants' worth of answers.
+- **The Δv options resolved to plain scalars once per asteroid.** All three
+  call sites re-read them out of the dict and re-ran `float()` / `bool()` /
+  `str()` on every (combo × Δv × ISRU) iteration, for a list with two or three
+  entries in it.
+- **The vehicle's LEO capacity derived once per RUN.**
+  `float(vehicle.get("payload_leo_kg", 0) or 0)` was written out in **three**
+  places — the combo loop, the pre-filter probe and `_evaluate_combo_at_ratio` —
+  and the first ran it 142,800 times per 400 rows for seventeen numbers. It
+  joins the fairing volume on `_vehicle_consts`, which `candidate_combos`
+  already stashes on the row so it crosses the worker boundary. ⚠️  The
+  `math.isfinite(cap) and cap > 0` test is folded in as a third field rather
+  than left to each caller: two of the three tested it and one tested only
+  `> 0`, and stating it once is what stops them drifting apart.
+- **Five reliability ops rows resolved once per run**
+  (`_ops_reliability_constants`), which is `_ops_cost_constants` (v1.17.1) and
+  `_ops_sizing_constants` (v1.10.1) applied to the one block between them that
+  still read `_ops_value` per candidate.
+
+Also: the stage-2 pre-filter built a 9-key dict and splatted it into both of its
+solver calls. `**` on that dict measures **558 ns** a call against **146 ns**
+for the keywords, plus **306 ns** to build it — ~1.1 µs of a ~16 µs function
+that runs once per surviving (vehicle × propellant × Δv × ISRU). Written out
+twice instead, same arguments in the same order.
+
+And `_price_programme`'s signature lost its annotations. It is a **nested def**,
+so `Optional[int]` — a `typing` subscript — was evaluated every time the
+enclosing function ran: **331 ns against 95 ns** for the bare def. The types are
+in a comment above it.
+
+### Verification (2026-08-21)
+
+**1. Four cells, 139/139 columns bit-identical against `git HEAD`**, same rows,
+one process, serial, less **BOTH** provenance columns:
+
+```
+raw,          400-row stride  sha16 f3dbd86ee6d35fc0  MATCH
+beneficiated, 150-row stride  sha16 9bb6c8bb41852b66  MATCH
+raw + search, 400-row stride  sha16 3c809fb067c8d034  MATCH
+benef+search, 150-row stride  sha16 1d5823f859478c74  MATCH
+```
+
+✅  **Those are the four hashes committed for v1.17.4**, so they now reproduce
+across two releases rather than one. Re-run after **each** of the seven items
+rather than only at the end, which is what localises a break to the change that
+caused it.
+
+**2. The pre-filter agrees with the unpruned search** — required by v1.14.1
+after touching anything the pre-filter reads, and this release touched the
+vehicle capacity it tests against, the Δv scalars it is handed, and stage 2's
+call convention:
+
+```
+prune ON vs prune OFF   139/139 identical, sha256 MATCH, 4 of 4 cells
+```
+
+**3. Serial and parallel are byte-identical**, through the rebuilt `master.py`.
+This is the check that matters most here: the release adds **four** new
+module-level memos (`_COMPOSITION_CACHE`, `_PROGRAMME_LADDER_CACHE`,
+`_FLEET_REFINEMENT_CACHE`, `_OPS_RELIABILITY_CACHE`), all per-process, and it
+changes what `candidate_combos` attaches to the vehicle dicts that get pickled
+to workers.
+
+```
+raw + search,   1,200-row stride  508 rows | 2c33eeb22754ec97 MATCH
+benef + search,   400-row stride  158 rows | 00ed6eccf1dd6ee7 MATCH
+```
+
+✅  Both hashes are the ones v1.17.4 committed for the same two checks.
+
+⚠️  Eight workers came out SLOWER than serial on both rows (20.7 → 29.5 s and
+25.1 → 31.4 s). That is v1.10.1's "more workers is not always faster" note on a
+small cap. The sha256 is what these rows are for.
+
+**4. The mass-ledger identity holds exactly**, all four cells:
+
+```
+hardware_total_kg == mining_hardware_kg + power_system_kg + ep_system_kg
+max |error| 0.000000000 kg
+```
+
+⚠️  Written against `config.mining_hardware_kg`, because the rig is a **config
+constant and not an output column** — the identity as this file states it raises
+`KeyError` against the CSV.
+
+**5. Both never-worse invariants hold, and reproduce v1.17.5's figures exactly:**
+
+```
+beneficiated vs raw      pairs 155 | max 1.000000 | worse 0 | declined 21
+searched vs unsearched   pairs 155 | max 0.907498 | worse 0 | median +42.5%
+```
+
+✅  That **+42.5%** is the committed full-catalog **+42.4%** reproduced on a
+stride sample five releases later — the one number in this verification that
+could have moved without any hash changing.
+
+⚠️  The harness set `delivery_destination` explicitly and asserted `MISMATCH`
+was absent from stdout, per "Model assumptions that are load-bearing".
+
+**6. `git status` is clean but for the three expected files** after
+`py build_master.py`, and a second rebuild is idempotent.
+
+### What is left
+
+**The fixed ~1.6 s a capped run pays is untouched and was declined again**, for
+the reason v1.17.5 gives: `integrity_check`'s walk (~0.9 s here) and the
+pre-filter probe (~0.5 s) are ~55% of a 400-row raw cell and **~0.1% of a full
+pass**. They optimise the harness this project argues its releases from, not the
+pipeline. ⚠️  They are also why **every ratio in this section names its row
+cap** — without that, the same build honestly measures 1.03× or 1.19×.
+
+**`_evaluate_combo_at_ratio` is the largest single item again** — its own body,
+not its callees — and the ratio-independent prologue inside it is still ~2.3%
+and still correctly declined; see v1.17.5's own re-measurement.
+
+**`viability_only` on `max_return_payload_kg` was measured and declined.** The
+trailing block plus the 14-key result dict is **519 ns of a 2,105 ns call**
+(25%), and the pre-filter's second stage reads only `["viable"]` from its second
+call — but that is 31% of the solver's calls in a raw cell and 6% in a
+beneficiated one, so the average gain is under 1% against a new branch in the
+hottest function in the model and a second shape for its return value. Recorded
+rather than taken. ⚠️  Do not "find" it again and assume it is bigger.
 
 **Branch-and-bound on the objective** remains the one big structural item, and
 v1.14.1's warning against approximating the bound stands unaltered.
