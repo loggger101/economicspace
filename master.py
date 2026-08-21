@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.20.4)
+"""Master Asteroid Profitability Pipeline (1.20.5)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -10344,6 +10344,7 @@ print("    mission_cost_breakdown(catalog, payload_kg=1000, "
 # ─────────────────────────────────────────────────────────────────────────────
 import ast
 import contextlib
+import functools
 import json
 import math
 import multiprocessing as mp
@@ -12197,7 +12198,72 @@ class CalcConfig:
     #         a real defect confined to the beneficiation path.  A full
     #         beneficiated cell is ~10 h, so a 2x2 CANNOT be run inside one
     #         date: strip every provenance column before hashing.
-    pipeline_version: str = "1.17.4"
+    # v1.17.5  PERFORMANCE ONLY — every number bit-identical to 1.17.4.  Aimed
+    #         at the programme LADDER, which is where 1.17.0's default flip put
+    #         the work: it prices a median of ~42 options per candidate mission,
+    #         and four items were re-deriving, per option, answers that move
+    #         with far less than the option does.
+    #         • THE RIG SHARES AND THE CALENDAR MULTIPLIERS are a function of
+    #           `missions_sharing_rig` (i.e. of W) and of the PROLOGUE — not of
+    #           N — so ~42 options asked for at most `trips` x 2 distinct
+    #           answers, and `trips` is `min(life / stay, max_trips)` with
+    #           `max_trips` = 5.  `_mission_cost_tail` takes an opt-in
+    #           `rig_cache` and `_price_programme` owns one per candidate, the
+    #           same shape as v1.17.2's `sat_by_fleet` one level out.  It also
+    #           ABSORBS the `_calendar_multipliers_cached` call v1.17.4 added,
+    #           rather than repeating it.  Worth ~3.5% on both searched cells.
+    #           ⚠️  v1.17.4 measured this block at 3.2% and declined it as
+    #           "under this file's own bar".  That figure was for the rig block
+    #           ALONE; folding the calendar lookup into the same entry is what
+    #           moves it, and the cache is opt-in, so `mission_cost_usd` and
+    #           every other caller keep the 1.17.4 path exactly.
+    #         • THE TWO O(N) MEMOS re-built their keys in Python.
+    #           `(int(n), float(rate))` is two conversions and a tuple
+    #           allocation before the lookup starts, at 455,094 calls apiece —
+    #           the key construction WAS the cost, not the miss.
+    #           `functools.lru_cache` hashes in C: 159 -> 92 ns and
+    #           249 -> 131 ns measured.  The `int()`/`float()` normalisation was
+    #           doing nothing the cache does not, since Python already hashes
+    #           1 and 1.0 to one slot, and both callers pass an int anyway.
+    #         • `_objective_key` ran `str(x).strip().lower()` on EVERY call —
+    #           457,776 of them on a 150-row sample — to re-derive one boolean
+    #           from a config field fixed for the run.  93 ns against a dict
+    #           lookup's 31 ns.  Memoised in `_selects_on_profit`; the parse is
+    #           unchanged, only its repetition.
+    #         • `isru_feed_kg_per_kg_propellant` re-answered a per-PROPELLANT
+    #           question per (asteroid x propellant x Δv option).  Four rows in
+    #           five fall through to the legacy name test — a strip/lower plus a
+    #           substring scan — to conclude "no": 48,600 of 62,018 calls on a
+    #           150-row sample.  Split into `_isru_propellant_consts`, attached
+    #           in `candidate_combos` beside the pre-filter and sizing tuples.
+    #         • Dead: `AU_KM`, unreferenced anywhere in four modules, `ui.py`,
+    #           `ui_meta.py` or `build_master.py`.
+    #         Measured interleaved A/B, both builds in ONE process, cells
+    #         alternated A,B,A,B..., best of 4 — the construction v1.17.1 had to
+    #         adopt after a separate-process run reported a SLOWDOWN purely from
+    #         host drift:
+    #             raw, search off            1.186 -> 1.175 s   1.01x
+    #             beneficiated, search off   2.260 -> 2.256 s   1.00x
+    #             raw + search               2.262 -> 2.127 s   1.06x
+    #             benef + search (DEFAULT)   4.283 -> 4.029 s   1.06x
+    #         🚨  SHAPED LIKE v1.17.2, NOT LIKE v1.17.4: every item removes work
+    #         that only exists when a LADDER exists, so both search-OFF cells are
+    #         inert and should be.  Do not quote one number for this release.
+    #         Verified: four cells 135/135 columns bit-identical against HEAD,
+    #         sha256 MATCH, less BOTH provenance columns; pre-filter on vs off
+    #         MATCH on all four; serial vs 8 workers byte-identical on
+    #         raw+search and benef+search; mass ledger exact at 0.000000000 kg;
+    #         both never-worse invariants hold with zero exceptions, the
+    #         searched-vs-unsearched median landing on +42.5% against the
+    #         committed full-catalog +42.4%.
+    #         ⚠️  The ratio-independent PROLOGUE of `_evaluate_combo_at_ratio`
+    #         was re-measured rather than inherited, and it is now **2.3% of the
+    #         default cell and 2.6% of raw** — against the 7.6% v1.14.2 recorded
+    #         when it declined the split.  Only ~89% of that is recoverable, so
+    #         the item is ~2% for splitting a 570-line function with ~40 locals
+    #         crossing the seam.  Still correctly declined, now on a current
+    #         number.
+    pipeline_version: str = "1.17.5"
 
 
 CALC_CONFIG = CalcConfig()
@@ -13429,7 +13495,6 @@ def _cargo_water_kg(
 # by rule, and the search is resolved against the destination being flown — see
 # asteroid_transfer_options_km_s and asteroid_dv_options.
 
-AU_KM            = 1.495_978_707e8     # astronomical unit
 V_EARTH_KM_S     = 29.784              # Earth mean orbital velocity
 MU_EARTH_KM3_S2  = 398_600.4418        # Earth gravitational parameter
 R_LEO_KM         = 6_378.14 + 200.0    # 200-km circular parking orbit
@@ -13999,15 +14064,26 @@ WATER_KG_PER_KG_HYDROLOX   = 9.0 / (1.0 + _HYDROLOX_OF_RATIO)
 _ISRU_PROPELLANTS          = ("hydrolox",)
 
 
-def isru_feed_kg_per_kg_propellant(
-    asteroid_row: Row, propellant: Row, config: CalcConfig,
-) -> Optional[float]:
-    """kg of regolith to dig per kg of ISRU return propellant, or None.
+_ISRU_CONSTS_KEY = "_isru_consts"
 
-    None means this mission cannot make its own propellant — either the
-    propellant is not manufacturable from asteroid material, or this body has
-    no water to make it from.  That is a per-(asteroid × propellant) fact, which
-    is why it is answered here rather than by a config flag.
+
+def _isru_propellant_consts(propellant: Row) -> Optional[Tuple[str, float]]:
+    """`(feed material, kg of feed per kg of propellant)` for one propellant.
+
+    None means this propellant can never be made from asteroid material at all,
+    whatever the body is — a fact about the ROW, not about the target.
+
+    v1.17.5.  This is the half of `isru_feed_kg_per_kg_propellant` that reads
+    only the propellant, and it is the expensive half: on a full propellant
+    table roughly four rows in five fall through to the legacy name test, which
+    is a `str().strip().lower()` plus a substring scan, to conclude "no" — and
+    it concluded it once per (asteroid × propellant × Δv option) rather than
+    once per run.  Measured at 48,600 of 62,018 calls taking that path on a
+    150-row sample.
+
+    Same route as `_prefilter_propellant_consts` and `_sizing_propellant_consts`:
+    derived in `candidate_combos`, stashed on the row so it crosses the worker
+    boundary, and re-derived on demand for a caller that hand-builds `combos`.
     """
     ratio    = propellant.get("isru_feed_kg_per_kg")
     material = propellant.get("isru_feed_material")
@@ -14023,14 +14099,40 @@ def isru_feed_kg_per_kg_propellant(
     ratio = float(ratio)
     if ratio <= 0:
         return None
+    if material not in ("regolith", "water"):
+        return None
+    return material, ratio
+
+
+def isru_feed_kg_per_kg_propellant(
+    asteroid_row: Row, propellant: Row, config: CalcConfig,
+) -> Optional[float]:
+    """kg of regolith to dig per kg of ISRU return propellant, or None.
+
+    None means this mission cannot make its own propellant — either the
+    propellant is not manufacturable from asteroid material, or this body has
+    no water to make it from.  That is a per-(asteroid × propellant) fact, which
+    is why it is answered here rather than by a config flag.
+
+    v1.17.5 splits the per-propellant half into `_isru_propellant_consts`; what
+    is left is the per-BODY half.  Same arithmetic, same order, same floats.
+    """
+    consts = propellant.get(_ISRU_CONSTS_KEY, _UNSET)
+    if consts is _UNSET:
+        # Absent means "not attached", which is NOT the same as "cannot make
+        # propellant" — that is a legitimate None.  Hence the sentinel: reading
+        # a plain None as an un-attached key would re-derive it on every call
+        # for exactly the rows where the answer is no, i.e. most of them.
+        consts = _isru_propellant_consts(propellant)
+        propellant[_ISRU_CONSTS_KEY] = consts
+    if consts is None:
+        return None
+    material, ratio = consts
 
     if material == "regolith":
         # Reaction mass is the body itself; no volatiles needed and no
         # separation loss, because nothing is being separated.
         return ratio
-
-    if material != "water":
-        return None
 
     ice_frac = asteroid_row.get("comp_ice_fraction")
     if ice_frac is None or pd.isna(ice_frac) or float(ice_frac) <= 0.0:
@@ -14128,6 +14230,11 @@ def asteroid_mission_duration_yr(
 # `prune_infeasible_combos = False` plus a column-by-column diff — if the two
 # ever disagree, the pruned build drops rows the unpruned one keeps and the
 # diff says so immediately.  Change one, re-run that diff.
+# Distinguishes "this derived value is not attached yet" from a derived value
+# that is legitimately None.  `.get(key)` cannot tell those apart, and reading
+# one as the other is how a cache silently stops caching.
+_UNSET = object()
+
 _PREFILTER_CONSTS_KEY = "_prefilter_consts"
 
 # Cache-miss sentinel for the search's `_combo_close_terms` memo (v1.14.2).
@@ -14914,28 +15021,35 @@ def learning_curve_factor(n_units: int, rate: float) -> float:
 # these caches hold at most one entry per rung of the ladder.  Nothing about the
 # arithmetic changes — same function, same arguments, same result — which is the
 # only kind of speed-up this module accepts on a release that also moves numbers.
-_LEARNING_CURVE_CACHE: Dict[Tuple[int, float], float] = {}
-_MINING_RELIABILITY_CACHE: Dict[Tuple[int, float, float, float], float] = {}
-
-
+# v1.17.5: memoised with `functools.lru_cache` rather than a hand-rolled dict.
+# The hand-rolled version built its key in Python -- `(int(n), float(rate))` is
+# two conversions and a tuple allocation before the lookup even starts -- and at
+# 455,094 calls apiece that key construction WAS the cost, not the miss.
+# `lru_cache` hashes the argument tuple in C: measured on this machine at
+# 159 ns -> 92 ns for the two-argument case and 249 ns -> 131 ns for the
+# four-argument one.
+#
+# ⚠️  Value-identical, not merely equivalent, and the `int()` / `float()` calls
+# were not doing anything the cache does not.  Python hashes 1, 1.0 and True to
+# the same slot and compares them equal, so a caller passing 1.0 where another
+# passed 1 hits the SAME entry either way -- which is exactly what the explicit
+# normalisation achieved.  Both callers pass an already-normalised int anyway
+# (`_mission_cost_tail` builds `n_missions` as `max(1, int(...))`), so the
+# conversions were defensive no-ops on every call this module actually makes.
+#
+# Unbounded, as the dicts were: the key space is one entry per rung of the
+# ladder, and `maxsize=None` is also the fastest lru_cache path -- it skips the
+# eviction bookkeeping entirely.
+@functools.lru_cache(maxsize=None)
 def _learning_curve_cached(n_units: int, rate: float) -> float:
-    key = (int(n_units), float(rate))
-    val = _LEARNING_CURVE_CACHE.get(key)
-    if val is None:
-        val = learning_curve_factor(n_units, rate)
-        _LEARNING_CURVE_CACHE[key] = val
-    return val
+    return learning_curve_factor(n_units, rate)
 
 
+@functools.lru_cache(maxsize=None)
 def _mining_reliability_cached(
     n_missions: int, p_first: float, alpha: float, p_mature: float,
 ) -> float:
-    key = (int(n_missions), float(p_first), float(alpha), float(p_mature))
-    val = _MINING_RELIABILITY_CACHE.get(key)
-    if val is None:
-        val = mining_success_probability(n_missions, p_first, alpha, p_mature)
-        _MINING_RELIABILITY_CACHE[key] = val
-    return val
+    return mining_success_probability(n_missions, p_first, alpha, p_mature)
 
 
 def rig_trips_per_ship(
@@ -15784,6 +15898,8 @@ def _mission_cost_tail(
     n_missions:          Optional[int] = None,
     missions_per_ship:   Optional[int] = None,
     totals_only:         bool = False,
+    rig_cache:           Optional[Dict[Tuple[int, bool],
+                                       Tuple[float, ...]]] = None,
 ) -> Union[Dict[str, float], float]:
     """The half of `mission_cost_usd` that DOES move with programme size.
 
@@ -15819,6 +15935,7 @@ def _mission_cost_tail(
     # is stranded, not an asset.
     rig_terminal_value = 0.0
     missions_sharing_rig = n_missions
+    _rig_hit = _rig_key = None
     if rig_trips is not None:
         trips, _calendar_cap, trip_cap = rig_trips
         # v1.16.0: how many campaigns one rig actually flies is a property of
@@ -15828,7 +15945,28 @@ def _mission_cost_tail(
         # and every pre-v1.16.0 caller get.
         missions_sharing_rig = (min(n_missions, trips) if missions_per_ship is None
                                 else max(1, min(int(missions_per_ship), trips)))
-        if n_missions > 1:
+        # ── v1.17.5: everything from here to the calendar multipliers is a
+        # function of (missions_sharing_rig, n_missions > 1) and the PROLOGUE,
+        # and the ladder is the F ladder crossed with W — so ~42 options ask
+        # for at most `trips` x 2 distinct answers, and `trips` is
+        # `min(life / stay, max_trips)` with `max_trips` = 5.  Same shape as
+        # `sat_by_fleet` (v1.17.2) and `_calendar_multipliers_cached` (v1.17.4),
+        # one level out: this absorbs that call rather than repeating it.
+        #
+        # Keyed on `missions_sharing_rig` rather than on `missions_per_ship`
+        # so the key is correct on BOTH paths — a caller that passes no
+        # `missions_per_ship` derives it from N, and the min/max above is cheap
+        # enough to run before the lookup.
+        #
+        # ⚠️  Bit-identical by construction, not by rounding: the same key
+        # re-runs the same arithmetic on the same prologue, so the cached
+        # floats ARE the floats the block would have produced.  Opt-in — a
+        # `rig_cache` of None is exactly the v1.17.4 code path, which is what
+        # `mission_cost_usd` and every other caller still get.
+        _rig_key = (missions_sharing_rig, n_missions > 1)
+        if rig_cache is not None:
+            _rig_hit = rig_cache.get(_rig_key)
+        if _rig_hit is None and n_missions > 1:
             # Life USED, and there are now two ways to use it up.  Crediting
             # salvage on remaining calendar years while the rig is mechanically
             # finished would pay a refund on a worn-out machine — the same shape
@@ -15846,18 +15984,44 @@ def _mission_cost_tail(
     # `trips` ≥ 1, but that is a property of `rig_trips_per_ship`'s current
     # return rather than of anything asserted here, and this file's own history
     # is full of guards that were correct until a table changed underneath them.
-    rig_share_divisor = max(1, missions_sharing_rig)
-    mining_rig_cost = ((mining_rig_cost_total - rig_terminal_value)
-                       / rig_share_divisor)
-    # The same two halves again, kept apart rather than netted, because the
-    # programme calendar term compounds them in OPPOSITE directions: the rig is
-    # bought at t = 0 and the salvage is collected at the end.  Netting first
-    # and applying one multiplier would credit the refund for arriving late.
-    # Read only by the calendar block below, which is skipped outright when the
-    # multipliers are 1.0 — so `mining_rig_cost` above stays the arithmetic
-    # v1.15.0 performed, in the order it performed it.
-    rig_gross_share  = mining_rig_cost_total / rig_share_divisor
-    rig_credit_share = rig_terminal_value    / rig_share_divisor
+    #
+    # ── v1.17.5: the calendar multipliers are resolved HERE, with the rig
+    # shares, rather than 60 lines below where they used to sit.  They read
+    # `missions_sharing_rig`, `cadence` and `wacc` and nothing computed in
+    # between, so this is a move, not a reordering of any arithmetic — and it
+    # is what lets one cache entry carry the whole W-dependent block instead of
+    # two.  The DELTA that applies them to `total_cost` has not moved; see it
+    # below, still written on top of the untouched v1.15.0 sum.
+    if _rig_hit is not None:
+        (mining_rig_cost, rig_gross_share, rig_credit_share,
+         rig_terminal_value, cal_cost, cal_credit) = _rig_hit
+    else:
+        # v1.17.2: one `max(1, ·)` rather than three.  Deliberately NOT dropped
+        # altogether: `missions_sharing_rig` is ≥ 1 in every branch above given
+        # `trips` ≥ 1, but that is a property of `rig_trips_per_ship`'s current
+        # return rather than of anything asserted here, and this file's own
+        # history is full of guards that were correct until a table changed
+        # underneath them.
+        rig_share_divisor = max(1, missions_sharing_rig)
+        mining_rig_cost = ((mining_rig_cost_total - rig_terminal_value)
+                           / rig_share_divisor)
+        # The same two halves again, kept apart rather than netted, because the
+        # programme calendar term compounds them in OPPOSITE directions: the rig
+        # is bought at t = 0 and the salvage is collected at the end.  Netting
+        # first and applying one multiplier would credit the refund for arriving
+        # late.  Read only by the calendar delta below, which is skipped outright
+        # when the multipliers are 1.0 — so `mining_rig_cost` above stays the
+        # arithmetic v1.15.0 performed, in the order it performed it.
+        rig_gross_share  = mining_rig_cost_total / rig_share_divisor
+        rig_credit_share = rig_terminal_value    / rig_share_divisor
+        cal_cost = cal_credit = 1.0
+        if calendar_on and missions_sharing_rig > 1:
+            cal_cost, cal_credit = _calendar_multipliers_cached(
+                missions_sharing_rig, cadence, wacc)
+        if rig_cache is not None and _rig_key is not None:
+            rig_cache[_rig_key] = (mining_rig_cost, rig_gross_share,
+                                   rig_credit_share, rig_terminal_value,
+                                   cal_cost, cal_credit)
 
     # v1.7.0: LEARNING CURVE.  The per-mission articles — the capsule or
     # lander, and the power system — are built N times over a programme, and
@@ -15917,11 +16081,6 @@ def _mission_cost_tail(
     # is bit-identical — which is the only form this project's verification can
     # actually check, and the reason the phase-table sort was rejected in
     # v1.14.2.
-    cal_cost  = cal_credit = 1.0
-    if calendar_on and missions_sharing_rig > 1:
-        cal_cost, cal_credit = _calendar_multipliers_cached(
-            missions_sharing_rig, cadence, wacc)
-
     total_cost = (
         upfront_with_cont * mult_upfront
         + ongoing_with_cont * mult_ongoing
@@ -17005,6 +17164,13 @@ def _evaluate_combo_at_ratio(
     # Per-candidate, because everything the saturation sum reads besides the
     # fleet belongs to this candidate.  See the read of it below.
     sat_by_fleet: Dict[int, Tuple[float, float, float]] = {}
+    # v1.17.5: the same argument one function further in.  The rig shares and
+    # the programme-calendar multipliers are a function of the campaigns one
+    # rig flies and of the PROLOGUE, and the ladder crosses ~8 fleets with
+    # `trips` ≤ 5 campaigns — so ~42 options ask `_mission_cost_tail` for at
+    # most ten distinct answers to that block.  Per-candidate for the same
+    # reason `sat_by_fleet` is: every other input to it lives in `cost_prologue`.
+    rig_by_share: Dict[Tuple[int, bool], Tuple[float, ...]] = {}
 
     def _price_programme(n_missions: int, fleet: int, per_ship: Optional[int] = None,
                          full: bool = True):
@@ -17023,7 +17189,7 @@ def _evaluate_combo_at_ratio(
         early return in `_mission_cost_tail`.
         """
         c = _mission_cost_tail(cost_prologue, n_missions, per_ship,
-                               totals_only = not full)
+                               totals_only = not full, rig_cache = rig_by_share)
         if full:
             total_cost = c["total_cost"]
         else:
@@ -17390,6 +17556,32 @@ def selection_key(
     )
 
 
+# The selection objective is a free-text config field, normalised on every read.
+# It is read once per programme option, so the normalisation ran ~458k times on
+# a 150-row sample to answer a question whose input is fixed for the run.
+# Keyed on the RAW value rather than on `id(config)`: the raw string IS the
+# input, so two configs naming the same objective share one entry, and a config
+# edited between runs is still answered correctly.
+_SELECTION_ON_PROFIT: Dict[Any, bool] = {}
+
+
+def _selects_on_profit(objective: Any) -> bool:
+    """Whether `selection_objective` names the raw-profit ranking.
+
+    Memoised because it is a string parse in the innermost loop of the search.
+    The parse itself is untouched -- this caches its answer, it does not change
+    what counts as "profit".
+    """
+    try:
+        hit = _SELECTION_ON_PROFIT.get(objective)
+    except TypeError:            # unhashable: parse it and cache nothing
+        return str(objective).strip().lower() == "profit"
+    if hit is None:
+        hit = _SELECTION_ON_PROFIT[objective] = (
+            str(objective).strip().lower() == "profit")
+    return hit
+
+
 def _objective_key(
     profit: float, gross: float, cost: float, config: CalcConfig,
 ) -> Tuple[float, float]:
@@ -17402,8 +17594,16 @@ def _objective_key(
     statement of the rule: `selection_key` is defined as this function, so the
     two cannot drift, which is the failure mode this file warns about wherever
     algebra appears twice (see `_combo_can_close`).
+
+    v1.17.5: the objective is read through `_selects_on_profit`, which memoises
+    the string normalisation.  `str(x).strip().lower()` measures 93 ns against a
+    dict lookup's 31 ns, and this function is called 457,776 times on a 150-row
+    beneficiated+searched sample -- once per rung of every programme ladder --
+    to re-derive one boolean from a config field that cannot change mid-solve.
+    The comparison it feeds is unchanged, so both returned floats are the same
+    floats.
     """
-    if str(config.selection_objective).strip().lower() == "profit":
+    if _selects_on_profit(config.selection_objective):
         return (0.0, profit)
     if profit > 0:
         return (1.0, profit)
@@ -17668,6 +17868,9 @@ def candidate_combos(
         # by the same route.  See `_sizing_propellant_consts`.
         propellant[_SIZING_CONSTS_KEY] = _sizing_propellant_consts(
             propellant, config)
+        # v1.17.5: and the ISRU feed pair, for the same reason and by the same
+        # route.  See `_isru_propellant_consts`.
+        propellant[_ISRU_CONSTS_KEY] = _isru_propellant_consts(propellant)
     vehicle_rows = [_row_to_dict(v) for _, v in vdf.iterrows()]
     for vehicle in vehicle_rows:
         vehicle[_VEHICLE_CONSTS_KEY] = _vehicle_consts(vehicle)
@@ -18620,7 +18823,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.20.4")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.20.5")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 
