@@ -12,6 +12,7 @@ profitability table.
 
 ```
 build_master.py        Build tool: assembles modules/ into master.py
+verify.py              Release verification: the five checks every change runs
 master.py              GENERATED single-file pipeline — do not edit by hand
 ui.py                  Streamlit front end (optional): configure, run, inspect
 ui_meta.py             Config introspection + curation for ui.py
@@ -34,10 +35,15 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
-| 1 | `modules/catalog.py` | 1.1.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
+| 1 | `modules/catalog.py` | 1.1.1 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.7.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.12.0 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
-| 4 | `modules/calc.py` | 1.16.0 | Per-asteroid Δv **and mission architecture** — and, optionally, **programme size, fleet size and schedule** — in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 3 | `modules/transportation.py` | 1.12.1 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
+| 4 | `modules/calc.py` | 1.17.7 | Per-asteroid Δv **and mission architecture** — and, by default since 1.17.0, **programme size, fleet size and schedule** — in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+
+⚠️  That version column is checked against the modules' own `pipeline_version`
+fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
+/ **calc 1.16.0** until 2026-08-21, when calc was four releases past it. The
+authority is the dataclass field in each module, never this table.
 
 ## Running it
 
@@ -335,6 +341,91 @@ to `_EXPECTED_DUPES`.
 
 Commit the rebuilt `master.py` alongside the module change — it is tracked,
 and `git status` after a build is the check that the two are in sync.
+
+## Verifying a change
+
+Almost every release of Stage 4 is argued from **bit-identity**: the claim is
+not "the numbers look right", it is "these are the same floats, and here is the
+hash". `verify.py` is those checks, committed:
+
+```bash
+py verify.py baseline --tag 1.17.7
+```
+
+Run that on a clean tree **before** editing. It builds four cells — raw and
+beneficiated, each with the programme search off and on — and writes their CSVs
+and hashes under `.verify/` (gitignored). Then make the change, rebuild, and:
+
+```bash
+py verify.py check --tag 1.17.7
+```
+
+which runs all five:
+
+| # | check | catches |
+|---|---|---|
+| 1 | bit-identity vs the baseline | any change to any number, column by column and by hash |
+| 2 | pre-filter on vs off | the pruner and the solver drifting apart — they are two statements of one algebra |
+| 3 | serial vs 8 workers | a worker seeing different reference data from its parent |
+| 4 | mass ledger | a kilogram in the rocket equation with no price in the ledger |
+| 5 | never-worse | a search optimising something other than what it reports |
+
+`py verify.py invariants` runs 4 and 5 only and needs no baseline, so it works
+on any tree; `--cells` takes a subset.
+
+⚠️  A full `check` builds about twenty cells and takes **roughly half an hour**.
+Most of that is check 2 — turning the pre-filter off is exactly what v1.14.1 and
+v1.17.4 exist to avoid, so an unpruned cell runs the entire search. Iterate with
+
+```bash
+py verify.py check --skip prune parallel
+```
+
+which is ~5 minutes and still catches any change to any number, then run the
+full set once before committing. A verification you will not run is worse than
+a slow one.
+
+**Why it is committed rather than rewritten each time.** Before 2026-08-21
+every release built these checks from scratch and threw them away, and
+`CLAUDE.md` records eleven harness bugs that came out of it — three of which
+produced conclusions that were written down or acted on before being caught:
+a comparison that stripped only one of the two provenance columns, so midnight
+falling mid-run read as a defect in the beneficiation path; two cells recorded
+as `cislunar` that had actually run against `earth_surface` prices; and a
+column diff that reported 64 of 139 columns as differing against a file that
+hashed byte-identical. Each of those traps is now defended against at the line
+that would otherwise reproduce it, and `verify.py`'s header lists all eleven.
+Add to that list rather than starting a twelfth harness.
+
+That last one is worth knowing about before you write any comparison of your
+own, because it had **three independent causes** producing one identical
+symptom, and fixing each moved the count and nothing else:
+
+1. pandas aligned two Series on the index **label**, and
+   `build_profitability_catalog` returns rows sorted by the objective, so a
+   live frame's index is scrambled against a CSV's fresh `RangeIndex`;
+2. `read_csv`'s default float parser is fast rather than correctly rounded, so
+   values came back one ULP off — only `float_precision="round_trip"` fixes it;
+3. an all-empty object column writes as bare commas and reads back as
+   float64-of-`NaN`, so a live `""` met a `nan`.
+
+It is also why the report prints **both** a hash and a column diff: when they
+disagree, the hash is the one that is right, and the disagreement is itself the
+signal that the comparator is broken rather than the release.
+
+The four hashes it prints reproduce the ones committed for calc v1.17.4 and
+v1.17.6 exactly, which is what makes it a replacement for those harnesses
+rather than another one to have to trust.
+
+⚠️  **It covers Stage 4 and nothing else.** It does not re-run Stages 1–3,
+deliberately: a Stage 1 run fetches a different catalog (JPL adds bodies daily)
+and a Stage 3 run re-fetches live metal and fuel prices, either of which would
+move the inputs underneath the comparison and invalidate every baseline in the
+same session. The consequence is that **a change to an upstream module can pass
+every check here and still be wrong** — v1.12.1's propellant-flag fix lives in
+Stage 3's `validate()`, which Stage 4 never calls, and had to be checked by
+running that function under `-W error::FutureWarning` instead. If you change
+Stage 1, 2 or 3, this file is not your evidence.
 
 ## Working copy
 
@@ -1433,6 +1524,60 @@ the return structure cost.
 If a change suddenly improves these by an order of magnitude, suspect it has
 switched one of the twenty models off rather than found something. See
 [What the model charges for](#what-the-model-charges-for).
+
+### What changed in v1.17.7
+
+**No number, and for once that is not the point.** Every stamp before this one
+went after cost, or a default, or dead code. This one fixes a **defect** — and
+one that no cell in this repo could have shown, because the run that shows it
+has not been made since v1.16.0.
+
+**A cache grew without bound.** `_CALENDAR_CACHE` memoised a pair of programme
+calendar multipliers on `(campaigns-per-ship, cadence, WACC)`. The first two of
+those are small; the third, `cadence`, is `max(stay, synodic period)` — a fresh
+float for **every candidate mission**. So unlike every other memo in the module,
+which reaches a ceiling and sits there, this one grew **linearly with the
+catalog**: ~45 entries per catalog row, or 3,983 / 17,729 / 36,071 entries at
+caps of 100 / 400 / 800 rows. On a full-catalog default cell that projects to
+**~70 million entries and 11–18 GB**, against a documented run peak of ~6 GB.
+
+**The retention was buying 0.1 pp.** Replaying the real 223,538-call sequence
+through bounded LRUs, all reuse turns out to be local to one candidate mission —
+v1.17.5's per-candidate rig cache already absorbs the cross-option traffic:
+
+```
+unbounded     hit rate 83.9%   retained 36,071 entries
+maxsize 1024  hit rate 83.9%   retained  1,024 entries
+maxsize   64  hit rate 83.8%   retained     64 entries
+```
+
+Now `functools.lru_cache(maxsize=1024)`, confirmed flat at 1,024 entries at
+every cap with the hit rate unchanged. **This cannot change an output value by
+construction rather than by rounding** — it is a memo of a pure function, so
+evicting an entry only forces recomputation of the identical float. That makes
+it the one shape of optimisation this project can take for free, unlike the
+arithmetic reorderings it has repeatedly declined. It is also *faster*:
+`lru_cache` hashes in C, 180 → 91 ns per hit, and bounding costs nothing against
+`maxsize=None`.
+
+**Two smaller items.** `_load_csv` now reads with `low_memory=False` — not for
+memory, but because the default reader infers dtypes from *chunks*, so the dtype
+depends on how values fall across them, and it emitted a `DtypeWarning` on every
+single load (a warning that always fires is one nobody reads). Measured neutral
+first: 0 of 46 columns change dtype or value. And in Stage 3, the two propellant
+sanity bands selected rows with `.astype(bool)` on a flag that reads `NaN` as
+**True**, so a future propellant row omitting it would be silently classed as a
+sail and dropped from both checks — the trap this repo already documents, in the
+one place it had not been fixed. It is now `.ne(True)`, which is total across
+both dtypes; the obvious `.fillna(False).astype(bool)` was written first and
+rejected, because pandas raises a deprecation warning on the object path — that
+is, exactly when the fix would fire.
+
+Verified with the newly committed `verify.py` rather than a harness rebuilt from
+memory — see [Verifying a change](#verifying-a-change), and note that writing
+that file turned up **five** fresh harness bugs of its own, three of them
+producing the identical "columns DIFFER against a byte-identical hash" symptom
+from three unrelated causes.
 
 ### What changed in v1.17.6
 

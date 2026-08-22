@@ -62,11 +62,11 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.1.1`, mineral_value `1.7.0`, transportation `1.12.0`,
-calc `1.17.6`, master `1.20.6` (the master version is a literal in
+Current: catalog `1.1.1`, mineral_value `1.7.0`, transportation `1.12.1`,
+calc `1.17.7`, master `1.20.7` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
-ℹ️  **TEN stamps so far do NOT mean the numbers moved.** The rule is
+ℹ️  **ELEVEN stamps so far do NOT mean the numbers moved.** The rule is
 one-directional — *changing a number means bumping; bumping does not mean a
 number changed* — and reading a version as evidence that a result moved is the
 mistake this table exists to prevent.
@@ -83,14 +83,38 @@ mistake this table exists to prevent.
 | `1.17.4` | performance only | bit-identical, verified |
 | `1.17.5` | performance only | bit-identical, verified |
 | `1.17.6` | performance only | bit-identical, verified |
+| `1.17.7` | **memory bound** | bit-identical, verified |
 
-**Every measured cell in this file stands unaltered across all ten — do not
+**Every measured cell in this file stands unaltered across all eleven — do not
 re-measure anything on account of any of them.** Each release's own section
 carries its verification.
 
-⚠️  Only eight of the ten are *performance* stamps: `1.17.0` was a default
-flip and `1.17.3` a cleanup, which is why this file counts two sequences that
-run apart — see "What calc v1.17.0 changed".
+⚠️  **Derive the taxonomy from the table above, not from a count in prose.**
+Eight of the eleven are *performance* stamps; the other three are `1.17.0` (a
+default flip), `1.17.3` (a cleanup) and `1.17.7` (a memory bound), which is why
+this file counts two sequences that run apart — see "What calc v1.17.0
+changed". That paragraph is where the count last rotted: it was written at
+`1.17.5` and still read "nine" and "seven" after `1.17.6` shipped, which is
+exactly the *counts-spelled-out-in-prose* failure the "When a number changes,
+grep the prose too" section names.
+
+🚨  **`1.17.7` IS THE FIRST STAMP HERE THAT FIXES A DEFECT RATHER THAN A COST,
+and it is a defect no cell in this file could have shown.** `_CALENDAR_CACHE`
+was the one memo in the module keyed on a **per-candidate float**, so it grew
+linearly with the catalog — ~45 entries per row, **~70 M entries and 11-18 GB**
+projected on a full-catalog default cell against a documented run peak of
+~6 GB. It landed in `1.17.4` and **no full-catalog run has been made since
+`1.16.0`**, so nothing had ever exercised it at the scale that shows it. Now
+bounded, which cannot change an output value by construction and is also
+*faster* (180 → 91 ns a hit). See "What calc v1.17.7 changed".
+
+✅  **The checks every release above argues from are now a committed file,
+`verify.py`, instead of a harness rebuilt from memory each time.** CLAUDE.md
+had recorded **eleven** harness bugs across six releases, three of which produced
+conclusions that were written down before being caught. `verify.py` reproduces
+the four cell hashes committed for `1.17.4` and `1.17.6` exactly, which is what
+makes it a replacement for those harnesses rather than a twelfth one. See "The
+verification harness is committed now".
 
 ⚠️  **`1.17.2` is the first performance release in this project that is INERT
 on some cells and worth 1.45× on others**, and the split is not subtle: it
@@ -685,6 +709,20 @@ exceptions, and the worst case is exactly 1.0000, which is beneficiation
 declining and falling back on the `beneficiate=False` baseline. That is the
 signature to expect: never worse, and equal wherever it declines. A max above
 1.0 means the search is optimising something other than what gets reported.
+
+⚠️  **Three definitions this file uses everywhere and had never written down,
+each of which has now cost someone an hour.** `verify.py` is the executable
+statement of all three; this is the prose one:
+
+| quantity | it is | it is NOT |
+|---|---|---|
+| the objective ranked on | `total_cost_usd / gross_value_usd` | any column — **there is no `cost_revenue_ratio`** |
+| `r`, in every never-worse table | the *lower* setting's ratio over the *higher*'s, e.g. `benef / raw` | the reciprocal |
+| "median improvement +42.5%" | `median(1 − r)`, the fractional **reduction** in the ratio | `median(1/r − 1)`, which reads **74.0%** for the same result |
+
+The last two describe one identical result and differ by a factor of 1.7, so a
+harness that picks the wrong one reports a number that is not wrong so much as
+*not the one on record* — and every committed figure here uses `median(1 − r)`.
 
 **How hard to concentrate is searched, not derived.** Grade saturates at
 `saturation_ratio` = 1/(frac_best × recovery); costs keep climbing. So the
@@ -3479,7 +3517,23 @@ is ~10 flops per candidate: ~14 GFLOP for the entire 1.55 M-row catalog, which
 is under a second on **either** processor and irrelevant against a 5,350 s run.
 
 **RAM is not a constraint either.** The run peaks around 6 GB against 64 GB
-installed. The only honest RAM/IO win found was the catalog load — `read_csv`
+installed.
+
+> 🚨  **THAT IS A `1.14.1` MEASUREMENT AND IT STOPPED BEING TRUE AT `1.17.4`.**
+> `_CALENDAR_CACHE` was keyed on a per-candidate float and grew at ~45 entries
+> per catalog row, which projects to **11–18 GB on a full-catalog default cell
+> on top of the 6 GB above**. Bounded in `1.17.7`, so the sentence is true
+> again — but note *why* nobody caught it for three releases: **no full-catalog
+> run has been made since `1.16.0`**, and a 150–400-row verification cell shows
+> 18,000 cache entries rather than 70 million.
+>
+> **A stride sample does not predict a full run's MEMORY either.** THE SAMPLING
+> RULE was written about wall clocks and later extended to ratios; this is the
+> third quantity it covers. Before quoting any resource figure in this file,
+> check which release and which row count it was measured at. See "What calc
+> v1.17.7 changed".
+
+The only honest RAM/IO win found was the catalog load — `read_csv`
 on the 883 MB catalog is **19.7 s** against **2.1 s** for the same frame as
 Parquet — which is real, free, and worth ~0.4% of a full destination run. It is
 noted here rather than implemented because it changes Module 1's output
@@ -4403,14 +4457,22 @@ not mean the model moved — after `1.10.1`, `1.14.1` and `1.14.2` — and the
 first where the reason is configuration rather than performance.
 
 ⚠️  **Two sequences are being counted in this file and they do not match.**
-Stamps where *the model* did not move are `1.10.1`, `1.14.1`, `1.14.2`,
-`1.17.0`, `1.17.1`, `1.17.2`, `1.17.3`, `1.17.4`, `1.17.5` — nine, and `1.17.0`
-is the fourth of them, which is what the sentence above says. Stamps that are
-*performance only* exclude `1.17.0` (a default flip) and `1.17.3` (a cleanup) —
-seven, of which `1.17.1`, `1.17.2`, `1.17.4` and `1.17.5` are the fourth,
-fifth, sixth and seventh.
-Both counts are right; neither is a typo for the other, and the table at the
-top of this file is the one to read.
+Stamps where *the model* did not move are every row of the table at the top of
+this file, and `1.17.0` is the fourth of them — which is what the sentence
+above says. Stamps that are *performance only* are that table minus `1.17.0`
+(a default flip), `1.17.3` (a cleanup) and `1.17.7` (a memory bound). Both
+counts are right; neither is a typo for the other.
+
+🚨  **THIS PARAGRAPH IS WHERE THE COUNT LAST ROTTED, AND IT IS NOW WRITTEN SO
+IT CANNOT.** It used to spell both sequences out as literal lists ending at
+`1.17.5`, with the totals "nine" and "seven" — and it stayed that way through
+`1.17.6`, so for a release it stated two counts that the table three thousand
+lines above it already contradicted. That is precisely the failure mode "When
+a number changes, grep the prose too" exists to catch, in the *counts spelled
+out in prose* category that section names, in the file that names it — and it
+is the second time a count in this document has rotted (see the "twenty-one
+things" heading, corrected 2026-08-20). **The fix both times is the same: name
+the table, do not restate its length.** A count is a number; re-derive it.
 
 ### Why the flip is defensible now and was not before
 
@@ -5104,6 +5166,14 @@ everything else here: the ladder is the F ladder **crossed with W**, and
 `programme_calendar_multipliers` reads W and nothing else the ladder varies, so
 ~40 options were asking it for at most `trips` (≤ 5) answers — 369,166 calls,
 about eight askings per answer, two `**` apiece.
+
+> 🚨  **THAT SENTENCE IS TRUE OF THE HIT RATE AND FALSE OF THE KEY SPACE, AND
+> THE GAP IS THREE RELEASES AND 11-18 GB.** "at most `trips` (≤ 5) answers" is
+> per candidate. The cache was **global**, and its key carried `cadence_yr` —
+> a fresh float per candidate — so it accumulated ~45 entries for every catalog
+> row and never forgot one. Bounded in `1.17.7`. The reasoning was right about
+> what the memo *does* and never asked what it *retains*, which is the question
+> to add whenever a memo is introduced here: **name the ceiling, or set one.**
 
 ### Every row was converted through a pandas Series it did not need
 
@@ -5853,6 +5923,440 @@ rather than taken. ⚠️  Do not "find" it again and assume it is bigger.
 **Branch-and-bound on the objective** remains the one big structural item, and
 v1.14.1's warning against approximating the bound stands unaltered.
 
+## What calc v1.17.7 / transportation v1.12.1 changed
+
+**Nothing you can measure, and for once that is not the point** — see the stamp
+table under "Bump `pipeline_version`". calc `1.17.6 → 1.17.7`, transportation
+`1.12.0 → 1.12.1`, master `1.20.6 → 1.20.7`.
+
+Every stamp in the table at the top of this file went after *cost*, or after a
+default, or after dead code. This one fixes a **defect**: a cache that grew
+without bound, which nothing in this file could have caught because the cell
+that would have shown it has never been run.
+
+### Every memo in the module is bounded except one
+
+`_CALENDAR_CACHE` memoised `programme_calendar_multipliers` on
+`(missions_per_ship, cadence_yr, wacc)`. Two of those three are small integers
+or a config constant. The third is **`cadence_yr` = `max(stay, synodic)`**,
+which is a fresh float for every candidate mission — so the key space is not
+bounded by anything, and the dict grew linearly with the catalog:
+
+| row cap | entries retained | per catalog row |
+|---|---|---|
+| 100 | 3,983 | 39.8 |
+| 400 | 17,729 | 44.3 |
+| 800 | 36,071 | 45.1 |
+
+At ~45 entries a row and 156–252 B an entry (tracemalloc and `getsizeof`
+respectively), a full-catalog default cell projects to **~70 M entries and
+11–18 GB**, against this file's documented run peak of **~6 GB**. At 12 workers
+each process holds its own copy of its own chunk, so the pool total is the same
+order either way and the *serial* path is the worse one.
+
+🚨  **It had never been exercised at the scale that shows it, and the reason is
+worth keeping.** The cache landed in **`1.17.4`**, on 2026-08-20. The last
+full-catalog run of any cell was **`1.16.0`**, and the "~6 GB" figure is a
+**`1.14.1`** measurement. So the only runs this cache has ever seen are the
+150–400-row verification cells every release argues from — where 45 entries a
+row is 18,000 entries and invisible. **A stride sample is not a sample of a
+full run's MEMORY either**, which is a new corner of THE SAMPLING RULE: that
+rule was written about wall clocks and then extended to ratios, and this is the
+third quantity it turns out to cover.
+
+Contrast the others — this is why it stands out rather than being a general
+problem with how this module memoises:
+
+| cache | key | entries after a 800-row cell |
+|---|---|---|
+| `_learning_curve_cached` | (N, rate) | **69** (2.4 M hits) |
+| `_mining_reliability_cached` | (N, p, α, p_mat) | **69** (2.4 M hits) |
+| `_COMPOSITION_CACHE` | composition tuple | ~25 |
+| `_PROGRAMME_LADDER_CACHE` | config values + trips | 5 |
+| `_FLEET_REFINEMENT_CACHE` | (F, ladder) | 8 |
+| `_ARCH_BY_RAW_KEY` | destination string | 1 |
+| **`_CALENDAR_CACHE`** | **(W, cadence, wacc)** | **36,071** |
+
+### The retention was buying 0.1 pp
+
+Not argued — replayed. The real 223,538-call key sequence from an 800-row
+default cell, run through bounded LRUs:
+
+```
+unbounded     hit rate 83.9%   retained 36,071 entries
+maxsize 4096  hit rate 83.9%   retained  4,096 entries
+maxsize 1024  hit rate 83.9%   retained  1,024 entries
+maxsize   64  hit rate 83.8%   retained     64 entries
+```
+
+**All reuse is local to one candidate mission.** v1.17.5's per-candidate
+`rig_cache` already absorbs the cross-option traffic one level up — that
+release folded the calendar multipliers into the rig block precisely so ~42
+programme options would stop asking for them — so what still reaches this
+function is one ask per distinct `(W, cadence)` *within* a candidate. Once the
+candidate is done, its entries can never be hit again, because no other body
+will produce that cadence float.
+
+Now `functools.lru_cache(maxsize=1024)`. 1024 is headroom, not a measured need.
+
+✅  **Confirmed on the built `master.py` rather than projected**, reading
+`cache_info()` off the same three caps:
+
+| row cap | `currsize` before | `currsize` after | hits | misses | hit rate |
+|---|---|---|---|---|---|
+| 100 | 3,983 | **1,024** | 23,818 | 3,983 | 85.7% |
+| 400 | 17,729 | **1,024** | 96,873 | 17,729 | 84.5% |
+| 800 | 36,071 | **1,024** | 187,467 | 36,071 | **83.9%** |
+
+Flat at the bound regardless of catalog size, and the 800-row hit rate is
+**exactly** the unbounded 83.9%. Note the miss counts reproduce the old *entry*
+counts precisely — every miss is a genuinely new key, which is the replay
+result restated: nothing evicted was ever going to be asked for again.
+
+⚠️  **This cannot change an output value, by CONSTRUCTION rather than by
+rounding**, and that distinction is the whole reason it is safe to take. It is
+a memo of a deterministic pure function, so evicting an entry only forces
+recomputation of the identical float — no operation is re-associated, no sum is
+reordered, nothing is approximated. Compare the items this file has *declined*
+on exactly that ground — the phase sort and the `bracket > 0` rearrangement
+(both v1.14.2), and the pyarrow CSV engine (v1.17.4, a 4.8× that moves
+`estimated_mass_kg` by 1e-13 relative and is therefore unusable). Every one was
+numerically negligible and still fatal, because **a change can be numerically
+negligible and still destroy the evidence**. **This one is not in that family,
+and a change that only evicts is the one shape of optimisation this project can
+take for free.**
+
+✅  **And it is faster.** `lru_cache` hashes the argument tuple in C instead of
+building a key tuple in Python first — the same finding v1.17.5 made for the
+two memos above it. Measured on this machine, per hit:
+
+| | ns/hit |
+|---|---|
+| hand-rolled dict (the `1.17.4` code) | **180.1** |
+| `lru_cache(maxsize=None)` | 93.4 |
+| **`lru_cache(maxsize=1024)`** | **91.0** |
+| `lru_cache(maxsize=256)` | 94.0 |
+
+So **bounding it is not a trade against speed** — a bounded LRU is not
+measurably slower than an unbounded one, and both are half the cost of the
+dict. At 223,538 calls per 800 rows the time saved is ~0.02 s and is not the
+point; it is recorded so nobody "restores" the dict believing the bound cost
+something.
+
+⚠️  This retires, **for this function only**, the "unbounded, as the dicts
+were" reasoning written above `_learning_curve_cached` in v1.17.5. That
+argument rests on the key space being small, and it is correct for those two.
+The general rule it implies is the one to carry forward: **`maxsize=None` is
+safe exactly when you can name the ceiling.** If you cannot, bound it.
+
+### transportation `1.12.1`: one line, and no table row moved
+
+The two propellant sanity bands in `validate()` selected their rows with
+`~propellant_df["propellantless"].astype(bool)` — the trap this file names
+under "Correctness invariants that were expensive to find", written out twice.
+
+It is correct **today** only because all 41 rows of `PROPELLANTS_REFERENCE`
+state the flag, so pandas infers dtype `bool`. Add one row that omits it and
+the column comes back `object` with a NaN in it, and `.astype(bool)` reads NaN
+as **True** — so the new propellant would be silently classed as a sail and
+dropped from *both* the Isp band and the price band. The two checks would stop
+covering exactly the row most likely to be new and wrong, and nothing would
+say so.
+
+Now `.ne(True)` — "not flagged propellantless" — resolved once into
+`has_mass_ratio` and read twice. It is total: `bool` out from a `bool` column
+and from an `object` one alike, so a missing value reads as "has a mass ratio",
+which is true of every real propellant.
+
+⚠️  **Deliberately NOT `.fillna(False).astype(bool)`, which was written first
+and is worse in the one case this exists for.** On an object column pandas
+raises `FutureWarning: Downcasting object dtype arrays on .fillna is
+deprecated` — so that fix would emit a deprecation warning *exactly when it
+fires*, and change behaviour again on a future pandas. Caught on the review
+pass, not by any test: it is inert today, because today the column is `bool`.
+⚠️  A CSV-loaded frame would still need `_truthy`-style parsing, since the
+string `"True"` is not `True`; this frame is built in-module from Python bools
+and `validate()` has no other caller. Same lesson, same module family, the other side of
+the same trap: *the wrong behaviour is the quiet one.*
+
+⚠️  **Stage 3 does NOT need re-running for this, and should not be re-run
+casually.** The change touches no exported column, and a Stage 3 run re-fetches
+live yfinance prices — which moves `cost_usd_per_kg` and with it every Stage 4
+baseline in the same session. The stamp moves so the module names its own code;
+the on-disk `propellants.csv` keeps `1.12.0` until Stage 3 is next run for its
+own reasons. **Exactly the call catalog `1.1.1` made, for exactly the same
+reason.**
+
+### And `_load_csv` reads in one pass now
+
+Every load of the 1.55 M-row catalog printed:
+
+```
+DtypeWarning: Columns (3,22) have mixed types. Specify dtype option on import
+or set low_memory=False.
+```
+
+— `is_neo` and `source_jpl`, both bool-plus-NaN. It is **not** about memory.
+pandas' default reader infers each column's dtype from **chunks**, so the dtype
+it settles on depends on how the values happen to be distributed across them:
+the same "**the dtype depends on the data**" hazard that cost NEOWISE four
+releases, one level further down. And a warning that fires on every single run
+is a warning nobody reads — this file's own rule against suppressing warnings
+in `catalog.py` cuts the same way here: **remove the cause so a real one stands
+out**, rather than silencing it.
+
+✅  Taken only because it was **measured** neutral, not because it looks safe.
+Single-pass against chunked inference on the real 1,555,667-row catalog:
+**0 of 46 columns change dtype, and 0 change value.** ⚠️  That is a measurement
+of *this* catalog; if the schema changes, re-measure rather than assume. A
+dtype change here propagates straight into the mass cascade.
+
+### Verification (2026-08-21, from the committed harness)
+
+Run from `verify.py` rather than from a harness rebuilt from memory — which is
+itself part of this release, and means these five results are reproducible by
+anyone with one command rather than by rewriting the checks. All five, on the
+rebuilt `master.py`:
+
+**1. Four cells, 139/139 columns bit-identical against `1.17.6`**, same rows,
+one process, serial, less **BOTH** provenance columns:
+
+```
+raw,          400-row stride  f3dbd86ee6d35fc0  MATCH
+raw + search, 400-row stride  3c809fb067c8d034  MATCH
+benef,        150-row stride  9bb6c8bb41852b66  MATCH
+benef+search, 150-row stride  1d5823f859478c74  MATCH
+```
+
+✅  **Those are the four hashes committed for BOTH `1.17.4` and `1.17.6`, so
+they now reproduce across THREE releases.** The baseline was captured on a
+clean tree before the first edit, exactly as every release note here claims its
+own was.
+
+**2. The pre-filter agrees with the unpruned search** — required after any
+change to anything it reads, and this release changed the loader beneath it:
+
+```
+prune ON vs prune OFF   139/139 identical, sha256 MATCH, 4 of 4 cells
+```
+
+**3. Serial and parallel are byte-identical**, required after any change to the
+search — and pointed here because this release swaps a module-level dict for an
+`lru_cache`, which is per-process exactly as the dict was:
+
+```
+raw + search    serial 22.0 s | 8 workers 34.5 s | 155 rows | 3c809fb067c8d034 MATCH
+benef + search  serial 23.8 s | 8 workers 34.9 s |  65 rows | 1d5823f859478c74 MATCH
+```
+
+⚠️  Eight workers are slower than serial on both rows. That is v1.10.1's "more
+workers is not always faster" on a small cap — the hash is what these rows are
+for.
+
+**4. The mass-ledger identity holds exactly**, all four cells, `max |error|
+0.000000000 kg` — as it must, since nothing in the mass cascade was touched.
+
+**5. Both never-worse invariants hold, and reproduce the committed figures:**
+
+```
+benef <= raw            pairs 155 | max 1.000000 | worse 0 | declined 21
+search <= N=1           pairs 155 | max 0.907498 | worse 0 | median +42.5%
+search <= N=1 (benef)   pairs 158 | max 0.858381 | worse 0 | median +39.2%
+```
+
+✅  `declined 21`, `max 0.907498` and `+42.5%` are the values committed for
+`1.17.6`, and that **+42.5%** is the full-catalog **+42.4%** reproduced on a
+stride sample six releases later — the one number in this verification that
+could have moved without any hash changing.
+
+**6. `git status` is clean but for the expected files** after
+`py build_master.py`, and a second rebuild is idempotent.
+
+**7. The `DtypeWarning` is gone** from every catalog load, which is the direct
+check on `low_memory=False`.
+
+**8. Stage 3's `validate()` runs clean under `-W error::FutureWarning`**, on the
+real reference tables through `merge_propellant_prices` — which is how the
+`.fillna(False)` version was caught and rejected. `propellantless` is dtype
+`bool`, **38 of 41** propellants have a mass ratio, and the function reports no
+data warnings.
+
+⚠️  **The five Stage 4 checks could not have caught the transportation bug, and
+that is worth stating rather than glossing.** `validate()` is Stage 3 and prints;
+Stage 4 reads `propellants.csv`, not the module. So the item is verified by
+running the function under warnings-as-errors, not by any hash above — a
+reminder that `verify.py` covers Stage 4 and nothing else.
+
+### Measured and declined, so nobody re-derives them
+
+🚨  **THE LAST BIG `_by_distinct` SITE IS WORTH 0.15 s, AND IT IS THE ONE THAT
+LOOKS BIGGEST.** `_infer_from_albedo` is applied per row at two places in
+`enrich_composition`, and the second of them fires on **1,300,139 rows with 54
+distinct values** — by row count the largest surviving instance in the pipeline
+of the shape this file calls its most common defect. Measured on the real
+1.4 M-row column:
+
+| | |
+|---|---|
+| `.apply()` | 0.182 s |
+| `_by_distinct` | 0.028 s |
+| fully vectorised (`np.select`) | 0.020 s |
+
+**~0.15 s, or 0.07% of Stage 1's 224 s.** The reason it is not v1.1.1's 3.87×
+is the whole lesson: `_infer_from_albedo` is *two float comparisons*, where the
+twelve composition lookups v1.1.1 fixed each ran `pd.isna` on a scalar at
+~1 µs. **The redundancy factor is not the saving — the per-call cost is.** A
+62,000-way redundancy over a 20 ns function is worth nothing. Do not re-find
+this one on the row count alone.
+
+✅  **`builtins.max` re-checked at four times the call count, and v1.17.4's
+verdict holds.** It is **18.7 M calls** in an 800-row default cell, against the
+4.75 M v1.17.4 measured — but per row that is the same rate, and at the ~13 ns
+per call v1.17.4 measured as the *saving* from inlining on Python 3.13
+(38.5 → 25.8 ns), inlining every one of them buys **~0.24 s of a 57.8 s run,
+~0.4%**. ⚠️  cProfile attributes **2.5 s** to it, which is dispatch overhead on
+a C builtin and not real cost; that number is what will tempt the next person.
+**Still closed, not deferred.**
+
+**`integrity_check`'s second factorize is still declined**, on v1.17.5's
+reasoning unchanged: **0.454 s** as that release measured it directly, ~0.03%
+of a full raw pass, so it optimises the harness rather than the pipeline — and
+every clean way to close it widens a contract. ⚠️  A cProfile run attributes
+~0.85 s to it, which is instrumentation overhead on a 1.55 M-element walk;
+quote v1.17.5's figure, not the profiler's.
+
+**Branch-and-bound on the objective** remains the one big structural item, and
+v1.14.1's warning against approximating the bound stands unaltered. ⚠️  Note
+that `1.17.7` is *not* a precedent for it, in the same way `1.17.4` was not:
+this release prunes a **cache**, where eviction is provably value-neutral. A
+bound on `selection_key` is lexicographic over profit and cost/revenue with
+revenue coming out of the payload knapsack, and a bound that is occasionally
+too tight drops winners **without changing a row count** — which is the one
+failure none of the five checks in `verify.py` would catch.
+
+## The verification harness is committed now
+
+`verify.py`, at the repo root. It is the five checks every release section in
+this file argues from, written down once:
+
+| # | check | catches |
+|---|---|---|
+| 1 | bit-identity vs a baseline | any change to any number, by column and by hash |
+| 2 | pre-filter on vs off | the pruner and the solver drifting apart |
+| 3 | serial vs 8 workers | a worker seeing different reference data from its parent |
+| 4 | mass ledger | a kilogram in the rocket equation with no price in the ledger |
+| 5 | never-worse | a search optimising something other than what it reports |
+
+```bash
+py verify.py baseline --tag 1.17.7   # on a clean tree, BEFORE editing
+py build_master.py
+py verify.py check --tag 1.17.7
+```
+
+`py verify.py invariants` runs 4 and 5 only and needs no baseline.
+
+⚠️  A full `check` builds ~20 cells and takes **roughly half an hour** — most of
+it check 2, since turning the pre-filter off is precisely what v1.14.1 and
+v1.17.4 exist to avoid. Iterate with `--skip prune parallel` (~5 min, and it
+still catches any change to any number), then run the full set once before
+committing. **A verification you will not run is worse than a slow one.**
+
+🚨  **THE REASON IT EXISTS IS IN THIS FILE, ONCE PER ROW OF THE TABLE BELOW.**
+Every release before 2026-08-21 rebuilt these checks from memory and threw them
+away, and the release notes record what that cost. **Three produced a wrong
+conclusion that was written down or acted on before being caught, and three more
+would have condemned a release that had changed nothing:**
+
+| release | the harness bug | what it looked like |
+|---|---|---|
+| `1.15.0` | destination not set explicitly | two cells recorded as `cislunar` that ran against `earth_surface` prices |
+| `1.15.0` | brute-force sweep truncated at N = 24 | a capped search read as a counter-example to the thing it was capping |
+| `1.17.1` | parquet round trip renders `None` as `nan` | three identical object columns compared as different |
+| `1.17.3` | only `pipeline_version` stripped | midnight falling mid-run read as a defect confined to the beneficiation path |
+| `1.17.4` | `spec_from_file_location` instead of `import master` | `ImportError` in every worker; the harness re-ran itself once per core |
+| `1.17.5` | `mining_hardware_kg` read as a column | `KeyError` — the rig is a config constant |
+| `1.17.7` | `cost_revenue_ratio` | no such column; the objective is `total_cost_usd / gross_value_usd` |
+| `1.17.7` | `median(1/r − 1)` | 74.0% where the committed convention reads 42.5% |
+| `1.17.7` | two Series compared directly | **every float column DIFFER while the file hashed MATCH** |
+| `1.17.7` | `read_csv` without `float_precision="round_trip"` | **the same symptom again, from a different cause** |
+| `1.17.7` | `""` compared as different from `NaN` | **and again, from a third** |
+
+The last five are this release's own, hit while reconstructing the harness —
+five fresh bugs in one sitting, in a harness that had already been written
+seven times. That is the argument, and it is empirical rather than
+tidy-minded.
+
+🚨  **THE LAST THREE ARE THE SHARPEST, THEY PRODUCE THE IDENTICAL SYMPTOM, AND
+EACH HAD TO BE DIAGNOSED SEPARATELY — FIXING ONE MOVED THE COUNT AND NOTHING
+ELSE.** In sequence, the same four cells reported:
+
+```
+75/139 identical | f3dbd86ee6d35fc0 | DIFFER dv_out_m_s, mission_duration_yr, …
+137/139 identical | f3dbd86ee6d35fc0 | DIFFER payload_mix, payload_dominant_phase
+139/139 identical | f3dbd86ee6d35fc0 | MATCH
+```
+
+**The hash never moved. All three readings were of the same four byte-identical
+files**, against hashes committed for v1.17.4 and v1.17.6. The three causes:
+
+1. **Index alignment.** `build_profitability_catalog` returns its rows
+   **sorted by the objective**, so a live frame carries a scrambled index while
+   the same frame re-read from CSV carries a fresh `RangeIndex` — and comparing
+   two Series directly makes pandas align on the index **label**, not position.
+2. **`read_csv`'s default float parser is not correctly rounded.** It is a fast
+   reader, and it returns a float64 one ULP from the one written:
+   `119898.18458829961` comes back as `119898.1845882996`. **Neither the
+   default nor `float_precision="high"` round-trips — only `"round_trip"`
+   does.** Same family as the pyarrow CSV engine v1.17.4 measured at 4.8× and
+   rejected for moving `estimated_mass_kg` by 1e-13 relative: *a different
+   float parser rounds differently in the last bit.*
+3. **The empty string is not `NaN`, except that in a CSV it is.** An all-empty
+   object column — `payload_mix` and `payload_dominant_phase` are empty on
+   every row of a raw cell — writes as bare commas and reads back as
+   **float64-of-NaN**, so a live `""` met a `nan`. A CSV cannot represent the
+   difference, so the file's own hash cannot see it either; **a comparator
+   stricter than the artefact it compares reports failures that do not exist.**
+
+⚠️  **Point 2 says nothing about the pipeline, and must not be "fixed" there.**
+`load_all_catalogs` reads with the default parser too, so the model's inputs go
+through the same slightly-inexact reader on every run — which is
+**deterministic**, and is therefore part of why bit-identity holds at all.
+Setting `float_precision="round_trip"` in Stage 4's loader would move every
+number in the model. It belongs in the *comparison*, not in the load.
+
+Together these are v1.17.1's "a broken checker looks exactly like a broken
+release" for the second and third time, and they are why this harness reports
+**a hash AND a column diff** rather than either alone: **when the two disagree,
+the hash is the one that is right**, and the disagreement is itself the signal
+that the comparator is broken. A column diff alone would have condemned a
+release that had changed nothing. A hash alone would not name the column when
+something genuinely does move.
+
+Every one of those is now defended against **at the line that would otherwise
+reproduce it**, and `verify.py`'s header carries the list. ⚠️  **Add to that
+list rather than starting a twelfth harness.**
+
+✅  **It reproduces the four cell hashes committed for `1.17.4` and `1.17.6`
+exactly** — `f3dbd86ee6d35fc0` / `3c809fb067c8d034` / `9bb6c8bb41852b66` /
+`1d5823f859478c74`. That is what makes it a *replacement* for those harnesses
+rather than another one to have to trust, and it is why `_comparable()`
+deliberately does **not** sort columns: sorting would be tidier and would
+silently make every hash it prints incomparable with the eight already in this
+file.
+
+⚠️  **It does not re-run Stages 1–3, deliberately.** A Stage 1 run fetches a
+different catalog (JPL adds bodies daily) and a Stage 3 run re-fetches live
+prices; either moves the inputs underneath the comparison. This is the same
+reasoning catalog `1.1.1` used when it verified `enrich_composition` in-process
+against the on-disk catalog rather than by re-running Stage 1.
+
+⚠️  **The two never-worse comparisons run their own cells at a matched cap**
+(400), because both join two runs on `designation` — and the four bit-identity
+cells deliberately do *not* share a cap, since beneficiated is ~7× raw and runs
+at 150. Joining a 400-row raw cell to a 150-row beneficiated one silently
+compares 65 pairs and reports them as though they were the population. That
+trap is one careless join away from being the twelfth entry in the table above.
+
 ## Config discipline
 
 Configs are dataclasses instantiated once at module scope. Edit the field
@@ -5898,6 +6402,22 @@ Undoing any of these silently corrupts the output:
   makes you say what a *missing* value means instead of letting truthiness
   decide. Same shape as the `str.contains` / `regex=False` trap above: the
   wrong behaviour is the quiet one.
+
+  ⚠️  **"through a CSV" was too narrow, and the second instance was in
+  `transportation.py` for eight releases.** `validate()` selected both
+  propellant sanity bands with `~propellant_df["propellantless"].astype(bool)`,
+  on a frame built in-module from Python bools — so the *string* half of the
+  trap could not fire, but the **NaN half could**, and it is the half that
+  matters here: a row omitting the flag would be classed as a sail and dropped
+  from the Isp band and the price band at once, i.e. the checks would stop
+  covering exactly the row most likely to be new and wrong. Fixed in
+  transportation `1.12.1` with `.ne(True)`, resolved once into
+  `has_mass_ratio` rather than written out at both bands — deliberately not
+  `.fillna(False).astype(bool)`, which raises a pandas `FutureWarning` on an
+  object column, i.e. exactly when it would fire. **The rule is
+  about the DTYPE being inferred from the data, not about where the data came
+  from** — any `.astype(bool)` on a column that a future row could leave blank
+  is the same bug.
 - **Re-run Stage 3 after upgrading it.** Every Module 3 column Module 4 reads
   is read defensively, so a stale `propellants.csv` does not raise — it
   reverts tank mass to zero, drops the maturity gate, and un-excludes solids
