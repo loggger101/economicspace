@@ -62,14 +62,18 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See the README's "parallel-repo divergence" section — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.1.1`, mineral_value `1.7.0`, transportation `1.12.1`,
-calc `1.17.7`, master `1.20.7` (the master version is a literal in
+Current: catalog `1.1.1`, mineral_value `1.7.1`, transportation `1.12.1`,
+calc `1.17.7`, master `1.20.8` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR` — two places).
 
-ℹ️  **ELEVEN stamps so far do NOT mean the numbers moved.** The rule is
+ℹ️  **TWELVE stamps so far do NOT mean the numbers moved.** The rule is
 one-directional — *changing a number means bumping; bumping does not mean a
 number changed* — and reading a version as evidence that a result moved is the
 mistake this table exists to prevent.
+
+⚠️  Every row is a **calc** stamp except the last, which is `mineral_value` —
+the first non-calc entry this table has carried. Read the module, not just the
+number: `1.7.1` and `1.17.1` are different modules and unrelated releases.
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -84,14 +88,16 @@ mistake this table exists to prevent.
 | `1.17.5` | performance only | bit-identical, verified |
 | `1.17.6` | performance only | bit-identical, verified |
 | `1.17.7` | **memory bound** | bit-identical, verified |
+| mineral_value `1.7.1` | **silent default closed** | bit-identical, verified |
 
-**Every measured cell in this file stands unaltered across all eleven — do not
+**Every measured cell in this file stands unaltered across all twelve — do not
 re-measure anything on account of any of them.** Each release's own section
 carries its verification.
 
 ⚠️  **Derive the taxonomy from the table above, not from a count in prose.**
-Eight of the eleven are *performance* stamps; the other three are `1.17.0` (a
-default flip), `1.17.3` (a cleanup) and `1.17.7` (a memory bound), which is why
+Eight rows are *performance* stamps; the rest are `1.17.0` (a default flip),
+`1.17.3` (a cleanup), `1.17.7` (a memory bound) and `1.7.1` (a silent default
+closed in another module), which is why
 this file counts two sequences that run apart — see "What calc v1.17.0
 changed". That paragraph is where the count last rotted: it was written at
 `1.17.5` and still read "nine" and "seven" after `1.17.6` shipped, which is
@@ -6234,10 +6240,140 @@ revenue coming out of the payload knapsack, and a bound that is occasionally
 too tight drops winners **without changing a row count** — which is the one
 failure none of the five checks in `verify.py` would catch.
 
+## What mineral_value v1.7.1 changed
+
+**Nothing you can measure**, and the stamp moves so a catalog still names the
+code that built it. mineral_value `1.7.0 → 1.7.1`, master `1.20.7 → 1.20.8`; no
+other module changed. Verified rather than asserted: **all 31 rows of the
+on-disk Stage 2 catalog recompute identically**, `annual_market_kg` and
+`in_space_utility` alike, and the four Stage 4 cells are bit-identical.
+
+This is the first audit pass Stage 2 has ever had. It found one thing.
+
+### Verification (2026-08-21, Stage 2 and Stage 4)
+
+```
+1. BIT-IDENTITY   4/4 cells 139/139 columns | f3dbd86ee6d35fc0  3c809fb067c8d034
+                                             9bb6c8bb41852b66  1d5823f859478c74
+2. PRUNE ON/OFF   4/4 cells identical
+3. SERIAL/8W      byte-identical on both searched cells
+4. MASS LEDGER    max |error| 0.000000000 kg
+5. NEVER-WORSE    zero exceptions; declined 21, max 0.907498, median +42.5%
+6. STAGE 2        31 rows recompute ALL IDENTICAL | unclassified 0 | uncapped 15
+```
+
+The four Stage 4 hashes are the ones committed for `1.17.4`, `1.17.6` and
+`1.17.7`, so they now reproduce across **four** releases — a Stage 2 table edit
+was never going to move them, and this is what says so rather than an argument
+that it could not. Check 6 is the one that actually bears on this release: the
+31-row recompute is the Stage 2 analogue of those hashes.
+
+### Three commodities were falling through a silent default
+
+`annual_market_kg` reads a commodity's demand class through
+`_COMMODITY_CLASS.get(name, "shielding")`. Three rows had no entry —
+**`sperrylite` (PtAs₂), `laurite` (RuS₂) and `native-pgm`** — so they took the
+`shielding` share, **0.15 of a destination's entire import budget**, where the
+eight PGM *elements* all take `trace` at **0.0005**:
+
+| | at LEO | at `mars_surface` |
+|---|---|---|
+| what they got (`shielding`) | 75,000 kg/yr | 3,000 kg/yr |
+| what the PGM elements get (`trace`) | **250 kg/yr** | **10 kg/yr** |
+
+A factor of **300**, for the ore minerals of exactly those metals.
+
+🚨  **IT IS INERT TODAY, AND THAT IS WHY IT SURVIVED.** Their in-space utility
+is **0.0 at every destination**, so `in_space_price_usd_per_kg` always returns
+the `shipped to Earth` route, and `annual_market_kg` returns the terrestrial
+ceiling before it ever reads the class. Measured across all five destinations ×
+all three routes: the 24 combinations that move are all `used in space` or
+`route=None`, neither of which the pipeline reaches for these three.
+
+That is **the RTG lesson in another module** — *an unreachable branch is not a
+verified branch* — and it is not hypothetical here. This file already records
+that "a settlement catalyst market for the PGMs (utility 0.05 at the two
+surfaces) **was considered and rejected**". Revisit that decision and the ore
+minerals would silently have taken 300× the market of the metals they contain.
+
+Reclassified to `trace`, and an `assert` after `MINERAL_REFERENCE` now fails at
+import if any commodity has no class, so the next one added cannot inherit 15%
+of a depot by accident. Same precedent as the assert on
+`_DEMAND_SHARE_BY_CLASS` summing to 1.0 — and the same reasoning as v1.14.0's
+`_MODULE3_REQUIRED_OPS`: **name the row AND the behaviour its absence reverts.**
+
+### Measured and declined, so nobody re-derives it
+
+🚨  **`nickel-iron` HAS NO TERRESTRIAL MARKET CEILING, SO AT `earth_surface` IT
+NEVER SATURATES — AND IT IS ONE OF ONLY FOUR PHASES STAGE 4 SELLS.**
+`ANNUAL_WORLD_PRODUCTION_KG` lists elements plus four bulk categories, and
+three of Stage 4's four phases are in it (`water` 1e15, `silicates` 1e15,
+`carbon` 1e12). The fourth is absent and takes the same
+`.get(..., _UNLIMITED_MARKET_KG)` default — except that for the other three the
+1e15 is *written down* and for `nickel-iron` it is an accident. It is also the
+only one of the four with a genuinely finite market: iron is 1.3e12 kg/yr,
+nickel 3.6e9.
+
+**Not corrected, and the reason is measured rather than argued.** Against world
+pig-iron the saturation multiplier moves by:
+
+| Q sold (kg Fe-Ni) | relative change |
+|---|---|
+| 5 × 10⁴ (one mission) | 7.7 × 10⁻⁸ |
+| 5 × 10⁷ (N = 100 concurrent) | 7.7 × 10⁻⁵ |
+
+Nothing — but enough to break the bit-identity every release here is argued
+from, on a destination **not re-measured since calc `1.14.0`**. Recorded rather
+than taken. ⚠️  Do not "find" it again and assume it is bigger; and if
+`earth_surface` is ever re-measured for another reason, take it in that pass.
+
+### Stage 1 was audited too, and needed nothing
+
+✅  **`TAXONOMY_COMPOSITION` covers the real population to 99.997%**, which
+nobody had measured. Of 75 distinct `spectral_type` values across 1,555,667
+rows, exactly **two resolve to neither an exact entry nor the root-letter
+fallback** — `Z` (36 rows) and `U` (4 rows), neither a Bus-DeMeo or Tholen
+class. **53 rows in total (0.0034%)** end with no `comp_metal_fraction` and are
+skipped by Stage 4. The cascade fails *safe*: an unresolved type lands on
+`TAXONOMY_COMPOSITION["Unknown"]`, whose fractions are `None`, so the body is
+excluded rather than mispriced.
+
+A dead-code scan across both modules found **nothing** — 64 top-level names in
+`mineral_value.py` and 59 in `catalog.py`, all referenced. That is v1.17.3's
+conclusion holding in the two modules it never looked at: the remaining
+duplication in this codebase is semantic, not structural.
+
+✅  **`verify.py` GAINED A SIXTH CHECK FOR THIS, rather than the gap being
+documented a second time.** transportation `1.12.1` and mineral_value `1.7.1`
+are two releases running whose item the five Stage 4 checks structurally could
+not see, and writing that down twice would have been the wrong answer.
+
+`6. STAGE 2 TABLES` does two things, neither needing the network:
+
+```
+  recompute       31 rows at cislunar       ALL IDENTICAL
+  unclassified   0
+  uncapped       15 take the unlimited terrestrial default (1e+15 kg/yr)
+```
+
+**Recompute** runs every row of the on-disk Stage 2 catalog back through the
+live `annual_market_kg` and `in_space_utility` and compares against the stored
+values — the Stage 2 analogue of a four-cell hash, and the check to re-run
+after touching any judgement table. **Coverage** reports what falls through a
+silent default: `unclassified` should always be 0 now that the module asserts
+it, and `uncapped` is 15 because the bulk minerals genuinely have no
+terrestrial market — **`nickel-iron` is in that 15 and is the known instance
+above.** ⚠️  A count that GROWS is the signal; the count itself is not.
+
+⚠️  The harness still covers **Stage 4 and Stage 2's tables only**. Stage 3's
+`validate()` and Stage 1's derivation chain remain outside it — the
+transportation `1.12.1` item had to be checked by running that function under
+`-W error::FutureWarning`, and Stage 1's coverage by reading the real catalog.
+
 ## The verification harness is committed now
 
-`verify.py`, at the repo root. It is the five checks every release section in
-this file argues from, written down once:
+`verify.py`, at the repo root. It is the checks every release section in this
+file argues from, written down once:
 
 | # | check | catches |
 |---|---|---|
@@ -6246,6 +6382,7 @@ this file argues from, written down once:
 | 3 | serial vs 8 workers | a worker seeing different reference data from its parent |
 | 4 | mass ledger | a kilogram in the rocket equation with no price in the ledger |
 | 5 | never-worse | a search optimising something other than what it reports |
+| 6 | Stage 2 tables | a judgement-table edit that moved a number, or a commodity falling through a silent default |
 
 ```bash
 py verify.py baseline --tag 1.17.7   # on a clean tree, BEFORE editing
@@ -6253,7 +6390,8 @@ py build_master.py
 py verify.py check --tag 1.17.7
 ```
 
-`py verify.py invariants` runs 4 and 5 only and needs no baseline.
+`py verify.py invariants` runs 4, 5 and 6 only and needs no baseline — which
+makes it the fast way to check an upstream table edit.
 
 ⚠️  A full `check` builds ~20 cells and takes **roughly half an hour** — most of
 it check 2, since turning the pre-filter off is precisely what v1.14.1 and
