@@ -36,7 +36,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.1.1 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
-| 2 | `modules/mineral_value.py` | 1.7.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
+| 2 | `modules/mineral_value.py` | 1.7.1 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.12.1 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
 | 4 | `modules/calc.py` | 1.17.7 | Per-asteroid Δv **and mission architecture** — and, by default since 1.17.0, **programme size, fleet size and schedule** — in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
@@ -369,9 +369,11 @@ which runs all five:
 | 3 | serial vs 8 workers | a worker seeing different reference data from its parent |
 | 4 | mass ledger | a kilogram in the rocket equation with no price in the ledger |
 | 5 | never-worse | a search optimising something other than what it reports |
+| 6 | Stage 2 tables | a judgement-table edit that moved a number, or a commodity falling through a silent default |
 
-`py verify.py invariants` runs 4 and 5 only and needs no baseline, so it works
-on any tree; `--cells` takes a subset.
+`py verify.py invariants` runs 4, 5 and 6 only and needs no baseline, so it
+works on any tree and is the fast way to check an upstream table edit;
+`--cells` takes a subset.
 
 ⚠️  A full `check` builds about twenty cells and takes **roughly half an hour**.
 Most of that is check 2 — turning the pre-filter off is exactly what v1.14.1 and
@@ -1524,6 +1526,41 @@ the return structure cost.
 If a change suddenly improves these by an order of magnitude, suspect it has
 switched one of the twenty models off rather than found something. See
 [What the model charges for](#what-the-model-charges-for).
+
+### What changed in mineral_value v1.7.1
+
+**No number.** All 31 rows of the Stage 2 catalog recompute identically, and the
+four Stage 4 cells are bit-identical. The stamp moves so a catalog still names
+the code that built it.
+
+The first audit pass Stage 2 has ever had, and it found one thing. A commodity's
+share of a depot's import budget is looked up as
+`_COMMODITY_CLASS.get(name, "shielding")`, and three rows had no entry —
+**sperrylite (PtAs₂), laurite (RuS₂) and native-pgm**. They were taking the
+shielding share, **15% of a destination's entire import budget**, where the
+eight PGM *elements* all take the trace slice at **0.05%**. That is 75,000 kg/yr
+at LEO against 250 — a factor of 300, for the ore minerals of exactly those
+metals.
+
+It is inert today, and that is why it survived: their in-space utility is 0.0 at
+every destination, so the price router always ships them to Earth and the class
+is never read. But the settlement catalyst market that would make it reachable
+is recorded in `CLAUDE.md` as *considered and rejected*, not impossible — so
+this is the same shape as the RTG branch: **an unreachable branch is not a
+verified branch.** Reclassified to trace, with an assert that now fails at
+import if any commodity is unclassified.
+
+Measured and deliberately not fixed: **`nickel-iron` has no terrestrial market
+ceiling**, so at `earth_surface` it never saturates — and it is one of only four
+phases Stage 4 sells. Correcting it to world pig-iron production moves the
+saturation multiplier by 7.7×10⁻⁸ at one mission's output and 7.7×10⁻⁵ at
+programme scale: nothing, but enough to break bit-identity on a destination not
+re-measured since calc v1.14.0.
+
+Stage 1 was audited in the same pass and needed no changes. Its taxonomy table
+covers the real population to **99.997%** — of 75 distinct spectral types across
+1.55 M rows, only `Z` (36 rows) and `U` (4) resolve to nothing, and the cascade
+fails safe by excluding them rather than mispricing them.
 
 ### What changed in v1.17.7
 
