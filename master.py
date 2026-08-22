@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.20.7)
+"""Master Asteroid Profitability Pipeline (1.20.8)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -3522,7 +3522,39 @@ class MineralValueConfig:
     #           olivine   $11,070 ->    $696   carbon  $17,831 ->    $691
     #           nickel    unchanged at $31,360 (undiscounted)
     #           platinum  unchanged at $0 (downleg still exceeds spot)
-    pipeline_version: str = "1.7.0"
+    # 1.7.1 — Three commodities were falling through a SILENT DEFAULT, and the
+    #         stamp moves so a catalog still names the code that built it.  No
+    #         exported value changes: all 31 rows of the on-disk catalog
+    #         recompute identically, `annual_market_kg` and `in_space_utility`
+    #         alike.
+    #         • `sperrylite` (PtAs2), `laurite` (RuS2) and `native-pgm` had no
+    #           `_COMMODITY_CLASS` entry, so `annual_market_kg` handed them the
+    #           `.get(..., "shielding")` default — **0.15 of a destination's
+    #           entire import budget** instead of the trace slice the eight PGM
+    #           ELEMENTS get.  75,000 kg/yr at LEO against 250: a factor of 300,
+    #           for the ore minerals of exactly those metals.
+    #           ⚠️  INERT TODAY, and that is why it survived: their in-space
+    #           utility is 0.0 at every destination, so the price router always
+    #           returns "shipped to Earth" and the class is never read.  It is
+    #           the RTG lesson again — **an unreachable branch is not a verified
+    #           branch** — and the settlement-catalyst market that would make it
+    #           reachable is recorded in CLAUDE.md as considered-and-rejected,
+    #           not as impossible.  Reclassified to "trace", where they belong.
+    #         • An `assert` after MINERAL_REFERENCE now fails at import if any
+    #           commodity has no class, so the next one added cannot inherit
+    #           15% of a depot by accident.  Same precedent as the assert on
+    #           `_DEMAND_SHARE_BY_CLASS` summing to 1.0.
+    #         ⚠️  NOT fixed, deliberately, and measured rather than argued:
+    #         `nickel-iron` is absent from ANNUAL_WORLD_PRODUCTION_KG, so at
+    #         `earth_surface` it takes the same unlimited default and never
+    #         saturates.  It is one of only four phases Stage 4 actually sells.
+    #         Correcting it to world pig-iron (1.3e12 kg/yr) moves the
+    #         saturation multiplier by **7.7e-8 at 5e4 kg and 7.7e-5 at 5e7 kg**
+    #         — nothing, but enough to break the bit-identity every release here
+    #         is argued from, on a destination not re-measured since calc
+    #         1.14.0.  Recorded in CLAUDE.md instead; do not "find" it again and
+    #         assume it is bigger.
+    pipeline_version: str = "1.7.1"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows: int = 20
@@ -4132,6 +4164,14 @@ _COMMODITY_CLASS: Dict[str, str] = {
     "rhodium":         "trace",      "ruthenium":    "trace",
     "iridium":         "trace",      "osmium":       "trace",
     "gold":            "trace",      "silver":       "trace",
+    # v1.7.1: the PGM ORE MINERALS, which were missing.  They are the same
+    # metals as the eight rows above — sperrylite is PtAs2, laurite is RuS2,
+    # native-pgm is the alloy — so "trace" is the only class they can be in.
+    # Absent, they fell through the `.get(..., "shielding")` default below and
+    # would have been handed **0.15 of a depot's entire import budget** rather
+    # than 0.0005: 75,000 kg/yr at LEO against 250, a factor of 300.
+    "sperrylite":      "trace",      "laurite":      "trace",
+    "native-pgm":      "trace",
 }
 
 # The bulk classes must partition the budget, or the "one import budget"
@@ -4760,6 +4800,31 @@ MINERAL_REFERENCE: List[dict] = [
 print(f"✅  Reference table ready — {len(MINERAL_REFERENCE)} entries "
       f"({sum(1 for r in MINERAL_REFERENCE if r['kind'] == 'element')} elements / "
       f"{sum(1 for r in MINERAL_REFERENCE if r['kind'] == 'mineral')} minerals)")
+
+
+# ─── EVERY COMMODITY MUST BE CLASSIFIED  (v1.7.1) ────────────────────────────
+# `annual_market_kg` reads the demand class through
+# `_COMMODITY_CLASS.get(name, "shielding")`, and an unrecognised name therefore
+# gets 15% of a destination's whole import budget without anyone deciding that.
+# Three PGM ore minerals had been doing exactly that since v1.7.0 — inertly,
+# because their in-space utility is 0 at every destination so the class is
+# never read, which is precisely why nobody noticed.  CLAUDE.md's own lesson
+# from the RTG branch applies: **an unreachable branch is not a verified
+# branch**, and the settlement-catalyst market that would make it reachable is
+# recorded there as considered-and-rejected rather than impossible.
+#
+# Asserted rather than commented, for the same reason the share table above is:
+# the failure this replaces was a silent default, and a default that is only
+# correct by accident is the quiet-wrong-answer shape this project keeps
+# finding.  Adding a commodity now fails loudly at import until it is placed.
+_UNCLASSIFIED = sorted(
+    {str(r["name"]) for r in MINERAL_REFERENCE} - set(_COMMODITY_CLASS)
+)
+assert not _UNCLASSIFIED, (
+    "every MINERAL_REFERENCE commodity needs a _COMMODITY_CLASS entry, or it "
+    f"silently takes the 'shielding' share of every in-space import budget: "
+    f"{_UNCLASSIFIED}"
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -19384,7 +19449,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.20.7")
+    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.20.8")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
     print("█" * 75)
 

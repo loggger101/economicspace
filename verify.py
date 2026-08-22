@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Release verification harness for the asteroid profitability pipeline.
 
-Run this before and after any change to Stage 4.  It is the five checks every
+Run this before and after any change to Stage 4.  It is the checks every
 release in CLAUDE.md argues from, written down once instead of rebuilt from
 memory each time:
 
@@ -10,6 +10,7 @@ memory each time:
     3. serial/parallel a worker sees what its parent sees
     4. mass ledger     hardware_total_kg == rig + plant + ep, exactly
     5. never-worse     beneficiated <= raw, and searched <= N = 1
+    6. stage 2 tables  the judgement tables still produce the numbers on disk
 
 Typical use.  The ORDER matters: the baseline must be captured before the first
 edit, exactly as every release note in CLAUDE.md says it was.
@@ -23,17 +24,22 @@ Other entry points:
 
     py verify.py check --skip prune parallel  # ~5 min: bit-identity + 4 + 5
     py verify.py check --cells raw benef      # a subset
-    py verify.py invariants                   # 4 and 5 only; needs no baseline
+    py verify.py invariants                   # 4, 5, 6 only; needs no baseline
     py verify.py baseline --tag 1.17.6        # keep several around
 
-SCOPE.  This covers STAGE 4 and nothing else.  It never re-runs Stages 1-3 --
-deliberately, because a Stage 1 run fetches a different catalog (JPL adds bodies
-daily) and a Stage 3 run re-fetches live prices, either of which moves the
-inputs underneath the comparison.  The consequence is that a change to Stage 1,
-2 or 3 can pass every check here and still be wrong: v1.12.1's propellant-flag
-fix lives in Stage 3's validate(), which Stage 4 never calls, and had to be
-checked by running that function under `-W error::FutureWarning` instead.  If
-you change an upstream module, this file is not your evidence.
+SCOPE.  Checks 1-5 cover STAGE 4; check 6 covers STAGE 2's judgement TABLES.
+Nothing here ever re-runs Stages 1-3 -- deliberately, because a Stage 1 run
+fetches a different catalog (JPL adds bodies daily) and a Stage 3 run re-fetches
+live prices, either of which moves the inputs underneath the comparison.  Check
+6 works around that by recomputing the pure table functions against the values
+already stored in the on-disk Stage 2 catalog, which needs no network.
+
+What is still NOT covered: Stage 3's validate(), and Stage 1's derivation chain.
+A change there can pass everything here and still be wrong -- transportation
+1.12.1's propellant-flag fix lives in Stage 3's validate(), which Stage 4 never
+calls, and had to be checked by running that function under
+`-W error::FutureWarning` instead.  If you change those, this file is not your
+evidence.
 
 BUDGET.  A full `check` builds ~20 cells and takes roughly HALF AN HOUR on the
 reference machine.  Most of that is check 2, because turning the pre-filter off
@@ -386,6 +392,66 @@ def check_never_worse(m) -> bool:
     return ok
 
 
+def check_stage2(m) -> bool:
+    """Stage 2's judgement tables still produce the numbers on disk.
+
+    Added after the second release running turned up an item the five Stage 4
+    checks structurally could not see (transportation 1.12.1's propellant flag,
+    then mineral_value 1.7.1's commodity classes).  Documenting that gap twice
+    was the wrong answer; this closes it for the table half.
+
+    Two things, and neither needs the network:
+
+      RECOMPUTE.  Every row of the on-disk Stage 2 catalog, through the live
+        `annual_market_kg` and `in_space_utility`, against the values stored in
+        it.  This is the Stage 2 analogue of a four-cell hash: it is what says a
+        judgement-table edit was inert, and it is the check to re-run after
+        touching one.
+
+      COVERAGE.  Which commodities fall through a silent default.  A name with
+        no `_COMMODITY_CLASS` entry silently takes 15% of a destination's whole
+        import budget; a name with no ANNUAL_WORLD_PRODUCTION_KG entry silently
+        takes an UNLIMITED terrestrial market and can never saturate.  The
+        first is now an import-time assert in the module, so it should always
+        report zero; the second is reported because `nickel-iron` is a known,
+        measured, deliberately-unfixed instance -- see CLAUDE.md.  A count that
+        GROWS is the signal, not the count itself.
+    """
+    import pandas as pd
+
+    path = os.path.join(m.MINERAL_CONFIG.output_dir,
+                        m.MINERAL_CONFIG.catalog_filename)
+    if not os.path.exists(path):
+        print(f"  (no Stage 2 catalog at {path} -- skipped)")
+        return True
+
+    d = pd.read_csv(path, float_precision="round_trip")
+    dest = str(d["delivery_destination"].iloc[0])
+    bad = []
+    for _, r in d.iterrows():
+        name = str(r["name"])
+        route = str(r["value_route"]) if pd.notna(r.get("value_route")) else None
+        if float(r["annual_market_kg"]) != m.annual_market_kg(name, dest, route):
+            bad.append((name, "annual_market_kg"))
+        if "in_space_utility" in d.columns and \
+                float(r["in_space_utility"]) != m.in_space_utility(name, dest):
+            bad.append((name, "in_space_utility"))
+    ok = not bad
+    print(f"  recompute      {len(d):3d} rows at {dest:14s} "
+          f"{'ALL IDENTICAL' if ok else str(len(bad)) + ' DIFFER: ' + str(bad[:4])}")
+
+    names = {str(r["name"]) for r in m.MINERAL_REFERENCE}
+    no_class = sorted(names - set(m._COMMODITY_CLASS))
+    no_cap = sorted(n for n in names
+                    if n not in m.ANNUAL_WORLD_PRODUCTION_KG)
+    ok &= not no_class
+    print(f"  unclassified   {len(no_class)} "
+          f"{'(would silently take 15% of a depot) ' + str(no_class) if no_class else ''}")
+    print(f"  uncapped       {len(no_cap)} take the unlimited terrestrial "
+          f"default ({m._UNLIMITED_MARKET_KG:.0e} kg/yr)")
+    return ok
+
+
 def check_prune(m, names: List[str],
                 already: Optional[Dict[str, Any]] = None) -> bool:
     """The pre-filter must agree with the unpruned search, column for column.
@@ -533,18 +599,23 @@ def cmd_check(args) -> int:
     print("\n5. NEVER-WORSE")
     ok &= check_never_worse(m)
 
+    print("\n6. STAGE 2 TABLES")
+    ok &= check_stage2(m)
+
     print("\n" + ("ALL CHECKS PASSED" if ok else "*** FAILURES ABOVE ***"))
     return 0 if ok else 1
 
 
 def cmd_invariants(args) -> int:
-    """Checks 4 and 5 only -- no baseline needed, so this runs on any tree."""
+    """Checks 4, 5 and 6 only -- no baseline needed, so this runs on any tree."""
     m = load_master()
     frames = {name: run_cell(m, name) for name in args.cells}
     print("\n4. MASS LEDGER")
     ok = check_mass_ledger(m, frames)
     print("\n5. NEVER-WORSE")
     ok &= check_never_worse(m)
+    print("\n6. STAGE 2 TABLES")
+    ok &= check_stage2(m)
     print("\n" + ("OK" if ok else "*** FAILURES ABOVE ***"))
     return 0 if ok else 1
 
