@@ -468,7 +468,34 @@ class TransportConfig:
     #           mechanisms (single-campaign by design, or failed inside one).
     #           5 is the optimistic reading of both.
     #         No propellant, vehicle, Δv or storage figure moved.
-    pipeline_version: str = "1.12.0"
+    # 1.12.1 — ONE line in validate(), and no table row moved at all.  The two
+    #         propellant sanity bands selected their rows with
+    #         `~propellant_df["propellantless"].astype(bool)`, which is the trap
+    #         CLAUDE.md names under "Correctness invariants that were expensive
+    #         to find" — correct today ONLY because every one of the 41 rows
+    #         states the flag, so pandas infers dtype `bool`.  Add one row that
+    #         omits it and the column comes back `object` with a NaN, which
+    #         `.astype(bool)` reads as **True**: the new row would be silently
+    #         classed as a sail and dropped from both the Isp band and the price
+    #         band, i.e. the two checks would stop covering exactly the row most
+    #         likely to be new and wrong.  Now `.ne(True)` — "not flagged
+    #         propellantless" — resolved once and read twice rather than written
+    #         out at both bands.  It is total: `bool` out from a `bool` column
+    #         and from an `object` one alike, so a missing value reads as "has a
+    #         mass ratio", which is true of every real propellant.
+    #         ⚠️  NOT `.fillna(False).astype(bool)`, which was tried first and
+    #         is worse in the one case this exists for: on an object column
+    #         pandas raises `FutureWarning: Downcasting object dtype arrays on
+    #         .fillna is deprecated`, so that fix would emit a deprecation
+    #         warning exactly when it fires.
+    #         ⚠️  Changes no exported column and no CSV, so Stage 3 does NOT
+    #         need re-running for this — and should not be, casually: a Stage 3
+    #         run re-fetches live yfinance prices, which moves `cost_usd_per_kg`
+    #         and with it every Stage 4 baseline.  The stamp moves so the module
+    #         still names its own code; the on-disk propellants.csv keeps 1.12.0
+    #         until Stage 3 is next run for its own reasons.  Same call, and the
+    #         same reason, as catalog v1.1.1.
+    pipeline_version: str = "1.12.1"
     preview_rows:     int = 15
 
 
@@ -4855,7 +4882,39 @@ def validate(
     # the ceiling nuclear pulse (10,000 s); anything outside 40-200,000 s is a
     # typo rather than a technology.  Propellantless rows carry Isp = inf by
     # construction and are excluded, not warned about.
-    finite_isp = propellant_df[~propellant_df["propellantless"].astype(bool)]
+    #
+    # ⚠️  v1.12.1: `.ne(True)` rather than `~(...).astype(bool)`.  Every row of
+    # PROPELLANTS_REFERENCE states `propellantless` today, so pandas infers
+    # dtype `bool` and the old expression was correct — but add ONE row that
+    # omits the key and the column comes back `object` with a NaN in it, and
+    # `.astype(bool)` reads NaN as **True**.  A propellant that forgot to say it
+    # has a mass ratio would be silently classed as a sail and dropped from both
+    # sanity bands below, so the two checks would quietly stop covering the row
+    # most likely to be new and wrong.  That is the trap CLAUDE.md names under
+    # "Correctness invariants that were expensive to find" — the wrong behaviour
+    # is the quiet one.
+    #
+    # `.ne(True)` says the intended thing directly ("not flagged propellantless")
+    # and is total: it returns dtype `bool` from a `bool` column and from an
+    # `object` column alike, so a missing value reads as "has a mass ratio",
+    # which is true of every real propellant.
+    #
+    # ⚠️  NOT `.fillna(False).astype(bool)`, which was tried first and is worse
+    # in the one case this exists for: on an object column pandas raises
+    # `FutureWarning: Downcasting object dtype arrays on .fillna is deprecated`,
+    # so the fix would emit a deprecation warning exactly when it fires, and
+    # change behaviour again on a future pandas.
+    #
+    # ⚠️  A CSV-loaded frame would still need `_truthy`-style parsing, because
+    # the STRING "True" is not `True`.  This frame is built in-module from
+    # Python bools and `validate()` has no other caller, so that case cannot
+    # arise here — but do not copy this line onto a frame that came off disk.
+    #
+    # Resolved once and read twice: the expression was written out at both
+    # sanity bands, which is one more place for the two to drift apart.
+    has_mass_ratio = propellant_df["propellantless"].ne(True)
+
+    finite_isp = propellant_df[has_mass_ratio]
     bad_isp = finite_isp[
         (finite_isp["isp_vac_s"] < 40) | (finite_isp["isp_vac_s"] > 200_000)
     ]
@@ -4867,7 +4926,7 @@ def validate(
     # ── Propellant $/kg sanity band ──────────────────────────────────────────
     # Also widened: iodine at $60/kg and antimatter at $1e15/kg are both real
     # entries.  The band now only catches a missing or negative price.
-    priced = propellant_df[~propellant_df["propellantless"].astype(bool)]
+    priced = propellant_df[has_mass_ratio]
     bad_prop_cost = priced[
         (priced["cost_usd_per_kg"] <= 0)
         | (~np.isfinite(pd.to_numeric(priced["cost_usd_per_kg"], errors="coerce")))
