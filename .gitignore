@@ -15,6 +15,9 @@ env/
 /asteroid_pipeline/
 *.parquet
 
+# verify.py baselines — local reference runs, regenerated per release
+/.verify/
+
 # build_master.py syntax-check temp file
 .master_check.pyc
 

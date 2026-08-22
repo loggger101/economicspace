@@ -2068,7 +2068,54 @@ class CalcConfig:
     #         releases.  Pre-filter on vs off MATCH; serial vs 8 workers
     #         byte-identical; mass ledger exact; both never-worse invariants
     #         hold with zero exceptions.
-    pipeline_version: str = "1.17.6"
+    # 1.17.7 — MEMORY, not speed, and the first stamp here that fixes a defect
+    #         nothing would have noticed until a full-catalog run ran out of
+    #         RAM.  `_CALENDAR_CACHE` was the ONE memo in this module keyed on a
+    #         per-candidate float (`cadence_yr` = max(stay, synodic)), so where
+    #         every other cache reaches a ceiling and sits there — 69 entries
+    #         for the two reliability memos after 2.4 M hits, ~25 for
+    #         `_COMPOSITION_CACHE` — this one grew LINEARLY with the catalog at
+    #         ~45 entries per row:
+    #             cap 100 -> 3,983    cap 400 -> 17,729    cap 800 -> 36,071
+    #         which projects to ~70 M entries and 11-18 GB on a full-catalog
+    #         default cell, against a documented run peak of ~6 GB.  It landed
+    #         in v1.17.4 and no full-catalog run has been made since v1.16.0,
+    #         so it had never been exercised at the scale that shows it.
+    #         • Now `functools.lru_cache(maxsize=1024)`.  Replaying the real
+    #           223,538-call sequence through bounded LRUs, ALL reuse is local
+    #           to one candidate mission — v1.17.5's per-candidate `rig_cache`
+    #           already absorbs the cross-option traffic — so 36,071 entries
+    #           were buying 0.1 pp of hit rate over 64:
+    #               unbounded 83.9%  |  maxsize 1024 83.9%  |  maxsize 64 83.8%
+    #         • It is also FASTER, because lru_cache hashes in C rather than
+    #           building a key tuple in Python: 180.1 -> 91.0 ns a hit, and a
+    #           bounded lru_cache is not measurably slower than an unbounded one
+    #           (93.4 ns).  Bounding it is not a trade against speed.
+    #         ⚠️  Cannot change an output value, by CONSTRUCTION rather than by
+    #         rounding: it is a memo of a deterministic pure function, so
+    #         evicting an entry only forces recomputation of the identical
+    #         float.  That is a stronger guarantee than any arithmetic change in
+    #         this file can offer, and it is why this one is safe.
+    #         SECOND item, unrelated: `_load_csv` reads with `low_memory=False`.
+    #         The default reader infers dtypes from CHUNKS, so the dtype depends
+    #         on how values fall across them — the same "the dtype depends on
+    #         the data" hazard that cost NEOWISE four releases — and it emitted
+    #         `DtypeWarning: Columns (3,22) have mixed types` on every load of
+    #         the 1.55 M-row catalog.  A warning that always fires is one nobody
+    #         reads, and this module's rule is to remove the cause rather than
+    #         suppress it.  Taken only because it was MEASURED neutral: on the
+    #         real 1,555,667-row catalog, single-pass against chunked inference
+    #         changes 0 of 46 dtypes and 0 values.
+    #         Verified: four cells bit-identical against v1.17.6 by hash and
+    #         column, and the four hashes are the ones committed for v1.17.4 and
+    #         v1.17.6 — so they now reproduce across THREE releases.  Pre-filter
+    #         on vs off MATCH; serial vs 8 workers byte-identical; mass ledger
+    #         exact; both never-worse invariants hold with zero exceptions.
+    #         Checks now run from the committed `verify.py` rather than a
+    #         harness rebuilt from memory — see that file's header for the
+    #         eleven harness bugs that motivated committing one, five of them
+    #         found while writing it.
+    pipeline_version: str = "1.17.7"
 
 
 CONFIG = CalcConfig()
@@ -2106,12 +2153,31 @@ print(f"    Calendar       : "
 # CATALOG LOADER  (reads Module 1, 2, 3 CSVs)
 # ─────────────────────────────────────────────────────────────────────────────
 def _load_csv(path: str, label: str) -> pd.DataFrame:
-    """Read a CSV with friendly error reporting."""
+    """Read a CSV with friendly error reporting.
+
+    ⚠️  v1.17.7: `low_memory=False`, and it is about DETERMINISM rather than
+    memory.  The default reader infers each column's dtype from CHUNKS, so the
+    dtype it lands on depends on how the values happen to be distributed across
+    them — which is the same "the dtype depends on the data" hazard that cost
+    NEOWISE four releases, one level lower down.  It also emitted
+    `DtypeWarning: Columns (3,22) have mixed types` on every single load of the
+    1.55 M-row catalog (`is_neo` and `source_jpl`, both bool-plus-NaN), and a
+    warning that always fires is a warning nobody reads — this file's own rule
+    against suppressing warnings in `catalog.py` cuts the same way here: remove
+    the cause so a real one stands out.
+
+    ⚠️  Taken only because it was MEASURED neutral, not because it looks safe:
+    on the real 1,555,667-row catalog, single-pass against chunked inference
+    gives **0 of 46 columns with a different dtype and 0 with a different
+    value**.  A dtype change here would propagate into the mass cascade, which
+    is exactly the class of "harmless cleanup" this file keeps declining — so
+    if the catalog's schema changes, re-measure before assuming it still holds.
+    """
     if not os.path.exists(path):
         raise FileNotFoundError(
             f"{label} not found at {path} — has the upstream module been run?"
         )
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, low_memory=False)
     print(f"     📥  {label:28s} {len(df):>7,} rows  ←  {path}")
     return df
 
@@ -5048,6 +5114,18 @@ def learning_curve_factor(n_units: int, rate: float) -> float:
 # Unbounded, as the dicts were: the key space is one entry per rung of the
 # ladder, and `maxsize=None` is also the fastest lru_cache path -- it skips the
 # eviction bookkeeping entirely.
+#
+# ⚠️  v1.17.7: that argument is correct HERE and does not generalise, so read it
+# as a claim about these two key spaces rather than as a house style.  Measured
+# after an 800-row default cell, both hold **69 entries** against 2.4 M hits --
+# `n_missions` is a rung of the ladder and the rates are config constants, so
+# the ceiling has a name.  `_calendar_multipliers_cached` reasoned the same way,
+# carried `cadence_yr` in its key, and grew to 36,071 entries on the same cell
+# (~70 M and 11-18 GB projected on a full catalog) before being bounded.
+#
+# The rule the pair of them implies: **`maxsize=None` is safe exactly when you
+# can NAME the ceiling.  If you cannot, set one.**  A memo whose hit rate is
+# local and whose key space is not is a leak wearing an optimisation's clothes.
 @functools.lru_cache(maxsize=None)
 def _learning_curve_cached(n_units: int, rate: float) -> float:
     return learning_curve_factor(n_units, rate)
@@ -5203,9 +5281,52 @@ def programme_calendar_multipliers(
     return cost, credit
 
 
-_CALENDAR_CACHE: Dict[Tuple[int, float, float], Tuple[float, float]] = {}
-
-
+# v1.17.7: BOUNDED, and it is the only cache in this module that has to be.
+#
+# Every other memo here keys on something with a small, fixed range — a frame's
+# identity, a config value, a fleet size, a rung of the ladder — so it reaches a
+# ceiling and sits there: `_learning_curve_cached` and `_mining_reliability_cached`
+# hold 69 entries apiece after 2.4 M hits, and `_COMPOSITION_CACHE` holds ~25.
+# This one keys on `cadence_yr`, which is `max(stay, synodic)` and therefore a
+# fresh float per candidate mission, so it grew LINEARLY with the catalog:
+#
+#     cap  100 rows ->   3,983 entries       cap 800 rows -> 36,071 entries
+#     cap  400 rows ->  17,729 entries       ~45 entries per catalog row
+#
+# which projects to ~70 M entries and 11-18 GB on a full-catalog default cell,
+# against a documented run peak of ~6 GB.  Nothing had caught it because the
+# cache landed in v1.17.4 and no full-catalog run has been made since v1.16.0.
+#
+# The retention was buying nothing.  Replaying the real 223,538-call sequence
+# through bounded LRUs, all reuse is local to one candidate mission — v1.17.5's
+# per-candidate `rig_cache` already absorbs the cross-option traffic one level
+# up, and what reaches here is one ask per distinct (W, cadence) within a
+# candidate:
+#
+#     unbounded     hit rate 83.9%     retained 36,071 entries
+#     maxsize 1024  hit rate 83.9%     retained  1,024 entries
+#     maxsize   64  hit rate 83.8%     retained     64 entries
+#
+# 36,071 entries buy 0.1 pp over 64.  1024 is headroom, not a measured need.
+#
+# ⚠️  This cannot change a single output value, and that is worth stating
+# because almost nothing else in this file is safe to say: it is a memo of a
+# deterministic pure function, so evicting an entry only forces recomputation
+# of the identical float.  Bit-identity holds by CONSTRUCTION rather than by
+# rounding — unlike the arithmetic reorderings this project keeps declining.
+#
+# `functools.lru_cache` also happens to be faster than the hand-rolled dict it
+# replaces, because it hashes the argument tuple in C instead of building a key
+# tuple in Python first — the same finding v1.17.5 made for the two memos
+# above.  Measured on this machine, per hit:
+#
+#     hand-rolled dict  180.1 ns      lru_cache(1024)   91.0 ns
+#     lru_cache(None)    93.4 ns      lru_cache(256)    94.0 ns
+#
+# so bounding it is not a trade against speed.  Note this retires the "unbounded,
+# as the dicts were" reasoning above for THIS function only: that argument rests
+# on the key space being small, and here it is not.
+@functools.lru_cache(maxsize=1024)
 def _calendar_multipliers_cached(
     missions_per_ship: int, cadence_yr: float, wacc: float,
 ) -> Tuple[float, float]:
@@ -5226,14 +5347,10 @@ def _calendar_multipliers_cached(
     Keyed globally rather than per candidate because the arguments ARE the
     inputs — the same (W, cadence, wacc) is the same pair of multipliers for
     any body — and `w == 1` returns before the cache is touched, so the
-    single-mission path is untouched.
+    single-mission path is untouched.  Bounded because `cadence_yr` is not:
+    see the note above.
     """
-    key = (missions_per_ship, cadence_yr, wacc)
-    hit = _CALENDAR_CACHE.get(key)
-    if hit is None:
-        hit = _CALENDAR_CACHE[key] = programme_calendar_multipliers(
-            missions_per_ship, cadence_yr, wacc)
-    return hit
+    return programme_calendar_multipliers(missions_per_ship, cadence_yr, wacc)
 
 
 def fleet_search_ladder(f_min: int, f_max: int, steps: int) -> List[int]:
