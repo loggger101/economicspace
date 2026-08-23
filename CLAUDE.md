@@ -6409,6 +6409,16 @@ py verify.py check --tag 1.17.7
 `py verify.py invariants` runs 4, 5 and 6 only and needs no baseline — which
 makes it the fast way to check an upstream table edit.
 
+🚨  **A `check` with no baseline used to print `ALL CHECKS PASSED`.**
+Check 1 skipped any cell absent from the baseline with a `continue` that never
+touched `ok`, so a missing or partial baseline meant the most important of the
+six compared *nothing* and the run still announced success. It now reports
+`*** NOT VERIFIED ***`, names the cells, and exits 1. Two sibling cases went
+the same way and are fixed with it: an empty cell in the mass ledger printed
+`(no rows)` and passed, and a never-worse comparison whose join came back
+empty was skipped silently — both of which are the regression, not the absence
+of one. **A check that cannot run must never say it passed.**
+
 ⚠️  A full `check` builds ~20 cells and takes **roughly half an hour** — most of
 it check 2, since turning the pre-filter off is precisely what v1.14.1 and
 v1.17.4 exist to avoid. Iterate with `--skip prune parallel` (~5 min, and it
@@ -6550,6 +6560,35 @@ Three things worth keeping:
 or a config, run a stage that writes nothing — or read the code. And if you are
 about to touch Stages 1–3 deliberately, copy `asteroid_pipeline/*.csv`
 somewhere first, because nothing else will.
+
+🚨  **IT HAPPENED AGAIN THE SAME DAY, WHILE AUDITING FOR BUGS, AND THAT IS
+WHY THERE IS NOW A GUARD.** Testing `run_pipeline.py`'s *argument parsing*,
+somebody ran `--stages 2,4` and `--stages 234 --destination leo` as throwaway
+checks that the new comma/space separators parsed. They parsed — and then the
+run went on to re-price the entire catalog for `leo`. The tell was not a
+failing check but `verify.py` reporting a destination mismatch minutes later.
+
+Two things make this worth recording rather than filing under carelessness:
+
+- **The command looked like a parser test.** `--stages 2,4` reads as "does the
+  comma work", and the answer arrives in the banner, three lines before the
+  fetch. `preflight()` deliberately does NOT refuse it, because Stage 2 is in
+  the list and is therefore "about to re-price anyway" — correct reasoning
+  about consistency, and no help at all against an unintended fetch.
+- **Recovery worked, and that is luck rather than design.** Re-running
+  `--stages 2 --destination cislunar` restored the pricing and all four cell
+  hashes reproduced exactly — because yfinance serves a daily close and the
+  mistake was caught the same day. An hour later on a different date and the
+  baseline would have been gone.
+
+✅  `run_pipeline.py` now asks before any of Stages 1–3 overwrites a file that
+already exists (`overwrite_warning` / `confirm_overwrite`), naming what gets
+re-fetched. ⚠️  It is **not** the same question as `confirm_long_run()`: that
+one asks about spending hours, this one asks about spending something you
+cannot get back, and a five-second Stage 2 is exactly the case the runtime
+question would wave through. Skipped by `--yes`, which `run.bat` passes on
+every *scripted* invocation — typing `run.bat quick` is not incidental, and
+the file's own header promises that path can be scheduled.
 
 ### Console text is not output, and did not move a stamp
 
@@ -6908,6 +6947,18 @@ fetches nothing and is the point of the button — i.e. the default is the
 "re-run Stage 4 against a cached catalog" loop that `ui.py`'s own docstring
 already called the normal one. Ticking a fetching stage still works and now
 says what it will destroy.
+
+🚨  **The sidebar's runtime estimate ignored the programme search, which
+defaults ON and costs ~3×.** `_stage_minutes` scaled Stage 4 by row count and
+`use_beneficiation` only, on a beneficiated:raw ratio of **3.12×** taken from a
+stride sample — the exact figure this file retires by name ("the real
+full-catalog ratio is **7.1×** raw, not 3.12×"). So a default run was estimated
+at **2.2 h against 6.8 h measured**, and was contradicted by Stage 4's own
+blurb in the same sidebar, which already said "budget for the 6.8 h". It now
+reads the four committed cells of THE FULL CISLUNAR 2×2 directly, so it needs
+no ratio at all. ⚠️  Those are calc `1.16.0` measurements and five
+performance-only releases have landed since with no full-catalog run on any of
+them, so the estimate reads HIGH — the right direction for an estimate.
 
 🚨  **And the destination selector seeds from the CATALOG ON DISK, not from
 the config default.** `CALC_CONFIG.delivery_destination` is `earth_surface`

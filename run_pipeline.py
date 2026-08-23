@@ -143,6 +143,53 @@ def human(seconds: float) -> str:
     return str(timedelta(seconds=int(seconds)))
 
 
+def nonneg_int(text):
+    """An int >= 0, for the three caps where 0 already means "no cap".
+
+    Argparse's plain `type=int` accepts a negative, and a negative row cap is
+    not rejected downstream -- it is MISREAD. `eval_row_cap = -5` is truthy and
+    `len(df) > -5` is true, so Stage 4 enters the capping branch and then either
+    raises deep inside numpy (`stride`, the default) or, with
+    `eval_row_sampling = "head"`, quietly evaluates every row but the last five.
+    Asking for a five-row smoke test and getting an hours-long full run is the
+    quiet-wrong-answer shape this repo keeps finding; refuse it at the flag.
+    """
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError("%r is not a whole number" % text)
+    if value < 0:
+        raise argparse.ArgumentTypeError(
+            "%r is negative; use 0 for no cap" % text)
+    return value
+
+
+def parse_stages(text, parser):
+    """Digits 1-4, comma- or space-separated. Anything else is a typo.
+
+    Previously any character outside 1-4 was silently dropped, so `--stages 45`
+    ran Stage 4 alone and said nothing about the 5 -- the user asked for
+    something this program does not have and got a plausible-looking run
+    instead of an error.
+    """
+    cleaned = text.replace(",", " ").split()
+    seen, unknown = set(), []
+    for chunk in cleaned:
+        for ch in chunk:
+            if ch in "1234":
+                seen.add(int(ch))
+            else:
+                unknown.append(ch)
+    if unknown:
+        parser.error(
+            "--stages %r contains %s, which is not a stage. Use the digits "
+            "1-4, e.g. 4 or 234." % (text, ", ".join(repr(c) for c in
+                                                     sorted(set(unknown)))))
+    if not seen:
+        parser.error("--stages %r names no stage in 1-4" % text)
+    return sorted(seen)
+
+
 def build_parser(destinations) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="run_pipeline",
@@ -161,12 +208,12 @@ def build_parser(destinations) -> argparse.ArgumentParser:
     p.add_argument("--destination", choices=sorted(destinations),
                    help="where the mined material is sold. Sets Stage 2 and "
                         "Stage 4 together, which must always agree.")
-    p.add_argument("--rows", type=int,
+    p.add_argument("--rows", type=nonneg_int,
                    help="Stage 4 row cap, 0 = every row (stride-sampled "
                         "across the whole catalog, not the first N)")
-    p.add_argument("--asteroids", type=int,
+    p.add_argument("--asteroids", type=nonneg_int,
                    help="Stage 1 fetch cap per source, 0 = all 1.55 M")
-    p.add_argument("--workers", type=int,
+    p.add_argument("--workers", type=nonneg_int,
                    help="worker processes for Stage 4, 0 = auto")
     p.add_argument("--output",
                    help="output directory (default: ./asteroid_pipeline)")
@@ -441,6 +488,80 @@ def print_banner(args, settings, cfg, stages) -> None:
     print("=" * 78)
 
 
+# Stage -> (what it re-fetches, the file it overwrites). Stage 4 is absent
+# because it fetches nothing: it reads the CSVs the others wrote.
+_FETCHING_STAGES = {
+    1: ("the JPL catalog and its supplements (~500 MB; JPL adds bodies daily, "
+        "so the population itself changes)", "asteroid_catalog_file"),
+    2: ("live metal prices", "mineral_catalog_file"),
+    3: ("live commodity prices", None),
+}
+
+
+def overwrite_warning(cfg, stages) -> list:
+    """Lines naming every fetch that would replace data already on disk.
+
+    WHY THIS EXISTS, twice over. Stages 1-3 do not compute, they FETCH, and
+    each writes over the only copy of its CSV -- there is no history and no
+    undo. Every `.verify` baseline is built against those exact inputs, so
+    refreshing one makes four cells stop reproducing, which looks exactly like
+    a code regression and is not one.
+
+    It has now happened here twice. On 2026-08-23 somebody ran `--stages 2`
+    to look at a banner. Later the same day somebody testing THIS FILE's
+    argument parsing ran `--stages 2,4` and `--stages 234` as throwaway
+    checks -- the flags parsed correctly and the run went on to re-price the
+    whole catalog for `leo`. Both times the command looked harmless and the
+    cost was invisible until a comparison failed hours later.
+
+    So the guard is about what a stage DOES, not about how long it takes:
+    `confirm_long_run` asks about spending hours, and this asks about spending
+    something you cannot get back.
+    """
+    at_risk = []
+    for stage in sorted(stages):
+        if stage not in _FETCHING_STAGES:
+            continue
+        what, attr = _FETCHING_STAGES[stage]
+        path = None
+        if attr:
+            path = os.path.join(cfg.calc.input_dir, getattr(cfg.calc, attr))
+            if not os.path.isfile(path):
+                continue                    # nothing to lose; it must run
+        elif not os.path.isdir(os.path.join(cfg.calc.input_dir,
+                                            cfg.calc.transportation_subdir)):
+            continue
+        at_risk.append((stage, what))
+    if not at_risk:
+        return []
+    lines = ["This run RE-FETCHES live data and overwrites what is on disk:", ""]
+    lines += ["    Stage %d  %s" % (stage, what) for stage, what in at_risk]
+    lines += [
+        "",
+        "The current values are the only copy. Any verify.py baseline built",
+        "on them stops reproducing, and that reads exactly like a code",
+        "regression. Copy asteroid_pipeline/*.csv first if you may want to",
+        "compare against them.",
+    ]
+    return lines
+
+
+def confirm_overwrite(cfg, stages) -> bool:
+    for line in overwrite_warning(cfg, stages):
+        print(("  " + line) if line else "")
+    try:
+        return input("\n  Type 'yes' to overwrite: ").strip().lower() == "yes"
+    except KeyboardInterrupt:
+        return False
+    except EOFError:
+        # Same rule as confirm_long_run: refuse, and say why, rather than
+        # hanging on a stdin nobody is holding.
+        print()
+        print("  No console to confirm on (stdin is not a terminal).")
+        print("  Pass --yes if overwriting them is what you meant.")
+        return False
+
+
 def confirm_long_run() -> bool:
     print()
     print("  WARNING: an uncapped Stage 4 over the full catalog runs for")
@@ -471,9 +592,7 @@ def main() -> int:
     args = parser.parse_args()
     settings = resolve(args)
 
-    stages = sorted({int(c) for c in args.stages if c in "1234"})
-    if not stages:
-        parser.error("--stages %r names no stage in 1-4" % args.stages)
+    stages = parse_stages(args.stages, parser)
 
     cfg = master.MASTER_CONFIG
     if args.output:
@@ -502,6 +621,11 @@ def main() -> int:
             print(("  " + line) if line else "")
         print()
         return 2
+
+    if not args.yes and overwrite_warning(cfg, stages):
+        if not confirm_overwrite(cfg, stages):
+            print("  Cancelled. Nothing was overwritten.")
+            return 1
 
     rows = settings["rows"]
     if 4 in stages and (not rows or rows > 50_000) and not args.yes:

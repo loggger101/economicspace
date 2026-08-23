@@ -39,6 +39,18 @@ REM  scripted rather than from the menu.
 set "ARG1=%~1"
 set "ARG2=%~2"
 
+REM  Scripted runs must not stop on a question -- the same rule as
+REM  :ask_destination, applied to run_pipeline.py's two confirmations. It
+REM  refuses rather than hangs when stdin is not a terminal, so without this
+REM  a scheduled `run.bat quick` would exit 1 having done nothing, and this
+REM  file's own header promises it can be scheduled.
+REM
+REM  The confirmations exist to catch an INCIDENTAL run -- someone testing
+REM  something else who did not realise Stages 1-3 re-fetch and overwrite.
+REM  Typing `run.bat quick` is not incidental, so answering for it is right.
+set "YES="
+if defined ARG1 set "YES=--yes"
+
 REM  A double-click from Explorer passes NO arguments, so "was an argument
 REM  given" is the whole test for interactive-vs-scripted, and it needs no
 REM  guesswork. The menu path pauses so the window does not vanish; an
@@ -223,17 +235,17 @@ exit /b 0
 REM ---------------------------------------------------------------------------
 :quick
 call :ask_destination
-%PY% run_pipeline.py --preset quick --destination !DEST!
+%PY% run_pipeline.py --preset quick --destination !DEST! !YES!
 goto done
 
 :rerun
 call :ask_destination
-%PY% run_pipeline.py --preset quick --stages 4 --destination !DEST!
+%PY% run_pipeline.py --preset quick --stages 4 --destination !DEST! !YES!
 goto done
 
 :standard
 call :ask_destination
-%PY% run_pipeline.py --preset standard --stages 4 --destination !DEST!
+%PY% run_pipeline.py --preset standard --stages 4 --destination !DEST! !YES!
 goto done
 
 :full
@@ -247,7 +259,7 @@ echo   budget days rather than hours.
 echo.
 echo   Ctrl-C is safe. Each stage writes its CSV before the next one starts.
 echo.
-%PY% run_pipeline.py --preset full --destination !DEST!
+%PY% run_pipeline.py --preset full --destination !DEST! !YES!
 goto done
 
 :verify
@@ -265,7 +277,8 @@ if defined TAG (
   echo   Comparing against baseline "!TAG!".
 ) else (
   echo   No baseline under .verify\ -- check 1 has nothing to compare
-  echo   against and will only print hashes. Checks 2-6 still run.
+  echo   against, so it reports NOT VERIFIED and exits 1. That is not
+  echo   a failure of this build: checks 2-6 still run and still count.
   echo.
   echo   To make one, run this on a CLEAN tree BEFORE editing anything:
   echo       py verify.py baseline --tag mytag
