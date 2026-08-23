@@ -2,9 +2,15 @@
 REM ===========================================================================
 REM  Asteroid mining profitability pipeline -- Windows launcher.
 REM
-REM  Double-click this file, or run it with an argument to skip the menu:
+REM  FOR THE DASHBOARD, DOUBLE-CLICK Dashboard.vbs INSTEAD. It opens the UI
+REM  in your browser with no console window at any point -- which a .bat
+REM  cannot do, because cmd creates the window before the first line runs.
 REM
-REM      run.bat ui         open the dashboard in a browser
+REM  This file is the TERMINAL entry point: a menu when double-clicked, or
+REM  an argument to skip straight to one option:
+REM
+REM      run.bat ui         open the dashboard (hands off to launch_ui.py
+REM                         and closes this window)
 REM      run.bat quick      400-row sample, all four stages
 REM      run.bat rerun      Stage 4 only, against the catalogs already on disk
 REM      run.bat standard   20,000-row sample, Stage 4 only
@@ -107,6 +113,7 @@ echo    ASTEROID MINING PROFITABILITY PIPELINE
 echo  ========================================================================
 echo.
 echo    [1]  Dashboard              open the UI in a browser  (recommended)
+echo                                closes this window - no terminal stays up
 echo.
 echo    [2]  Quick run              all four stages, 400-row sample
 echo                                (first run downloads ~500 MB)
@@ -179,24 +186,39 @@ goto menu
 
 REM ---------------------------------------------------------------------------
 :ui
-%PY% -c "import streamlit" >nul 2>&1
-if errorlevel 1 (
+REM  Hand the dashboard to the windowless launcher and get out of the way.
+REM  That launcher exists so no console stays open while the dashboard is
+REM  up, so this must NOT pause or return to the menu: either would leave
+REM  behind exactly the terminal it removes. It puts up its own small
+REM  window, which is what you close to stop the server.
+REM
+REM  Streamlit is checked THERE rather than here, because Dashboard.vbs
+REM  never runs this file -- a check in this branch would cover one of the
+REM  two ways in and look like it covered both.
+REM  Handed to Dashboard.vbs rather than started here, so there is ONE
+REM  windowless-start implementation and both entry points get the same
+REM  behaviour. It is also the only form that does not block a redirected
+REM  caller: a process started by `start` INHERITS this console's stdout,
+REM  so `run.bat ui > log` or `run.bat ui | tee` sat there until the
+REM  dashboard was closed -- while looking perfectly fine from a console.
+REM  Windows Script Host's Run does not pass our handles to the process it
+REM  creates, so going through it closes the pipe. (Measured: 120 s+ hang
+REM  under a pipe before, 0.46 s after.) Same family as the `set /p` hang
+REM  documented below -- fine interactively, broken everywhere else.
+if not exist "Dashboard.vbs" (
   echo.
-  echo   The dashboard needs Streamlit, which is not installed.
-  set /p "INSTALL=  Install it now? [Y/n] "
-  if /i "!INSTALL!"=="n" goto done
-  %PY% -m pip install -r requirements-ui.txt
-  if errorlevel 1 (
-    echo   Install failed.
-    goto done
-  )
+  echo   Dashboard.vbs is missing, so this falls back to a foreground
+  echo   server. Close this window, or press Ctrl-C, to stop it.
+  echo.
+  %PY% -m streamlit run ui.py
+  goto done
 )
 echo.
-echo   Starting the dashboard. It opens in your browser.
-echo   Close this window, or press Ctrl-C, to stop it.
+echo   Opening the dashboard. It appears in your browser, and a small
+echo   control window lets you stop it. This window closes now.
 echo.
-%PY% -m streamlit run ui.py
-goto done
+start "" wscript.exe Dashboard.vbs
+exit /b 0
 
 REM ---------------------------------------------------------------------------
 :quick
