@@ -1246,8 +1246,24 @@ def render_sidebar() -> None:
 
     # Covers both "not seeded yet" and "seeded with something no longer legal",
     # either of which makes selectbox raise rather than fall back.
+    #
+    # SEEDED FROM THE CATALOG ON DISK, not from the config default, and that is
+    # the difference between opening this page and destroying your inputs.
+    # calc's default is `earth_surface` while the catalog here is almost always
+    # `cislunar`, so seeding from the config made the freshly-opened page
+    # disagree with its own data -- which marks Stage 2 stale, forces it back
+    # on, and makes the very first click of "Run pipeline" re-fetch live metal
+    # prices for a destination nobody chose. The old prices do not come back.
+    #
+    # This is NOT the silent adoption run_pipeline.py deliberately refuses: the
+    # value lands in a selectbox the user is looking at, under a caption saying
+    # it matches the data on disk. Headless, the right answer is to refuse and
+    # say so; here, it is to show the truth and let them change it.
+    cached_dest = cached_mineral_destination()
     if st.session_state.get("destination") not in DESTINATIONS:
-        st.session_state["destination"] = MASTER.delivery_destination
+        st.session_state["destination"] = (
+            cached_dest if cached_dest in DESTINATIONS
+            else MASTER.delivery_destination)
     st.sidebar.selectbox(
         "Delivery destination", DESTINATIONS, key="destination",
         help="Sets Stage 2 pricing AND Stage 4 architecture together. They are "
@@ -1255,11 +1271,17 @@ def render_sidebar() -> None:
              "MASTER_CONFIG.delivery_destination.",
     )
     destination = st.session_state["destination"]
+    # Derived, never stored: a flag set at seeding time would still be claiming
+    # "preselected" after the user had picked something else.
+    if cached_dest and destination == cached_dest:
+        st.sidebar.caption(
+            "Matches the catalog already on disk, so Stage 2 does not need "
+            "re-pricing. Changing it will force one."
+        )
 
     st.sidebar.divider()
     st.sidebar.subheader("Stages to run")
 
-    cached_dest = cached_mineral_destination()
     stale_mineral = bool(cached_dest and cached_dest != destination)
     selected: List[str] = []
 
@@ -1270,7 +1292,15 @@ def render_sidebar() -> None:
             when = (f"{age_s / 3600:.1f} h ago" if age_s > 3600
                     else f"{age_s / 60:.0f} min ago")
             note = f"cached · {size_mb:.1f} MB · {when}"
-            default = stage.key != "catalog"
+            # Cached means REUSE, and only Stage 4 is exempt.
+            #
+            # Stages 1-3 fetch, so defaulting a cached one to "on" made the
+            # first click of Run overwrite good data with today's download --
+            # and this module's own docstring calls re-running Stage 4 against
+            # a cached catalog "the normal working loop". The default now IS
+            # that loop. Stage 4 fetches nothing and is the whole point of
+            # pressing the button, so it stays on.
+            default = stage.key == "calc"
         else:
             note = "not built, must run"
             default = True
@@ -1299,8 +1329,39 @@ def render_sidebar() -> None:
         st.sidebar.warning(
             f"Stage 2 is cached for **{cached_dest}** but you have selected "
             f"**{destination}**. Re-running it is forced, because skipping "
-            "would price the cargo at one destination and fly it to another.",
+            "would price the cargo at one destination and fly it to another. "
+            "Note that it re-fetches **live** metal prices — see the caution "
+            "below.",
             icon="⚠️",
+        )
+
+    # Stages 1-3 all FETCH, and each writes over the CSV already on disk. The
+    # previous copy is the only copy: verify.py compares against baselines built
+    # on those exact inputs, so refreshing them makes four cells stop
+    # reproducing -- which looks precisely like a code regression and is not
+    # one. That is a mistake somebody made here on 2026-08-23, by running
+    # Stage 2 to look at a banner; CLAUDE.md carries the write-up. The CLI
+    # spells this out in run_pipeline.py's refusal, and the front door should
+    # not be the quieter of the two.
+    _FETCHES = {
+        "catalog":   "re-downloads the JPL catalog (~500 MB; JPL adds bodies "
+                     "daily, so the population itself changes)",
+        "mineral":   "re-fetches live metal prices",
+        "transport": "re-fetches live commodity prices",
+    }
+    refetch = [st_ for st_ in STAGES[:3]
+               if st_.key in selected and st_.cache_status()]
+    if refetch:
+        lines = "\n".join("- **Stage %d** %s"
+                          % (st_.number, _FETCHES[st_.key])
+                          for st_ in refetch)
+        st.sidebar.warning(
+            "This overwrites data already on disk:\n\n" + lines +
+            "\n\nThe old values are **not recoverable**, and any verify.py "
+            "baseline built on them will stop reproducing. Copy "
+            "`asteroid_pipeline/*.csv` first if you may want to compare "
+            "against them.",
+            icon="🔄",
         )
 
     # Stage 4 reads what Stages 1-3 wrote, so a skipped upstream stage needs its

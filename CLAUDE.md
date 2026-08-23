@@ -6882,6 +6882,44 @@ rule below:
   to a `queue.Queue` and the main thread drains it; the worker never touches a
   widget. Cancel the pending pump in `quit()` too: clearing the reschedule flag
   leaves the one already in flight to fire into a destroyed interpreter.
+- 🚨  **Closing the window mid-spawn leaked a server nothing could stop.**
+  `Popen` returns with the child already alive, so assigning it to `self.proc`
+  afterwards left a window in which `quit()` found `None`, killed nothing, and
+  the control window — the only thing that could have stopped the server —
+  went away. Reproduced, not theorised. **Two things were needed and one is
+  not obvious:** a lock makes the hand-over atomic, AND `main()` must join the
+  boot thread after `mainloop()` returns. The thread is a daemon, so without
+  the join the interpreter exits and kills it wherever it stands — the lock
+  would be protecting a window the process never lives long enough to reach.
+- ⚠️  **A health check identifies Streamlit, not YOUR Streamlit.** Adopting
+  any server that answers `/_stcore/health` on 8501 meant a double-click could
+  open somebody else's project. `.launcher/running.json` records the port and
+  pid we started; reuse requires the marker, a live pid AND a healthy port, so
+  a crashed launcher, a recycled pid and a stranger's app each fail a different
+  one of the three.
+
+⚠️  **The dashboard's defaults must never re-fetch on their own.** Stages
+1-3 all fetch, and each overwrites the only copy of its CSV — which is what
+invalidates every `.verify` baseline, and it is a mistake somebody made here
+on 2026-08-23. `ui.py` used to default every CACHED stage to on except Stage 1,
+so the first click of "Run pipeline" re-priced Stage 2 and 3 against live
+quotes. It now defaults a cached stage to **off** unless it is Stage 4, which
+fetches nothing and is the point of the button — i.e. the default is the
+"re-run Stage 4 against a cached catalog" loop that `ui.py`'s own docstring
+already called the normal one. Ticking a fetching stage still works and now
+says what it will destroy.
+
+🚨  **And the destination selector seeds from the CATALOG ON DISK, not from
+the config default.** `CALC_CONFIG.delivery_destination` is `earth_surface`
+while the catalog is almost always `cislunar`, so a freshly-opened page
+disagreed with its own data, marked Stage 2 stale, forced it back on and made
+the first run a live re-price for a destination nobody chose. ⚠️  This is
+**not** the silent adoption `run_pipeline.py`'s `preflight()` deliberately
+refuses, and the distinction is the point: headless, the destination would be
+adopted invisibly and the run would proceed, so refusing is right; in the UI it
+lands in a selectbox the user is looking at, under a caption saying it matches
+the data on disk. **A UI default that is visible is not the same as a CLI
+default that is not.**
 
 ⚠️  **Nothing in `run.bat` may prompt once an argument was given**, and that
 rule has now been broken twice in the same file. `set /p` against a stdin a
