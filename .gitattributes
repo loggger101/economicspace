@@ -13,6 +13,10 @@
 # call -- which is exactly where an LF-only .bat is known to misbehave.
 *.bat   text eol=crlf
 
+# Windows Script Host refuses to be flexible about line endings in a
+# way nobody has ever fully documented; CRLF is what wscript expects.
+*.vbs   text eol=crlf
+
 # Machine-generated: one 6,300-line file assembled by build_master.py.
 # Marking it linguist-generated keeps it out of diff noise on hosts that
 # understand the attribute.
