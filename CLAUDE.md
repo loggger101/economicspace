@@ -19,7 +19,7 @@ keep:
 
 - a leading `# -*- coding: utf-8 -*-` line followed immediately by the module
   docstring (the docstring strip anchors on it),
-- an `# INSTALLATION` block ending with the literal `print("✅  All packages present")`,
+- an `# INSTALLATION` block ending with the literal `print("OK  All packages present")`,
 - a `# RUN & PREVIEW` block at the bottom, wrapped in `if __name__ == "__main__":`,
 - its config global named exactly `CONFIG`.
 
@@ -6238,7 +6238,7 @@ this release prunes a **cache**, where eviction is provably value-neutral. A
 bound on `selection_key` is lexicographic over profit and cost/revenue with
 revenue coming out of the payload knapsack, and a bound that is occasionally
 too tight drops winners **without changing a row count** — which is the one
-failure none of the five checks in `verify.py` would catch.
+failure none of the six checks in `verify.py` would catch.
 
 ## What mineral_value v1.7.1 changed
 
@@ -6495,6 +6495,61 @@ at 150. Joining a 400-row raw cell to a 150-row beneficiated one silently
 compares 65 pairs and reports them as though they were the population. That
 trap is one careless join away from being the twelfth entry in the table above.
 
+### 🚨  RUNNING STAGE 2 OR STAGE 3 DESTROYS EVERY BASELINE YOU HOLD
+
+The note directly above says `verify.py` will not re-run Stages 1–3 because
+they move the inputs underneath a comparison. **That is not only a rule for the
+harness. It is a rule for you**, and it was broken on 2026-08-23 by a single
+throwaway command:
+
+```
+py run_pipeline.py --stages 2 ...       # just to look at the banner
+```
+
+Stage 2 re-fetched live metal prices, rewrote `mineral_value_catalog.csv`
+(previously 2026-08-11), and **the committed `.verify` baseline stopped
+reproducing** — `130/139` columns identical, with
+`delivered_value_usd_per_kg`, `bulk_value_usd_per_kg`,
+`best_phase_usd_per_kg` and `saturation_multiplier` all differing. The previous
+prices are **not recoverable**; the on-disk Stage 2 catalog is the only copy
+and it had been overwritten.
+
+Three things worth keeping:
+
+- **It looks exactly like a code regression.** Four cells failing bit-identity
+  on nine value columns is the signature of a broken release, and the cause was
+  an unrelated command run minutes earlier. This is the `catalog_date` lesson of
+  `1.17.3` one level up: *the comparison broke, not the model.*
+- **The mass and mission columns were untouched** — 130 of 139 identical, and
+  every differing column downstream of price. That split is the diagnosis, and
+  it is why a column-by-column diff earns its keep against a bare hash.
+- **The fix is to re-isolate, not to argue.** Stash the change, baseline the
+  **pre-change** build against the *same* refreshed catalog, restore, and
+  re-check: `139/139` on all four cells. Comparing two builds against identical
+  inputs is the only construction that answers the question once an input has
+  moved.
+
+**So: never run Stage 1, 2 or 3 to test an unrelated thing.** Use
+`--stages 4`, which reads the CSVs already on disk. If you need to see a banner
+or a config, run a stage that writes nothing — or read the code. And if you are
+about to touch Stages 1–3 deliberately, copy `asteroid_pipeline/*.csv`
+somewhere first, because nothing else will.
+
+### Console text is not output, and did not move a stamp
+
+The 2026-08-23 ASCII conversion rewrote **243 `print(...)` calls** across the
+four modules (103 / 42 / 50 / 48) and every banner `build_master.py` emits, and
+**no `pipeline_version` was bumped**. That is deliberate and follows the rule as
+stated: *changing any number a run produces means bumping.* No CSV byte
+changes, so a catalog stamped `calc 1.17.7` means the same model whether it was
+built before or after. The stamp identifies the code that produced a **catalog**,
+and console text is not in one.
+
+⚠️  Note this cuts against `1.17.3`, which bumped for dead-code removal, and
+`mineral_value 1.7.1`, which bumped while bit-identical. Both were *choices*,
+not obligations — the rule is one-directional. If you would rather every source
+change carry a stamp, bump it; just do not read this decision as an oversight.
+
 ## Config discipline
 
 Configs are dataclasses instantiated once at module scope. Edit the field
@@ -6579,7 +6634,7 @@ Undoing any of these silently corrupts the output:
   table that was being replaced. Nothing anywhere said so.
 
   The cheap habit that catches it: **Stage 4's loader prints row counts for
-  every Module 3 table it reads** (`📥 Module 3 propellants  41 rows`). Read
+  every Module 3 table it reads** (`Module 3 propellants  41 rows`). Read
   those against what Stage 3 said it wrote. A count that has not moved after
   you added a row is the whole diagnosis. When only values changed and no
   count moved, spot-check the field itself out of the CSV before trusting a
@@ -6730,3 +6785,91 @@ Windows, Python 3.13, invoked as `py` (a bare `python` hits the Microsoft Store
 alias and fails). The working tree is on Google Drive with the git directory
 outside it — see the README's "Working copy" section, especially if the folder
 gets renamed again.
+
+### Entry points
+
+Four consumers of the built `master.py`, all at the repo root because
+`build_master.py` concatenates `modules/` from four explicit paths and asserts
+a header/footer shape per file:
+
+| file | what it is |
+|---|---|
+| `run.bat` | Windows launcher — a menu over the three below, no model behaviour of its own |
+| `run_pipeline.py` | headless CLI: `--preset`, `--stages`, `--destination`, row caps |
+| `ui.py` | Streamlit dashboard |
+| `verify.py` | the six release checks |
+
+All four import master **by name** with the repo on `sys.path`, which is the
+only form the worker pool tolerates — see `_spawn_environment`, and the table
+of harness bugs under "The verification harness is committed now". `run.bat`
+is a launcher only; it adds no default the pipeline does not already have,
+except that its `quick` / `standard` presets cap rows and fly raw ore at N = 1
+rather than starting the tens-of-hours default cell on a double-click.
+
+### The console output is ASCII, and must stay that way
+
+🚨  **THE STAGE BANNERS USED TO BE EMOJI, AND WINDOWS PICKS cp1252 FOR A
+REDIRECTED STDOUT.** So `py master.py > run.log`, or any pipe, died on the
+first `print` with `UnicodeEncodeError: 'charmap' codec can't encode character
+'\U0001f4b0'` — at master.py's own "PROFITABILITY PIPELINE" line, before one
+row was evaluated. It never fired in a console, so it was invisible until the
+moment somebody logged a long run, which is exactly when it cost most. Hit on
+the first run of `run_pipeline.py`.
+
+Fixed at source: **every `print(...)` in the four modules is pure ASCII**, and
+so is everything `build_master.py` emits into `master.py`. Verified
+mechanically rather than by eye — zero non-ASCII characters remain in any
+print literal in the built `master.py`.
+
+✅  **And the failing case was re-run rather than reasoned about.** A Stage 4
+pass under `PYTHONUTF8=0 PYTHONIOENCODING=cp1252`, stdout redirected to a file,
+with **no** reconfigure anywhere — i.e. exactly what used to die on the first
+banner — now completes with **exit 0 and empty stderr**. That is the regression
+test for this; re-run it after touching any print.
+
+⚠️  **EMOJI WERE UNDER A FIFTH OF IT, AND FIXING ONLY THEM WOULD HAVE LEFT THE
+CRASH IN PLACE.** Of **2,081** occurrences cp1252 cannot encode, just **372
+(17.9%)** are emoji; the other **1,709** are box drawing — `─` alone appears
+1,204 times — plus arrows, `Δ`, `≈`, `−` and `×`. The rule is therefore
+**ASCII, not "no emoji"**: any non-ASCII character in a printed string is the
+same bug, and `print("─" * 75)` crashes exactly as hard as a money bag.
+
+⚠️  **Only PRINTED strings were converted.** Comments and docstrings keep
+theirs — the version-history blocks are this project's real changelog — and so
+does every DATA string, because the `notes` fields in `PROPELLANTS_REFERENCE`
+and `STORAGE_REFERENCE` are written into `propellants.csv` and
+`storage_systems.csv`, and rewriting them would change CSV bytes. The
+transformation was AST-driven and touched only the source segments of
+`print(...)` calls for exactly that reason.
+
+🚨  **`build_master.py`'s ANCHORS MATCH ON LINES THIS CHANGED, and one of them
+broke on the first rebuild** — `BUILD FAILED: catalog: INSTALLATION block
+survived`. Two rules, learned the hard way:
+
+- The install-block anchor is now `print\("OK  All packages present"\)`. **Do
+  not "improve" that marker to `[OK]`** — inside a regex `[OK]` is a CHARACTER
+  CLASS matching `O` or `K`, so the anchor would silently stop matching the
+  line it names. Every replacement used here is free of regex metacharacters
+  for this reason.
+- Both anchors still match the rule comments with `# ─+`, because those rules
+  are **comments and are not printed**. Anchor and target must be changed
+  together or not at all — the same "update `build_master.py` in the same
+  commit" rule this file states above.
+
+✅  **It moved no number, and that was proven rather than assumed.** The four
+committed cell hashes reproduce exactly, and when a Stage 2 price refresh made
+the release baseline stale mid-session, the change was re-isolated by baselining
+the pre-change build against the *same* refreshed catalog: **139/139 columns
+identical on all four cells.** Comparing two builds against identical inputs is
+the only construction that answers this question.
+
+`run.bat` still sets `PYTHONUTF8=1` and `chcp 65001`, and `run_pipeline.py`
+still reconfigures stdout to UTF-8 with `errors="replace"` at import. That is
+belt and braces, not the fix: it also covers tqdm, exception text and any data
+value that reaches stdout.
+
+✅  `PYTHONUTF8=1` **cannot move an output byte**, which is why it is safe to
+set globally: the only bare `open()` in the four modules is binary
+(`catalog.py`'s download), and every CSV is written by `to_csv`, which is UTF-8
+regardless of locale. Checked before it was used, because a locale switch that
+reached a CSV would break the bit-identity every release is argued from.

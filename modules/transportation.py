@@ -81,13 +81,13 @@ for _pkg in _REQUIRED_PKGS:
         _missing.append(_pkg)
 
 if _missing:
-    print(f"📦  Installing: {_missing} …")
+    print(f"PKG  Installing: {_missing} ...")
     subprocess.check_call(
         [sys.executable, "-m", "pip", "install", "-q"] + _missing
     )
-    print("✅  Install complete")
+    print("OK  Install complete")
 else:
-    print("✅  All packages present")
+    print("OK  All packages present")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -502,7 +502,7 @@ class TransportConfig:
 CONFIG = TransportConfig()
 os.makedirs(os.path.join(CONFIG.output_dir, CONFIG.subdir), exist_ok=True)
 
-print(f"✅  Configuration loaded — output dir: "
+print(f"OK  Configuration loaded - output dir: "
       f"{os.path.join(CONFIG.output_dir, CONFIG.subdir)}")
 print(f"    Active sources : "
       f"{', '.join(s for s, on in (('yfinance', CONFIG.use_yfinance), ('reference', CONFIG.use_reference_table)) if on)}")
@@ -1370,7 +1370,7 @@ def _apply_launch_defaults(rows: List[dict]) -> None:
 
 _apply_launch_defaults(LAUNCH_VEHICLES_REFERENCE)
 
-print(f"✅  Launch vehicles reference loaded — {len(LAUNCH_VEHICLES_REFERENCE)} vehicles "
+print(f"OK  Launch vehicles reference loaded - {len(LAUNCH_VEHICLES_REFERENCE)} vehicles "
       f"({sum(1 for v in LAUNCH_VEHICLES_REFERENCE if v['status'] == 'operational')} operational, "
       f"{sum(1 for v in LAUNCH_VEHICLES_REFERENCE if v['status'] == 'development')} development, "
       f"{sum(1 for v in LAUNCH_VEHICLES_REFERENCE if v['status'] == 'concept')} concept, "
@@ -3165,7 +3165,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
     },
 ]
 
-print(f"✅  Propellant reference loaded — {len(PROPELLANTS_REFERENCE)} fuel systems "
+print(f"OK  Propellant reference loaded - {len(PROPELLANTS_REFERENCE)} fuel systems "
       f"({sum(1 for p in PROPELLANTS_REFERENCE if p['status'] == 'operational')} operational, "
       f"{sum(1 for p in PROPELLANTS_REFERENCE if p['status'] == 'development')} development, "
       f"{sum(1 for p in PROPELLANTS_REFERENCE if p['status'] == 'concept')} concept, "
@@ -3300,7 +3300,7 @@ DELTA_V_REFERENCE: List[dict] = [
               "duration figure carries that."},
 ]
 
-print(f"✅  Mission Δv reference loaded — {len(DELTA_V_REFERENCE)} trajectory segments")
+print(f"OK  Mission dv reference loaded - {len(DELTA_V_REFERENCE)} trajectory segments")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4099,7 +4099,7 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
     },
 ]
 
-print(f"✅  Operational costs reference loaded — "
+print(f"OK  Operational costs reference loaded - "
       f"{len(OPERATIONAL_COSTS_REFERENCE)} categories")
 
 
@@ -4510,7 +4510,7 @@ STORAGE_REFERENCE: List[dict] = [
     },
 ]
 
-print(f"✅  Storage reference loaded — {len(STORAGE_REFERENCE)} systems "
+print(f"OK  Storage reference loaded - {len(STORAGE_REFERENCE)} systems "
       f"({len({s['domain'] for s in STORAGE_REFERENCE})} domains)")
 
 
@@ -4545,12 +4545,12 @@ def fetch_yfinance_fuel_prices(
         name, live_cost_usd_per_kg, live_cost_usd_per_L,
         live_price_date, live_price_source.
     """
-    print("\n⛽  yfinance  (Yahoo Finance) — live fuel commodity prices …")
+    print("\n  yfinance  (Yahoo Finance) - live fuel commodity prices ...")
 
     try:
         import yfinance as yf
     except ImportError:
-        print("     ❌  yfinance not importable — skipped")
+        print("     FAIL  yfinance not importable - skipped")
         return pd.DataFrame()
 
     # Step 1 — pull commodity quotes
@@ -4560,7 +4560,7 @@ def fetch_yfinance_fuel_prices(
             hist = yf.Ticker(ticker).history(period="5d", auto_adjust=False)
             closes = hist["Close"].dropna() if "Close" in hist else pd.Series(dtype=float)
             if closes.empty:
-                print(f"     ⚠️  {label} ({ticker}) — no close data")
+                print(f"     WARN  {label} ({ticker}) - no close data")
                 continue
 
             last_close = float(closes.iloc[-1])
@@ -4573,7 +4573,7 @@ def fetch_yfinance_fuel_prices(
             elif unit == "barrel":
                 usd_per_kg = _per_bbl_to_per_kg(last_close, fluid_key)
             else:
-                print(f"     ⚠️  {label} — unrecognised unit {unit!r}")
+                print(f"     WARN  {label} - unrecognised unit {unit!r}")
                 continue
 
             commodity_usd_per_kg[fluid_key] = {
@@ -4583,15 +4583,15 @@ def fetch_yfinance_fuel_prices(
                 "raw_unit":     unit,
                 "quote_date":   last_date,
             }
-            print(f"     ✅  {label:38s} ({ticker}) = "
+            print(f"     OK  {label:38s} ({ticker}) = "
                   f"{last_close:>8,.2f} USD/{unit:6s} "
-                  f"→ {usd_per_kg:>7.3f} USD/kg  [{last_date}]")
+                  f"-> {usd_per_kg:>7.3f} USD/kg  [{last_date}]")
 
         except Exception as exc:
-            print(f"     ❌  {label} ({ticker}) — {type(exc).__name__}: {exc}")
+            print(f"     FAIL  {label} ({ticker}) - {type(exc).__name__}: {exc}")
 
     if not commodity_usd_per_kg:
-        print("     ⚠️  yfinance returned no commodity quotes")
+        print("     WARN  yfinance returned no commodity quotes")
         return pd.DataFrame()
 
     # Step 2 — map onto propellants via `yfinance_proxy`.  Bipropellants
@@ -4634,40 +4634,40 @@ def fetch_yfinance_fuel_prices(
 # REFERENCE-TABLE LOADERS  (always-on)
 # ─────────────────────────────────────────────────────────────────────────────
 def load_launch_vehicles() -> pd.DataFrame:
-    print("\n🚀  Loading launch-vehicles reference …")
+    print("\n  Loading launch-vehicles reference ...")
     df = pd.DataFrame(LAUNCH_VEHICLES_REFERENCE)
-    print(f"     ✅  {len(df)} vehicles")
+    print(f"     OK  {len(df)} vehicles")
     return df
 
 
 def load_propellants() -> pd.DataFrame:
-    print("\n🔥  Loading propellants reference …")
+    print("\n  Loading propellants reference ...")
     df = pd.DataFrame(PROPELLANTS_REFERENCE)
     _apply_thruster_data(df)
     n_rep = int((df["thrust_scaling"] == "replicated").sum())
-    print(f"     ✅  {len(df)} propellant systems "
-          f"({n_rep} thrust by replication — see _THRUSTER_SYSTEMS)")
+    print(f"     OK  {len(df)} propellant systems "
+          f"({n_rep} thrust by replication - see _THRUSTER_SYSTEMS)")
     return df
 
 
 def load_delta_v() -> pd.DataFrame:
-    print("\n📐  Loading mission Δv reference …")
+    print("\n  Loading mission dv reference ...")
     df = pd.DataFrame(DELTA_V_REFERENCE)
-    print(f"     ✅  {len(df)} trajectory segments")
+    print(f"     OK  {len(df)} trajectory segments")
     return df
 
 
 def load_operational_costs() -> pd.DataFrame:
-    print("\n🏢  Loading operational-costs reference …")
+    print("\n  Loading operational-costs reference ...")
     df = pd.DataFrame(OPERATIONAL_COSTS_REFERENCE)
-    print(f"     ✅  {len(df)} cost categories")
+    print(f"     OK  {len(df)} cost categories")
     return df
 
 
 def load_storage() -> pd.DataFrame:
-    print("\n🗄️   Loading storage-systems reference …")
+    print("\n   Loading storage-systems reference ...")
     df = pd.DataFrame(STORAGE_REFERENCE)
-    print(f"     ✅  {len(df)} storage systems")
+    print(f"     OK  {len(df)} storage systems")
     return df
 
 
@@ -4729,7 +4729,7 @@ def build_transportation_summary(
         propellant_mass_per_kg_payload
         segment_duration_yr
     """
-    print("\n🧮  Building (vehicle × segment × propellant) cost summary …")
+    print("\n  Building (vehicle x segment x propellant) cost summary ...")
 
     # Only price IN-SPACE Δv with the propellant table — surface ascent is
     # already baked into the launch vehicle's $/kg-to-LEO.
@@ -4770,7 +4770,7 @@ def build_transportation_summary(
                 })
 
     summary = pd.DataFrame(rows)
-    print(f"     ✅  {len(summary):,} (vehicle × segment × propellant) rows")
+    print(f"     OK  {len(summary):,} (vehicle x segment x propellant) rows")
     return summary
 
 
@@ -4785,7 +4785,7 @@ def merge_propellant_prices(
     `cost_usd_per_kg` and `cost_usd_per_L` resolve to live where available,
     reference where not — same pattern as Module 2.
     """
-    print("\n🔗  Merging live + reference propellant prices …")
+    print("\n  Merging live + reference propellant prices ...")
 
     out = reference.copy()
     out["live_cost_usd_per_kg"] = pd.NA
@@ -4833,7 +4833,7 @@ def validate(
     ops_df:         pd.DataFrame,
 ) -> None:
     """Print sanity warnings.  Never raises."""
-    print("\n🔎  Validating catalog …")
+    print("\n  Validating catalog ...")
 
     # ── Launch $/kg sanity band ──────────────────────────────────────────────
     # The band applies to things that FLY.  v1.9.0 added non-rocket concepts
@@ -4849,7 +4849,7 @@ def validate(
         | (flying["usd_per_kg_to_leo"] > 100_000)
     ]
     if not bad_launch.empty:
-        print(f"     ⚠️  {len(bad_launch)} flying launch rows outside "
+        print(f"     WARN  {len(bad_launch)} flying launch rows outside "
               f"$100-$100 000 / kg-to-LEO sanity band:")
         for _, r in bad_launch.iterrows():
             print(f"          {r['name']}: {r['usd_per_kg_to_leo']:,.0f}")
@@ -4860,7 +4860,7 @@ def validate(
         | (concepts["usd_per_kg_to_leo"] > 100_000)
     ]
     if not bad_concept.empty:
-        print(f"     ⚠️  {len(bad_concept)} concept launch rows outside "
+        print(f"     WARN  {len(bad_concept)} concept launch rows outside "
               f"$1-$100 000 / kg-to-LEO:")
         for _, r in bad_concept.iterrows():
             print(f"          {r['name']}: {r['usd_per_kg_to_leo']:,.0f}")
@@ -4871,7 +4871,7 @@ def validate(
     # what it is FOR rather than how much it costs.
     rough = launch_df[launch_df["max_accel_g"] > 50]
     if not rough.empty:
-        print(f"     ℹ️   {len(rough)} launchers exceed 50 g and can lift bulk "
+        print(f"     NOTE   {len(rough)} launchers exceed 50 g and can lift bulk "
               f"material only, not mining hardware:")
         for _, r in rough.iterrows():
             print(f"          {r['name']}: {r['max_accel_g']:,.0f} g")
@@ -4919,7 +4919,7 @@ def validate(
         (finite_isp["isp_vac_s"] < 40) | (finite_isp["isp_vac_s"] > 200_000)
     ]
     if not bad_isp.empty:
-        print(f"     ⚠️  {len(bad_isp)} propellant rows with implausible Isp:")
+        print(f"     WARN  {len(bad_isp)} propellant rows with implausible Isp:")
         for _, r in bad_isp.iterrows():
             print(f"          {r['name']}: {r['isp_vac_s']} s")
 
@@ -4932,7 +4932,7 @@ def validate(
         | (~np.isfinite(pd.to_numeric(priced["cost_usd_per_kg"], errors="coerce")))
     ]
     if not bad_prop_cost.empty:
-        print(f"     ⚠️  {len(bad_prop_cost)} propellant rows with a missing or "
+        print(f"     WARN  {len(bad_prop_cost)} propellant rows with a missing or "
               f"non-positive price:")
         for _, r in bad_prop_cost.iterrows():
             print(f"          {r['name']}: {r['cost_usd_per_kg']}")
@@ -4945,7 +4945,7 @@ def validate(
                  / pd.to_numeric(propellant_df["density_kg_per_L"], errors="coerce"))
     bad_tank = propellant_df[tank_frac > 1.0]
     if not bad_tank.empty:
-        print(f"     ⚠️  {len(bad_tank)} propellant rows whose tank outweighs "
+        print(f"     WARN  {len(bad_tank)} propellant rows whose tank outweighs "
               f"the propellant:")
         for i, r in bad_tank.iterrows():
             print(f"          {r['name']}: {tank_frac[i]:.2f} kg tank / kg propellant")
@@ -4954,7 +4954,7 @@ def validate(
     _VALID_STATUS = {"operational", "development", "concept", "retired"}
     bad_status = propellant_df[~propellant_df["status"].isin(_VALID_STATUS)]
     if not bad_status.empty:
-        print(f"     ⚠️  {len(bad_status)} propellant rows with an unrecognised "
+        print(f"     WARN  {len(bad_status)} propellant rows with an unrecognised "
               f"status (Module 4 gates on this):")
         for _, r in bad_status.iterrows():
             print(f"          {r['name']}: {r['status']!r}")
@@ -4964,12 +4964,12 @@ def validate(
         (delta_v_df["dv_m_per_s"] < 50) | (delta_v_df["dv_m_per_s"] > 20_000)
     ]
     if not bad_dv.empty:
-        print(f"     ⚠️  {len(bad_dv)} Δv rows outside 50-20 000 m/s sanity band:")
+        print(f"     WARN  {len(bad_dv)} dv rows outside 50-20 000 m/s sanity band:")
         for _, r in bad_dv.iterrows():
             print(f"          {r['segment']}: {r['dv_m_per_s']} m/s")
 
-    print(f"     ✅  Unit invariants: launch USD/kg | propellant USD/kg + USD/L | "
-          f"Δv m/s | ops USD per unit")
+    print(f"     OK  Unit invariants: launch USD/kg | propellant USD/kg + USD/L | "
+          f"dv m/s | ops USD per unit")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4991,7 +4991,7 @@ def build_transportation_catalog(
     t0 = datetime.now()
 
     print("=" * 75)
-    print("  🛰️   TRANSPORTATION COST PIPELINE — MODULE 3")
+    print("     TRANSPORTATION COST PIPELINE - MODULE 3")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  v{config.pipeline_version}")
     print("=" * 75)
 
@@ -5034,11 +5034,11 @@ def build_transportation_catalog(
     for fname, df in files.items():
         path = os.path.join(out_dir, fname)
         df.to_csv(path, index=False)
-        print(f"     💾  {fname:32s} → {path}  ({len(df):,} rows)")
+        print(f"       {fname:32s} -> {path}  ({len(df):,} rows)")
 
     elapsed = (datetime.now() - t0).total_seconds()
     print("\n" + "=" * 75)
-    print("  ✅  TRANSPORTATION CATALOG COMPLETE")
+    print("  OK  TRANSPORTATION CATALOG COMPLETE")
     print(f"      Tables   : {len(files)}")
     print(f"      Elapsed  : {elapsed:.1f}s")
     print("=" * 75)
@@ -5180,9 +5180,9 @@ def mission_cost_breakdown(
     }
 
 
-print("\n✅  Helper utilities available:")
+print("\nOK  Helper utilities available:")
 print("    cheapest_launch_to(catalog, 'leo', min_payload_kg=5000)")
-print("    cheapest_propellant_for(catalog, 6500)   # Δv in m/s")
+print("    cheapest_propellant_for(catalog, 6500)   # dv in m/s")
 print("    mission_cost_breakdown(catalog, payload_kg=1000, "
       "delta_v_outbound=6500, delta_v_return=5500, "
       "launch_vehicle='Falcon Heavy (reusable side cores)', "
@@ -5200,7 +5200,7 @@ if __name__ == "__main__":
 
         # ── Launch vehicles preview ──────────────────────────────────────────────
         print(f"\n{'='*75}")
-        print(f"  🚀  LAUNCH VEHICLES — cheapest $/kg-to-LEO first")
+        print(f"    LAUNCH VEHICLES - cheapest $/kg-to-LEO first")
         print(f"{'='*75}")
         lv_cols = ["name", "operator", "status", "payload_leo_kg",
                    "usd_per_kg_to_leo", "usd_per_kg_to_gto", "usd_per_kg_to_escape"]
@@ -5210,7 +5210,7 @@ if __name__ == "__main__":
 
         # ── Propellant preview ───────────────────────────────────────────────────
         print(f"\n{'='*75}")
-        print(f"  🔥  PROPELLANTS — Isp, density, cost  (live where available)")
+        print(f"    PROPELLANTS - Isp, density, cost  (live where available)")
         print(f"{'='*75}")
         p_cols = ["name", "type", "isp_vac_s", "density_kg_per_L",
                   "cost_usd_per_kg", "cost_usd_per_L", "price_basis"]
@@ -5218,7 +5218,7 @@ if __name__ == "__main__":
 
         # ── Δv reference preview ─────────────────────────────────────────────────
         print(f"\n{'='*75}")
-        print(f"  📐  MISSION Δv SEGMENTS")
+        print(f"    MISSION dv SEGMENTS")
         print(f"{'='*75}")
         print(catalog["delta_v_segments"][
             ["segment", "dv_m_per_s", "duration_yr", "notes"]
@@ -5226,7 +5226,7 @@ if __name__ == "__main__":
 
         # ── Operational costs preview ────────────────────────────────────────────
         print(f"\n{'='*75}")
-        print(f"  🏢  OPERATIONAL COSTS")
+        print(f"    OPERATIONAL COSTS")
         print(f"{'='*75}")
         print(catalog["operational_costs"][
             ["category", "value", "unit", "range_low", "range_high"]
@@ -5234,7 +5234,7 @@ if __name__ == "__main__":
 
         # ── Cost-per-Δv comparison (the headline normalised metric) ──────────────
         print(f"\n{'='*75}")
-        print(f"  🧮  PROPELLANT COST PER kg OF PAYLOAD — at Δv = 6 500 m/s "
+        print(f"    PROPELLANT COST PER kg OF PAYLOAD - at dv = 6 500 m/s "
               f"(median NEA)")
         print(f"{'='*75}")
         headline = cheapest_propellant_for(catalog, 6_500)
@@ -5242,7 +5242,7 @@ if __name__ == "__main__":
 
         # ── Worked-example mission cost ──────────────────────────────────────────
         print(f"\n{'='*75}")
-        print(f"  💼  WORKED EXAMPLE — 1 000-kg payload, LEO → avg NEA → return")
+        print(f"    WORKED EXAMPLE - 1 000-kg payload, LEO -> avg NEA -> return")
         print(f"{'='*75}")
         example = mission_cost_breakdown(
             catalog,

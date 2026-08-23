@@ -67,13 +67,13 @@ for _pkg in _REQUIRED_PKGS:
         _missing.append(_pkg)
 
 if _missing:
-    print(f"📦  Installing: {_missing} …")
+    print(f"PKG  Installing: {_missing} ...")
     subprocess.check_call(
         [sys.executable, "-m", "pip", "install", "-q"] + _missing
     )
-    print("✅  Install complete")
+    print("OK  Install complete")
 else:
-    print("✅  All packages present")
+    print("OK  All packages present")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -428,7 +428,7 @@ def _resolve_cache_dir(config: "CatalogConfig") -> str:
 # Eagerly create the default cache dir so first-run prints reflect the real path
 os.makedirs(_resolve_cache_dir(CONFIG), exist_ok=True)
 
-print(f"✅  Configuration loaded — output dir: {CONFIG.output_dir}")
+print(f"OK  Configuration loaded - output dir: {CONFIG.output_dir}")
 print(f"    Active sources  : "
       f"{', '.join(s for s, on in (('JPL', CONFIG.use_jpl), ('MP3C', CONFIG.use_mp3c), ('SsODNet', CONFIG.use_ssodnet), ('NEOWISE', CONFIG.use_neowise)) if on)}")
 def _fmt_limit(n: int) -> str:
@@ -444,7 +444,7 @@ print(f"    Fetch limits    : "
 print(f"    Min diameter    : {CONFIG.min_diameter_km} km")
 print(f"    Strict taxonomy : {CONFIG.require_spectral_type}")
 print(f"    H-derived diam. : "
-      f"{'on — bodies with no measured diameter are sized from H + albedo' if CONFIG.derive_diameter_from_h else 'off — measured diameters only'}")
+      f"{'on - bodies with no measured diameter are sized from H + albedo' if CONFIG.derive_diameter_from_h else 'off - measured diameters only'}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -841,7 +841,7 @@ TAXONOMY_COMPOSITION: Dict[str, dict] = {
     },
 }
 
-print(f"✅  Taxonomy lookup ready — {len(TAXONOMY_COMPOSITION)} spectral types defined")
+print(f"OK  Taxonomy lookup ready - {len(TAXONOMY_COMPOSITION)} spectral types defined")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -960,9 +960,9 @@ def pgm_enrichment_for_type(spec_type) -> float:
     return PGM_ENRICHMENT_BY_TYPE.get(s[0], 1.0)
 
 
-print(f"✅  PGM enrichment table ready — "
+print(f"OK  PGM enrichment table ready - "
       f"{len(PGM_ENRICHMENT_BY_TYPE)} non-baseline spectral types "
-      f"(M / Xe = 2.0×, V = 0.2×, A / R / O = 0.5×, others 1.0×)")
+      f"(M / Xe = 2.0x, V = 0.2x, A / R / O = 0.5x, others 1.0x)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1052,7 +1052,7 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
         used as fallback if any field name in attempt 1 is rejected.
     Returns EMPTY DataFrame on any unrecoverable error.
     """
-    print("\n📡  JPL Small-Body Database  (ssd-api.jpl.nasa.gov) …")
+    print("\n  JPL Small-Body Database  (ssd-api.jpl.nasa.gov) ...")
 
     # Minimal field set guaranteed to exist in every SBDB query response.
     # Used as fallback if the full list causes a 400.
@@ -1072,7 +1072,7 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
     if config.jpl_limit:
         base_params["limit"] = config.jpl_limit
     else:
-        print("     ℹ️   No row cap — requesting the full SBDB asteroid table "
+        print("     NOTE   No row cap - requesting the full SBDB asteroid table "
               "(~1.55 M rows, ~435 MB).  Set CONFIG.jpl_limit for a faster run.")
 
     attempts = [
@@ -1097,7 +1097,7 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
                         api_msg = resp.json().get("message", resp.text[:300])
                     except Exception:
                         api_msg = resp.text[:300]
-                    print(f"     ⚠️  HTTP 400 on {attempt_name} — API says: {api_msg}")
+                    print(f"     WARN  HTTP 400 on {attempt_name} - API says: {api_msg}")
                     continue   # try next attempt
 
                 resp.raise_for_status()
@@ -1126,11 +1126,11 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
             try:
                 payload = json.loads(body)
             except json.JSONDecodeError as exc:
-                print(f"     ❌  JSON decode failed on {attempt_name}: {exc}")
+                print(f"     FAIL  JSON decode failed on {attempt_name}: {exc}")
                 continue
 
             if "data" not in payload or not payload["data"]:
-                print(f"     ⚠️  No data on {attempt_name} — trying next")
+                print(f"     WARN  No data on {attempt_name} - trying next")
                 continue
 
             # SBDB Query API returns "fields" as a plain list of strings
@@ -1156,22 +1156,22 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
                     df[flag] = df[flag].map({"Y": True, "N": False, True: True, False: False})
 
             df["source_jpl"] = True
-            print(f"     ✅  {len(df):,} records fetched from JPL SBDB ({attempt_name})")
+            print(f"     OK  {len(df):,} records fetched from JPL SBDB ({attempt_name})")
             return df
 
         except requests.exceptions.Timeout:
-            print(f"     ❌  Timeout on {attempt_name}")
+            print(f"     FAIL  Timeout on {attempt_name}")
         except requests.exceptions.ConnectionError:
-            print("     ❌  Connection error — JPL SBDB skipped entirely")
+            print("     FAIL  Connection error - JPL SBDB skipped entirely")
             return pd.DataFrame()
         except requests.exceptions.HTTPError as exc:
-            print(f"     ❌  HTTP {exc.response.status_code} on {attempt_name}")
+            print(f"     FAIL  HTTP {exc.response.status_code} on {attempt_name}")
         except (KeyError, ValueError, json.JSONDecodeError) as exc:
-            print(f"     ❌  Parse error ({exc}) on {attempt_name}")
+            print(f"     FAIL  Parse error ({exc}) on {attempt_name}")
         except Exception as exc:
-            print(f"     ❌  Unexpected error ({exc}) on {attempt_name}")
+            print(f"     FAIL  Unexpected error ({exc}) on {attempt_name}")
 
-    print("     ❌  All JPL SBDB attempts failed — skipped")
+    print("     FAIL  All JPL SBDB attempts failed - skipped")
     return pd.DataFrame()
 
 
@@ -1374,7 +1374,7 @@ def fetch_mp3c(config: CatalogConfig) -> pd.DataFrame:
     Fetch from MP3C.  Tries REST endpoints first, then TAP/ADQL.
     Returns EMPTY DataFrame if every approach fails.
     """
-    print("\n🔭  MP3C — Minor Planet Physical Properties Catalogue …")
+    print("\n  MP3C - Minor Planet Physical Properties Catalogue ...")
 
     # Both MP3C transports need a number in the query — neither has an
     # "everything" form — so an unlimited (0) config becomes a ceiling larger
@@ -1387,13 +1387,13 @@ def fetch_mp3c(config: CatalogConfig) -> pd.DataFrame:
         try:
             r = requests.get(url, timeout=config.request_timeout)
         except requests.exceptions.ConnectionError as exc:
-            print(f"     ⚠️  REST unreachable ({str(exc)[:80]})")
+            print(f"     WARN  REST unreachable ({str(exc)[:80]})")
             break  # if DNS fails for the host, no point trying other paths
         except requests.exceptions.Timeout:
-            print(f"     ⚠️  REST timed out on {endpoint_tpl[:60]}…")
+            print(f"     WARN  REST timed out on {endpoint_tpl[:60]}...")
             continue
         except Exception as exc:
-            print(f"     ⚠️  REST {type(exc).__name__}: {exc}")
+            print(f"     WARN  REST {type(exc).__name__}: {exc}")
             continue
 
         if r.status_code != 200 or not r.text.strip():
@@ -1420,10 +1420,10 @@ def fetch_mp3c(config: CatalogConfig) -> pd.DataFrame:
                              timeout=config.request_timeout)
         except (requests.exceptions.ConnectionError,
                 requests.exceptions.Timeout) as exc:
-            print(f"     ⚠️  TAP unreachable for table '{table}' ({type(exc).__name__})")
+            print(f"     WARN  TAP unreachable for table '{table}' ({type(exc).__name__})")
             continue
         except Exception as exc:
-            print(f"     ⚠️  TAP {type(exc).__name__}: {exc}")
+            print(f"     WARN  TAP {type(exc).__name__}: {exc}")
             continue
 
         if r.status_code != 200 or not r.text.strip():
@@ -1436,7 +1436,7 @@ def fetch_mp3c(config: CatalogConfig) -> pd.DataFrame:
         if df is not None and not df.empty:
             return _normalise_mp3c_df(df, source_url=f"TAP:{table}")
 
-    print("     ℹ️  MP3C not reachable on any endpoint — continuing without it")
+    print("     NOTE  MP3C not reachable on any endpoint - continuing without it")
     return pd.DataFrame()
 
 
@@ -1456,7 +1456,7 @@ def _normalise_mp3c_df(df: pd.DataFrame, source_url: str) -> pd.DataFrame:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df["source_mp3c"] = True
-    print(f"     ✅  {len(df):,} records fetched from MP3C  ({source_url[:80]})")
+    print(f"     OK  {len(df):,} records fetched from MP3C  ({source_url[:80]})")
     return df
 
 
@@ -1633,13 +1633,13 @@ def _download_ssodnet_parquet(dest: str, config: CatalogConfig) -> bool:
                 os.replace(tmp, dest)  # final attempt → raises if still locked
         return True
     except requests.exceptions.Timeout:
-        print("     ❌  SsODNet download timed out")
+        print("     FAIL  SsODNet download timed out")
     except requests.exceptions.ConnectionError as exc:
-        print(f"     ❌  SsODNet unreachable ({str(exc)[:80]})")
+        print(f"     FAIL  SsODNet unreachable ({str(exc)[:80]})")
     except requests.exceptions.HTTPError as exc:
-        print(f"     ❌  SsODNet HTTP {exc.response.status_code}")
+        print(f"     FAIL  SsODNet HTTP {exc.response.status_code}")
     except Exception as exc:
-        print(f"     ❌  SsODNet download error: {type(exc).__name__}: {exc}")
+        print(f"     FAIL  SsODNet download error: {type(exc).__name__}: {exc}")
     # Clean partial file on failure so a retry doesn't trip the freshness check
     try:
         os.remove(dest + ".part")
@@ -1660,7 +1660,7 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
     Returns EMPTY DataFrame on any unrecoverable error so the rest of the
     pipeline survives unaffected.
     """
-    print("\n🛰️   SsODNet ssoBFT  (ssp.imcce.fr) …")
+    print("\n   SsODNet ssoBFT  (ssp.imcce.fr) ...")
 
     # pyarrow is required for column-projection parquet reads.  If somehow it
     # didn't install, fall back to pandas' built-in parquet engine — which is
@@ -1669,15 +1669,15 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
         import pyarrow.parquet as pq          # noqa: F401  (engine probe)
         engine = "pyarrow"
     except ImportError:
-        print("     ⚠️  pyarrow not available — falling back to pandas default engine")
+        print("     WARN  pyarrow not available - falling back to pandas default engine")
         engine = "auto"
 
     cache_path = _ssodnet_cache_path(config)
     if _ssodnet_cache_is_fresh(cache_path, config.cache_max_age_days):
         age_h = (datetime.now().timestamp() - os.path.getmtime(cache_path)) / 3600
-        print(f"     💾  Using cached parquet ({age_h:.1f} h old): {cache_path}")
+        print(f"       Using cached parquet ({age_h:.1f} h old): {cache_path}")
     else:
-        print(f"     ⬇️   Downloading bulk parquet from {_SSODNET_PARQUET_URL}")
+        print(f"     v   Downloading bulk parquet from {_SSODNET_PARQUET_URL}")
         if not _download_ssodnet_parquet(cache_path, config):
             return pd.DataFrame()
 
@@ -1701,12 +1701,12 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
                 # the old code only spoke up when fewer than 5 columns matched,
                 # which is exactly why a release that renamed the IDENTITY
                 # columns (and 6 others) passed for healthy: 14 still matched.
-                print(f"     ℹ️   Schema drift: {len(cols)}/{len(_SSODNET_WANTED)} "
+                print(f"     NOTE   Schema drift: {len(cols)}/{len(_SSODNET_WANTED)} "
                       f"columns matched, missing {missing}")
             absent_required = [c for c in _SSODNET_REQUIRED if c not in schema_names]
             if absent_required:
-                print(f"     ❌  ssoBFT schema is missing the merge key(s) "
-                      f"{absent_required} — cannot build `designation`, so every "
+                print(f"     FAIL  ssoBFT schema is missing the merge key(s) "
+                      f"{absent_required} - cannot build `designation`, so every "
                       f"row would be dropped at merge time.  Skipping SsODNet.")
                 print(f"         Inspect the real schema and update "
                       f"_SSODNET_WANTED / _SSODNET_RENAME:")
@@ -1718,16 +1718,16 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
             df = pd.read_parquet(cache_path)
             absent_required = [c for c in _SSODNET_REQUIRED if c not in df.columns]
             if absent_required:
-                print(f"     ❌  ssoBFT schema is missing the merge key(s) "
-                      f"{absent_required} — skipping SsODNet.")
+                print(f"     FAIL  ssoBFT schema is missing the merge key(s) "
+                      f"{absent_required} - skipping SsODNet.")
                 return pd.DataFrame()
             df = df[[c for c in _SSODNET_WANTED if c in df.columns]]
     except Exception as exc:
-        print(f"     ❌  Parquet read failed: {type(exc).__name__}: {exc}")
+        print(f"     FAIL  Parquet read failed: {type(exc).__name__}: {exc}")
         return pd.DataFrame()
 
     if df.empty:
-        print("     ⚠️  Parquet returned 0 rows")
+        print("     WARN  Parquet returned 0 rows")
         return pd.DataFrame()
 
     # Cap to config.jpl_limit so SsODNet doesn't dominate runtime on small runs.
@@ -1744,7 +1744,7 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
     if config.ssodnet_limit and len(df) > config.ssodnet_limit:
         df = df.sort_values("number", ascending=True, na_position="last")
         df = df.head(config.ssodnet_limit).copy()
-        print(f"     ✂️   Truncated to first {config.ssodnet_limit:,} rows by number ASC")
+        print(f"        Truncated to first {config.ssodnet_limit:,} rows by number ASC")
 
     # Reduce the ranked spin solutions to a single rotation_period_h column.
     # ssoBFT used to expose them as `spins.<1..3>.period.value` scalars and now
@@ -1818,7 +1818,7 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
             df["aphelion_au"] = df["semi_major_axis_au"] * (1 + df["eccentricity"])
 
     df["source_ssodnet"] = True
-    print(f"     ✅  {len(df):,} records ingested from SsODNet ssoBFT "
+    print(f"     OK  {len(df):,} records ingested from SsODNet ssoBFT "
           f"({len(df.columns)} columns)")
     return df
 
@@ -1887,7 +1887,7 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
 
     Returns EMPTY DataFrame on any unrecoverable error.
     """
-    print("\n🌡️   NEOWISE V2.0 diameters & albedos  (IRSA TAP) …")
+    print("\n   NEOWISE V2.0 diameters & albedos  (IRSA TAP) ...")
 
     # ADQL.  `neowise_limit` caps the pull; 0 drops the TOP clause and takes the
     # whole table, which is only ~183 k rows / ~19 MB / ~30 s — small enough
@@ -1920,7 +1920,7 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
         ) as resp:
             if resp.status_code != 200:
                 snippet = resp.text[:300].replace("\n", " ")
-                print(f"     ❌  HTTP {resp.status_code} — {snippet}")
+                print(f"     FAIL  HTTP {resp.status_code} - {snippet}")
                 return pd.DataFrame()
 
             total_bytes = int(resp.headers.get("content-length") or 0) or None
@@ -1941,13 +1941,13 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
             body = b"".join(chunks)
 
     except requests.exceptions.Timeout:
-        print("     ❌  NEOWISE TAP timed out")
+        print("     FAIL  NEOWISE TAP timed out")
         return pd.DataFrame()
     except requests.exceptions.ConnectionError as exc:
-        print(f"     ❌  NEOWISE TAP unreachable ({str(exc)[:80]})")
+        print(f"     FAIL  NEOWISE TAP unreachable ({str(exc)[:80]})")
         return pd.DataFrame()
     except Exception as exc:
-        print(f"     ❌  NEOWISE TAP error: {type(exc).__name__}: {exc}")
+        print(f"     FAIL  NEOWISE TAP error: {type(exc).__name__}: {exc}")
         return pd.DataFrame()
 
     # IRSA may return one of several non-CSV bodies on failure:
@@ -1958,32 +1958,32 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
     # a DataFrame and end up with garbage rows.
     head = body[:400].lstrip()
     if not head:
-        print("     ❌  TAP returned an empty body")
+        print("     FAIL  TAP returned an empty body")
         return pd.DataFrame()
     if head.startswith(b"<?xml") or head.startswith(b"<VOTABLE"):
         snippet = body[:400].decode("utf-8", errors="replace").replace("\n", " ")
-        print(f"     ❌  TAP returned a VOTable error envelope: {snippet[:200]}")
+        print(f"     FAIL  TAP returned a VOTable error envelope: {snippet[:200]}")
         return pd.DataFrame()
     if head[:1] == b"<":   # any other tag-leading body (HTML, etc.)
         snippet = body[:400].decode("utf-8", errors="replace").replace("\n", " ")
-        print(f"     ❌  TAP returned a non-CSV body: {snippet[:200]}")
+        print(f"     FAIL  TAP returned a non-CSV body: {snippet[:200]}")
         return pd.DataFrame()
     if not head.lower().startswith(b"asteroid_number"):
         # Expected CSV header from this query begins with `asteroid_number`.
         # Anything else means the schema or query has drifted — fail loud.
         snippet = body[:400].decode("utf-8", errors="replace").replace("\n", " ")
-        print(f"     ❌  TAP body doesn't look like expected CSV: {snippet[:200]}")
+        print(f"     FAIL  TAP body doesn't look like expected CSV: {snippet[:200]}")
         return pd.DataFrame()
 
     from io import BytesIO
     try:
         df = pd.read_csv(BytesIO(body))
     except Exception as exc:
-        print(f"     ❌  CSV parse failed: {type(exc).__name__}: {exc}")
+        print(f"     FAIL  CSV parse failed: {type(exc).__name__}: {exc}")
         return pd.DataFrame()
 
     if df.empty:
-        print("     ⚠️  NEOWISE TAP returned 0 rows")
+        print("     WARN  NEOWISE TAP returned 0 rows")
         return pd.DataFrame()
 
     # Designation: numbered → `asteroid_number`, unnumbered → `prov_desig`.
@@ -2048,7 +2048,7 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
         df["designation"] = _extract_canonical_designation(df["designation"])
 
     df["source_neowise"] = True
-    print(f"     ✅  {len(df):,} records fetched from NEOWISE V2.0")
+    print(f"     OK  {len(df):,} records fetched from NEOWISE V2.0")
     return df
 
 
@@ -2117,9 +2117,9 @@ def deduplicate_catalog(
             msg.append(f"{n_removed:,} duplicate(s) collapsed (kept most-complete row)")
         if n_null > 0:
             msg.append(f"{n_null:,} row(s) dropped for null designation")
-        print(f"     🗑   {label}: " + "; ".join(msg))
+        print(f"        {label}: " + "; ".join(msg))
     else:
-        print(f"     ✔   {label}: no duplicates detected")
+        print(f"     OK   {label}: no duplicates detected")
 
     return work
 
@@ -2153,12 +2153,12 @@ def merge_sources(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         Merged + deduplicated DataFrame, or an empty DataFrame if every
         source was empty.
     """
-    print("\n🔀  Merging sources …")
+    print("\n  Merging sources ...")
 
     available = {k: v for k, v in sources.items() if v is not None and not v.empty}
 
     if not available:
-        print("     ❌  No data from any source — aborting merge")
+        print("     FAIL  No data from any source - aborting merge")
         return pd.DataFrame()
 
     # Normalise designation for joining, then dedupe each source on its own
@@ -2178,8 +2178,8 @@ def merge_sources(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         # the fetcher has already printed its success line.  NEOWISE did this
         # on every large run up to v1.1.0.  Fail loud.
         if n_raw and available[name].empty:
-            print(f"     🚨  {name} fetched {n_raw:,} rows and NONE survived "
-                  f"keying — its `designation` column is unusable, so the whole "
+            print(f"     ALERT  {name} fetched {n_raw:,} rows and NONE survived "
+                  f"keying - its `designation` column is unusable, so the whole "
                   f"source is about to contribute nothing.  This is a BUG in "
                   f"fetch_{name.split()[0].lower()}, not an empty upstream table.")
 
@@ -2188,13 +2188,13 @@ def merge_sources(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     backbone_name, backbone_df = next(iter(available.items()))
     merged = backbone_df.copy()
     available.pop(backbone_name)
-    print(f"     🦴  Backbone: {backbone_name}  ({len(merged):,} rows)")
+    print(f"       Backbone: {backbone_name}  ({len(merged):,} rows)")
 
     # Outer-join each remaining source so designations unique to that source
     # are retained.  Backbone values win; supplement values fill NaN gaps.
     for src_name, supp in available.items():
         if "designation" not in supp.columns:
-            print(f"     ⚠️  {src_name} has no 'designation' column — skipped in merge")
+            print(f"     WARN  {src_name} has no 'designation' column - skipped in merge")
             continue
 
         # Pass every column through, INCLUDING `source_*` flags.  Every
@@ -2231,19 +2231,19 @@ def merge_sources(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
                 continue
             merged.drop(columns=[src_col], inplace=True)
 
-        print(f"     ✔   Merged {src_name}: {len(supp):,} supplement records "
+        print(f"     OK   Merged {src_name}: {len(supp):,} supplement records "
               f"({overlap:,} matched the backbone, +{new_rows:,} new entries)")
         if len(supp) and not overlap:
-            print(f"     🚨  {src_name} matched ZERO backbone designations. "
+            print(f"     ALERT  {src_name} matched ZERO backbone designations. "
                   f"Every one of its {len(supp):,} rows entered as a new body "
                   f"with no orbital elements, and validation will drop them "
-                  f"all.  Check how fetch_* builds `designation` — a float-typed "
+                  f"all.  Check how fetch_* builds `designation` - a float-typed "
                   f"identifier stringifies to \"3.0\" and joins nothing.")
 
     # Final post-merge dedup — keeps the most-complete row in each group.
     merged = deduplicate_catalog(merged, key="designation", label="post-merge")
 
-    print(f"     ✅  Combined catalog: {len(merged):,} rows × {len(merged.columns)} columns")
+    print(f"     OK  Combined catalog: {len(merged):,} rows x {len(merged.columns)} columns")
     return merged
 
 
@@ -2470,18 +2470,18 @@ def derive_missing_diameters(
     df["derived_diameter_is_estimate"] = ~measured
 
     if not config.derive_diameter_from_h:
-        print("\n📐  Diameter derivation OFF — measured diameters only "
+        print("\n  Diameter derivation OFF - measured diameters only "
               f"({int(measured.sum()):,} of {len(df):,} rows will survive validation)")
         df["diameter_km"] = diam
         return df
 
-    print("\n📐  Deriving diameters from absolute magnitude …")
+    print("\n  Deriving diameters from absolute magnitude ...")
 
     if "absolute_magnitude_h" not in df.columns:
         # Every source supplies H, so its total absence means something upstream
         # broke rather than that the data is simply unavailable.  Say so — a
         # silent no-op here costs 1.4 M rows.
-        print("     ⚠️  No `absolute_magnitude_h` column — nothing to derive from. "
+        print("     WARN  No `absolute_magnitude_h` column - nothing to derive from. "
               "Check that the JPL fetcher requested the H field.")
         df["diameter_km"] = diam
         return df
@@ -2491,7 +2491,7 @@ def derive_missing_diameters(
     n_target = int(target.sum())
 
     if not n_target:
-        print("     ℹ️   Every row already carries a measured diameter")
+        print("     NOTE   Every row already carries a measured diameter")
         df["diameter_km"] = diam
         return df
 
@@ -2508,8 +2508,8 @@ def derive_missing_diameters(
         too_small = target & (derived < config.min_derived_diameter_km)
         n_small = int(too_small.sum())
         if n_small:
-            print(f"     ✂️   {n_small:,} derived below "
-                  f"{config.min_derived_diameter_km} km — left unfilled "
+            print(f"        {n_small:,} derived below "
+                  f"{config.min_derived_diameter_km} km - left unfilled "
                   f"(min_derived_diameter_km)")
         target &= ~too_small
 
@@ -2544,15 +2544,15 @@ def derive_missing_diameters(
     df.loc[target, "albedo_assumed_for_diameter"] = albedo[target]
 
     counts = df["diameter_source"].value_counts()
-    print(f"     ✅  {int(target.sum()):,} diameters derived  "
+    print(f"     OK  {int(target.sum()):,} diameters derived  "
           f"(measured kept: {int(measured.sum()):,})")
     for src, n in counts.items():
         if src == "none":
             continue
-        print(f"         • {str(src):32s} → {int(n):,}")
+        print(f"         * {str(src):32s} -> {int(n):,}")
     still = int((pd.to_numeric(df['diameter_km'], errors='coerce').fillna(0) <= 0).sum())
     if still:
-        print(f"         • {'no diameter (will be dropped)':32s} → {still:,}")
+        print(f"         * {'no diameter (will be dropped)':32s} -> {still:,}")
 
     return df
 
@@ -2588,10 +2588,10 @@ def validate_and_filter(
     Returns:
         (filtered_df, rejection_log_df)
     """
-    print("\n🔍  Validating entries …")
+    print("\n  Validating entries ...")
 
     if df.empty:
-        print("     ⚠️  Nothing to validate")
+        print("     WARN  Nothing to validate")
         return df.copy(), pd.DataFrame()
 
     total      = len(df)
@@ -2600,7 +2600,7 @@ def validate_and_filter(
 
     # ── 1. Designation required ───────────────────────────────────────────────
     if "designation" not in df.columns:
-        print("     ❌  'designation' column missing — cannot build catalog")
+        print("     FAIL  'designation' column missing - cannot build catalog")
         return pd.DataFrame(), pd.DataFrame()
 
     bad = df["designation"].isna() | (df["designation"].astype(str).str.strip() == "")
@@ -2634,7 +2634,7 @@ def validate_and_filter(
     else:
         log.append({"reason": "semi_major_axis_au column absent — coordinate mapping disabled",
                     "rejected_count": 0, "examples": "N/A"})
-        print("     ⚠️  No orbital elements — coordinate mapping will be unavailable")
+        print("     WARN  No orbital elements - coordinate mapping will be unavailable")
 
     # ── 5. Strict spectral type (optional) ───────────────────────────────────
     # Validate runs BEFORE enrich_composition's Tholen fallback, so we have to
@@ -2666,11 +2666,11 @@ def validate_and_filter(
 
     rejection_df = pd.DataFrame([r for r in log if r["rejected_count"] > 0])
 
-    print(f"     ✅  Accepted : {n_kept:,}")
-    print(f"     ❌  Rejected : {n_dropped:,}  ({n_dropped/total*100:.1f}%)")
+    print(f"     OK  Accepted : {n_kept:,}")
+    print(f"     FAIL  Rejected : {n_dropped:,}  ({n_dropped/total*100:.1f}%)")
     if not rejection_df.empty:
         for _, row in rejection_df.iterrows():
-            print(f"         • {row['reason']:55s} → {row['rejected_count']:,} dropped")
+            print(f"         * {row['reason']:55s} -> {row['rejected_count']:,} dropped")
 
     return filtered, rejection_df
 
@@ -2704,7 +2704,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
          fetcher (SsODNet) and filling gaps with (4/3)π r³ ρ from
          diameter × density; `mass_measured` flag tracks provenance.
     """
-    print("\n🧪  Enriching composition data …")
+    print("\n  Enriching composition data ...")
     df = df.copy()
 
     # ── 1. Normalise spectral_type ────────────────────────────────────────────
@@ -2749,7 +2749,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[fill_mask, "spectral_type_source"] = "tholen"
         n_thol = int(fill_mask.sum())
         if n_thol:
-            print(f"     🔡  Spectral type filled from Tholen for {n_thol:,} entries")
+            print(f"       Spectral type filled from Tholen for {n_thol:,} entries")
 
     # ── 2b. Infer from albedo where type is still missing ────────────────────
     def _infer_from_albedo(a: float) -> str:
@@ -2766,7 +2766,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[infer_mask, "spectral_type_source"] = "albedo"
         n_inf = int(infer_mask.sum())
         if n_inf:
-            print(f"     🔎  Spectral type inferred from albedo for {n_inf:,} entries")
+            print(f"       Spectral type inferred from albedo for {n_inf:,} entries")
 
     # ── 2c. Infer from the albedo ASSUMED when the diameter was derived ──────
     # Separate from 2b and separately labelled, because the input is an
@@ -2784,7 +2784,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[assume_mask, "spectral_type_source"] = "albedo_assumed"
         n_ass = int(assume_mask.sum())
         if n_ass:
-            print(f"     🔎  Spectral type inferred from the ASSUMED albedo for "
+            print(f"       Spectral type inferred from the ASSUMED albedo for "
                   f"{n_ass:,} entries (H-derived diameters)")
 
     # ── 3. Look up composition fields ────────────────────────────────────────
@@ -2834,8 +2834,8 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
     n_enriched  = int((df["comp_pgm_enrichment"] > 1.0).sum())
     n_depleted  = int((df["comp_pgm_enrichment"] < 1.0).sum())
     if n_enriched or n_depleted:
-        print(f"     💎  PGM enrichment: {n_enriched:,} enriched (>1×)  |  "
-              f"{n_depleted:,} depleted (<1×)  |  rest baseline (1×)")
+        print(f"       PGM enrichment: {n_enriched:,} enriched (>1x)  |  "
+              f"{n_depleted:,} depleted (<1x)  |  rest baseline (1x)")
 
     # ── 4. Fill density gap ───────────────────────────────────────────────────
     if "density_gcm3" in df.columns:
@@ -2851,7 +2851,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
 
     n_meas = int(df["density_measured"].sum())
     n_est  = len(df) - n_meas
-    print(f"     📊  Density: {n_meas:,} measured  |  {n_est:,} estimated from taxonomy")
+    print(f"       Density: {n_meas:,} measured  |  {n_est:,} estimated from taxonomy")
 
     # ── 5. Compute estimated mass (kg) ────────────────────────────────────────
     # Keep any MEASURED mass already supplied by a source (SsODNet).
@@ -2875,7 +2875,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
 
     n_mass_meas = int(df["mass_measured"].sum())
     n_mass_der  = int(df["estimated_mass_kg"].notna().sum()) - n_mass_meas
-    print(f"     ⚖️   Mass:    {n_mass_meas:,} measured  |  {n_mass_der:,} derived (diameter × density)")
+    print(f"        Mass:    {n_mass_meas:,} measured  |  {n_mass_der:,} derived (diameter x density)")
 
     return df
 
@@ -2898,7 +2898,7 @@ def build_catalog(config: CatalogConfig = CONFIG) -> pd.DataFrame:
     t0 = datetime.now()
 
     print("=" * 65)
-    print("  🚀  ASTEROID CATALOG PIPELINE  —  MODULE 1: CATALOGING")
+    print("    ASTEROID CATALOG PIPELINE  -  MODULE 1: CATALOGING")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  v{config.pipeline_version}")
     print("=" * 65)
 
@@ -2925,7 +2925,7 @@ def build_catalog(config: CatalogConfig = CONFIG) -> pd.DataFrame:
     # ── Step 2 — Merge ────────────────────────────────────────────────────────
     merged = merge_sources(sources)
     if merged.empty:
-        print("\n❌  Pipeline aborted — merge produced no data")
+        print("\nFAIL  Pipeline aborted - merge produced no data")
         return pd.DataFrame()
 
     # ── Step 2b — Derive diameters from H ────────────────────────────────────
@@ -2936,7 +2936,7 @@ def build_catalog(config: CatalogConfig = CONFIG) -> pd.DataFrame:
     # ── Step 3 — Validate & filter ────────────────────────────────────────────
     catalog, rejections = validate_and_filter(merged, config)
     if catalog.empty:
-        print("\n❌  Pipeline aborted — no entries passed validation")
+        print("\nFAIL  Pipeline aborted - no entries passed validation")
         return pd.DataFrame()
 
     # ── Step 4 — Composition enrichment ──────────────────────────────────────
@@ -2945,7 +2945,7 @@ def build_catalog(config: CatalogConfig = CONFIG) -> pd.DataFrame:
     # ── Step 4b — Final dedup safety net ─────────────────────────────────────
     # Belt-and-braces: enrichment shouldn't introduce duplicates, but checking
     # here means a CSV written to disk is guaranteed to have unique designations.
-    print("\n🧹  Final duplicate sweep …")
+    print("\n  Final duplicate sweep ...")
     catalog = deduplicate_catalog(catalog, key="designation", label="final")
 
     # ── Step 5 — Metadata + sort ──────────────────────────────────────────────
@@ -2960,16 +2960,16 @@ def build_catalog(config: CatalogConfig = CONFIG) -> pd.DataFrame:
     rejected_path = os.path.join(config.output_dir, config.rejected_filename)
 
     catalog.to_csv(catalog_path, index=False)
-    print(f"\n     💾  Catalog saved  → {catalog_path}")
+    print(f"\n       Catalog saved  -> {catalog_path}")
 
     if not rejections.empty:
         rejections.to_csv(rejected_path, index=False)
-        print(f"     💾  Rejections log → {rejected_path}")
+        print(f"       Rejections log -> {rejected_path}")
 
     # ── Summary ───────────────────────────────────────────────────────────────
     elapsed = (datetime.now() - t0).total_seconds()
     print("\n" + "=" * 65)
-    print("  ✅  CATALOGING COMPLETE")
+    print("  OK  CATALOGING COMPLETE")
     print(f"      Entries    : {len(catalog):,}")
     print(f"      Columns    : {len(catalog.columns)}")
     print(f"      Elapsed    : {elapsed:.1f}s")
@@ -2986,9 +2986,9 @@ def build_catalog(config: CatalogConfig = CONFIG) -> pd.DataFrame:
         for src, n in vc.items():
             if src == "measured":
                 continue
-            print(f"                   • {str(src):30s} {int(n):,}")
+            print(f"                   * {str(src):30s} {int(n):,}")
         if n_der:
-            print("      ⚠️   Derived rows carry an ASSUMED albedo; mass scales as "
+            print("      WARN   Derived rows carry an ASSUMED albedo; mass scales as "
                   "p_V**-1.5.\n"
                   "          Filter on `derived_diameter_is_estimate` to get the "
                   "measured-only\n"
@@ -3058,7 +3058,7 @@ def filter_by_spectral_group(catalog: pd.DataFrame, *groups: str) -> pd.DataFram
     return catalog[catalog["comp_group"].isin(groups)].copy()
 
 
-print("\n✅  Helper utilities available:")
+print("\nOK  Helper utilities available:")
 print("    lookup_asteroid(catalog, 'Ceres')")
 print("    filter_by_region(catalog, 2.0, 3.3)   # main-belt slice")
 print("    filter_by_spectral_group(catalog, 'X-complex')  # metallic")
@@ -3085,13 +3085,13 @@ if __name__ == "__main__":
         show = [c for c in PREVIEW_COLS if c in catalog.columns]
 
         print(f"\n{'='*65}")
-        print(f"  📋  CATALOG PREVIEW  —  first {CONFIG.preview_rows} entries")
+        print(f"    CATALOG PREVIEW  -  first {CONFIG.preview_rows} entries")
         print(f"{'='*65}")
         print(catalog[show].head(CONFIG.preview_rows).to_string(index=False))
 
         # ── Spectral distribution ─────────────────────────────────────────────────
         print(f"\n{'='*65}")
-        print("  📊  SPECTRAL TYPE DISTRIBUTION")
+        print("    SPECTRAL TYPE DISTRIBUTION")
         print(f"{'='*65}")
         if "spectral_type" in catalog.columns:
             dist = catalog["spectral_type"].value_counts()
@@ -3101,11 +3101,11 @@ if __name__ == "__main__":
                 bar = "█" * max(1, int(n / bar_scale))
                 print(f"  {str(spec):8s} {bar:<42s} {n:>6,}")
             if len(dist) > top_n:
-                print(f"  … and {len(dist)-top_n} more types")
+                print(f"  ... and {len(dist)-top_n} more types")
 
         # ── Size histogram ────────────────────────────────────────────────────────
         print(f"\n{'='*65}")
-        print("  📏  SIZE DISTRIBUTION")
+        print("    SIZE DISTRIBUTION")
         print(f"{'='*65}")
         if "diameter_km" in catalog.columns:
             d = pd.to_numeric(catalog["diameter_km"], errors="coerce")
@@ -3118,7 +3118,7 @@ if __name__ == "__main__":
 
         # ── Orbital regions ───────────────────────────────────────────────────────
         print(f"\n{'='*65}")
-        print("  🌌  ORBITAL REGION DISTRIBUTION")
+        print("    ORBITAL REGION DISTRIBUTION")
         print(f"{'='*65}")
         if "semi_major_axis_au" in catalog.columns:
             a = pd.to_numeric(catalog["semi_major_axis_au"], errors="coerce")
@@ -3139,7 +3139,7 @@ if __name__ == "__main__":
 
         # ── Composition group summary ─────────────────────────────────────────────
         print(f"\n{'='*65}")
-        print("  🧪  COMPOSITION GROUP BREAKDOWN")
+        print("    COMPOSITION GROUP BREAKDOWN")
         print(f"{'='*65}")
         if "comp_group" in catalog.columns:
             grp = catalog["comp_group"].value_counts()
@@ -3148,7 +3148,7 @@ if __name__ == "__main__":
 
         # ── Data completeness report ──────────────────────────────────────────────
         print(f"\n{'='*65}")
-        print("  📈  DATA COMPLETENESS")
+        print("    DATA COMPLETENESS")
         print(f"{'='*65}")
         key_cols = [
             "designation", "name", "spectral_type", "diameter_km",
