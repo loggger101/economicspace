@@ -470,7 +470,11 @@ def _stage_minutes(key: str) -> float:
 # that a bar drawn off it advances more than ten times in twenty minutes.
 _COUNT_RE = re.compile(r"([\d,]+)\s*/\s*([\d,]+)\s+evaluated")
 _TQDM_PCT_RE = re.compile(r"(\d{1,3})%\|")
-_RULE_ONLY_RE = re.compile(r"^[\s=█▔▁─═*·.+-]*$")
+# The ASCII banner characters come first: the pipeline's own output is pure
+# ASCII, and `#` is what the old full-block rule became. The box-drawing
+# characters are kept so an archived log from before that change still
+# filters correctly.
+_RULE_ONLY_RE = re.compile(r"^[\s=#█▔▁─═*·.+-]*$")
 
 
 class _RunView:

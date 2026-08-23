@@ -9,6 +9,10 @@
 .gitignore     text eol=lf
 .gitattributes text eol=lf
 
+# Batch files are CRLF by convention, and this one is all labels, goto and
+# call -- which is exactly where an LF-only .bat is known to misbehave.
+*.bat   text eol=crlf
+
 # Machine-generated: one 6,300-line file assembled by build_master.py.
 # Marking it linguist-generated keeps it out of diff noise on hosts that
 # understand the attribute.

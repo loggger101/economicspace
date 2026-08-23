@@ -3,21 +3,21 @@
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
-run top-to-bottom — the orchestrator at the bottom executes everything.
+run top-to-bottom - the orchestrator at the bottom executes everything.
 
-    Stage 1  →  Asteroid Catalog        (modules/catalog.py 1.1.0)
+    Stage 1  ->  Asteroid Catalog        (modules/catalog.py 1.1.0)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
-    Stage 2  →  Mineral Value Catalog   (modules/mineral_value.py 1.7.0)
+    Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.7.0)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
                 + destination pricing for EVERY commodity
-    Stage 3  →  Transportation Data     (modules/transportation.py 1.11.0)
-                Launch vehicles + propellants + Δv segments + ops costs
-                (UNCREWED autonomous mining — no crew costs)
-    Stage 4  →  Profitability Calc      (modules/calc.py 1.14.0)
+    Stage 3  ->  Transportation Data     (modules/transportation.py 1.11.0)
+                Launch vehicles + propellants + dv segments + ops costs
+                (UNCREWED autonomous mining - no crew costs)
+    Stage 4  ->  Profitability Calc      (modules/calc.py 1.14.0)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
-                + PGM enrichment applied per asteroid (M-type 2×, V-type 0.2×)
+                + PGM enrichment applied per asteroid (M-type 2x, V-type 0.2x)
                 + delivery architecture: earth_surface / leo / cislunar /
                   lunar_surface / mars_surface, beneficiation,
                   low-thrust trip time, launch windows, learning curve,
@@ -28,23 +28,23 @@ run top-to-bottom — the orchestrator at the bottom executes everything.
 Mission profile: UNCREWED autonomous mining spacecraft throughout (no
 crew costs, no life-support overhead).
 
-DELIVERY DESTINATION — set MINERAL_CONFIG.delivery_destination and
+DELIVERY DESTINATION - set MINERAL_CONFIG.delivery_destination and
 CALC_CONFIG.delivery_destination TO THE SAME VALUE.  Stage 2 decides what a
 kilogram sells for; Stage 4 decides what it costs to put it there, and the
 answer is only meaningful when they agree.  Stage 4 checks and warns.
 
 Output tree (under MASTER_CONFIG.output_dir):
-    asteroid_catalog.csv               ← Stage 1 (~0.88 GB at the 1.55 M-row
+    asteroid_catalog.csv               <- Stage 1 (~0.88 GB at the 1.55 M-row
                                           default; set catalog.jpl_limit lower)
-    rejected_entries.csv               ← Stage 1 (validation rejects)
-    mineral_value_catalog.csv          ← Stage 2
+    rejected_entries.csv               <- Stage 1 (validation rejects)
+    mineral_value_catalog.csv          <- Stage 2
     transportation/
-        launch_vehicles.csv            ← Stage 3
-        propellants.csv                ← Stage 3
-        delta_v_segments.csv           ← Stage 3
-        operational_costs.csv          ← Stage 3
-        transportation_summary.csv     ← Stage 3 (vehicle × prop × segment)
-    profitability_catalog.csv          ← Stage 4 (the headline output)
+        launch_vehicles.csv            <- Stage 3
+        propellants.csv                <- Stage 3
+        delta_v_segments.csv           <- Stage 3
+        operational_costs.csv          <- Stage 3
+        transportation_summary.csv     <- Stage 3 (vehicle x prop x segment)
+    profitability_catalog.csv          <- Stage 4 (the headline output)
 
 The output directory defaults to /content/asteroid_pipeline on Colab and
 ./asteroid_pipeline everywhere else; override with the environment variable
@@ -62,13 +62,13 @@ Tuning:
         MASTER_CONFIG.calc.eval_row_cap             (limit Stage 4 evaluations)
     Or set any sub-config field directly before run_full_pipeline() fires.
 
-GENERATED FILE — do not edit by hand.  Machine-assembled from modules/*.py by
+GENERATED FILE - do not edit by hand.  Machine-assembled from modules/*.py by
 build_master.py; edit the modules and re-run that script.
 """
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # CONSOLE ENCODING
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Windows consoles default to cp1252, which cannot encode the emoji used in
 # this file's progress output.  Must happen before the first print().
 
@@ -79,9 +79,9 @@ for _stream in (_sys.stdout, _sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # SPAWNED-WORKER QUIET MODE
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Stage 4 evaluates asteroids across a process pool.  Windows has no fork, so
 # every worker re-imports this file and would replay all four module banners --
 # 60 lines each, 700+ for a full pool, interleaved into the run log the UI
@@ -100,9 +100,9 @@ if _os.environ.get("ASTEROID_PIPELINE_WORKER") == "1":
     _os.environ["ASTEROID_PIPELINE_WORKER"] = "silenced"
     _sys.stdout = open(_os.devnull, "w", encoding="utf-8")
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # CONSOLIDATED INSTALLATION
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Union of every package required by the four modules.  Auto-installs at
 # import time; safe to re-run.
 
@@ -118,19 +118,19 @@ for _pkg in _MASTER_REQUIRED:
     except ImportError:
         _master_missing.append(_pkg)
 if _master_missing:
-    print(f"📦  Installing: {_master_missing} …")
+    print(f"PKG  Installing: {_master_missing} ...")
     _subprocess.check_call(
         [_sys.executable, "-m", "pip", "install", "-q"] + _master_missing
     )
-    print("✅  Install complete")
+    print("OK  Install complete")
 else:
-    print("✅  All packages present")
+    print("OK  All packages present")
 
 
 
-# ═════════════════════════════════════════════════════════════════════════
-# MODULE 1 — ASTEROID CATALOG BUILDER
-# ═════════════════════════════════════════════════════════════════════════
+# =========================================================================
+# MODULE 1 - ASTEROID CATALOG BUILDER
+# =========================================================================
 
 
 # ==============================================================================
@@ -518,7 +518,7 @@ def _resolve_cache_dir(config: "CatalogConfig") -> str:
 # Eagerly create the default cache dir so first-run prints reflect the real path
 os.makedirs(_resolve_cache_dir(CATALOG_CONFIG), exist_ok=True)
 
-print(f"✅  Configuration loaded — output dir: {CATALOG_CONFIG.output_dir}")
+print(f"OK  Configuration loaded - output dir: {CATALOG_CONFIG.output_dir}")
 print(f"    Active sources  : "
       f"{', '.join(s for s, on in (('JPL', CATALOG_CONFIG.use_jpl), ('MP3C', CATALOG_CONFIG.use_mp3c), ('SsODNet', CATALOG_CONFIG.use_ssodnet), ('NEOWISE', CATALOG_CONFIG.use_neowise)) if on)}")
 def _fmt_limit(n: int) -> str:
@@ -534,7 +534,7 @@ print(f"    Fetch limits    : "
 print(f"    Min diameter    : {CATALOG_CONFIG.min_diameter_km} km")
 print(f"    Strict taxonomy : {CATALOG_CONFIG.require_spectral_type}")
 print(f"    H-derived diam. : "
-      f"{'on — bodies with no measured diameter are sized from H + albedo' if CATALOG_CONFIG.derive_diameter_from_h else 'off — measured diameters only'}")
+      f"{'on - bodies with no measured diameter are sized from H + albedo' if CATALOG_CONFIG.derive_diameter_from_h else 'off - measured diameters only'}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -931,7 +931,7 @@ TAXONOMY_COMPOSITION: Dict[str, dict] = {
     },
 }
 
-print(f"✅  Taxonomy lookup ready — {len(TAXONOMY_COMPOSITION)} spectral types defined")
+print(f"OK  Taxonomy lookup ready - {len(TAXONOMY_COMPOSITION)} spectral types defined")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1050,9 +1050,9 @@ def pgm_enrichment_for_type(spec_type) -> float:
     return PGM_ENRICHMENT_BY_TYPE.get(s[0], 1.0)
 
 
-print(f"✅  PGM enrichment table ready — "
+print(f"OK  PGM enrichment table ready - "
       f"{len(PGM_ENRICHMENT_BY_TYPE)} non-baseline spectral types "
-      f"(M / Xe = 2.0×, V = 0.2×, A / R / O = 0.5×, others 1.0×)")
+      f"(M / Xe = 2.0x, V = 0.2x, A / R / O = 0.5x, others 1.0x)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1142,7 +1142,7 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
         used as fallback if any field name in attempt 1 is rejected.
     Returns EMPTY DataFrame on any unrecoverable error.
     """
-    print("\n📡  JPL Small-Body Database  (ssd-api.jpl.nasa.gov) …")
+    print("\n  JPL Small-Body Database  (ssd-api.jpl.nasa.gov) ...")
 
     # Minimal field set guaranteed to exist in every SBDB query response.
     # Used as fallback if the full list causes a 400.
@@ -1162,7 +1162,7 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
     if config.jpl_limit:
         base_params["limit"] = config.jpl_limit
     else:
-        print("     ℹ️   No row cap — requesting the full SBDB asteroid table "
+        print("     NOTE   No row cap - requesting the full SBDB asteroid table "
               "(~1.55 M rows, ~435 MB).  Set CATALOG_CONFIG.jpl_limit for a faster run.")
 
     attempts = [
@@ -1187,7 +1187,7 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
                         api_msg = resp.json().get("message", resp.text[:300])
                     except Exception:
                         api_msg = resp.text[:300]
-                    print(f"     ⚠️  HTTP 400 on {attempt_name} — API says: {api_msg}")
+                    print(f"     WARN  HTTP 400 on {attempt_name} - API says: {api_msg}")
                     continue   # try next attempt
 
                 resp.raise_for_status()
@@ -1216,11 +1216,11 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
             try:
                 payload = json.loads(body)
             except json.JSONDecodeError as exc:
-                print(f"     ❌  JSON decode failed on {attempt_name}: {exc}")
+                print(f"     FAIL  JSON decode failed on {attempt_name}: {exc}")
                 continue
 
             if "data" not in payload or not payload["data"]:
-                print(f"     ⚠️  No data on {attempt_name} — trying next")
+                print(f"     WARN  No data on {attempt_name} - trying next")
                 continue
 
             # SBDB Query API returns "fields" as a plain list of strings
@@ -1246,22 +1246,22 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
                     df[flag] = df[flag].map({"Y": True, "N": False, True: True, False: False})
 
             df["source_jpl"] = True
-            print(f"     ✅  {len(df):,} records fetched from JPL SBDB ({attempt_name})")
+            print(f"     OK  {len(df):,} records fetched from JPL SBDB ({attempt_name})")
             return df
 
         except requests.exceptions.Timeout:
-            print(f"     ❌  Timeout on {attempt_name}")
+            print(f"     FAIL  Timeout on {attempt_name}")
         except requests.exceptions.ConnectionError:
-            print("     ❌  Connection error — JPL SBDB skipped entirely")
+            print("     FAIL  Connection error - JPL SBDB skipped entirely")
             return pd.DataFrame()
         except requests.exceptions.HTTPError as exc:
-            print(f"     ❌  HTTP {exc.response.status_code} on {attempt_name}")
+            print(f"     FAIL  HTTP {exc.response.status_code} on {attempt_name}")
         except (KeyError, ValueError, json.JSONDecodeError) as exc:
-            print(f"     ❌  Parse error ({exc}) on {attempt_name}")
+            print(f"     FAIL  Parse error ({exc}) on {attempt_name}")
         except Exception as exc:
-            print(f"     ❌  Unexpected error ({exc}) on {attempt_name}")
+            print(f"     FAIL  Unexpected error ({exc}) on {attempt_name}")
 
-    print("     ❌  All JPL SBDB attempts failed — skipped")
+    print("     FAIL  All JPL SBDB attempts failed - skipped")
     return pd.DataFrame()
 
 
@@ -1464,7 +1464,7 @@ def fetch_mp3c(config: CatalogConfig) -> pd.DataFrame:
     Fetch from MP3C.  Tries REST endpoints first, then TAP/ADQL.
     Returns EMPTY DataFrame if every approach fails.
     """
-    print("\n🔭  MP3C — Minor Planet Physical Properties Catalogue …")
+    print("\n  MP3C - Minor Planet Physical Properties Catalogue ...")
 
     # Both MP3C transports need a number in the query — neither has an
     # "everything" form — so an unlimited (0) config becomes a ceiling larger
@@ -1477,13 +1477,13 @@ def fetch_mp3c(config: CatalogConfig) -> pd.DataFrame:
         try:
             r = requests.get(url, timeout=config.request_timeout)
         except requests.exceptions.ConnectionError as exc:
-            print(f"     ⚠️  REST unreachable ({str(exc)[:80]})")
+            print(f"     WARN  REST unreachable ({str(exc)[:80]})")
             break  # if DNS fails for the host, no point trying other paths
         except requests.exceptions.Timeout:
-            print(f"     ⚠️  REST timed out on {endpoint_tpl[:60]}…")
+            print(f"     WARN  REST timed out on {endpoint_tpl[:60]}...")
             continue
         except Exception as exc:
-            print(f"     ⚠️  REST {type(exc).__name__}: {exc}")
+            print(f"     WARN  REST {type(exc).__name__}: {exc}")
             continue
 
         if r.status_code != 200 or not r.text.strip():
@@ -1510,10 +1510,10 @@ def fetch_mp3c(config: CatalogConfig) -> pd.DataFrame:
                              timeout=config.request_timeout)
         except (requests.exceptions.ConnectionError,
                 requests.exceptions.Timeout) as exc:
-            print(f"     ⚠️  TAP unreachable for table '{table}' ({type(exc).__name__})")
+            print(f"     WARN  TAP unreachable for table '{table}' ({type(exc).__name__})")
             continue
         except Exception as exc:
-            print(f"     ⚠️  TAP {type(exc).__name__}: {exc}")
+            print(f"     WARN  TAP {type(exc).__name__}: {exc}")
             continue
 
         if r.status_code != 200 or not r.text.strip():
@@ -1526,7 +1526,7 @@ def fetch_mp3c(config: CatalogConfig) -> pd.DataFrame:
         if df is not None and not df.empty:
             return _normalise_mp3c_df(df, source_url=f"TAP:{table}")
 
-    print("     ℹ️  MP3C not reachable on any endpoint — continuing without it")
+    print("     NOTE  MP3C not reachable on any endpoint - continuing without it")
     return pd.DataFrame()
 
 
@@ -1546,7 +1546,7 @@ def _normalise_mp3c_df(df: pd.DataFrame, source_url: str) -> pd.DataFrame:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df["source_mp3c"] = True
-    print(f"     ✅  {len(df):,} records fetched from MP3C  ({source_url[:80]})")
+    print(f"     OK  {len(df):,} records fetched from MP3C  ({source_url[:80]})")
     return df
 
 
@@ -1723,13 +1723,13 @@ def _download_ssodnet_parquet(dest: str, config: CatalogConfig) -> bool:
                 os.replace(tmp, dest)  # final attempt → raises if still locked
         return True
     except requests.exceptions.Timeout:
-        print("     ❌  SsODNet download timed out")
+        print("     FAIL  SsODNet download timed out")
     except requests.exceptions.ConnectionError as exc:
-        print(f"     ❌  SsODNet unreachable ({str(exc)[:80]})")
+        print(f"     FAIL  SsODNet unreachable ({str(exc)[:80]})")
     except requests.exceptions.HTTPError as exc:
-        print(f"     ❌  SsODNet HTTP {exc.response.status_code}")
+        print(f"     FAIL  SsODNet HTTP {exc.response.status_code}")
     except Exception as exc:
-        print(f"     ❌  SsODNet download error: {type(exc).__name__}: {exc}")
+        print(f"     FAIL  SsODNet download error: {type(exc).__name__}: {exc}")
     # Clean partial file on failure so a retry doesn't trip the freshness check
     try:
         os.remove(dest + ".part")
@@ -1750,7 +1750,7 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
     Returns EMPTY DataFrame on any unrecoverable error so the rest of the
     pipeline survives unaffected.
     """
-    print("\n🛰️   SsODNet ssoBFT  (ssp.imcce.fr) …")
+    print("\n   SsODNet ssoBFT  (ssp.imcce.fr) ...")
 
     # pyarrow is required for column-projection parquet reads.  If somehow it
     # didn't install, fall back to pandas' built-in parquet engine — which is
@@ -1759,15 +1759,15 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
         import pyarrow.parquet as pq          # noqa: F401  (engine probe)
         engine = "pyarrow"
     except ImportError:
-        print("     ⚠️  pyarrow not available — falling back to pandas default engine")
+        print("     WARN  pyarrow not available - falling back to pandas default engine")
         engine = "auto"
 
     cache_path = _ssodnet_cache_path(config)
     if _ssodnet_cache_is_fresh(cache_path, config.cache_max_age_days):
         age_h = (datetime.now().timestamp() - os.path.getmtime(cache_path)) / 3600
-        print(f"     💾  Using cached parquet ({age_h:.1f} h old): {cache_path}")
+        print(f"       Using cached parquet ({age_h:.1f} h old): {cache_path}")
     else:
-        print(f"     ⬇️   Downloading bulk parquet from {_SSODNET_PARQUET_URL}")
+        print(f"     v   Downloading bulk parquet from {_SSODNET_PARQUET_URL}")
         if not _download_ssodnet_parquet(cache_path, config):
             return pd.DataFrame()
 
@@ -1791,12 +1791,12 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
                 # the old code only spoke up when fewer than 5 columns matched,
                 # which is exactly why a release that renamed the IDENTITY
                 # columns (and 6 others) passed for healthy: 14 still matched.
-                print(f"     ℹ️   Schema drift: {len(cols)}/{len(_SSODNET_WANTED)} "
+                print(f"     NOTE   Schema drift: {len(cols)}/{len(_SSODNET_WANTED)} "
                       f"columns matched, missing {missing}")
             absent_required = [c for c in _SSODNET_REQUIRED if c not in schema_names]
             if absent_required:
-                print(f"     ❌  ssoBFT schema is missing the merge key(s) "
-                      f"{absent_required} — cannot build `designation`, so every "
+                print(f"     FAIL  ssoBFT schema is missing the merge key(s) "
+                      f"{absent_required} - cannot build `designation`, so every "
                       f"row would be dropped at merge time.  Skipping SsODNet.")
                 print(f"         Inspect the real schema and update "
                       f"_SSODNET_WANTED / _SSODNET_RENAME:")
@@ -1808,16 +1808,16 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
             df = pd.read_parquet(cache_path)
             absent_required = [c for c in _SSODNET_REQUIRED if c not in df.columns]
             if absent_required:
-                print(f"     ❌  ssoBFT schema is missing the merge key(s) "
-                      f"{absent_required} — skipping SsODNet.")
+                print(f"     FAIL  ssoBFT schema is missing the merge key(s) "
+                      f"{absent_required} - skipping SsODNet.")
                 return pd.DataFrame()
             df = df[[c for c in _SSODNET_WANTED if c in df.columns]]
     except Exception as exc:
-        print(f"     ❌  Parquet read failed: {type(exc).__name__}: {exc}")
+        print(f"     FAIL  Parquet read failed: {type(exc).__name__}: {exc}")
         return pd.DataFrame()
 
     if df.empty:
-        print("     ⚠️  Parquet returned 0 rows")
+        print("     WARN  Parquet returned 0 rows")
         return pd.DataFrame()
 
     # Cap to config.jpl_limit so SsODNet doesn't dominate runtime on small runs.
@@ -1834,7 +1834,7 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
     if config.ssodnet_limit and len(df) > config.ssodnet_limit:
         df = df.sort_values("number", ascending=True, na_position="last")
         df = df.head(config.ssodnet_limit).copy()
-        print(f"     ✂️   Truncated to first {config.ssodnet_limit:,} rows by number ASC")
+        print(f"        Truncated to first {config.ssodnet_limit:,} rows by number ASC")
 
     # Reduce the ranked spin solutions to a single rotation_period_h column.
     # ssoBFT used to expose them as `spins.<1..3>.period.value` scalars and now
@@ -1908,7 +1908,7 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
             df["aphelion_au"] = df["semi_major_axis_au"] * (1 + df["eccentricity"])
 
     df["source_ssodnet"] = True
-    print(f"     ✅  {len(df):,} records ingested from SsODNet ssoBFT "
+    print(f"     OK  {len(df):,} records ingested from SsODNet ssoBFT "
           f"({len(df.columns)} columns)")
     return df
 
@@ -1977,7 +1977,7 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
 
     Returns EMPTY DataFrame on any unrecoverable error.
     """
-    print("\n🌡️   NEOWISE V2.0 diameters & albedos  (IRSA TAP) …")
+    print("\n   NEOWISE V2.0 diameters & albedos  (IRSA TAP) ...")
 
     # ADQL.  `neowise_limit` caps the pull; 0 drops the TOP clause and takes the
     # whole table, which is only ~183 k rows / ~19 MB / ~30 s — small enough
@@ -2010,7 +2010,7 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
         ) as resp:
             if resp.status_code != 200:
                 snippet = resp.text[:300].replace("\n", " ")
-                print(f"     ❌  HTTP {resp.status_code} — {snippet}")
+                print(f"     FAIL  HTTP {resp.status_code} - {snippet}")
                 return pd.DataFrame()
 
             total_bytes = int(resp.headers.get("content-length") or 0) or None
@@ -2031,13 +2031,13 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
             body = b"".join(chunks)
 
     except requests.exceptions.Timeout:
-        print("     ❌  NEOWISE TAP timed out")
+        print("     FAIL  NEOWISE TAP timed out")
         return pd.DataFrame()
     except requests.exceptions.ConnectionError as exc:
-        print(f"     ❌  NEOWISE TAP unreachable ({str(exc)[:80]})")
+        print(f"     FAIL  NEOWISE TAP unreachable ({str(exc)[:80]})")
         return pd.DataFrame()
     except Exception as exc:
-        print(f"     ❌  NEOWISE TAP error: {type(exc).__name__}: {exc}")
+        print(f"     FAIL  NEOWISE TAP error: {type(exc).__name__}: {exc}")
         return pd.DataFrame()
 
     # IRSA may return one of several non-CSV bodies on failure:
@@ -2048,32 +2048,32 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
     # a DataFrame and end up with garbage rows.
     head = body[:400].lstrip()
     if not head:
-        print("     ❌  TAP returned an empty body")
+        print("     FAIL  TAP returned an empty body")
         return pd.DataFrame()
     if head.startswith(b"<?xml") or head.startswith(b"<VOTABLE"):
         snippet = body[:400].decode("utf-8", errors="replace").replace("\n", " ")
-        print(f"     ❌  TAP returned a VOTable error envelope: {snippet[:200]}")
+        print(f"     FAIL  TAP returned a VOTable error envelope: {snippet[:200]}")
         return pd.DataFrame()
     if head[:1] == b"<":   # any other tag-leading body (HTML, etc.)
         snippet = body[:400].decode("utf-8", errors="replace").replace("\n", " ")
-        print(f"     ❌  TAP returned a non-CSV body: {snippet[:200]}")
+        print(f"     FAIL  TAP returned a non-CSV body: {snippet[:200]}")
         return pd.DataFrame()
     if not head.lower().startswith(b"asteroid_number"):
         # Expected CSV header from this query begins with `asteroid_number`.
         # Anything else means the schema or query has drifted — fail loud.
         snippet = body[:400].decode("utf-8", errors="replace").replace("\n", " ")
-        print(f"     ❌  TAP body doesn't look like expected CSV: {snippet[:200]}")
+        print(f"     FAIL  TAP body doesn't look like expected CSV: {snippet[:200]}")
         return pd.DataFrame()
 
     from io import BytesIO
     try:
         df = pd.read_csv(BytesIO(body))
     except Exception as exc:
-        print(f"     ❌  CSV parse failed: {type(exc).__name__}: {exc}")
+        print(f"     FAIL  CSV parse failed: {type(exc).__name__}: {exc}")
         return pd.DataFrame()
 
     if df.empty:
-        print("     ⚠️  NEOWISE TAP returned 0 rows")
+        print("     WARN  NEOWISE TAP returned 0 rows")
         return pd.DataFrame()
 
     # Designation: numbered → `asteroid_number`, unnumbered → `prov_desig`.
@@ -2138,7 +2138,7 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
         df["designation"] = _extract_canonical_designation(df["designation"])
 
     df["source_neowise"] = True
-    print(f"     ✅  {len(df):,} records fetched from NEOWISE V2.0")
+    print(f"     OK  {len(df):,} records fetched from NEOWISE V2.0")
     return df
 
 
@@ -2207,9 +2207,9 @@ def deduplicate_catalog(
             msg.append(f"{n_removed:,} duplicate(s) collapsed (kept most-complete row)")
         if n_null > 0:
             msg.append(f"{n_null:,} row(s) dropped for null designation")
-        print(f"     🗑   {label}: " + "; ".join(msg))
+        print(f"        {label}: " + "; ".join(msg))
     else:
-        print(f"     ✔   {label}: no duplicates detected")
+        print(f"     OK   {label}: no duplicates detected")
 
     return work
 
@@ -2243,12 +2243,12 @@ def merge_sources(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         Merged + deduplicated DataFrame, or an empty DataFrame if every
         source was empty.
     """
-    print("\n🔀  Merging sources …")
+    print("\n  Merging sources ...")
 
     available = {k: v for k, v in sources.items() if v is not None and not v.empty}
 
     if not available:
-        print("     ❌  No data from any source — aborting merge")
+        print("     FAIL  No data from any source - aborting merge")
         return pd.DataFrame()
 
     # Normalise designation for joining, then dedupe each source on its own
@@ -2268,8 +2268,8 @@ def merge_sources(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         # the fetcher has already printed its success line.  NEOWISE did this
         # on every large run up to v1.1.0.  Fail loud.
         if n_raw and available[name].empty:
-            print(f"     🚨  {name} fetched {n_raw:,} rows and NONE survived "
-                  f"keying — its `designation` column is unusable, so the whole "
+            print(f"     ALERT  {name} fetched {n_raw:,} rows and NONE survived "
+                  f"keying - its `designation` column is unusable, so the whole "
                   f"source is about to contribute nothing.  This is a BUG in "
                   f"fetch_{name.split()[0].lower()}, not an empty upstream table.")
 
@@ -2278,13 +2278,13 @@ def merge_sources(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     backbone_name, backbone_df = next(iter(available.items()))
     merged = backbone_df.copy()
     available.pop(backbone_name)
-    print(f"     🦴  Backbone: {backbone_name}  ({len(merged):,} rows)")
+    print(f"       Backbone: {backbone_name}  ({len(merged):,} rows)")
 
     # Outer-join each remaining source so designations unique to that source
     # are retained.  Backbone values win; supplement values fill NaN gaps.
     for src_name, supp in available.items():
         if "designation" not in supp.columns:
-            print(f"     ⚠️  {src_name} has no 'designation' column — skipped in merge")
+            print(f"     WARN  {src_name} has no 'designation' column - skipped in merge")
             continue
 
         # Pass every column through, INCLUDING `source_*` flags.  Every
@@ -2321,19 +2321,19 @@ def merge_sources(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
                 continue
             merged.drop(columns=[src_col], inplace=True)
 
-        print(f"     ✔   Merged {src_name}: {len(supp):,} supplement records "
+        print(f"     OK   Merged {src_name}: {len(supp):,} supplement records "
               f"({overlap:,} matched the backbone, +{new_rows:,} new entries)")
         if len(supp) and not overlap:
-            print(f"     🚨  {src_name} matched ZERO backbone designations. "
+            print(f"     ALERT  {src_name} matched ZERO backbone designations. "
                   f"Every one of its {len(supp):,} rows entered as a new body "
                   f"with no orbital elements, and validation will drop them "
-                  f"all.  Check how fetch_* builds `designation` — a float-typed "
+                  f"all.  Check how fetch_* builds `designation` - a float-typed "
                   f"identifier stringifies to \"3.0\" and joins nothing.")
 
     # Final post-merge dedup — keeps the most-complete row in each group.
     merged = deduplicate_catalog(merged, key="designation", label="post-merge")
 
-    print(f"     ✅  Combined catalog: {len(merged):,} rows × {len(merged.columns)} columns")
+    print(f"     OK  Combined catalog: {len(merged):,} rows x {len(merged.columns)} columns")
     return merged
 
 
@@ -2560,18 +2560,18 @@ def derive_missing_diameters(
     df["derived_diameter_is_estimate"] = ~measured
 
     if not config.derive_diameter_from_h:
-        print("\n📐  Diameter derivation OFF — measured diameters only "
+        print("\n  Diameter derivation OFF - measured diameters only "
               f"({int(measured.sum()):,} of {len(df):,} rows will survive validation)")
         df["diameter_km"] = diam
         return df
 
-    print("\n📐  Deriving diameters from absolute magnitude …")
+    print("\n  Deriving diameters from absolute magnitude ...")
 
     if "absolute_magnitude_h" not in df.columns:
         # Every source supplies H, so its total absence means something upstream
         # broke rather than that the data is simply unavailable.  Say so — a
         # silent no-op here costs 1.4 M rows.
-        print("     ⚠️  No `absolute_magnitude_h` column — nothing to derive from. "
+        print("     WARN  No `absolute_magnitude_h` column - nothing to derive from. "
               "Check that the JPL fetcher requested the H field.")
         df["diameter_km"] = diam
         return df
@@ -2581,7 +2581,7 @@ def derive_missing_diameters(
     n_target = int(target.sum())
 
     if not n_target:
-        print("     ℹ️   Every row already carries a measured diameter")
+        print("     NOTE   Every row already carries a measured diameter")
         df["diameter_km"] = diam
         return df
 
@@ -2598,8 +2598,8 @@ def derive_missing_diameters(
         too_small = target & (derived < config.min_derived_diameter_km)
         n_small = int(too_small.sum())
         if n_small:
-            print(f"     ✂️   {n_small:,} derived below "
-                  f"{config.min_derived_diameter_km} km — left unfilled "
+            print(f"        {n_small:,} derived below "
+                  f"{config.min_derived_diameter_km} km - left unfilled "
                   f"(min_derived_diameter_km)")
         target &= ~too_small
 
@@ -2634,15 +2634,15 @@ def derive_missing_diameters(
     df.loc[target, "albedo_assumed_for_diameter"] = albedo[target]
 
     counts = df["diameter_source"].value_counts()
-    print(f"     ✅  {int(target.sum()):,} diameters derived  "
+    print(f"     OK  {int(target.sum()):,} diameters derived  "
           f"(measured kept: {int(measured.sum()):,})")
     for src, n in counts.items():
         if src == "none":
             continue
-        print(f"         • {str(src):32s} → {int(n):,}")
+        print(f"         * {str(src):32s} -> {int(n):,}")
     still = int((pd.to_numeric(df['diameter_km'], errors='coerce').fillna(0) <= 0).sum())
     if still:
-        print(f"         • {'no diameter (will be dropped)':32s} → {still:,}")
+        print(f"         * {'no diameter (will be dropped)':32s} -> {still:,}")
 
     return df
 
@@ -2678,10 +2678,10 @@ def validate_and_filter(
     Returns:
         (filtered_df, rejection_log_df)
     """
-    print("\n🔍  Validating entries …")
+    print("\n  Validating entries ...")
 
     if df.empty:
-        print("     ⚠️  Nothing to validate")
+        print("     WARN  Nothing to validate")
         return df.copy(), pd.DataFrame()
 
     total      = len(df)
@@ -2690,7 +2690,7 @@ def validate_and_filter(
 
     # ── 1. Designation required ───────────────────────────────────────────────
     if "designation" not in df.columns:
-        print("     ❌  'designation' column missing — cannot build catalog")
+        print("     FAIL  'designation' column missing - cannot build catalog")
         return pd.DataFrame(), pd.DataFrame()
 
     bad = df["designation"].isna() | (df["designation"].astype(str).str.strip() == "")
@@ -2724,7 +2724,7 @@ def validate_and_filter(
     else:
         log.append({"reason": "semi_major_axis_au column absent — coordinate mapping disabled",
                     "rejected_count": 0, "examples": "N/A"})
-        print("     ⚠️  No orbital elements — coordinate mapping will be unavailable")
+        print("     WARN  No orbital elements - coordinate mapping will be unavailable")
 
     # ── 5. Strict spectral type (optional) ───────────────────────────────────
     # Validate runs BEFORE enrich_composition's Tholen fallback, so we have to
@@ -2756,11 +2756,11 @@ def validate_and_filter(
 
     rejection_df = pd.DataFrame([r for r in log if r["rejected_count"] > 0])
 
-    print(f"     ✅  Accepted : {n_kept:,}")
-    print(f"     ❌  Rejected : {n_dropped:,}  ({n_dropped/total*100:.1f}%)")
+    print(f"     OK  Accepted : {n_kept:,}")
+    print(f"     FAIL  Rejected : {n_dropped:,}  ({n_dropped/total*100:.1f}%)")
     if not rejection_df.empty:
         for _, row in rejection_df.iterrows():
-            print(f"         • {row['reason']:55s} → {row['rejected_count']:,} dropped")
+            print(f"         * {row['reason']:55s} -> {row['rejected_count']:,} dropped")
 
     return filtered, rejection_df
 
@@ -2794,7 +2794,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
          fetcher (SsODNet) and filling gaps with (4/3)π r³ ρ from
          diameter × density; `mass_measured` flag tracks provenance.
     """
-    print("\n🧪  Enriching composition data …")
+    print("\n  Enriching composition data ...")
     df = df.copy()
 
     # ── 1. Normalise spectral_type ────────────────────────────────────────────
@@ -2839,7 +2839,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[fill_mask, "spectral_type_source"] = "tholen"
         n_thol = int(fill_mask.sum())
         if n_thol:
-            print(f"     🔡  Spectral type filled from Tholen for {n_thol:,} entries")
+            print(f"       Spectral type filled from Tholen for {n_thol:,} entries")
 
     # ── 2b. Infer from albedo where type is still missing ────────────────────
     def _infer_from_albedo(a: float) -> str:
@@ -2856,7 +2856,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[infer_mask, "spectral_type_source"] = "albedo"
         n_inf = int(infer_mask.sum())
         if n_inf:
-            print(f"     🔎  Spectral type inferred from albedo for {n_inf:,} entries")
+            print(f"       Spectral type inferred from albedo for {n_inf:,} entries")
 
     # ── 2c. Infer from the albedo ASSUMED when the diameter was derived ──────
     # Separate from 2b and separately labelled, because the input is an
@@ -2874,7 +2874,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[assume_mask, "spectral_type_source"] = "albedo_assumed"
         n_ass = int(assume_mask.sum())
         if n_ass:
-            print(f"     🔎  Spectral type inferred from the ASSUMED albedo for "
+            print(f"       Spectral type inferred from the ASSUMED albedo for "
                   f"{n_ass:,} entries (H-derived diameters)")
 
     # ── 3. Look up composition fields ────────────────────────────────────────
@@ -2924,8 +2924,8 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
     n_enriched  = int((df["comp_pgm_enrichment"] > 1.0).sum())
     n_depleted  = int((df["comp_pgm_enrichment"] < 1.0).sum())
     if n_enriched or n_depleted:
-        print(f"     💎  PGM enrichment: {n_enriched:,} enriched (>1×)  |  "
-              f"{n_depleted:,} depleted (<1×)  |  rest baseline (1×)")
+        print(f"       PGM enrichment: {n_enriched:,} enriched (>1x)  |  "
+              f"{n_depleted:,} depleted (<1x)  |  rest baseline (1x)")
 
     # ── 4. Fill density gap ───────────────────────────────────────────────────
     if "density_gcm3" in df.columns:
@@ -2941,7 +2941,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
 
     n_meas = int(df["density_measured"].sum())
     n_est  = len(df) - n_meas
-    print(f"     📊  Density: {n_meas:,} measured  |  {n_est:,} estimated from taxonomy")
+    print(f"       Density: {n_meas:,} measured  |  {n_est:,} estimated from taxonomy")
 
     # ── 5. Compute estimated mass (kg) ────────────────────────────────────────
     # Keep any MEASURED mass already supplied by a source (SsODNet).
@@ -2965,7 +2965,7 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
 
     n_mass_meas = int(df["mass_measured"].sum())
     n_mass_der  = int(df["estimated_mass_kg"].notna().sum()) - n_mass_meas
-    print(f"     ⚖️   Mass:    {n_mass_meas:,} measured  |  {n_mass_der:,} derived (diameter × density)")
+    print(f"        Mass:    {n_mass_meas:,} measured  |  {n_mass_der:,} derived (diameter x density)")
 
     return df
 
@@ -2988,7 +2988,7 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
     t0 = datetime.now()
 
     print("=" * 65)
-    print("  🚀  ASTEROID CATALOG PIPELINE  —  MODULE 1: CATALOGING")
+    print("    ASTEROID CATALOG PIPELINE  -  MODULE 1: CATALOGING")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  v{config.pipeline_version}")
     print("=" * 65)
 
@@ -3015,7 +3015,7 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
     # ── Step 2 — Merge ────────────────────────────────────────────────────────
     merged = merge_sources(sources)
     if merged.empty:
-        print("\n❌  Pipeline aborted — merge produced no data")
+        print("\nFAIL  Pipeline aborted - merge produced no data")
         return pd.DataFrame()
 
     # ── Step 2b — Derive diameters from H ────────────────────────────────────
@@ -3026,7 +3026,7 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
     # ── Step 3 — Validate & filter ────────────────────────────────────────────
     catalog, rejections = validate_and_filter(merged, config)
     if catalog.empty:
-        print("\n❌  Pipeline aborted — no entries passed validation")
+        print("\nFAIL  Pipeline aborted - no entries passed validation")
         return pd.DataFrame()
 
     # ── Step 4 — Composition enrichment ──────────────────────────────────────
@@ -3035,7 +3035,7 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
     # ── Step 4b — Final dedup safety net ─────────────────────────────────────
     # Belt-and-braces: enrichment shouldn't introduce duplicates, but checking
     # here means a CSV written to disk is guaranteed to have unique designations.
-    print("\n🧹  Final duplicate sweep …")
+    print("\n  Final duplicate sweep ...")
     catalog = deduplicate_catalog(catalog, key="designation", label="final")
 
     # ── Step 5 — Metadata + sort ──────────────────────────────────────────────
@@ -3050,16 +3050,16 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
     rejected_path = os.path.join(config.output_dir, config.rejected_filename)
 
     catalog.to_csv(catalog_path, index=False)
-    print(f"\n     💾  Catalog saved  → {catalog_path}")
+    print(f"\n       Catalog saved  -> {catalog_path}")
 
     if not rejections.empty:
         rejections.to_csv(rejected_path, index=False)
-        print(f"     💾  Rejections log → {rejected_path}")
+        print(f"       Rejections log -> {rejected_path}")
 
     # ── Summary ───────────────────────────────────────────────────────────────
     elapsed = (datetime.now() - t0).total_seconds()
     print("\n" + "=" * 65)
-    print("  ✅  CATALOGING COMPLETE")
+    print("  OK  CATALOGING COMPLETE")
     print(f"      Entries    : {len(catalog):,}")
     print(f"      Columns    : {len(catalog.columns)}")
     print(f"      Elapsed    : {elapsed:.1f}s")
@@ -3076,9 +3076,9 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
         for src, n in vc.items():
             if src == "measured":
                 continue
-            print(f"                   • {str(src):30s} {int(n):,}")
+            print(f"                   * {str(src):30s} {int(n):,}")
         if n_der:
-            print("      ⚠️   Derived rows carry an ASSUMED albedo; mass scales as "
+            print("      WARN   Derived rows carry an ASSUMED albedo; mass scales as "
                   "p_V**-1.5.\n"
                   "          Filter on `derived_diameter_is_estimate` to get the "
                   "measured-only\n"
@@ -3148,7 +3148,7 @@ def filter_by_spectral_group(catalog: pd.DataFrame, *groups: str) -> pd.DataFram
     return catalog[catalog["comp_group"].isin(groups)].copy()
 
 
-print("\n✅  Helper utilities available:")
+print("\nOK  Helper utilities available:")
 print("    lookup_asteroid_catalog(catalog, 'Ceres')")
 print("    filter_by_region(catalog, 2.0, 3.3)   # main-belt slice")
 print("    filter_by_spectral_group(catalog, 'X-complex')  # metallic")
@@ -3156,9 +3156,9 @@ print("    filter_by_spectral_group(catalog, 'X-complex')  # metallic")
 
 
 
-# ═════════════════════════════════════════════════════════════════════════
-# MODULE 2 — MINERAL VALUE CATALOG
-# ═════════════════════════════════════════════════════════════════════════
+# =========================================================================
+# MODULE 2 - MINERAL VALUE CATALOG
+# =========================================================================
 
 
 
@@ -3563,12 +3563,12 @@ class MineralValueConfig:
 MINERAL_CONFIG = MineralValueConfig()
 os.makedirs(MINERAL_CONFIG.output_dir, exist_ok=True)
 
-print(f"✅  Configuration loaded — output dir: {MINERAL_CONFIG.output_dir}")
+print(f"OK  Configuration loaded - output dir: {MINERAL_CONFIG.output_dir}")
 print(f"    Active sources : "
       f"{', '.join(s for s, on in (('yfinance', MINERAL_CONFIG.use_yfinance), ('metals.dev', MINERAL_CONFIG.use_metals_api and MINERAL_CONFIG.metals_api_key != 'DEMO'), ('reference', MINERAL_CONFIG.use_reference_table)) if on)}")
 print(f"    Price unit     : {MINERAL_CONFIG.PRICE_UNIT}  (every numeric price column ends with _usd_per_kg)")
 print(f"    Delivery dest  : {MINERAL_CONFIG.delivery_destination}  "
-      f"(sets EVERY price — see DELIVERY_DESTINATIONS + IN_SPACE_UTILITY)")
+      f"(sets EVERY price - see DELIVERY_DESTINATIONS + IN_SPACE_UTILITY)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4284,7 +4284,7 @@ def value_for_destination(destination: str) -> dict:
     """
     key = str(destination or "").strip().lower()
     if key not in DELIVERY_DESTINATIONS:
-        print(f"     ⚠️   Unknown delivery_destination {destination!r} — "
+        print(f"     WARN   Unknown delivery_destination {destination!r} - "
               f"falling back to 'earth_surface'.  Valid: "
               f"{', '.join(sorted(DELIVERY_DESTINATIONS))}")
         key = "earth_surface"
@@ -4797,7 +4797,7 @@ MINERAL_REFERENCE: List[dict] = [
     },
 ]
 
-print(f"✅  Reference table ready — {len(MINERAL_REFERENCE)} entries "
+print(f"OK  Reference table ready - {len(MINERAL_REFERENCE)} entries "
       f"({sum(1 for r in MINERAL_REFERENCE if r['kind'] == 'element')} elements / "
       f"{sum(1 for r in MINERAL_REFERENCE if r['kind'] == 'mineral')} minerals)")
 
@@ -4843,12 +4843,12 @@ def fetch_yfinance(config: MineralValueConfig) -> pd.DataFrame:
     entry's `yfinance_unit`.  Returns an empty DataFrame if yfinance fails
     entirely — individual tickers that fail are logged but don't abort.
     """
-    print("\n💰  yfinance  (Yahoo Finance) — fetching live futures …")
+    print("\n  yfinance  (Yahoo Finance) - fetching live futures ...")
 
     try:
         import yfinance as yf
     except ImportError:
-        print("     ❌  yfinance not importable — skipped")
+        print("     FAIL  yfinance not importable - skipped")
         return pd.DataFrame()
 
     rows = []
@@ -4864,7 +4864,7 @@ def fetch_yfinance(config: MineralValueConfig) -> pd.DataFrame:
             hist = yf.Ticker(ticker).history(period="5d", auto_adjust=False)
             closes = hist["Close"].dropna() if "Close" in hist else pd.Series(dtype=float)
             if closes.empty:
-                print(f"     ⚠️  {entry['name']:11s} ({ticker}) — no close data")
+                print(f"     WARN  {entry['name']:11s} ({ticker}) - no close data")
                 continue
 
             last_close = float(closes.iloc[-1])
@@ -4878,7 +4878,7 @@ def fetch_yfinance(config: MineralValueConfig) -> pd.DataFrame:
             elif unit == "tonne":
                 price_kg = _per_tonne_to_per_kg(last_close)
             else:
-                print(f"     ⚠️  {entry['name']:11s} ({ticker}) — unknown unit {unit!r}")
+                print(f"     WARN  {entry['name']:11s} ({ticker}) - unknown unit {unit!r}")
                 continue
 
             rows.append({
@@ -4887,15 +4887,15 @@ def fetch_yfinance(config: MineralValueConfig) -> pd.DataFrame:
                 "live_price_date":   last_date,
                 "live_price_source": f"yfinance:{ticker}",
             })
-            print(f"     ✅  {entry['name']:11s} ({ticker}) "
+            print(f"     OK  {entry['name']:11s} ({ticker}) "
                   f"= {last_close:>10,.2f} USD/{unit:7s} "
-                  f"→ {price_kg:>12,.2f} USD/kg  [{last_date}]")
+                  f"-> {price_kg:>12,.2f} USD/kg  [{last_date}]")
 
         except Exception as exc:
-            print(f"     ❌  {entry['name']:11s} ({ticker}) — {type(exc).__name__}: {exc}")
+            print(f"     FAIL  {entry['name']:11s} ({ticker}) - {type(exc).__name__}: {exc}")
 
     if not rows:
-        print("     ⚠️  yfinance returned no usable rows")
+        print("     WARN  yfinance returned no usable rows")
         return pd.DataFrame()
 
     return pd.DataFrame(rows)
@@ -4917,10 +4917,10 @@ def fetch_metals_dev(config: MineralValueConfig) -> pd.DataFrame:
     Returns an empty DataFrame on any HTTP / parse failure.
     """
     if config.metals_api_key == "DEMO" or not config.metals_api_key:
-        print("\n🔗  metals.dev — skipped (no API key set; edit MINERAL_CONFIG.metals_api_key)")
+        print("\n  metals.dev - skipped (no API key set; edit MINERAL_CONFIG.metals_api_key)")
         return pd.DataFrame()
 
-    print("\n🔗  metals.dev — fetching live LME / spot prices …")
+    print("\n  metals.dev - fetching live LME / spot prices ...")
 
     try:
         r = requests.get(
@@ -4935,12 +4935,12 @@ def fetch_metals_dev(config: MineralValueConfig) -> pd.DataFrame:
         r.raise_for_status()
         payload = r.json()
     except Exception as exc:
-        print(f"     ❌  metals.dev failed: {type(exc).__name__}: {exc}")
+        print(f"     FAIL  metals.dev failed: {type(exc).__name__}: {exc}")
         return pd.DataFrame()
 
     quotes = payload.get("metals") or payload.get("rates") or {}
     if not quotes:
-        print("     ⚠️  metals.dev returned no `metals` payload")
+        print("     WARN  metals.dev returned no `metals` payload")
         return pd.DataFrame()
 
     date = payload.get("date") or payload.get("timestamp_iso") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -4963,8 +4963,8 @@ def fetch_metals_dev(config: MineralValueConfig) -> pd.DataFrame:
             "live_price_date":   str(date)[:10],
             "live_price_source": f"metals.dev:{key}",
         })
-        print(f"     ✅  {entry['name']:11s} = {usd_per_toz:>10,.2f} USD/troy_oz "
-              f"→ {price_kg:>12,.2f} USD/kg")
+        print(f"     OK  {entry['name']:11s} = {usd_per_toz:>10,.2f} USD/troy_oz "
+              f"-> {price_kg:>12,.2f} USD/kg")
 
     return pd.DataFrame(rows)
 
@@ -4978,7 +4978,7 @@ def fetch_metals_dev(config: MineralValueConfig) -> pd.DataFrame:
 
 def fetch_reference_table(config: MineralValueConfig) -> pd.DataFrame:
     """Static USGS / LME / mineralogy reference data — always available."""
-    print("\n📚  Reference table — loading curated prices + densities …")
+    print("\n  Reference table - loading curated prices + densities ...")
 
     # Every row here carries its TERRESTRIAL price.  The in-space repricing is
     # applied once, uniformly, after the merge — see apply_delivery_destination
@@ -5005,7 +5005,7 @@ def fetch_reference_table(config: MineralValueConfig) -> pd.DataFrame:
         })
 
     df = pd.DataFrame(rows)
-    print(f"     ✅  {len(df)} reference rows loaded")
+    print(f"     OK  {len(df)} reference rows loaded")
     return df
 
 
@@ -5036,11 +5036,11 @@ def apply_delivery_destination(
     dest_key = str(config.delivery_destination or "").strip().lower()
     dest     = value_for_destination(dest_key)
     if dest["usd_per_kg"] <= 0.0:
-        print(f"\n🌍  Delivery destination '{dest_key}' — terrestrial prices stand.")
+        print(f"\n  Delivery destination '{dest_key}' - terrestrial prices stand.")
         return catalog
 
     downleg = downleg_cost_usd_per_kg(dest_key)
-    print(f"\n🛰️   Repricing for delivery to '{dest_key}' …")
+    print(f"\n   Repricing for delivery to '{dest_key}' ...")
     print(f"     Launch cost avoided : ${dest['usd_per_kg']:,.0f}/kg  ({dest['basis']})")
     print(f"     Downleg to surface  : ${downleg:,.0f}/kg  "
           f"(capsule + TPS + recovery, per kg delivered)")
@@ -5080,7 +5080,7 @@ def apply_delivery_destination(
     n_use  = routes.count("used in space")
     n_ship = routes.count("shipped to Earth")
     n_zero = int((pd.to_numeric(catalog["price_usd_per_kg"], errors="coerce") == 0).sum())
-    print(f"     ✅  {n_use} sold in space, {n_ship} shipped down "
+    print(f"     OK  {n_use} sold in space, {n_ship} shipped down "
           f"({n_zero} worth less than the freight)")
     return catalog
 
@@ -5100,7 +5100,7 @@ def merge_mineral_sources(
     live source to provide a quote for a given material wins, and the
     reference fallback fills anything still missing.
     """
-    print("\n🔗  Merging sources …")
+    print("\n  Merging sources ...")
 
     catalog = reference.copy()
     catalog["live_price_usd_per_kg"] = pd.NA
@@ -5146,7 +5146,7 @@ def merge_mineral_sources(
 # ─────────────────────────────────────────────────────────────────────────────
 def validate_minerals(catalog: pd.DataFrame) -> pd.DataFrame:
     """Light sanity checks — print warnings, never drop rows."""
-    print("\n🔎  Validating catalog …")
+    print("\n  Validating catalog ...")
 
     # ── Unit normalisation guard ─────────────────────────────────────────────
     # Every numeric price column MUST be USD per kilogram.  This block both
@@ -5163,11 +5163,11 @@ def validate_minerals(catalog: pd.DataFrame) -> pd.DataFrame:
             vals.notna() & ((vals < 1e-3) | (vals > 1e7))
         ]
         if not suspicious.empty:
-            print(f"     ⚠️  {len(suspicious)} rows in {col} outside USD/kg sanity band "
-                  f"[0.001, 1e7] — possible unit-conversion bug:")
+            print(f"     WARN  {len(suspicious)} rows in {col} outside USD/kg sanity band "
+                  f"[0.001, 1e7] - possible unit-conversion bug:")
             for _, r in suspicious.iterrows():
                 print(f"          {r['name']}: {r[col]}")
-    print(f"     ✅  Unit check: all price columns are USD/kg "
+    print(f"     OK  Unit check: all price columns are USD/kg "
           f"(checked {', '.join(c for c in PRICE_COLS if c in catalog.columns)})")
 
     # Density should be positive and physically plausible (< 25 g/cm³, the
@@ -5178,9 +5178,9 @@ def validate_minerals(catalog: pd.DataFrame) -> pd.DataFrame:
         | (catalog["density_gcm3"] > 25)
     ]
     if not bad_density.empty:
-        print(f"     ⚠️  {len(bad_density)} rows with implausible density:")
+        print(f"     WARN  {len(bad_density)} rows with implausible density:")
         for _, r in bad_density.iterrows():
-            print(f"          {r['name']}: {r['density_gcm3']} g/cm³")
+            print(f"          {r['name']}: {r['density_gcm3']} g/cm^3")
 
     # Every mineral should reference at least one known element via `yields`
     # (otherwise Module 3 can't value it).  Bulk silicates legitimately have
@@ -5190,13 +5190,13 @@ def validate_minerals(catalog: pd.DataFrame) -> pd.DataFrame:
         try:
             ymap = json.loads(r["yields_json"] or "{}")
         except json.JSONDecodeError:
-            print(f"     ❌  {r['name']}: malformed yields_json")
+            print(f"     FAIL  {r['name']}: malformed yields_json")
             continue
         unknown = set(ymap) - known_elements
         if unknown:
-            print(f"     ⚠️  {r['name']}: yields reference unknown elements {sorted(unknown)}")
+            print(f"     WARN  {r['name']}: yields reference unknown elements {sorted(unknown)}")
 
-    print(f"     ✅  Validation complete")
+    print(f"     OK  Validation complete")
     return catalog
 
 
@@ -5217,7 +5217,7 @@ def build_mineral_value_catalog(
     t0 = datetime.now()
 
     print("=" * 65)
-    print("  💎  MINERAL VALUE PIPELINE — MODULE 2")
+    print("    MINERAL VALUE PIPELINE - MODULE 2")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  v{config.pipeline_version}")
     print("=" * 65)
 
@@ -5233,7 +5233,7 @@ def build_mineral_value_catalog(
         if config.use_reference_table else pd.DataFrame()
     )
     if reference.empty:
-        print("\n❌  Pipeline aborted — reference table disabled and no live data spine")
+        print("\nFAIL  Pipeline aborted - reference table disabled and no live data spine")
         return pd.DataFrame()
 
     # ── Step 3 — Merge ───────────────────────────────────────────────────────
@@ -5275,12 +5275,12 @@ def build_mineral_value_catalog(
     # ── Step 6 — Save ────────────────────────────────────────────────────────
     out_path = os.path.join(config.output_dir, config.catalog_filename)
     catalog.to_csv(out_path, index=False)
-    print(f"\n     💾  Catalog saved → {out_path}")
+    print(f"\n       Catalog saved -> {out_path}")
 
     # ── Summary ──────────────────────────────────────────────────────────────
     elapsed = (datetime.now() - t0).total_seconds()
     print("\n" + "=" * 65)
-    print("  ✅  MINERAL VALUE CATALOG COMPLETE")
+    print("  OK  MINERAL VALUE CATALOG COMPLETE")
     print(f"      Entries  : {len(catalog):,}")
     print(f"      Columns  : {len(catalog.columns)}")
     print(f"      Elapsed  : {elapsed:.1f}s")
@@ -5340,7 +5340,7 @@ def mineral_to_element_value(
     return total if total > 0 else None
 
 
-print("\n✅  Helper utilities available:")
+print("\nOK  Helper utilities available:")
 print("    lookup_mineral(catalog, 'gold')")
 print("    value_per_kg(catalog, 'platinum')")
 print("    mineral_to_element_value(catalog, 'nickel-iron')")
@@ -5348,9 +5348,9 @@ print("    mineral_to_element_value(catalog, 'nickel-iron')")
 
 
 
-# ═════════════════════════════════════════════════════════════════════════
-# MODULE 3 — TRANSPORTATION DATA
-# ═════════════════════════════════════════════════════════════════════════
+# =========================================================================
+# MODULE 3 - TRANSPORTATION DATA
+# =========================================================================
 
 
 
@@ -5767,7 +5767,7 @@ class TransportConfig:
 TRANSPORT_CONFIG = TransportConfig()
 os.makedirs(os.path.join(TRANSPORT_CONFIG.output_dir, TRANSPORT_CONFIG.subdir), exist_ok=True)
 
-print(f"✅  Configuration loaded — output dir: "
+print(f"OK  Configuration loaded - output dir: "
       f"{os.path.join(TRANSPORT_CONFIG.output_dir, TRANSPORT_CONFIG.subdir)}")
 print(f"    Active sources : "
       f"{', '.join(s for s, on in (('yfinance', TRANSPORT_CONFIG.use_yfinance), ('reference', TRANSPORT_CONFIG.use_reference_table)) if on)}")
@@ -6635,7 +6635,7 @@ def _apply_launch_defaults(rows: List[dict]) -> None:
 
 _apply_launch_defaults(LAUNCH_VEHICLES_REFERENCE)
 
-print(f"✅  Launch vehicles reference loaded — {len(LAUNCH_VEHICLES_REFERENCE)} vehicles "
+print(f"OK  Launch vehicles reference loaded - {len(LAUNCH_VEHICLES_REFERENCE)} vehicles "
       f"({sum(1 for v in LAUNCH_VEHICLES_REFERENCE if v['status'] == 'operational')} operational, "
       f"{sum(1 for v in LAUNCH_VEHICLES_REFERENCE if v['status'] == 'development')} development, "
       f"{sum(1 for v in LAUNCH_VEHICLES_REFERENCE if v['status'] == 'concept')} concept, "
@@ -8430,7 +8430,7 @@ PROPELLANTS_REFERENCE: List[dict] = [
     },
 ]
 
-print(f"✅  Propellant reference loaded — {len(PROPELLANTS_REFERENCE)} fuel systems "
+print(f"OK  Propellant reference loaded - {len(PROPELLANTS_REFERENCE)} fuel systems "
       f"({sum(1 for p in PROPELLANTS_REFERENCE if p['status'] == 'operational')} operational, "
       f"{sum(1 for p in PROPELLANTS_REFERENCE if p['status'] == 'development')} development, "
       f"{sum(1 for p in PROPELLANTS_REFERENCE if p['status'] == 'concept')} concept, "
@@ -8565,7 +8565,7 @@ DELTA_V_REFERENCE: List[dict] = [
               "duration figure carries that."},
 ]
 
-print(f"✅  Mission Δv reference loaded — {len(DELTA_V_REFERENCE)} trajectory segments")
+print(f"OK  Mission dv reference loaded - {len(DELTA_V_REFERENCE)} trajectory segments")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -9364,7 +9364,7 @@ OPERATIONAL_COSTS_REFERENCE: List[dict] = [
     },
 ]
 
-print(f"✅  Operational costs reference loaded — "
+print(f"OK  Operational costs reference loaded - "
       f"{len(OPERATIONAL_COSTS_REFERENCE)} categories")
 
 
@@ -9775,7 +9775,7 @@ STORAGE_REFERENCE: List[dict] = [
     },
 ]
 
-print(f"✅  Storage reference loaded — {len(STORAGE_REFERENCE)} systems "
+print(f"OK  Storage reference loaded - {len(STORAGE_REFERENCE)} systems "
       f"({len({s['domain'] for s in STORAGE_REFERENCE})} domains)")
 
 
@@ -9810,12 +9810,12 @@ def fetch_yfinance_fuel_prices(
         name, live_cost_usd_per_kg, live_cost_usd_per_L,
         live_price_date, live_price_source.
     """
-    print("\n⛽  yfinance  (Yahoo Finance) — live fuel commodity prices …")
+    print("\n  yfinance  (Yahoo Finance) - live fuel commodity prices ...")
 
     try:
         import yfinance as yf
     except ImportError:
-        print("     ❌  yfinance not importable — skipped")
+        print("     FAIL  yfinance not importable - skipped")
         return pd.DataFrame()
 
     # Step 1 — pull commodity quotes
@@ -9825,7 +9825,7 @@ def fetch_yfinance_fuel_prices(
             hist = yf.Ticker(ticker).history(period="5d", auto_adjust=False)
             closes = hist["Close"].dropna() if "Close" in hist else pd.Series(dtype=float)
             if closes.empty:
-                print(f"     ⚠️  {label} ({ticker}) — no close data")
+                print(f"     WARN  {label} ({ticker}) - no close data")
                 continue
 
             last_close = float(closes.iloc[-1])
@@ -9838,7 +9838,7 @@ def fetch_yfinance_fuel_prices(
             elif unit == "barrel":
                 usd_per_kg = _per_bbl_to_per_kg(last_close, fluid_key)
             else:
-                print(f"     ⚠️  {label} — unrecognised unit {unit!r}")
+                print(f"     WARN  {label} - unrecognised unit {unit!r}")
                 continue
 
             commodity_usd_per_kg[fluid_key] = {
@@ -9848,15 +9848,15 @@ def fetch_yfinance_fuel_prices(
                 "raw_unit":     unit,
                 "quote_date":   last_date,
             }
-            print(f"     ✅  {label:38s} ({ticker}) = "
+            print(f"     OK  {label:38s} ({ticker}) = "
                   f"{last_close:>8,.2f} USD/{unit:6s} "
-                  f"→ {usd_per_kg:>7.3f} USD/kg  [{last_date}]")
+                  f"-> {usd_per_kg:>7.3f} USD/kg  [{last_date}]")
 
         except Exception as exc:
-            print(f"     ❌  {label} ({ticker}) — {type(exc).__name__}: {exc}")
+            print(f"     FAIL  {label} ({ticker}) - {type(exc).__name__}: {exc}")
 
     if not commodity_usd_per_kg:
-        print("     ⚠️  yfinance returned no commodity quotes")
+        print("     WARN  yfinance returned no commodity quotes")
         return pd.DataFrame()
 
     # Step 2 — map onto propellants via `yfinance_proxy`.  Bipropellants
@@ -9899,40 +9899,40 @@ def fetch_yfinance_fuel_prices(
 # REFERENCE-TABLE LOADERS  (always-on)
 # ─────────────────────────────────────────────────────────────────────────────
 def load_launch_vehicles() -> pd.DataFrame:
-    print("\n🚀  Loading launch-vehicles reference …")
+    print("\n  Loading launch-vehicles reference ...")
     df = pd.DataFrame(LAUNCH_VEHICLES_REFERENCE)
-    print(f"     ✅  {len(df)} vehicles")
+    print(f"     OK  {len(df)} vehicles")
     return df
 
 
 def load_propellants() -> pd.DataFrame:
-    print("\n🔥  Loading propellants reference …")
+    print("\n  Loading propellants reference ...")
     df = pd.DataFrame(PROPELLANTS_REFERENCE)
     _apply_thruster_data(df)
     n_rep = int((df["thrust_scaling"] == "replicated").sum())
-    print(f"     ✅  {len(df)} propellant systems "
-          f"({n_rep} thrust by replication — see _THRUSTER_SYSTEMS)")
+    print(f"     OK  {len(df)} propellant systems "
+          f"({n_rep} thrust by replication - see _THRUSTER_SYSTEMS)")
     return df
 
 
 def load_delta_v() -> pd.DataFrame:
-    print("\n📐  Loading mission Δv reference …")
+    print("\n  Loading mission dv reference ...")
     df = pd.DataFrame(DELTA_V_REFERENCE)
-    print(f"     ✅  {len(df)} trajectory segments")
+    print(f"     OK  {len(df)} trajectory segments")
     return df
 
 
 def load_operational_costs() -> pd.DataFrame:
-    print("\n🏢  Loading operational-costs reference …")
+    print("\n  Loading operational-costs reference ...")
     df = pd.DataFrame(OPERATIONAL_COSTS_REFERENCE)
-    print(f"     ✅  {len(df)} cost categories")
+    print(f"     OK  {len(df)} cost categories")
     return df
 
 
 def load_storage() -> pd.DataFrame:
-    print("\n🗄️   Loading storage-systems reference …")
+    print("\n   Loading storage-systems reference ...")
     df = pd.DataFrame(STORAGE_REFERENCE)
-    print(f"     ✅  {len(df)} storage systems")
+    print(f"     OK  {len(df)} storage systems")
     return df
 
 
@@ -9994,7 +9994,7 @@ def build_transportation_summary(
         propellant_mass_per_kg_payload
         segment_duration_yr
     """
-    print("\n🧮  Building (vehicle × segment × propellant) cost summary …")
+    print("\n  Building (vehicle x segment x propellant) cost summary ...")
 
     # Only price IN-SPACE Δv with the propellant table — surface ascent is
     # already baked into the launch vehicle's $/kg-to-LEO.
@@ -10035,7 +10035,7 @@ def build_transportation_summary(
                 })
 
     summary = pd.DataFrame(rows)
-    print(f"     ✅  {len(summary):,} (vehicle × segment × propellant) rows")
+    print(f"     OK  {len(summary):,} (vehicle x segment x propellant) rows")
     return summary
 
 
@@ -10050,7 +10050,7 @@ def merge_propellant_prices(
     `cost_usd_per_kg` and `cost_usd_per_L` resolve to live where available,
     reference where not — same pattern as Module 2.
     """
-    print("\n🔗  Merging live + reference propellant prices …")
+    print("\n  Merging live + reference propellant prices ...")
 
     out = reference.copy()
     out["live_cost_usd_per_kg"] = pd.NA
@@ -10098,7 +10098,7 @@ def validate_transport(
     ops_df:         pd.DataFrame,
 ) -> None:
     """Print sanity warnings.  Never raises."""
-    print("\n🔎  Validating catalog …")
+    print("\n  Validating catalog ...")
 
     # ── Launch $/kg sanity band ──────────────────────────────────────────────
     # The band applies to things that FLY.  v1.9.0 added non-rocket concepts
@@ -10114,7 +10114,7 @@ def validate_transport(
         | (flying["usd_per_kg_to_leo"] > 100_000)
     ]
     if not bad_launch.empty:
-        print(f"     ⚠️  {len(bad_launch)} flying launch rows outside "
+        print(f"     WARN  {len(bad_launch)} flying launch rows outside "
               f"$100-$100 000 / kg-to-LEO sanity band:")
         for _, r in bad_launch.iterrows():
             print(f"          {r['name']}: {r['usd_per_kg_to_leo']:,.0f}")
@@ -10125,7 +10125,7 @@ def validate_transport(
         | (concepts["usd_per_kg_to_leo"] > 100_000)
     ]
     if not bad_concept.empty:
-        print(f"     ⚠️  {len(bad_concept)} concept launch rows outside "
+        print(f"     WARN  {len(bad_concept)} concept launch rows outside "
               f"$1-$100 000 / kg-to-LEO:")
         for _, r in bad_concept.iterrows():
             print(f"          {r['name']}: {r['usd_per_kg_to_leo']:,.0f}")
@@ -10136,7 +10136,7 @@ def validate_transport(
     # what it is FOR rather than how much it costs.
     rough = launch_df[launch_df["max_accel_g"] > 50]
     if not rough.empty:
-        print(f"     ℹ️   {len(rough)} launchers exceed 50 g and can lift bulk "
+        print(f"     NOTE   {len(rough)} launchers exceed 50 g and can lift bulk "
               f"material only, not mining hardware:")
         for _, r in rough.iterrows():
             print(f"          {r['name']}: {r['max_accel_g']:,.0f} g")
@@ -10184,7 +10184,7 @@ def validate_transport(
         (finite_isp["isp_vac_s"] < 40) | (finite_isp["isp_vac_s"] > 200_000)
     ]
     if not bad_isp.empty:
-        print(f"     ⚠️  {len(bad_isp)} propellant rows with implausible Isp:")
+        print(f"     WARN  {len(bad_isp)} propellant rows with implausible Isp:")
         for _, r in bad_isp.iterrows():
             print(f"          {r['name']}: {r['isp_vac_s']} s")
 
@@ -10197,7 +10197,7 @@ def validate_transport(
         | (~np.isfinite(pd.to_numeric(priced["cost_usd_per_kg"], errors="coerce")))
     ]
     if not bad_prop_cost.empty:
-        print(f"     ⚠️  {len(bad_prop_cost)} propellant rows with a missing or "
+        print(f"     WARN  {len(bad_prop_cost)} propellant rows with a missing or "
               f"non-positive price:")
         for _, r in bad_prop_cost.iterrows():
             print(f"          {r['name']}: {r['cost_usd_per_kg']}")
@@ -10210,7 +10210,7 @@ def validate_transport(
                  / pd.to_numeric(propellant_df["density_kg_per_L"], errors="coerce"))
     bad_tank = propellant_df[tank_frac > 1.0]
     if not bad_tank.empty:
-        print(f"     ⚠️  {len(bad_tank)} propellant rows whose tank outweighs "
+        print(f"     WARN  {len(bad_tank)} propellant rows whose tank outweighs "
               f"the propellant:")
         for i, r in bad_tank.iterrows():
             print(f"          {r['name']}: {tank_frac[i]:.2f} kg tank / kg propellant")
@@ -10219,7 +10219,7 @@ def validate_transport(
     _VALID_STATUS = {"operational", "development", "concept", "retired"}
     bad_status = propellant_df[~propellant_df["status"].isin(_VALID_STATUS)]
     if not bad_status.empty:
-        print(f"     ⚠️  {len(bad_status)} propellant rows with an unrecognised "
+        print(f"     WARN  {len(bad_status)} propellant rows with an unrecognised "
               f"status (Module 4 gates on this):")
         for _, r in bad_status.iterrows():
             print(f"          {r['name']}: {r['status']!r}")
@@ -10229,12 +10229,12 @@ def validate_transport(
         (delta_v_df["dv_m_per_s"] < 50) | (delta_v_df["dv_m_per_s"] > 20_000)
     ]
     if not bad_dv.empty:
-        print(f"     ⚠️  {len(bad_dv)} Δv rows outside 50-20 000 m/s sanity band:")
+        print(f"     WARN  {len(bad_dv)} dv rows outside 50-20 000 m/s sanity band:")
         for _, r in bad_dv.iterrows():
             print(f"          {r['segment']}: {r['dv_m_per_s']} m/s")
 
-    print(f"     ✅  Unit invariants: launch USD/kg | propellant USD/kg + USD/L | "
-          f"Δv m/s | ops USD per unit")
+    print(f"     OK  Unit invariants: launch USD/kg | propellant USD/kg + USD/L | "
+          f"dv m/s | ops USD per unit")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -10256,7 +10256,7 @@ def build_transportation_catalog(
     t0 = datetime.now()
 
     print("=" * 75)
-    print("  🛰️   TRANSPORTATION COST PIPELINE — MODULE 3")
+    print("     TRANSPORTATION COST PIPELINE - MODULE 3")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  v{config.pipeline_version}")
     print("=" * 75)
 
@@ -10299,11 +10299,11 @@ def build_transportation_catalog(
     for fname, df in files.items():
         path = os.path.join(out_dir, fname)
         df.to_csv(path, index=False)
-        print(f"     💾  {fname:32s} → {path}  ({len(df):,} rows)")
+        print(f"       {fname:32s} -> {path}  ({len(df):,} rows)")
 
     elapsed = (datetime.now() - t0).total_seconds()
     print("\n" + "=" * 75)
-    print("  ✅  TRANSPORTATION CATALOG COMPLETE")
+    print("  OK  TRANSPORTATION CATALOG COMPLETE")
     print(f"      Tables   : {len(files)}")
     print(f"      Elapsed  : {elapsed:.1f}s")
     print("=" * 75)
@@ -10445,9 +10445,9 @@ def mission_cost_breakdown(
     }
 
 
-print("\n✅  Helper utilities available:")
+print("\nOK  Helper utilities available:")
 print("    cheapest_launch_to(catalog, 'leo', min_payload_kg=5000)")
-print("    cheapest_propellant_for(catalog, 6500)   # Δv in m/s")
+print("    cheapest_propellant_for(catalog, 6500)   # dv in m/s")
 print("    mission_cost_breakdown(catalog, payload_kg=1000, "
       "delta_v_outbound=6500, delta_v_return=5500, "
       "launch_vehicle='Falcon Heavy (reusable side cores)', "
@@ -10456,9 +10456,9 @@ print("    mission_cost_breakdown(catalog, payload_kg=1000, "
 
 
 
-# ═════════════════════════════════════════════════════════════════════════
-# MODULE 4 — PROFITABILITY CALCULATOR
-# ═════════════════════════════════════════════════════════════════════════
+# =========================================================================
+# MODULE 4 - PROFITABILITY CALCULATOR
+# =========================================================================
 
 
 
@@ -12495,7 +12495,7 @@ class CalcConfig:
 CALC_CONFIG = CalcConfig()
 os.makedirs(CALC_CONFIG.output_dir, exist_ok=True)
 
-print(f"✅  Configuration loaded — output dir: {CALC_CONFIG.output_dir}")
+print(f"OK  Configuration loaded - output dir: {CALC_CONFIG.output_dir}")
 print(f"    Hardware       : {CALC_CONFIG.mining_hardware_kg:,.0f} kg mining rig "
       f"+ {CALC_CONFIG.return_vehicle_dry_kg:,.0f} kg return-capsule dry")
 print(f"    Mining cap     : {CALC_CONFIG.max_mining_fraction:.0%} of asteroid mass per mission")
@@ -12504,23 +12504,23 @@ print(f"    Mining cap     : {CALC_CONFIG.max_mining_fraction:.0%} of asteroid m
 print(f"    Beneficiation  : "
       + ("concentrate (search also prices not concentrating at all)"
          if CALC_CONFIG.use_beneficiation else
-         "off — run-of-mine ore at bulk grade"))
+         "off - run-of-mine ore at bulk grade"))
 print(f"    Return mode    : "
-      f"{'aerocapture available (per-asteroid Δv saving vs TPS mass)' if CALC_CONFIG.use_aerocapture_return else 'propulsive only'}")
+      f"{'aerocapture available (per-asteroid dv saving vs TPS mass)' if CALC_CONFIG.use_aerocapture_return else 'propulsive only'}")
 print(f"    ISRU           : {'available where the rock has water' if CALC_CONFIG.use_isru_return_propellant else 'off'}")
 print(f"    Architecture   : "
       f"{'searched per asteroid' if CALC_CONFIG.optimise_architecture_per_asteroid else 'fixed by config'}")
 print(f"    Contingency    : {CALC_CONFIG.contingency_fraction:.0%}  |  "
       f"NRE amortised over {CALC_CONFIG.nre_amortization_missions} mission(s)")
 print(f"    Programme      : "
-      + (f"(fleet ≤ {CALC_CONFIG.max_fleet_ships}) × (campaigns/ship) searched; N follows"
+      + (f"(fleet <= {CALC_CONFIG.max_fleet_ships}) x (campaigns/ship) searched; N follows"
          if CALC_CONFIG.optimise_programme_scale else
          f"fixed at N = {CALC_CONFIG.nre_amortization_missions} "
          f"(set optimise_programme_scale to search it)"))
 print(f"    Calendar       : "
-      + ("programme span charged — amortised NRE and rig compound over "
-         "T + (W−1)×cadence" if CALC_CONFIG.model_programme_calendar else
-         "NOT charged (model_programme_calendar off — reproduces 1.15.0)"))
+      + ("programme span charged - amortised NRE and rig compound over "
+         "T + (W-1)xcadence" if CALC_CONFIG.model_programme_calendar else
+         "NOT charged (model_programme_calendar off - reproduces 1.15.0)"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -12552,7 +12552,7 @@ def _load_csv(path: str, label: str) -> pd.DataFrame:
             f"{label} not found at {path} — has the upstream module been run?"
         )
     df = pd.read_csv(path, low_memory=False)
-    print(f"     📥  {label:28s} {len(df):>7,} rows  ←  {path}")
+    print(f"       {label:28s} {len(df):>7,} rows  <-  {path}")
     return df
 
 
@@ -12612,7 +12612,7 @@ def _parse_minerals_column(col: pd.Series) -> pd.Series:
 
 def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
     """Load and lightly normalise the three upstream catalogs."""
-    print("\n📂  Loading upstream catalogs …")
+    print("\n  Loading upstream catalogs ...")
 
     transport_dir = os.path.join(config.input_dir, config.transportation_subdir)
 
@@ -12667,8 +12667,8 @@ def destination_check(catalogs: Dict[str, pd.DataFrame], config: CalcConfig) -> 
     """
     minerals = catalogs.get("minerals")
     if minerals is None or "delivery_destination" not in minerals.columns:
-        print("     ⚠️   Module 2 catalog carries no `delivery_destination` "
-              "column (pre-v1.3.0) — cannot verify pricing matches this "
+        print("     WARN   Module 2 catalog carries no `delivery_destination` "
+              "column (pre-v1.3.0) - cannot verify pricing matches this "
               "mission architecture.  Re-run Module 2.")
         return
 
@@ -12676,13 +12676,13 @@ def destination_check(catalogs: Dict[str, pd.DataFrame], config: CalcConfig) -> 
     mine    = str(config.delivery_destination).strip().lower()
     if stamped == mine:
         arch = delivery_architecture(mine)
-        print(f"     ✅  Delivery destination '{mine}' — {arch['label']}")
+        print(f"     OK  Delivery destination '{mine}' - {arch['label']}")
         return
 
-    print(f"     ❌  DESTINATION MISMATCH — the prices and the mission disagree.")
+    print(f"     FAIL  DESTINATION MISMATCH - the prices and the mission disagree.")
     print(f"          Module 2 priced the material for : {stamped}")
     print(f"          Module 4 is flying it to         : {mine}")
-    print(f"        → Every profit number in this run is meaningless.  Set both")
+    print(f"        -> Every profit number in this run is meaningless.  Set both")
     print(f"          MINERAL_CONFIG.delivery_destination and")
     print(f"          CALC_CONFIG.delivery_destination to the same value and")
     print(f"          re-run Module 2 before Module 4.")
@@ -12695,13 +12695,13 @@ def integrity_check(catalogs: Dict[str, pd.DataFrame]) -> None:
     introduces a new mineral that Module 2 has no row for — without this
     check, those minerals would simply not contribute to value (silently).
     """
-    print("\n🔗  Integrity check — Module 1 ↔ Module 2 mineral coverage …")
+    print("\n  Integrity check - Module 1 <-> Module 2 mineral coverage ...")
 
     asteroids   = catalogs["asteroids"]
     mineral_set = set(catalogs["minerals"]["name"].astype(str))
 
     if "comp_minerals" not in asteroids.columns:
-        print("     ⚠️  asteroid catalog has no `comp_minerals` column — skipping check")
+        print("     WARN  asteroid catalog has no `comp_minerals` column - skipping check")
         return
 
     # Every unique mineral name the asteroid catalog references.
@@ -12736,17 +12736,17 @@ def integrity_check(catalogs: Dict[str, pd.DataFrame]) -> None:
     extra   = mineral_set - referenced
 
     if missing:
-        print(f"     ❌  {len(missing)} mineral(s) named by Module 1 but ABSENT in Module 2:")
+        print(f"     FAIL  {len(missing)} mineral(s) named by Module 1 but ABSENT in Module 2:")
         for m in sorted(missing):
-            print(f"          • {m}")
-        print("        → Module 4 will treat these as zero-value contributions.")
+            print(f"          * {m}")
+        print("        -> Module 4 will treat these as zero-value contributions.")
     else:
-        print(f"     ✅  All {len(referenced)} referenced minerals are priced by Module 2")
+        print(f"     OK  All {len(referenced)} referenced minerals are priced by Module 2")
 
     if extra:
         # Not an error — Module 2 prices elements (Au, Pt, …) that Module 1
         # doesn't name directly.  Just informational.
-        print(f"     ℹ️   Module 2 prices {len(extra)} extra rows not named by Module 1 "
+        print(f"     NOTE   Module 2 prices {len(extra)} extra rows not named by Module 1 "
               f"(expected: elements + ice + bulk categories)")
 
     schema_check(catalogs)
@@ -12833,11 +12833,11 @@ def schema_check(catalogs: Dict[str, pd.DataFrame]) -> None:
 
     if not stale:
         return
-    print(f"\n     ⚠️  Module 3 catalog is STALE — {len(stale)} column(s)/row(s) "
+    print(f"\n     WARN  Module 3 catalog is STALE - {len(stale)} column(s)/row(s) "
           f"this version reads are missing:")
     for key, col, consequence in stale:
-        print(f"          • {key}.{col}  →  {consequence}")
-    print("        → Re-run Stage 3 (transportation).  It takes seconds, and "
+        print(f"          * {key}.{col}  ->  {consequence}")
+    print("        -> Re-run Stage 3 (transportation).  It takes seconds, and "
           "until you do, the numbers below are not comparable to any "
           "committed figure.")
 
@@ -14290,7 +14290,7 @@ def delivery_architecture(destination: str) -> dict:
 
     key = str(destination or "").strip().lower()
     if key not in DELIVERY_ARCHITECTURES:
-        print(f"     ⚠️   Unknown delivery_destination {destination!r} — "
+        print(f"     WARN   Unknown delivery_destination {destination!r} - "
               f"falling back to 'earth_surface'.  Valid: "
               f"{', '.join(sorted(DELIVERY_ARCHITECTURES))}")
         return DELIVERY_ARCHITECTURES["earth_surface"]
@@ -19046,7 +19046,7 @@ def _evaluate_in_parallel(
                                combos, config),
             )
         except (OSError, ValueError, RuntimeError, ImportError) as exc:
-            print(f"     ⚠️   Could not start worker processes ({exc}) — "
+            print(f"     WARN   Could not start worker processes ({exc}) - "
                   f"evaluating in a single process")
             return None
 
@@ -19071,7 +19071,7 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
     """Run the full Module 4 calculation pipeline."""
     t0 = datetime.now()
     print("=" * 75)
-    print("  💰  PROFITABILITY PIPELINE — MODULE 4")
+    print("    PROFITABILITY PIPELINE - MODULE 4")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  v{config.pipeline_version}")
     print("=" * 75)
 
@@ -19091,13 +19091,13 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
                    "comp_ice_fraction"]
     missing_cols = [c for c in needed_cols if c not in asteroids.columns]
     if missing_cols:
-        print(f"\n❌  Asteroid catalog missing required columns: {missing_cols}")
+        print(f"\nFAIL  Asteroid catalog missing required columns: {missing_cols}")
         print("     Has Module 1 been re-run with enrich_composition?  Aborting.")
         return pd.DataFrame()
 
     mass_ok = pd.to_numeric(asteroids["estimated_mass_kg"], errors="coerce") > 0
     work_df = asteroids[mass_ok].copy()
-    print(f"\n🪐  Evaluating {len(work_df):,} asteroids with positive mass "
+    print(f"\n  Evaluating {len(work_df):,} asteroids with positive mass "
           f"(skipped {len(asteroids) - len(work_df):,} without)")
 
     if config.eval_row_cap and len(work_df) > config.eval_row_cap:
@@ -19119,17 +19119,17 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
             )
             work_df = work_df.iloc[idx]
             how = f"every ~{n_before / max(len(idx), 1):.1f}th row, evenly spaced"
-        print(f"     ✂️   Capped at {len(work_df):,} of {n_before:,} rows "
+        print(f"        Capped at {len(work_df):,} of {n_before:,} rows "
               f"({how}; eval_row_cap / eval_row_sampling in CALC_CONFIG)")
 
     # Candidate (vehicle × propellant) grid is config-driven, not asteroid-
     # driven — build it once and hand it to every evaluation.
     combos = candidate_combos(catalogs, config)
     if not combos:
-        print("\n❌  No candidate vehicle × propellant combinations after "
-              "filtering — check operational_vehicles_only / candidate_* in CALC_CONFIG.")
+        print("\nFAIL  No candidate vehicle x propellant combinations after "
+              "filtering - check operational_vehicles_only / candidate_* in CALC_CONFIG.")
         return pd.DataFrame()
-    print(f"     🔧  {len(combos):,} vehicle × propellant combinations per asteroid")
+    print(f"       {len(combos):,} vehicle x propellant combinations per asteroid")
 
     # ── How much the pre-filter is actually removing (v1.14.1) ───────────────
     # Probed rather than tallied.  A running count would have to come back from
@@ -19153,7 +19153,7 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
             seen += seen_row
             kept += kept_row
         if seen:
-            print(f"     ✂️   Pre-filter keeps {kept / seen * 100:.1f}% of "
+            print(f"        Pre-filter keeps {kept / seen * 100:.1f}% of "
                   f"candidates ({seen - kept:,} of {seen:,} pruned on a "
                   f"{len(probe_idx)}-row probe; prune_infeasible_combos)")
 
@@ -19182,12 +19182,12 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
         i = progress["done"]
         if n >= 100 and (i * 100) // n != progress["pct"]:
             progress["pct"] = (i * 100) // n
-            print(f"     … {i:,} / {n:,} evaluated  ({progress['pct']}%)")
+            print(f"     ... {i:,} / {n:,} evaluated  ({progress['pct']}%)")
 
     results = None
     n_workers = _resolve_worker_count(config, n)
     if n_workers > 1:
-        print(f"     ⚡  {n_workers} worker processes "
+        print(f"       {n_workers} worker processes "
               f"({os.cpu_count()} logical CPUs, parallel_workers="
               f"{config.parallel_workers or 'auto'})")
         results = _evaluate_in_parallel(
@@ -19204,7 +19204,7 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
             report(1)
 
     if not results:
-        print("\n❌  No viable evaluations — every asteroid failed.")
+        print("\nFAIL  No viable evaluations - every asteroid failed.")
         return pd.DataFrame()
 
     df = pd.DataFrame(results)
@@ -19223,7 +19223,7 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
     # ── Step 5 — Export ──────────────────────────────────────────────────────
     out_path = os.path.join(config.output_dir, config.output_filename)
     df.to_csv(out_path, index=False)
-    print(f"\n     💾  Profitability catalog → {out_path}  ({len(df):,} rows)")
+    print(f"\n       Profitability catalog -> {out_path}  ({len(df):,} rows)")
 
     # ── What the architecture search actually chose ──────────────────────────
     # Worth printing rather than burying in the CSV: if every row picks the
@@ -19241,7 +19241,7 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
             if n_peri:
                 bits.append(f"{n_peri:,} rendezvous at perihelion")
         if bits:
-            print(f"     🧭  Architecture chosen: {'  |  '.join(bits)}")
+            print(f"       Architecture chosen: {'  |  '.join(bits)}")
 
     # ── What the programme search chose (v1.15.0) ────────────────────────────
     # Same argument as the block above, and it matters more here, because the
@@ -19258,33 +19258,33 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
     #   • EVERY ROW AT F = 1 means the fleet never wanted to grow, so the axis
     #     is costing runtime and buying nothing.
     if config.optimise_programme_scale and not config.model_rig_service_life:
-        print("     ⚠️   optimise_programme_scale is ON but model_rig_service_life "
+        print("     WARN   optimise_programme_scale is ON but model_rig_service_life "
               "is OFF, so one rig serves any programme, nothing is ever "
               "concurrent, and market saturation cannot push back. The search "
-              "is refused rather than run — it would report the ladder's top "
+              "is refused rather than run - it would report the ladder's top "
               "rung as a result. See programme_options().")
     elif config.optimise_programme_scale and "fleet_ships" in df.columns:
         f = df["fleet_ships"]
         at_cap = int((f >= config.max_fleet_ships).sum())
-        print(f"     🚢  Programme chosen: fleet median {f.median():.0f} ship(s), "
+        print(f"       Programme chosen: fleet median {f.median():.0f} ship(s), "
               f"max {f.max():.0f}  |  N median {df['programme_missions'].median():.0f}, "
               f"max {df['programme_missions'].max():.0f}  |  "
               f"{int((f <= 1).sum()):,} single-ship")
         if "trips_per_ship" in df.columns:
             binds = df["rig_trip_limit_binds"]
-            print(f"     🔧  Rig life: {df['trips_per_ship'].median():.0f} trips median "
+            print(f"       Rig life: {df['trips_per_ship'].median():.0f} trips median "
                   f"(calendar cap {df['rig_trips_calendar_cap'].median():.0f})  |  "
                   f"cycle bound binds on {binds.mean():.1%} of rows")
         if at_cap:
-            print(f"     ⚠️   {at_cap:,} row(s) ({at_cap/len(df):.1%}) sit AT "
+            print(f"     WARN   {at_cap:,} row(s) ({at_cap/len(df):.1%}) sit AT "
                   f"max_fleet_ships = {config.max_fleet_ships}. The ladder is "
-                  f"binding, not bounding — check those rows have a finite "
+                  f"binding, not bounding - check those rows have a finite "
                   f"market before reading their N as an optimum.")
 
     n_viable = int(df["viable"].sum())
     elapsed  = (datetime.now() - t0).total_seconds()
     print("\n" + "=" * 75)
-    print("  ✅  PROFITABILITY ANALYSIS COMPLETE")
+    print("  OK  PROFITABILITY ANALYSIS COMPLETE")
     print(f"      Evaluated  : {n:,} asteroids")
     print(f"      Viable     : {n_viable:,}  ({n_viable/n*100:.1f}% turn a profit)")
     print(f"      Unviable   : {n - n_viable:,}")
@@ -19323,7 +19323,7 @@ def lookup_asteroid(df: pd.DataFrame, query: str) -> pd.DataFrame:
     return df[mask]
 
 
-print("\n✅  Helper utilities available:")
+print("\nOK  Helper utilities available:")
 print("    top_profitable(catalog, 20)")
 print("    filter_viable(catalog)")
 print("    lookup_asteroid(catalog, 'Bennu')")
@@ -19331,17 +19331,17 @@ print("    lookup_asteroid(catalog, 'Bennu')")
 
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# ║                                                                           ║
-# ║   ★  MASTER CONFIG — ONE PLACE TO TUNE EVERYTHING ★                      ║
-# ║                                                                           ║
-# ║   The MasterConfig wraps the four module-specific configs as properties.  ║
-# ║   Each sub-config (CATALOG_CONFIG, MINERAL_CONFIG, TRANSPORT_CONFIG,      ║
-# ║   CALC_CONFIG) was instantiated when its module section ran above.  This  ║
-# ║   master object centralises the shared output directory and provides a    ║
-# ║   single handle for the orchestrator.                                     ║
-# ║                                                                           ║
-# ═════════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# |                                                                           |
+# |   *  MASTER CONFIG - ONE PLACE TO TUNE EVERYTHING *                      |
+# |                                                                           |
+# |   The MasterConfig wraps the four module-specific configs as properties.  |
+# |   Each sub-config (CATALOG_CONFIG, MINERAL_CONFIG, TRANSPORT_CONFIG,      |
+# |   CALC_CONFIG) was instantiated when its module section ran above.  This  |
+# |   master object centralises the shared output directory and provides a    |
+# |   single handle for the orchestrator.                                     |
+# |                                                                           |
+# =============================================================================
 
 from dataclasses import dataclass as _master_dataclass
 
@@ -19352,7 +19352,7 @@ class MasterConfig:
         MASTER_CONFIG.catalog.jpl_limit = 10_000
         MASTER_CONFIG.calc.use_isru_return_propellant = True
 
-    One exception: set the delivery destination HERE, not on a sub-config —
+    One exception: set the delivery destination HERE, not on a sub-config -
 
         MASTER_CONFIG.delivery_destination = "cislunar"
 
@@ -19365,7 +19365,7 @@ class MasterConfig:
 
     @property
     def delivery_destination(self) -> str:
-        """Where the mined material is sold — 'earth_surface', 'leo', 'cislunar'."""
+        """Where the mined material is sold - 'earth_surface', 'leo', 'cislunar'."""
         return self.mineral.delivery_destination
 
     @delivery_destination.setter
@@ -19404,7 +19404,7 @@ MASTER_CONFIG.apply()
 
 print()
 print("=" * 75)
-print("  ⚙️   MASTER CONFIG READY")
+print("     MASTER CONFIG READY")
 print(f"      Pipeline output  : {MASTER_CONFIG.output_dir}")
 print(f"      JPL limit        : {MASTER_CONFIG.catalog.jpl_limit:,} asteroids")
 print(f"      Eval row cap     : {MASTER_CONFIG.calc.eval_row_cap:,}")
@@ -19418,11 +19418,11 @@ print(f"      NRE amortise     : over {MASTER_CONFIG.calc.nre_amortization_missi
 # ~20x the runtime of the raw single-mission run most of the older tables in
 # CLAUDE.md were measured at.  Print them so a long run is never a mystery.
 print(f"      Beneficiation    : "
-      + ("ON — concentrate, not run-of-mine ore (~7x runtime; False for the raw cell)"
+      + ("ON - concentrate, not run-of-mine ore (~7x runtime; False for the raw cell)"
          if MASTER_CONFIG.calc.use_beneficiation else
-         "off — flying run-of-mine ore at bulk grade"))
+         "off - flying run-of-mine ore at bulk grade"))
 print(f"      Programme        : "
-      + (f"(fleet ≤ {MASTER_CONFIG.calc.max_fleet_ships}) x (campaigns/ship) searched; "
+      + (f"(fleet <= {MASTER_CONFIG.calc.max_fleet_ships}) x (campaigns/ship) searched; "
          f"N follows (~3x runtime)"
          if MASTER_CONFIG.calc.optimise_programme_scale else
          "fixed size (set calc.optimise_programme_scale to search it)"))
@@ -19430,9 +19430,9 @@ print(f"      Contingency      : {MASTER_CONFIG.calc.contingency_fraction:.0%}")
 print("=" * 75)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # MASTER ORCHESTRATOR
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 def run_full_pipeline(master: MasterConfig = None) -> dict:
     """Run all four module pipelines end-to-end in sequence.
@@ -19448,50 +19448,50 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
 
     t0 = datetime.now()
     print()
-    print("█" * 75)
-    print("  🚀  MASTER ASTEROID PROFITABILITY PIPELINE — v1.20.8")
-    print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output → {master.output_dir}")
-    print("█" * 75)
+    print("#" * 75)
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.20.8")
+    print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
+    print("#" * 75)
 
-    # ── Stage 1 — Asteroid Catalog ───────────────────────────────────────────
+    # -- Stage 1 - Asteroid Catalog -------------------------------------------
     print()
-    print("▔" * 75)
-    print("  STAGE 1 — ASTEROID CATALOG (Module 1)")
-    print("▔" * 75)
+    print("-" * 75)
+    print("  STAGE 1 - ASTEROID CATALOG (Module 1)")
+    print("-" * 75)
     asteroid_df = build_asteroid_catalog(master.catalog)
 
-    # ── Stage 2 — Mineral Value ──────────────────────────────────────────────
+    # -- Stage 2 - Mineral Value ----------------------------------------------
     print()
-    print("▔" * 75)
-    print("  STAGE 2 — MINERAL VALUE CATALOG (Module 2)")
-    print("▔" * 75)
+    print("-" * 75)
+    print("  STAGE 2 - MINERAL VALUE CATALOG (Module 2)")
+    print("-" * 75)
     mineral_df = build_mineral_value_catalog(master.mineral)
 
-    # ── Stage 3 — Transportation ─────────────────────────────────────────────
+    # -- Stage 3 - Transportation ---------------------------------------------
     print()
-    print("▔" * 75)
-    print("  STAGE 3 — TRANSPORTATION COSTS (Module 3)")
-    print("▔" * 75)
+    print("-" * 75)
+    print("  STAGE 3 - TRANSPORTATION COSTS (Module 3)")
+    print("-" * 75)
     transport_catalogs = build_transportation_catalog(master.transport)
 
-    # ── Stage 4 — Profitability ──────────────────────────────────────────────
+    # -- Stage 4 - Profitability ----------------------------------------------
     print()
-    print("▔" * 75)
-    print("  STAGE 4 — PROFITABILITY ANALYSIS (Module 4)")
-    print("▔" * 75)
+    print("-" * 75)
+    print("  STAGE 4 - PROFITABILITY ANALYSIS (Module 4)")
+    print("-" * 75)
     profit_df = build_profitability_catalog(master.calc)
 
     elapsed = (datetime.now() - t0).total_seconds()
     print()
-    print("█" * 75)
-    print("  ✅  MASTER PIPELINE COMPLETE")
+    print("#" * 75)
+    print("  OK  MASTER PIPELINE COMPLETE")
     print(f"      Total elapsed     : {elapsed:.1f}s")
     print(f"      Asteroids         : {len(asteroid_df):,}")
     print(f"      Minerals priced   : {len(mineral_df):,}")
     print(f"      Profitability rows: {len(profit_df):,}")
     print(f"      Viable missions   : {int(profit_df['viable'].sum()) if not profit_df.empty else 0:,}")
     print(f"      Master output dir : {master.output_dir}")
-    print("█" * 75)
+    print("#" * 75)
 
     return {
         "asteroids":      asteroid_df,
@@ -19502,11 +19502,11 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # AUTO-RUN
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Runs when executed as a script (`python master.py`) or pasted into a Colab /
-# Jupyter cell — both give __name__ == "__main__".  Importing this file for its
+# Jupyter cell - both give __name__ == "__main__".  Importing this file for its
 # functions is side-effect free.  Force either way by setting MASTER_AUTORUN
 # before the file executes.
 
