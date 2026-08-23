@@ -101,6 +101,14 @@ It is a launcher and nothing else — every path through it goes through
 `run_pipeline.py` or `ui.py`, and from there through `master.py`. No model
 behaviour lives in it.
 
+**Stages 1-3 re-fetch and overwrite, so they ask first.** Each replaces the
+only copy of its CSV — there is no history and no undo, and every `verify.py`
+baseline is built against those exact bytes. `run_pipeline.py` names what a
+run would re-fetch and waits for a `yes`, unless the file does not exist yet
+(nothing to lose) or you pass `--yes`. `run.bat` passes `--yes` on any
+invocation carrying an argument, so a scripted or scheduled `run.bat quick`
+still runs unattended; the menu asks.
+
 ⚠️  **The presets exist because the pipeline's own defaults are a very long
 run.** Since calc v1.17.0 a configure-nothing run is the full 1.55 M-row
 catalog, beneficiated, with the programme search on — a cell nobody has ever

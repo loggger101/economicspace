@@ -448,20 +448,42 @@ def _stage_minutes(key: str) -> float:
                                 MASTER.calc.eval_row_cap) or _JPL_FULL_ROWS
     benef = st.session_state.get("cfg::calc::use_beneficiation",
                                  MASTER.calc.use_beneficiation)
-    # Per-row seconds, fitted to the FULL-CATALOG raw run measured 2026-08-08 at
-    # cislunar: 1,554,351 rows in 2,539 s = 1.63 ms/row on six physical cores.
+    # BOTH axes, because both default ON as of calc v1.17.0 and each is worth
+    # roughly 3x. Omitting the programme search told the user 2.2 h for the
+    # DEFAULT run, against 6.8 h measured -- 3.1x low, and flatly contradicted
+    # by this stage's own blurb four lines of sidebar away, which already says
+    # "budget for the 6.8 h". A stale estimate beside a correct sentence is the
+    # exact failure CLAUDE.md is written to catch.
+    search = st.session_state.get("cfg::calc::optimise_programme_scale",
+                                  MASTER.calc.optimise_programme_scale)
+
+    # Seconds per row, read straight off the committed full-catalog 2x2 --
+    # CLAUDE.md, "THE FULL CISLUNAR 2x2", calc 1.16.0, 12 workers, over the
+    # 1,555,618 rows with positive mass:
     #
-    # Deliberately NOT fitted to a small sample.  A 20,000-row run of the same
-    # code costs 5.0 ms/row, 3.1x more, because worker startup and loading a
-    # 0.88 GB catalog are fixed costs and parallel efficiency is worse on a
-    # short job.  Using the sample rate here would have told the user 2.2 hours
-    # for a 42-minute run.  The error runs the other way for genuinely small
-    # runs, which this now under-estimates -- acceptable, since the estimate
-    # only matters when it is long.
+    #                 search OFF     search ON
+    #     raw            1,307 s       3,890 s
+    #     beneficiated   9,300 s      24,587 s
     #
-    # Beneficiated carries the 3.12x ratio measured on the sample; the full
-    # beneficiated run has not been timed.
-    return rows * (0.00509 if benef else 0.00163) / 60.0
+    # The old pair of rates carried a beneficiated:raw ratio of 3.12x, taken
+    # from a stride sample. CLAUDE.md retires that figure by name -- the real
+    # full-catalog ratio is 7.1x -- and THE SAMPLING RULE is precisely about
+    # not doing this. These four are measured full runs, so they need no
+    # ratio at all.
+    _CELL_ROWS = 1_555_618
+    _SECONDS_PER_ROW = {
+        (False, False):  1_307 / _CELL_ROWS,
+        (False, True):   3_890 / _CELL_ROWS,
+        (True,  False):  9_300 / _CELL_ROWS,
+        (True,  True):  24_587 / _CELL_ROWS,
+    }
+    # Measured at CISLUNAR on calc 1.16.0. Five performance-only releases have
+    # landed since and no full-catalog run has been made on any of them, so
+    # this reads HIGH -- which is the right direction for an estimate. Other
+    # destinations run 1.4-2x slower on raw (v1.14.0 matrix); this does not try
+    # to model that, because it is a prior, and the stage bar replaces it with
+    # measured progress within the first minute.
+    return rows * _SECONDS_PER_ROW[(bool(benef), bool(search))] / 60.0
 
 
 # Progress signals the pipeline already emits. These are PARSED rather than

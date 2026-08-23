@@ -331,7 +331,11 @@ def check_mass_ledger(m, frames: Dict[str, Any]) -> bool:
     ok = True
     for name, df in frames.items():
         if df.empty:
-            print(f"  {name:13s} (no rows)")
+            # Not "nothing to check" -- these cells evaluate 150-400 rows at
+            # cislunar, so an empty one IS the regression. Passing quietly here
+            # would hide it behind a check that looks like it ran.
+            print(f"  {name:13s} NO ROWS -- the cell produced nothing  FAIL")
+            ok = False
             continue
         err = float((df["hardware_total_kg"] - rig
                      - df["power_system_kg"] - df["ep_system_kg"]).abs().max())
@@ -378,10 +382,16 @@ def check_never_worse(m) -> bool:
     for lo, hi, label in pairs:
         a, b = side[hi], side[lo]
         if a.empty or b.empty:
+            which = "hi" if a.empty else "lo"
+            print(f"  {label:22s} SKIPPED -- the {which} cell is empty  FAIL")
+            ok = False
             continue
         j = (a[["designation"]].assign(r_hi=_ratio(a))
              .merge(b[["designation"]].assign(r_lo=_ratio(b)), on="designation"))
         if j.empty:
+            print(f"  {label:22s} SKIPPED -- the two cells share no "
+                  f"designation  FAIL")
+            ok = False
             continue
         r = j["r_lo"] / j["r_hi"]
         worse = int((r > 1 + 1e-12).sum())
@@ -561,6 +571,12 @@ def cmd_check(args) -> int:
         print(f"\n(no baseline at {d} -- check 1 will only report hashes)")
 
     ok = True
+    # Cells check 1 could not compare. Tracked, because "not in baseline" used
+    # to `continue` without touching `ok` -- so a check run against a missing
+    # or partial baseline printed hashes, compared nothing, and finished with
+    # ALL CHECKS PASSED. A verification that cannot run must never report that
+    # it passed; that is worse than not running it at all.
+    unchecked: List[str] = []
     frames: Dict[str, Any] = {}
 
     was = index.get("_meta", {}).get("calc_version", "?")
@@ -571,7 +587,9 @@ def cmd_check(args) -> int:
         frames[name] = df
         h = cell_hash(df)
         if name not in index:
-            print(f"  {name:13s} {len(df):4d} rows | {h} | (not in baseline)")
+            print(f"  {name:13s} {len(df):4d} rows | {h} | NOT COMPARED "
+                  f"(absent from baseline)")
+            unchecked.append(name)
             continue
         old = _read_baseline(pd, _cell_file(d, name))
         same, total, diff = column_diff(_comparable(df), old)
@@ -602,6 +620,12 @@ def cmd_check(args) -> int:
     print("\n6. STAGE 2 TABLES")
     ok &= check_stage2(m)
 
+    if unchecked:
+        print("\n*** NOT VERIFIED: check 1 compared nothing for %s."
+              % ", ".join(unchecked))
+        print("    Build a baseline on a CLEAN tree BEFORE editing:")
+        print("        py verify.py baseline --tag %s" % args.tag)
+        return 1
     print("\n" + ("ALL CHECKS PASSED" if ok else "*** FAILURES ABOVE ***"))
     return 0 if ok else 1
 
