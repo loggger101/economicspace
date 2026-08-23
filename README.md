@@ -59,10 +59,18 @@ point**. A small control panel appears while the server boots -- it says what
 is happening, opens the browser once the port actually answers, and stops the
 server when you close it. That window is what you close when you are done.
 
-It installs Streamlit on first use if you do not have it, reuses a dashboard
-that is already running rather than starting a second one, and writes the
-server's output to `.launcher/dashboard.log` so a failed start is still
+It installs Streamlit on first use if you do not have it, reuses the dashboard
+it started earlier rather than opening a second one, and writes the server's
+output to `.launcher/dashboard-<port>.log` so a failed start is still
 diagnosable with no console to have watched it.
+
+**The dashboard opens ready to re-run Stage 4 and nothing else.** Stages 1-3
+each re-fetch live data and overwrite the only copy of their CSV on disk, so a
+cached stage starts unticked and the destination selector is preselected to
+whatever the catalog on disk is already priced for. Tick a fetching stage and
+it tells you what that will overwrite. This is the loop you want almost every
+time: the catalogs are expensive to rebuild and Stage 4 is the stage whose
+answer you are actually changing.
 
 Why a `.vbs` and not a `.bat`: cmd creates its window before the first line of
 a batch file runs, and a shortcut set to "Minimized" still puts one on the
