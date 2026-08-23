@@ -11,7 +11,9 @@ profitability table.
 ## Layout
 
 ```
-run.bat                Windows launcher: double-click to run anything below
+Dashboard.vbs          Double-click this: opens the dashboard, no terminal
+launch_ui.py           What it runs -- starts the server, owns the stop button
+run.bat                Windows launcher: a terminal menu over everything below
 run_pipeline.py        Headless CLI the launcher drives (presets + flags)
 build_master.py        Build tool: assembles modules/ into master.py
 verify.py              Release verification: the six checks every change runs
@@ -50,14 +52,35 @@ authority is the dataclass field in each module, never this table.
 
 ## Running it
 
-### On Windows: double-click `run.bat`
+### On Windows: double-click `Dashboard.vbs`
 
-`run.bat` is the whole pipeline behind a menu. It finds Python, offers to
-install anything missing, and dispatches to the dashboard or to a headless run.
-It takes an argument if you would rather skip the menu:
+That opens the dashboard in your browser with **no terminal window at any
+point**. A small control panel appears while the server boots -- it says what
+is happening, opens the browser once the port actually answers, and stops the
+server when you close it. That window is what you close when you are done.
+
+It installs Streamlit on first use if you do not have it, reuses a dashboard
+that is already running rather than starting a second one, and writes the
+server's output to `.launcher/dashboard.log` so a failed start is still
+diagnosable with no console to have watched it.
+
+Why a `.vbs` and not a `.bat`: cmd creates its window before the first line of
+a batch file runs, and a shortcut set to "Minimized" still puts one on the
+taskbar. Windows Script Host is the only launcher that can start a process with
+no window at all. It decides nothing itself -- which port, whether a
+dashboard is already up, what to do when Streamlit is missing, all of that
+lives in `launch_ui.py` where it can be read and tested.
+
+### On Windows, from a terminal: `run.bat`
+
+`run.bat` is the whole pipeline behind a menu -- the same dashboard, plus the
+headless runs, verification and the build. It finds Python, offers to install
+anything missing, and dispatches. It takes an argument if you would rather skip
+the menu:
 
 ```
-run.bat ui         open the dashboard in a browser
+run.bat ui         open the dashboard (hands off to Dashboard.vbs, then
+                   closes this window -- no terminal stays up)
 run.bat quick      400-row sample, all four stages
 run.bat rerun      Stage 4 only, against the catalogs already on disk
 run.bat standard   20,000-row sample, Stage 4 only

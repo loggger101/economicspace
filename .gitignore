@@ -21,6 +21,10 @@ env/
 # build_master.py syntax-check temp file
 .master_check.pyc
 
+# Dashboard launcher logs - the server's stdout, kept so a failed
+# start is diagnosable when there is no console to have watched.
+/.launcher/
+
 # Local tooling / editor
 .claude/
 .ipynb_checkpoints/
