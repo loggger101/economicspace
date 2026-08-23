@@ -6806,21 +6806,30 @@ gets renamed again.
 
 Four consumers of the built `master.py`, all at the repo root because
 `build_master.py` concatenates `modules/` from four explicit paths and asserts
-a header/footer shape per file:
+a header/footer shape per file — plus two files that launch one of them:
 
 | file | what it is |
 |---|---|
-| `run.bat` | Windows launcher — a menu over the three below, no model behaviour of its own |
 | `run_pipeline.py` | headless CLI: `--preset`, `--stages`, `--destination`, row caps |
 | `ui.py` | Streamlit dashboard |
 | `verify.py` | the six release checks |
+| `run.bat` | Windows launcher — a terminal menu over the three above, no model behaviour of its own |
+| `Dashboard.vbs` | double-click entry point — starts the dashboard with no console, ever |
+| `launch_ui.py` | what it starts: supervises `streamlit run ui.py` and owns the stop button |
 
-All four import master **by name** with the repo on `sys.path`, which is the
-only form the worker pool tolerates — see `_spawn_environment`, and the table
-of harness bugs under "The verification harness is committed now". `run.bat`
-is a launcher only; it adds no default the pipeline does not already have,
-except that its `quick` / `standard` presets cap rows and fly raw ore at N = 1
-rather than starting the tens-of-hours default cell on a double-click.
+The first three import master **by name** with the repo on `sys.path`, which is
+the only form the worker pool tolerates — see `_spawn_environment`, and the
+table of harness bugs under "The verification harness is committed now".
+`run.bat` is a launcher only; it adds no default the pipeline does not already
+have, except that its `quick` / `standard` presets cap rows and fly raw ore at
+N = 1 rather than starting the tens-of-hours default cell on a double-click.
+
+⚠️  **`launch_ui.py` deliberately imports NOTHING from this project** — not
+master, not ui, not `modules/`. It spawns `streamlit run ui.py` as a child and
+watches a socket. It is the one process that must not fail, so putting a 1 MB
+module and a multiprocessing pool inside the supervisor would be exactly
+backwards — and it means nothing here is ever a worker's `__main__`, so
+`_spawn_environment` never comes into it. Keep it that way.
 
 `run_pipeline.py` carries two guards that exist because a launcher makes both
 mistakes cheap, and neither is model behaviour:
@@ -6835,6 +6844,44 @@ mistakes cheap, and neither is model behaviour:
   labelled "THE PIPELINE DEFAULTS", and calc `1.17.0` is precisely the release
   that would have made that label a lie. A count or a default spelled out in
   prose is the thing this file keeps catching; this one checks itself.
+
+### The dashboard must not own a console, and that costs more than hiding one
+
+`run.bat ui` used to run `streamlit run ui.py` in the foreground, so the
+console window WAS the app: it had to stay open and in the way for as long as
+the dashboard was up, and closing it was how you stopped the server. Hiding
+that window is not enough on its own — a `pythonw` process with no console has
+nothing to close and no output to read, so a failed start becomes a program
+that silently does not appear and a successful one becomes a server nobody can
+stop without Task Manager. `launch_ui.py` therefore puts up a small control
+window to **replace** the console rather than merely suppress it.
+
+Three Windows-specific traps were hit building it, each of which looks fine
+from a console and is broken everywhere else — the same shape as the `set /p`
+rule below:
+
+- 🚨  **`SO_REUSEADDR` is INVERTED on Windows.** On Unix it means "reuse a
+  port stuck in TIME_WAIT"; on Windows it means "bind even though someone else
+  already holds it". Setting it made a free-port probe return True for the port
+  Streamlit was serving *at that moment*, so a second launch would have started
+  a duplicate server on an occupied port. `_port_is_free` does a bare `bind`;
+  "is something listening" is `_port_answers`' question, and `_choose_port`
+  asks it first.
+- 🚨  **A process started with `start` inherits this console's stdout**, so
+  `run.bat ui > log` or `run.bat ui | tee` blocked until the dashboard was
+  closed — measured at 120 s+ against 0.46 s. `<nul >nul 2>&1` on the `start`
+  line does NOT fix it. What does is going through Windows Script Host, whose
+  `Run` does not pass the caller's handles to the process it creates — so
+  `:ui` delegates to `Dashboard.vbs`, which also leaves one windowless-start
+  implementation instead of two.
+- ⚠️  **`Tk.after` is not thread-safe and raises once the main loop is gone.**
+  Reporting progress from the boot thread with `root.after` produced
+  `RuntimeError: main thread is not in main loop` whenever the window was
+  closed during the seconds Streamlit takes to start — in a thread, under
+  `pythonw`, where nothing would ever have shown it. The worker posts callables
+  to a `queue.Queue` and the main thread drains it; the worker never touches a
+  widget. Cancel the pending pump in `quit()` too: clearing the reschedule flag
+  leaves the one already in flight to fire into a destroyed interpreter.
 
 ⚠️  **Nothing in `run.bat` may prompt once an argument was given**, and that
 rule has now been broken twice in the same file. `set /p` against a stdin a
