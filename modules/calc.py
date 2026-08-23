@@ -80,13 +80,13 @@ for _pkg in _REQUIRED_PKGS:
         _missing.append(_pkg)
 
 if _missing:
-    print(f"📦  Installing: {_missing} …")
+    print(f"PKG  Installing: {_missing} ...")
     subprocess.check_call(
         [sys.executable, "-m", "pip", "install", "-q"] + _missing
     )
-    print("✅  Install complete")
+    print("OK  Install complete")
 else:
-    print("✅  All packages present")
+    print("OK  All packages present")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2121,7 +2121,7 @@ class CalcConfig:
 CONFIG = CalcConfig()
 os.makedirs(CONFIG.output_dir, exist_ok=True)
 
-print(f"✅  Configuration loaded — output dir: {CONFIG.output_dir}")
+print(f"OK  Configuration loaded - output dir: {CONFIG.output_dir}")
 print(f"    Hardware       : {CONFIG.mining_hardware_kg:,.0f} kg mining rig "
       f"+ {CONFIG.return_vehicle_dry_kg:,.0f} kg return-capsule dry")
 print(f"    Mining cap     : {CONFIG.max_mining_fraction:.0%} of asteroid mass per mission")
@@ -2130,23 +2130,23 @@ print(f"    Mining cap     : {CONFIG.max_mining_fraction:.0%} of asteroid mass p
 print(f"    Beneficiation  : "
       + ("concentrate (search also prices not concentrating at all)"
          if CONFIG.use_beneficiation else
-         "off — run-of-mine ore at bulk grade"))
+         "off - run-of-mine ore at bulk grade"))
 print(f"    Return mode    : "
-      f"{'aerocapture available (per-asteroid Δv saving vs TPS mass)' if CONFIG.use_aerocapture_return else 'propulsive only'}")
+      f"{'aerocapture available (per-asteroid dv saving vs TPS mass)' if CONFIG.use_aerocapture_return else 'propulsive only'}")
 print(f"    ISRU           : {'available where the rock has water' if CONFIG.use_isru_return_propellant else 'off'}")
 print(f"    Architecture   : "
       f"{'searched per asteroid' if CONFIG.optimise_architecture_per_asteroid else 'fixed by config'}")
 print(f"    Contingency    : {CONFIG.contingency_fraction:.0%}  |  "
       f"NRE amortised over {CONFIG.nre_amortization_missions} mission(s)")
 print(f"    Programme      : "
-      + (f"(fleet ≤ {CONFIG.max_fleet_ships}) × (campaigns/ship) searched; N follows"
+      + (f"(fleet <= {CONFIG.max_fleet_ships}) x (campaigns/ship) searched; N follows"
          if CONFIG.optimise_programme_scale else
          f"fixed at N = {CONFIG.nre_amortization_missions} "
          f"(set optimise_programme_scale to search it)"))
 print(f"    Calendar       : "
-      + ("programme span charged — amortised NRE and rig compound over "
-         "T + (W−1)×cadence" if CONFIG.model_programme_calendar else
-         "NOT charged (model_programme_calendar off — reproduces 1.15.0)"))
+      + ("programme span charged - amortised NRE and rig compound over "
+         "T + (W-1)xcadence" if CONFIG.model_programme_calendar else
+         "NOT charged (model_programme_calendar off - reproduces 1.15.0)"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2178,7 +2178,7 @@ def _load_csv(path: str, label: str) -> pd.DataFrame:
             f"{label} not found at {path} — has the upstream module been run?"
         )
     df = pd.read_csv(path, low_memory=False)
-    print(f"     📥  {label:28s} {len(df):>7,} rows  ←  {path}")
+    print(f"       {label:28s} {len(df):>7,} rows  <-  {path}")
     return df
 
 
@@ -2238,7 +2238,7 @@ def _parse_minerals_column(col: pd.Series) -> pd.Series:
 
 def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
     """Load and lightly normalise the three upstream catalogs."""
-    print("\n📂  Loading upstream catalogs …")
+    print("\n  Loading upstream catalogs ...")
 
     transport_dir = os.path.join(config.input_dir, config.transportation_subdir)
 
@@ -2293,8 +2293,8 @@ def destination_check(catalogs: Dict[str, pd.DataFrame], config: CalcConfig) -> 
     """
     minerals = catalogs.get("minerals")
     if minerals is None or "delivery_destination" not in minerals.columns:
-        print("     ⚠️   Module 2 catalog carries no `delivery_destination` "
-              "column (pre-v1.3.0) — cannot verify pricing matches this "
+        print("     WARN   Module 2 catalog carries no `delivery_destination` "
+              "column (pre-v1.3.0) - cannot verify pricing matches this "
               "mission architecture.  Re-run Module 2.")
         return
 
@@ -2302,13 +2302,13 @@ def destination_check(catalogs: Dict[str, pd.DataFrame], config: CalcConfig) -> 
     mine    = str(config.delivery_destination).strip().lower()
     if stamped == mine:
         arch = delivery_architecture(mine)
-        print(f"     ✅  Delivery destination '{mine}' — {arch['label']}")
+        print(f"     OK  Delivery destination '{mine}' - {arch['label']}")
         return
 
-    print(f"     ❌  DESTINATION MISMATCH — the prices and the mission disagree.")
+    print(f"     FAIL  DESTINATION MISMATCH - the prices and the mission disagree.")
     print(f"          Module 2 priced the material for : {stamped}")
     print(f"          Module 4 is flying it to         : {mine}")
-    print(f"        → Every profit number in this run is meaningless.  Set both")
+    print(f"        -> Every profit number in this run is meaningless.  Set both")
     print(f"          MINERAL_CONFIG.delivery_destination and")
     print(f"          CALC_CONFIG.delivery_destination to the same value and")
     print(f"          re-run Module 2 before Module 4.")
@@ -2321,13 +2321,13 @@ def integrity_check(catalogs: Dict[str, pd.DataFrame]) -> None:
     introduces a new mineral that Module 2 has no row for — without this
     check, those minerals would simply not contribute to value (silently).
     """
-    print("\n🔗  Integrity check — Module 1 ↔ Module 2 mineral coverage …")
+    print("\n  Integrity check - Module 1 <-> Module 2 mineral coverage ...")
 
     asteroids   = catalogs["asteroids"]
     mineral_set = set(catalogs["minerals"]["name"].astype(str))
 
     if "comp_minerals" not in asteroids.columns:
-        print("     ⚠️  asteroid catalog has no `comp_minerals` column — skipping check")
+        print("     WARN  asteroid catalog has no `comp_minerals` column - skipping check")
         return
 
     # Every unique mineral name the asteroid catalog references.
@@ -2362,17 +2362,17 @@ def integrity_check(catalogs: Dict[str, pd.DataFrame]) -> None:
     extra   = mineral_set - referenced
 
     if missing:
-        print(f"     ❌  {len(missing)} mineral(s) named by Module 1 but ABSENT in Module 2:")
+        print(f"     FAIL  {len(missing)} mineral(s) named by Module 1 but ABSENT in Module 2:")
         for m in sorted(missing):
-            print(f"          • {m}")
-        print("        → Module 4 will treat these as zero-value contributions.")
+            print(f"          * {m}")
+        print("        -> Module 4 will treat these as zero-value contributions.")
     else:
-        print(f"     ✅  All {len(referenced)} referenced minerals are priced by Module 2")
+        print(f"     OK  All {len(referenced)} referenced minerals are priced by Module 2")
 
     if extra:
         # Not an error — Module 2 prices elements (Au, Pt, …) that Module 1
         # doesn't name directly.  Just informational.
-        print(f"     ℹ️   Module 2 prices {len(extra)} extra rows not named by Module 1 "
+        print(f"     NOTE   Module 2 prices {len(extra)} extra rows not named by Module 1 "
               f"(expected: elements + ice + bulk categories)")
 
     schema_check(catalogs)
@@ -2459,11 +2459,11 @@ def schema_check(catalogs: Dict[str, pd.DataFrame]) -> None:
 
     if not stale:
         return
-    print(f"\n     ⚠️  Module 3 catalog is STALE — {len(stale)} column(s)/row(s) "
+    print(f"\n     WARN  Module 3 catalog is STALE - {len(stale)} column(s)/row(s) "
           f"this version reads are missing:")
     for key, col, consequence in stale:
-        print(f"          • {key}.{col}  →  {consequence}")
-    print("        → Re-run Stage 3 (transportation).  It takes seconds, and "
+        print(f"          * {key}.{col}  ->  {consequence}")
+    print("        -> Re-run Stage 3 (transportation).  It takes seconds, and "
           "until you do, the numbers below are not comparable to any "
           "committed figure.")
 
@@ -3916,7 +3916,7 @@ def delivery_architecture(destination: str) -> dict:
 
     key = str(destination or "").strip().lower()
     if key not in DELIVERY_ARCHITECTURES:
-        print(f"     ⚠️   Unknown delivery_destination {destination!r} — "
+        print(f"     WARN   Unknown delivery_destination {destination!r} - "
               f"falling back to 'earth_surface'.  Valid: "
               f"{', '.join(sorted(DELIVERY_ARCHITECTURES))}")
         return DELIVERY_ARCHITECTURES["earth_surface"]
@@ -8672,7 +8672,7 @@ def _evaluate_in_parallel(
                                combos, config),
             )
         except (OSError, ValueError, RuntimeError, ImportError) as exc:
-            print(f"     ⚠️   Could not start worker processes ({exc}) — "
+            print(f"     WARN   Could not start worker processes ({exc}) - "
                   f"evaluating in a single process")
             return None
 
@@ -8697,7 +8697,7 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
     """Run the full Module 4 calculation pipeline."""
     t0 = datetime.now()
     print("=" * 75)
-    print("  💰  PROFITABILITY PIPELINE — MODULE 4")
+    print("    PROFITABILITY PIPELINE - MODULE 4")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  v{config.pipeline_version}")
     print("=" * 75)
 
@@ -8717,13 +8717,13 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
                    "comp_ice_fraction"]
     missing_cols = [c for c in needed_cols if c not in asteroids.columns]
     if missing_cols:
-        print(f"\n❌  Asteroid catalog missing required columns: {missing_cols}")
+        print(f"\nFAIL  Asteroid catalog missing required columns: {missing_cols}")
         print("     Has Module 1 been re-run with enrich_composition?  Aborting.")
         return pd.DataFrame()
 
     mass_ok = pd.to_numeric(asteroids["estimated_mass_kg"], errors="coerce") > 0
     work_df = asteroids[mass_ok].copy()
-    print(f"\n🪐  Evaluating {len(work_df):,} asteroids with positive mass "
+    print(f"\n  Evaluating {len(work_df):,} asteroids with positive mass "
           f"(skipped {len(asteroids) - len(work_df):,} without)")
 
     if config.eval_row_cap and len(work_df) > config.eval_row_cap:
@@ -8745,17 +8745,17 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
             )
             work_df = work_df.iloc[idx]
             how = f"every ~{n_before / max(len(idx), 1):.1f}th row, evenly spaced"
-        print(f"     ✂️   Capped at {len(work_df):,} of {n_before:,} rows "
+        print(f"        Capped at {len(work_df):,} of {n_before:,} rows "
               f"({how}; eval_row_cap / eval_row_sampling in CONFIG)")
 
     # Candidate (vehicle × propellant) grid is config-driven, not asteroid-
     # driven — build it once and hand it to every evaluation.
     combos = candidate_combos(catalogs, config)
     if not combos:
-        print("\n❌  No candidate vehicle × propellant combinations after "
-              "filtering — check operational_vehicles_only / candidate_* in CONFIG.")
+        print("\nFAIL  No candidate vehicle x propellant combinations after "
+              "filtering - check operational_vehicles_only / candidate_* in CONFIG.")
         return pd.DataFrame()
-    print(f"     🔧  {len(combos):,} vehicle × propellant combinations per asteroid")
+    print(f"       {len(combos):,} vehicle x propellant combinations per asteroid")
 
     # ── How much the pre-filter is actually removing (v1.14.1) ───────────────
     # Probed rather than tallied.  A running count would have to come back from
@@ -8779,7 +8779,7 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
             seen += seen_row
             kept += kept_row
         if seen:
-            print(f"     ✂️   Pre-filter keeps {kept / seen * 100:.1f}% of "
+            print(f"        Pre-filter keeps {kept / seen * 100:.1f}% of "
                   f"candidates ({seen - kept:,} of {seen:,} pruned on a "
                   f"{len(probe_idx)}-row probe; prune_infeasible_combos)")
 
@@ -8808,12 +8808,12 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
         i = progress["done"]
         if n >= 100 and (i * 100) // n != progress["pct"]:
             progress["pct"] = (i * 100) // n
-            print(f"     … {i:,} / {n:,} evaluated  ({progress['pct']}%)")
+            print(f"     ... {i:,} / {n:,} evaluated  ({progress['pct']}%)")
 
     results = None
     n_workers = _resolve_worker_count(config, n)
     if n_workers > 1:
-        print(f"     ⚡  {n_workers} worker processes "
+        print(f"       {n_workers} worker processes "
               f"({os.cpu_count()} logical CPUs, parallel_workers="
               f"{config.parallel_workers or 'auto'})")
         results = _evaluate_in_parallel(
@@ -8830,7 +8830,7 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
             report(1)
 
     if not results:
-        print("\n❌  No viable evaluations — every asteroid failed.")
+        print("\nFAIL  No viable evaluations - every asteroid failed.")
         return pd.DataFrame()
 
     df = pd.DataFrame(results)
@@ -8849,7 +8849,7 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
     # ── Step 5 — Export ──────────────────────────────────────────────────────
     out_path = os.path.join(config.output_dir, config.output_filename)
     df.to_csv(out_path, index=False)
-    print(f"\n     💾  Profitability catalog → {out_path}  ({len(df):,} rows)")
+    print(f"\n       Profitability catalog -> {out_path}  ({len(df):,} rows)")
 
     # ── What the architecture search actually chose ──────────────────────────
     # Worth printing rather than burying in the CSV: if every row picks the
@@ -8867,7 +8867,7 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
             if n_peri:
                 bits.append(f"{n_peri:,} rendezvous at perihelion")
         if bits:
-            print(f"     🧭  Architecture chosen: {'  |  '.join(bits)}")
+            print(f"       Architecture chosen: {'  |  '.join(bits)}")
 
     # ── What the programme search chose (v1.15.0) ────────────────────────────
     # Same argument as the block above, and it matters more here, because the
@@ -8884,33 +8884,33 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
     #   • EVERY ROW AT F = 1 means the fleet never wanted to grow, so the axis
     #     is costing runtime and buying nothing.
     if config.optimise_programme_scale and not config.model_rig_service_life:
-        print("     ⚠️   optimise_programme_scale is ON but model_rig_service_life "
+        print("     WARN   optimise_programme_scale is ON but model_rig_service_life "
               "is OFF, so one rig serves any programme, nothing is ever "
               "concurrent, and market saturation cannot push back. The search "
-              "is refused rather than run — it would report the ladder's top "
+              "is refused rather than run - it would report the ladder's top "
               "rung as a result. See programme_options().")
     elif config.optimise_programme_scale and "fleet_ships" in df.columns:
         f = df["fleet_ships"]
         at_cap = int((f >= config.max_fleet_ships).sum())
-        print(f"     🚢  Programme chosen: fleet median {f.median():.0f} ship(s), "
+        print(f"       Programme chosen: fleet median {f.median():.0f} ship(s), "
               f"max {f.max():.0f}  |  N median {df['programme_missions'].median():.0f}, "
               f"max {df['programme_missions'].max():.0f}  |  "
               f"{int((f <= 1).sum()):,} single-ship")
         if "trips_per_ship" in df.columns:
             binds = df["rig_trip_limit_binds"]
-            print(f"     🔧  Rig life: {df['trips_per_ship'].median():.0f} trips median "
+            print(f"       Rig life: {df['trips_per_ship'].median():.0f} trips median "
                   f"(calendar cap {df['rig_trips_calendar_cap'].median():.0f})  |  "
                   f"cycle bound binds on {binds.mean():.1%} of rows")
         if at_cap:
-            print(f"     ⚠️   {at_cap:,} row(s) ({at_cap/len(df):.1%}) sit AT "
+            print(f"     WARN   {at_cap:,} row(s) ({at_cap/len(df):.1%}) sit AT "
                   f"max_fleet_ships = {config.max_fleet_ships}. The ladder is "
-                  f"binding, not bounding — check those rows have a finite "
+                  f"binding, not bounding - check those rows have a finite "
                   f"market before reading their N as an optimum.")
 
     n_viable = int(df["viable"].sum())
     elapsed  = (datetime.now() - t0).total_seconds()
     print("\n" + "=" * 75)
-    print("  ✅  PROFITABILITY ANALYSIS COMPLETE")
+    print("  OK  PROFITABILITY ANALYSIS COMPLETE")
     print(f"      Evaluated  : {n:,} asteroids")
     print(f"      Viable     : {n_viable:,}  ({n_viable/n*100:.1f}% turn a profit)")
     print(f"      Unviable   : {n - n_viable:,}")
@@ -8949,7 +8949,7 @@ def lookup_asteroid(df: pd.DataFrame, query: str) -> pd.DataFrame:
     return df[mask]
 
 
-print("\n✅  Helper utilities available:")
+print("\nOK  Helper utilities available:")
 print("    top_profitable(catalog, 20)")
 print("    filter_viable(catalog)")
 print("    lookup_asteroid(catalog, 'Bennu')")
@@ -8965,7 +8965,7 @@ if __name__ == "__main__":
 
         # ── Top-N preview ────────────────────────────────────────────────────────
         print(f"\n{'='*95}")
-        print(f"  🏆  TOP {CONFIG.top_n_preview} MOST PROFITABLE ASTEROIDS")
+        print(f"    TOP {CONFIG.top_n_preview} MOST PROFITABLE ASTEROIDS")
         print(f"{'='*95}")
         preview_cols = [
             "designation", "name", "spectral_type", "comp_group",
@@ -8978,7 +8978,7 @@ if __name__ == "__main__":
 
         # ── Summary by composition group ─────────────────────────────────────────
         print(f"\n{'='*95}")
-        print("  📊  PROFITABILITY BY COMPOSITION GROUP")
+        print("    PROFITABILITY BY COMPOSITION GROUP")
         print(f"{'='*95}")
         if "comp_group" in catalog.columns:
             grp = catalog.groupby("comp_group").agg(
@@ -8992,7 +8992,7 @@ if __name__ == "__main__":
 
         # ── Vehicle / propellant selection summary ───────────────────────────────
         print(f"\n{'='*95}")
-        print("  🚀  WINNING VEHICLE × PROPELLANT COMBINATIONS")
+        print("    WINNING VEHICLE x PROPELLANT COMBINATIONS")
         print(f"{'='*95}")
         if "vehicle" in catalog.columns and "propellant" in catalog.columns:
             combo = (
@@ -9013,7 +9013,7 @@ if __name__ == "__main__":
         viable_df = catalog[catalog["viable"]]
         diag_df, label = (viable_df, "viable missions") if not viable_df.empty else (catalog, "ALL evaluated (no viable mission yet — try cheaper hardware / multi-mission NRE / Starship)")
         print(f"\n{'='*95}")
-        print(f"  💵  AVERAGE COST BREAKDOWN  ({label}, USD)")
+        print(f"    AVERAGE COST BREAKDOWN  ({label}, USD)")
         print(f"{'='*95}")
         if cost_cols and not diag_df.empty:
             means = diag_df[cost_cols].mean().sort_values(ascending=False)

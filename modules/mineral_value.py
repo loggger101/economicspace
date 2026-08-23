@@ -56,13 +56,13 @@ for _pkg in _REQUIRED_PKGS:
         _missing.append(_pkg)
 
 if _missing:
-    print(f"📦  Installing: {_missing} …")
+    print(f"PKG  Installing: {_missing} ...")
     subprocess.check_call(
         [sys.executable, "-m", "pip", "install", "-q"] + _missing
     )
-    print("✅  Install complete")
+    print("OK  Install complete")
 else:
-    print("✅  All packages present")
+    print("OK  All packages present")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -465,12 +465,12 @@ class MineralValueConfig:
 CONFIG = MineralValueConfig()
 os.makedirs(CONFIG.output_dir, exist_ok=True)
 
-print(f"✅  Configuration loaded — output dir: {CONFIG.output_dir}")
+print(f"OK  Configuration loaded - output dir: {CONFIG.output_dir}")
 print(f"    Active sources : "
       f"{', '.join(s for s, on in (('yfinance', CONFIG.use_yfinance), ('metals.dev', CONFIG.use_metals_api and CONFIG.metals_api_key != 'DEMO'), ('reference', CONFIG.use_reference_table)) if on)}")
 print(f"    Price unit     : {CONFIG.PRICE_UNIT}  (every numeric price column ends with _usd_per_kg)")
 print(f"    Delivery dest  : {CONFIG.delivery_destination}  "
-      f"(sets EVERY price — see DELIVERY_DESTINATIONS + IN_SPACE_UTILITY)")
+      f"(sets EVERY price - see DELIVERY_DESTINATIONS + IN_SPACE_UTILITY)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1186,7 +1186,7 @@ def value_for_destination(destination: str) -> dict:
     """
     key = str(destination or "").strip().lower()
     if key not in DELIVERY_DESTINATIONS:
-        print(f"     ⚠️   Unknown delivery_destination {destination!r} — "
+        print(f"     WARN   Unknown delivery_destination {destination!r} - "
               f"falling back to 'earth_surface'.  Valid: "
               f"{', '.join(sorted(DELIVERY_DESTINATIONS))}")
         key = "earth_surface"
@@ -1699,7 +1699,7 @@ MINERAL_REFERENCE: List[dict] = [
     },
 ]
 
-print(f"✅  Reference table ready — {len(MINERAL_REFERENCE)} entries "
+print(f"OK  Reference table ready - {len(MINERAL_REFERENCE)} entries "
       f"({sum(1 for r in MINERAL_REFERENCE if r['kind'] == 'element')} elements / "
       f"{sum(1 for r in MINERAL_REFERENCE if r['kind'] == 'mineral')} minerals)")
 
@@ -1745,12 +1745,12 @@ def fetch_yfinance(config: MineralValueConfig) -> pd.DataFrame:
     entry's `yfinance_unit`.  Returns an empty DataFrame if yfinance fails
     entirely — individual tickers that fail are logged but don't abort.
     """
-    print("\n💰  yfinance  (Yahoo Finance) — fetching live futures …")
+    print("\n  yfinance  (Yahoo Finance) - fetching live futures ...")
 
     try:
         import yfinance as yf
     except ImportError:
-        print("     ❌  yfinance not importable — skipped")
+        print("     FAIL  yfinance not importable - skipped")
         return pd.DataFrame()
 
     rows = []
@@ -1766,7 +1766,7 @@ def fetch_yfinance(config: MineralValueConfig) -> pd.DataFrame:
             hist = yf.Ticker(ticker).history(period="5d", auto_adjust=False)
             closes = hist["Close"].dropna() if "Close" in hist else pd.Series(dtype=float)
             if closes.empty:
-                print(f"     ⚠️  {entry['name']:11s} ({ticker}) — no close data")
+                print(f"     WARN  {entry['name']:11s} ({ticker}) - no close data")
                 continue
 
             last_close = float(closes.iloc[-1])
@@ -1780,7 +1780,7 @@ def fetch_yfinance(config: MineralValueConfig) -> pd.DataFrame:
             elif unit == "tonne":
                 price_kg = _per_tonne_to_per_kg(last_close)
             else:
-                print(f"     ⚠️  {entry['name']:11s} ({ticker}) — unknown unit {unit!r}")
+                print(f"     WARN  {entry['name']:11s} ({ticker}) - unknown unit {unit!r}")
                 continue
 
             rows.append({
@@ -1789,15 +1789,15 @@ def fetch_yfinance(config: MineralValueConfig) -> pd.DataFrame:
                 "live_price_date":   last_date,
                 "live_price_source": f"yfinance:{ticker}",
             })
-            print(f"     ✅  {entry['name']:11s} ({ticker}) "
+            print(f"     OK  {entry['name']:11s} ({ticker}) "
                   f"= {last_close:>10,.2f} USD/{unit:7s} "
-                  f"→ {price_kg:>12,.2f} USD/kg  [{last_date}]")
+                  f"-> {price_kg:>12,.2f} USD/kg  [{last_date}]")
 
         except Exception as exc:
-            print(f"     ❌  {entry['name']:11s} ({ticker}) — {type(exc).__name__}: {exc}")
+            print(f"     FAIL  {entry['name']:11s} ({ticker}) - {type(exc).__name__}: {exc}")
 
     if not rows:
-        print("     ⚠️  yfinance returned no usable rows")
+        print("     WARN  yfinance returned no usable rows")
         return pd.DataFrame()
 
     return pd.DataFrame(rows)
@@ -1819,10 +1819,10 @@ def fetch_metals_dev(config: MineralValueConfig) -> pd.DataFrame:
     Returns an empty DataFrame on any HTTP / parse failure.
     """
     if config.metals_api_key == "DEMO" or not config.metals_api_key:
-        print("\n🔗  metals.dev — skipped (no API key set; edit CONFIG.metals_api_key)")
+        print("\n  metals.dev - skipped (no API key set; edit CONFIG.metals_api_key)")
         return pd.DataFrame()
 
-    print("\n🔗  metals.dev — fetching live LME / spot prices …")
+    print("\n  metals.dev - fetching live LME / spot prices ...")
 
     try:
         r = requests.get(
@@ -1837,12 +1837,12 @@ def fetch_metals_dev(config: MineralValueConfig) -> pd.DataFrame:
         r.raise_for_status()
         payload = r.json()
     except Exception as exc:
-        print(f"     ❌  metals.dev failed: {type(exc).__name__}: {exc}")
+        print(f"     FAIL  metals.dev failed: {type(exc).__name__}: {exc}")
         return pd.DataFrame()
 
     quotes = payload.get("metals") or payload.get("rates") or {}
     if not quotes:
-        print("     ⚠️  metals.dev returned no `metals` payload")
+        print("     WARN  metals.dev returned no `metals` payload")
         return pd.DataFrame()
 
     date = payload.get("date") or payload.get("timestamp_iso") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -1865,8 +1865,8 @@ def fetch_metals_dev(config: MineralValueConfig) -> pd.DataFrame:
             "live_price_date":   str(date)[:10],
             "live_price_source": f"metals.dev:{key}",
         })
-        print(f"     ✅  {entry['name']:11s} = {usd_per_toz:>10,.2f} USD/troy_oz "
-              f"→ {price_kg:>12,.2f} USD/kg")
+        print(f"     OK  {entry['name']:11s} = {usd_per_toz:>10,.2f} USD/troy_oz "
+              f"-> {price_kg:>12,.2f} USD/kg")
 
     return pd.DataFrame(rows)
 
@@ -1880,7 +1880,7 @@ def fetch_metals_dev(config: MineralValueConfig) -> pd.DataFrame:
 
 def fetch_reference_table(config: MineralValueConfig) -> pd.DataFrame:
     """Static USGS / LME / mineralogy reference data — always available."""
-    print("\n📚  Reference table — loading curated prices + densities …")
+    print("\n  Reference table - loading curated prices + densities ...")
 
     # Every row here carries its TERRESTRIAL price.  The in-space repricing is
     # applied once, uniformly, after the merge — see apply_delivery_destination
@@ -1907,7 +1907,7 @@ def fetch_reference_table(config: MineralValueConfig) -> pd.DataFrame:
         })
 
     df = pd.DataFrame(rows)
-    print(f"     ✅  {len(df)} reference rows loaded")
+    print(f"     OK  {len(df)} reference rows loaded")
     return df
 
 
@@ -1938,11 +1938,11 @@ def apply_delivery_destination(
     dest_key = str(config.delivery_destination or "").strip().lower()
     dest     = value_for_destination(dest_key)
     if dest["usd_per_kg"] <= 0.0:
-        print(f"\n🌍  Delivery destination '{dest_key}' — terrestrial prices stand.")
+        print(f"\n  Delivery destination '{dest_key}' - terrestrial prices stand.")
         return catalog
 
     downleg = downleg_cost_usd_per_kg(dest_key)
-    print(f"\n🛰️   Repricing for delivery to '{dest_key}' …")
+    print(f"\n   Repricing for delivery to '{dest_key}' ...")
     print(f"     Launch cost avoided : ${dest['usd_per_kg']:,.0f}/kg  ({dest['basis']})")
     print(f"     Downleg to surface  : ${downleg:,.0f}/kg  "
           f"(capsule + TPS + recovery, per kg delivered)")
@@ -1982,7 +1982,7 @@ def apply_delivery_destination(
     n_use  = routes.count("used in space")
     n_ship = routes.count("shipped to Earth")
     n_zero = int((pd.to_numeric(catalog["price_usd_per_kg"], errors="coerce") == 0).sum())
-    print(f"     ✅  {n_use} sold in space, {n_ship} shipped down "
+    print(f"     OK  {n_use} sold in space, {n_ship} shipped down "
           f"({n_zero} worth less than the freight)")
     return catalog
 
@@ -2002,7 +2002,7 @@ def merge_sources(
     live source to provide a quote for a given material wins, and the
     reference fallback fills anything still missing.
     """
-    print("\n🔗  Merging sources …")
+    print("\n  Merging sources ...")
 
     catalog = reference.copy()
     catalog["live_price_usd_per_kg"] = pd.NA
@@ -2048,7 +2048,7 @@ def merge_sources(
 # ─────────────────────────────────────────────────────────────────────────────
 def validate(catalog: pd.DataFrame) -> pd.DataFrame:
     """Light sanity checks — print warnings, never drop rows."""
-    print("\n🔎  Validating catalog …")
+    print("\n  Validating catalog ...")
 
     # ── Unit normalisation guard ─────────────────────────────────────────────
     # Every numeric price column MUST be USD per kilogram.  This block both
@@ -2065,11 +2065,11 @@ def validate(catalog: pd.DataFrame) -> pd.DataFrame:
             vals.notna() & ((vals < 1e-3) | (vals > 1e7))
         ]
         if not suspicious.empty:
-            print(f"     ⚠️  {len(suspicious)} rows in {col} outside USD/kg sanity band "
-                  f"[0.001, 1e7] — possible unit-conversion bug:")
+            print(f"     WARN  {len(suspicious)} rows in {col} outside USD/kg sanity band "
+                  f"[0.001, 1e7] - possible unit-conversion bug:")
             for _, r in suspicious.iterrows():
                 print(f"          {r['name']}: {r[col]}")
-    print(f"     ✅  Unit check: all price columns are USD/kg "
+    print(f"     OK  Unit check: all price columns are USD/kg "
           f"(checked {', '.join(c for c in PRICE_COLS if c in catalog.columns)})")
 
     # Density should be positive and physically plausible (< 25 g/cm³, the
@@ -2080,9 +2080,9 @@ def validate(catalog: pd.DataFrame) -> pd.DataFrame:
         | (catalog["density_gcm3"] > 25)
     ]
     if not bad_density.empty:
-        print(f"     ⚠️  {len(bad_density)} rows with implausible density:")
+        print(f"     WARN  {len(bad_density)} rows with implausible density:")
         for _, r in bad_density.iterrows():
-            print(f"          {r['name']}: {r['density_gcm3']} g/cm³")
+            print(f"          {r['name']}: {r['density_gcm3']} g/cm^3")
 
     # Every mineral should reference at least one known element via `yields`
     # (otherwise Module 3 can't value it).  Bulk silicates legitimately have
@@ -2092,13 +2092,13 @@ def validate(catalog: pd.DataFrame) -> pd.DataFrame:
         try:
             ymap = json.loads(r["yields_json"] or "{}")
         except json.JSONDecodeError:
-            print(f"     ❌  {r['name']}: malformed yields_json")
+            print(f"     FAIL  {r['name']}: malformed yields_json")
             continue
         unknown = set(ymap) - known_elements
         if unknown:
-            print(f"     ⚠️  {r['name']}: yields reference unknown elements {sorted(unknown)}")
+            print(f"     WARN  {r['name']}: yields reference unknown elements {sorted(unknown)}")
 
-    print(f"     ✅  Validation complete")
+    print(f"     OK  Validation complete")
     return catalog
 
 
@@ -2119,7 +2119,7 @@ def build_mineral_value_catalog(
     t0 = datetime.now()
 
     print("=" * 65)
-    print("  💎  MINERAL VALUE PIPELINE — MODULE 2")
+    print("    MINERAL VALUE PIPELINE - MODULE 2")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  v{config.pipeline_version}")
     print("=" * 65)
 
@@ -2135,7 +2135,7 @@ def build_mineral_value_catalog(
         if config.use_reference_table else pd.DataFrame()
     )
     if reference.empty:
-        print("\n❌  Pipeline aborted — reference table disabled and no live data spine")
+        print("\nFAIL  Pipeline aborted - reference table disabled and no live data spine")
         return pd.DataFrame()
 
     # ── Step 3 — Merge ───────────────────────────────────────────────────────
@@ -2177,12 +2177,12 @@ def build_mineral_value_catalog(
     # ── Step 6 — Save ────────────────────────────────────────────────────────
     out_path = os.path.join(config.output_dir, config.catalog_filename)
     catalog.to_csv(out_path, index=False)
-    print(f"\n     💾  Catalog saved → {out_path}")
+    print(f"\n       Catalog saved -> {out_path}")
 
     # ── Summary ──────────────────────────────────────────────────────────────
     elapsed = (datetime.now() - t0).total_seconds()
     print("\n" + "=" * 65)
-    print("  ✅  MINERAL VALUE CATALOG COMPLETE")
+    print("  OK  MINERAL VALUE CATALOG COMPLETE")
     print(f"      Entries  : {len(catalog):,}")
     print(f"      Columns  : {len(catalog.columns)}")
     print(f"      Elapsed  : {elapsed:.1f}s")
@@ -2242,7 +2242,7 @@ def mineral_to_element_value(
     return total if total > 0 else None
 
 
-print("\n✅  Helper utilities available:")
+print("\nOK  Helper utilities available:")
 print("    lookup_mineral(catalog, 'gold')")
 print("    value_per_kg(catalog, 'platinum')")
 print("    mineral_to_element_value(catalog, 'nickel-iron')")
@@ -2265,17 +2265,17 @@ if __name__ == "__main__":
         show = [c for c in PREVIEW_COLS if c in catalog.columns]
 
         print(f"\n{'='*75}")
-        print(f"  📋  MINERAL VALUE CATALOG — first {CONFIG.preview_rows} entries")
+        print(f"    MINERAL VALUE CATALOG - first {CONFIG.preview_rows} entries")
         print(f"{'='*75}")
         print(catalog[show].head(CONFIG.preview_rows).to_string(index=False))
 
         # ── Mineral implied-value cross-check ─────────────────────────────────────
         print(f"\n{'='*75}")
-        print("  🧪  MINERAL IMPLIED VALUE (USD/kg, computed from elemental yields)")
+        print("    MINERAL IMPLIED VALUE (USD/kg, computed from elemental yields)")
         print(f"{'='*75}")
         for _, r in catalog[catalog["kind"] == "mineral"].iterrows():
             implied = mineral_to_element_value(catalog, r["name"])
             if implied is None:
-                print(f"  {r['name']:18s} —  (no yields defined)")
+                print(f"  {r['name']:18s} -  (no yields defined)")
             else:
-                print(f"  {r['name']:18s}  implied ≈ {implied:>14,.2f}  USD/kg")
+                print(f"  {r['name']:18s}  implied ~ {implied:>14,.2f}  USD/kg")

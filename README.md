@@ -11,8 +11,10 @@ profitability table.
 ## Layout
 
 ```
+run.bat                Windows launcher: double-click to run anything below
+run_pipeline.py        Headless CLI the launcher drives (presets + flags)
 build_master.py        Build tool: assembles modules/ into master.py
-verify.py              Release verification: the five checks every change runs
+verify.py              Release verification: the six checks every change runs
 master.py              GENERATED single-file pipeline — do not edit by hand
 ui.py                  Streamlit front end (optional): configure, run, inspect
 ui_meta.py             Config introspection + curation for ui.py
@@ -23,10 +25,11 @@ modules/
     calc.py            Stage 4 — profitability calculation
 ```
 
-`ui.py` and `ui_meta.py` sit at the root rather than in `modules/` on purpose:
+`run.bat`, `run_pipeline.py`, `ui.py` and `ui_meta.py` sit at the root rather
+than in `modules/` on purpose:
 `build_master.py` concatenates everything in that directory into `master.py`
-and asserts a specific header/footer shape on each file. The UI is a consumer
-of the built `master.py`, not a stage of it.
+and asserts a specific header/footer shape on each file. All four are
+consumers of the built `master.py`, not stages of it.
 
 Each module is a standalone file: run it directly to build just that stage, or
 import it for its functions without triggering a run. They share no Python
@@ -46,6 +49,72 @@ fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
 authority is the dataclass field in each module, never this table.
 
 ## Running it
+
+### On Windows: double-click `run.bat`
+
+`run.bat` is the whole pipeline behind a menu. It finds Python, offers to
+install anything missing, and dispatches to the dashboard or to a headless run.
+It takes an argument if you would rather skip the menu:
+
+```
+run.bat ui         open the dashboard in a browser
+run.bat quick      400-row sample, all four stages
+run.bat rerun      Stage 4 only, against the catalogs already on disk
+run.bat standard   20,000-row sample, Stage 4 only
+run.bat full       THE PIPELINE DEFAULTS (HOURS TO DAYS)
+run.bat verify     verify.py against the committed baseline
+run.bat build      rebuild master.py from modules/
+```
+
+It is a launcher and nothing else — every path through it goes through
+`run_pipeline.py` or `ui.py`, and from there through `master.py`. No model
+behaviour lives in it.
+
+⚠️  **The presets exist because the pipeline's own defaults are a very long
+run.** Since calc v1.17.0 a configure-nothing run is the full 1.55 M-row
+catalog, beneficiated, with the programme search on — a cell nobody has ever
+measured end to end, whose measured neighbours put it in the tens of hours.
+That is the right default for the model and a hostile one for a double-click,
+so `quick` and `standard` cap the rows and fly run-of-mine ore at N = 1. The
+row cap is a **stride sample across the whole belt**, not the innermost N
+bodies — see calc v1.13.0.
+
+**`full` is the only preset that overrides nothing**, and every run says so
+explicitly: each setting is printed marked `[default]`, or
+`[default: <the value it replaced>]`, so a run is never ambiguous about which
+question it answered.
+
+```
+  Destination  : cislunar             [default: earth_surface]
+  Asteroids    : all (1.55 M)         [default]
+  Stage 4 rows : 400 (stride sample)  [default: every row]
+  Ore          : run-of-mine          [default: beneficiated (~7x slower)]
+```
+
+Those labels are read from the config dataclasses at runtime, not hardcoded, and
+`run_pipeline.py` warns on stdout if `full` ever stops matching the declared
+defaults — so flipping a default in a module cannot leave the label behind.
+
+The launcher also sets the **delivery destination in one prompt**, which
+`run_pipeline.py` writes through `MASTER_CONFIG` so Stage 2 and Stage 4 cannot
+disagree.
+
+### Headless, on any platform
+
+`run_pipeline.py` is the launcher's engine and works on its own:
+
+```bash
+py run_pipeline.py --preset quick
+py run_pipeline.py --destination cislunar --raw --no-search --rows 5000
+py run_pipeline.py --stages 4 --preset full --yes
+py run_pipeline.py --help
+```
+
+`--stages` takes digits, so `--stages 4` reuses the CSVs already on disk for
+the other three — the normal working loop, and what saves the 224-second
+catalog rebuild.
+
+### From source
 
 Python 3.9+ (developed and run on 3.13). Then:
 
@@ -2754,7 +2823,7 @@ key became `"3.0"` instead of `"3"` and matched nothing. Every NEOWISE row then
 died at validation for having no orbital elements.
 
 The bug worked at small row caps and failed at large ones, the fetcher printed
-`✅ 183,408 records fetched` on the runs where it contributed zero, and the only
+`OK  183,408 records fetched` on the runs where it contributed zero, and the only
 trace in the output was seven `neowise_*` columns present and 100% empty. After
 the fix, **132,691** bodies pick up NEOWISE IR albedo, beaming parameter and
 diameter uncertainties. The population gain is small — JPL SBDB already ingests
