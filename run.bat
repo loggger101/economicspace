@@ -151,9 +151,23 @@ if /i "%CHOICE%"=="8"        goto clihelp
 if /i "%CHOICE%"=="help"     goto clihelp
 if /i "%CHOICE%"=="q"        exit /b 0
 if /i "%CHOICE%"=="quit"     exit /b 0
-REM  Bounded, so a redirected stdin cannot spin this forever: `set /p` reads
-REM  EOF, matches nothing, and comes straight back round. Five is plenty for a
-REM  human and finite for a pipe.
+REM  An unrecognised ARGUMENT must never reach the menu. Falling through to
+REM  it puts `set /p` in front of a stdin that a scheduled job holds open and
+REM  never writes to, and cmd waits there forever -- a hang, not a failure,
+REM  which is the worse of the two. Same rule as :ask_destination: if an
+REM  argument was given, nothing may prompt.
+if defined ARG1 (
+  echo.
+  echo   "%CHOICE%" is not one of the options.
+  echo.
+  echo   Try one of:  ui  quick  rerun  standard  full  verify  build  help
+  echo   or run this with no arguments for the menu.
+  exit /b 1
+)
+
+REM  The menu path CAN prompt, but is bounded so a redirected stdin cannot
+REM  spin it forever: `set /p` reads EOF, matches nothing, and comes straight
+REM  back round. Five is plenty for a human and finite for a pipe.
 set /a TRIES+=1
 echo   "%CHOICE%" is not one of the options.
 if %TRIES% GEQ 5 (
@@ -215,12 +229,35 @@ echo.
 goto done
 
 :verify
+REM  verify.py defaults to `--tag head`, and there is no baseline-head -- so
+REM  check 1 would compare against nothing and say so in one line nobody
+REM  reads, silently turning the most important of the six into a hash print.
+REM  Use the newest baseline actually on disk. /o-d sorts newest first.
+set "TAG="
+for /f "delims=" %%d in ('dir /b /ad /o-d ".verify\baseline-*" 2^>nul') do (
+  if not defined TAG set "TAG=%%d"
+)
+echo.
+if defined TAG (
+  set "TAG=!TAG:baseline-=!"
+  echo   Comparing against baseline "!TAG!".
+) else (
+  echo   No baseline under .verify\ -- check 1 has nothing to compare
+  echo   against and will only print hashes. Checks 2-6 still run.
+  echo.
+  echo   To make one, run this on a CLEAN tree BEFORE editing anything:
+  echo       py verify.py baseline --tag mytag
+)
 echo.
 echo   A full check builds ~20 cells and takes about half an hour.
-echo   Passing --skip prune parallel cuts it to ~5 minutes and still
-echo   catches any change to any number.
+echo   This skips checks 2 and 3 to run in ~5 minutes, and still catches
+echo   any change to any number. Drop --skip before committing.
 echo.
-%PY% verify.py check --skip prune parallel
+if defined TAG (
+  %PY% verify.py check --tag !TAG! --skip prune parallel
+) else (
+  %PY% verify.py check --skip prune parallel
+)
 goto done
 
 :build
@@ -241,21 +278,27 @@ REM  both -- run_pipeline.py writes them through MASTER_CONFIG together.
 REM  cislunar is the default because it is the model's best case and the
 REM  destination the catalog on disk is normally priced for.
 :ask_destination
-echo.
-echo   Where is the material sold?
-echo     [1] cislunar  (default -- the best case)   [2] lunar_surface
-echo     [3] leo                                    [4] mars_surface
-echo     [5] earth_surface
 REM  A scripted run must not prompt. It takes the destination as the second
 REM  argument (`run.bat rerun leo`) and otherwise defaults, because `set /p`
 REM  against a redirected or absent stdin reads EOF, leaves the prompt
 REM  unanswered and makes cmd exit 255 -- so a scheduled `run.bat quick` would
 REM  report failure on a run that in fact succeeded.
+REM
+REM  Tested BEFORE the menu is echoed, so a scripted run does not log a prompt
+REM  it never asks. Choosing a destination the Stage 2 catalog on disk was not
+REM  priced for is caught by run_pipeline.py, which refuses before the run
+REM  starts rather than producing meaningless numbers.
 if defined ARG1 (
   set "DEST=cislunar"
   if not "%ARG2%"=="" set "DEST=%ARG2%"
   exit /b 0
 )
+
+echo.
+echo   Where is the material sold?
+echo     [1] cislunar  (default -- the best case)   [2] lunar_surface
+echo     [3] leo                                    [4] mars_surface
+echo     [5] earth_surface
 
 REM  Written as "default, then override" rather than one `if` per branch with
 REM  an `& exit` on the end: in batch, `if cond A & B` runs B UNCONDITIONALLY,
