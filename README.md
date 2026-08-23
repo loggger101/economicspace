@@ -106,13 +106,21 @@ disagree.
 ```bash
 py run_pipeline.py --preset quick
 py run_pipeline.py --destination cislunar --raw --no-search --rows 5000
-py run_pipeline.py --stages 4 --preset full --yes
+py run_pipeline.py --stages 4 --destination cislunar --preset full --yes
 py run_pipeline.py --help
 ```
 
 `--stages` takes digits, so `--stages 4` reuses the CSVs already on disk for
 the other three — the normal working loop, and what saves the 224-second
 catalog rebuild.
+
+**Give `--stages 4` an explicit `--destination`.** Stage 2 decides what a
+kilogram sells for and Stage 4 decides the architecture that puts it there, so
+the two must agree — and both configs default to `earth_surface` while the
+catalog on disk is whatever destination was last priced. A Stage-4-only run
+that disagrees is refused before it starts, with the destination the catalog
+actually holds named in the message, so this costs you one flag rather than a
+wasted run.
 
 ### From source
 

@@ -54,17 +54,22 @@ REPO = os.path.dirname(os.path.abspath(__file__))
 
 
 def _force_utf8_stdout() -> None:
-    """Make the pipeline's emoji survive a Windows console and a pipe alike.
+    """Survive a redirected stdout on Windows, whatever reaches it.
 
-    Every stage banner in master.py is full of them, and Windows picks cp1252
-    for a redirected stdout -- so `py run_pipeline.py > run.log`, or any pipe,
-    dies on the first print with UnicodeEncodeError.  Observed on the very
-    first run of this script, at master.py's "PROFITABILITY PIPELINE" line.
+    Windows picks cp1252 for a redirected stdout, so `py run_pipeline.py >
+    run.log` -- or any pipe -- used to die on the first print with
+    UnicodeEncodeError, at master.py's own "PROFITABILITY PIPELINE" banner,
+    before a single row was evaluated.
 
-    `errors="replace"` is the belt-and-braces half: a glyph nothing can encode
+    THAT IS FIXED AT SOURCE NOW: every print in modules/*.py is pure ASCII, so
+    the banners cannot trip this.  What is left is everything the source does
+    not control -- tqdm's progress bars, a traceback quoting a non-ASCII path,
+    and DATA reaching stdout (an asteroid designation, a propellant `notes`
+    field).  Those are why this stays.
+
+    `errors="replace"` is the load-bearing half: a glyph nothing can encode
     must never take down a run that is hours in.  It runs at import, i.e.
-    BEFORE master.py is imported and starts printing.  master.py is generated
-    from modules/ and must not be edited, so the fix belongs here.
+    BEFORE master.py is imported and starts printing.
     """
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -101,7 +106,12 @@ PRESETS = {
 # at startup against the dataclasses rather than trusted, so that a default
 # flipped in a module cannot leave this claim standing while it stops being
 # true -- the failure mode CLAUDE.md calls a stale claim in prose.
-DEFAULT_PRESET = "full"
+#
+# It is NOT the default preset -- that is `quick`, on the --preset flag. This
+# names the preset that IS the pipeline's own defaults, which is a different
+# thing, and running the two names together is how someone reads "the default"
+# off a banner and means the other one.
+PIPELINE_DEFAULTS_PRESET = "full"
 
 STAGE_NAMES = {
     1: "catalog (downloads ~500 MB on a cold run)",
@@ -209,7 +219,7 @@ def declared_default(config_obj, field_name):
     return None
 
 
-def check_default_preset(cfg) -> None:
+def check_defaults_preset(cfg) -> None:
     """Verify `full` still IS the defaults instead of merely saying so.
 
     Shouts on stdout rather than raising: a labelling drift should not block a
@@ -223,18 +233,150 @@ def check_default_preset(cfg) -> None:
         "raw":   not declared_default(cfg.calc,    "use_beneficiation"),
         "search":    declared_default(cfg.calc,    "optimise_programme_scale"),
     }
-    actual = {k: v for k, v in PRESETS[DEFAULT_PRESET].items() if k != "blurb"}
+    actual = {k: v for k, v in PRESETS[PIPELINE_DEFAULTS_PRESET].items()
+              if k != "blurb"}
     if actual == expected:
         return
     print()
     print("  WARNING: preset %r is labelled 'THE PIPELINE DEFAULTS' and no "
-          "longer matches them." % DEFAULT_PRESET)
+          "longer matches them." % PIPELINE_DEFAULTS_PRESET)
     for k in sorted(expected):
         if actual.get(k) != expected[k]:
             print("     %-10s preset says %r, dataclass default is %r"
                   % (k, actual.get(k), expected[k]))
     print("     A default was flipped in a module. Update PRESETS in "
           "run_pipeline.py.")
+
+
+def preflight(cfg, stages, destination_given: bool) -> list:
+    """Refuse a run whose inputs cannot support it, BEFORE it starts.
+
+    Two failures, both of which otherwise surface only as a line on stdout.
+    CLAUDE.md's warning about `destination_check()` is exactly this: it shouts
+    "on STDOUT, which is where a measurement harness is least likely to be
+    listening", and a run that has already started is a run somebody will read
+    the numbers off.
+
+      1. A stage is skipped and its output is not on disk. Stage 4 otherwise
+         dies inside the loader on a bare file-not-found -- and if the missing
+         file is one of Module 3's, it dies AFTER the 862 MB catalog load.
+
+      2. Stage 4 flies to one destination while the Stage 2 catalog on disk
+         priced the cargo for another. The run completes, every profit number
+         in it is meaningless, and nothing in the output CSV says so.
+
+    (2) is the one this launcher made cheap to hit: `run.bat rerun leo` reuses
+    the catalog on disk, which is normally priced for cislunar. Hence a hard
+    refusal rather than a warning -- there is no reading of that run worth the
+    minutes it costs.
+
+    It also fires when NO --destination is given, because both configs default
+    to `earth_surface` while the catalog on disk is whatever was last run.
+    That is not over-eagerness: it is the exact case CLAUDE.md describes as
+    "importing calc and calling build_profitability_catalog straight off gives
+    a mismatched run".  So `--stages 4` wants an explicit --destination, and
+    the message says which one.  Adopting the stamped value automatically was
+    considered and rejected -- it would make the destination depend on
+    whatever somebody ran last, which is how two v1.15.0 figures came to be
+    recorded as cislunar after running against earth_surface prices.
+
+    Returns the lines of a printable error, or [] if the run can proceed.
+    """
+    need = []
+    if 4 in stages:
+        if 1 not in stages:
+            need.append((cfg.calc.asteroid_catalog_file,
+                         os.path.join(cfg.calc.input_dir,
+                                      cfg.calc.asteroid_catalog_file), 1))
+        if 2 not in stages:
+            need.append((cfg.calc.mineral_catalog_file,
+                         os.path.join(cfg.calc.input_dir,
+                                      cfg.calc.mineral_catalog_file), 2))
+        if 3 not in stages:
+            tdir = os.path.join(cfg.calc.input_dir,
+                                cfg.calc.transportation_subdir)
+            for fname in (cfg.calc.launch_vehicles_file,
+                          cfg.calc.propellants_file,
+                          cfg.calc.delta_v_segments_file,
+                          cfg.calc.operational_costs_file):
+                need.append((fname, os.path.join(tdir, fname), 3))
+
+    missing = [(f, path, st) for f, path, st in need if not os.path.isfile(path)]
+    if missing:
+        stages_needed = sorted({st for _, _, st in missing})
+        lines = ["Stage 4 needs files that are not on disk, and the stage",
+                 "that writes them is not in --stages:", ""]
+        lines += ["    %-28s (Stage %d)" % (f, st) for f, _, st in missing]
+        lines += ["",
+                  "Run those stages first:",
+                  "",
+                  "      py run_pipeline.py --stages %s"
+                  % "".join(str(s) for s in stages_needed + [4])]
+        return lines
+
+    # -- (2) the destination the on-disk prices were built for ---------------
+    if 4 not in stages or 2 in stages:
+        return []                       # Stage 2 is about to re-price anyway
+
+    path = os.path.join(cfg.calc.input_dir, cfg.calc.mineral_catalog_file)
+    stamped = _stamped_destination(path)
+    if stamped is None:
+        return []                       # pre-v1.3.0 catalog; Stage 4 warns
+    mine = str(cfg.delivery_destination).strip().lower()
+    if stamped == mine:
+        return []
+
+    why = ([] if destination_given else [
+        "No --destination was given, so this run took the config default,",
+        "which is `%s` and is almost certainly not what you meant." % mine,
+        "",
+    ])
+    return [
+        "DESTINATION MISMATCH -- refusing to run.",
+        "",
+        "    the catalog on disk prices the cargo for : %s" % stamped,
+        "    this run would fly it to                 : %s" % mine,
+        "",
+    ] + why + [
+        "Stage 2 decides what a kilogram sells for and Stage 4 decides the",
+        "architecture that puts it there. Disagreeing prices the cargo at a",
+        "depot while paying to land it in Utah, and every profit number in",
+        "the run is meaningless.",
+        "",
+        "Either use the destination the catalog is already priced for --",
+        "",
+        "      --destination %s" % stamped,
+        "",
+        "-- or re-price it, which means running Stage 2:",
+        "",
+        "      --stages %s --destination %s"
+        % ("".join(str(x) for x in sorted(set(stages) | {2})), mine),
+        "",
+        "WARNING: Stage 2 re-fetches LIVE metal prices and overwrites the",
+        "catalog on disk. The old prices are not recoverable, and every",
+        ".verify baseline stops reproducing. Copy asteroid_pipeline/*.csv",
+        "first if you may want to compare against them.",
+    ]
+
+
+def _stamped_destination(path):
+    """The destination Module 2 priced for, read from its CSV's first row.
+
+    One column of one row, so the whole 31-row file is not worth loading, and
+    this must not import pandas at module scope -- master.py has not been
+    imported yet when the parser is built.  Returns None when the column is
+    absent (a pre-v1.3.0 catalog), which Stage 4's own check reports.
+    """
+    import csv
+    try:
+        with io.open(path, encoding="utf-8", newline="") as f:
+            row = next(csv.DictReader(f), None)
+    except (OSError, UnicodeDecodeError, csv.Error):
+        return None
+    if not row or "delivery_destination" not in row:
+        return None
+    value = (row["delivery_destination"] or "").strip().lower()
+    return value or None
 
 
 def print_banner(args, settings, cfg, stages) -> None:
@@ -307,7 +449,17 @@ def confirm_long_run() -> bool:
     print("  Ctrl-C is safe: each stage writes its CSV before the next starts.")
     try:
         return input("\n  Type 'run' to continue: ").strip().lower() == "run"
-    except (EOFError, KeyboardInterrupt):
+    except KeyboardInterrupt:
+        return False
+    except EOFError:
+        # No console to answer on -- a scheduled job, or stdin redirected.
+        # Refusing is the right default for a run measured in days, but it has
+        # to say WHY: a bare "Cancelled." and a non-zero exit reads as a run
+        # that failed. Same trap as the destination prompt in run.bat, which
+        # made a successful `run.bat quick` report 255.
+        print()
+        print("  No console to confirm on (stdin is not a terminal).")
+        print("  Pass --yes to run this unattended.")
         return False
 
 
@@ -340,8 +492,16 @@ def main() -> int:
     if args.workers is not None:
         cfg.calc.parallel_workers = args.workers
 
-    check_default_preset(cfg)
+    check_defaults_preset(cfg)
     print_banner(args, settings, cfg, stages)
+
+    problem = preflight(cfg, stages, bool(args.destination))
+    if problem:
+        print()
+        for line in problem:
+            print(("  " + line) if line else "")
+        print()
+        return 2
 
     rows = settings["rows"]
     if 4 in stages and (not rows or rows > 50_000) and not args.yes:
@@ -373,14 +533,16 @@ def main() -> int:
     print()
     print("=" * 72)
     print("  COMPLETE in %s" % human(time.time() - t0))
+    # Deliberately NOT a row/viable count. Stage 4 prints its own summary
+    # immediately above this, and the two counted different things -- master
+    # counts asteroids evaluated, this frame holds only the rows that produced
+    # a result, so "20 evaluated" sat directly above "7 evaluated". One
+    # authoritative count beats two that disagree.
     profit = results.get("calc")
     if profit is not None and not profit.empty:
-        viable = int(profit["viable"].sum())
-        print("  Rows evaluated  : {:,}".format(len(profit)))
-        print("  Viable missions : {:,}".format(viable))
-        if not viable:
-            print("  (Zero viable missions is the model's correct answer for "
-                  "every setting currently in it, not a failure.)")
+        if not int(profit["viable"].sum()):
+            print("  Zero viable missions is the model's correct answer for")
+            print("  every setting currently in it, not a failure.")
     print("  Output written to: %s" % cfg.output_dir)
     print("=" * 72)
     return 0

@@ -588,6 +588,22 @@ came from were still valid — both sides saw identical inputs — while the LEV
 were not. **Set the destination explicitly in any harness**, and if you must
 filter stdout, keep `MISMATCH` in the pattern.
 
+✅  **`run_pipeline.py` is the one entry point that cannot hit this**, and it
+is worth knowing which one that is rather than assuming the trap is closed.
+Its `preflight()` reads the destination Module 2 stamped into the catalog on
+disk and **refuses the run** — exit 2, before a stage starts — when Stage 4
+would fly somewhere else and Stage 2 is not in `--stages`. That is a refusal,
+not a warning, because there is no reading of a mismatched run worth the
+minutes it costs. `ui.py`, `verify.py` and a hand-rolled harness are all still
+on their own; `verify.py` sets the destination explicitly and asserts
+`MISMATCH` is absent from stdout, which is the pattern to copy.
+
+⚠️  It is also why the launcher can offer a destination menu at all.
+`run.bat rerun leo` reuses the catalog on disk, which is normally priced for
+`cislunar` — one keystroke from a meaningless run, and the refusal is what
+makes it safe to put on a menu. **If you add another Stage-4-only entry point,
+call `preflight()` from it.**
+
 **And strip EVERY provenance column before hashing two runs.** There are two —
 `pipeline_version` and **`catalog_date`** — and only the first is obvious.
 v1.17.3 dropped the version alone, got a MATCH on the raw cells and a DIFFER on
@@ -6805,6 +6821,29 @@ of harness bugs under "The verification harness is committed now". `run.bat`
 is a launcher only; it adds no default the pipeline does not already have,
 except that its `quick` / `standard` presets cap rows and fly raw ore at N = 1
 rather than starting the tens-of-hours default cell on a double-click.
+
+`run_pipeline.py` carries two guards that exist because a launcher makes both
+mistakes cheap, and neither is model behaviour:
+
+- **`preflight()`** refuses a Stage-4 run whose inputs are missing, or whose
+  destination disagrees with the prices on disk. See the destination section
+  above; the missing-file half just turns a loader `FileNotFoundError` — which
+  on a Module 3 file arrives *after* the 862 MB catalog load — into a message
+  naming the stage to run.
+- **`check_defaults_preset()`** re-derives the `full` preset's four values from
+  `dataclasses.fields` and shouts if the preset stops matching. `full` is
+  labelled "THE PIPELINE DEFAULTS", and calc `1.17.0` is precisely the release
+  that would have made that label a lie. A count or a default spelled out in
+  prose is the thing this file keeps catching; this one checks itself.
+
+⚠️  **Nothing in `run.bat` may prompt once an argument was given**, and that
+rule has now been broken twice in the same file. `set /p` against a stdin a
+scheduled job holds open and never writes to does not read EOF — it **waits
+there forever**, so the failure is a hang rather than an exit code, which is
+the worse of the two. Both the destination prompt and the unrecognised-option
+retry had to be moved behind `if defined ARG1`. If you add a menu entry, the
+test is `run.bat <your-option>` from a non-interactive shell, not from a
+console.
 
 ### The console output is ASCII, and must stay that way
 
