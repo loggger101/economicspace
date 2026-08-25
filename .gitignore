@@ -35,3 +35,9 @@ env/
 desktop.ini
 Thumbs.db
 .DS_Store
+
+# Campaign cell archives - one gzipped full-catalog profitability catalog per
+# cell, ~350-500 MB each and 8.1 GB for the 20-cell matrix. The measurements
+# taken from them live in campaign/results.csv and campaign/FINDINGS.md, which
+# ARE committed; the archives themselves are regenerable by re-running the cell.
+/campaign/cells/

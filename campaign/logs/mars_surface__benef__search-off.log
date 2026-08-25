@@ -1,0 +1,164 @@
+Importing the pipeline ...
+
+==============================================================================
+  ASTEROID PROFITABILITY PIPELINE
+==============================================================================
+  Preset       : quick -- 400-row stride sample, run-of-mine ore, single mission (minutes once the catalog is cached)
+  Stages       : 4 profitability (the long one)
+  Destination  : mars_surface                             [default: earth_surface]
+  Asteroids    : 20,000 per source                        [default: all (1.55 M)]
+  Stage 4 rows : every row                                [default]
+  Ore          : beneficiated (~7x slower)                [default]
+  Programme    : single mission (N = 1)                   [default: fleet x campaigns searched (~3x slower)]
+  Output       : C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline
+------------------------------------------------------------------------------
+  [default] marks a pipeline default; the rest are this run's
+  overrides, with the default they replaced shown alongside.
+==============================================================================
+
+------------------------------------------------------------------------
+  STAGE 4 -- profitability (the long one)
+  started 05:12:53
+------------------------------------------------------------------------
+===========================================================================
+    PROFITABILITY PIPELINE - MODULE 4
+      2026-08-24 05:12:53  |  v1.17.7
+===========================================================================
+
+  Loading upstream catalogs ...
+       Module 1 asteroid catalog    1,555,667 rows  <-  C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\asteroid_catalog.csv
+       Module 2 mineral catalog          31 rows  <-  C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\mineral_value_catalog.csv
+       Module 3 launch vehicles          36 rows  <-  C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\transportation\launch_vehicles.csv
+       Module 3 propellants              41 rows  <-  C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\transportation\propellants.csv
+       Module 3 Δv segments              26 rows  <-  C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\transportation\delta_v_segments.csv
+       Module 3 operational costs        44 rows  <-  C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\transportation\operational_costs.csv
+
+  Integrity check - Module 1 <-> Module 2 mineral coverage ...
+     OK  All 14 referenced minerals are priced by Module 2
+     NOTE   Module 2 prices 17 extra rows not named by Module 1 (expected: elements + ice + bulk categories)
+     OK  Delivery destination 'mars_surface' - landed at a Mars surface base
+
+  Evaluating 1,555,618 asteroids with positive mass (skipped 49 without)
+       357 vehicle x propellant combinations per asteroid
+        Pre-filter keeps 23.9% of candidates (118,747 of 156,060 pruned on a 200-row probe; prune_infeasible_combos)
+       12 worker processes (12 logical CPUs, parallel_workers=12)
+     ... 15,616 / 1,555,618 evaluated  (1%)
+     ... 31,232 / 1,555,618 evaluated  (2%)
+     ... 46,848 / 1,555,618 evaluated  (3%)
+     ... 62,464 / 1,555,618 evaluated  (4%)
+     ... 77,824 / 1,555,618 evaluated  (5%)
+     ... 93,440 / 1,555,618 evaluated  (6%)
+     ... 109,056 / 1,555,618 evaluated  (7%)
+     ... 124,672 / 1,555,618 evaluated  (8%)
+     ... 140,032 / 1,555,618 evaluated  (9%)
+     ... 155,648 / 1,555,618 evaluated  (10%)
+     ... 171,264 / 1,555,618 evaluated  (11%)
+     ... 186,880 / 1,555,618 evaluated  (12%)
+     ... 202,240 / 1,555,618 evaluated  (13%)
+     ... 217,856 / 1,555,618 evaluated  (14%)
+     ... 233,472 / 1,555,618 evaluated  (15%)
+     ... 249,088 / 1,555,618 evaluated  (16%)
+     ... 264,704 / 1,555,618 evaluated  (17%)
+     ... 280,064 / 1,555,618 evaluated  (18%)
+     ... 295,680 / 1,555,618 evaluated  (19%)
+     ... 311,296 / 1,555,618 evaluated  (20%)
+     ... 326,912 / 1,555,618 evaluated  (21%)
+     ... 342,272 / 1,555,618 evaluated  (22%)
+     ... 357,888 / 1,555,618 evaluated  (23%)
+     ... 373,504 / 1,555,618 evaluated  (24%)
+     ... 389,120 / 1,555,618 evaluated  (25%)
+     ... 404,480 / 1,555,618 evaluated  (26%)
+     ... 420,096 / 1,555,618 evaluated  (27%)
+     ... 435,712 / 1,555,618 evaluated  (28%)
+     ... 451,328 / 1,555,618 evaluated  (29%)
+     ... 466,688 / 1,555,618 evaluated  (30%)
+     ... 482,304 / 1,555,618 evaluated  (31%)
+     ... 497,920 / 1,555,618 evaluated  (32%)
+     ... 513,536 / 1,555,618 evaluated  (33%)
+     ... 529,152 / 1,555,618 evaluated  (34%)
+     ... 544,512 / 1,555,618 evaluated  (35%)
+     ... 560,128 / 1,555,618 evaluated  (36%)
+     ... 575,744 / 1,555,618 evaluated  (37%)
+     ... 591,360 / 1,555,618 evaluated  (38%)
+     ... 606,720 / 1,555,618 evaluated  (39%)
+     ... 622,336 / 1,555,618 evaluated  (40%)
+     ... 637,952 / 1,555,618 evaluated  (41%)
+     ... 653,568 / 1,555,618 evaluated  (42%)
+     ... 668,928 / 1,555,618 evaluated  (43%)
+     ... 684,544 / 1,555,618 evaluated  (44%)
+     ... 700,160 / 1,555,618 evaluated  (45%)
+     ... 715,776 / 1,555,618 evaluated  (46%)
+     ... 731,392 / 1,555,618 evaluated  (47%)
+     ... 746,752 / 1,555,618 evaluated  (48%)
+     ... 762,368 / 1,555,618 evaluated  (49%)
+     ... 777,984 / 1,555,618 evaluated  (50%)
+     ... 793,600 / 1,555,618 evaluated  (51%)
+     ... 808,960 / 1,555,618 evaluated  (52%)
+     ... 824,576 / 1,555,618 evaluated  (53%)
+     ... 840,192 / 1,555,618 evaluated  (54%)
+     ... 855,808 / 1,555,618 evaluated  (55%)
+     ... 871,168 / 1,555,618 evaluated  (56%)
+     ... 886,784 / 1,555,618 evaluated  (57%)
+     ... 902,400 / 1,555,618 evaluated  (58%)
+     ... 918,016 / 1,555,618 evaluated  (59%)
+     ... 933,376 / 1,555,618 evaluated  (60%)
+     ... 948,992 / 1,555,618 evaluated  (61%)
+     ... 964,608 / 1,555,618 evaluated  (62%)
+     ... 980,224 / 1,555,618 evaluated  (63%)
+     ... 995,840 / 1,555,618 evaluated  (64%)
+     ... 1,011,200 / 1,555,618 evaluated  (65%)
+     ... 1,026,816 / 1,555,618 evaluated  (66%)
+     ... 1,042,432 / 1,555,618 evaluated  (67%)
+     ... 1,058,048 / 1,555,618 evaluated  (68%)
+     ... 1,073,408 / 1,555,618 evaluated  (69%)
+     ... 1,089,024 / 1,555,618 evaluated  (70%)
+     ... 1,104,640 / 1,555,618 evaluated  (71%)
+     ... 1,120,256 / 1,555,618 evaluated  (72%)
+     ... 1,135,616 / 1,555,618 evaluated  (73%)
+     ... 1,151,232 / 1,555,618 evaluated  (74%)
+     ... 1,166,848 / 1,555,618 evaluated  (75%)
+     ... 1,182,464 / 1,555,618 evaluated  (76%)
+     ... 1,198,080 / 1,555,618 evaluated  (77%)
+     ... 1,213,440 / 1,555,618 evaluated  (78%)
+     ... 1,229,056 / 1,555,618 evaluated  (79%)
+     ... 1,244,672 / 1,555,618 evaluated  (80%)
+     ... 1,260,288 / 1,555,618 evaluated  (81%)
+     ... 1,275,648 / 1,555,618 evaluated  (82%)
+     ... 1,291,264 / 1,555,618 evaluated  (83%)
+     ... 1,306,880 / 1,555,618 evaluated  (84%)
+     ... 1,322,496 / 1,555,618 evaluated  (85%)
+     ... 1,337,856 / 1,555,618 evaluated  (86%)
+     ... 1,353,472 / 1,555,618 evaluated  (87%)
+     ... 1,369,088 / 1,555,618 evaluated  (88%)
+     ... 1,384,704 / 1,555,618 evaluated  (89%)
+     ... 1,400,064 / 1,555,618 evaluated  (90%)
+     ... 1,415,680 / 1,555,618 evaluated  (91%)
+     ... 1,431,296 / 1,555,618 evaluated  (92%)
+     ... 1,446,912 / 1,555,618 evaluated  (93%)
+     ... 1,462,528 / 1,555,618 evaluated  (94%)
+     ... 1,477,888 / 1,555,618 evaluated  (95%)
+     ... 1,493,504 / 1,555,618 evaluated  (96%)
+     ... 1,509,120 / 1,555,618 evaluated  (97%)
+     ... 1,524,736 / 1,555,618 evaluated  (98%)
+     ... 1,540,096 / 1,555,618 evaluated  (99%)
+     ... 1,555,618 / 1,555,618 evaluated  (100%)
+
+       Profitability catalog -> C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\profitability_catalog.csv  (892,563 rows)
+       Architecture chosen: 780,164 aerocapture / 112,399 propulsive  |  5,904 make their own propellant  |  4,039 rendezvous at perihelion
+
+===========================================================================
+  OK  PROFITABILITY ANALYSIS COMPLETE
+      Evaluated  : 1,555,618 asteroids
+      Viable     : 0  (0.0% turn a profit)
+      Unviable   : 1,555,618
+      Elapsed    : 7123.9s
+===========================================================================
+
+  Stage 4 done in 1:58:46
+
+========================================================================
+  COMPLETE in 1:58:46
+  Zero viable missions is the model's correct answer for
+  every setting currently in it, not a failure.
+  Output written to: C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline
+========================================================================

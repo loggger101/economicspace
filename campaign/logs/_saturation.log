@@ -1,0 +1,11 @@
+cell                                         sat min   sat med   sat max  fleet med   N med
+cislunar__benef__search-on                  0.470746  0.837953  0.999965          2      10
+cislunar__raw__search-on                    0.358439  0.812837  0.999957          2      10
+earth_surface__benef__search-on             1.000000  1.000000  1.000000         64     320
+earth_surface__raw__search-on               1.000000  1.000000  1.000000         64     320
+leo__benef__search-on                       0.745166  0.867371  1.000000          5      25
+leo__raw__search-on                         0.704996  0.861486  1.000000          5      25
+lunar_surface__benef__search-on             0.549873  0.818513  0.999726          2      10
+lunar_surface__raw__search-on               0.536206  0.830467  0.999726          4      20
+mars_surface__benef__search-on              0.299018  0.709726  0.999996          1       4
+mars_surface__raw__search-on                0.354904  0.750813  0.999996          2      10
