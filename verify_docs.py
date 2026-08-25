@@ -420,7 +420,7 @@ def check_transfer(before: str, after: List[str]) -> bool:
         b = old.find("\n", m.end())
         seen[tok] = old[a:b if b > 0 else None].strip()
     lost = [(t, c) for t, c in seen.items() if t not in hay]
-    print("6. transfer    %d distinctive numbers in %s, %d lost"
+    print("7. transfer    %d distinctive numbers in %s, %d lost"
           % (len(seen), os.path.basename(before), len(lost)))
     for t, c in sorted(lost):
         print("     ! %-14s | %s" % (t, c[:110]))

@@ -220,7 +220,7 @@ def build_parser(destinations) -> argparse.ArgumentParser:
 
     ore = p.add_mutually_exclusive_group()
     ore.add_argument("--raw", dest="raw", action="store_true",
-                     help="fly run-of-mine ore (~7x faster than concentrate)")
+                     help="fly run-of-mine ore (~4.7x faster than concentrate)")
     ore.add_argument("--beneficiated", dest="raw", action="store_false",
                      help="concentrate the ore before flying it")
     p.set_defaults(raw=None)
@@ -228,7 +228,7 @@ def build_parser(destinations) -> argparse.ArgumentParser:
     prog = p.add_mutually_exclusive_group()
     prog.add_argument("--search", dest="search", action="store_true",
                       help="search programme scale: fleet x campaigns "
-                           "(~3x slower)")
+                           "(~1.7x slower)")
     prog.add_argument("--no-search", dest="search", action="store_false",
                       help="price one mission per asteroid (N = 1)")
     p.set_defaults(search=None)
@@ -446,8 +446,8 @@ def print_banner(args, settings, cfg, stages) -> None:
 
     def fmt_rows(n):      return "every row" if not n else "{:,} (stride sample)".format(n)
     def fmt_ast(n):       return "all (1.55 M)" if not n else "{:,} per source".format(n)
-    def fmt_ore(raw):     return "run-of-mine" if raw else "beneficiated (~7x slower)"
-    def fmt_prog(s):      return ("fleet x campaigns searched (~3x slower)" if s
+    def fmt_ore(raw):     return "run-of-mine" if raw else "beneficiated (~4.7x slower)"
+    def fmt_prog(s):      return ("fleet x campaigns searched (~1.7x slower)" if s
                                   else "single mission (N = 1)")
 
     def mark(current, default, fmt):

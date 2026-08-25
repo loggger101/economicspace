@@ -152,8 +152,11 @@ reason, take it in that pass.
 
 Stage 1 was audited in the same pass and needed no changes. Its taxonomy table
 covers the real population to **99.997%**, of 75 distinct spectral types across
-1.55 M rows, only `Z` (36 rows) and `U` (4) resolve to nothing, and the cascade
-fails safe by excluding them rather than mispricing them.
+1.55 M rows, only `Z` (36 rows) and `U` (4) resolve to neither an exact entry
+nor the root-letter fallback. **53 rows in total (0.0034%)** end with no
+`comp_metal_fraction` and are skipped by Stage 4, and the cascade fails safe by
+excluding them rather than mispricing them: an unresolved type lands on
+`TAXONOMY_COMPOSITION["Unknown"]`, whose fractions are `None`.
 
 ## calc v1.17.7 / transportation v1.12.1
 
@@ -954,8 +957,11 @@ elsewhere in this project are v1.13.0 and are now stale.
 - **The pipeline sold water and never kept it.** Water is priced at every
   in-space destination, its liberation energy is charged and the array that
   bakes it is flown, and nothing kept it from subliming across a four-year
-  cruise. The best cislunar missions are **~88% water by mass**, so the
-  commodity carrying the entire result was the one with no containment. A
+  cruise. The best cislunar missions are **~88% water by mass**, water
+  38,415 kg against carbon 3,548 kg and nickel-iron 1,537 kg of a 43,500 kg
+  hold, so the commodity carrying the entire result was the one with no
+  containment. ⚠️  Charged on **water only**: carbon and organics are
+  refractory at these temperatures and ride in the hopper like rock. A
   sealed shaded hold at 0.05 kg/kg, incremental to the ore restraint, folded
   into the payload-scaling structure so the closed-form solver carries it with
   no change to its algebra.
@@ -967,7 +973,21 @@ elsewhere in this project are v1.13.0 and are now stale.
   the **body's own rotation period**, which finally makes `rotation_period_h`, 
   carried by Stage 1 since v1.0.0 and read by nothing, a quantity the model
   uses. Together they cost **4.7×** at 1 AU and the median 10.2 h rotation, not
-  the "roughly doubles" the storage table itself estimated.
+  the "roughly doubles" the storage table itself estimated. ⚠️  **The storage
+  term is charged as an INCREMENT and the deduction is not a nicety**: the
+  60 W/kg row is system-level and part of its 2.5× gap to ROSA's ~150 W/kg at
+  the wing is a battery, so Stage 3 names the baseline dark period it already
+  covers (0.58 h, a LEO eclipse) and only the excess is new mass. Without that
+  the battery is charged twice, and at 0.0056 kg/W against the row's own
+  0.0167 kg/W that is **a third of the plant**. ⚠️  **The battery is the bigger
+  half, which is why "roughly doubles" was so far out**: at the median 10.2 h
+  rotation the storage for a 5-hour night is 0.044 kg/W against the array
+  oversize's 0.035, so the 2× the storage table estimated is the array term
+  alone. ⚠️  The 104 Wh/kg it is sized
+  at is 130 Wh/kg system-level Li-ion at 80% depth of discharge, which is
+  aggressive for the ~2,000 cycles a 10 h rotation implies across a 2.3-year
+  dig; a regenerative fuel cell would cut the term ~4× and is not taken because
+  nothing has flown one. Those two roughly offset.
 - **The power source was chosen on mass, and it costs 625× more per watt.**
   This one was latent and this release is what made it dangerous. The
   radioisotope branch used to fire on *one row of 15,566*, so nobody noticed it
@@ -1108,8 +1128,24 @@ Every item below moves the answer the same way, *worse*. Cislunar raw
   (discrete emitters, needles, pulses) are stuck at 2,500-10,000 kg/N forever.
   Efficiency was also one shared 0.60 for every electric row; a PPT is really
   ~8% against a gridded ion thruster's 70%, so it needs ~9× the array. Both
-  are per-technology now. **Zero replicated-scaling devices survive anywhere**,
-  the evaluable catalog halves, and chemical propulsion comes back.
+  are per-technology now, and measurably so in the output: **0.70 on 10,809
+  rows, 0.45 on 1,997, 0.35 on 1,878**. **Zero replicated-scaling devices
+  survive anywhere**, the evaluable catalog halves, and chemical propulsion
+  comes back.
+
+  The old lumped **8 kg/kW** "thruster + PPU" row is what allowed all of this,
+  because a per-kW figure cannot express a per-newton constraint. It is split:
+  the PPU scales with power (4.7 kg/kW, from NEXT-C's 34.5 kg at 7.4 kW) and
+  the thruster head with thrust (54 kg/N). Together they reproduce NEXT-C to
+  within 1%: `4.7 × 7.4 + 54 × 0.236 = 47.5 kg` against **47.2 kg measured**.
+  ⚠️  **Iodine is the judgement call and it is load-bearing.** Its only flight
+  unit is a 1.1 mN cubesat thruster, which works out near 1,100 kg/N, but that
+  is an artefact of a 1U device rather than a property of iodine, which runs in
+  the same Hall and gridded bodies xenon uses. Entered at **60 kg/N** against
+  xenon Hall's 30, penalised for the heated feed and corrosion tolerance it
+  really needs. `status` cannot express "flown, but three orders of magnitude
+  below the scale being modelled", and that is a gap in the schema rather than
+  in this number.
 
   > 🚨  **"Zero survive anywhere" was a property of the 15,566-row population,
   > not of the gate, and it is retired.** On the full 1.55 M-row catalog, FEEP
@@ -1132,9 +1168,21 @@ Every item below moves the answer the same way, *worse*. Cislunar raw
   supercritical in a COPV at 0.30 kg/L (**22.9%** tankage), which is what has
   flown, and a `development`-tagged cryogenic row paying derived boil-off.
   22.9% is not a penalty, it is 1/M, pressure cancels out of the COPV mass
-  fraction, so xenon 1.9% / krypton 12.5% / argon 22.9% is just their molar
-  masses read backwards. Density derived two ways, boil-off derived from this
-  table's own LOX figure. Measured effect at cislunar: argon falls from 25.0%
+  fraction, so xenon 1.9% / krypton 12.5% / argon 22.9% is just
+  M = 131.3 / 83.8 / 39.9 read backwards. ✅  Argon at 30 MPa pays **22.3%**
+  against 22.9% at 18 MPa, and that robustness is the tell that it is physics
+  rather than a tuned constant. **Density is derived twice rather than
+  asserted**:
+  Peng-Robinson at 293.15 K / 18 MPa gives Z = 0.919 and 0.321 kg/L, a
+  generalised-compressibility reading at Tr = 1.945 / Pr = 3.70 gives Z ~ 0.99
+  and 0.298 kg/L, and 0.30 sits between them; two methods rather than one
+  because PR reproduces this table's xenon row but overstates krypton.
+  **Boil-off is derived from the table's own LOX figure**: kerolox is
+  0.015%/day and only the LOX half boils, which at O/F 2.30 makes LOX alone
+  0.0215%/day, scaled to argon by heat leak (300 − 87.3)/(300 − 90.2) = 1.014
+  and energy to boil (1.141 x 213.1)/(1.395 x 161.1) = 1.082, giving
+  **0.024%/day**; argon boils slightly *faster* than oxygen, being 3 K colder
+  with 8% less latent heat per litre. Measured effect at cislunar: argon falls from 25.0%
   of raw winners to 2.4% and from 27.3% of beneficiated winners to 0.0%, and
   1,059 bodies stop being feasible, while **neither headline ratio moves at
   all**, because the best missions were never flying argon. A single best-case
@@ -1353,10 +1401,13 @@ effect: [the v1.7.0 pricing matrix](#the-v170-pricing-matrix). Mechanism:
 ssoBFT renamed its identity columns, the column projection tolerated the loss,
 and a ~500 MB download went in the bin at merge time behind one warning line.
 Measured taxonomy went from **1,854 to 24,675** bodies and albedo-guessed
-taxonomy from 33,235 to 11,131. ⚠️  **Every figure committed before v1.0.9 was
-measured on that degraded catalog.** Full account, including the three separate
-things that kept it quiet:
-[Source outages](README.md#source-outages-change-the-population-not-just-the-coverage).
+taxonomy from 33,235 to 11,131, density measured from 0 to **438**, and V-types
+*fell* from 3,988 to 2,614; that last one is the giveaway, because V-types are
+genuinely rare and 3,988 of them was an artefact of guessing taxonomy from
+albedo. ⚠️  **Every figure committed before v1.0.9 was measured on that
+degraded catalog.** Full account, including the three separate things that kept
+it quiet:
+[the SsODNet outage that wasn't an outage](CLAUDE.md#the-ssodnet-outage-that-wasnt-an-outage-fixed-in-v109).
 
 **calc v1.9.0, reliability growth.** Duane/AMSAA, `q(n) = q_first · n^(−0.30)`,
 capped at 0.95 and reported as the mean over missions 1..N rather than the
@@ -1375,6 +1426,19 @@ hidden inside a utility factor.
 **calc v1.7.0; five charges**, all of which had been running the same way,
 towards optimism: low-thrust trip time, launch windows, bound-water liberation,
 the learning curve, and market saturation.
+
+**Net effect of those two releases on a default `earth_surface` run**, which is
+the only place this early progression was ever tabulated:
+
+| | v1.6.0 | v1.7.0 | v1.8.0 |
+|---|---|---|---|
+| electric share of winning combos | 12% | 2% | varies by destination |
+| median mission duration | 3.49 yr | 4.12 yr | 4.1 yr |
+| expected revenue multiplier | 1.00 | 1.00 | **0.67** (reliability) |
+| rows with no feasible mission | 0 | 47 | 85 |
+
+⚠️  Measured on the pre-v1.0.9 catalog, so the row counts are not comparable
+with anything current; the *direction* of each column is the point.
 
 **Earlier still.** Pre-v1.7.0 module copies were overwritten in place before any
 of this was under version control; see
