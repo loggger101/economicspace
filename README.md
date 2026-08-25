@@ -381,9 +381,11 @@ belong to v1.10.1 and the old 89,367-row catalog.** v1.11.0 made the search
 4.6× wider (357 combinations per asteroid against 77), catalog v1.1.0 then made
 the catalog 17× bigger, and v1.14.0 added a power-source search axis. None of
 that is a performance regression. As of 2026-08-09 a full cislunar destination
-measures **5,350 s raw / 38,072 s beneficiated**, and the cislunar cells are
-**26.7863× / 20.5895×**. Current timings are in
-[Beneficiation](#beneficiation).
+measured **5,350 s raw / 38,072 s beneficiated**, and the cislunar cells are
+**26.7863× / 20.5895×** — both cells still reproduce exactly on calc v1.17.7,
+but the **timings do not**: the same two cells now take **733 s / 3,424 s**,
+because five performance-only releases have landed since. Current timings are
+in [Beneficiation](#beneficiation) and in the 20-cell matrix.
 
 Roughly 1.9× of the gain is single-threaded and applies even at
 `parallel_workers = 1`: catalog rows are converted to plain dicts before the
@@ -1261,9 +1263,11 @@ destination table below**, which they also reproduce.
 | **raw** | **26.7863×** | **15.4273×** |
 | **beneficiated** | **20.5895×** | **13.1443×** |
 
-Evaluable 650,921 raw / 660,253 beneficiated. Runtimes 1,307 s / 3,890 s raw and
-9,300 s / 24,587 s beneficiated — beneficiation is ~7× and the programme search
-~3×, so the 2×2 spans **18.8×** in wall clock corner to corner.
+Evaluable 650,921 raw / 660,253 beneficiated. ⚠️  Its **runtimes are
+superseded**: on calc v1.17.7 the same four cells take 733 / 1,253 / 3,424 /
+5,692 s, so beneficiation is **4.67×** and the programme search **1.71×**, and
+the 2×2 spans **7.77×** corner to corner rather than 18.8×. All four MODEL
+values reproduce exactly.
 
 **13.1443× is the best cislunar figure this model has produced**, and it is what
 calc v1.17.0's two flipped defaults return **at cislunar**. It is still a factor
@@ -1272,7 +1276,9 @@ produces zero viable missions, and that is the correct answer.**
 
 ⚠️  It is **not** "the default run" — `delivery_destination` still defaults to
 `earth_surface`, so a configure-nothing v1.17.0 run is beneficiated + searched
-at `earth_surface`, which has never been measured. Only the two flags moved.
+at `earth_surface`. Only the two flags moved. That cell **is** measured now, at
+**7,869.88×** — and it is the one cell that must not be read as an optimum,
+because saturation is inert there and every row runs to the fleet ceiling.
 
 ⚠️  The two columns are **not comparable** — one is the best single mission to a
 rock, the other the best programme built around it (here: 10 missions, 2 ships,
@@ -1296,19 +1302,117 @@ top-left is what almost every other table in this README is. Set
 `use_beneficiation = False` and `optimise_programme_scale = False` to reproduce
 them.
 
-#### Current results — full catalog, calc v1.14.0, measured 2026-08-09
+#### Current results — THE COMPLETE 20-CELL MATRIX, calc v1.17.7, measured 2026-08-23/24
+
+Every destination × both settings of beneficiation × both settings of the
+programme search, on the full 1,555,667-row catalog, 12 workers, 26.1 h of
+compute, zero failures. `master.py` rebuilt from the modules with a clean
+`git status`. Stage 2 priced once per destination on 2026-08-23 with live
+prices verified identical across all five, so the destinations are comparable
+by construction; Stages 1 and 3 were frozen for the whole campaign.
+
+Best cost/revenue, lower is better, 1.0 is breakeven:
+
+| destination | raw, N = 1 | raw, searched | benef, N = 1 | **benef + searched** (default) |
+|---|---|---|---|---|
+| **`cislunar`** | **26.7863×** | **15.4272×** | **20.5895×** | **13.1443×** |
+| `lunar_surface` | 63.3505× | 38.9904× | 35.8051× | 22.5790× |
+| `leo` | 71.1029× | 36.6889× | 48.2714× | 24.4678× |
+| `mars_surface` | 74.6748× | 41.8068× | 55.3403× | 30.6818× |
+| `earth_surface` | 42,953.98× | 12,977.88×† | 25,839.48× | 7,869.88×† |
+
+† **Not an optimum** — at `earth_surface` market saturation is numerically
+inert, so 100% of rows run to the fleet ceiling. See below.
+
+Evaluable rows, raw / beneficiated: 650,921 / 660,253 (`cislunar`), 586,054 /
+606,304 (`lunar_surface`), 776,755 / 882,429 (`leo`), 731,322 / 892,563
+(`mars_surface`), 784,242 / 912,846 (`earth_surface`). The programme search
+never changes the evaluable set, at any destination.
+
+**Cislunar is still the best case, and by a wider margin than before** —
+13.1443× against `lunar_surface`'s 22.5790×, a factor of 1.72 on the default
+cell. The ordering cislunar < lunar_surface < leo < mars_surface <<
+earth_surface reproduces the v1.14.0 raw ordering and now holds on all four
+settings. Still **zero viable missions anywhere** — the best cell in the entire
+model is a factor of 13 from breakeven, and the project's headline is unchanged.
+
+**Twelve of these twenty cells had never been measured.** The four non-cislunar
+beneficiated figures in the v1.11.0 matrix were placeholders on the old
+89,367-row catalog and are retired: `lunar_surface` reads 35.8051× against that
+table's 37.8133×, `leo` 48.2714× against 51.2223×, `mars_surface` 55.3403×
+against 51.9597×.
+
+**Reproduction.** All four cislunar cells and the `lunar_surface` and
+`mars_surface` raw cells reproduce their committed values *exactly*, across
+seven version stamps and a re-priced Stage 2 catalog. `leo` moves −0.004% and
+`earth_surface` −1.75% — both live metal prices, not the model, and ordered
+exactly as the pricing mechanism predicts: cells reproduce where
+launch-cost-avoided dominates, and drift where a terrestrial price does.
+
+**Invariants: clean on all twenty cells.** Never-worse holds on 20 pairings
+with zero exceptions; the mass ledger closes to `0.000000000 kg` on every cell;
+`N = F × W` on every row of all ten searched cells and `W > trips` never.
+
+Winners: **2021 CX5 (D) takes 10 of the 20 cells** — all four at `cislunar`,
+all four at `lunar_surface`, two at `leo`. **2016 PN38** (M) takes all four
+`earth_surface` cells. `mars_surface` is the only destination whose winner
+moves on every axis — 8651 (M), **2014 YN** (M), and **2001 UU92 (T)**, the
+first T-type winner in this project's record.
+
+##### Two results that change standing claims
+
+**A `replicated`-scaling thruster does win, once.** At `mars_surface`, raw,
+with the programme search on, 2014 YN (M) takes rank 1 on **FEEP** at 41.8068×,
+13.4% clear of the runner-up, carrying 6,667 kg of thruster for 96.7 kW. Every
+previous measurement had one of these devices surviving but never winning, at
+best rank 5. The thrust gate is not broken — `thruster_kg_per_n` is a mass
+penalty rather than a threshold, and this mission pays the mass and wins anyway
+— but "never wins anywhere" is retired.
+
+**`earth_surface`'s searched cells are not optima.** There the saturation
+multiplier departs from 1.0 by a median of 2.3e−11, against cislunar's 1.9e−1:
+terrestrial markets run 10¹²–10¹⁵ kg/yr against a programme delivering ~10⁷ kg,
+so the price never moves. Every lever then improves with programme size,
+nothing pushes back, and **100% of rows** run to `max_fleet_ships` = 64,
+N = 320. The reported 12,977.88× and 7,869.88× are the value at the ladder's
+top rung. The other four destinations are unaffected.
+
+##### Runtime — the first full-catalog measurement on the v1.17.x line
+
+No full-catalog run had been made since v1.16.0, so the five performance-only
+releases since had only ever been measured on 150–400-row samples. At
+`cislunar`:
+
+| cell | v1.16.0 | **v1.17.7** | speed-up |
+|---|---|---|---|
+| raw, search OFF | 1,307 s | **733 s** | 1.78× |
+| raw, search ON | 3,890 s | **1,253 s** | 3.11× |
+| benef, search OFF | 9,300 s | **3,424 s** | 2.72× |
+| **benef, search ON** (default) | **24,587 s** | **5,692 s** | **4.32×** |
+
+**A default cislunar run is ~1.6 h, not 6.8 h.** Five committed cost ratios
+move with it: the programme search costs **1.71×** (not 2.98×), beneficiation
+**4.67×** (not 7.1×), and the 2×2 spans **7.77×** corner to corner rather than
+18.8×. Other destinations cost 2.1–2.7× more per cell than cislunar.
+
+#### Superseded — full catalog, calc v1.14.0, measured 2026-08-09
 
 The 1,554,400-row catalog v1.1.0 (1,554,353 with positive mass), Stage 2 re-run
 per destination, transportation v1.11.0, calc v1.14.0, master v1.17.0, on
 `master.py` rebuilt from the modules with a clean `git status`. 12 workers.
 
-| destination | raw | evaluable | beneficiated | evaluable |
+| destination | raw | evaluable | beneficiated (v1.17.7) | evaluable |
 |---|---|---|---|---|
 | **`cislunar`** | **26.7863×** | 650,516 | **20.5895×** | 659,847 |
-| `lunar_surface` | 63.3505× | 585,710 | *not measured* | — |
-| `leo` | 71.1055× | 776,266 | *not measured* | — |
-| `mars_surface` | 74.6748× | 730,858 | *not measured* | — |
-| `earth_surface` | 43,721.0072× | 783,742 | *not measured* | — |
+| `lunar_surface` | 63.3505× | 585,710 | 35.8051× | 606,304 |
+| `leo` | 71.1055× | 776,266 | 48.2714× | 882,429 |
+| `mars_surface` | 74.6748× | 730,858 | 55.3403× | 892,563 |
+| `earth_surface` | 43,721.0072× | 783,742 | 25,839.48× | 912,846 |
+
+⚠️  The beneficiated column read *not measured* until 2026-08-24 and is filled
+in from the 20-cell matrix above, so it is **calc v1.17.7 on a 1,555,667-row
+catalog** while the raw column is v1.14.0 on 1,554,400 rows. The two columns
+are not a like-for-like pair; quote the 20-cell matrix instead.
 
 **Cislunar is still the best case, at 20.5895×** — 2.4× clear of the next
 destination on raw. Still **zero viable missions** anywhere.

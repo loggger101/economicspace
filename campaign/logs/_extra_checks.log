@@ -1,0 +1,21 @@
+cell                                             fleet@64    repl rows    best repl    rank  vs best
+cislunar__benef__search-off                     0 (0.00%)          327      44.6631   8,602    2.17x
+cislunar__benef__search-on                  2,610 (0.40%)          384      27.8825  12,020    2.12x
+cislunar__raw__search-off                       0 (0.00%)           13      34.6263      39    1.29x
+cislunar__raw__search-on                    2,383 (0.37%)            9      26.0204     283    1.69x
+earth_surface__benef__search-off                0 (0.00%)        4,517   31066.3054      13    1.20x
+earth_surface__benef__search-on            912,846 (100.00%)        4,092    9166.5191      10    1.16x
+earth_surface__raw__search-off                  0 (0.00%)        5,482   47021.4535       7    1.09x
+earth_surface__raw__search-on              784,242 (100.00%)        6,127   13860.1540       5    1.07x
+leo__benef__search-off                          0 (0.00%)        3,770      78.4077   1,770    1.62x
+leo__benef__search-on                      22,503 (2.55%)        3,042      52.4925  19,197    2.15x
+leo__raw__search-off                            0 (0.00%)        4,713      93.6409      62    1.32x
+leo__raw__search-on                        13,368 (1.72%)        4,626      54.0712   1,145    1.47x
+lunar_surface__benef__search-off                0 (0.00%)            0            -       -        -
+lunar_surface__benef__search-on             1,880 (0.31%)            0            -       -        -
+lunar_surface__raw__search-off                  0 (0.00%)            0            -       -        -
+lunar_surface__raw__search-on               1,303 (0.22%)            0            -       -        -
+mars_surface__benef__search-off                 0 (0.00%)          727      61.1953      73    1.11x
+mars_surface__benef__search-on              1,336 (0.15%)          603      32.4608      14    1.06x
+mars_surface__raw__search-off                   0 (0.00%)          837      78.9916       5    1.06x
+mars_surface__raw__search-on                3,468 (0.47%)          848      41.8068       1    1.00x

@@ -1,0 +1,5 @@
+[2026-08-23 14:58:26] START cislunar__raw__search-off
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination cislunar --rows 0 --workers 12 --yes --raw --no-search
+[15:10:39] DONE  rc=0 wall=733s (0.20 h)
+  best 26.7863x | evaluable 650,921 | winner 2021 CX5 (D) | archive campaign\cells\cislunar__raw__search-off.csv.gz
+  ledger += cislunar__raw__search-off

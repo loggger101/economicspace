@@ -1,0 +1,193 @@
+queue: 20 cells | done: 1 | to run: 19
+   - cislunar  raw  search-on
+   - cislunar  benef  search-off
+   - cislunar  benef  search-on
+   - lunar_surface  raw  search-off
+   - lunar_surface  raw  search-on
+   - lunar_surface  benef  search-off
+   - lunar_surface  benef  search-on
+   - leo  raw  search-off
+   - leo  raw  search-on
+   - leo  benef  search-off
+   - leo  benef  search-on
+   - mars_surface  raw  search-off
+   - mars_surface  raw  search-on
+   - mars_surface  benef  search-off
+   - mars_surface  benef  search-on
+   - earth_surface  raw  search-off
+   - earth_surface  raw  search-on
+   - earth_surface  benef  search-off
+   - earth_surface  benef  search-on
+
+==============================================================================
+[1/19] cislunar | raw | search-on | elapsed 0.00 h
+==============================================================================
+[2026-08-23 15:12:23] START cislunar__raw__search-on
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination cislunar --rows 0 --workers 12 --yes --raw --search
+[15:33:16] DONE  rc=0 wall=1,253s (0.35 h)
+  best 15.4272x | evaluable 650,921 | winner 2021 CX5 (D) | archive campaign\cells\cislunar__raw__search-on.csv.gz
+  ledger += cislunar__raw__search-on
+
+==============================================================================
+[2/19] cislunar | benef | search-off | elapsed 0.37 h
+==============================================================================
+[2026-08-23 15:34:20] START cislunar__benef__search-off
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination cislunar --rows 0 --workers 12 --yes --beneficiated --no-search
+[16:31:25] DONE  rc=0 wall=3,424s (0.95 h)
+  best 20.5895x | evaluable 660,253 | winner 2021 CX5 (D) | archive campaign\cells\cislunar__benef__search-off.csv.gz
+  ledger += cislunar__benef__search-off
+
+==============================================================================
+[3/19] cislunar | benef | search-on | elapsed 1.33 h
+==============================================================================
+[2026-08-23 16:32:29] START cislunar__benef__search-on
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination cislunar --rows 0 --workers 12 --yes --beneficiated --search
+[18:07:21] DONE  rc=0 wall=5,692s (1.58 h)
+  best 13.1443x | evaluable 660,253 | winner 2021 CX5 (D) | archive campaign\cells\cislunar__benef__search-on.csv.gz
+  ledger += cislunar__benef__search-on
+
+==============================================================================
+[4/19] lunar_surface | raw | search-off | elapsed 2.93 h
+==============================================================================
+[2026-08-23 18:08:27] START lunar_surface__raw__search-off
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination lunar_surface --rows 0 --workers 12 --yes --raw --no-search
+[18:17:58] DONE  rc=0 wall=572s (0.16 h)
+  best 63.3505x | evaluable 586,054 | winner 2021 CX5 (D) | archive campaign\cells\lunar_surface__raw__search-off.csv.gz
+  ledger += lunar_surface__raw__search-off
+
+==============================================================================
+[5/19] lunar_surface | raw | search-on | elapsed 3.11 h
+==============================================================================
+[2026-08-23 18:18:56] START lunar_surface__raw__search-on
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination lunar_surface --rows 0 --workers 12 --yes --raw --search
+[18:33:23] DONE  rc=0 wall=867s (0.24 h)
+  best 38.9904x | evaluable 586,054 | winner 2021 CX5 (D) | archive campaign\cells\lunar_surface__raw__search-on.csv.gz
+  ledger += lunar_surface__raw__search-on
+
+==============================================================================
+[6/19] lunar_surface | benef | search-off | elapsed 3.37 h
+==============================================================================
+[2026-08-23 18:34:20] START lunar_surface__benef__search-off
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination lunar_surface --rows 0 --workers 12 --yes --beneficiated --no-search
+[19:18:39] DONE  rc=0 wall=2,660s (0.74 h)
+  best 35.8051x | evaluable 606,304 | winner 2021 CX5 (D) | archive campaign\cells\lunar_surface__benef__search-off.csv.gz
+  ledger += lunar_surface__benef__search-off
+
+==============================================================================
+[7/19] lunar_surface | benef | search-on | elapsed 4.12 h
+==============================================================================
+[2026-08-23 19:19:39] START lunar_surface__benef__search-on
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination lunar_surface --rows 0 --workers 12 --yes --beneficiated --search
+[20:34:47] DONE  rc=0 wall=4,508s (1.25 h)
+  best 22.5790x | evaluable 606,304 | winner 2021 CX5 (D) | archive campaign\cells\lunar_surface__benef__search-on.csv.gz
+  ledger += lunar_surface__benef__search-on
+
+==============================================================================
+[8/19] leo | raw | search-off | elapsed 5.39 h
+==============================================================================
+[2026-08-23 20:35:48] START leo__raw__search-off
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination leo --rows 0 --workers 12 --yes --raw --no-search
+[20:55:23] DONE  rc=0 wall=1,175s (0.33 h)
+  best 71.1029x | evaluable 776,755 | winner 2018 DT (M) | archive campaign\cells\leo__raw__search-off.csv.gz
+  ledger += leo__raw__search-off
+
+==============================================================================
+[9/19] leo | raw | search-on | elapsed 5.74 h
+==============================================================================
+[2026-08-23 20:56:39] START leo__raw__search-on
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination leo --rows 0 --workers 12 --yes --raw --search
+[21:31:03] DONE  rc=0 wall=2,064s (0.57 h)
+  best 36.6889x | evaluable 776,755 | winner 2021 CX5 (D) | archive campaign\cells\leo__raw__search-on.csv.gz
+  ledger += leo__raw__search-on
+
+==============================================================================
+[10/19] leo | benef | search-off | elapsed 6.33 h
+==============================================================================
+[2026-08-23 21:32:22] START leo__benef__search-off
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination leo --rows 0 --workers 12 --yes --beneficiated --no-search
+[23:59:36] DONE  rc=0 wall=8,834s (2.45 h)
+  best 48.2714x | evaluable 882,429 | winner 2021 CX5 (D) | archive campaign\cells\leo__benef__search-off.csv.gz
+  ledger += leo__benef__search-off
+
+==============================================================================
+[11/19] leo | benef | search-on | elapsed 8.81 h
+==============================================================================
+[2026-08-24 00:01:14] START leo__benef__search-on
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination leo --rows 0 --workers 12 --yes --beneficiated --search
+[04:16:30] DONE  rc=0 wall=15,316s (4.25 h)
+  best 24.4678x | evaluable 882,429 | winner 2021 CX5 (D) | archive campaign\cells\leo__benef__search-on.csv.gz
+  ledger += leo__benef__search-on
+
+==============================================================================
+[12/19] mars_surface | raw | search-off | elapsed 13.09 h
+==============================================================================
+[2026-08-24 04:18:02] START mars_surface__raw__search-off
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination mars_surface --rows 0 --workers 12 --yes --raw --no-search
+[04:37:53] DONE  rc=0 wall=1,191s (0.33 h)
+  best 74.6748x | evaluable 731,322 | winner 8651 (M) | archive campaign\cells\mars_surface__raw__search-off.csv.gz
+  ledger += mars_surface__raw__search-off
+
+==============================================================================
+[13/19] mars_surface | raw | search-on | elapsed 13.44 h
+==============================================================================
+[2026-08-24 04:39:03] START mars_surface__raw__search-on
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination mars_surface --rows 0 --workers 12 --yes --raw --search
+[05:11:39] DONE  rc=0 wall=1,955s (0.54 h)
+  best 41.8068x | evaluable 731,322 | winner 2014 YN (M) | archive campaign\cells\mars_surface__raw__search-on.csv.gz
+  ledger += mars_surface__raw__search-on
+
+==============================================================================
+[14/19] mars_surface | benef | search-off | elapsed 14.01 h
+==============================================================================
+[2026-08-24 05:12:51] START mars_surface__benef__search-off
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination mars_surface --rows 0 --workers 12 --yes --beneficiated --no-search
+[07:11:40] DONE  rc=0 wall=7,128s (1.98 h)
+  best 55.3403x | evaluable 892,563 | winner 2001 UU92 (T) | archive campaign\cells\mars_surface__benef__search-off.csv.gz
+  ledger += mars_surface__benef__search-off
+
+==============================================================================
+[15/19] mars_surface | benef | search-on | elapsed 16.01 h
+==============================================================================
+[2026-08-24 07:13:09] START mars_surface__benef__search-on
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination mars_surface --rows 0 --workers 12 --yes --beneficiated --search
+[10:36:15] DONE  rc=0 wall=12,186s (3.38 h)
+  best 30.6818x | evaluable 892,563 | winner 2014 YN (M) | archive campaign\cells\mars_surface__benef__search-on.csv.gz
+  ledger += mars_surface__benef__search-on
+
+==============================================================================
+[16/19] earth_surface | raw | search-off | elapsed 19.42 h
+==============================================================================
+[2026-08-24 10:37:48] START earth_surface__raw__search-off
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination earth_surface --rows 0 --workers 12 --yes --raw --no-search
+[10:57:03] DONE  rc=0 wall=1,154s (0.32 h)
+  best 42953.9782x | evaluable 784,242 | winner 2016 PN38 (M) | archive campaign\cells\earth_surface__raw__search-off.csv.gz
+  ledger += earth_surface__raw__search-off
+
+==============================================================================
+[17/19] earth_surface | raw | search-on | elapsed 19.77 h
+==============================================================================
+[2026-08-24 10:58:17] START earth_surface__raw__search-on
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination earth_surface --rows 0 --workers 12 --yes --raw --search
+[11:28:55] DONE  rc=0 wall=1,838s (0.51 h)
+  best 12977.8837x | evaluable 784,242 | winner 2016 PN38 (M) | archive campaign\cells\earth_surface__raw__search-on.csv.gz
+  ledger += earth_surface__raw__search-on
+
+==============================================================================
+[18/19] earth_surface | benef | search-off | elapsed 20.30 h
+==============================================================================
+[2026-08-24 11:30:12] START earth_surface__benef__search-off
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination earth_surface --rows 0 --workers 12 --yes --beneficiated --no-search
+[13:38:46] DONE  rc=0 wall=7,713s (2.14 h)
+  best 25839.4840x | evaluable 912,846 | winner 2016 PN38 (M) | archive campaign\cells\earth_surface__benef__search-off.csv.gz
+  ledger += earth_surface__benef__search-off
+
+==============================================================================
+[19/19] earth_surface | benef | search-on | elapsed 22.46 h
+==============================================================================
+[2026-08-24 13:40:15] START earth_surface__benef__search-on
+  py C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\run_pipeline.py --stages 4 --destination earth_surface --rows 0 --workers 12 --yes --beneficiated --search
+[17:26:36] DONE  rc=0 wall=13,581s (3.77 h)
+  best 7869.8772x | evaluable 912,846 | winner 2016 PN38 (M) | archive campaign\cells\earth_surface__benef__search-on.csv.gz
+  ledger += earth_surface__benef__search-on
+
+queue finished in 26.26 h
