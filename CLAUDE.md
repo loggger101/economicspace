@@ -5,6 +5,24 @@ what it does and how to run it, `versions.md` covers what changed in which
 release and what the numbers used to be, and this file covers what will bite
 you.
 
+**It is long, and it is meant to be grepped rather than read.** Six parts, in
+this order:
+
+| part | what it is | read it when |
+|---|---|---|
+| **Build and versioning** | how `master.py` is assembled, and the `pipeline_version` rule | before any edit |
+| **What the model currently says** | the 20-cell campaign, per destination, and the claims each cell retired | before re-measuring anything, or "fixing" a result that looks wrong |
+| **Keeping these files honest** | the one rule about stale prose, placed between the results and the assumptions because it is about both | after changing any number |
+| **Load-bearing assumptions** | the things that silently corrupt the output if undone, and the older matrices they replaced | before changing a model term |
+| **Release notes**, `v1.10.0` → `mineral_value v1.7.1` | one section per release: what changed, what it measured, what not to fix | when a number moved and you need to know which release owns it |
+| **Working practice** | the verification harness, the invariants, data-source behaviour, Google Drive, the environment | when something is behaving strangely and it is not the model |
+
+⚠️  **The release notes here run OLDEST first; `versions.md` runs newest
+first.** That is deliberate rather than an oversight — these read as an
+accumulating narrative, where a finding is routinely "the third instance of
+what v1.17.4 found", and that only makes sense forwards. `versions.md` is a
+lookup table, and a lookup table opens on the current release.
+
 ## master.py is generated — never edit it
 
 `master.py` is ~9,600 lines assembled from `modules/*.py` by `build_master.py`.
@@ -240,6 +258,18 @@ absolute. See "Measured — FULL CATALOG".
 ⚠️  Three of the five stamps in the `1.14.x` line are performance-only, which
 is the sharpest illustration of why the table above is worth reading before
 treating a version bump as evidence.
+
+## What the model currently says, and what that retired
+
+Everything from here to "When a number changes" is **measurement**, not
+guidance. It sat under the `pipeline_version` heading above for several
+releases, which is why a section about version stamps ran to nine hundred
+lines.
+
+Read it before re-measuring anything, and before "fixing" a result that looks
+wrong — that is what it is for. `README.md` carries the same headline numbers
+in a shorter form for anyone who is not about to edit the model; what is here
+and not there is the per-destination detail, and the claims each cell retired.
 
 ### ✅ THE COMPLETE 20-CELL MATRIX IS MEASURED (CURRENT — 2026-08-23/24, calc `1.17.7`)
 
@@ -1521,6 +1551,27 @@ accordingly; don't restore the 0.80/5.30 values.
 
 A default run produces zero viable missions. That is the correct answer, not
 a regression. So does every other combination currently in the model.
+
+## The older matrices, and the claims they retired
+
+Everything from here to "The twenty-one things" is **superseded measurement**.
+Like the campaign results above, it sat under a heading it had nothing to do
+with — "Model assumptions that are load-bearing" — which is why that section
+ran to a thousand lines.
+
+🚨  **`versions.md` is the authority for every table in this section.** It holds
+the same matrices, organised by release, and it is the file whose job that is.
+These copies are kept because the *warnings* interleaved with them are
+editing guidance and belong here — "do not fix this", "this number was never
+measured", "that claim is retired" — and stripping the tables out from between
+them would leave the warnings pointing at nothing.
+
+⚠️  **So if a table here and the same table in `versions.md` ever disagree,
+`versions.md` wins, and the disagreement is a bug to fix rather than a judgement
+call.** Two copies of one measurement is the documentation form of the defect
+this file spends thirty pages cataloguing — see the `tank_frac` note under calc
+v1.17.3, where one derivation lived in two places for three releases beneath a
+comment claiming it lived in one. **Name one authority, or you have two.**
 
 ### The v1.14.0 full-catalog matrix (measured 2026-08-09 — SUPERSEDED by the 20-cell matrix)
 
