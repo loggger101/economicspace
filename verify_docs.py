@@ -189,9 +189,9 @@ def check_row_counts(mods) -> bool:
     }
     # (regex, which size it claims) -- each must match the table it describes
     CLAIMS: List[Tuple[str, str]] = [
-        (r"###\s*Propellants\s*[-—–]\s*(\d+)\s*rows", "propellants"),
-        (r"###\s*Launch vehicles\s*[-—–]\s*(\d+)\s*rows", "vehicles"),
-        (r"###\s*Storage systems\s*[-—–]\s*(\d+)\s*rows", "storage"),
+        (r"###\s*Propellants\s*[-:—–]\s*(\d+)\s*rows", "propellants"),
+        (r"###\s*Launch vehicles\s*[-:—–]\s*(\d+)\s*rows", "vehicles"),
+        (r"###\s*Storage systems\s*[-:—–]\s*(\d+)\s*rows", "storage"),
         (r"(\d+)\s*launch vehicles \(incl\. non-rocket concepts\)", "vehicles"),
         (r"(\d+)\s*propellants with storage class", "propellants"),
     ]
