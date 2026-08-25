@@ -1053,7 +1053,10 @@ exactly that.
 `verify_docs.py`.** It takes about a second and needs no baseline: every
 default the README's Tuning table quotes is checked against the dataclass field
 it names, every documented `pipeline_version` against the module, and every
-documented reference-table row count against the table. Those three cover the
+documented reference-table row count against the table. It also ratchets the
+2026-08 em-dash removal: no em- or en-dash may reappear in prose, in the docs,
+the root scripts, or module comments and docstrings. Module DATA strings are
+exempt, because the `notes` and `composition` fields are written into the CSVs. Those three cover the
 rot that is *checkable*; run it after touching any config field or reference
 table. ⚠️  **It cannot see a stale measurement**; a wrong number that is
 merely out of date passes everything in it, which is why the rest of this
@@ -7507,7 +7510,7 @@ one that reads the docs rather than the model:
 | `run_pipeline.py` | headless CLI: `--preset`, `--stages`, `--destination`, row caps |
 | `ui.py` | Streamlit dashboard |
 | `verify.py` | the six release checks |
-| `verify_docs.py` | the six **docs** checks; imports the four configs, never runs the pipeline |
+| `verify_docs.py` | the seven **docs** checks; imports the four configs, never runs the pipeline |
 | `run.bat` | Windows launcher, a terminal menu over the three above, no model behaviour of its own |
 | `Dashboard.vbs` | double-click entry point, starts the dashboard with no console, ever |
 | `launch_ui.py` | what it starts: supervises `streamlit run ui.py` and owns the stop button |
