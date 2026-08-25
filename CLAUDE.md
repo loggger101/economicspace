@@ -123,7 +123,7 @@ carries its verification.
 Eight rows are *performance* stamps; the rest are `1.17.0` (a default flip),
 `1.17.3` (a cleanup), `1.17.7` (a memory bound) and `1.7.1` (a silent default
 closed in another module), which is why
-this file counts two sequences that run apart; see "What calc v1.17.0
+this file counts two sequences that run apart; see [calc v1.17.0](versions.md#calc-v1170)
 changed". That paragraph is where the count last rotted: it was written at
 `1.17.5` and still read "nine" and "seven" after `1.17.6` shipped, which is
 exactly the *counts-spelled-out-in-prose* failure the "When a number changes,
@@ -137,7 +137,7 @@ projected on a full-catalog default cell against a documented run peak of
 ~6 GB. It landed in `1.17.4` and **no full-catalog run has been made since
 `1.16.0`**, so nothing had ever exercised it at the scale that shows it. Now
 bounded, which cannot change an output value by construction and is also
-*faster* (180 → 91 ns a hit). See "What calc v1.17.7 changed".
+*faster* (180 → 91 ns a hit). See [calc v1.17.7](versions.md#calc-v1177--transportation-v1121).
 
 ✅  **The checks every release above argues from are now a committed file,
 `verify.py`, instead of a harness rebuilt from memory each time.** CLAUDE.md
@@ -162,7 +162,7 @@ Measured 1.52 / 1.97 / 1.33 / **1.57×** across the four cells. It also takes a
 fixed **~15 s off the LOAD** of every run at any row cap, which is a *larger*
 share of a sample run than of a full one, and **3.44× off the per-row walk**
 that every catalog row pays whether or not it turns out to be evaluable: 
-~67-78 s on a full cislunar pass. See "What calc v1.17.4 changed".
+~67-78 s on a full cislunar pass. See [calc v1.17.4](versions.md#calc-v1174--catalog-v111).
 
 ⚠️  **`1.17.5` is shaped like `1.17.2`, not like `1.17.4`, and it is the
 SMALLEST perf stamp in the project: 1.06×, not 1.4-2×.** Every item in it
@@ -174,9 +174,8 @@ measured in tens of nanoseconds. **Do not quote a single number for it**, and
 do not expect another 1.5× from this code path. ⚠️  `1.17.6` did not, and it is
 the check on that sentence rather than a counter-example: it is worth 1.10× on
 the default cell, and the ~3.6% of it that comes from the ladder is the ladder
-being *rebuilt* per candidate rather than anything inside a rung. See "What calc v1.17.5
-changed", whose own section also re-measures the one big item this file has
-twice declined on a stale figure.
+being *rebuilt* per candidate rather than anything inside a rung. See
+[calc v1.17.5](versions.md#calc-v1175).
 
 🚨  **`1.17.6` IS THE FIRST PERF STAMP HERE THAT LANDS ON THE PER-ROW WALK
 RATHER THAN ON THE SEARCH, so it is the first that is worth MORE on raw than on
@@ -216,7 +215,7 @@ bit-identical to `1.16.0`, but the question a *configured-nothing* run asks
 has changed, from "the best single mission to this rock" to "the best
 programme built around it, flying concentrate". Set both False to get the old
 answer; both OFF cells were re-measured on the full catalog on 2026-08-11 and
-**reproduce exactly**. See "What calc v1.17.0 changed".
+**reproduce exactly**. See [calc v1.17.0](versions.md#calc-v1170).
 
 ⚠️  **`1.15.0` AND `1.16.0` MOVE NUMBERS ONLY FOR PROGRAMMES, and almost every
 measured cell in this file is a single mission.** Three items between them: 
@@ -227,9 +226,10 @@ cislunar sample at N = 1, `1.16.0`'s term on and off is **141 of 141 columns
 identical, sha256 MATCH**.
 
 **Do not re-measure a single-mission cell on account of either release**, and
-do not read any table below as covering an `optimise_programme_scale = True`
-run unless it says so, only those under "Measured, FULL CATALOG" and "THE
-FULL CISLUNAR 2×2" do. The N = 10 / N = 100 curve **does** move, and is now a
+do not read any table as covering an `optimise_programme_scale = True` run
+unless it says so; the searched columns of
+[the 20-cell matrix](README.md#current-results-the-complete-20-cell-matrix) are
+the ones that do. The N = 10 / N = 100 curve **does** move, and is now a
 `1.14.0` measurement of a model superseded twice.
 
 🚨  **"and the search is default OFF" was true until calc `1.17.0` and is now
@@ -248,7 +248,7 @@ split. It also puts `1.14.1` + `1.14.2` at a measured **4.10×** on a full cell
 🚨  **The programme search costs 1.51× runtime, not the 1.04-1.13× this file
 first recorded** from a 2,500-row sample. Third sample-mispredicts-runtime
 finding in this project, and the first to apply to a *ratio* rather than an
-absolute. See "Measured, FULL CATALOG".
+absolute. See [calc v1.15.0](versions.md#calc-v1150--transportation-v1120).
 
 > 🚨  **That 1.51× is `1.15.0`'s ONE-dimensional ladder and does not carry to
 > `1.16.0`, whose search is two-dimensional. Measured on the full catalog on
@@ -267,14 +267,13 @@ treating a version bump as evidence.
 ## What the model currently says, and what that retired
 
 Everything from here to "When a number changes" is **measurement**, not
-guidance. It sat under the `pipeline_version` heading above for several
-releases, which is why a section about version stamps ran to nine hundred
-lines.
+guidance.
 
 Read it before re-measuring anything, and before "fixing" a result that looks
-wrong: that is what it is for. `README.md` carries the same headline numbers
-in a shorter form for anyone who is not about to edit the model; what is here
-and not there is the per-destination detail, and the claims each cell retired.
+wrong: that is what it is for. **The headline numbers themselves are
+[README.md's](README.md#current-results-the-complete-20-cell-matrix)**; what is
+here and not there is the per-destination detail, the invariants, and the
+claims each cell retired.
 
 ### ✅ THE COMPLETE 20-CELL MATRIX IS MEASURED (CURRENT: 2026-08-23/24, calc `1.17.7`)
 
@@ -444,7 +443,7 @@ the one v1.14.0 already wrote down for the RTG branch: *a margin of a few
 percent is not a law*, and here one new search axis was enough to close it.
 
 🚨  **SURVIVAL WAS NEVER THE TEST, AND THE COUNT IS THE REASON.** The
-survivor count spans **400x across destinations on one model, one catalog and
+survivor count spans **400× across destinations on one model, one catalog and
 one release**: zero at `lunar_surface` against 5,479 (0.699%) at
 `earth_surface`, with `cislunar` at 13 raw (0.002%) and 327 beneficiated
 (0.050%), and `leo` at 4,710 (0.607%). A claim built on a count is a statement
@@ -472,11 +471,11 @@ in [README.md](README.md#beneficiation). Neither is repeated here. The three
 things that are *guidance* rather than record:
 
 🚨  **A default cislunar run is now ~1.6 h, not 6.8 h**, and **every timing or
-cost ratio in this project older than calc `1.17.7` is high by 1.78-4.32x.**
+cost ratio in this project older than calc `1.17.7` is high by 1.78-4.32×.**
 Five committed ratios moved as a consequence, including the two most quoted:
-beneficiation costs **4.67x** rather than 7.1x, and the programme search
-**1.71x** rather than 2.98x. ⚠️  Those are `cislunar` figures; `leo`,
-`mars_surface` and `earth_surface` cost 2.1-2.7x more per cell.
+beneficiation costs **4.67×** rather than 7.1×, and the programme search
+**1.71×** rather than 2.98×. ⚠️  Those are `cislunar` figures; `leo`,
+`mars_surface` and `earth_surface` cost 2.1-2.7× more per cell.
 
 ⚠️  **The forbidden arithmetic was finally scored, and the prohibition held on
 direction while being generous on magnitude.** Compounding the five releases'
@@ -778,7 +777,7 @@ still being **printed to the user on every run**, in five files at once:
 | `verify.py` | the comment explaining why beneficiated cells run at a lower row cap |
 | `README.md` | a quoted example of the run banner |
 
-They are **4.67x** and **1.71x** on `1.17.7`. ⚠️  A banner is the *most* read
+They are **4.67×** and **1.71×** on `1.17.7`. ⚠️  A banner is the *most* read
 copy of a number in this project and the least checked, so **when a ratio
 moves, grep the code as well as the prose**: `grep -rn "~7x\|2.98x\|7.1x"`.
 Comments and console text are not output, so this moves no `pipeline_version`;
@@ -1098,9 +1097,9 @@ see calc `1.13.0`) for anything interactive.
 > the whole `1.17.x` line landing at once, measured on the full catalog for the
 > first time: `cislunar` reads **733 / 1,253 / 3,424 / 5,692 s** for raw-N1 /
 > raw-searched / benef-N1 / benef-searched, and all twenty cells are tabulated
-> under "THE COMPLETE 20-CELL MATRIX" at the top of this file. **Every wall
-> clock below is superseded**; they are kept because the *reasons* the timings
-> moved are the point of the section.
+> in [README.md](README.md#beneficiation). **Every wall clock below is
+> superseded**; they are kept because the *reasons* the timings moved are the
+> point of the section.
 
 ⚠️  **The eighth, ninth, tenth and eleventh moves are calc `1.17.1`,
 `1.17.2`, `1.17.4` and `1.17.6`, and NONE of the wall clocks below have been
@@ -1255,7 +1254,7 @@ them is how a stale timing gets quoted as evidence:
 - `1.10.0` and earlier: ~140 s raw / ~2,120 s beneficiated. The ten-cell
   reproduction took about three and a half hours.
 - `1.10.1`: ~33 s / ~137 s. A **pure performance release**: every number
-  bit-identical. See "What v1.10.1 changed".
+  bit-identical. See [calc v1.10.1](versions.md#calc-v1101).
 - `1.11.0`: the table above, roughly 5× slower than `1.10.1` again. Also not a
   performance regression in the code: the search is **4.6× wider** (357
   vehicle × propellant combinations per asteroid against 77) because the
@@ -1336,7 +1335,7 @@ is the only copy.** It holds the per-release notes, the cost/revenue matrices
 each release retired, the runtime history and the programme-scale curves. This
 file used to carry a second copy of all of it, roughly five thousand lines,
 beneath its own warning that **two copies of one measurement is the
-documentation form of the defect this file spends thirty pages cataloguing.**
+documentation form of the defect this file exists to catalogue.**
 The second copy is gone; what stayed here is the part that is *editing
 guidance* rather than record.
 
@@ -1359,7 +1358,7 @@ already:
 | "the optimum N is *provably* a multiple of the rig's trip life" | only *usually*; programme calendar time pushes back inside a band |
 | "the cycle bound retires almost every rig" | **`cislunar` raw** only; the calendar bound does 42% at `cislunar` beneficiated and **80.79%** at `mars_surface` |
 | "a programme's pace is set by orbital mechanics, not mining rate" | true of raw everywhere, and **inverts under beneficiation** at every destination except Mars |
-| "the RTG option is correctly wired and very nearly unreachable" | it became reachable the moment the eclipse term landed, and was then found to be choosing on **mass** while the two sources differ 625x in price |
+| "the RTG option is correctly wired and very nearly unreachable" | it became reachable the moment the eclipse term landed, and was then found to be choosing on **mass** while the two sources differ 625× in price |
 
 The last row is the one to internalise, because it generalises past its branch:
 **an unreachable branch is not a verified branch.** "How often a branch fires"
@@ -1503,7 +1502,7 @@ number. Four have been measured and refused on exactly this ground:
 |---|---|---|
 | sort the phase table at source | removes ~325,000 sorts | the saturation block accumulates over its natural order, so the table is **load-bearing on the last ULP**: 2.8e-16 on 3 of 60 rows |
 | rearrange `bracket > 0` into a launch-capacity comparison | one fewer term | re-associates the arithmetic and moves the boundary in the last bit, changing whether a marginal row **survives the prune** |
-| `pd.read_csv(engine="pyarrow")` | **4.8x** on the 862 MB read, identical dtypes | its float parser rounds differently in the last ULP: 13 of 46 columns differ, and `estimated_mass_kg` moves 1e-13 relative. **Mass is what the ranking runs on** |
+| `pd.read_csv(engine="pyarrow")` | **4.8×** on the 862 MB read, identical dtypes | its float parser rounds differently in the last ULP: 13 of 46 columns differ, and `estimated_mass_kg` moves 1e-13 relative. **Mass is what the ranking runs on** |
 | a faster CSV writer | ~84 s a full cell | every one changes the formatting, which is the contract |
 
 ✅  **The one shape that is free is a change that only EVICTS.** Bounding a memo
@@ -1527,14 +1526,14 @@ assume it is bigger than it looks.
 
 | item | measured | verdict |
 |---|---|---|
-| inlining `builtins.max` | **1.2-2.4x** per call on Python 3.13, not the 6x recorded on an older interpreter; 18.7 M calls buys ~0.4% of a run | **closed.** ⚠️  cProfile attributes 2.5 s to it, which is dispatch overhead on a C builtin and is what will tempt the next person |
+| inlining `builtins.max` | **1.2-2.4×** per call on Python 3.13, not the 6× recorded on an older interpreter; 18.7 M calls buys ~0.4% of a run | **closed.** ⚠️  cProfile attributes 2.5 s to it, which is dispatch overhead on a C builtin and is what will tempt the next person |
 | the ratio-independent prologue hoist | **2.3%** of the default cell, 2.6% raw, of which ~89% is recoverable | declined: ~2% for splitting a 570-line function with ~40 locals crossing the seam. ⚠️  The **7.6%** this file quoted for three releases was stale |
 | `integrity_check`'s second factorize | **0.454 s**, ~0.03% of a full raw pass | declined; it optimises the harness, not the pipeline, and every clean fix widens a contract. ⚠️  cProfile says 0.85 s; that is instrumentation |
 | `_infer_from_albedo` by distinct value | 0.182 s to 0.028 s, 0.020 s fully vectorised: **~0.15 s**, 0.07% of Stage 1 | declined; see defect class 3 |
 | `viability_only` on `max_return_payload_kg` | 519 ns of a 2,105 ns call, but only 31% of calls in a raw cell | declined at **under 1%** average, against a new branch in the hottest function in the model |
 | the rig block in `_mission_cost_tail` | 3.2% priced alone | **taken in `1.17.5`**, once priced with the neighbour that shares its key. **Price the block, not the line** |
 | Parquet instead of CSV for the catalog | 19.7 s to **2.1 s** | real and free, and not taken: it changes Module 1's output contract and no measured cell would move detectably |
-| `nickel-iron`'s missing market ceiling | **7.7e-8** relative on one mission, 7.7e-5 at N = 100 | declined; it would break bit-identity on a destination not re-measured since `1.14.0`. Take it in that pass if `earth_surface` is ever re-run |
+| `nickel-iron`'s missing market ceiling | **7.7e−8** relative on one mission, 7.7e−5 at N = 100 | declined; it would break bit-identity on a destination not re-measured since `1.14.0`. Take it in that pass if `earth_surface` is ever re-run |
 
 ⚠️  **Two of those figures went stale while being quoted forward, in opposite
 directions**, which is the argument for re-measuring rather than inheriting.
@@ -1555,9 +1554,9 @@ cupy   fp32 exp, 40M elements   0.137 s
 host->device, 320 MB            0.055 s
 ```
 
-**The card is 7.6x slower than the CPU at the arithmetic this model is made
+**The card is 7.6× slower than the CPU at the arithmetic this model is made
 of.** That is the TU102's 1:32 FP64 rate and a property of every consumer
-GeForce, not a tuning problem. fp32 is 1.6x faster and unusable, because every
+GeForce, not a tuning problem. fp32 is 1.6× faster and unusable, because every
 verification here is a bit-identity check. The workload is also the wrong
 *shape*, branchy scalar Python with early exits, a fixed-point loop and a
 knapsack with a `sorted()` in it, so a port is a rewrite. And the one piece
@@ -1954,7 +1953,8 @@ Undoing any of these silently corrupts the output:
   count moved, spot-check the field itself out of the CSV before trusting a
   number, one `read_csv` on the row you edited.
 
-  The deeper lesson from that pass is in "What v1.12.0 changed": the headline
+  The deeper lesson from that pass is in
+  [calc v1.12.0](versions.md#calc-v1120--transportation-v1100): the headline
   cislunar ratios were **bit-identical** with the stale table and the correct
   one, because the best mission was not affected by the change. A best-case
   cell is a poor detector for anything wrong below the top; the
@@ -2247,7 +2247,7 @@ stride sample, the exact figure this file retires by name ("the real
 full-catalog ratio is **7.1×** raw, not 3.12×"). So a default run was estimated
 at **2.2 h against 6.8 h measured**, and was contradicted by Stage 4's own
 blurb in the same sidebar, which already said "budget for the 6.8 h". It now
-reads the four committed cells of THE FULL CISLUNAR 2×2 directly, so it needs
+reads the four committed full-catalog cislunar cells directly, so it needs
 no ratio at all.
 
 ✅  **Re-anchored 2026-08-24 on the calc `1.17.7` cells**: 733 / 1,253 / 3,424

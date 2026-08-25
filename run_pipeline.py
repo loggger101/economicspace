@@ -98,7 +98,8 @@ PRESETS = {
     "full": dict(
         rows=0, raw=False, search=True, asteroids=0,
         blurb="THE PIPELINE DEFAULTS -- every row, beneficiated, programme "
-              "search on (HOURS TO DAYS)",
+              "search on (1.6 h at cislunar to 3.8 h at earth_surface, "
+              "measured 2026-08-24)",
     ),
 }
 
