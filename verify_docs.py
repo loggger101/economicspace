@@ -2,7 +2,7 @@
 """Documentation verification for the asteroid profitability pipeline.
 
 `verify.py` proves the MODEL did not change.  This proves the DOCS still
-describe it.  Six checks, all mechanical, all fast (about a second):
+describe it.  Seven checks, all mechanical, all fast (about a second):
 
     1. defaults      every default the README's Tuning table quotes, against
                      the dataclass field it names
@@ -12,11 +12,12 @@ describe it.  Six checks, all mechanical, all fast (about a second):
     4. links         every markdown anchor resolves, in all three files
     5. structure     balanced fences, no ragged tables, no heading-level jumps,
                      no duplicate h1/h2 within a file
-    6. transfer      every distinctive number in a --before snapshot still
+    6. dashes        no em- or en-dash in prose a reader sees
+    7. transfer      every distinctive number in a --before snapshot still
                      appears somewhere in the docs afterwards
 
-    py verify_docs.py                       # checks 1-5
-    py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 6
+    py verify_docs.py                       # checks 1-6
+    py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 7
 
 WHY THIS FILE EXISTS
 --------------------
@@ -46,12 +47,14 @@ release notes and `verify.py` are for.
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import importlib.util
 import io
 import os
 import re
 import sys
+import tokenize
 from typing import Dict, List, Optional, Tuple
 
 REPO = os.path.dirname(os.path.abspath(__file__))
@@ -330,7 +333,76 @@ def check_structure() -> bool:
     return not bad
 
 
-# ----------------------------------------------------------------- 6. transfer
+# -------------------------------------------------------------------- 6. dashes
+EM, EN = "—", "–"
+ROOT_PY = ["ui.py", "ui_meta.py", "run_pipeline.py", "verify.py",
+           "build_master.py", "launch_ui.py"]
+
+
+def check_dashes() -> bool:
+    """No em- or en-dash in prose a person reads.
+
+    The docs and the root scripts must be clean outright.  In modules/*.py
+    only COMMENTS and DOCSTRINGS are checked: the `notes` and `composition`
+    strings are written into propellants.csv, launch_vehicles.csv and the
+    asteroid catalog, so their text is DATA and keeps whatever it has.
+
+    This is a ratchet, not a style opinion.  1,342 dashes came out of the docs
+    and 1,120 out of the modules; without a check they drift back one commit
+    at a time.
+    """
+    bad, files = [], 0
+
+    for name in DOCS + ROOT_PY:
+        p = os.path.join(REPO, name)
+        if not os.path.exists(p):
+            continue
+        files += 1
+        for i, line in enumerate(read(p).split("\n"), 1):
+            # verify_docs.py's own character classes must keep matching a dash
+            if name == os.path.basename(__file__) and "[-:" in line:
+                continue
+            if EM in line or EN in line:
+                bad.append("%s:%d  %s" % (name, i, line.strip()[:70]))
+
+    for rel in MODULES.values():
+        p = os.path.join(REPO, rel)
+        if not os.path.exists(p):
+            continue
+        files += 1
+        src = read(p)
+        rows = set()
+        try:
+            fh = io.StringIO(src)
+            for tok in tokenize.generate_tokens(fh.readline):
+                if tok.type == tokenize.COMMENT:
+                    rows.add(tok.start[0])
+            for node in ast.walk(ast.parse(src)):
+                body = getattr(node, "body", None)
+                if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                                     ast.AsyncFunctionDef)) and body:
+                    f = body[0]
+                    if (isinstance(f, ast.Expr)
+                            and isinstance(f.value, ast.Constant)
+                            and isinstance(f.value.value, str)):
+                        rows.update(range(f.lineno, f.end_lineno + 1))
+        except (SyntaxError, tokenize.TokenError) as exc:
+            bad.append("%s: could not parse (%s)" % (rel, exc))
+            continue
+        for i, line in enumerate(src.split("\n"), 1):
+            if i in rows and (EM in line or EN in line):
+                bad.append("%s:%d  %s" % (rel, i, line.strip()[:70]))
+
+    print("6. dashes      %d files checked, %d lines with an em/en dash"
+          % (files, len(bad)))
+    for b in bad[:20]:
+        print("     ! " + b)
+    if len(bad) > 20:
+        print("     ! ... and %d more" % (len(bad) - 20))
+    return not bad
+
+
+# ----------------------------------------------------------------- 7. transfer
 def check_transfer(before: str, after: List[str]) -> bool:
     """Every distinctive number in `before` must survive somewhere in `after`.
 
@@ -361,7 +433,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         description="Documentation verification (see the module docstring).")
     p.add_argument("--before", nargs="+", metavar=("OLD", "NEW"),
                    help="OLD.md then the file(s) its content should now be in; "
-                        "adds check 6")
+                        "adds check 7")
     args = p.parse_args(argv)
 
     mods = load_modules()
@@ -370,7 +442,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                lambda: check_versions(mods),
                lambda: check_row_counts(mods),
                check_links,
-               check_structure):
+               check_structure,
+               check_dashes):
         ok = fn() and ok
     if args.before:
         if len(args.before) < 2:
