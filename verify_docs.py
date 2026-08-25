@@ -252,20 +252,29 @@ def slugs(path: str) -> set:
 
 LINK = re.compile(r"\[([^\]]*)\]\(([^)\s]+)\)")
 
+# Link-checked as well as DOCS.  These live in a subdirectory and point back up
+# at the root docs, which is why targets resolve relative to the LINKING FILE
+# rather than to REPO -- keying anchors by the path as written works only while
+# every doc sits at the root, and campaign/ does not.
+LINKED_DOCS = DOCS + ["campaign/FINDINGS.md", "campaign/README.md"]
+
 
 def check_links() -> bool:
-    anchors = {d: slugs(os.path.join(REPO, d)) for d in DOCS
-               if os.path.exists(os.path.join(REPO, d))}
+    files = [d for d in LINKED_DOCS if os.path.exists(os.path.join(REPO, d))]
+    anchors = {os.path.normpath(os.path.join(REPO, d)):
+               slugs(os.path.join(REPO, d)) for d in files}
     bad, n = [], 0
-    for d in anchors:
-        for m in LINK.finditer(read(os.path.join(REPO, d))):
+    for d in files:
+        src = os.path.normpath(os.path.join(REPO, d))
+        base = os.path.dirname(src)
+        for m in LINK.finditer(read(src)):
             target = m.group(2)
             if target.startswith(("http", "mailto", "#!")):
                 continue
             fpart, _, apart = target.partition("#")
-            dest = fpart or d
+            dest = os.path.normpath(os.path.join(base, fpart)) if fpart else src
             if fpart and dest not in anchors:
-                if not os.path.exists(os.path.join(REPO, fpart)):
+                if not os.path.exists(dest):
                     bad.append("%s -> %s  (no such file)" % (d, target))
                 continue
             if apart:
@@ -420,7 +429,7 @@ def check_transfer(before: str, after: List[str]) -> bool:
         b = old.find("\n", m.end())
         seen[tok] = old[a:b if b > 0 else None].strip()
     lost = [(t, c) for t, c in seen.items() if t not in hay]
-    print("6. transfer    %d distinctive numbers in %s, %d lost"
+    print("7. transfer    %d distinctive numbers in %s, %d lost"
           % (len(seen), os.path.basename(before), len(lost)))
     for t, c in sorted(lost):
         print("     ! %-14s | %s" % (t, c[:110]))

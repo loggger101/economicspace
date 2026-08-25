@@ -281,9 +281,11 @@ class CalcConfig:
     # documented signature, never worse and equal wherever it declines.
     #
     # What it costs is TIME, and that is the only reason it was ever off: a
-    # full beneficiated cislunar pass measured 9,300 s against raw's 1,307 s,
-    # a ratio of 7.1x.  Set False for the raw cell (26.7863x), which is what
-    # most of the older tables in CLAUDE.md were measured at.
+    # full beneficiated cislunar pass measured 9,300 s against raw's 1,307 s
+    # on calc 1.16.0, a ratio of 7.1x.  Six performance-only releases later it
+    # is 3,424 s against 733 s, a ratio of 4.67x (2026-08-24, full catalog).
+    # Set False for the raw cell (26.7863x), which is what most of the older
+    # tables in versions.md were measured at.
     use_beneficiation:         bool  = True
     # Fraction of the valuable phase that actually reports to concentrate.
     # Terrestrial PGM / sulphide flotation circuits run 85-95%; magnetic
@@ -634,13 +636,14 @@ class CalcConfig:
     # the real population, so OFF was the only anchor anyone had.
     #
     # That is no longer true.  The full cislunar 2x2 was measured on the full
-    # 1.55 M-row catalog on 2026-08-11 (calc 1.16.0) and is in CLAUDE.md, and
+    # 1.55 M-row catalog on 2026-08-11 (calc 1.16.0) and is in versions.md, and
     # the OFF cells reproduce their committed values exactly: 26.7863x raw and
     # 20.5895x beneficiated, both unmoved across four releases.  The N = 1
     # answer is now a recorded measurement rather than a thing you would lose.
     #
     # It is NOT free.  Measured at 2.98x runtime on the full raw cislunar cell
-    # (1,307 s -> 3,890 s), because the 2-D (F, W) search prices a median of 40
+    # on calc 1.16.0 (1,307 s -> 3,890 s); on 1.17.7 it is 1.71x (733 s ->
+    # 1,253 s).  The cost is real because the 2-D (F, W) search prices 40
     # programmes per surviving candidate against the 1-D ladder's 8.  The
     # sample this release was developed on predicted 1.10x, and v1.15.0's
     # 1-D ladder measured 1.51x; neither carries over.
@@ -1692,14 +1695,16 @@ class CalcConfig:
     #, so this cannot make any row's objective worse.  Verified on
     #           the full catalog: 650,921 cislunar pairs, max benef/raw
     #           1.000000, zero exceptions, 15.79% declining at exactly 1.0.
-    #           Costs 7.1x runtime (1,307 s -> 9,300 s raw -> beneficiated).
+    #           Cost 7.1x runtime at the time (1,307 s -> 9,300 s); 4.67x as
+    #           re-measured on 1.17.7 (733 s -> 3,424 s).
     #         • `optimise_programme_scale` False -> True.  NOT weakly dominant
     #           in the same sense; it is a change of QUESTION, from the best
     #           single mission to the best programme, but never-worse against
     #           N = 1 holds by construction since v1.16.0 put (F, W) = (1, 1) in
     #           the search set.  Verified: 650,921 pairs, max searched/unsearched
     #           1.000000, zero worse, median improvement 42.4%.
-    #           Costs 2.98x runtime (1,307 s -> 3,890 s).
+    #           Cost 2.98x runtime at the time (1,307 s -> 3,890 s); 1.71x as
+    #           re-measured on 1.17.7 (733 s -> 1,253 s).
     #         ⚠️  A DEFAULT RUN NO LONGER REPRODUCES THE OLDER TABLES, because
     #         almost all of them are N = 1 raw.  Both flags restore them, and
     #         both OFF cells were re-measured on the full catalog on 2026-08-11
@@ -2125,8 +2130,8 @@ print(f"OK  Configuration loaded - output dir: {CONFIG.output_dir}")
 print(f"    Hardware       : {CONFIG.mining_hardware_kg:,.0f} kg mining rig "
       f"+ {CONFIG.return_vehicle_dry_kg:,.0f} kg return-capsule dry")
 print(f"    Mining cap     : {CONFIG.max_mining_fraction:.0%} of asteroid mass per mission")
-# Default ON as of v1.17.0 and worth ~7x the runtime of a raw pass, so say so
-# up front rather than leaving a two-and-a-half-hour run unexplained.
+# Default ON as of v1.17.0 and worth ~4.7x the runtime of a raw pass, so say
+# so up front rather than leaving a multi-hour run unexplained.
 print(f"    Beneficiation  : "
       + ("concentrate (search also prices not concentrating at all)"
          if CONFIG.use_beneficiation else

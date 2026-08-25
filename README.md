@@ -18,7 +18,6 @@ run_pipeline.py        Headless CLI the launcher drives (presets + flags)
 build_master.py        Build tool: assembles modules/ into master.py
 verify.py              Release verification: the six checks every change runs
 verify_docs.py         Docs verification: the docs still describe the code
-versions.md            Release history + the measurement tables it superseded
 master.py              GENERATED single-file pipeline - do not edit by hand
 ui.py                  Streamlit front end (optional): configure, run, inspect
 ui_meta.py             Config introspection + curation for ui.py
@@ -27,7 +26,21 @@ modules/
     mineral_value.py   Stage 2 - mineral prices + densities
     transportation.py  Stage 3 - launch / propellant / Δv / ops costs
     calc.py            Stage 4 - profitability calculation
+campaign/              The 20-cell measurement campaign: results.csv, the
+                       archived cells, the logs, and the scripts that ran it
+README.md              This file: what it is, how to run it, current numbers
+versions.md            What changed in which release, and what numbers used to be
+CLAUDE.md              Working notes: the traps and invariants. Read before editing
 ```
+
+**Three documents, and the split is deliberate**, because the recurring failure
+in this repo is a stale sentence rather than a missing table:
+
+| file | holds | is the authority for |
+|---|---|---|
+| `README.md` | what the pipeline is, how to run it, what the model does, and the **current** numbers | the current answer |
+| [`versions.md`](versions.md) | what changed in which release, and what every number used to be | the measurement history |
+| [`CLAUDE.md`](CLAUDE.md) | the traps, the invariants, and the reasoning behind decisions that look wrong | how to edit it safely |
 
 `run.bat`, `run_pipeline.py`, `ui.py` and `ui_meta.py` sit at the root rather
 than in `modules/` on purpose:
@@ -99,9 +112,10 @@ run.bat ui         open the dashboard (hands off to Dashboard.vbs, then
 run.bat quick      400-row sample, all four stages
 run.bat rerun      Stage 4 only, against the catalogs already on disk
 run.bat standard   20,000-row sample, Stage 4 only
-run.bat full       THE PIPELINE DEFAULTS (HOURS TO DAYS)
+run.bat full       THE PIPELINE DEFAULTS (1.6 h cislunar, 3.8 h default dest.)
 run.bat verify     verify.py against the committed baseline
 run.bat build      rebuild master.py from modules/
+run.bat help       run_pipeline.py --help
 ```
 
 It is a launcher and nothing else; every path through it goes through
@@ -116,14 +130,14 @@ run would re-fetch and waits for a `yes`, unless the file does not exist yet
 invocation carrying an argument, so a scripted or scheduled `run.bat quick`
 still runs unattended; the menu asks.
 
-⚠️  **The presets exist because the pipeline's own defaults are a very long
-run.** Since calc v1.17.0 a configure-nothing run is the full 1.55 M-row
-catalog, beneficiated, with the programme search on; a cell nobody has ever
-measured end to end, whose measured neighbours put it in the tens of hours.
-That is the right default for the model and a hostile one for a double-click,
-so `quick` and `standard` cap the rows and fly run-of-mine ore at N = 1. The
-row cap is a **stride sample across the whole belt**, not the innermost N
-bodies; see calc v1.13.0.
+⚠️  **The presets exist because the pipeline's own defaults are a long run.**
+Since calc v1.17.0 a configure-nothing run is the full 1.55 M-row catalog,
+beneficiated, with the programme search on, at `earth_surface`: **measured at
+13,581 s (3.8 h)** in the 2026-08-24 campaign, against 5,692 s (1.6 h) for the
+same cell at `cislunar`. That is the right default for the model and a hostile
+one for a double-click, so `quick` and `standard` cap the rows and fly
+run-of-mine ore at N = 1. The row cap is a **stride sample across the whole
+belt**, not the innermost N bodies; see calc v1.13.0.
 
 **`full` is the only preset that overrides nothing**, and every run says so
 explicitly: each setting is printed marked `[default]`, or
@@ -134,7 +148,7 @@ question it answered.
   Destination  : cislunar             [default: earth_surface]
   Asteroids    : all (1.55 M)         [default]
   Stage 4 rows : 400 (stride sample)  [default: every row]
-  Ore          : run-of-mine          [default: beneficiated (~7x slower)]
+  Ore          : run-of-mine          [default: beneficiated (~4.7x slower)]
 ```
 
 Those labels are read from the config dataclasses at runtime, not hardcoded, and
@@ -334,32 +348,26 @@ that actually move the answer:
 | `.calc.apply_wacc_compounding` | `True` | Time-value of money, bucketed by when each cost is incurred |
 | `.mineral.metals_api_key` | `"DEMO"` | Set a real metals.dev key to enable that source; `"DEMO"` silently skips |
 
-`use_isru_return_propellant` and `use_aerocapture_return` changed meaning in
-Stage 4 v1.10.0. They used to *force* an architecture on the whole catalog;
-they now say it is **available**, and Stage 4 prices every feasible
-combination per asteroid and flies the one that pays. ISRU is additionally
-gated on physics; the propellant has to be makeable from what the body is
-actually made of, and the rock it takes is dug, timed and charged like any
-other feed.
+⚠️  **`use_isru_return_propellant` and `use_aerocapture_return` mean
+"available", not "mandatory".** Stage 4 prices every feasible combination per
+asteroid and flies the one that pays, so these do not force an architecture on
+the catalog. ISRU is additionally gated on physics: the propellant has to be
+makeable from what the body is actually made of, and the rock it takes is dug,
+timed and charged like any other feed.
 
-Stage 4 v1.11.0 widened what "makeable" means. v1.10.0 allowed hydrolox and
-nothing else, which was right about the chemistry it knew and wrong about the
-question: electrolysing water into cryogenic hydrogen and oxygen is the
-*hardest* thing you can do with asteroid water. A steam rocket boils it and
-thrusts on the vapour at **1.00 kg of water per kg of propellant** against
-hydrolox's 1.286, with no electrolyser, no liquefaction and no cryogenic tank
-, and buys that at 190 s of specific impulse against 452. Which trade wins
-varies by body, so it is resolved in the per-asteroid search rather than
-assumed. Stage 3 states the feed ratio and the feed material on each
-propellant row.
+"Makeable" is not only hydrolox. Electrolysing water into cryogenic hydrogen
+and oxygen is the *hardest* thing you can do with asteroid water; a steam
+rocket boils it and thrusts on the vapour at **1.00 kg of water per kg of
+propellant** against hydrolox's 1.286, with no electrolyser, no liquefaction
+and no cryogenic tank, and buys that at 190 s of specific impulse against 452.
+Which trade wins varies by body, so it is resolved in the per-asteroid search.
+Stage 3 states the feed ratio and the feed material on each propellant row.
 
-Historically the dangerous corner was ISRU on *and* aerocapture off: nothing
-in the rocket equation scaled with returned payload, so the launch-mass
-constraint went slack and a 30 km body "returned" 7.4e14 kg in a 500 kg
-capsule for a fictional $7.8e17 profit. Stage 4 v1.3.6 bound the return
-**volume** to stop it; v1.10.0 closes it properly, because
-`return_structure_frac_of_payload` puts a payload-proportional term back into
-the cascade. Set that to `0.0` and the corner reopens.
+🚨  **The dangerous corner is ISRU on *and* aerocapture off**, and what closes
+it is `return_structure_frac_of_payload`. Without a payload-proportional term
+in the cascade nothing scales with returned mass, the launch-mass constraint
+goes slack, and a 30 km body "returns" 7.4e14 kg in a 500 kg capsule for a
+fictional $7.8e17 profit. **Set that field to `0.0` and the corner reopens.**
 
 Importing `master.py` is side-effect free, so you can drive it yourself:
 
@@ -399,29 +407,22 @@ reads serialise. At 3,000 beneficiated rows, twelve workers is slower end to
 end than six. The useful ceiling is the **physical** core count, hyperthreading
 adds ~17% on this branch-heavy pure-Python workload, not 2×.
 
-One trap worth knowing if you extend this. A spawned worker rebuilds the parent
-by importing `__main__`, and under Streamlit `__main__` is a synthetic module
-whose `__file__` points at `ui.py`, so a plain `Pool()` executes the entire
-Streamlit app once per worker. `_spawn_environment` in `modules/calc.py`
-repoints `__main__.__spec__` at the pipeline module to prevent it, and sets an
-env var that keeps the workers' re-import from replaying the startup banner
-sixty lines at a time into the run log the UI is parsing.
-
-**That guard has a precondition, and it fails silently when it is not met.**
-It finds the module to point at with `sys.modules[__name__]`, so `master.py`
-has to actually be in `sys.modules` under its own name. Loading it with
-`importlib.util.spec_from_file_location(...)` + `exec_module(...)`, the
-obvious way to write a measurement harness against an absolute path, never
-registers it, the pin quietly does not happen, and every worker falls back to
-executing your harness as `__main__` instead. If your driver script re-runs
-itself once per worker, this is why. Put the repo on `sys.path` and
-`import master` by name:
+🚨  **If you drive the pipeline from your own script, import it by name.** A
+spawned worker rebuilds the parent by importing `__main__`, and
+`_spawn_environment` in `modules/calc.py` repoints that at the pipeline module
+so a plain `Pool()` under Streamlit does not execute the whole app once per
+worker. **The guard fails silently unless `master` is in `sys.modules` under
+its own name**, which loading it by file path does not do, and then every
+worker executes *your harness* as `__main__` instead:
 
 ```python
 sys.path.insert(0, REPO)
 import master as m
 assert sys.modules.get("master") is m and m.__spec__ is not None
 ```
+
+If your driver script re-runs itself once per worker, that is why; the full
+account is in [CLAUDE.md](CLAUDE.md#entry-points).
 
 ## Rebuilding master.py
 
@@ -498,36 +499,21 @@ full set once before committing. A verification you will not run is worse than
 a slow one.
 
 **Why it is committed rather than rewritten each time.** Before 2026-08-21
-every release built these checks from scratch and threw them away, and
-`CLAUDE.md` records eleven harness bugs that came out of it; three of which
-produced conclusions that were written down or acted on before being caught:
-a comparison that stripped only one of the two provenance columns, so midnight
-falling mid-run read as a defect in the beneficiation path; two cells recorded
-as `cislunar` that had actually run against `earth_surface` prices; and a
-column diff that reported 64 of 139 columns as differing against a file that
-hashed byte-identical. Each of those traps is now defended against at the line
-that would otherwise reproduce it, and `verify.py`'s header lists all eleven.
-Add to that list rather than starting a twelfth harness.
+every release built these checks from scratch and threw them away, and eleven
+harness bugs came out of it; three produced conclusions that were written down
+before being caught. Each trap is now defended against at the line that would
+otherwise reproduce it, `verify.py`'s header lists all eleven, and the four
+hashes it prints reproduce the ones committed for calc v1.17.4 and v1.17.6
+exactly, which is what makes it a replacement for those harnesses rather than
+another one to have to trust. **Add to that list rather than starting a twelfth
+harness.**
 
-That last one is worth knowing about before you write any comparison of your
-own, because it had **three independent causes** producing one identical
-symptom, and fixing each moved the count and nothing else:
-
-1. pandas aligned two Series on the index **label**, and
-   `build_profitability_catalog` returns rows sorted by the objective, so a
-   live frame's index is scrambled against a CSV's fresh `RangeIndex`;
-2. `read_csv`'s default float parser is fast rather than correctly rounded, so
-   values came back one ULP off, only `float_precision="round_trip"` fixes it;
-3. an all-empty object column writes as bare commas and reads back as
-   float64-of-`NaN`, so a live `""` met a `nan`.
-
-It is also why the report prints **both** a hash and a column diff: when they
+⚠️  **Read those eleven before writing any comparison of your own**; see
+[the harness table in CLAUDE.md](CLAUDE.md#the-verification-harness-is-committed-now).
+The short version is that a broken checker looks exactly like a broken release,
+which is why the report prints **both** a hash and a column diff: when the two
 disagree, the hash is the one that is right, and the disagreement is itself the
-signal that the comparator is broken rather than the release.
-
-The four hashes it prints reproduce the ones committed for calc v1.17.4 and
-v1.17.6 exactly, which is what makes it a replacement for those harnesses
-rather than another one to have to trust.
+signal that the comparator is at fault.
 
 ### Verifying the docs
 
@@ -641,7 +627,9 @@ propellant × return mode × propellant sourcing × rendezvous apsis ×
 concentration ratio, sorted by `profit_usd` descending. Note that the *file*
 is sorted by profit while the *search* that produced each row optimises
 `selection_objective` (cost/revenue by default); those are different questions
-and the sort order is the less useful of the two. Roughly 65 columns; the ones
+and the sort order is the less useful of the two. **141 columns**, of which two
+(`pipeline_version`, `catalog_date`) are provenance and must be stripped before
+comparing two runs, which is why the verification blocks compare 139. The ones
 to look at first:
 
 | Column | Meaning |
@@ -665,7 +653,7 @@ to look at first:
 | `m_launch_kg`, `m_outbound_prop_kg`, `m_return_prop_kg`, `m_at_asteroid_kg`, `tps_mass_kg` | The mass cascade |
 | `m_dry_return_kg` | Return-vehicle dry mass actually flown, the 500 kg base plus `return_structure_frac_of_payload` of the haul. Compare it to `max_payload_kg`: a ratio far above ~7:1 means something has gone slack |
 | `ep_system_kg`, `ep_power_w`, `ep_system_cost_usd` | The electric stage. Before v1.10.0 the first two existed and the third did not, which is exactly the bug |
-| `*_cost_usd` (16 of them) | The cost cascade, line by line: launch, propellant, hardware, EP stage, ops, TPS, recovery, liability, licensing, insurance, NRE, autonomy NRE, contingency |
+| `*_cost_usd` (23 columns) | The cost cascade, line by line: launch, outbound and return propellant, hardware, mining rig, power system, EP stage, tankage, tanker flights, capsule, heat shield, ops, recovery, liability, licensing, launch insurance, NRE, autonomy NRE, contingency. Four of the 23 are the time-bucket aggregates in the next row, plus `total_cost_usd` |
 | `upfront_cost_usd`, `ongoing_cost_usd`, `end_of_mission_cost_usd`, `wacc_multiplier*` | Cost by time bucket, and the WACC factor applied to each |
 | `pipeline_version`, `catalog_date` | Which version of Stage 4 produced this row, and when |
 
@@ -831,8 +819,7 @@ The `value_route` column records which fate was chosen for every row.
 **engineering judgements**. They are the softest assumption in the pipeline
 and live in one table for exactly that reason.
 
-#### Utility is per destination, because the alternative to importing isn't
-#### always launching (v1.7.0)
+#### Utility is per destination, because the alternative to importing is not always launching
 
 The freight table above says what Earth would pay to put a kilogram somewhere.
 It does **not** say whether anyone there wants it, and that answer is not a
@@ -856,26 +843,22 @@ itself.
   ore of any of them is known on either body, and they are what motors,
   batteries and wiring are made of.
 
-Two things worth not "fixing". First, **every override runs downward**; that
-is the only direction this table can move without becoming a way to manufacture
-viability, which is the one thing the in-space case must not be tuned into. A
-settlement catalyst market for the PGMs was considered and rejected; the reason
-is in the note above `IN_SPACE_UTILITY_BY_DESTINATION`, and it is a routing
-limitation, not a judgement about Mars.
+⚠️  **Prices still rise with distance**, and reading this table as though they
+do not is the standard mistake: Mars freight is 10.6 kg-in-LEO per kg delivered
+and that still dominates. They simply no longer rise as *fast* as the freight
+does, and the volatiles that once carried the Mars result rise least, water at
+Mars is 2.7× its LEO price now against 11× before. **Every override runs
+downward**, deliberately; why that constraint exists, and why a PGM settlement
+market was considered and rejected, are in
+[CLAUDE.md](CLAUDE.md#model-assumptions-that-are-load-bearing).
 
-Second, **prices still rise with distance**; Mars freight is 10.6 kg-in-LEO
-per kg delivered and that dominates. They just no longer rise as fast as the
-freight does, and the volatiles that carried the Mars result rise least: water
-at Mars is 2.7× its LEO price now, against 11× before.
-
-The import budget is split too. `IN_SPACE_ANNUAL_DEMAND_KG` has described
-itself as one shared budget since v1.5.0 while the code handed *every*
-commodity the whole thing, so a 20 t/yr Mars base would absorb 20 t of water
-and 20 t of platinum and 20 t of olivine. `_DEMAND_SHARE_BY_CLASS` now
-partitions it, propellant 0.55, structural 0.25, shielding 0.15, chemical
-0.05, and `annual_market_kg` is routed, so a commodity flown home saturates
-the **terrestrial** market rather than a depot's import budget. Platinum at LEO
-was capped at the depot's 500 t/yr against the world's actual 180 t/yr.
+**The import budget is split per commodity class.** One shared depot budget
+meant a 20 t/yr Mars base absorbing 20 t of water *and* 20 t of platinum *and*
+20 t of olivine. `_DEMAND_SHARE_BY_CLASS` partitions it, propellant 0.55,
+structural 0.25, shielding 0.15, chemical 0.05, and `annual_market_kg` is
+**routed**, so a commodity flown home saturates the terrestrial market rather
+than a depot's import budget. Platinum at LEO was capped at the depot's
+500 t/yr against the world's actual 180 t/yr.
 
 ### What it costs to get there
 
@@ -1387,57 +1370,45 @@ Stated plainly so results aren't over-read:
 
 Every model below defaults **ON** and each one moved every number when it
 landed. They are corrections, not options; the flags exist to isolate an
-effect, not to be left off.
+effect, not to be left off. **When each one arrived is in
+[`versions.md`](versions.md); what it charges for is here.**
 
-⚠️  **The count is deliberately not spelled out here.** It has rotted twice,
-once in each direction, which is the exact failure the "when a number changes,
-grep the prose too" rule in `CLAUDE.md` exists to catch. Count the list; do not
-carry a number forward. One entry (orbital refuelling)
-was later *withdrawn*, so the list is one longer than the charges.
-
-They come in three species, and telling them apart is what makes the pattern
-useful:
-
-1. **Gaps in what the model charged for**: v1.7.0's five, all of which ran the
-   same way, towards optimism; then v1.8.0 and v1.9.0's five, one of which
-   (reliability growth) pushed back the other way.
-2. **Masses flown and never billed, or bills presented for mass never flown**; 
-   v1.10.0 through v1.12.0. This is the defect class to look for in this
-   codebase first: the mass cascade and the cost cascade are written in
-   different places, and nothing checks that every kilogram in one has a price
-   in the other. v1.12.0 found three fresh instances inside v1.11.0's own
-   additions. The one-line assertion that catches the whole family is
-   `hardware_total_kg == mining_hardware_kg + power_system_kg + ep_system_kg`.
-3. **Terms whose figures were already written down, cited and correct, in a
-   Stage 3 table Stage 4 does not load**: v1.14.0's two. Volatile cargo
-   containment and night-side power had both been recorded as known limitations
-   for two releases. *Writing a gap down had been mistaken for closing it.*
+⚠️  **The count is deliberately not spelled out.** It has rotted twice, once in
+each direction, which is the exact failure the "when a number changes, grep the
+prose too" rule in `CLAUDE.md` exists to catch. Count the list. One entry
+(orbital refuelling) was later *withdrawn*, so the list is one longer than the
+charges.
 
 ⚠️  **`use_beneficiation` and `optimise_programme_scale` are NOT on this list**,
-and calc v1.17.0 defaulting both ON does not put them on it. They are questions
-("ship concentrate or ore?", "how big a programme?"), not subsidies being
-withdrawn. The test is not "is it on by default"; it is **"was the model
-getting something for free before?"**
+and defaulting both ON does not put them on it. They are questions ("ship
+concentrate or ore?", "how big a programme?"), not subsidies being withdrawn.
+The test is not "is it on by default"; it is **"was the model getting something
+for free before?"**
 
-**Low-thrust trip time** (`model_low_thrust_time`). Electric propulsion used
-to pay a Δv penalty and nothing else; it flew its burns instantly on power
-it never carried. A thruster's power fixes its thrust, so burning `m_prop`
-takes `m_prop·(Isp·g0)² / (2·η·P)`: **high specific impulse buys propellant
-mass at a quadratic cost in time-or-power.** The EP stage is now sized to
-finish inside `ep_target_thrust_yr` (3.0 by default), and the array plus
-thruster/PPU mass that demands goes into the same rocket equation as
-everything else. A typical electric winner now hauls ~4,900 kg of power
-system against a 2,000 kg mining rig.
+### Gaps in what the model charged for
 
-Validated against Dawn: the only mission that has flown this regime. At its
-2.2-3.0 AU operating distance the formula gives 5.0-9.3 years of thrusting;
-Dawn actually thrust ~5.9 years. The 1/r² term does the work: evaluated at
-Dawn's 1 AU array rating the same sum gives 1.0 year and is nonsense.
+Time, rate, wear and the market: things that were happening to a real mission
+and were not on any invoice.
 
-**Launch windows** (`model_launch_windows`). Departure needs phasing, and
-alignments recur at the synodic period, so expected wait after mining is half
-a period. This punishes **NEAs hardest**, which is the opposite of the Δv
-story:
+**Low-thrust trip time** (`model_low_thrust_time`). Electric propulsion used to
+pay a Δv penalty and nothing else; it flew its burns instantly on power it
+never carried. A thruster's power fixes its thrust, so burning `m_prop` takes
+`m_prop·(Isp·g0)² / (2·η·P)`: **high specific impulse buys propellant mass at a
+quadratic cost in time-or-power.** The EP stage is sized to finish inside
+`ep_target_thrust_yr` (3.0), and the array plus thruster/PPU mass that demands
+goes into the same rocket equation as everything else. A typical electric
+winner hauls ~4,900 kg of power system against a 2,000 kg mining rig.
+
+✅  Validated against **Dawn**, the only mission to have flown this regime: at
+its 2.2-3.0 AU operating distance the formula gives 5.0-9.3 years of thrusting
+against ~5.9 actually flown. The 1/r² term does the work; evaluated at Dawn's
+1 AU array rating the same sum gives 1.0 year and is nonsense. **If this check
+ever passes that easily, the 1/r² term has been lost.**
+
+**Launch windows** (`model_launch_windows`). Departure needs phasing and
+alignments recur at the synodic period, so the expected wait after mining is
+half a period. This punishes **NEAs hardest**, which is the opposite of the Δv
+story: a body whose period nearly matches Earth's drifts in phase very slowly.
 
 | Semi-major axis | Period | Synodic with Earth |
 |---|---|---|
@@ -1445,51 +1416,43 @@ story:
 | 1.13 AU | 1.20 yr | 6.0 yr |
 | 2.70 AU | 4.44 yr | 1.3 yr |
 
-A body whose period nearly matches Earth's drifts in phase very slowly.
-Accessibility in Δv and accessibility in *time* pull in opposite directions,
-and only one of them was modelled before.
+⚠️  Accessibility in Δv and accessibility in *time* pull in opposite
+directions, and only one of them was modelled before. **Do not assume a
+low-Δv target is a fast one.**
 
 **Bound-water liberation** (`model_water_liberation`). C/B/D-type "ice" is
-water locked into phyllosilicates; it has to be baked out at ~700 K, not
-scooped. Stage 3 charges 2,500 Wh per kg of water, derived from heating the
-rock through dehydroxylation plus the enthalpy of dehydration plus
-vaporisation, and matching the 1-3 kWh/kg in the ISRU literature. The
-pipeline had been extracting it for free and selling it at full
-launch-cost-avoided.
+water locked into phyllosilicates; it is baked out at ~700 K, not scooped.
+Stage 3 charges **2,500 Wh/kg**, derived from heating the rock through
+dehydroxylation plus the enthalpy of dehydration plus vaporisation, and
+matching the 1-3 kWh/kg in the ISRU literature. It had been extracted free and
+sold at full launch-cost-avoided.
 
 **Learning curve** (`learning_curve_rate`, 0.85). Wright's law on the
-per-mission articles, capsule/lander and power system. The amortised mining
-rig is excluded because it is modelled as one shared unit, not N built.
-Exactly 1.0 at `nre_amortization_missions = 1`, so a single-mission run is
-untouched; 0.44 at N = 100.
+per-mission articles, capsule/lander and power system. The amortised mining rig
+is **excluded**, because it is one shared unit rather than N built, and a curve
+on it double-counts. Exactly 1.0 at `nre_amortization_missions = 1`, so a
+single-mission run is untouched; 0.44 at N = 100.
 
-**Market saturation** (`model_market_saturation`). `P/P0 = (1 + Q/Q_market)^(−1/ε)`
-against Stage 2's `annual_market_kg`, with ε = 0.5 (precious-metal demand is
-inelastic). Returning 180 t/yr of platinum doubles world supply and quarters
-the price. Delivering 6.6 t/yr of water to a Mars base that can absorb 11 t/yr
-of it cuts the price to 0.39. Without this, `nre_amortization_missions` had no
-natural stopping point; you could amortise development across a fleet whose
-output would have destroyed the price justifying it.
+**Market saturation** (`model_market_saturation`).
+`P/P0 = (1 + Q/Q_market)^(−1/ε)` against Stage 2's `annual_market_kg`, with
+ε = 0.5 (precious-metal demand is inelastic). Returning 180 t/yr of platinum
+doubles world supply and quarters the price; delivering 6.6 t/yr of water to a
+Mars base that can absorb 11 t/yr cuts the price to 0.39. Without it,
+`nre_amortization_missions` had no stopping point: you could amortise
+development across a fleet whose output would have destroyed the price
+justifying it.
 
-World production is USGS; the in-space absorption ceilings (LEO 500 t/yr,
+⚠️  World production is USGS; the in-space absorption ceilings (LEO 500 t/yr,
 cislunar 100 t, lunar surface 50 t, Mars 20 t) are **judgement, not
-measurement**; no such market exists. Since v1.7.0 those are destination
-*totals* split across commodity classes rather than a figure each commodity
-gets to itself, so the Mars water ceiling is 0.55 × 20 t = 11 t/yr; and the
-ceiling follows the **value route**, so anything flown home is bounded by
-terrestrial production instead.
+measurement**, since no such market exists. They are destination *totals* split
+across commodity classes rather than a figure each commodity gets to itself, so
+the Mars water ceiling is 0.55 × 20 t = 11 t/yr, and the ceiling follows the
+**value route**, so anything flown home is bounded by terrestrial production.
 
-### Added in v1.8.0 and v1.9.0
-
-Four in v1.8.0, rig service life, mission reliability, cryogenic boil-off,
-in-space manufacturing, plus **Reliability growth** in v1.9.0, which is kept
-next to Mission reliability below rather than in release order because the two
-only make sense read together.
-
-**Rig service life and terminal value** (`model_rig_service_life`). The rig
-was amortised across `nre_amortization_missions` with no upper bound, so a
-programme could spread one machine across 100 missions of two years each: 
-200 years of duty from something chewing rock. A 15-year life now *caps* the
+**Rig service life and terminal value** (`model_rig_service_life`). The rig was
+amortised across `nre_amortization_missions` with no upper bound, so a
+programme could spread one machine across 100 missions of two years each: 200
+years of duty from something chewing rock. A 15-year life now *caps* the
 amortisation, and the cap makes long-stay programmes markedly **more**
 expensive, not less:
 
@@ -1500,18 +1463,16 @@ expensive, not less:
 | 2.0 yr | 7 | **13.8×** |
 
 Life remaining when the programme ends is credited at the salvage fraction
-(0.50), but only when `nre_amortization_missions > 1`. A rig parked at an
-asteroid nobody revisits is stranded, not an asset, so a single-mission run
-is unaffected.
+(0.50), but only when `nre_amortization_missions > 1`: a rig parked at an
+asteroid nobody revisits is stranded, not an asset.
 
 **Mission reliability** (`model_reliability`). Revenue was certain. Expected
-revenue is now `p_launch(0.97) × exp(−T/MTBF)(30 yr) × p_mining(0.85)`, 
-about 0.70 for a five-year mission. **Costs are still charged in full**,
-which is both conservative and correct: you spend the money whether or not it
-works. Launch insurance in the cost model replaces hardware, not revenue, so
-there is no double count.
+revenue is now `p_launch(0.97) × exp(−T/MTBF)(30 yr) × p_mining(0.85)`, about
+0.70 for a five-year mission. ⚠️  **Costs are still charged in full**, which is
+both conservative and correct: you spend the money whether or not it works.
+Launch insurance replaces hardware, not revenue, so there is no double count.
 
-`p_mining` is counted from the actual flight record of regolith-contact
+`p_mining` is counted from the full flight record of regolith-contact
 mechanisms, not from the failures alone:
 
 | | Missions |
@@ -1520,31 +1481,21 @@ mechanisms, not from the failures alone:
 | **Partial** (1) | Hayabusa; projectile never fired, but contact dust was still collected and returned |
 | **Failed** (2) | Philae's harpoon pyrotechnics; InSight's HP³ mole, which could not get purchase in Martian regolith |
 
-That is **11/13 = 0.85** counting Hayabusa as the success it ultimately was,
-or 0.77 counting it as a loss. 0.85 is taken because Hayabusa did return its
-sample. An earlier release used 0.75, counted from the failures alone, which
-was selection bias, and below even the pessimistic reading.
+That is **11/13 = 0.85** counting Hayabusa as the success it ultimately was, or
+0.77 counting it as a loss. The canonical roster, with per-mission detail, is
+the note in `modules/transportation.py`.
 
-The honest caveat: none of these is *sustained* mining. They are one-shot or
-short-campaign collections of grams to kilograms, not a rig moving 200 kg/day
-for years without maintenance. 0.85 is the demonstrated **mechanism** rate;
-the sustained-operation exposure is carried by the spacecraft MTBF term
-rather than double-counted here.
+The honest caveat: none of these is *sustained* mining. They are one-shot
+collections of grams to kilograms, not a rig moving 200 kg/day for years. 0.85
+is the demonstrated **mechanism** rate; sustained-operation exposure is carried
+by the spacecraft MTBF term rather than double-counted here.
 
-**Reliability growth** (`model_reliability_growth`, v1.9.0). `p_mining` used
-to sit at its first-of-kind 0.75 no matter how many missions a programme
-flew; the one
-place the model was *pessimistic* rather than optimistic. A fleet that has
-flown ten rigs has found and designed out failure modes the first one
-discovered the hard way.
-
-Duane/AMSAA: failure probability falls as a power law in cumulative
-production, `q(n) = q_first · n^(−α)` with α = 0.30, the bottom of
-MIL-HDBK-189's *active* growth band, appropriate for hardware that flies
-once every few years with no test fleet to accelerate the learning. Capped at
-a 0.95 mature ceiling, because growth is asymptotic: mature spacecraft
-mechanisms run 97-99%, and a continuously-operating excavator is harder than
-a one-shot deployment.
+**Reliability growth** (`model_reliability_growth`). `p_mining` used to sit at
+its first-of-kind value however many missions a programme flew, the one place
+the model was *pessimistic*. Duane/AMSAA: failure probability falls as a power
+law in cumulative production, `q(n) = q_first · n^(−α)` with α = 0.30, the
+bottom of MIL-HDBK-189's *active* growth band, appropriate for hardware that
+flies once every few years with no test fleet. Capped at a 0.95 mature ceiling.
 
 | Programme size | `p_mining` (fleet average) |
 |---|---|
@@ -1552,18 +1503,16 @@ a one-shot deployment.
 | 10 | 0.902 |
 | 100 | 0.943 |
 
-Reported as the **mean over missions 1..N, not the terminal value.** NRE and
-the rig are amortised across the whole programme, so per-mission expected
-revenue has to use the programme average; quoting the last mission's
-reliability would credit every mission with heritage only the last one has.
-Exactly 0.850 at N = 1, so single-mission runs use the first-of-kind figure.
+⚠️  Reported as the **mean over missions 1..N, not the terminal value**. NRE and
+the rig amortise across the whole programme, so per-mission expected revenue
+has to use the programme average; quoting the last mission's reliability would
+credit every mission with heritage only the last one has. Exactly 0.850 at
+N = 1. ⚠️  Launch and cruise reliability deliberately do **not** grow: launch
+vehicles are already mature, and MTBF is a duration exposure rather than a
+heritage question. Do not "complete" the model by adding growth to them.
 
-Launch and cruise reliability deliberately do *not* grow: launch vehicles are
-already mature, and MTBF is a duration exposure rather than a heritage
-question.
-
-**Cryogenic boil-off** (`model_propellant_boiloff`). Return propellant sits
-in the tank from launch until the departure burn, years, not hours. Loading
+**Cryogenic boil-off** (`model_propellant_boiloff`). Return propellant sits in
+the tank from launch until the departure burn, years rather than hours. Loading
 per kg actually burned:
 
 | Hold | hydrolox (0.05%/day) | methalox (0.012%) | storable (0%) |
@@ -1572,30 +1521,46 @@ per kg actually burned:
 | 5 yr | **2.49×** | 1.25× | 1.00× |
 | 8 yr | 4.31× | 1.42× | 1.00× |
 
-Folded into an effective return Δv, which leaves the closed-form cascade
-exact: since `m_return_prop` scales with `(R−1)`, inflating that term by `k`
-is `R_eff = 1 + (R−1)k`. ISRU return propellant is exempt; it is
-manufactured at the asteroid on departure. Without this, hydrolox won long
-missions it could not physically have stored propellant for.
+Folded into an effective return Δv, which leaves the closed-form cascade exact:
+since `m_return_prop` scales with `(R−1)`, inflating that term by `k` is
+`R_eff = 1 + (R−1)k`. ISRU return propellant is exempt; it is manufactured at
+the asteroid on departure.
 
-v1.10.0 fixed the hold time this table is read with. It was computed once,
-before the sizing loop, against a stay of `station_keeping_floor_yr`: 0.25 yr,
-the *shortest* stay the model permits, when the real stay is dig time plus
-the launch-window wait, which runs to years on exactly the targets that want a
-cryogenic upper stage. The prose said "years, not hours" while the arithmetic
-said three months. It is now solved inside the same fixed point as the power
-plant and the ISRU feed.
+**In-space manufacturing** (Stage 2). Raw Fe-Ni is not a pressure vessel, and
+the gap used to hide inside the 0.70 utility factor: the refinery was assumed
+into existence and never costed. Now explicit, ~$230/kg for metals:
 
-**The electric propulsion stage** (v1.10.0). v1.7.0 sized the EP array and
-thruster, pushed both through the rocket equation, and never passed either to
-the cost model, so a 309 kW, 14-tonne electric stage was free, and electric
-propulsion won missions on hardware nobody had to buy. Priced in two parts,
-because they cost wildly different amounts per kilogram: the **array** off the
-existing $800/W-EOL power-system row, the **thruster and PPU** off a new Stage-3
-row at **$1.5M/kW**, anchored on a NEXT-C flight string (7 kW, ~47 kg, in the
-$10-15M class) with a $0.5-3M/kW range because high-power Hall systems buy down
-from there. Flagged soft in the notes: this pipeline sizes some missions at
-300 kW, six times the largest article ever built.
+- **Energy** at **$6.08/kWh**, the capital cost of a kilowatt-hour in deep
+  space ($800/W-EOL over a 15-year life), roughly 100× terrestrial industrial
+  power, which is why in-space processing is not obviously free. Metals take
+  5 kWh/kg; terrestrial electric-arc steelmaking is 4-5 kWh/kg and there is no
+  carbothermic shortcut in vacuum.
+- **Plant** at **$200/kg refined**: $300k/kg of deep-space hardware at
+  100 kg/yr throughput per kg of plant over 15 years.
+
+Deducted from the *used in space* route only; material shipped down is refined
+on Earth. ⚠️  The plant's **mass** is deliberately not in any mission's rocket
+equation: it belongs to the buyer at the depot, not to the miner.
+
+### Mass flown and never billed, or billed and never flown
+
+**The defect class to look for in this codebase first.** The mass cascade and
+the cost cascade are written in different places, and nothing checks that every
+kilogram in one has a price in the other. The one-line assertion that catches
+the whole family is
+`hardware_total_kg == mining_hardware_kg + power_system_kg + ep_system_kg`, and
+one release introduced three fresh instances while fixing three older ones.
+
+**The electric propulsion stage.** The EP array and thruster were sized, pushed
+through the rocket equation, and never passed to the cost model, so a 309 kW,
+14-tonne electric stage was free and electric propulsion won missions on
+hardware nobody had to buy. Priced in two parts, because they cost wildly
+different amounts per kilogram: the **array** off the existing $800/W-EOL
+power-system row, the **thruster and PPU** off a Stage-3 row at **$1.5M/kW**,
+anchored on a NEXT-C flight string (7 kW, ~47 kg, in the $10-15M class) with a
+$0.5-3M/kW range because high-power Hall systems buy down from there. ⚠️
+Flagged soft: this pipeline sizes some missions at 300 kW, six times the
+largest article ever built.
 
 **Return-vehicle structure** (`return_structure_frac_of_payload`, 0.15). The
 return vehicle's dry mass was a flat 500 kg however much it carried, so the
@@ -1603,166 +1568,144 @@ cascade loaded 125 tonnes of ore into a half-tonne can: **250:1
 payload-to-structure**, against 0.4:1 (Cygnus PCM) to 2:1 (Dragon) for real
 cargo spacecraft. Nothing caught it because the only other bound on returned
 mass was the launch vehicle's fairing *volume*, which dense ore never fills.
-The 500 kg is now a floor, avionics, comms, beacon, separation hardware, and
-15% of the payload is added for tankage, primary structure and cargo restraint.
-Deliberately at the light end of the real range, since the ablative TPS is
-already carried separately and an ore carrier should beat a crew-rated capsule.
-The closed-form payload solver carries the term exactly: writing `g = s(1+f) − 1`
-for the combined payload-proportional overhead, it reduces to the pre-v1.10.0
-expression when `f = 0`.
+The 500 kg is now a floor and 15% of the payload is added for tankage, primary
+structure and cargo restraint. The closed-form solver carries the term exactly:
+writing `g = s(1+f) − 1`, it reduces to the old expression when `f = 0`.
 
-**In-space manufacturing** (Stage 2). Raw Fe-Ni is not a pressure vessel, and
-the gap used to hide inside the 0.70 utility factor; the refinery was
-assumed into existence and never costed. Now explicit, ~$230/kg for metals:
-
-- **Energy** at **$6.08/kWh**: the capital cost of a kilowatt-hour in deep
-  space ($800/W-EOL over a 15-year life), roughly 100× terrestrial industrial
-  power, which is why in-space processing is not obviously free. Metals take
-  5 kWh/kg; terrestrial electric-arc steelmaking is 4-5 kWh/kg and there is
-  no carbothermic shortcut in vacuum.
-- **Plant** at **$200/kg refined**: $300k/kg of deep-space hardware at
-  100 kg/yr throughput per kg of plant over 15 years.
-
-Deducted from the *used in space* route only; material shipped down is
-refined on Earth. The utility factor now means only what it says.
-
-**Propellant tankage** (`model_tank_mass`, v1.11.0). Stage 3 had computed
-`density_kg_per_L` since v1.2.0 and nothing read it. A tank's mass scales with
-the **volume** it encloses, not with the propellant mass inside it, so leaving
-it out was a straight subsidy to whichever propellant had the lowest density, 
-which is the same propellant that has the highest specific impulse, so the
-error compounded rather than cancelling. LH2 is 0.0708 kg/L against kerolox at
-1.015: fourteen times the tank per kilogram burnt.
+**Propellant tankage** (`model_tank_mass`). `density_kg_per_L` had been
+computed for four releases and read by nothing. A tank's mass scales with the
+**volume** it encloses, not with the propellant mass inside it, so leaving it
+out was a straight subsidy to whichever propellant had the lowest density,
+which is the same propellant that has the highest specific impulse: the error
+compounded rather than cancelling. LH2 is 0.0708 kg/L against kerolox at 1.015,
+fourteen times the tank per kilogram burnt.
 
 `tank_kg_per_L` is derived per storage class and anchored on flight articles
-rather than asserted. As a fraction of the propellant it holds: iodine 0.2%
+rather than asserted. As a fraction of the propellant it holds: **iodine 0.2%**
 (solid at ambient pressure), xenon 1.9%, kerolox 2.5%, an APCP motor case 6.9%
 against Star 48B's measured 6.4%, hydrolox 9.7% against Centaur III's measured
-~9.7%, krypton 12.5% (a worse COPV at 18 MPa is the price of a cheaper
-propellant), cold gas 46%, and bare LH2 53%, which is what a nuclear-thermal
-stage has to earn its 900 s against.
+~9.7%, krypton 12.5%, cold gas 46%, and bare LH2 **53%**, which is what a
+nuclear-thermal stage has to earn its 900 s against.
 
 The closed-form solver generalises with two scalars rather than going
 iterative: `k = 1/(1 − t(R_ret − 1))` on the return leg, where the tank flies
 home inside the cargo's post-burn mass, and `k_out` on the outbound leg, where
-it is staged at the asteroid. Both are exactly 1 at `t = 0`. `t(R − 1) ≥ 1`
-means the tank cannot close, and that is infeasible rather than expensive.
+it is staged at the asteroid. Both are exactly 1 at `t = 0`. 🚨  `t(R − 1) ≥ 1`
+means **the tank cannot close**, and that is infeasible rather than expensive.
 
-**Orbital refuelling** (`charge_tanker_flights`, v1.11.0, **gated off in
-v1.12.0**). Starship's escape payload (27 t) *exceeds* its GTO payload (21 t).
-No propulsion system can do that; the escape figure is for a vehicle topped up
-in orbit first. Stage 3's vehicle row has said so in prose since v1.4.0,
-*including the fix* ("Module 4 should add ~$90M × N_tankers **to the
-escape-direct scenario**"), and Stage 4 never did it.
+**Thruster scalability** (`thruster_kg_per_n`). The largest single correction
+in the project, and the clearest statement of the defect class: **launch was
+modelled as an integrated vehicle with a payload it can actually lift, while
+in-space propulsion was modelled as a bare specific impulse.** One side had a
+capacity limit and the other did not, so Stage 4 sized the electric stage on
+power alone and buying enough kilowatts turned any row in the propellant table
+into a cargo tug: 31.8% of cislunar winners were pulsed plasma thrusters and
+24.3% electrospray, devices whose largest flown units make *micronewtons*,
+being asked for ~7-10 N.
 
-v1.11.0 then did the arithmetic and dropped the scenario, charging twelve
-flights: $1.08B on top of a $90M launch, on **every** mission. Stage 4 has no
-escape-direct scenario: it reads `payload_leo_kg` and `usd_per_kg_to_leo` and
-nothing else, so the vehicle is a LEO lifter and the stack departs on its own
-outbound stage. Starship's 100 t to LEO needs no tankers. v1.12.0 gates the
-charge behind `escape_direct_launch`, which nothing sets, and keeps the wiring
-for the day this module gains direct injection.
+The gate is **mass, not a threshold**: thrust is momentum flux, `T = ṁ·ve`,
+which owes nothing to efficiency, so Stage 3 carries kg/N per technology and a
+device making µN/kg reports thousands of tonnes of thruster and dies in the
+rocket equation on its own. The evaluable catalog halved and chemical
+propulsion came back. ⚠️  Because it is a penalty rather than a cutoff, the
+right test is not whether such devices *survive* but whether one ever **wins**,
+and as of 2026-08-24 one does, at `mars_surface` with the programme search on.
+That is the mechanism working, not leaking.
 
-**Thruster scalability** (`thruster_kg_per_n`, v1.12.0). The largest single
-correction in the project, and the clearest statement of the defect class:
-**launch was modelled as an integrated vehicle with a payload it can actually
-lift, while in-space propulsion was modelled as a bare specific impulse.** One
-side had a capacity limit and the other did not, so Stage 4 sized the electric
-stage on power alone and buying enough kilowatts turned any row in the
-propellant table into a cargo tug: 31.8% of cislunar winners were pulsed
-plasma thrusters and 24.3% electrospray, devices whose largest flown units make
-*micronewtons*, being asked for ~7-10 N. The gate is **mass, not a threshold**:
-thrust is momentum flux, so Stage 3 carries kg/N per technology and a device
-making µN/kg reports thousands of tonnes of thruster and dies in the rocket
-equation on its own. The evaluable catalog halved, and chemical propulsion came
-back. ⚠️  Because it is a penalty rather than a cutoff, the right test is not
-whether such devices *survive* but whether one ever **wins**, and as of
-2026-08-24 one does, at `mars_surface` with the programme search on. That is
-the mechanism working, not leaking.
-
-**Argon storage** (v1.12.0, Stage 3). Not a flag, a reference-table fix, and
-the one that moves numbers. The row carried liquid-argon density, which exists
-only at 87.3 K, *together with* a boil-off of zero: its own two comments read
-"liquid NBP (cryogenic storage)" and "stored supercritical at ambient
-temperature", three lines apart. Argon was winning ~25% of missions on that
-combination. Split into the two articles that actually exist. See
+**Argon storage** (Stage 3). Not a flag but a reference-table fix, and the one
+that moves numbers. The row carried liquid-argon density, which exists only at
+87.3 K, *together with* a boil-off of zero: its own two comments read "liquid
+NBP (cryogenic storage)" and "stored supercritical at ambient temperature",
+three lines apart. Argon was winning ~25% of missions on that combination.
+Split into the two articles that actually exist; see
 [calc v1.12.0](versions.md#calc-v1120--transportation-v1100).
 
-**Cargo-water power plant** (`model_water_liberation`, corrected v1.12.0). The
-liberation energy for water sold as cargo had sized an array that the cost
-model paid for and the rocket equation never carried. The flag is unchanged;
-what changed is that the array is now flown.
+**Cargo-water power plant** (`model_water_liberation`). The liberation energy
+for water sold as cargo had sized an array that the cost model paid for and the
+rocket equation never carried. The flag is unchanged; what changed is that the
+array is now flown.
 
-**Launch acceleration** (`max_payload_accel_g`, v1.12.0). 15 g. Every real
-launcher in Stage 3 is 6 g or less; SpinLaunch is 10,000 g, a light-gas gun
-30,000, StarTram 30. Stage 3 added the column in v1.9.0 to disqualify them and
-nothing read it, so only their `concept` status was keeping them out.
+**Launch acceleration** (`max_payload_accel_g`, 15 g). Every real launcher in
+Stage 3 is 6 g or less; SpinLaunch is 10,000 g, a light-gas gun 30,000,
+StarTram 30. The column existed to disqualify them and nothing read it, so only
+their `concept` status was keeping them out.
 
-**Propellant tank fabrication** (v1.12.0). $6,000/kg, Centaur-derived. Tank
-mass had been flown and launch-charged since v1.11.0 and never built.
+**Propellant tank fabrication.** $6,000/kg, Centaur-derived (~1,880 kg of
+structure, a ~$30M stage less ~$20M of RL10). Tank mass had been flown and
+launch-charged for a release and never built. It is 0.004-0.6% of mission cost,
+median 0.012%, and it is kept precisely because it is small: **these are only
+ever found by checking every term rather than the big ones.**
 
-### Added in v1.14.0, v1.15.0 and v1.16.0
+**Orbital refuelling** (`charge_tanker_flights`, **gated off**). Starship's
+escape payload (27 t) *exceeds* its GTO payload (21 t). No propulsion system
+can do that; the escape figure is for a vehicle topped up in orbit first.
+Charging for it was briefly implemented catalog-wide, at **$1.08B on top of a
+$90M launch**, and that is the **withdrawn** entry: Stage 4 has no
+escape-direct scenario, so the charge was real but billed against a scenario
+this module does not have. Gated behind `escape_direct_launch`, which nothing
+sets, rather than deleted, so the day this module gains direct injection the
+charge becomes correct and the column is already wired.
 
-**Volatile cargo containment** (`model_volatile_containment`, v1.14.0). The
-pipeline priced water at every in-space destination, charged the energy to bake
-it out of phyllosilicate and flew the array that does the baking, and charged
+### Figures that were written down and never wired in
+
+Both of these had sat in a Stage 3 reference table, correctly derived and
+correctly cited, behind a note saying they were not modelled in Stage 4, and
+Stage 4 does not load that table. They were quoted as known limitations for two
+releases and nothing moved. **Writing a gap down had been mistaken for closing
+it. A reference table nobody reads is not a model.**
+
+**Volatile cargo containment** (`model_volatile_containment`). The pipeline
+priced water at every in-space destination, charged the energy to bake it out
+of phyllosilicate and flew the array that does the baking, and charged
 **nothing** to stop it subliming across a four-year cruise. Not a rounding
 term: the best cislunar missions are **~88% water by mass**, so the commodity
 carrying the entire result was the one flying free. A sealed shaded hold at
 0.05 kg/kg, *incremental* to the 0.15 ore restraint; the hopper holds the
-cargo, the seal and the shade keep the volatile fraction of it from leaving.
-Charged on water only; carbon and organics are refractory at these temperatures
+cargo, the seal and the shade keep the volatile fraction from leaving. Charged
+on water only, since carbon and organics are refractory at these temperatures
 and ride in the hopper like rock.
 
-**Eclipse and night-side power** (`model_eclipse_power`, v1.14.0). Processing
-power is a *continuous average* draw and the plant was sized straight off it,
-which is only right if the rig is never in shadow. It stands on a rotating
-body. Two terms: an array oversize of `[(1−f) + f/η]/(1−f)` = **2.11×**, which
-is a sizing factor no W/kg figure could ever have absorbed; and storage sized on
-the **body's own rotation period**, which finally makes `rotation_period_h`, 
-carried by Stage 1 since v1.0.0 and read by nothing, a quantity the model
+**Eclipse and night-side power** (`model_eclipse_power`). Processing power is a
+*continuous average* draw and the plant was sized straight off it, which is
+only right if the rig is never in shadow. It stands on a rotating body. Two
+terms: an array oversize of `[(1−f) + f/η]/(1−f)` = **2.11×**, which is a
+sizing factor no W/kg figure could ever have absorbed; and storage sized on the
+**body's own rotation period**, which finally makes `rotation_period_h`,
+carried by Stage 1 from the start and read by nothing, a quantity the model
 uses, so a slow rotator is genuinely a worse place to mine. Together they cost
 **4.7×** at 1 AU and the median 10.2 h rotation, not the "roughly doubles" the
-storage table itself estimated. ⚠️  A radioisotope plant is exempt because its
-output is flat with time, and the EP array because it is in permanent sunlight
-in cruise; it is the rig's plant that stands in the shadow, not the propulsion
-train.
+storage table itself estimated.
 
-**The rig's duty cycles** (`model_rig_trip_limit`, v1.15.0). `life` is "Mining
-rig service life" = **15 YEARS**, a figure whose own Stage 3 notes describe
+### Bounds that only bite at programme scale
+
+⚠️  **These two are the only entries on this list that are inert at N = 1**, so
+no single-mission figure moves for either, which also means neither can be
+checked by re-running a headline.
+
+**The rig's duty cycles** (`model_rig_trip_limit`). `life` is "Mining rig
+service life" = **15 YEARS**, a figure whose own Stage 3 notes describe
 corrosion, thermal cycling and radiation dose. Dividing it by the stay gave a
 mission count, and **nothing anywhere bounded duty cycles**, so at a short stay
 one rig was good for twelve consecutive digs on the strength of a number that
 only ever promised it would not have rusted meanwhile. A rig parked between
-campaigns ages slowly; one cutting rock does not. Stage 3 v1.12.0 adds a
-maximum of **5 trips** and the min of the two bounds is taken, so long stays
-stay calendar-limited and short ones are now cycle-limited. ⚠️  The 5 is a
-documented judgement; nothing has ever mined an asteroid twice.
+campaigns ages slowly; one cutting rock does not. Stage 3 adds a maximum of
+**5 trips** and the min of the two bounds is taken, so long stays stay
+calendar-limited and short ones are cycle-limited, which is the correct way
+round and was the entire gap.
 
-**Programme calendar time** (`model_programme_calendar`, v1.16.0). One rig digs
-one hole at a time, so campaigns on a ship are strictly sequential, and the
-cost model compounded each mission's up-front costs over that *mission's* own
-duration and stopped, which for a programme assumes every mission happens at
-once. The lines carried free are the **amortised** ones, bus NRE, autonomy
-NRE, the rig, because those alone are bought once at t = 0 and divided across
-missions that sell years apart. A mission's own articles are unaffected: shift
-a whole cash flow later and its cost/revenue ratio does not move. ⚠️  Salvage
-gets the **reciprocal** series, because it is collected at the *end*;
-compounding a refund forward alongside the cost it is netted against would pay a
-bonus for taking longer to collect it.
+**Programme calendar time** (`model_programme_calendar`). One rig digs one hole
+at a time, so campaigns on a ship are strictly sequential, and the cost model
+compounded each mission's up-front costs over that *mission's* own duration and
+stopped, which for a programme assumes every mission happens at once. The lines
+carried free are the **amortised** ones, bus NRE, autonomy NRE and the rig,
+because those alone are bought once at t = 0 and divided across missions that
+sell years apart. A mission's own articles are unaffected: shift a whole cash
+flow later and its cost/revenue ratio does not move.
 
-⚠️  **The last two are the only entries on this list that are inert at N = 1**,
-so no single-mission figure moves for either, which also means neither can be
-checked by re-running a headline.
-
-### Net effect on a default earth_surface run
-
-| | v1.6.0 | v1.7.0 | v1.8.0 |
-|---|---|---|---|
-| Electric share of winning combos | 12% | 2% | varies by destination |
-| Median mission duration | 3.49 yr | 4.12 yr | 4.1 yr |
-| Expected revenue multiplier | 1.00 | 1.00 | **0.67** (reliability) |
-| Rows with no feasible mission | 0 | 47 | 85 |
+⚠️  Salvage gets the **reciprocal** series, because it is collected at the
+*end*; compounding a refund forward alongside the cost it is netted against
+would pay a bonus for taking longer to collect it. Both multipliers are exactly
+1.0 at one campaign per ship, which is what makes the term inert at N = 1.
 
 ## Data sources
 
@@ -1784,38 +1727,21 @@ Where a spectral type cannot be sourced, Stage 1 infers a coarse one from
 geometric albedo and records that in `spectral_type_source`
 (`source` / `tholen` / `albedo` / `albedo_assumed` / `unknown`).
 
-This is not hypothetical, and it has now happened twice.
+This is not hypothetical: **two sources have been silently contributing
+nothing, each for several releases.** SsODNet was downloaded in full (~500 MB)
+and discarded at merge time on every run until catalog v1.0.9, which is why
+measured taxonomy jumped from 1,854 bodies to **24,675** when it was fixed;
+NEOWISE matched zero rows until catalog v1.1.0 because a float-typed
+identifier stringified to `"3.0"` instead of `"3"`. Both printed a successful
+fetch throughout. The mechanisms, and the three separate things that kept the
+SsODNet one quiet, are in
+[CLAUDE.md](CLAUDE.md#the-ssodnet-outage-that-wasnt-an-outage-fixed-in-v109);
+what each was worth is in
+[versions.md](versions.md#catalog-v110--calc-v1130).
 
-**NEOWISE, until catalog v1.1.0.** IRSA types its `asteroid_number` column by
-what the result slice happens to contain: all-numbered comes back `int64`, and
-one unnumbered row makes it `float64`. The fetcher stringified it, so the merge
-key became `"3.0"` instead of `"3"` and matched nothing. Every NEOWISE row then
-died at validation for having no orbital elements.
-
-The bug worked at small row caps and failed at large ones, the fetcher printed
-`OK  183,408 records fetched` on the runs where it contributed zero, and the only
-trace in the output was seven `neowise_*` columns present and 100% empty. After
-the fix, **132,691** bodies pick up NEOWISE IR albedo, beaming parameter and
-diameter uncertainties. The population gain is small, JPL SBDB already ingests
-NEOWISE diameters, so only ~27 bodies were missing outright, but no run before
-v1.1.0 had the IR data it reported fetching.
-
-**SsODNet, until catalog v1.0.9.** Downloaded in full
-(~500 MB), parsed, and then **discarded at merge time on every run**; ssoBFT
-had renamed its identity columns, the column projection tolerated the loss,
-and the source was dropped for having no `designation`:
-
-| | before v1.0.9 | after |
-|---|---|---|
-| taxonomy measured | 1,854 | **24,675** |
-| taxonomy guessed from albedo | 33,235 | **11,131** |
-| density measured | 0 | **438** |
-| V-type bodies | 3,988 | 2,614 |
-
-The V-type count is the giveaway; V-types are genuinely rare, and 3,988 of
-them was an artefact of guessing taxonomy from albedo. **Every figure in this
-README committed before v1.0.9 was measured on that degraded catalog**, which
-is why they quote "across 1,959 asteroids".
+⚠️  **Every figure committed before catalog v1.0.9 was measured on that
+degraded catalog**, which is why the oldest of them quote "across 1,959
+asteroids".
 
 **So check `spectral_type_source` before comparing a run against a committed
 number.** The run banner reporting a source as "Active" only means it was
@@ -1860,8 +1786,21 @@ diameter is never overwritten, and `diameter_source` records which is which:
 
 Both albedo tables are **medians over the 138,437 bodies with a measured
 albedo**, computed rather than taken from literature, with per-entry sample
-sizes in the source. The gradient is strong enough to be worth binning for:
-0.2885 at 1.3-2.0 AU against 0.0660 in the outer belt.
+sizes in the source. The spectral-type table covers 28 classes with n >= 5
+(S 0.2439 at n = 534, C 0.0540 at n = 195, V 0.3880 at n = 36); the orbital
+gradient is strong enough to be worth binning for, 0.2885 at 1.3-2.0 AU
+against 0.0660 in the outer belt.
+
+⚠️  **The orbital table is what actually sizes the catalog, not the taxonomy
+one.** A body with a taxonomy almost always has a diameter too, so the taxonomy
+branch fires on 105,905 rows against the orbital gradient's 1,298,885.
+⚠️  The derived albedo also sets the **composition**, deliberately: assuming
+p_V = 0.066 for an outer-belt body *is* assuming it is carbonaceous, so the
+assumed albedo is read as the last spectral-type fallback. Without that, 1.4 M
+derived bodies would land on an `Unknown` composition with `None` fractions and
+get no mass at all. Note the direction: **one assumption produces two outputs.**
+Inferring the class first and reading an albedo back off it would launder one
+guess into two apparently independent columns, and *that* would be circular.
 
 Three caveats, all of which run **optimistic**, and none of which should be
 "fixed" by editing the tables:

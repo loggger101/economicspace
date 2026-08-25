@@ -2,7 +2,7 @@
 """Release verification harness for the asteroid profitability pipeline.
 
 Run this before and after any change to Stage 4.  It is the checks every
-release in CLAUDE.md argues from, written down once instead of rebuilt from
+release in versions.md argues from, written down once instead of rebuilt from
 memory each time:
 
     1. bit-identity    four cells, column by column and by hash, vs a baseline
@@ -13,7 +13,7 @@ memory each time:
     6. stage 2 tables  the judgement tables still produce the numbers on disk
 
 Typical use.  The ORDER matters: the baseline must be captured before the first
-edit, exactly as every release note in CLAUDE.md says it was.
+edit, exactly as every release note in versions.md says it was.
 
     py verify.py baseline           # on a clean tree, BEFORE editing
     ...make the change...
@@ -151,8 +151,8 @@ def load_master():
 # -----------------------------------------------------------------------------
 # CELLS
 # -----------------------------------------------------------------------------
-# The four cells every release in CLAUDE.md is verified on, at the caps it uses.
-# Beneficiated cells run at 150 rows because they are ~7x raw; raw at 400.
+# The four cells every release in versions.md is verified on, at the caps it uses.
+# Beneficiated cells run at 150 rows because they are ~4.7x raw; raw at 400.
 CELLS: Dict[str, Dict[str, Any]] = {
     "raw":          dict(use_beneficiation=False, optimise_programme_scale=False,
                          eval_row_cap=400),
@@ -215,7 +215,7 @@ def _comparable(df):
 
     Column ORDER is left alone deliberately.  Sorting them would be tidier and
     would silently make every hash this file prints incomparable with the eight
-    already committed in CLAUDE.md -- which is the whole point of printing one.
+    already committed in versions.md -- which is the whole point of printing one.
     """
     return df[[c for c in df.columns if c not in PROVENANCE]]
 
@@ -358,7 +358,7 @@ def _ratio(df):
 # Both never-worse comparisons join two cells on `designation`, so the two
 # sides must be sampled at the SAME cap or the join is a subset of the smaller
 # one and the counts mean nothing.  The bit-identity cells above deliberately
-# do not share a cap (beneficiated is ~7x raw, so it runs at 150), which is why
+# do not share a cap (beneficiated is ~4.7x raw, so it runs at 150), which is why
 # this check runs its own.  400 is the cap the committed figures use.
 NEVER_WORSE_CAP = 400
 

@@ -9,14 +9,15 @@ REM
 REM  This file is the TERMINAL entry point: a menu when double-clicked, or
 REM  an argument to skip straight to one option:
 REM
-REM      run.bat ui         open the dashboard (hands off to launch_ui.py
+REM      run.bat ui         open the dashboard (hands off to Dashboard.vbs
 REM                         and closes this window)
 REM      run.bat quick      400-row sample, all four stages
 REM      run.bat rerun      Stage 4 only, against the catalogs already on disk
 REM      run.bat standard   20,000-row sample, Stage 4 only
-REM      run.bat full       the pipeline's own defaults (HOURS TO DAYS)
+REM      run.bat full       the pipeline's own defaults (1.6 to 3.8 h)
 REM      run.bat verify     run verify.py against the committed baseline
 REM      run.bat build      rebuild master.py from modules/
+REM      run.bat help       run_pipeline.py --help
 REM
 REM  A run option takes the destination as an optional second argument,
 REM  so a scripted run never has to answer a prompt:
@@ -133,7 +134,7 @@ echo    [3]  Quick re-run           Stage 4 only, reuses catalogs on disk
 echo    [4]  Standard run           Stage 4 only, 20,000-row sample
 echo    [5]  Full run               THE PIPELINE DEFAULTS - every row,
 echo                                beneficiated, programme search on
-echo                                *** HOURS TO DAYS ***
+echo                                *** 1.6 h cislunar, 3.8 h default ***
 echo.
 echo         2-4 override those defaults so a run finishes in reasonable
 echo         time. Every run prints each setting marked [default], or
