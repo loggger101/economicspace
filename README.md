@@ -116,14 +116,14 @@ run would re-fetch and waits for a `yes`, unless the file does not exist yet
 invocation carrying an argument, so a scripted or scheduled `run.bat quick`
 still runs unattended; the menu asks.
 
-⚠️  **The presets exist because the pipeline's own defaults are a very long
-run.** Since calc v1.17.0 a configure-nothing run is the full 1.55 M-row
-catalog, beneficiated, with the programme search on; a cell nobody has ever
-measured end to end, whose measured neighbours put it in the tens of hours.
-That is the right default for the model and a hostile one for a double-click,
-so `quick` and `standard` cap the rows and fly run-of-mine ore at N = 1. The
-row cap is a **stride sample across the whole belt**, not the innermost N
-bodies; see calc v1.13.0.
+⚠️  **The presets exist because the pipeline's own defaults are a long run.**
+Since calc v1.17.0 a configure-nothing run is the full 1.55 M-row catalog,
+beneficiated, with the programme search on, at `earth_surface`: **measured at
+13,581 s (3.8 h)** in the 2026-08-24 campaign, against 5,692 s (1.6 h) for the
+same cell at `cislunar`. That is the right default for the model and a hostile
+one for a double-click, so `quick` and `standard` cap the rows and fly
+run-of-mine ore at N = 1. The row cap is a **stride sample across the whole
+belt**, not the innermost N bodies; see calc v1.13.0.
 
 **`full` is the only preset that overrides nothing**, and every run says so
 explicitly: each setting is printed marked `[default]`, or
@@ -827,26 +827,22 @@ itself.
   ore of any of them is known on either body, and they are what motors,
   batteries and wiring are made of.
 
-Two things worth not "fixing". First, **every override runs downward**; that
-is the only direction this table can move without becoming a way to manufacture
-viability, which is the one thing the in-space case must not be tuned into. A
-settlement catalyst market for the PGMs was considered and rejected; the reason
-is in the note above `IN_SPACE_UTILITY_BY_DESTINATION`, and it is a routing
-limitation, not a judgement about Mars.
+⚠️  **Prices still rise with distance**, and reading this table as though they
+do not is the standard mistake: Mars freight is 10.6 kg-in-LEO per kg delivered
+and that still dominates. They simply no longer rise as *fast* as the freight
+does, and the volatiles that once carried the Mars result rise least, water at
+Mars is 2.7× its LEO price now against 11× before. **Every override runs
+downward**, deliberately; why that constraint exists, and why a PGM settlement
+market was considered and rejected, are in
+[CLAUDE.md](CLAUDE.md#model-assumptions-that-are-load-bearing).
 
-Second, **prices still rise with distance**; Mars freight is 10.6 kg-in-LEO
-per kg delivered and that dominates. They just no longer rise as fast as the
-freight does, and the volatiles that carried the Mars result rise least: water
-at Mars is 2.7× its LEO price now, against 11× before.
-
-The import budget is split too. `IN_SPACE_ANNUAL_DEMAND_KG` has described
-itself as one shared budget since v1.5.0 while the code handed *every*
-commodity the whole thing, so a 20 t/yr Mars base would absorb 20 t of water
-and 20 t of platinum and 20 t of olivine. `_DEMAND_SHARE_BY_CLASS` now
-partitions it, propellant 0.55, structural 0.25, shielding 0.15, chemical
-0.05, and `annual_market_kg` is routed, so a commodity flown home saturates
-the **terrestrial** market rather than a depot's import budget. Platinum at LEO
-was capped at the depot's 500 t/yr against the world's actual 180 t/yr.
+**The import budget is split per commodity class.** One shared depot budget
+meant a 20 t/yr Mars base absorbing 20 t of water *and* 20 t of platinum *and*
+20 t of olivine. `_DEMAND_SHARE_BY_CLASS` partitions it, propellant 0.55,
+structural 0.25, shielding 0.15, chemical 0.05, and `annual_market_kg` is
+**routed**, so a commodity flown home saturates the terrestrial market rather
+than a depot's import budget. Platinum at LEO was capped at the depot's
+500 t/yr against the world's actual 180 t/yr.
 
 ### What it costs to get there
 

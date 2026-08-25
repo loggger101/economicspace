@@ -31,8 +31,8 @@ THREE THINGS IT HAS TO GET RIGHT, all of them traps this repo has already hit:
      cargo at a depot while paying to land it in Utah.
 
 ON THE PRESETS.  The pipeline's own defaults are the full 1.55 M-row catalog,
-beneficiated, with the programme search on -- a cell nobody has ever measured
-end to end, and CLAUDE.md's measured neighbours put it in the tens of hours.
+beneficiated, with the programme search on, at earth_surface -- measured at
+13,581 s (3.8 h) in the 2026-08-24 campaign; see README.md's Results.
 That is the right default for the model and a hostile default for someone who
 has just double-clicked something, so `--preset` names three runs by what they
 cost, and `--preset full` is the one that reproduces the pipeline's own
@@ -82,7 +82,8 @@ def _force_utf8_stdout() -> None:
 _force_utf8_stdout()
 
 # Runtime notes on each preset.  The timings are order-of-magnitude, read off
-# the measured cells in CLAUDE.md; the row cap is what makes them differ.
+# the measured cells in README.md's Results; the row cap is what makes them
+# differ.
 PRESETS = {
     "quick": dict(
         rows=400, raw=True, search=False, asteroids=20_000,
@@ -431,7 +432,7 @@ def print_banner(args, settings, cfg, stages) -> None:
 
     The marking is the point. Since calc v1.17.0 a configure-nothing run is the
     full catalog, beneficiated, with the programme search on -- so "the
-    defaults" and "what most tables in CLAUDE.md were measured at" are no
+    defaults" and "what most tables on record were measured at" are no
     longer the same thing, and a run that does not say which it is invites the
     two being confused.
     """
