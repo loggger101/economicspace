@@ -165,7 +165,7 @@ STAGES = [
     Stage("transport", 3, "Transportation",
           "Launch vehicles, propellants (with storage class and tankage), Δv "
           "segments, ops costs, storage systems. Reference tables: fast, and "
-          "rarely needs re-running — but it MUST be re-run after a v1.9.0 "
+          "rarely needs re-running, but it MUST be re-run after a v1.9.0 "
           "upgrade, or Stage 4 reads a propellants.csv with no tankage "
           "columns and silently flies every tank for free."),
     Stage("calc",      4, "Profitability",
@@ -173,7 +173,7 @@ STAGES = [
           "Measured on the full 1.55 M-row catalog at cislunar, 12 workers, "
           "calc 1.17.7: 12 min raw at N = 1, 21 min with "
           "optimise_programme_scale, 57 min with use_beneficiation, and 1.6 h "
-          "with both — and both of those flags DEFAULT ON as of calc v1.17.0, "
+          "with both, and both of those flags DEFAULT ON as of calc v1.17.0, "
           "so budget for the 1.6 h unless you turn one off. Cislunar is the "
           "CHEAPEST destination: leo, mars_surface and earth_surface run "
           "2.1-2.7x longer per cell, so the default there is 3.4-4.3 h. "
@@ -422,7 +422,7 @@ def _stage_minutes(key: str) -> float:
     # Full size of the JPL asteroid table, measured 2026-08-08.  Needed as a
     # literal because `jpl_limit = 0` means "unlimited" as of catalog v1.1.0,
     # and `or 50_000` would have quietly estimated the largest possible run as
-    # the smallest one — the estimate would have said three minutes for
+    # the smallest one; the estimate would have said three minutes for
     # something that takes an afternoon.
     _JPL_FULL_ROWS = 1_554_321
 
@@ -1361,7 +1361,7 @@ def render_sidebar() -> None:
             f"Stage 2 is cached for **{cached_dest}** but you have selected "
             f"**{destination}**. Re-running it is forced, because skipping "
             "would price the cargo at one destination and fly it to another. "
-            "Note that it re-fetches **live** metal prices — see the caution "
+            "Note that it re-fetches **live** metal prices; see the caution "
             "below.",
             icon="⚠️",
         )
