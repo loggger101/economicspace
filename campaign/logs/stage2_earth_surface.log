@@ -1,0 +1,65 @@
+Importing the pipeline ...
+
+==============================================================================
+  ASTEROID PROFITABILITY PIPELINE
+==============================================================================
+  Preset       : quick -- 400-row stride sample, run-of-mine ore, single mission (minutes once the catalog is cached)
+  Stages       : 2 mineral value
+  Destination  : earth_surface                            [default]
+  Asteroids    : 20,000 per source                        [default: all (1.55 M)]
+  Stage 4 rows : 400 (stride sample)                      [default: every row]
+  Ore          : run-of-mine                              [default: beneficiated (~7x slower)]
+  Programme    : single mission (N = 1)                   [default: fleet x campaigns searched (~3x slower)]
+  Output       : C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline
+------------------------------------------------------------------------------
+  [default] marks a pipeline default; the rest are this run's
+  overrides, with the default they replaced shown alongside.
+==============================================================================
+
+------------------------------------------------------------------------
+  STAGE 2 -- mineral value
+  started 14:56:49
+------------------------------------------------------------------------
+=================================================================
+    MINERAL VALUE PIPELINE - MODULE 2
+      2026-08-23 14:56:49  |  v1.7.1
+=================================================================
+
+  yfinance  (Yahoo Finance) - fetching live futures ...
+     OK  copper      (HG=F) =       6.59 USD/lb      ->        14.52 USD/kg  [2026-08-21]
+     OK  gold        (GC=F) =   4,680.60 USD/troy_oz ->   150,484.79 USD/kg  [2026-08-21]
+     OK  silver      (SI=F) =      69.53 USD/troy_oz ->     2,235.44 USD/kg  [2026-08-21]
+     OK  platinum    (PL=F) =   1,895.70 USD/troy_oz ->    60,948.17 USD/kg  [2026-08-21]
+     OK  palladium   (PA=F) =   1,350.20 USD/troy_oz ->    43,409.94 USD/kg  [2026-08-21]
+
+  metals.dev - skipped (no API key set; edit MINERAL_CONFIG.metals_api_key)
+
+  Reference table - loading curated prices + densities ...
+     OK  31 reference rows loaded
+
+  Merging sources ...
+     Live prices  :   5 entries
+     Reference    :  19 entries
+     Unpriced     :   7 entries
+
+  Delivery destination 'earth_surface' - terrestrial prices stand.
+
+  Validating catalog ...
+     OK  Unit check: all price columns are USD/kg (checked price_usd_per_kg, live_price_usd_per_kg, ref_price_usd_per_kg)
+     OK  Validation complete
+
+       Catalog saved -> C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\mineral_value_catalog.csv
+
+=================================================================
+  OK  MINERAL VALUE CATALOG COMPLETE
+      Entries  : 31
+      Columns  : 19
+      Elapsed  : 0.8s
+=================================================================
+
+  Stage 2 done in 0:00:00
+
+========================================================================
+  COMPLETE in 0:00:00
+  Output written to: C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline
+========================================================================
