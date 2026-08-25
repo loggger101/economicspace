@@ -545,7 +545,14 @@ py verify_docs.py
 | 3 | row counts | "40 propellants" after a row was added |
 | 4 | links | a markdown anchor that does not resolve |
 | 5 | structure | unbalanced fences, ragged tables, heading-level jumps, duplicate h1/h2 |
-| 6 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
+| 6 | dashes | an em- or en-dash creeping back into prose a reader sees |
+| 7 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
+
+Check 6 is a ratchet rather than a style opinion: 1,342 em-dashes came out of
+the docs and 1,120 out of the module comments, and without a check they drift
+back one commit at a time. It reads `modules/*.py` through `tokenize` and `ast`
+so it sees only comments and docstrings, because the `notes` and `composition`
+strings are written into the CSVs and their text is data.
 
 The first three exist because they have already failed: `use_beneficiation` and
 `optimise_programme_scale` were both documented as `False` for several releases
