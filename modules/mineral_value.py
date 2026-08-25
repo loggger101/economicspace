@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""mineral_value — Module 2 of the Asteroid Profitability Pipeline.
+"""mineral_value, Module 2 of the Asteroid Profitability Pipeline.
 
 Builds a catalog of CURRENT market prices and bulk DENSITIES for every
 mineral / element that appears in Module 1's TAXONOMY_COMPOSITION table.
@@ -10,20 +10,20 @@ Pipeline flow:
     Fetch live prices  →  Merge with reference table  →  Validate  →  Export
 
 Active sources:
-    • yfinance  (Yahoo Finance)    — live futures prices for gold (GC=F),
+    • yfinance  (Yahoo Finance)    - live futures prices for gold (GC=F),
                                      silver (SI=F), platinum (PL=F),
                                      palladium (PA=F), copper (HG=F).
                                      Free, no API key.
-    • USGS Mineral Commodity      — curated fallback prices for the LME
+    • USGS Mineral Commodity      - curated fallback prices for the LME
       Summaries + LME reference     metals (Ni, Co, Al, Pb, Zn, Sn, Fe ore)
                                     and the trace PGMs that yfinance does
                                     not expose (Rh, Ir, Ru, Os).  These are
                                     stamped with `reference_date` so the
                                     user knows how stale they are.
-    • In-pipeline mineralogy      — densities, chemical formulas, and the
+    • In-pipeline mineralogy      - densities, chemical formulas, and the
       reference (Klein & Hurlbut    relevant elemental yield fractions for
        "Manual of Mineralogy"       every mineral named in the Module 1
-       + Mindat / Webmineral)       taxonomy table.  Physical constants —
+       + Mindat / Webmineral)       taxonomy table.  Physical constants; 
                                     they do not change between runs.
 
 Adding a new mineral / element:
@@ -114,7 +114,7 @@ _DEFAULT_OUTPUT_DIR = _default_output_dir()
 
 # ═════════════════════════════════════════════════════════════════════════════
 # ║                                                                           ║
-# ║   ★  USER SETTINGS — EDIT THESE TO TUNE THE PIPELINE  ★                  ║
+# ║   ★  USER SETTINGS, EDIT THESE TO TUNE THE PIPELINE  ★                  ║
 # ║                                                                           ║
 # ═════════════════════════════════════════════════════════════════════════════
 @dataclass
@@ -128,49 +128,49 @@ class MineralValueConfig:
 
     # ─── METALS.DEV (optional, off unless you supply a key) ──────────────────
     # Set to your real API key to enable.  Leaving it as "DEMO" causes the
-    # fetcher to silently skip — the demo endpoint is heavily rate-limited.
+    # fetcher to silently skip; the demo endpoint is heavily rate-limited.
     metals_api_key: str = "DEMO"
     metals_api_url: str = "https://api.metals.dev/v1/latest"
 
-    # ─── DELIVERY DESTINATION  (drives EVERY price — read this) ──────────────
+    # ─── DELIVERY DESTINATION  (drives EVERY price; read this) ──────────────
     # Where the mined material is actually SOLD.  This is the single most
     # consequential field in the pipeline: it selects the market, and the
     # market decides both what a kilogram is worth and which asteroids win.
     #
-    #   "earth_surface" — material re-enters and is sold on Earth at
+    #   "earth_surface"; material re-enters and is sold on Earth at
     #                     terrestrial commodity prices.  Water is worth
     #                     ~nothing; platinum is worth $57,000/kg.  Favours
     #                     metal-rich M / X types.
-    #   "leo"           — delivered to and sold in low Earth orbit.  Every
+    #   "leo"           - delivered to and sold in low Earth orbit.  Every
     #                     commodity with in-space utility is worth the launch
     #                     cost it avoids ($4,253/kg); precious metals are
     #                     worth nothing, because no orbital market for them
     #                     exists.  Favours water- and metal-rich bulk.
-    #   "cislunar"      — sold at a lunar-vicinity (NRHO) depot, worth the
+    #   "cislunar"      - sold at a lunar-vicinity (NRHO) depot, worth the
     #                     larger launch cost avoided ($10,810/kg, derived).
     #                     Also the CHEAPEST of the orbital options to reach
-    #                     from an asteroid — see Module 4's return-Δv model.
-    #   "lunar_surface" — sold at a Moon base.  $21,210/kg: nearest
+    #                     from an asteroid; see Module 4's return-Δv model.
+    #   "lunar_surface", sold at a Moon base.  $21,210/kg: nearest
     #                     destination, but airless, so all 5,920 m/s from LEO
     #                     is propulsive.
-    #   "mars_surface"  — sold at a Mars base.  $45,105/kg: far in Δv, but the
+    #   "mars_surface"  - sold at a Mars base.  $45,105/kg: far in Δv, but the
     #                     atmosphere brakes most of the arrival for free.
     #
     # ⚠️  The two surface figures are MARGINAL-TRANSPORT LOWER BOUNDS.  They
     # price the propellant and stages needed to move a kilogram, on a reusable
     # Falcon 9 LEO price, with no first-of-kind development, no programme
     # overhead and no launch-cadence limit.  Real delivered cost today is far
-    # higher — CLPS lunar landers run on the order of $1M/kg for ~100 kg
+    # higher; CLPS lunar landers run on the order of $1M/kg for ~100 kg
     # payloads.  Treat these as "what it could cost at industrial scale", not
     # "what it costs now".
     #
     # v1.3.0: this used to reprice water only.  It now reprices everything,
-    # which is the consistent form of the same correction — see
+    # which is the consistent form of the same correction; see
     # DELIVERY_DESTINATIONS and IN_SPACE_UTILITY below for the numbers, the
     # derivation, and which parts are judgement rather than measurement.
     #
     # ⚠️  Module 4's CALC_CONFIG carries a delivery_destination of its own,
-    # and it must MATCH this one — it selects the mission architecture that
+    # and it must MATCH this one; it selects the mission architecture that
     # actually delivers the cargo here.  Module 4 checks and warns.
     delivery_destination: str = "earth_surface"
 
@@ -182,23 +182,23 @@ class MineralValueConfig:
     catalog_filename: str = "mineral_value_catalog.csv"
 
     # ─── PRICE UNITS ─────────────────────────────────────────────────────────
-    # Every price in this pipeline — live OR reference — is normalised to
+    # Every price in this pipeline, live OR reference, is normalised to
     # USD per kilogram before it lands in the output frame.  This constant
     # is the single source of truth for that unit; every column carries the
     # `_usd_per_kg` suffix so the unit is unmistakable downstream.
     PRICE_UNIT: str = "USD/kg"
 
     # ─── PIPELINE VERSION ────────────────────────────────────────────────────
-    # 1.1.0 — initial release
-    # 1.1.1 — cross-file audit cleanup (May 2026):
+    # 1.1.0 : initial release
+    # 1.1.1 : cross-file audit cleanup (May 2026):
     #         • removed unused imports (`field` from dataclasses, `Dict` from typing)
     #         • refreshed _REF_PRICE_DATE stamp 2026-01-15 → 2026-05-29
-    # 1.1.4 — lookup_mineral() passes regex=False.  pandas' str.contains
-    #         defaults to regex=True, so a query containing metacharacters —
-    #         "nickel-iron (alloy)" — was read as a pattern rather than the
+    # 1.1.4 : lookup_mineral() passes regex=False.  pandas' str.contains
+    #         defaults to regex=True, so a query containing metacharacters; 
+    #         "nickel-iron (alloy)", was read as a pattern rather than the
     #         literal substring the docstring promises, and an unbalanced
     #         bracket raised re.PatternError.  No other behaviour change.
-    # 1.1.3 — added rare-mineral phase entries (Option 3 from low-value audit):
+    # 1.1.3 : added rare-mineral phase entries (Option 3 from low-value audit):
     #         • sperrylite  PtAs2     56.6% Pt  → ~$25k/kg implied
     #         • laurite     RuS2      61.2% Ru  → ~$10k/kg implied
     #         • awaruite    Ni3Fe     75.9% Ni + 5× PGM-enriched → ~$25k/kg
@@ -206,9 +206,9 @@ class MineralValueConfig:
     #         These are NOT referenced by default in Module 1's TAXONOMY
     #         (which uses bulk "nickel-iron" as the metal carrier).  They are
     #         available targets for per-asteroid composition overrides or
-    #         future spectral-identification work — the integrity check in
+    #         future spectral-identification work; the integrity check in
     #         Module 4 will report them as informational "extra" rows.
-    # 1.1.2 — calibration pass — fix low-value bugs found in Module 4 output:
+    # 1.1.2 : calibration pass; fix low-value bugs found in Module 4 output:
     #         • Iron price $0.12 → $0.50/kg.  Old number was the iron-ore
     #           benchmark; mining produces refined Fe metal from nickel-iron
     #           alloy, so the correct sale price is steel scrap ($0.25-0.50/kg).
@@ -218,7 +218,7 @@ class MineralValueConfig:
     #         • Rhodium $150k → $320k/kg (~$9,950/oz, LBMA May 2026).
     #         • Water $2,500 → $4,250/kg.  Was based on legacy Falcon 9 launch
     #           cost; now matches Module 3 v1.2.4 reusable Falcon 9 $4,253/kg-to-LEO.
-    #         • nickel-iron yields: added ruthenium (3 ppm) + osmium (2 ppm) —
+    #         • nickel-iron yields: added ruthenium (3 ppm) + osmium (2 ppm), 
     #           previously missing despite being in the element catalog.
     #           Iridium 2 → 4 ppm; rhodium 2 → 1.5 ppm (rebalanced for ~37 ppm
     #           total PGM matching siderite literature).
@@ -227,15 +227,15 @@ class MineralValueConfig:
     #           M-type bulk value          $2.61 → $3.69/kg  (+41%)
     #           C-type bulk value          $375  → $638/kg   (+70%, water-driven)
     #           B-type bulk value          $500  → $850/kg   (+70%, water-driven)
-    # 1.1.5 — renumbering, no behaviour change.  This project was briefly
+    # 1.1.5 : renumbering, no behaviour change.  This project was briefly
     #         developed in two places at once and both shipped different code
     #         as 1.1.4, so that stamp is ambiguous.  The reconciled module is
     #         1.1.5 because it matches neither parent.  Treat any CSV stamped
     #         1.1.4 as undated and re-run rather than trusting the number.
-    # 1.2.0 — realism audit: water is now priced by DELIVERY DESTINATION.
-    #         Water was hardcoded at $4,250/kg — explicitly "the cost-to-LEO
+    # 1.2.0 : realism audit: water is now priced by DELIVERY DESTINATION.
+    #         Water was hardcoded at $4,250/kg, explicitly "the cost-to-LEO
     #         of launching an equivalent water mass", i.e. the value of water
-    #         sitting in orbit — while Module 4's mission model flies the
+    #         sitting in orbit, while Module 4's mission model flies the
     #         cargo back down and lands it in a re-entry capsule.  Water on
     #         Earth's surface is worth bulk-industrial rates.
     #         The error was not marginal.  Measured across a real catalog,
@@ -250,12 +250,12 @@ class MineralValueConfig:
     #         New WATER_VALUE_BY_DESTINATION table + delivery_destination
     #         config field (earth_surface / leo / cislunar).  Default is
     #         earth_surface, which is what the Module 4 architecture actually
-    #         delivers — so C-type bulk value drops 637.63 → 0.13 $/kg and
+    #         delivers, so C-type bulk value drops 637.63 → 0.13 $/kg and
     #         the ranking inverts to metal-rich types.  Set 'leo' to recover
     #         the old numbers, but only alongside a mission model that
     #         actually stops at LEO.
     #         New output columns: value_basis, delivery_destination.
-    # 1.3.0 — IN-SPACE DELIVERY: destination pricing generalised from water to
+    # 1.3.0 : IN-SPACE DELIVERY: destination pricing generalised from water to
     #         EVERY commodity.  Paired with Module 3 v1.4.0 / Module 4 v1.5.0.
     #         v1.2.0 repriced water by destination and left every other
     #         commodity at its terrestrial spot price, which is the same
@@ -268,7 +268,7 @@ class MineralValueConfig:
     #           it is now $4,253/kg-to-LEO carried a further 3,600 m/s
     #           (Module 3's TLI + NRHO insertion) by an Isp 465 s stage of
     #           dry-mass fraction 0.10, via the rocket equation in
-    #           delivered_cost_usd_per_kg().  That lands at $10,809/kg —
+    #           delivered_cost_usd_per_kg().  That lands at $10,809/kg: 
     #           15% below the old hand-waved $12,750, and now traceable.
     #             earth_surface  $0/kg avoided (terrestrial prices stand)
     #             leo            $4,253/kg
@@ -276,7 +276,7 @@ class MineralValueConfig:
     #         • A kilogram at a depot is worth the BETTER OF TWO FATES, and
     #           the choice is made per commodity:
     #             USED IN SPACE   terrestrial price PLUS in_space_utility x
-    #                             launch cost avoided.  Note the PLUS — the
+    #                             launch cost avoided.  Note the PLUS; the
     #                             launch bill is what delivering it saves, on
     #                             top of the material itself.
     #             SHIPPED DOWN    terrestrial price MINUS the downleg
@@ -292,7 +292,7 @@ class MineralValueConfig:
     #         • New IN_SPACE_UTILITY table: how good a substitute each
     #           commodity is for the launched article.  Water 1.00, structural
     #           metals 0.70, silicates 0.25, carbon 0.40, organics 0.20, and
-    #           0.00 for the precious metals — which routes them down the
+    #           0.00 for the precious metals, which routes them down the
     #           ship-to-Earth branch rather than zeroing them.
     #           THESE ARE JUDGEMENTS, not measurements; they are the softest
     #           assumption in the in-space case and live in one table for that
@@ -306,21 +306,21 @@ class MineralValueConfig:
     #           gold        $138,882   -> $113,472/ $111,565 (shipped down)
     #         New output columns: terrestrial_price_usd_per_kg,
     #         in_space_utility, downleg_cost_usd_per_kg, value_route.
-    # 1.4.0 — SURFACE DESTINATIONS: lunar_surface and mars_surface.  Paired
+    # 1.4.0 : SURFACE DESTINATIONS: lunar_surface and mars_surface.  Paired
     #         with Module 3 v1.5.0 and Module 4 v1.6.0.  Prices for the three
     #         existing destinations are UNCHANGED.
     #         • delivered_cost_usd_per_kg now walks a CHAIN OF LEGS
     #           (_DELIVERY_LEGS) backwards from the payload instead of taking
     #           one lumped Δv.  Staging is worth roughly 2x on a lunar
-    #           landing — a single stage flying the whole 5,920 m/s needs
+    #           landing, a single stage flying the whole 5,920 m/s needs
     #           10.96 kg in LEO per kg landed against 4.99 kg for the
-    #           TLI/LOI-tug + lander pair that would actually be flown — so
+    #           TLI/LOI-tug + lander pair that would actually be flown, so
     #           lumping it would have overstated the Moon by 2x.
     #         • New "edl" leg type for atmospheric arrival, carrying a
     #           surviving-mass fraction rather than a Δv.  Mars uses 0.30,
     #           measured from MSL (3,257 kg entry -> 899 kg rover, 27.6%) and
     #           Perseverance (3,440 -> 1,025, 29.8%).
-    #         • New _LANDER_DRY_MASS_FRAC 0.20 — Apollo LM descent stage flew
+    #         • New _LANDER_DRY_MASS_FRAC 0.20; Apollo LM descent stage flew
     #           2,134 kg dry on 8,200 kg propellant.  A lander is structurally
     #           much heavier than a cryo tug for the same propellant load.
     #         Delivered cost, and the mass that has to reach LEO for it:
@@ -332,23 +332,23 @@ class MineralValueConfig:
     #         way: $25,410 from LEO, $27,317 from NRHO, $44,939 from the Moon,
     #         $96,394 from Mars.  The last exceeds the terrestrial price of
     #         platinum, so platinum delivered to a Mars base is worth exactly
-    #         nothing — which is the correct answer, not a bug.
-    #         ⚠️  Both surface figures are marginal-transport LOWER BOUNDS —
+    #         nothing, which is the correct answer, not a bug.
+    #         ⚠️  Both surface figures are marginal-transport LOWER BOUNDS: 
     #         no NRE, no programme overhead, no cadence limit.  CLPS lunar
     #         landers really cost ~$1M/kg today at ~100 kg scale.
-    # 1.5.0 — market-size data for Module 4 v1.7.0's saturation model.
+    # 1.5.0 : market-size data for Module 4 v1.7.0's saturation model.
     #         Prices were static at the point of sale: a mission could return
     #         any quantity of platinum and sell every kilogram at spot, which
     #         left the "fly more missions" lever with no stopping point.
-    #         • ANNUAL_WORLD_PRODUCTION_KG — USGS primary production.  The
+    #         • ANNUAL_WORLD_PRODUCTION_KG, USGS primary production.  The
     #           targets asteroid mining always names are the small ones:
     #           osmium ~1 t/yr, iridium 7.5 t, rhodium 23 t, platinum 180 t.
-    #         • IN_SPACE_ANNUAL_DEMAND_KG — what a theoretical base can absorb
+    #         • IN_SPACE_ANNUAL_DEMAND_KG; what a theoretical base can absorb
     #           per year, all commodities competing for one import budget.
     #           LEO 500 t, cislunar 100 t, lunar surface 50 t, Mars 20 t.
-    #           ⚠️  JUDGEMENT, not measurement — no such market exists.
+    #           ⚠️  JUDGEMENT, not measurement; no such market exists.
     #         New output column: annual_market_kg (destination-aware).
-    # 1.6.0 — IN-SPACE MANUFACTURING is now costed instead of assumed.  The
+    # 1.6.0 : IN-SPACE MANUFACTURING is now costed instead of assumed.  The
     #         gap between "kilogram of Fe-Ni at a depot" and "kilogram of
     #         usable structure" used to hide inside the 0.70 utility factor,
     #         so the refinery was assumed into existence and never paid for.
@@ -366,16 +366,16 @@ class MineralValueConfig:
     #         The utility factor now means only what it says: how good a
     #         substitute the finished article is for a launched one.
     #         New output column: in_space_processing_usd_per_kg.
-    # 1.7.0 — UTILITY IS PER DESTINATION, and the import budget is per
+    # 1.7.0 : UTILITY IS PER DESTINATION, and the import budget is per
     #         commodity.  One utility table used to serve every in-space
     #         destination, so olivine captured the same fraction of its freight
-    #         on the surface of Mars — a planet made of olivine — as at a
+    #         on the surface of Mars, a planet made of olivine, as at a
     #         propellant depot in empty space.  The missing term is not
     #         distance, it is LOCAL COMPETITION: the alternative to importing
     #         is not always launching from Earth.
     #         • IN_SPACE_UTILITY_BY_DESTINATION overrides the base table per
     #           destination.  LEO and cislunar keep the base profile unchanged
-    #           — nothing is available locally there at any price, so they are
+    #, nothing is available locally there at any price, so they are
     #           the calibration anchor.  The two surfaces are discounted
     #           against what they can dig up:
     #             water        1.00 -> 0.60 Moon (PSR ice, ~40 K, no sunlight)
@@ -388,16 +388,16 @@ class MineralValueConfig:
     #             carbon       0.40 -> 0.02 Mars (95.3% CO2 atmosphere); NOT
     #                                  discounted on the Moon, where carbon is
     #                                  ~100 ppm solar-wind implantation
-    #             Ni/Co/Cu     undiscounted everywhere — no concentrated ore is
+    #             Ni/Co/Cu     undiscounted everywhere; no concentrated ore is
     #                                  known on either body
     #           Every override runs DOWNWARD.  Raising a utility is how this
     #           table becomes a viability dial, so a settlement catalyst market
-    #           for the PGMs was considered and rejected — see the note on
+    #           for the PGMs was considered and rejected; see the note on
     #           IN_SPACE_UTILITY_BY_DESTINATION for why it needs a
     #           quantity-aware route choice first.
     #         • _DEMAND_SHARE_BY_CLASS splits the destination import budget
     #           that IN_SPACE_ANNUAL_DEMAND_KG has described as shared since
-    #           v1.5.0 but never actually divided — every commodity used to get
+    #           v1.5.0 but never actually divided, every commodity used to get
     #           the whole budget to itself.  Propellant 0.55 / structural 0.25 /
     #           shielding 0.15 / chemical 0.05, plus a 0.0005 trace slice that
     #           binds only if anyone ever gives the PGMs in-space utility.  So
@@ -414,8 +414,8 @@ class MineralValueConfig:
     #           becomes the world's real 180 t/yr) while gold loosens (500 t/yr
     #           becomes 3,000 t/yr).  Net effect on the best case is negative
     #           at every destination measured.
-    #         Prices still RISE with distance — Mars freight is 10.6 kg-in-LEO
-    #         per kg delivered and that dominates — but they no longer rise as
+    #         Prices still RISE with distance; Mars freight is 10.6 kg-in-LEO
+    #         per kg delivered and that dominates, but they no longer rise as
     #         fast as the freight does, and the volatiles that carried the Mars
     #         result rise least.  Water at Mars is 2.7x its LEO price now,
     #         against 11x before.
@@ -424,22 +424,22 @@ class MineralValueConfig:
     #           olivine   $11,070 ->    $696   carbon  $17,831 ->    $691
     #           nickel    unchanged at $31,360 (undiscounted)
     #           platinum  unchanged at $0 (downleg still exceeds spot)
-    # 1.7.1 — Three commodities were falling through a SILENT DEFAULT, and the
+    # 1.7.1 : Three commodities were falling through a SILENT DEFAULT, and the
     #         stamp moves so a catalog still names the code that built it.  No
     #         exported value changes: all 31 rows of the on-disk catalog
     #         recompute identically, `annual_market_kg` and `in_space_utility`
     #         alike.
     #         • `sperrylite` (PtAs2), `laurite` (RuS2) and `native-pgm` had no
     #           `_COMMODITY_CLASS` entry, so `annual_market_kg` handed them the
-    #           `.get(..., "shielding")` default — **0.15 of a destination's
+    #           `.get(..., "shielding")` default: **0.15 of a destination's
     #           entire import budget** instead of the trace slice the eight PGM
     #           ELEMENTS get.  75,000 kg/yr at LEO against 250: a factor of 300,
     #           for the ore minerals of exactly those metals.
     #           ⚠️  INERT TODAY, and that is why it survived: their in-space
     #           utility is 0.0 at every destination, so the price router always
     #           returns "shipped to Earth" and the class is never read.  It is
-    #           the RTG lesson again — **an unreachable branch is not a verified
-    #           branch** — and the settlement-catalyst market that would make it
+    #           the RTG lesson again; **an unreachable branch is not a verified
+    #           branch**, and the settlement-catalyst market that would make it
     #           reachable is recorded in CLAUDE.md as considered-and-rejected,
     #           not as impossible.  Reclassified to "trace", where they belong.
     #         • An `assert` after MINERAL_REFERENCE now fails at import if any
@@ -452,7 +452,7 @@ class MineralValueConfig:
     #         saturates.  It is one of only four phases Stage 4 actually sells.
     #         Correcting it to world pig-iron (1.3e12 kg/yr) moves the
     #         saturation multiplier by **7.7e-8 at 5e4 kg and 7.7e-5 at 5e7 kg**
-    #         — nothing, but enough to break the bit-identity every release here
+    #, nothing, but enough to break the bit-identity every release here
     #         is argued from, on a destination not re-measured since calc
     #         1.14.0.  Recorded in CLAUDE.md instead; do not "find" it again and
     #         assume it is bigger.
@@ -504,9 +504,9 @@ def _per_tonne_to_per_kg(usd_per_tonne: float) -> float:
 # One row per entity that Module 1's TAXONOMY_COMPOSITION can name OR that the
 # user might want to value separately.  Splits cleanly into two kinds:
 #
-#   • ELEMENTS  — actually tradable commodities, priced by markets.
+#   • ELEMENTS  - actually tradable commodities, priced by markets.
 #                 Live-price columns get filled by the fetchers.
-#   • MINERALS  — rock-forming compounds, priced via their valuable elemental
+#   • MINERALS  - rock-forming compounds, priced via their valuable elemental
 #                 yield (e.g. magnetite = Fe ore; nickel-iron ≈ 90 % Fe + 10 %
 #                 Ni by mass).  The `yields` dict maps the mineral onto the
 #                 element rows so Module 3 can compute mass × composition ×
@@ -524,7 +524,7 @@ def _per_tonne_to_per_kg(usd_per_tonne: float) -> float:
 # to update it.
 
 # Reference snapshot date for the static price column.  Update this whenever
-# you refresh ref_price_usd_per_kg values (the numbers below — when a fresh
+# you refresh ref_price_usd_per_kg values (the numbers below, when a fresh
 # audit re-reviews the static prices, bump this stamp).
 _REF_PRICE_DATE = "2026-05-29"
 
@@ -536,34 +536,34 @@ _REF_PRICE_DATE = "2026-05-29"
 # bulk value of every C / B / D-type asteroid, so whichever number goes here
 # determines the entire top of the profitability ranking.
 #
-# Water has no intrinsic scarcity value — it is worth what it costs to put it
+# Water has no intrinsic scarcity value; it is worth what it costs to put it
 # where the customer is.  So the price is a function of DESTINATION, not of
 # the asteroid:
 #
-#   earth_surface — you flew it down a gravity well to a planet that is 71%
+#   earth_surface; you flew it down a gravity well to a planet that is 71%
 #                   ocean.  It is worth bulk industrial water, and even that
 #                   overstates it once you account for the fact that nobody
 #                   needs it.  This is what a sample-return architecture
 #                   actually delivers.
-#   leo           — worth the launch cost it avoids.  $4,250/kg matches the
+#   leo           - worth the launch cost it avoids.  $4,250/kg matches the
 #                   Falcon 9 reusable $/kg-to-LEO in Module 3, so the two
 #                   modules stay consistent by construction.
-#   cislunar      — worth the cost of lifting it to lunar vicinity.  Roughly
+#   cislunar      - worth the cost of lifting it to lunar vicinity.  Roughly
 #                   3× the LEO figure, tracking the Δv difference between LEO
 #                   and a TLI/NRHO depot.
 #
 # BEFORE v1.2.0 this table did not exist and water was hardcoded at the LEO
 # figure while Module 4's mission model returned the material to Earth's
-# surface — pricing the cargo as if it had been left in orbit.  That single
+# surface; pricing the cargo as if it had been left in orbit.  That single
 # inconsistency was worth a factor of ~4 million on C-type asteroids and
 # inverted the entire ranking.
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DELIVERY DESTINATIONS  —  what a kilogram is worth, and where  (v1.3.0)
+# DELIVERY DESTINATIONS  -  what a kilogram is worth, and where  (v1.3.0)
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # Material sold in space is worth the launch cost it AVOIDS.  That number is
-# not asserted here — it is derived from the rocket equation, from the Δv
+# not asserted here; it is derived from the rocket equation, from the Δv
 # ladder in Module 3's DELTA_V_REFERENCE, and from a real launch price.
 #
 # Constants below are cross-referenced to Module 3.  They are duplicated
@@ -573,7 +573,7 @@ _REF_PRICE_DATE = "2026-05-29"
 
 G0_M_S2 = 9.806_65                 # standard gravity, exact by definition
 
-# Falcon 9 reusable $/kg-to-LEO — Module 3 LAUNCH_VEHICLES ($74M / 17.4 t).
+# Falcon 9 reusable $/kg-to-LEO, Module 3 LAUNCH_VEHICLES ($74M / 17.4 t).
 # This is the cheapest operational figure in that table, so every in-space
 # price derived from it is a LOWER bound on the launch cost avoided.
 _LEO_USD_PER_KG = 4_253.0
@@ -581,7 +581,7 @@ _LEO_USD_PER_KG = 4_253.0
 # The stages that would have carried the payload up if you had launched it.
 # Isp 465 s = hydrolox upper stage (Module 3 PROPELLANTS: LH2/LOX, 450-465 s
 # vacuum).  Dry-mass fraction 0.10 is mid-range for a cryogenic upper stage
-# (Centaur V ~0.08, DCSS ~0.11) — stage dry mass / (dry + propellant).
+# (Centaur V ~0.08, DCSS ~0.11), stage dry mass / (dry + propellant).
 _TUG_ISP_S            = 465.0
 _TUG_DRY_MASS_FRAC    = 0.10
 # A LANDER is structurally much heavier than a tug for the same propellant
@@ -594,7 +594,7 @@ _LANDER_DRY_MASS_FRAC = 0.20
 # discarded.  Measured, not assumed:
 #     MSL           entry 3,257 kg  ->  rover   899 kg  = 27.6%
 #     Perseverance  entry 3,440 kg  ->  rover 1,025 kg  = 29.8%
-# 0.30 takes the better of the two and is generous to Mars — larger entry
+# 0.30 takes the better of the two and is generous to Mars; larger entry
 # vehicles should scale better than MSL's sky-crane, but nothing that size
 # has flown.
 _MARS_LANDED_MASS_FRACTION = 0.30
@@ -607,8 +607,8 @@ _MARS_LANDED_MASS_FRACTION = 0.30
 # chain that would actually be flown.
 #
 # Every Δv here appears in Module 3's DELTA_V_REFERENCE.
-#   ("burn", Δv m/s, Isp s, dry fraction)  — a propulsive leg
-#   ("edl",  surviving mass fraction)      — atmospheric entry, descent, landing
+#   ("burn", Δv m/s, Isp s, dry fraction)  - a propulsive leg
+#   ("edl",  surviving mass fraction)      - atmospheric entry, descent, landing
 _DELIVERY_LEGS: Dict[str, Optional[List[tuple]]] = {
     "earth_surface": None,                       # already at the market
     "leo": [],                                   # nothing above LEO
@@ -635,7 +635,7 @@ def _stage_mass_ratio(dv_m_s: float, isp_s: float, dry_mass_frac: float) -> floa
         δ  = d / (d + p)   ⇒   d = δ(R−1) / (1 − δR)   stage dry mass
         m0 = R (1 + d)                                 total mass to start with
 
-    Returns inf when δ·R ≥ 1 — the tank cannot close on that Δv and no amount
+    Returns inf when δ·R ≥ 1; the tank cannot close on that Δv and no amount
     of propellant will fix it.
     """
     if dv_m_s <= 0:
@@ -658,7 +658,7 @@ def delivered_cost_usd_per_kg(
     BACKWARDS from the payload, multiplying up the mass each leg demands, then
     charge the whole stack at the LEO launch price.
 
-    An `edl` leg divides rather than multiplies — surviving 30% of entry mass
+    An `edl` leg divides rather than multiplies; surviving 30% of entry mass
     means you must arrive with 1/0.30 = 3.33 kg for every kg that lands.
     """
     legs = _DELIVERY_LEGS.get(str(destination or "").strip().lower())
@@ -679,7 +679,7 @@ def delivered_cost_usd_per_kg(
 
 
 # Terrestrial bulk-industrial water, for the earth_surface case.  Municipal /
-# industrial bulk water runs $0.0005-0.002/kg — asteroid water landed on Earth
+# industrial bulk water runs $0.0005-0.002/kg; asteroid water landed on Earth
 # competes with rain.
 _EARTH_SURFACE_WATER_USD_PER_KG = 0.001
 
@@ -734,7 +734,7 @@ DELIVERY_DESTINATIONS: Dict[str, dict] = _build_destination_table()
 
 
 # ─── DOWNLEG: GETTING IT FROM A DEPOT TO THE TERRESTRIAL MARKET ──────────────
-# A commodity with no in-space demand is not worthless at a depot — it is
+# A commodity with no in-space demand is not worthless at a depot; it is
 # worth its Earth price MINUS whatever it costs to fly it the rest of the way
 # down.  Someone has to pay that leg; the miner selling at the depot eats it
 # in the price.
@@ -752,8 +752,8 @@ DELIVERY_DESTINATIONS: Dict[str, dict] = _build_destination_table()
 #                                                 "Sample recovery operations")
 #   departure burn    rocket-equation mass penalty for leaving the depot
 #
-# Coming down is far cheaper than going up — you need a heat shield, not a
-# launch vehicle — which is why these numbers are a fraction of the
+# Coming down is far cheaper than going up; you need a heat shield, not a
+# launch vehicle, which is why these numbers are a fraction of the
 # launch-cost-avoided figures above.
 _DOWNLEG_CAPSULE_DRY_FRAC   = 0.10
 _DOWNLEG_TPS_FRAC           = 0.15
@@ -763,14 +763,14 @@ _DOWNLEG_RECOVERY_USD       = 15_000_000.0
 _DOWNLEG_BATCH_KG           = 10_000.0
 # Δv to leave the destination onto an Earth-return trajectory, entering
 # directly.  All from Module 3's DELTA_V_REFERENCE.
-#   leo           — deorbit burn, ~120 m/s
-#   cislunar      — NRHO departure, ~450 m/s (symmetric with insertion)
-#   lunar_surface — ascent to LLO (1,870) + trans-Earth injection (~850)
-#   mars_surface  — Mars ascent (4,100) + TEI from LMO (2,100)
+#   leo           - deorbit burn, ~120 m/s
+#   cislunar      - NRHO departure, ~450 m/s (symmetric with insertion)
+#   lunar_surface: ascent to LLO (1,870) + trans-Earth injection (~850)
+#   mars_surface  - Mars ascent (4,100) + TEI from LMO (2,100)
 # The surface cases are punishing, and correctly so: hauling material back UP
 # out of a gravity well you just landed in is close to the worst thing you can
 # do with it.  Mars in particular ends up costing more to ship home than any
-# commodity in this catalog is worth, which is the honest answer — you do not
+# commodity in this catalog is worth, which is the honest answer; you do not
 # mine asteroids to deliver platinum to Mars and then fly it back.
 _DOWNLEG_DEPARTURE_DV_M_S = {
     "leo":            120.0,
@@ -783,7 +783,7 @@ _DOWNLEG_DEPARTURE_DV_M_S = {
 def downleg_cost_usd_per_kg(destination: str) -> float:
     """Cost of moving 1 kg from an in-space depot to the terrestrial market.
 
-    Returns 0.0 for earth_surface — the material is already there.
+    Returns 0.0 for earth_surface; the material is already there.
     """
     key = str(destination or "").strip().lower()
     if key not in _DOWNLEG_DEPARTURE_DV_M_S:
@@ -805,7 +805,7 @@ def downleg_cost_usd_per_kg(destination: str) -> float:
 # all and it can only be sold by flying it down.
 #
 # ⚠️  THESE ARE ENGINEERING JUDGEMENTS, NOT MEASUREMENTS.  Unlike the price
-# above — which is derived from the rocket equation and a real launch price —
+# above, which is derived from the rocket equation and a real launch price, 
 # no market exists yet to calibrate these against.  They are the single
 # biggest soft assumption in the in-space case, so they live here as one
 # obvious table rather than being buried per-entry.
@@ -813,10 +813,10 @@ def downleg_cost_usd_per_kg(destination: str) -> float:
 # This table is the BASE PROFILE, and it describes a destination with no local
 # resources of any kind: LEO and cislunar, where the only alternative to
 # importing a kilogram from an asteroid is launching that kilogram from Earth.
-# Planetary surfaces have a third option — dig it up locally — and they get
+# Planetary surfaces have a third option, dig it up locally, and they get
 # per-destination overrides in IN_SPACE_UTILITY_BY_DESTINATION below.
 IN_SPACE_UTILITY: Dict[str, float] = {
-    # Volatiles — the canonical in-space commodity.  Water is propellant
+    # Volatiles, the canonical in-space commodity.  Water is propellant
     # feedstock, radiation shielding, life support and coolant; electrolysis
     # is the only processing step between raw ice and a fuelled depot.
     "water":            1.00,
@@ -829,7 +829,7 @@ IN_SPACE_UTILITY: Dict[str, float] = {
     "copper":           0.70,   # wiring, coils, heat exchangers
     "nickel-iron":      0.70,
     "awaruite":         0.70,
-    "magnetite":        0.40,   # oxide — needs reduction before it is metal
+    "magnetite":        0.40,   # oxide, needs reduction before it is metal
     "troilite":         0.30,   # sulphur source, minor structural use
     # Silicates.  Usable as bulk radiation shielding and as 3-D-printing /
     # sintering feedstock, but a poor per-kg substitute for engineered
@@ -837,10 +837,10 @@ IN_SPACE_UTILITY: Dict[str, float] = {
     "olivine":          0.25, "pyroxene":        0.25, "orthopyroxene": 0.25,
     "enstatite":        0.25, "plagioclase":     0.25, "spinel":        0.25,
     "phyllosilicates":  0.25, "oxides":          0.25, "silicates":     0.25,
-    # Carbon and organics — composites, plastics, agriculture feedstock.
+    # Carbon and organics: composites, plastics, agriculture feedstock.
     "carbon":           0.40,
     "organics":         0.20,
-    # Everything not listed — the precious metals above all — defaults to 0.0.
+    # Everything not listed, the precious metals above all, defaults to 0.0.
     # That does NOT make them worthless at a depot: a zero here means only
     # that nobody in orbit wants the material for its own sake, so it is
     # valued by shipping it down instead (terrestrial price less the downleg).
@@ -853,23 +853,23 @@ IN_SPACE_UTILITY_DEFAULT = 0.0
 # Until v1.7.0 one utility table served every in-space destination, so a
 # kilogram of olivine was assumed to be worth the same fraction of its freight
 # on the surface of Mars as at a propellant depot in LEO.  It is not, and the
-# reason is not distance — it is that THE ALTERNATIVE TO IMPORTING IS NOT
+# reason is not distance; it is that THE ALTERNATIVE TO IMPORTING IS NOT
 # ALWAYS LAUNCHING FROM EARTH.
 #
 #   LEO, cislunar    Empty space.  Nothing is available locally at any price,
 #                    so the only substitute for asteroid material is the same
 #                    material launched from Earth.  These keep the base table
-#                    above — they are the calibration anchor, and every
+#                    above; they are the calibration anchor, and every
 #                    override below is defined as a deviation from them.
-#   lunar_surface    Sits on 4×10^19 t of silicate regolith containing 5–15 wt%
+#   lunar_surface    Sits on 4×10^19 t of silicate regolith containing 5-15 wt%
 #                    FeO plus mare ilmenite, and (at the poles) water ice.
 #   mars_surface     Sits on metres-thick mid-latitude ground ice (SHARAD /
-#                    SWIM), 1–3 wt% hydrated regolith measured by Curiosity's
+#                    SWIM), 1-3 wt% hydrated regolith measured by Curiosity's
 #                    SAM, a 95.3% CO2 atmosphere, and a globally oxidised
 #                    iron-rich crust.
 #
 # So the correction runs mostly DOWNWARD, and hardest at the destination that
-# is furthest away — which inverts the naive reading of the price table above.
+# is furthest away, which inverts the naive reading of the price table above.
 # Mars has the dearest freight ($45,105/kg) AND the poorest market for bulk
 # asteroid material, because a settlement with an atmosphere and a crust makes
 # its own water, carbon and rock.  Do not "fix" that by raising these back up:
@@ -882,13 +882,13 @@ IN_SPACE_UTILITY_DEFAULT = 0.0
 #
 # ⚠️  CONSIDERED AND REJECTED: giving the precious metals a small non-zero
 # utility (0.05) at the two SURFACE destinations.  The physical argument is
-# sound — a crewed base runs fuel cells, electrolysers and Sabatier reactors
+# sound; a crewed base runs fuel cells, electrolysers and Sabatier reactors
 # and wants Pt/Pd/Ru catalysts, where a propellant depot genuinely does not.
 # It was dropped because this module prices each commodity with ONE $/kg and
 # ONE market depth, and in_space_price_usd_per_kg routes on unit price alone.
 # Gold at a lunar base would then route "used in space" at $76,060/kg into a
 # 25 kg/yr catalyst market, beating a $30,061/kg route into a 3,000,000 kg/yr
-# terrestrial one — a five-order-of-magnitude cliff in market depth, invisible
+# terrestrial one, a five-order-of-magnitude cliff in market depth, invisible
 # to the router, that would make precious-metal bodies look worse for a reason
 # with no physics in it.  The real behaviour is a blend (sell the first few kg
 # in space, fly the rest home) and this pipeline cannot express a blend.
@@ -897,14 +897,14 @@ IN_SPACE_UTILITY_DEFAULT = 0.0
 # ⚠️  Softer than the base table, which is already the softest thing in the
 # pipeline.  These are judgements about economies that do not exist.
 IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
-    "leo":      {},                  # base profile — no local resources
-    "cislunar": {},                  # base profile — no local resources
+    "leo":      {},                  # base profile, no local resources
+    "cislunar": {},                  # base profile, no local resources
     "lunar_surface": {
         # Polar ice is real and is the entire premise of a lunar base, but it
         # is in permanently shadowed craters at ~40 K with no sunlight to work
         # by.  Discounted, not eliminated.
         "water":            0.60,
-        # Regolith is 5–15 wt% FeO and the mare carries ilmenite; hydrogen
+        # Regolith is 5-15 wt% FeO and the mare carries ilmenite; hydrogen
         # reduction and molten regolith electrolysis both work at lab scale.
         "iron":             0.45,
         "nickel-iron":      0.45,
@@ -912,7 +912,7 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         "magnetite":        0.25,
         # Ni / Co / Cu are NOT discounted.  No concentrated ore of any of them
         # is known on the Moon, and they are what motors, batteries and wiring
-        # are made of — the base table's 0.70 already prices the manufacturing
+        # are made of; the base table's 0.70 already prices the manufacturing
         # gap.
         # Shipping silicate rock to a body made of silicate rock.  Kept just
         # above zero for the specific phases nobody has demonstrated
@@ -920,10 +920,10 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         "olivine":          0.03, "pyroxene":       0.03, "orthopyroxene": 0.03,
         "enstatite":        0.03, "plagioclase":    0.03, "spinel":        0.03,
         "phyllosilicates":  0.03, "oxides":         0.03, "silicates":     0.03,
-        # Carbon is one of the genuinely scarce elements on the Moon —
+        # Carbon is one of the genuinely scarce elements on the Moon; 
         # solar-wind implantation leaves it at ~100 ppm, which is not a
         # resource.  No discount.
-        # Precious metals stay at the base 0.00 and route down — see the
+        # Precious metals stay at the base 0.00 and route down; see the
         # rejected-change note above.
     },
     "mars_surface": {
@@ -938,17 +938,17 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         "awaruite":         0.40,
         "magnetite":        0.15,
         "troilite":         0.15,   # Mars has abundant crustal sulphate
-        # Ni / Co / Cu again undiscounted — no known concentrated martian ore.
+        # Ni / Co / Cu again undiscounted, no known concentrated martian ore.
         # Basalt, everywhere, for free.
         "olivine":          0.02, "pyroxene":       0.02, "orthopyroxene": 0.02,
         "enstatite":        0.02, "plagioclase":    0.02, "spinel":        0.02,
         "phyllosilicates":  0.02, "oxides":         0.02, "silicates":     0.02,
         # The atmosphere is 95.3% CO2 at ~600 Pa.  Carbon is free on Mars, and
         # Sabatier + electrolysis turns it and the local water into methane and
-        # onward feedstock — which is most of what "organics" would be for.
+        # onward feedstock, which is most of what "organics" would be for.
         "carbon":           0.02,
         "organics":         0.05,
-        # Precious metals stay at the base 0.00 and route down — see the
+        # Precious metals stay at the base 0.00 and route down; see the
         # rejected-change note above.  At Mars that means zero: the $96,394/kg
         # downleg exceeds every terrestrial price in the catalog.
     },
@@ -974,14 +974,14 @@ def in_space_utility(name: str, destination: str) -> float:
 # Prices in this pipeline were static at the point of sale: a mission could
 # return any quantity of platinum and still sell every kilogram at spot.  That
 # is the one remaining assumption that flatters the model in a direction
-# nothing else corrects, because the whole "just fly more missions" lever —
-# nre_amortization_missions — has no natural stopping point without it.
+# nothing else corrects, because the whole "just fly more missions" lever; 
+# nre_amortization_missions, has no natural stopping point without it.
 #
 # Terrestrial figures are USGS Mineral Commodity Summaries annual primary
 # production.  Bulk commodities Earth has in effective abundance carry a
 # deliberately huge number so saturation never binds on them.
 ANNUAL_WORLD_PRODUCTION_KG: Dict[str, float] = {
-    # Precious — small markets, and the ones asteroid mining always targets
+    # Precious: small markets, and the ones asteroid mining always targets
     "osmium":         1.0e3,      # ~1 t/yr, a by-product of a by-product
     "iridium":        7.5e3,      # ~7.5 t
     "rhodium":        2.3e4,      # ~23 t
@@ -990,7 +990,7 @@ ANNUAL_WORLD_PRODUCTION_KG: Dict[str, float] = {
     "palladium":      2.1e5,      # ~210 t
     "gold":           3.0e6,      # ~3,000 t
     "silver":         2.6e7,      # ~26,000 t
-    # Base metals — large markets, saturation effectively never binds
+    # Base metals; large markets, saturation effectively never binds
     "cobalt":         2.3e8,
     "copper":         2.2e10,
     "nickel":         3.6e9,
@@ -1006,7 +1006,7 @@ _UNLIMITED_MARKET_KG = 1.0e15
 # What a theoretical in-space base can actually ABSORB per year, all
 # commodities competing for the same import budget.
 #
-# ⚠️  JUDGEMENT, not measurement — no such market exists.  Anchored to
+# ⚠️  JUDGEMENT, not measurement; no such market exists.  Anchored to
 # publicly discussed architectures: a Starship-class refuelling campaign needs
 # on the order of 1,000 t of propellant in LEO per Mars departure; an
 # Artemis-scale NRHO depot is a fraction of that; surface bases are smaller
@@ -1026,14 +1026,14 @@ IN_SPACE_ANNUAL_DEMAND_KG: Dict[str, float] = {
 # ─── WHAT THE BUDGET IS SPENT ON  (v1.7.0) ───────────────────────────────────
 # The comment above has said "all commodities competing for the same import
 # budget" since v1.5.0, but the code handed EVERY commodity the full budget
-# independently — so a Mars base that imports 20 t/yr would take 20 t of water
+# independently, so a Mars base that imports 20 t/yr would take 20 t of water
 # AND 20 t of platinum AND 20 t of olivine.  That mattered little while the
 # precious metals had zero in-space utility everywhere; it stopped being
 # harmless the moment v1.7.0 gave them a non-zero utility at a settlement.
 #
 # Each commodity now gets a SHARE of the destination's annual import mass.
 # Shares are per CLASS, and every commodity in a class can absorb the whole
-# class share, because within a class they are substitutes — a base wanting
+# class share, because within a class they are substitutes; a base wanting
 # shielding mass does not care whether it arrives as olivine or pyroxene.
 # The four bulk classes partition the budget; the trace slice is additive and
 # negligible.
@@ -1043,7 +1043,7 @@ IN_SPACE_ANNUAL_DEMAND_KG: Dict[str, float] = {
 # dominates, structure is next, shielding is bulky but occasional, and
 # catalysts are measured in kilograms.
 _DEMAND_SHARE_BY_CLASS: Dict[str, float] = {
-    "propellant":  0.55,   # water — refuelling is most of any depot's tonnage
+    "propellant":  0.55,   # water; refuelling is most of any depot's tonnage
     "structural":  0.25,   # metals: pressure vessels, trusses, wire, motors
     "shielding":   0.15,   # bulk silicate: GCR/SPE mass, sintering feedstock
     "chemical":    0.05,   # carbon and organics: composites, agriculture
@@ -1067,8 +1067,8 @@ _COMMODITY_CLASS: Dict[str, str] = {
     "iridium":         "trace",      "osmium":       "trace",
     "gold":            "trace",      "silver":       "trace",
     # v1.7.1: the PGM ORE MINERALS, which were missing.  They are the same
-    # metals as the eight rows above — sperrylite is PtAs2, laurite is RuS2,
-    # native-pgm is the alloy — so "trace" is the only class they can be in.
+    # metals as the eight rows above; sperrylite is PtAs2, laurite is RuS2,
+    # native-pgm is the alloy, so "trace" is the only class they can be in.
     # Absent, they fell through the `.get(..., "shielding")` default below and
     # would have been handed **0.15 of a depot's entire import budget** rather
     # than 0.0005: 75,000 kg/yr at LEO against 250, a factor of 300.
@@ -1092,7 +1092,7 @@ def annual_market_kg(
     because THE MARKET THAT SATURATES IS THE ONE YOU ACTUALLY SELL INTO.  A
     commodity with no in-space demand is flown down and sold on Earth, so it
     is bounded by terrestrial annual production, not by a depot's import
-    budget — before v1.7.0 platinum at LEO was capped at the depot's 500 t/yr
+    budget; before v1.7.0 platinum at LEO was capped at the depot's 500 t/yr
     when the real constraint is the world's 180 t/yr.
 
     Passing route=None keeps the in-space ceiling, which is what a caller with
@@ -1123,7 +1123,7 @@ def annual_market_kg(
 #   ENERGY   kWh per kg of feedstock, times the capital cost of a Watt in
 #            space.  A $800/W-EOL solar train delivering power for 15 years
 #            supplies 15 × 8,766 = 131,490 Wh per installed Watt, so energy
-#            costs $800 / 131,490 = $0.0061/Wh ≈ $6.08/kWh — roughly 100×
+#            costs $800 / 131,490 = $0.0061/Wh ≈ $6.08/kWh, roughly 100×
 #            terrestrial industrial power, which is the whole reason in-space
 #            processing is not obviously free.
 #
@@ -1146,7 +1146,7 @@ IN_SPACE_PROCESSING_KWH_PER_KG: Dict[str, float] = {
     "water":            0.5,
     "iron":             5.0,  "nickel":     5.0,  "cobalt": 5.0,  "copper": 5.0,
     "nickel-iron":      5.0,  "awaruite":   5.0,
-    "magnetite":        7.0,  # oxide — reduction first
+    "magnetite":        7.0,  # oxide, reduction first
     "troilite":         4.0,
     "olivine":          1.0, "pyroxene":       1.0, "orthopyroxene": 1.0,
     "enstatite":        1.0, "plagioclase":    1.0, "spinel":        1.0,
@@ -1166,7 +1166,7 @@ def in_space_processing_cost_usd_per_kg(name: str) -> float:
     """Cost of refining 1 kg of raw feedstock into a usable in-space product.
 
     Energy at the in-space capital rate, plus the amortised refinery.  Zero
-    for anything with no listed process — the caller then treats it as sold
+    for anything with no listed process; the caller then treats it as sold
     as-is, which is the conservative reading.
     """
     kwh = IN_SPACE_PROCESSING_KWH_PER_KG.get(str(name))
@@ -1181,8 +1181,8 @@ def in_space_processing_cost_usd_per_kg(name: str) -> float:
 def value_for_destination(destination: str) -> dict:
     """Look up the delivered-value basis for a delivery destination.
 
-    Unknown destinations fall back to earth_surface — the conservative
-    choice — rather than silently keeping an in-space premium.
+    Unknown destinations fall back to earth_surface, the conservative
+    choice, rather than silently keeping an in-space premium.
     """
     key = str(destination or "").strip().lower()
     if key not in DELIVERY_DESTINATIONS:
@@ -1198,7 +1198,7 @@ def in_space_price_usd_per_kg(
 ) -> Optional[Tuple[float, str]]:
     """Value of 1 kg of `name` sitting at `destination`, and how it is realised.
 
-    Returns (usd_per_kg, route) — or None at earth_surface, where the
+    Returns (usd_per_kg, route), or None at earth_surface, where the
     terrestrial price already stands.
 
     A kilogram at a depot has two possible fates, and it is worth the better
@@ -1206,7 +1206,7 @@ def in_space_price_usd_per_kg(
 
       USE IT IN SPACE.  Worth what an equivalent kilogram delivered from Earth
         would have cost: its purchase price PLUS the launch bill.  Note the
-        PLUS — v1.3.0 replaced the terrestrial price with the launch cost,
+        PLUS, v1.3.0 replaced the terrestrial price with the launch cost,
         which quietly threw the material itself away.  Scaled by
         `in_space_utility`, which is how good a substitute it actually is for
         the launched article.  Only available where demand exists (utility>0).
@@ -1216,7 +1216,7 @@ def in_space_price_usd_per_kg(
         non-zero number on platinum at a depot: nobody in orbit wants
         platinum, but it is still platinum.
 
-    Floored at zero — material too cheap to be worth the freight is worth
+    Floored at zero, material too cheap to be worth the freight is worth
     nothing, not a negative.
     """
     dest = value_for_destination(destination)
@@ -1249,7 +1249,7 @@ MINERAL_REFERENCE: List[dict] = [
         "kind":                  "element",
         "formula":               "Fe",
         "density_gcm3":          7.874,
-        "yfinance_ticker":       None,           # iron ore (TIO=F) is CNY/MT — skip
+        "yfinance_ticker":       None,           # iron ore (TIO=F) is CNY/MT, skip
         "yfinance_unit":         None,
         "metals_dev_key":        None,
         "ref_price_usd_per_kg":  0.50,           # steel scrap / refined iron metal
@@ -1408,7 +1408,7 @@ MINERAL_REFERENCE: List[dict] = [
         "yfinance_ticker":       None,
         "yfinance_unit":         None,
         "metals_dev_key":        None,
-        # This is the TERRESTRIAL price — bulk industrial water, what a
+        # This is the TERRESTRIAL price, bulk industrial water, what a
         # kilogram of it is worth once landed.  At an in-space destination
         # apply_delivery_destination() overwrites it with the launch cost
         # avoided; see DELIVERY_DESTINATIONS and IN_SPACE_UTILITY above.
@@ -1425,7 +1425,7 @@ MINERAL_REFERENCE: List[dict] = [
     },
 
     # ══════════════════════════════════════════════════════════════════════
-    # MINERALS  (rock-forming compounds — priced via elemental yield)
+    # MINERALS  (rock-forming compounds, priced via elemental yield)
     # ══════════════════════════════════════════════════════════════════════
     # `yields` maps mineral → {element_name: mass-fraction}.  Module 3 will
     # use these to break a mineral mass back into its tradable element masses.
@@ -1444,7 +1444,7 @@ MINERAL_REFERENCE: List[dict] = [
         "ref_price_usd_per_kg":  None,           # priced via yields, not directly
         "ref_price_date":        None,
         "yields": {
-            # Bulk metals — typical IIIAB iron-meteorite Fe-Ni alloy.
+            # Bulk metals, typical IIIAB iron-meteorite Fe-Ni alloy.
             "iron":      0.900,    # ~90 wt% Fe
             "nickel":    0.090,    # 7-10 wt% Ni in IIIAB octahedrites
             "cobalt":    0.005,
@@ -1453,7 +1453,7 @@ MINERAL_REFERENCE: List[dict] = [
             # below sums to ~37 ppm total + 1 ppm Au, calibrated to IIIAB
             # medium-octahedrite means.  Ir bumped from 2→4 ppm (range cited
             # at 0.01-19 ppm).  Ru + Os added (were missing in v1.1.0-1.1.1)
-            # — both concentrate in the metallic phase and are present at
+            #, both concentrate in the metallic phase and are present at
             # 1-5 ppm in nearly every iron meteorite group.
             "platinum":  1.5e-5,   # 15 ppm   (Pt is the dominant PGM)
             "palladium": 1.0e-5,   # 10 ppm
@@ -1489,17 +1489,17 @@ MINERAL_REFERENCE: List[dict] = [
     },
 
     # ══════════════════════════════════════════════════════════════════════
-    # RARE-MINERAL PHASES  (v1.1.3 — added for PGM-rich inclusions)
+    # RARE-MINERAL PHASES  (v1.1.3, added for PGM-rich inclusions)
     # ══════════════════════════════════════════════════════════════════════
     # These minerals are NOT referenced by Module 1's TAXONOMY_COMPOSITION
     # (which uses "nickel-iron" as the bulk metal carrier).  They are
     # available as targets for user-supplied per-asteroid composition
     # overrides or future spectral-identification work.  Each is a real
     # PGM-bearing phase documented in iron meteorites, chondrites, or
-    # ureilites — see references in each row's `notes`.
+    # ureilites; see references in each row's `notes`.
 
     {   # ── Sperrylite ────────────────────────────────────────────────────
-        # Pt arsenide — the dominant terrestrial Pt ore (Sudbury, Stillwater).
+        # Pt arsenide, the dominant terrestrial Pt ore (Sudbury, Stillwater).
         # Documented in chondritic and iron-meteorite matrix as tiny grains.
         # Atomic masses: Pt 195.08, As 74.92 → Pt mass-fraction = 0.566.
         "name":                  "sperrylite",
@@ -1533,7 +1533,7 @@ MINERAL_REFERENCE: List[dict] = [
         # kamacite/taenite of iron meteorites.  Atomic masses: Ni 58.69 ×3
         # + Fe 55.85 → Ni mass-fraction = 0.759, Fe = 0.241.
         # In terrestrial ophiolites (Josephine, Mojave) awaruite hosts
-        # PGMs at 10-100× chondritic — used here as a PGM-enriched analog
+        # PGMs at 10-100× chondritic, used here as a PGM-enriched analog
         # for asteroid-mining targets that show specific spectral indicators.
         "name":                  "awaruite",
         "kind":                  "mineral",
@@ -1622,7 +1622,7 @@ MINERAL_REFERENCE: List[dict] = [
         "kind":                  "mineral",
         "formula":               "MgSiO3",
         "density_gcm3":          3.20,
-        "yields": {},                              # Mg/Si silicate — no traded yield
+        "yields": {},                              # Mg/Si silicate, no traded yield
         "ref_price_usd_per_kg":  0.05,
         "ref_price_date":        _REF_PRICE_DATE,
         "notes":                 "Mg-pyroxene end-member; E-chondrite analogue.",
@@ -1708,7 +1708,7 @@ print(f"OK  Reference table ready - {len(MINERAL_REFERENCE)} entries "
 # `annual_market_kg` reads the demand class through
 # `_COMMODITY_CLASS.get(name, "shielding")`, and an unrecognised name therefore
 # gets 15% of a destination's whole import budget without anyone deciding that.
-# Three PGM ore minerals had been doing exactly that since v1.7.0 — inertly,
+# Three PGM ore minerals had been doing exactly that since v1.7.0; inertly,
 # because their in-space utility is 0 at every destination so the class is
 # never read, which is precisely why nobody noticed.  CLAUDE.md's own lesson
 # from the RTG branch applies: **an unreachable branch is not a verified
@@ -1743,7 +1743,7 @@ def fetch_yfinance(config: MineralValueConfig) -> pd.DataFrame:
     For each entry in MINERAL_REFERENCE with a non-null `yfinance_ticker`,
     download the most recent close price and normalise to USD/kg using the
     entry's `yfinance_unit`.  Returns an empty DataFrame if yfinance fails
-    entirely — individual tickers that fail are logged but don't abort.
+    entirely; individual tickers that fail are logged but don't abort.
     """
     print("\n  yfinance  (Yahoo Finance) - fetching live futures ...")
 
@@ -1815,7 +1815,7 @@ def fetch_metals_dev(config: MineralValueConfig) -> pd.DataFrame:
     Live metal prices from metals.dev (https://metals.dev).
 
     Skipped silently if the user hasn't replaced the DEMO key with a real
-    one — the demo endpoint is too rate-limited to be useful for a pipeline.
+    one; the demo endpoint is too rate-limited to be useful for a pipeline.
     Returns an empty DataFrame on any HTTP / parse failure.
     """
     if config.metals_api_key == "DEMO" or not config.metals_api_key:
@@ -1879,12 +1879,12 @@ def fetch_metals_dev(config: MineralValueConfig) -> pd.DataFrame:
 # the live sources.
 
 def fetch_reference_table(config: MineralValueConfig) -> pd.DataFrame:
-    """Static USGS / LME / mineralogy reference data — always available."""
+    """Static USGS / LME / mineralogy reference data, always available."""
     print("\n  Reference table - loading curated prices + densities ...")
 
     # Every row here carries its TERRESTRIAL price.  The in-space repricing is
-    # applied once, uniformly, after the merge — see apply_delivery_destination
-    # — because it has to override live quotes too (platinum's LME price is
+    # applied once, uniformly, after the merge; see apply_delivery_destination
+    #, because it has to override live quotes too (platinum's LME price is
     # not what platinum is worth at a cislunar depot).
     rows = []
     for entry in MINERAL_REFERENCE:
@@ -1920,7 +1920,7 @@ def apply_delivery_destination(
     price the sources supplied.
 
     At an in-space destination every commodity is revalued to the better of
-    its two fates — used in space, or shipped down to the terrestrial market.
+    its two fates, used in space, or shipped down to the terrestrial market.
     See in_space_price_usd_per_kg for the rule.  Two consequences worth being
     explicit about, because they are the whole point of the field:
 
@@ -1930,7 +1930,7 @@ def apply_delivery_destination(
       • Precious metals lose their in-space premium but keep their value.
         Nobody in orbit wants platinum, so it is priced by shipping it down:
         terrestrial price less the downleg.  ~$31,700/kg in LEO against
-        $57,074 on the ground — a real discount, not a wipeout.
+        $57,074 on the ground, a real discount, not a wipeout.
 
     Applied after merge_sources so it overrides live quotes as well as
     reference ones.
@@ -2047,7 +2047,7 @@ def merge_sources(
 # VALIDATION
 # ─────────────────────────────────────────────────────────────────────────────
 def validate(catalog: pd.DataFrame) -> pd.DataFrame:
-    """Light sanity checks — print warnings, never drop rows."""
+    """Light sanity checks, print warnings, never drop rows."""
     print("\n  Validating catalog ...")
 
     # ── Unit normalisation guard ─────────────────────────────────────────────
@@ -2086,7 +2086,7 @@ def validate(catalog: pd.DataFrame) -> pd.DataFrame:
 
     # Every mineral should reference at least one known element via `yields`
     # (otherwise Module 3 can't value it).  Bulk silicates legitimately have
-    # no yield — that's a warning, not an error.
+    # no yield, that's a warning, not an error.
     known_elements = set(catalog.loc[catalog["kind"] == "element", "name"])
     for _, r in catalog[catalog["kind"] == "mineral"].iterrows():
         try:
@@ -2112,7 +2112,7 @@ def build_mineral_value_catalog(
     Run the full mineral-value pipeline:
       1. Fetch live prices (yfinance, optionally metals.dev)
       2. Load the curated reference table
-      3. Merge — live wins, reference fills gaps
+      3. Merge; live wins, reference fills gaps
       4. Validate
       5. Sort, tag, export
     """
@@ -2123,13 +2123,13 @@ def build_mineral_value_catalog(
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  v{config.pipeline_version}")
     print("=" * 65)
 
-    # ── Step 1 — Live-price fetchers (in priority order) ─────────────────────
+    # ── Step 1, Live-price fetchers (in priority order) ─────────────────────
     live_frames = [
         fetch_yfinance(config)    if config.use_yfinance    else pd.DataFrame(),
         fetch_metals_dev(config)  if config.use_metals_api  else pd.DataFrame(),
     ]
 
-    # ── Step 2 — Reference spine ─────────────────────────────────────────────
+    # ── Step 2, Reference spine ─────────────────────────────────────────────
     reference = (
         fetch_reference_table(config)
         if config.use_reference_table else pd.DataFrame()
@@ -2138,22 +2138,22 @@ def build_mineral_value_catalog(
         print("\nFAIL  Pipeline aborted - reference table disabled and no live data spine")
         return pd.DataFrame()
 
-    # ── Step 3 — Merge ───────────────────────────────────────────────────────
+    # ── Step 3, Merge ───────────────────────────────────────────────────────
     catalog = merge_sources(reference, live_frames)
 
-    # ── Step 3b — Reprice for the delivery destination ───────────────────────
+    # ── Step 3b; Reprice for the delivery destination ───────────────────────
     # Must follow the merge: at an in-space destination this overrides live
     # quotes too, since a terrestrial spot price is not what a commodity is
     # worth at a depot.
     catalog = apply_delivery_destination(catalog, config)
 
-    # ── Step 4 — Validate ────────────────────────────────────────────────────
+    # ── Step 4, Validate ────────────────────────────────────────────────────
     catalog = validate(catalog)
 
-    # ── Step 5 — Metadata + sort ─────────────────────────────────────────────
-    # How much of each commodity the market can absorb per year — Module 4
+    # ── Step 5, Metadata + sort ─────────────────────────────────────────────
+    # How much of each commodity the market can absorb per year, Module 4
     # uses it to apply a demand curve rather than selling any quantity at spot.
-    # v1.7.0: routed — a commodity sold by flying it down saturates the
+    # v1.7.0: routed; a commodity sold by flying it down saturates the
     # TERRESTRIAL market, not the destination's import budget.
     _routes = (catalog["value_route"] if "value_route" in catalog.columns
                else [None] * len(catalog))
@@ -2165,8 +2165,8 @@ def build_mineral_value_catalog(
 
     catalog["catalog_date"]         = t0.strftime("%Y-%m-%d")
     catalog["pipeline_version"]     = config.pipeline_version
-    # Stamped into every row: the water price — and therefore the whole
-    # downstream ranking — is meaningless without knowing which destination
+    # Stamped into every row: the water price, and therefore the whole
+    # downstream ranking, is meaningless without knowing which destination
     # it was priced for.
     catalog["delivery_destination"] = config.delivery_destination
 
@@ -2174,7 +2174,7 @@ def build_mineral_value_catalog(
         ["kind", "price_usd_per_kg"], ascending=[True, False]
     ).reset_index(drop=True)
 
-    # ── Step 6 — Save ────────────────────────────────────────────────────────
+    # ── Step 6, Save ────────────────────────────────────────────────────────
     out_path = os.path.join(config.output_dir, config.catalog_filename)
     catalog.to_csv(out_path, index=False)
     print(f"\n       Catalog saved -> {out_path}")
@@ -2197,7 +2197,7 @@ def build_mineral_value_catalog(
 def lookup_mineral(catalog: pd.DataFrame, name: str) -> pd.DataFrame:
     """Case-insensitive substring match against the `name` column.
 
-    regex=False — a query like "nickel-iron (alloy)" would otherwise be read
+    regex=False; a query like "nickel-iron (alloy)" would otherwise be read
     as a regex pattern rather than the literal substring the docstring
     promises, and an unbalanced bracket would raise re.PatternError.
     """
