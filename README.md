@@ -17,6 +17,7 @@ run.bat                Windows launcher: a terminal menu over everything below
 run_pipeline.py        Headless CLI the launcher drives (presets + flags)
 build_master.py        Build tool: assembles modules/ into master.py
 verify.py              Release verification: the six checks every change runs
+verify_docs.py         Docs verification: the docs still describe the code
 versions.md            Release history + the measurement tables it superseded
 master.py              GENERATED single-file pipeline — do not edit by hand
 ui.py                  Streamlit front end (optional): configure, run, inspect
@@ -527,6 +528,33 @@ signal that the comparator is broken rather than the release.
 The four hashes it prints reproduce the ones committed for calc v1.17.4 and
 v1.17.6 exactly, which is what makes it a replacement for those harnesses
 rather than another one to have to trust.
+
+### Verifying the docs
+
+`verify.py` proves the model did not change. **`verify_docs.py` proves the docs
+still describe it**, in about a second and with no baseline:
+
+```bash
+py verify_docs.py
+```
+
+| # | check | catches |
+|---|---|---|
+| 1 | defaults | a documented default that no longer matches its dataclass field |
+| 2 | versions | the Stage/Version table or CLAUDE.md's `Current:` line drifting from `pipeline_version` |
+| 3 | row counts | "40 propellants" after a row was added |
+| 4 | links | a markdown anchor that does not resolve |
+| 5 | structure | unbalanced fences, ragged tables, heading-level jumps, duplicate h1/h2 |
+| 6 | transfer | a measurement dropped rather than moved during a reorganisation — `--before OLD.md NEW.md …` |
+
+The first three exist because they have already failed: `use_beneficiation` and
+`optimise_programme_scale` were both documented as `False` for several releases
+after calc v1.17.0 flipped them to `True`, and the propellant table was
+documented at 40 rows for six releases after v1.12.0 split argon into two.
+
+⚠️  **It checks that a documented *configuration* matches the code — not that a
+documented *measurement* is current.** A stale number passes everything in it.
+That is what the release notes and `verify.py` are for.
 
 ⚠️  **It covers Stage 4 and nothing else.** It does not re-run Stages 1–3,
 deliberately: a Stage 1 run fetches a different catalog (JPL adds bodies daily)

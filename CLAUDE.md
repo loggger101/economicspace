@@ -1049,6 +1049,16 @@ That matters more here than in most repos, because these files exist to stop
 someone "fixing" a result that only looks wrong. A stale headline invites
 exactly that.
 
+✅  **Three of these are mechanical now, and are committed as
+`verify_docs.py`.** It takes about a second and needs no baseline: every
+default the README's Tuning table quotes is checked against the dataclass field
+it names, every documented `pipeline_version` against the module, and every
+documented reference-table row count against the table. Those three cover the
+rot that is *checkable*; run it after touching any config field or reference
+table. ⚠️  **It cannot see a stale measurement** — a wrong number that is
+merely out of date passes everything in it, which is why the rest of this
+section is still a manual discipline.
+
 So after changing any number, search for the superseded **claim**, not just
 the digits: "best case", "still comes in", counts spelled out in prose and
 headings, and the name of whichever destination used to win. Check that
@@ -7489,13 +7499,15 @@ gets renamed again.
 
 Four consumers of the built `master.py`, all at the repo root because
 `build_master.py` concatenates `modules/` from four explicit paths and asserts
-a header/footer shape per file — plus two files that launch one of them:
+a header/footer shape per file — plus two files that launch one of them, and
+one that reads the docs rather than the model:
 
 | file | what it is |
 |---|---|
 | `run_pipeline.py` | headless CLI: `--preset`, `--stages`, `--destination`, row caps |
 | `ui.py` | Streamlit dashboard |
 | `verify.py` | the six release checks |
+| `verify_docs.py` | the six **docs** checks — imports the four configs, never runs the pipeline |
 | `run.bat` | Windows launcher — a terminal menu over the three above, no model behaviour of its own |
 | `Dashboard.vbs` | double-click entry point — starts the dashboard with no console, ever |
 | `launch_ui.py` | what it starts: supervises `streamlit run ui.py` and owns the stop button |
