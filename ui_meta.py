@@ -101,7 +101,7 @@ CHOICES: Dict[str, Optional[List[str]]] = {
 # where a bad value wastes a 20-minute run. (min, max, step).
 BOUNDS: Dict[str, Tuple[float, float, float]] = {
     # 0 = unlimited on all four source caps, so the minimum must be 0 rather
-    # than 100 — a slider that cannot reach 0 cannot express "take the whole
+    # than 100; a slider that cannot reach 0 cannot express "take the whole
     # table", which is the v1.1.0 default.  Upper bounds are each source's real
     # size measured 2026-08-08: JPL 1,554,321 asteroids, SsODNet ~1.2 M rows,
     # NEOWISE 183,412, MP3C ~1.2 M.
@@ -182,7 +182,7 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "UNLIMITED at 0. catalog v1.1.0 removed the shared row cap and can now "
         "hand Stage 4 ~1.55 million asteroids instead of ~89 thousand, so these "
         "are no longer minor dials: a full beneficiated destination goes from "
-        "minutes to hours. Cap the rows to sanity-check a config change first — "
+        "minutes to hours. Cap the rows to sanity-check a config change first, "
         "and note that calc v1.13.0 makes a capped run an evenly-spaced sample "
         "of the whole belt rather than the innermost N bodies.",
         [
@@ -202,7 +202,7 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "asteroids have a MEASURED diameter, and Stage 1 drops any body "
         "without one. Deriving diameter from absolute magnitude H lifts the "
         "catalog to ~1.55 million, at the cost of an assumed albedo on every "
-        "derived row — and mass scales as albedo^-1.5, so those rows are much "
+        "derived row, and mass scales as albedo^-1.5, so those rows are much "
         "softer than their diameters look. Every one is tagged in "
         "`diameter_source`.",
         [
@@ -220,7 +220,7 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "answers \"the best programme built around it\", sizing the fleet, the "
         "schedule and N together. Almost every figure in CLAUDE.md and the "
         "README was measured OFF at N = 1, so turning it on does not make them "
-        "wrong — it changes the question. ⚠️  BOTH IT AND `use_beneficiation` "
+        "wrong; it changes the question. ⚠️  BOTH IT AND `use_beneficiation` "
         "DEFAULT ON as of calc v1.17.0, so a default run is no longer any of "
         "those figures; set both False to reproduce them. The full cislunar "
         "2x2 is measured on the full catalog (26.7863x / 15.4273x raw, "
@@ -228,7 +228,7 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "committed values exactly. Programme size is comparatively cheap "
         "because it touches nothing in the mass cascade: the rocket equation, "
         "the power fixed point and the concentration sweep are solved once per "
-        "candidate and every programme is priced off the result — but it is "
+        "candidate and every programme is priced off the result, but it is "
         "not free, and v1.15.0's widely-quoted 1.51x was for a search that was "
         "one-dimensional. v1.16.0's is two-dimensional and measures 2.98x raw "
         "/ 2.64x beneficiated on the full catalog.",
@@ -249,15 +249,15 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "pushing back on scale: `model_programme_calendar` charges the calendar "
         "the programme actually spans, and a programme that flies more campaigns "
         "per ship carries its NRE and its rig for longer before they sell "
-        "anything. So the search is two-dimensional — a ladder over the FLEET, "
+        "anything. So the search is two-dimensional: a ladder over the FLEET, "
         "and every campaigns-per-ship value enumerated exhaustively, because "
         "there are at most a handful of them. "
-        "`max_fleet_ships` bounds the ladder — if rows pile up against it the "
+        "`max_fleet_ships` bounds the ladder, if rows pile up against it the "
         "run says so, and it means those payloads have no finite market rather "
         "than that bigger is better. `model_rig_trip_limit` and "
-        "`model_programme_calendar` are corrections rather than options — a rig "
+        "`model_programme_calendar` are corrections rather than options, a rig "
         "wears out on duty cycles as well as on a calendar, and a programme "
-        "takes years — and they sit here because between them they set the trip "
+        "takes years, and they sit here because between them they set the trip "
         "life and the schedule this whole search is built on. Both are inert at "
         "N = 1.",
         [
@@ -287,15 +287,15 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "Hopeless candidates (v1.14.1)",
         "⚠️  Leave this ON. Roughly **76% of the (vehicle × propellant × return "
         "mode × propellant sourcing) candidates the search generates cannot "
-        "close their mass budget at all** — they are not bad missions, they are "
+        "close their mass budget at all**; they are not bad missions, they are "
         "not missions. Before v1.14.1 each one paid the full sizing prologue to "
         "be told so, once per power source and once per point of the "
         "concentration sweep: up to eighteen times for the same dead candidate. "
-        "Skipping them makes the search 1.5–1.7× faster and changes NO output, "
+        "Skipping them makes the search 1.5-1.7× faster and changes NO output, "
         "because the test is the sizing loop's own first iteration in closed "
         "form, and that iteration is the most optimistic one it will ever take. "
         "Turn it OFF only to reproduce the v1.14.0 search, or to check the "
-        "pruner on a population nobody has tried — if an output ever moves, "
+        "pruner on a population nobody has tried, if an output ever moves, "
         "that is a bug in the pre-filter, not a result. The run log prints how "
         "much it is actually removing; a rate near 0% or near 100% is worth "
         "investigating either way.",
@@ -332,8 +332,8 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "A rig anchored to a rotating body is in shadow about half the time, so "
         "the processing plant needs an oversized array AND a battery sized on "
         "the body's own rotation period. `default_rotation_period_h` is used "
-        "only where the catalog has no measured period — about two thirds of "
-        "rows — and `max_dark_period_h` clamps the slow rotators, where a "
+        "only where the catalog has no measured period, about two thirds of "
+        "rows, and `max_dark_period_h` clamps the slow rotators, where a "
         "chemical battery stops being the right answer at all.",
         [
             ("calc", "default_rotation_period_h"),
