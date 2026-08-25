@@ -290,3 +290,52 @@ rising under beneficiation at every atmospheric destination.
 **The winner's vehicle is not the population's**, again: every winner flies a
 New Glenn, Falcon Heavy, H3 or Long March while Falcon Heavy and SLS carry most
 of every population.
+
+## 9. Cross-destination population results (added after the queue finished)
+
+### Propellant shares - iodine returns at scale
+
+The raw N=1 column reproduces the committed v1.14.0 shares at every
+destination. With both defaults ON, iodine overtakes xenon at `leo`
+(42.74 vs 42.14%) and wins `earth_surface` outright (47.31 vs 35.50%) -
+confirming on the real searched population what the programme-scale curve
+predicted from three sampled points.
+
+methalox reaches 11.11-15.23% beneficiated at `leo`, `mars_surface` and
+`earth_surface`, against 1.6-1.8% raw. Krypton collapses the other way
+(22.64% -> 6.40% at `lunar_surface`), which is the v1.11.0 tank term.
+
+### Vehicle shares - New Glenn rises at every destination
+
+New Glenn (45 t, SMALLER than Falcon Heavy's 57 t) goes 1.67 -> 36.57% at
+`cislunar`, 0.64 -> 28.35% at `lunar_surface`, 5.70 -> 28.63% at
+`mars_surface` between raw N=1 and beneficiated+searched. Saturation punishes
+volume, so at programme scale the model prefers more, smaller missions.
+
+### The rig's two bounds - mars_surface inverts them
+
+Committed cislunar figures reproduce EXACTLY (96.11/3.89 raw, 57.66/42.34
+beneficiated, 92.31/7.69 window/dig raw, 34.13/65.87 beneficiated, cadence
+1.38/2.09 yr). New: at `mars_surface` the CALENDAR bound retires 80.79% of
+beneficiated rigs, because the cadence is 3.8-4.0 yr against ~1.37 elsewhere.
+Median programme span at Mars is 21.4 yr raw searched.
+
+"a programme's pace is set by orbital mechanics" holds for raw everywhere
+(86-99.97% window-bound) and INVERTS under beneficiation everywhere except
+Mars (dig-bound on 65.87% of `cislunar`, 74.63% `leo`, 82.97% `earth_surface`).
+
+### THE SAMPLING RULE - compounding scored for the first time
+
+CLAUDE.md forbids compounding per-release performance ratios. With the ground
+truth now measured, the forbidden product can be scored:
+
+| cell | compounded from samples | measured | error |
+|---|---|---|---|
+| raw, search OFF | 1.82x | 1.78x | +1.9% |
+| benef, search OFF | 2.67x | 2.72x | -1.8% |
+| raw, search ON | 3.02x | 3.11x | -2.9% |
+| benef + search (default) | 3.45x | 4.32x | **-20.2%** |
+
+Three cells inside 3%; the default cell 20% low. The prohibition was right
+about the direction and the magnitude is a fifth, not the factor of ~5 the
+rule is written around - and it missed worst on the only cell anybody runs.

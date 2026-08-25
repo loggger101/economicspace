@@ -484,6 +484,158 @@ measuring is how a clean result becomes a false alarm.
 wall clocks, extended to ratios by `1.15.0`, and `1.17.7` argued it covers
 memory. It does, and this is what the measurement looks like.
 
+### The rig's two bounds, and the cadence, at every destination
+
+This file carries this table for `cislunar` only, where beneficiation swaps the
+two bounds over. ✅  **Every committed `cislunar` figure reproduces exactly** —
+96.11 / 3.89 / 92.31 / 7.69% raw, 57.66 / 42.34 / 34.13 / 65.87% beneficiated,
+98.04 / 95.77% raw searched and 75.08 / 37.59% beneficiated searched, cadence
+medians 1.38 and 2.09 yr. Here are the other four.
+
+**Which bound retires the rig** (cycle = `max_trips`, calendar = `life / stay`):
+
+| destination | raw N=1 | raw ON | benef N=1 | benef ON |
+|---|---|---|---|---|
+| `cislunar` | 96.11 / 3.89 | 98.04 / 1.96 | 57.66 / 42.34 | 75.08 / 24.92 |
+| `lunar_surface` | 96.09 / 3.91 | 96.36 / 3.64 | 75.24 / 24.76 | 93.51 / 6.49 |
+| `leo` | 98.70 / 1.30 | 98.89 / 1.11 | 49.54 / 50.46 | 77.89 / 22.11 |
+| **`mars_surface`** | **80.99 / 19.01** | **85.24 / 14.76** | **19.21 / 80.79** | **21.44 / 78.56** |
+| `earth_surface` | 98.65 / 1.35 | 98.75 / 1.25 | 29.53 / 70.47 | 47.66 / 52.34 |
+
+**What sets the pace** (window = synodic period, dig = mining rate), and the
+median cadence:
+
+| destination | raw N=1 | benef N=1 | cadence raw | cadence benef |
+|---|---|---|---|---|
+| `cislunar` | 92.31 / 7.69 | 34.13 / 65.87 | 1.384 yr | 2.090 yr |
+| `lunar_surface` | 96.21 / 3.79 | 42.73 / 57.27 | 1.384 yr | 1.622 yr |
+| `leo` | 88.67 / 11.33 | 25.37 / 74.63 | 1.369 yr | 2.564 yr |
+| **`mars_surface`** | **99.95 / 0.05** | **63.18 / 36.82** | **3.798 yr** | **3.990 yr** |
+| `earth_surface` | 86.48 / 13.52 | 17.03 / 82.97 | 1.369 yr | 3.324 yr |
+
+🚨  **`mars_surface` INVERTS BOTH SPLITS, AND IT IS THE ONE DESTINATION WHERE
+THE CALENDAR BOUND DOES MOST OF THE WORK.** Beneficiated, the calendar retires
+**80.79%** of Mars rigs against `cislunar`'s 42.34% and `lunar_surface`'s
+24.76%. The mechanism is in the cadence column: a Mars campaign repeats every
+**3.8–4.0 years** against ~1.37 for everywhere else, because the Earth–Mars
+synodic period is 2.14 yr and the transfer is a separate heliocentric leg. At
+that cadence `life / stay` runs out long before five digs do.
+
+⚠️  So this file's statement that "the cycle bound is what retires almost every
+rig" is a **`cislunar` raw** claim twice over — it fails on beneficiated
+`cislunar` (42% calendar), and it fails hardest at Mars, where the calendar
+bound does **four fifths** of the work.
+
+🚨  **And "a programme's pace is set by orbital mechanics, not by mining rate"
+inverts at four destinations out of five.** v1.16.0 measured the window binding
+on 165 of 168 rows of a 400-row raw cislunar sample and drew that conclusion.
+On the full population it is true of **raw** everywhere — 86–99.97% — and
+**false of beneficiated everywhere except Mars**: the dig sets the pace on
+65.87% of `cislunar` rows, 74.63% of `leo`, and **82.97% of `earth_surface`**.
+Beneficiation is exactly the thing that makes the stay long, so it moves the
+binding constraint from the sky to the ground.
+
+`mars_surface` is the exception that proves the mechanism: its window is so
+long (**99.95%** binding on raw, still 63.18% beneficiated) that even
+concentrating cannot make the dig the slower half.
+
+**Programme span** follows the cadence, and the searched cells run long
+everywhere: median 10.7 yr (`earth_surface`, `leo` raw) to **21.4 yr**
+(`mars_surface` raw) and 13.3–18.7 yr beneficiated. A Mars programme in this
+model is a **two-decade** commitment.
+
+⚠️  **`W < trips` is only meaningful with the search ON.** At N = 1, W = 1 and
+`trips` is 2–5, so the search-OFF cells report ~100% trivially. With the search
+on it is 0.161% (`leo`), 0.177% (`lunar_surface`), 0.210–0.319% (`cislunar`),
+0.234–0.268% (`earth_surface`) and **3.705–3.785% at `mars_surface`** — an
+order of magnitude more, and the same cause: Mars's calendar charge over a
+21-year span is what makes a ship decline the fifth campaign.
+
+### Propellant and vehicle shares, all twenty cells
+
+**Every share table elsewhere in this file is a single cell** — usually
+`cislunar` raw at N = 1. These are all twenty, and the raw N = 1 column
+reproduces the committed v1.14.0 shares at every destination.
+
+**Propellant, % of evaluable rows:**
+
+| | raw N=1 | raw ON | benef N=1 | benef ON | | raw N=1 | raw ON | benef N=1 | benef ON |
+|---|---|---|---|---|---|---|---|---|---|
+| **`cislunar`** | | | | | **`mars_surface`** | | | | |
+| xenon | 42.64 | 40.44 | 59.24 | 48.94 | xenon | 57.81 | 49.09 | 59.92 | 47.87 |
+| iodine | 25.19 | 26.00 | 17.08 | 26.48 | iodine | 19.94 | 28.51 | 14.71 | 23.23 |
+| water ion | 15.58 | 18.44 | 12.54 | 13.80 | krypton | 15.37 | 14.65 | 1.52 | 1.11 |
+| hydrolox | 8.11 | 5.29 | 10.34 | 9.80 | methalox | 1.60 | 1.61 | **15.23** | **15.23** |
+| krypton | 8.01 | 9.29 | 0.47 | 0.38 | argon | 1.81 | 2.67 | 5.60 | 6.96 |
+| **`lunar_surface`** | | | | | **`leo`** | | | | |
+| xenon | 42.26 | 37.93 | 47.32 | 37.26 | xenon | 76.04 | 71.36 | 74.85 | **42.14** |
+| krypton | 22.64 | 26.31 | 6.40 | 8.51 | iodine | 13.56 | 16.19 | 11.61 | **42.74** |
+| water ion | 20.67 | 20.87 | 19.44 | 19.76 | methalox | 1.77 | 1.86 | **11.11** | **11.45** |
+| iodine | 10.29 | 10.89 | 24.42 | 31.86 | krypton | 4.36 | 4.83 | — | — |
+| hydrolox | 3.76 | 3.57 | 2.12 | 2.26 | hydrolox | 1.95 | 2.06 | 1.20 | 1.58 |
+| **`earth_surface`** | | | | | | | | | |
+| xenon | 74.67 | 71.57 | 64.03 | **35.50** | | | | | |
+| iodine | 13.46 | 16.07 | 20.09 | **47.31** | | | | | |
+| methalox | 1.73 | 1.76 | **12.26** | **12.43** | | | | | |
+| krypton | 5.46 | 5.70 | 0.90 | 1.51 | | | | | |
+| hydrolox | 1.92 | 2.01 | — | — | | | | | |
+
+🚨  **IODINE COMES BACK, AND THE `1.11.0` CLAIM v1.14.0 RETIRED WAS HALF
+RIGHT.** v1.11.0 said "iodine wins nine of the ten cells"; v1.14.0 retired that
+by name when the eclipse term made **xenon** take 42–76% of every raw N = 1
+cell. Both were measuring a **single-mission** population. Turn on both
+defaults and iodine **overtakes xenon at `leo`** (42.74 against 42.14%) and
+**wins `earth_surface` outright** (47.31 against 35.50%).
+
+That is the mechanism the programme-scale curve already predicted — "iodine
+takes over at scale", 25.19% → 49.64% between N = 1 and N = 100 — now confirmed
+on the real searched population rather than on three sampled points. **Every
+propellant-share claim in this file is a statement about a configuration, not
+about the model.**
+
+⚠️  **Chemical propulsion is not merely alive, it is 11–15% of three
+destinations.** `methalox` goes 1.6–1.8% raw to **11.11–15.23%** beneficiated
+at `leo`, `mars_surface` and `earth_surface`. Beneficiation drives mass ratio
+up, which is where the v1.11.0 tank term bites — and methalox stores at 0.83
+kg/L against xenon's COPV, so it is the propellant that *gains* when the tank
+starts to matter. Krypton moves the opposite way for the same reason
+(12.5% tankage): 22.64% → 6.40% at `lunar_surface`, 15.37% → 1.52% at
+`mars_surface`, and out of the table entirely at `leo`.
+
+**Launch vehicle, % of evaluable rows:**
+
+| destination | | raw N=1 | raw ON | benef N=1 | benef ON |
+|---|---|---|---|---|---|
+| `cislunar` | Falcon Heavy | 66.42 | 71.48 | 64.86 | 36.41 |
+| | SLS Block 1B | 31.60 | 25.67 | 30.20 | 25.65 |
+| | **New Glenn** | 1.67 | 2.45 | 4.28 | **36.57** |
+| `lunar_surface` | Falcon Heavy | 67.98 | 72.53 | 53.73 | 39.19 |
+| | SLS Block 1B | 30.96 | 26.03 | 33.10 | 24.24 |
+| | **New Glenn** | 0.64 | 1.00 | 10.27 | **28.35** |
+| `leo` | Falcon Heavy | 69.55 | 73.98 | 62.81 | 58.76 |
+| | SLS Block 1B | 21.33 | 16.39 | 26.71 | 20.05 |
+| | New Glenn | 8.80 | 9.28 | 8.57 | 16.81 |
+| `mars_surface` | Falcon Heavy | 79.94 | 80.23 | 43.44 | 40.98 |
+| | SLS Block 1B | 10.72 | 9.96 | 23.31 | 23.09 |
+| | **New Glenn** | 5.70 | 5.52 | 27.68 | **28.63** |
+| `earth_surface` | Falcon Heavy | 66.47 | 71.37 | 37.60 | 46.48 |
+| | SLS Block 1B | 23.35 | 18.34 | 20.62 | 19.00 |
+| | **New Glenn** | 9.86 | 10.07 | 29.88 | 25.55 |
+
+✅  **New Glenn's rise is the market-saturation mechanism, visible at every
+destination at once.** It is a *smaller* vehicle than Falcon Heavy (45 t against
+57 t), and it goes 1.67 → 36.57% at `cislunar`, 0.64 → 28.35% at
+`lunar_surface`, 5.70 → 28.63% at `mars_surface`. Saturation punishes volume,
+so at programme scale the model prefers **more, smaller missions** — the same
+thing the winner's payload does (93,312 → 34,573 kg at `cislunar`). The
+committed 2×2 recorded New Glenn overtaking Falcon Heavy at `cislunar` as a
+first; it is now four destinations showing the same move.
+
+⚠️  `mars_surface` remains the outlier the v1.14.0 matrix describes — least SLS
+(10.72% against 21–32%) and most Vulcan — because a Mars delivery pays no Earth
+capture, so its stacks are lighter and a mid-class vehicle closes missions that
+need SLS anywhere else.
+
 ### Winners, and one that is new
 
 **2021 CX5 (D) takes 10 of the 20 cells** — all four at `cislunar`, all four at
@@ -757,6 +909,13 @@ set by orbital mechanics, not by mining rate" **inverts**: on beneficiated the
 dig sets the pace on 65.87% of rows. Neither claim is wrong about the
 population it was measured on; both were stated as though the population were
 the model.
+
+✅  **Both are now measured at ALL FIVE destinations (2026-08-24), and the
+correction is bigger than this paragraph makes it look.** `mars_surface`
+inverts the rig bound outright — the **calendar** retires 80.79% of its
+beneficiated rigs, against `cislunar`'s 42.34% — because a Mars campaign
+repeats every 3.8–4.0 yr rather than 1.37. Full tables under "The rig's two
+bounds, and the cadence, at every destination".
 
 > ✅  **calc `1.14.0` / transportation `1.11.0` HAVE NOW BEEN MEASURED ON THE
 > FULL CATALOG — six of the ten cells.** Measured 2026-08-09, on the
@@ -1089,13 +1248,22 @@ general* — see THE SAMPLING RULE. The two speed-ups are ratios measured on
 identical rows in one process, which is far better conditioned than a projected
 wall clock, but the wall clock they imply is still a projection. It happened to
 hold **for this cell**; that is one data point, and the beneficiated cell is
-still unmeasured on anything past `1.14.0`.
+still unmeasured on anything past `1.14.0`. ✅  *(Measured 2026-08-24:
+**3,424 s** on `1.17.7`.)*
 
 ⚠️  **The timings in this file have moved TEN times, for ten unrelated
 reasons, and the fifth dwarfs the others.** Everything below is per
 *catalog*, and catalog `1.1.0` made the catalog **17× bigger** — 89,367 rows
 to 1,554,400. Cap `eval_row_cap` (which now *samples* rather than truncating —
 see calc `1.13.0`) for anything interactive.
+
+> ✅  **ALL OF THEM ARE RE-MEASURED NOW (2026-08-23/24).** The twelfth move is
+> the whole `1.17.x` line landing at once, measured on the full catalog for the
+> first time: `cislunar` reads **733 / 1,253 / 3,424 / 5,692 s** for raw-N1 /
+> raw-searched / benef-N1 / benef-searched, and all twenty cells are tabulated
+> under "THE COMPLETE 20-CELL MATRIX" at the top of this file. **Every wall
+> clock below is superseded**; they are kept because the *reasons* the timings
+> moved are the point of the section.
 
 ⚠️  **The eighth, ninth, tenth and eleventh moves are calc `1.17.1`,
 `1.17.2`, `1.17.4` and `1.17.6`, and NONE of the wall clocks below have been
@@ -1125,6 +1293,14 @@ which removes the host-drift objection and does nothing at all about THE
 SAMPLING RULE. ⚠️  `1.17.6` measured the same build twice that way and got
 **1.14× and 1.19×** on the raw cell, so even the interleaved construction leaves
 a few percent of drift; that is why its section records both passes.
+
+> ✅  **SCORED 2026-08-24, and the warning was half right.** The full-catalog
+> measurement exists now, so the forbidden product can be checked: compounding
+> all five sample ratios gives **1.82 / 2.67 / 3.02 / 3.45×** against a measured
+> **1.78 / 2.72 / 3.11 / 4.32×**. Three cells land inside **3%**; the default
+> cell is **20% low**. The advice stands — compounding understates, and it
+> understates worst on the one cell anybody runs — but the error is a fifth,
+> not the order of magnitude the paragraph implies. See THE SAMPLING RULE.
 
 ⚠️  **`1.17.4`'s load saving does NOT scale with the row cap**, so it behaves
 oppositely to most of this section: ~15 s is half the wall clock of a 400-row cell and 0.2% of a full
@@ -1172,11 +1348,45 @@ sweep is under-represented in a stride sample.
 > beneficiated cell inside its projected band. Extrapolating *from a stride
 > sample to the full catalog* is what has failed four times.
 
+> ✅  **A FIFTH DATA POINT, 2026-08-24, and it is the first one that makes the
+> rule look GENEROUS.** This file forbids compounding the per-release
+> performance ratios ("do not compound them … nobody has measured that"). The
+> 20-cell campaign measured the ground truth, so the forbidden arithmetic can
+> finally be scored — compounding the stride-sample ratios of `1.17.1`,
+> `1.17.2`, `1.17.4`, `1.17.5` and `1.17.6` against the measured `1.16.0` →
+> `1.17.7` full-catalog speed-up:
+>
+> | cell | compounded from samples | measured | error |
+> |---|---|---|---|
+> | raw, search OFF | 1.82× | **1.78×** | +1.9% |
+> | benef, search OFF | 2.67× | **2.72×** | −1.8% |
+> | raw, search ON | 3.02× | **3.11×** | −2.9% |
+> | **benef + search** (default) | 3.45× | **4.32×** | **−20.2%** |
+>
+> **Three cells inside 3%, and the default cell 20% low.** So the prohibition
+> was right about the *direction* — compounding understates — and the magnitude
+> is a fifth, not the factor of ~5 this rule is written around.
+>
+> ⚠️  **Do not read that as permission to compound.** It is one test, on one
+> release line, of five ratios that all pointed the same way; and it missed
+> worst on the **only cell anybody actually runs**. What it does establish is
+> that the ~5× bound is a bound on the *worst* case and not a typical error —
+> and that the cell most likely to break a projection is the most expensive
+> one, which is also the one you were trying to budget.
+
 **This is the canonical statement; everywhere else in this file points here.**
 
 The ten-cell sweep is therefore **~3.5 days**, not "most of a day": the raw row
 alone is 41,476 s (11.5 h) and the four unmeasured beneficiated cells are ~70 h
 on top of cislunar's 10.6.
+
+> ✅  **MEASURED 2026-08-23/24, and it is not 3.5 days.** The full **twenty**-cell
+> matrix — every destination × ore × search, i.e. twice the work this paragraph
+> is estimating — took **26.1 h** on calc `1.17.7`. The ten cells this sentence
+> describes are **13.5 h** of that. The projection was not wrong when written;
+> five performance-only releases landed in between, worth 1.78–4.32×. **A
+> runtime sentence in this file is only ever true of the release it names** —
+> which is this section's own point, arriving on schedule.
 
 The table below is calc `1.11.0` / six physical cores, on the **old ~31,000-row
 catalog**, measured 2026-08-08. It is kept because the *ratios* between cells
@@ -1545,17 +1755,28 @@ the evaluable-row count caught it; the headline did not.
 table below is `1.11.0` and is kept because its *structure* is still the right
 way to read the model, not because its numbers are current.
 
-### The v1.11.0 matrix (fully superseded on raw; the beneficiated column is the last figure any non-cislunar cell has)
+### The v1.11.0 matrix (FULLY superseded, both columns)
 
 ⚠️  **Read this table for its structure, not its levels.** Every cell is the
 OLD 89,367-row catalog at 30,458–32,442 evaluable rows. The **raw column is
 fully superseded** by the v1.14.0 full-catalog matrix near the top of this file.
-The **beneficiated column is retained only because it is still the last figure
-any non-cislunar destination has** — those four cells have never been run on the
-1.55 M catalog. Treat them as an order-of-magnitude placeholder, not a
-measurement of the current model: they are three releases and a 17× population
-behind, and the one cell that *has* been re-measured (cislunar, 22.4665× here)
-now reads **20.5895×**.
+🚨  **The beneficiated column is superseded too, as of 2026-08-24** — it used
+to be "the last figure any non-cislunar destination has", and every one of
+those four cells is now measured on the full catalog:
+
+| destination | this table (`1.11.0`, 89,367 rows) | **measured (`1.17.7`, 1.55 M rows)** |
+|---|---|---|
+| `cislunar` | 22.4665× | **20.5895×** |
+| `lunar_surface` | 37.8133× | **35.8051×** |
+| `leo` | 51.2223× | **48.2714×** |
+| `mars_surface` | 51.9597× | **55.3403×** |
+| `earth_surface` | 26,256.72× | **25,839.48×** |
+
+⚠️  Note the placeholders were **not** uniformly optimistic: four came in
+better than the old table and `mars_surface` came in **6.5% worse**. A
+placeholder from a different population does not even have a reliable *sign*,
+which is why this file insists they are not measurements. Read the table below
+for its structure only.
 
 Best cost/revenue (lower is better, 1.0 is breakeven), measured 2026-08-08 on
 transportation `1.9.0` + calc `1.11.0`, full catalog, 30,458–32,442 evaluable
@@ -2177,7 +2398,16 @@ here pins it more tightly.
 > v1.15.0 changed".
 
 ⚠️  **This is the RAW curve.** The beneficiated curve above is not superseded by
-it — it is unmeasured. Two beneficiated cislunar runs are ~21 h.
+it — it is unmeasured at pinned N = 10 / 100. ~~Two beneficiated cislunar runs
+are ~21 h~~ — on `1.17.7` they would be **~3.2 h**.
+
+> ℹ️  **Still genuinely open, and worth being precise about what closed.** The
+> 2026-08-24 campaign measured the beneficiated **searched** cell at all five
+> destinations, which locates the optimum N *per body* — the method `1.15.0`
+> introduced and the reason re-running at pinned N = 10 and N = 100 samples a
+> grid whose points mostly cannot be optimal. What it did **not** produce is
+> this table's shape: a curve of the objective against a *forced* programme
+> size. If you want that, it is two runs, and they are now cheap.
 
 ⚠️  Calc `1.10.0`. The N = 1 cell is 22.4665x on `1.11.0` and **20.5895x** on
 `1.14.0` full catalog (measured 2026-08-09), so the cost/revenue column is
@@ -4299,7 +4529,9 @@ shift toward Falcon Heavy, 66.4% → 71.0%, against SLS Block 1B 31.6% → 25.7%
 **The trip cap binds on 96.1% of rows** (98.1% with the search on) against a
 median calendar cap of **15** and a median trip life of **5** — so on the real
 population the cycle bound is what retires almost every rig, and the calendar
-bound it replaced was doing almost nothing.
+bound it replaced was doing almost nothing (⚠️  **`cislunar` RAW only** — at
+`mars_surface` beneficiated the calendar bound does **80.79%** of the work; see
+"The rig's two bounds, and the cadence, at every destination").
 
 > ⚠️  **That is a RAW figure and it does not hold beneficiated.** Measured
 > 2026-08-11 on the full catalog: the cycle bound binds on **57.66%** of
@@ -4547,6 +4779,11 @@ flying home. So the cadence is the **stay**, not the round trip.
 this module has known how rarely that is since v1.5.0. If the rig digs faster
 than Earth and the target line up, the rig **idles** and the synodic period sets
 the pace. `campaign_cadence_yr` takes the max of the two.
+
+🚨  ⚠️  *(Measured on all five destinations 2026-08-24: true of RAW everywhere
+— 86–99.97% — and **false of beneficiated everywhere except Mars**, where the
+dig sets the pace on 66–83% of rows. See "The rig's two bounds, and the cadence,
+at every destination".)*
 
 🚨  **The window binds on 165 of 168 rows** in the 400-row raw cislunar sample —
 so on this population a programme's pace is set by orbital mechanics, not by
