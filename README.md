@@ -18,7 +18,6 @@ run_pipeline.py        Headless CLI the launcher drives (presets + flags)
 build_master.py        Build tool: assembles modules/ into master.py
 verify.py              Release verification: the six checks every change runs
 verify_docs.py         Docs verification: the docs still describe the code
-versions.md            Release history + the measurement tables it superseded
 master.py              GENERATED single-file pipeline - do not edit by hand
 ui.py                  Streamlit front end (optional): configure, run, inspect
 ui_meta.py             Config introspection + curation for ui.py
@@ -27,7 +26,21 @@ modules/
     mineral_value.py   Stage 2 - mineral prices + densities
     transportation.py  Stage 3 - launch / propellant / Δv / ops costs
     calc.py            Stage 4 - profitability calculation
+campaign/              The 20-cell measurement campaign: results.csv, the
+                       archived cells, the logs, and the scripts that ran it
+README.md              This file: what it is, how to run it, current numbers
+versions.md            What changed in which release, and what numbers used to be
+CLAUDE.md              Working notes: the traps and invariants. Read before editing
 ```
+
+**Three documents, and the split is deliberate**, because the recurring failure
+in this repo is a stale sentence rather than a missing table:
+
+| file | holds | is the authority for |
+|---|---|---|
+| `README.md` | what the pipeline is, how to run it, what the model does, and the **current** numbers | the current answer |
+| [`versions.md`](versions.md) | what changed in which release, and what every number used to be | the measurement history |
+| [`CLAUDE.md`](CLAUDE.md) | the traps, the invariants, and the reasoning behind decisions that look wrong | how to edit it safely |
 
 `run.bat`, `run_pipeline.py`, `ui.py` and `ui_meta.py` sit at the root rather
 than in `modules/` on purpose:
@@ -99,9 +112,10 @@ run.bat ui         open the dashboard (hands off to Dashboard.vbs, then
 run.bat quick      400-row sample, all four stages
 run.bat rerun      Stage 4 only, against the catalogs already on disk
 run.bat standard   20,000-row sample, Stage 4 only
-run.bat full       THE PIPELINE DEFAULTS (HOURS TO DAYS)
+run.bat full       THE PIPELINE DEFAULTS (1.6 h cislunar, 3.8 h default dest.)
 run.bat verify     verify.py against the committed baseline
 run.bat build      rebuild master.py from modules/
+run.bat help       run_pipeline.py --help
 ```
 
 It is a launcher and nothing else; every path through it goes through
@@ -613,7 +627,9 @@ propellant × return mode × propellant sourcing × rendezvous apsis ×
 concentration ratio, sorted by `profit_usd` descending. Note that the *file*
 is sorted by profit while the *search* that produced each row optimises
 `selection_objective` (cost/revenue by default); those are different questions
-and the sort order is the less useful of the two. Roughly 65 columns; the ones
+and the sort order is the less useful of the two. **141 columns**, of which two
+(`pipeline_version`, `catalog_date`) are provenance and must be stripped before
+comparing two runs, which is why the verification blocks compare 139. The ones
 to look at first:
 
 | Column | Meaning |
@@ -637,7 +653,7 @@ to look at first:
 | `m_launch_kg`, `m_outbound_prop_kg`, `m_return_prop_kg`, `m_at_asteroid_kg`, `tps_mass_kg` | The mass cascade |
 | `m_dry_return_kg` | Return-vehicle dry mass actually flown, the 500 kg base plus `return_structure_frac_of_payload` of the haul. Compare it to `max_payload_kg`: a ratio far above ~7:1 means something has gone slack |
 | `ep_system_kg`, `ep_power_w`, `ep_system_cost_usd` | The electric stage. Before v1.10.0 the first two existed and the third did not, which is exactly the bug |
-| `*_cost_usd` (16 of them) | The cost cascade, line by line: launch, propellant, hardware, EP stage, ops, TPS, recovery, liability, licensing, insurance, NRE, autonomy NRE, contingency |
+| `*_cost_usd` (23 columns) | The cost cascade, line by line: launch, outbound and return propellant, hardware, mining rig, power system, EP stage, tankage, tanker flights, capsule, heat shield, ops, recovery, liability, licensing, launch insurance, NRE, autonomy NRE, contingency. Four of the 23 are the time-bucket aggregates in the next row, plus `total_cost_usd` |
 | `upfront_cost_usd`, `ongoing_cost_usd`, `end_of_mission_cost_usd`, `wacc_multiplier*` | Cost by time bucket, and the WACC factor applied to each |
 | `pipeline_version`, `catalog_date` | Which version of Stage 4 produced this row, and when |
 
