@@ -1,7 +1,9 @@
 # Notes for working in this repo
 
 Context for anyone (human or agent) editing this pipeline. The README covers
-what it does and how to run it; this file covers what will bite you.
+what it does and how to run it, `versions.md` covers what changed in which
+release and what the numbers used to be, and this file covers what will bite
+you.
 
 ## master.py is generated — never edit it
 
@@ -59,7 +61,7 @@ change, often hand-verified. Add to it, don't replace it.
 
 This has already failed once: the project was briefly developed in two places
 at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
-See the README's "parallel-repo divergence" section — CSVs stamped with those
+See "The parallel-repo divergence" in `versions.md` — CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.1.1`, mineral_value `1.7.1`, transportation `1.12.1`,
@@ -1021,6 +1023,34 @@ So after changing any number, search for the superseded **claim**, not just
 the digits: "best case", "still comes in", counts spelled out in prose and
 headings, and the name of whichever destination used to win. Check that
 summary paragraphs still agree with the tables below them in the same file.
+
+🚨  **THERE ARE THREE FILES TO GREP NOW, NOT TWO.** The release history moved
+out of the README into `versions.md` on 2026-08-24, so a measurement can go
+stale in any of: this file (the working notes), `README.md` (the current
+answer) and `versions.md` (what the numbers used to be). The split is what
+makes that tractable — `versions.md` is *allowed* to hold superseded figures,
+and every table in it names the release and catalog it belongs to — but it
+means `grep -rn "<the old number>" *.md` is the check, not a two-file diff.
+
+✅  **The split was audited at fact level rather than by eye, and that is the
+technique to reuse.** Pull every distinctive numeric token out of the old file
+(anything with a decimal point, a thousands separator, or four-plus digits) and
+assert each still appears somewhere in the new ones. It found **26 measurements
+dropped rather than moved** — the whole v1.14.0 and v1.11.0 runtime tables, the
+`60.9284×` that is the only evidence behind v1.15.0's "inert at N = 1", the
+2,077-row full-catalog correction that retires v1.16.0's "not yet
+load-bearing", and the saturation-multiplier column that *is* the mechanism in
+v1.14.0's programme-scale curve. A line-level diff reported 302 differences and
+could not tell any of that from a reflowed paragraph.
+
+⚠️  **It also surfaced a contradiction that had been sitting in the README.**
+The v1.10.0 programme-scale curve explained its Falcon Heavy → New Glenn switch
+as "a bigger vehicle starts paying". New Glenn lifts **45 t** to LEO against
+Falcon Heavy's **57 t**, so the switch is to a *smaller* vehicle — and the
+v1.14.0 curve a hundred lines below said exactly that, in the same file. The
+correct reading is saturation punishing volume. **Two tables in one document
+disagreeing about their own shared column is the failure this section is
+about**, and it survived because nobody had read them next to each other.
 
 ## Model assumptions that are load-bearing
 
@@ -5100,8 +5130,8 @@ explanation on stdout is how someone concludes the pipeline has hung.
 
 ### What to watch for
 
-⚠️  **Almost every table in this file and the README is N = 1 raw, and a
-default run no longer reproduces any of them.** That is not a stale-number
+⚠️  **Almost every table in this file, the README and `versions.md` is N = 1
+raw, and a default run no longer reproduces any of them.** That is not a stale-number
 problem to fix by re-measuring — the numbers are right for the question they
 answer. It is a *labelling* problem, and the fix is that any cell quoted from
 here on says which side of both flags it is on.
