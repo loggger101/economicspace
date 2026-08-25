@@ -31,8 +31,8 @@ THREE THINGS IT HAS TO GET RIGHT, all of them traps this repo has already hit:
      cargo at a depot while paying to land it in Utah.
 
 ON THE PRESETS.  The pipeline's own defaults are the full 1.55 M-row catalog,
-beneficiated, with the programme search on -- a cell nobody has ever measured
-end to end, and CLAUDE.md's measured neighbours put it in the tens of hours.
+beneficiated, with the programme search on, at earth_surface -- measured at
+13,581 s (3.8 h) in the 2026-08-24 campaign; see README.md's Results.
 That is the right default for the model and a hostile default for someone who
 has just double-clicked something, so `--preset` names three runs by what they
 cost, and `--preset full` is the one that reproduces the pipeline's own
@@ -82,7 +82,8 @@ def _force_utf8_stdout() -> None:
 _force_utf8_stdout()
 
 # Runtime notes on each preset.  The timings are order-of-magnitude, read off
-# the measured cells in CLAUDE.md; the row cap is what makes them differ.
+# the measured cells in README.md's Results; the row cap is what makes them
+# differ.
 PRESETS = {
     "quick": dict(
         rows=400, raw=True, search=False, asteroids=20_000,
@@ -97,7 +98,8 @@ PRESETS = {
     "full": dict(
         rows=0, raw=False, search=True, asteroids=0,
         blurb="THE PIPELINE DEFAULTS -- every row, beneficiated, programme "
-              "search on (HOURS TO DAYS)",
+              "search on (1.6 h at cislunar to 3.8 h at earth_surface, "
+              "measured 2026-08-24)",
     ),
 }
 
@@ -220,7 +222,7 @@ def build_parser(destinations) -> argparse.ArgumentParser:
 
     ore = p.add_mutually_exclusive_group()
     ore.add_argument("--raw", dest="raw", action="store_true",
-                     help="fly run-of-mine ore (~7x faster than concentrate)")
+                     help="fly run-of-mine ore (~4.7x faster than concentrate)")
     ore.add_argument("--beneficiated", dest="raw", action="store_false",
                      help="concentrate the ore before flying it")
     p.set_defaults(raw=None)
@@ -228,7 +230,7 @@ def build_parser(destinations) -> argparse.ArgumentParser:
     prog = p.add_mutually_exclusive_group()
     prog.add_argument("--search", dest="search", action="store_true",
                       help="search programme scale: fleet x campaigns "
-                           "(~3x slower)")
+                           "(~1.7x slower)")
     prog.add_argument("--no-search", dest="search", action="store_false",
                       help="price one mission per asteroid (N = 1)")
     p.set_defaults(search=None)
@@ -431,7 +433,7 @@ def print_banner(args, settings, cfg, stages) -> None:
 
     The marking is the point. Since calc v1.17.0 a configure-nothing run is the
     full catalog, beneficiated, with the programme search on -- so "the
-    defaults" and "what most tables in CLAUDE.md were measured at" are no
+    defaults" and "what most tables on record were measured at" are no
     longer the same thing, and a run that does not say which it is invites the
     two being confused.
     """
@@ -446,8 +448,8 @@ def print_banner(args, settings, cfg, stages) -> None:
 
     def fmt_rows(n):      return "every row" if not n else "{:,} (stride sample)".format(n)
     def fmt_ast(n):       return "all (1.55 M)" if not n else "{:,} per source".format(n)
-    def fmt_ore(raw):     return "run-of-mine" if raw else "beneficiated (~7x slower)"
-    def fmt_prog(s):      return ("fleet x campaigns searched (~3x slower)" if s
+    def fmt_ore(raw):     return "run-of-mine" if raw else "beneficiated (~4.7x slower)"
+    def fmt_prog(s):      return ("fleet x campaigns searched (~1.7x slower)" if s
                                   else "single mission (N = 1)")
 
     def mark(current, default, fmt):

@@ -461,15 +461,16 @@ def _stage_minutes(key: str) -> float:
                                   MASTER.calc.optimise_programme_scale)
 
     # Seconds per row, read straight off the committed full-catalog 2x2 --
-    # CLAUDE.md, "THE COMPLETE 20-CELL MATRIX", calc 1.17.7, 12 workers, over
-    # the 1,555,618 rows with positive mass:
+    # README.md, "Beneficiation", which carries the wall clock for all twenty
+    # cells; calc 1.17.7, 12 workers, over the 1,555,618 rows with positive
+    # mass:
     #
     #                 search OFF     search ON
     #     raw              733 s       1,253 s
     #     beneficiated   3,424 s       5,692 s
     #
     # The old pair of rates carried a beneficiated:raw ratio of 3.12x, taken
-    # from a stride sample. CLAUDE.md retires that figure by name -- and
+    # from a stride sample. versions.md retires that figure by name -- and
     # THE SAMPLING RULE is precisely about not doing this. These four are
     # measured full runs, so they need no ratio at all.
     #
