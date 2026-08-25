@@ -1377,6 +1377,31 @@ nothing pushes back, and **100% of rows** run to `max_fleet_ships` = 64,
 N = 320. The reported 12,977.88× and 7,869.88× are the value at the ladder's
 top rung. The other four destinations are unaffected.
 
+##### Three population results the single-cell tables could not show
+
+**Iodine comes back at scale.** v1.11.0 claimed iodine won nine of ten cells;
+v1.14.0 retired that when the eclipse term gave **xenon** 42–76% of every raw
+N = 1 cell. Both were measuring single missions. Turn on both defaults and
+iodine **overtakes xenon at `leo`** (42.74 vs 42.14%) and **wins
+`earth_surface` outright** (47.31 vs 35.50%). Every propellant-share claim in
+this project is a statement about a configuration, not about the model.
+
+**Chemical propulsion reaches 11–15% of three destinations.** `methalox` goes
+1.6–1.8% raw to 11.11–15.23% beneficiated at `leo`, `mars_surface` and
+`earth_surface` — beneficiation drives mass ratio up, which is exactly where
+the v1.11.0 tank term bites, and methalox is dense. Krypton moves the opposite
+way for the same reason: 22.64% → 6.40% at `lunar_surface`.
+
+**Mars inverts the rig's bounds.** This project's rig-bound figures are
+cislunar's, where the *cycle* bound retires 96% of rigs raw. At `mars_surface`
+beneficiated the **calendar** bound retires **80.79%**, because a Mars campaign
+repeats every 3.8–4.0 years against ~1.37 elsewhere — the Earth–Mars synodic
+period, on a separate heliocentric transfer. A Mars programme in this model has
+a median span of **21 years**. Relatedly, "a programme's pace is set by orbital
+mechanics, not mining rate" holds for raw everywhere (86–99.97%) and **inverts
+under beneficiation** at every destination except Mars, where the dig sets the
+pace on 66–83% of rows.
+
 ##### Runtime — the first full-catalog measurement on the v1.17.x line
 
 No full-catalog run had been made since v1.16.0, so the five performance-only
