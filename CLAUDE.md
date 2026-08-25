@@ -278,29 +278,22 @@ and not there is the per-destination detail, and the claims each cell retired.
 
 ### ✅ THE COMPLETE 20-CELL MATRIX IS MEASURED (CURRENT: 2026-08-23/24, calc `1.17.7`)
 
-**Every destination × both settings of beneficiation × both settings of the
-programme search**, on the full 1,555,667-row catalog, 12 workers, 26.1 h of
-compute, zero failures. **These are the current numbers for the whole model.**
-
-🚨  **The headline table itself lives in
-[README.md](README.md#current-results-the-complete-20-cell-matrix) and is not
+🚨  **The headline matrix, the campaign's conditions and the result highlights
+are in
+[README.md](README.md#current-results-the-complete-20-cell-matrix), and are not
 copied here**, for the reason this file gives everywhere else: name one
-authority or you have two. What is below is the part a README should not
-carry, the per-destination depth, the invariants, and the claims each cell
-retired.
+authority or you have two. What follows is the part a README should not carry:
+per-destination depth, the invariants, and the claims each cell retired.
 
-The two facts worth restating because everything downstream leans on them:
-**`cislunar` is the best case on all four settings** (13.1443× against
-`lunar_surface`'s 22.5790×, a factor of 1.72 on the default cell), and **the
-programme search never changes the evaluable set** at any destination, as it
-must not, since N enters nothing in the mass cascade.
+Two facts everything below leans on: **`cislunar` is the best case on all four
+settings**, and **the programme search never changes the evaluable set** at any
+destination, as it must not, since N enters nothing in the mass cascade.
 
-⚠️  **Twelve of these twenty cells had never been measured at all**: every
-non-cislunar beneficiated cell and every non-cislunar searched cell. The four
-non-cislunar beneficiated figures in the v1.11.0 matrix were placeholders on
-the OLD 89,367-row catalog and are now retired: `lunar_surface` reads
-**35.8051×** against that table's 37.8133×, `leo` **48.2714×** against
-51.2223×, `mars_surface` **55.3403×** against 51.9597×.
+⚠️  **The four non-cislunar beneficiated figures in the v1.11.0 matrix were
+placeholders on the OLD 89,367-row catalog and are retired**: `lunar_surface`
+reads **35.8051×** against that table's 37.8133×, `leo` **48.2714×** against
+51.2223×, `mars_surface` **55.3403×** against 51.9597×. Note they were not
+uniformly optimistic; `mars_surface` came in **6.5% worse**.
 
 #### Reproduction against the committed record
 
@@ -354,6 +347,22 @@ ordering is the ISRU discount doing its job: `mars_surface` **4,276 (0.6%)**,
 `earth_surface` 8,340 (1.1%), `lunar_surface` 22,781 (3.9%), `leo` 90,372
 (11.6%), `cislunar` **102,765 (15.8%)**. Median improvement from beneficiation
 runs +39.5% at `cislunar` to **+77.7%** at `earth_surface`.
+
+✅  **`cislunar` being the WORST place to concentrate is the utility table
+working, not a defect.** Against `lunar_surface`, beneficiation improves the
+median by +39.5% / +34.2% (search off / on) at `cislunar` and **+63.8% /
++66.5%** at the Moon, with four times fewer bodies declining. Lunar water
+utility is **0.60** against cislunar's 1.00 in
+`IN_SPACE_UTILITY_BY_DESTINATION`, so the Moon pays less for volatiles, and
+**concentrating is exactly how a mission escapes being carried by volatiles.**
+A destination that pays full price for water has less to gain from upgrading
+away from it. Do not "fix" this.
+
+⚠️  **Programme structure is per destination too, so do not carry cislunar's
+medians anywhere.** `lunar_surface` raw searched runs a fleet median of **4**
+and N median **20** against `cislunar`'s 2 and 10, with `W < trips` on 1,317
+rows (0.225%) raw and 1,074 (0.177%) beneficiated. `N = F × W` on every row and
+`W > trips` never, in both.
 
 ### 🚨 `earth_surface`'s SEARCHED CELLS ARE NOT OPTIMA: saturation is inert there
 
@@ -753,6 +762,27 @@ or reference table.
 ⚠️  **It cannot see a stale measurement.** A number that is merely out of date
 passes everything in it, which is why the rest of this section is still a
 manual discipline.
+
+🚨  **AND IT CANNOT SEE THE COPIES THAT LIVE IN CODE.** The docs are not the
+only place a measurement is quoted: **`--help` text, run banners, config
+comments and harness comments all quote runtime ratios**, and none of it is a
+dataclass default, so check 1 cannot reach it. The 2026-08-25 pass found the
+superseded `1.16.0` ratios (beneficiation "~7x", the programme search "~3x")
+still being **printed to the user on every run**, in five files at once:
+
+| file | where |
+|---|---|
+| `run_pipeline.py` | `--help` for `--raw` and `--search`, and the `[default: ...]` run banner |
+| `build_master.py` | the `MASTER CONFIG READY` banner, which is a `MASTER_ORCHESTRATOR` template, so it is in `master.py` too |
+| `modules/calc.py` | the `use_beneficiation` and `optimise_programme_scale` config comments, and their version-history blocks |
+| `verify.py` | the comment explaining why beneficiated cells run at a lower row cap |
+| `README.md` | a quoted example of the run banner |
+
+They are **4.67x** and **1.71x** on `1.17.7`. ⚠️  A banner is the *most* read
+copy of a number in this project and the least checked, so **when a ratio
+moves, grep the code as well as the prose**: `grep -rn "~7x\|2.98x\|7.1x"`.
+Comments and console text are not output, so this moves no `pipeline_version`;
+it does move `master.py`, which must be rebuilt and committed with it.
 
 🚨  **This paragraph used to open "Three of these are mechanical now" and then
 describe four, against a file that had seven.** It is left corrected rather
@@ -1648,11 +1678,11 @@ the same way and are fixed with it: an empty cell in the mass ledger printed
 empty was skipped silently; both of which are the regression, not the absence
 of one. **A check that cannot run must never say it passed.**
 
-⚠️  A full `check` builds ~20 cells and takes **roughly half an hour**: most of
-it check 2, since turning the pre-filter off is precisely what v1.14.1 and
-v1.17.4 exist to avoid. Iterate with `--skip prune parallel` (~5 min, and it
-still catches any change to any number), then run the full set once before
-committing. **A verification you will not run is worse than a slow one.**
+⚠️  A full `check` takes **roughly half an hour**, most of it check 2, since
+turning the pre-filter off is precisely what `1.14.1` and `1.17.4` exist to
+avoid. **`--skip prune parallel` is the ~5 minute loop**; see
+[README.md](README.md#verifying-a-change) for the flags. **A verification you
+will not run is worse than a slow one.**
 
 🚨  **THE REASON IT EXISTS IS IN THIS FILE, ONCE PER ROW OF THE TABLE BELOW.**
 Every release before 2026-08-21 rebuilt these checks from memory and threw them
