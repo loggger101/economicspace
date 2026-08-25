@@ -11,7 +11,7 @@ Three things it does:
                 the module's own explanatory comment attached as help text.
     Run         any subset of the four stages, reusing the CSVs already on disk
                 for the stages you skip. Stage 1 downloads ~500 MB and a full
-                Stage 4 runs 22 min to 6.8 h depending on two flags (see below),
+                Stage 4 runs 12 min to 1.6 h depending on two flags (see below),
                 so re-running Stage 4 alone against a cached catalog is the
                 normal working loop.
     Inspect     the profitability catalog ranked by cost/revenue, charted, and
@@ -170,11 +170,14 @@ STAGES = [
           "columns and silently flies every tank for free."),
     Stage("calc",      4, "Profitability",
           "The headline output, and the only stage whose runtime you choose. "
-          "Measured on the full 1.55 M-row catalog at cislunar, 12 workers: "
-          "22 min raw at N = 1, 65 min with optimise_programme_scale, 2.6 h "
-          "with use_beneficiation, and 6.8 h with both — and both of those "
-          "flags DEFAULT ON as of calc v1.17.0, so budget for the 6.8 h unless "
-          "you turn one off. Seconds with eval_row_cap set low."),
+          "Measured on the full 1.55 M-row catalog at cislunar, 12 workers, "
+          "calc 1.17.7: 12 min raw at N = 1, 21 min with "
+          "optimise_programme_scale, 57 min with use_beneficiation, and 1.6 h "
+          "with both — and both of those flags DEFAULT ON as of calc v1.17.0, "
+          "so budget for the 1.6 h unless you turn one off. Cislunar is the "
+          "CHEAPEST destination: leo, mars_surface and earth_surface run "
+          "2.1-2.7x longer per cell, so the default there is 3.4-4.3 h. "
+          "Seconds with eval_row_cap set low."),
 ]
 
 
@@ -458,31 +461,37 @@ def _stage_minutes(key: str) -> float:
                                   MASTER.calc.optimise_programme_scale)
 
     # Seconds per row, read straight off the committed full-catalog 2x2 --
-    # CLAUDE.md, "THE FULL CISLUNAR 2x2", calc 1.16.0, 12 workers, over the
-    # 1,555,618 rows with positive mass:
+    # CLAUDE.md, "THE COMPLETE 20-CELL MATRIX", calc 1.17.7, 12 workers, over
+    # the 1,555,618 rows with positive mass:
     #
     #                 search OFF     search ON
-    #     raw            1,307 s       3,890 s
-    #     beneficiated   9,300 s      24,587 s
+    #     raw              733 s       1,253 s
+    #     beneficiated   3,424 s       5,692 s
     #
     # The old pair of rates carried a beneficiated:raw ratio of 3.12x, taken
-    # from a stride sample. CLAUDE.md retires that figure by name -- the real
-    # full-catalog ratio is 7.1x -- and THE SAMPLING RULE is precisely about
-    # not doing this. These four are measured full runs, so they need no
-    # ratio at all.
+    # from a stride sample. CLAUDE.md retires that figure by name -- and
+    # THE SAMPLING RULE is precisely about not doing this. These four are
+    # measured full runs, so they need no ratio at all.
+    #
+    # Updated 2026-08-24 from the calc 1.16.0 figures (1,307 / 3,890 / 9,300 /
+    # 24,587 s). The previous comment here said this "reads HIGH" because five
+    # performance-only releases had landed with no full-catalog run on any of
+    # them; the 20-cell campaign supplied one, and they were worth 1.78x to
+    # 4.32x -- so the default estimate was reading 4.3x high, not slightly.
     _CELL_ROWS = 1_555_618
     _SECONDS_PER_ROW = {
-        (False, False):  1_307 / _CELL_ROWS,
-        (False, True):   3_890 / _CELL_ROWS,
-        (True,  False):  9_300 / _CELL_ROWS,
-        (True,  True):  24_587 / _CELL_ROWS,
+        (False, False):    733 / _CELL_ROWS,
+        (False, True):   1_253 / _CELL_ROWS,
+        (True,  False):  3_424 / _CELL_ROWS,
+        (True,  True):   5_692 / _CELL_ROWS,
     }
-    # Measured at CISLUNAR on calc 1.16.0. Five performance-only releases have
-    # landed since and no full-catalog run has been made on any of them, so
-    # this reads HIGH -- which is the right direction for an estimate. Other
-    # destinations run 1.4-2x slower on raw (v1.14.0 matrix); this does not try
-    # to model that, because it is a prior, and the stage bar replaces it with
-    # measured progress within the first minute.
+    # Measured at CISLUNAR, which is the CHEAPEST destination. leo, mars_surface
+    # and earth_surface run 2.1-2.7x slower per cell (20-cell matrix); this does
+    # not try to model that, because it is a prior, and the stage bar replaces
+    # it with measured progress within the first minute. So it now reads LOW
+    # away from cislunar rather than high everywhere -- the trade taken
+    # deliberately, since the four cislunar cells are the ones measured on the
+    # current code.
     return rows * _SECONDS_PER_ROW[(bool(benef), bool(search))] / 60.0
 
 
