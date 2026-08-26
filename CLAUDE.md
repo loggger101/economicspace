@@ -754,9 +754,10 @@ exactly that.
 `verify_docs.py`.** It takes about a second and needs no baseline; the checks
 are listed in [README.md](README.md#verifying-the-docs), and they cover
 documented defaults, `pipeline_version` stamps, reference-table row counts,
-anchors, document structure, the em-dash ratchet and, with `--before`, whether
-a reorganisation dropped a measurement. Run it after touching any config field
-or reference table.
+anchors, document structure, the em-dash ratchet, two cross-file manifests
+(`requirements.txt` against `_MASTER_REQUIRED`, README's option list against
+`run.bat`'s dispatcher) and, with `--before`, whether a reorganisation dropped
+a measurement. Run it after touching any config field or reference table.
 
 ⚠️  **It cannot see a stale measurement.** A number that is merely out of date
 passes everything in it, which is why the rest of this section is still a

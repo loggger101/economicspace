@@ -254,9 +254,9 @@ call :ask_destination
 echo.
 echo   THE PIPELINE DEFAULTS: every one of 1.55 million rows, beneficiated,
 echo   with the programme search on. This preset overrides nothing -- it is
-echo   what a configure-nothing run does. Nobody has ever measured that cell
-echo   end to end; its measured neighbours put it in the tens of hours, so
-echo   budget days rather than hours.
+echo   what a configure-nothing run does. Measured 2026-08-24: Stage 4 alone
+echo   is 1.6 h at cislunar and 3.8 h at earth_surface, the config default.
+echo   Budget half a day if Stages 1-3 run too.
 echo.
 echo   Ctrl-C is safe. Each stage writes its CSV before the next one starts.
 echo.
