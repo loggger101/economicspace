@@ -2,7 +2,7 @@
 """Documentation verification for the asteroid profitability pipeline.
 
 `verify.py` proves the MODEL did not change.  This proves the DOCS still
-describe it.  Seven checks, all mechanical, all fast (about a second):
+describe it.  Eight checks, all mechanical, all fast (about a second):
 
     1. defaults      every default the README's Tuning table quotes, against
                      the dataclass field it names
@@ -13,11 +13,14 @@ describe it.  Seven checks, all mechanical, all fast (about a second):
     5. structure     balanced fences, no ragged tables, no heading-level jumps,
                      no duplicate h1/h2 within a file
     6. dashes        no em- or en-dash in prose a reader sees
-    7. transfer      every distinctive number in a --before snapshot still
+    7. manifests     a list documented in one place, against the list actually
+                     defined in another: requirements.txt vs _MASTER_REQUIRED,
+                     and README's `run.bat` block vs run.bat's own dispatcher
+    8. transfer      every distinctive number in a --before snapshot still
                      appears somewhere in the docs afterwards
 
-    py verify_docs.py                       # checks 1-6
-    py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 7
+    py verify_docs.py                       # checks 1-7
+    py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 8
 
 WHY THIS FILE EXISTS
 --------------------
@@ -34,9 +37,11 @@ to stop.  What they caught, on the run that prompted writing them down:
   "Propellants -- 40 rows" with development=7; the module loads 41 and 8, both
   stale by exactly the cryogenic-argon row v1.12.0 added.        -> check 3
   A README section promising "all five" checks above a table of six. -> by eye
+  `run.bat help` was accepted by the dispatcher and documented nowhere, so
+  README's option list had quietly drifted from run.bat's own.    -> check 7
   26 measurements dropped rather than moved when the version history was split
   out into versions.md -- a line diff reported 302 differences and could not
-  tell any of them from a reflowed paragraph.                    -> check 6
+  tell any of them from a reflowed paragraph.                    -> check 8
 
 SCOPE.  This reads the docs and the module dataclasses.  It does NOT run the
 pipeline, fetch anything, or check that a documented NUMBER is a correct
@@ -411,7 +416,65 @@ def check_dashes() -> bool:
     return not bad
 
 
-# ----------------------------------------------------------------- 7. transfer
+# ---------------------------------------------------------------- 7. manifests
+def check_manifests() -> bool:
+    """A list documented in one place, against the list defined in another.
+
+    Neither of these is a dataclass default, so check 1 cannot reach them, and
+    both have already drifted.  `run.bat help` shipped accepted-but-undocumented
+    for several releases; requirements.txt asserts in its own first line that it
+    mirrors `_MASTER_REQUIRED`, and nothing was checking that.  The second is
+    not cosmetic: a miss means `pip install -r` builds a different environment
+    from the one the Colab paste auto-installs.
+    """
+    bad, n = [], 0
+
+    # requirements.txt <-> _MASTER_REQUIRED (build_master.py writes it into
+    # master.py, which pip-installs it at import time).
+    req_p = os.path.join(REPO, "requirements.txt")
+    bm_p = os.path.join(REPO, "build_master.py")
+    if os.path.exists(req_p) and os.path.exists(bm_p):
+        req = [ln.strip() for ln in read(req_p).split("\n")
+               if ln.strip() and not ln.strip().startswith("#")]
+        req = [re.split(r"[<>=!~]", r)[0].strip() for r in req]
+        m = re.search(r"_MASTER_REQUIRED\s*=\s*\[(.*?)\]", read(bm_p), re.S)
+        if m is None:
+            bad.append("build_master.py: no _MASTER_REQUIRED list found")
+        else:
+            master = re.findall(r'"([^"]+)"', m.group(1))
+            n += 1
+            if sorted(req) != sorted(master):
+                bad.append("requirements.txt %s != _MASTER_REQUIRED %s"
+                           % (sorted(req), sorted(master)))
+
+    # README's `run.bat` block <-> the words run.bat's dispatcher accepts.
+    bat_p = os.path.join(REPO, "run.bat")
+    readme_p = os.path.join(REPO, "README.md")
+    if os.path.exists(bat_p) and os.path.exists(readme_p):
+        bat = io.open(bat_p, encoding="utf-8", errors="replace").read()
+        # `if /i "%CHOICE%"=="ui"   goto ui` -- the word forms only; the digits
+        # are menu shortcuts and q/quit is not a run option.  Anchored on
+        # %CHOICE% rather than on `==` alone, because run.bat compares other
+        # variables too and the loose form reported the install prompt's "n"
+        # as an undocumented option.
+        accepted = {w.lower() for w in
+                    re.findall(r'"%CHOICE%"\s*==\s*"([A-Za-z]+)"', bat)}
+        accepted -= {"q", "quit"}
+        documented = set(re.findall(r"^run\.bat\s+([a-z]+)", read(readme_p), re.M))
+        n += 1
+        for miss in sorted(accepted - documented):
+            bad.append("run.bat accepts '%s', README does not document it" % miss)
+        for extra in sorted(documented - accepted):
+            bad.append("README documents 'run.bat %s', dispatcher rejects it"
+                       % extra)
+
+    print("7. manifests   %d manifests checked, %d mismatched" % (n, len(bad)))
+    for b in bad:
+        print("     ! " + b)
+    return not bad
+
+
+# ----------------------------------------------------------------- 8. transfer
 def check_transfer(before: str, after: List[str]) -> bool:
     """Every distinctive number in `before` must survive somewhere in `after`.
 
@@ -429,7 +492,7 @@ def check_transfer(before: str, after: List[str]) -> bool:
         b = old.find("\n", m.end())
         seen[tok] = old[a:b if b > 0 else None].strip()
     lost = [(t, c) for t, c in seen.items() if t not in hay]
-    print("7. transfer    %d distinctive numbers in %s, %d lost"
+    print("8. transfer    %d distinctive numbers in %s, %d lost"
           % (len(seen), os.path.basename(before), len(lost)))
     for t, c in sorted(lost):
         print("     ! %-14s | %s" % (t, c[:110]))
@@ -452,7 +515,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                lambda: check_row_counts(mods),
                check_links,
                check_structure,
-               check_dashes):
+               check_dashes,
+               check_manifests):
         ok = fn() and ok
     if args.before:
         if len(args.before) < 2:

@@ -742,16 +742,25 @@ class CalcConfig:
     # preview, not something a full pipeline run should discover it inherited.
     #
     # ⚠️  Budget before setting this to 0 on a big catalog.  MEASURED
-    # 2026-08-08 at cislunar, six physical cores / 12 workers, on the full
-    # 1,554,351-row v1.1.0 catalog:
-    #     raw           2,539 s (42 min), 668,004 evaluable rows, 1.06 GB out
-    #     beneficiated  ~2.2 h ESTIMATED, not yet measured
+    # 2026-08-24 at cislunar, six physical cores / 12 workers, calc 1.17.7, on
+    # the full 1,555,667-row catalog:
+    #     raw, N = 1            733 s     650,921 evaluable rows
+    #     raw, searched       1,253 s
+    #     beneficiated, N = 1 3,424 s     660,253 evaluable rows
+    #     beneficiated+search 5,692 s     <- BOTH DEFAULT ON since v1.17.0
+    # cislunar is the CHEAPEST destination; leo, mars_surface and earth_surface
+    # cost 2.1-2.7x more per cell.  All twenty are in README.md.
     #
     # ⚠️  DO NOT BUDGET BY SCALING A SMALL RUN.  Scaling a 20,000-row sample
-    # predicted 2.2 h for that raw run and it took 42 minutes -- a 3.1x
+    # predicted 2.2 h for a raw run that took 42 minutes -- a 3.1x
     # overestimate.  Fixed costs (worker startup, loading a 0.88 GB catalog)
     # dominate a small run, and parallel efficiency is much better on a large
     # one, so per-row cost falls sharply with size.  It is not linear.
+    #
+    # ⚠️  And it misses in BOTH directions: the beneficiated cell sat here as
+    # "~2.2 h ESTIMATED" from that same sample's 3.12x ratio, and measured
+    # 10.6 h on calc 1.14.0 -- 4.8x the other way.  versions.md's sampling rule
+    # is the general statement; the four numbers above are measurements.
     eval_row_cap:              int = 0
 
     # HOW a cap selects its rows.  Only consulted when eval_row_cap > 0.
