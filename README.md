@@ -532,7 +532,8 @@ py verify_docs.py
 | 4 | links | a markdown anchor that does not resolve |
 | 5 | structure | unbalanced fences, ragged tables, heading-level jumps, duplicate h1/h2 |
 | 6 | dashes | an em- or en-dash creeping back into prose a reader sees |
-| 7 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
+| 7 | manifests | a list documented in one place drifting from the list defined in another: `requirements.txt` against `_MASTER_REQUIRED`, and the `run.bat` block above against run.bat's own dispatcher |
+| 8 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
 
 Check 6 is a ratchet rather than a style opinion: 1,342 em-dashes came out of
 the docs and 1,120 out of the module comments, and without a check they drift
@@ -540,10 +541,16 @@ back one commit at a time. It reads `modules/*.py` through `tokenize` and `ast`
 so it sees only comments and docstrings, because the `notes` and `composition`
 strings are written into the CSVs and their text is data.
 
-The first three exist because they have already failed: `use_beneficiation` and
-`optimise_programme_scale` were both documented as `False` for several releases
-after calc v1.17.0 flipped them to `True`, and the propellant table was
-documented at 40 rows for six releases after v1.12.0 split argon into two.
+Checks 1, 3 and 7 exist because they have already failed: `use_beneficiation`
+and `optimise_programme_scale` were both documented as `False` for several
+releases after calc v1.17.0 flipped them to `True`; the propellant table was
+documented at 40 rows for six releases after v1.12.0 split argon into two; and
+`run.bat help` was accepted by the dispatcher and documented nowhere.
+
+⚠️  **Check 7's second half is not cosmetic.** `requirements.txt` says in its
+own first line that it mirrors `_MASTER_REQUIRED`, which `master.py`
+pip-installs at import time; if the two drift, `pip install -r` builds a
+different environment from the one a Colab paste sets up for itself.
 
 ⚠️  **It checks that a documented *configuration* matches the code; not that a
 documented *measurement* is current.** A stale number passes everything in it.

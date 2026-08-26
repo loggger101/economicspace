@@ -451,12 +451,14 @@ def _stage_minutes(key: str) -> float:
                                 MASTER.calc.eval_row_cap) or _JPL_FULL_ROWS
     benef = st.session_state.get("cfg::calc::use_beneficiation",
                                  MASTER.calc.use_beneficiation)
-    # BOTH axes, because both default ON as of calc v1.17.0 and each is worth
-    # roughly 3x. Omitting the programme search told the user 2.2 h for the
-    # DEFAULT run, against 6.8 h measured -- 3.1x low, and flatly contradicted
-    # by this stage's own blurb four lines of sidebar away, which already says
-    # "budget for the 6.8 h". A stale estimate beside a correct sentence is the
-    # exact failure CLAUDE.md is written to catch.
+    # BOTH axes, because both default ON as of calc v1.17.0 and each costs
+    # real time. Omitting the programme search once told the user 2.2 h for the
+    # DEFAULT run against the 6.8 h then measured -- 3.1x low, and flatly
+    # contradicted by this stage's own blurb four lines of sidebar away, which
+    # already carried the right figure. A stale estimate beside a correct
+    # sentence is the exact failure CLAUDE.md is written to catch. (Both
+    # numbers are calc 1.16.0; on 1.17.7 the same cell is 1.6 h, which is what
+    # the blurb and _SECONDS_PER_ROW now carry.)
     search = st.session_state.get("cfg::calc::optimise_programme_scale",
                                   MASTER.calc.optimise_programme_scale)
 
