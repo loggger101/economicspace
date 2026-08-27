@@ -152,7 +152,9 @@ def load_master():
 # CELLS
 # -----------------------------------------------------------------------------
 # The four cells every release in versions.md is verified on, at the caps it uses.
-# Beneficiated cells run at 150 rows because they are ~4.7x raw; raw at 400.
+# Beneficiated cells run at 150 rows because they are ~4.7x raw (the ratio is
+# master.MEASURED_CELL_SECONDS'; this comment is the only place verify.py
+# restates it); raw at 400.
 CELLS: Dict[str, Dict[str, Any]] = {
     "raw":          dict(use_beneficiation=False, optimise_programme_scale=False,
                          eval_row_cap=400),

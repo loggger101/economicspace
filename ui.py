@@ -464,8 +464,10 @@ def _stage_minutes(key: str) -> float:
 
     # Seconds per row, read straight off the committed full-catalog 2x2 --
     # README.md, "Beneficiation", which carries the wall clock for all twenty
-    # cells; calc 1.17.7, 12 workers, over the 1,555,618 rows with positive
-    # mass:
+    # cells; calc 1.17.7, 12 workers, over master.MEASURED_CELL_ROWS (the
+    # 1,555,667-row catalog those cells were measured on; 1,555,618 of them
+    # carry positive mass, a 0.003% difference that does not matter to an
+    # estimate the stage bar replaces within a minute):
     #
     #                 search OFF     search ON
     #     raw              733 s       1,253 s
@@ -481,13 +483,12 @@ def _stage_minutes(key: str) -> float:
     # performance-only releases had landed with no full-catalog run on any of
     # them; the 20-cell campaign supplied one, and they were worth 1.78x to
     # 4.32x -- so the default estimate was reading 4.3x high, not slightly.
-    _CELL_ROWS = 1_555_618
-    _SECONDS_PER_ROW = {
-        (False, False):    733 / _CELL_ROWS,
-        (False, True):   1_253 / _CELL_ROWS,
-        (True,  False):  3_424 / _CELL_ROWS,
-        (True,  True):   5_692 / _CELL_ROWS,
-    }
+    # Read from master rather than restated here. These four numbers used to
+    # be typed into five files at once and went stale together; calc.py's
+    # MEASURED_CELL_SECONDS is the one place they live now.
+    _CELL_ROWS = master.MEASURED_CELL_ROWS
+    _SECONDS_PER_ROW = {k: v / _CELL_ROWS
+                        for k, v in master.MEASURED_CELL_SECONDS.items()}
     # Measured at CISLUNAR, which is the CHEAPEST destination. leo, mars_surface
     # and earth_surface run 2.1-2.7x slower per cell (20-cell matrix); this does
     # not try to model that, because it is a prior, and the stage bar replaces
