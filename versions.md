@@ -22,7 +22,7 @@ history of how it got there.
 | 1 | `modules/catalog.py` | **1.1.1** | v1.1.1, `enrich_composition` by distinct taxonomy, 3.87× |
 | 2 | `modules/mineral_value.py` | **1.7.1** | v1.7.1, three PGM ore minerals reclassified out of a silent default |
 | 3 | `modules/transportation.py` | **1.12.1** | v1.12.1, `.astype(bool)` on the propellantless flag |
-| 4 | `modules/calc.py` | **1.17.7** | v1.17.7, `_CALENDAR_CACHE` bounded |
+| 4 | `modules/calc.py` | **1.17.8** | v1.17.8, the loader checks its upstream stamps |
 | - | `master.py` | **1.20.8** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
@@ -89,6 +89,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [calc v1.17.8](#calc-v1178) | 2026-08-27 | the loader now checks the Stage 3 stamp, not just its columns |
 | [mineral_value v1.7.1](#mineral_value-v171) | 2026-08-21 | three PGM ore minerals were falling through a silent default |
 | [calc v1.17.7 / transportation v1.12.1](#calc-v1177--transportation-v1121) | 2026-08-21 | a cache grew without bound; `.astype(bool)` on a nullable flag |
 | [calc v1.17.6](#calc-v1176) | 2026-08-21 | composition derived per row instead of per taxonomy |
@@ -109,6 +110,44 @@ moved in that release.
 | [calc v1.10.1](#calc-v1101) | 2026-08-07 | the first performance-only stamp, the process pool |
 | [calc v1.10.0](#calc-v1100) | 2026-08-07 | **the EP stage and the return structure flew free; the search optimised the wrong thing** |
 | [Earlier releases](#earlier-releases) | - | v1.9.0 and earlier, summarised |
+
+## calc v1.17.8
+
+**No number.** Four cells 139/139 columns bit-identical against the committed
+v1.17.7 baseline, all four hashes MATCH. The stamp moves so a catalog still
+names the code that built it.
+
+Closes the **value half** of the upstream-staleness hole `CLAUDE.md` has listed
+as open since v1.14.0. `schema_check()` asks whether the Module 3 columns and
+rows this version reads are PRESENT; it passes cleanly on a catalog whose
+**values** are a release out of date, because editing a density, a status or a
+boil-off rate leaves the schema identical.
+
+🚨 **That is not a hypothetical, and it has already cost a full measurement
+pass.** During v1.12.0 the argon rows were rewritten, Stage 3 was re-run, the
+CSV did not actually land, and two full-catalog runs plus a determinism sweep
+were measured against the table that was being replaced. Nothing anywhere said
+so. The documented mitigation was to read Stage 4's row counts against what
+Stage 3 reported writing, by eye, on every run: the kind of habit that works
+until the day it matters.
+
+`stamp_check()` compares the transportation `pipeline_version` **stamped in
+each Stage 3 CSV** against the Module 3 in this process. It needed no new
+column, because Stage 3 has stamped its output all along and nothing had ever
+read it back. What it really does is turn *"changing any number a run produces
+means bumping"* from a rule someone has to remember into one the loader
+enforces on the way past.
+
+⚠️ **It is a diagnostic, not an import.** `TRANSPORT_CONFIG` exists only when
+both modules share a process, which is `master.py`, the normal path. A
+standalone `calc.py` run cannot know what Module 3 currently says, and it stays
+silent rather than inventing a complaint it cannot support: the modules hand
+off through CSVs on disk and must not grow an import edge for a warning.
+
+⚠️ **It cannot see an edit that did not bump the version.** The rule is
+one-directional, so a value changed without a bump still passes. What this
+closes is the case where the discipline was followed and the write silently did
+not land, which is exactly the v1.12.0 failure.
 
 ## mineral_value v1.7.1
 

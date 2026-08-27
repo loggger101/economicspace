@@ -88,7 +88,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.1.1`, mineral_value `1.7.1`, transportation `1.12.1`,
-calc `1.17.7`, master `1.20.8` (the master version is a literal in
+calc `1.17.8`, master `1.20.8` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **TWELVE stamps so far do NOT mean the numbers moved.** The rule is
@@ -1989,19 +1989,30 @@ Undoing any of these silently corrupts the output:
   generic "columns changed" warning, because the consequence is the useful
   part.
 
-  ⚠️  **`schema_check()` checks COLUMNS, not VALUES, and that is a real hole.**
-  It checks Module 3 **rows** as well since v1.14.0; the ops table is keyed by
-  category, so a missing *figure* was invisible to a column test, and
-  `_MODULE3_REQUIRED_OPS` now names each row Stage 4 needs alongside the model
-  term its absence silently reverts. That closes the missing-row half. The
-  wrong-**value** half is still open and is the one below.
+  ⚠️  **`schema_check()` checks COLUMNS, not VALUES.** It checks Module 3
+  **rows** as well since v1.14.0; the ops table is keyed by category, so a
+  missing *figure* was invisible to a column test, and `_MODULE3_REQUIRED_OPS`
+  now names each row Stage 4 needs alongside the model term its absence
+  silently reverts. That closed the missing-row half.
 
   Editing a number in a Module 3 table, a density, a status, a boil-off rate
-, leaves the schema identical, so nothing warns and Stage 4 quietly runs on
+, leaves the schema identical, so nothing warned and Stage 4 quietly ran on
   the old figure. This cost a full measurement pass during v1.12.0: the argon
   rows were rewritten, Stage 3 was re-run, the CSV did not actually land, and
   two full-catalog runs plus a determinism sweep were measured against the
   table that was being replaced. Nothing anywhere said so.
+
+  ✅  **`stamp_check()` closes that half as of calc `1.17.8`.** Stage 3 has
+  stamped its own `pipeline_version` into every CSV it writes all along, and
+  nothing had ever read it back; the loader now compares that stamp against the
+  Module 3 in this process and shouts, naming each stale file. It needed no new
+  column, and it makes the one-directional bump rule self-enforcing: follow it,
+  and a write that silently fails to land is caught on the next run.
+  ⚠️  **Two limits, both deliberate.** It is a *diagnostic, not an import*, so
+  it is silent in a standalone `calc.py` run where `TRANSPORT_CONFIG` does not
+  exist, rather than inventing a complaint it cannot support. And it cannot see
+  **an edit that did not bump the version**; what it closes is the case where
+  the discipline was followed and the CSV did not land.
 
   The cheap habit that catches it: **Stage 4's loader prints row counts for
   every Module 3 table it reads** (`Module 3 propellants  41 rows`). Read
