@@ -1871,6 +1871,35 @@ default *inside* the dataclass, not the instance afterwards, mutating
 `CONFIG.foo` after construction defeats having one editable source of truth,
 and every module says so in a comment.
 
+🚨  **A FIELD'S COMMENT IS ITS UI HELP TEXT, AND THE ATTACHMENT RULE IS
+POSITIONAL.** `ui_meta.scrape_field_docs` walks *upward* from a field to the
+comment block directly above it, stopping at the first blank line or section
+banner, and also reads a trailing comment on the field's own line. So a comment
+block that explains **two** fields but sits above only the first leaves the
+second with **no help at all in the dashboard**, and the reader sees a bare
+number exactly where they are most likely to change one:
+
+| the documented field | the silent one beside it |
+|---|---|
+| `model_market_saturation` | `demand_elasticity`, the ε the block defines |
+| `allow_rtg_power` | `rtg_max_power_w`, the Pu-238 cap the block describes |
+| `mining_hardware_kg` | `return_vehicle_dry_kg`, which the block also explains |
+| `charge_tanker_flights` | `escape_direct_launch`, the flag that gates it |
+
+**Thirty-nine of 105 fields were in that state**, and the fix is per field, not
+one edit: give the second field its own block above (preceded by a blank line
+so it does not merge upward) or a **single-line** trailing comment.
+
+⚠️  **A trailing comment cannot be continued onto the next line.** A `#` line
+below a field is a *block* comment belonging to whatever field comes next, so
+a two-line trailing comment loses its own second half **and prepends it to the
+neighbour**. That was introduced and caught while closing the gap above.
+
+✅  **Every non-path field carries help now, and `verify_docs.py` check 8
+keeps it that way**: it builds the real UI specs and fails on any field outside
+`PATH_FIELDS` whose help is empty. Add a config field without a comment and the
+docs check goes red before anyone opens the dashboard.
+
 ## Correctness invariants that were expensive to find
 
 Undoing any of these silently corrupts the output:
