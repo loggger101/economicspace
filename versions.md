@@ -1688,7 +1688,10 @@ only destination that did not adopt iodine, winning on argon at both settings.
 
 All ten cells were re-measured through the UI from a catalog re-downloaded that
 morning, the first check of these tables against a separate run rather than
-against the process that produced them.
+against the process that produced them. ⚠️  **On the pre-v1.1.0 89,367-row
+catalog**, so the levels here are not comparable with anything measured after
+catalog v1.1.0 took the population to 1,554,400; what the table establishes is
+reproducibility, not magnitude.
 
 | destination | raw | beneficiated |
 |---|---|---|
@@ -1783,7 +1786,17 @@ output value, and **no full-catalog run had been made on any of them.** They
 had only ever been measured on the 150-400-row cells each release argues itself
 from, which is exactly what [the sampling rule](#the-sampling-rule) says
 not to extrapolate from.
-Measured at `cislunar`, both builds against the same catalog and Stage 2 pass:
+Measured at `cislunar` on the full **1,555,667-row** catalog, 12 workers, both
+builds against the same catalog and the same Stage 2 pass, 2026-08-24.
+
+🚨  **The `v1.17.7` column is the ONE PLACE these four numbers live.** They are
+`MEASURED_CELL_SECONDS` in `modules/calc.py`, and every printed cost ratio in
+the project derives from it: `run_pipeline.py`'s `--help` and run banner,
+`build_master.py`'s `MASTER CONFIG READY` banner (so `master.py` too), calc's
+own Stage 4 preview, and `ui.py`'s runtime estimate. They were five hand-copied
+literals until 2026-08-25 and had gone stale together. **Re-measure here, edit
+the dict, and every banner moves with it**; `verify_docs.py` check 9 holds
+[README's wall-clock table](README.md#beneficiation) to the same values.
 
 | cell | v1.16.0 | **v1.17.7** | speed-up |
 |---|---|---|---|
