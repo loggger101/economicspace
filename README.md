@@ -533,7 +533,8 @@ py verify_docs.py
 | 5 | structure | unbalanced fences, ragged tables, heading-level jumps, duplicate h1/h2 |
 | 6 | dashes | an em- or en-dash creeping back into prose a reader sees |
 | 7 | manifests | a list documented in one place drifting from the list defined in another: `requirements.txt` against `_MASTER_REQUIRED`, and the `run.bat` block above against run.bat's own dispatcher |
-| 8 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
+| 8 | help | a config dial the dashboard renders with no help text, because the UI scrapes its help from the field's own comment |
+| 9 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
 
 Check 6 is a ratchet rather than a style opinion: 1,342 em-dashes came out of
 the docs and 1,120 out of the module comments, and without a check they drift
@@ -541,11 +542,13 @@ back one commit at a time. It reads `modules/*.py` through `tokenize` and `ast`
 so it sees only comments and docstrings, because the `notes` and `composition`
 strings are written into the CSVs and their text is data.
 
-Checks 1, 3 and 7 exist because they have already failed: `use_beneficiation`
+Checks 1, 3, 7 and 8 exist because they have already failed: `use_beneficiation`
 and `optimise_programme_scale` were both documented as `False` for several
 releases after calc v1.17.0 flipped them to `True`; the propellant table was
-documented at 40 rows for six releases after v1.12.0 split argon into two; and
-`run.bat help` was accepted by the dispatcher and documented nowhere.
+documented at 40 rows for six releases after v1.12.0 split argon into two;
+`run.bat help` was accepted by the dispatcher and documented nowhere; and **39
+of 105 config fields rendered in the dashboard as a bare number with no help**,
+because a comment block explaining two fields sits above only the first one.
 
 ⚠️  **Check 7's second half is not cosmetic.** `requirements.txt` says in its
 own first line that it mirrors `_MASTER_REQUIRED`, which `master.py`

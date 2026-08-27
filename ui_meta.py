@@ -25,8 +25,10 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import io
 import os
 import re
+import tokenize
 from typing import Any, Dict, List, Optional, Tuple
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -403,6 +405,32 @@ def _clean_comment(line: str) -> str:
     return body[1:] if body.startswith(" ") else body
 
 
+def _trailing_comments(src: str) -> Dict[int, str]:
+    """line number -> the inline `#` comment on that line, if any.
+
+    Read through `tokenize` rather than by splitting on "#", because a default
+    value is allowed to contain one.  This exists because several fields carry
+    their whole description as a TRAILING comment and nothing else:
+
+        use_mp3c:     bool = True   # MP3C @ Observatoire Cote d'Azur
+        ssodnet_limit: int = 0      # 0 = whole cached ssoBFT table
+
+    Reading only the block ABOVE a field showed those as having no help at all,
+    while the text was sitting on the same line.
+    """
+    out: Dict[int, str] = {}
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+            if tok.type == tokenize.COMMENT:
+                # A comment that starts the line is a block comment, not a
+                # trailing one; those are already handled by the walk upward.
+                if src.split("\n")[tok.start[0] - 1][:tok.start[1]].strip():
+                    out[tok.start[0]] = _clean_comment(tok.string).strip()
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return {}
+    return out
+
+
 def scrape_field_docs(path: str, class_name: str) -> Dict[str, Dict[str, str]]:
     """field name -> {"help", "section"} scraped from a module source.
 
@@ -420,6 +448,7 @@ def scrape_field_docs(path: str, class_name: str) -> Dict[str, Dict[str, str]]:
         return {}
 
     lines = src.split("\n")
+    trailing_comments = _trailing_comments(src)
     cls = next(
         (n for n in ast.walk(tree)
          if isinstance(n, ast.ClassDef) and n.name == class_name),
@@ -453,8 +482,19 @@ def scrape_field_docs(path: str, class_name: str) -> Dict[str, Dict[str, str]]:
             section = _banner_title(line) or ""
             i -= 1
 
+        help_text = "\n".join(reversed(block)).strip()
+
+        # A trailing comment on the field's own line. For most fields this is
+        # the only description there is; where a block exists too it usually
+        # carries the part the block leaves out ("0 = all 1.55 M asteroids"),
+        # so it is appended rather than discarded, and skipped when the block
+        # already says it.
+        trailing = trailing_comments.get(stmt.lineno, "")
+        if trailing and trailing not in help_text:
+            help_text = (help_text + "\n" + trailing).strip() if help_text else trailing
+
         docs[stmt.target.id] = {
-            "help": "\n".join(reversed(block)).strip(),
+            "help": help_text,
             "section": section or "Other",
         }
 
