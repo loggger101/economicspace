@@ -534,7 +534,8 @@ py verify_docs.py
 | 6 | dashes | an em- or en-dash creeping back into prose a reader sees |
 | 7 | manifests | a list documented in one place drifting from the list defined in another: `requirements.txt` against `_MASTER_REQUIRED`, and the `run.bat` block above against run.bat's own dispatcher |
 | 8 | help | a config dial the dashboard renders with no help text, because the UI scrapes its help from the field's own comment |
-| 9 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
+| 9 | runtime | the cislunar wall clock above drifting from `calc.MEASURED_CELL_SECONDS`, which every banner and `--help` string derives its cost ratios from |
+| 10 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
 
 Check 6 is a ratchet rather than a style opinion: 1,342 em-dashes came out of
 the docs and 1,120 out of the module comments, and without a check they drift
@@ -554,6 +555,15 @@ because a comment block explaining two fields sits above only the first one.
 own first line that it mirrors `_MASTER_REQUIRED`, which `master.py`
 pip-installs at import time; if the two drift, `pip install -r` builds a
 different environment from the one a Colab paste sets up for itself.
+
+✅  **Check 9 exists because a banner is the most-read copy of a number here
+and was the least checked.** The beneficiation and programme-search cost ratios
+were hand-copied into five files, and they went stale together: the superseded
+v1.16.0 figures were still being *printed on every run* three releases after
+the measurement that retired them. Those ratios now derive from one dict,
+`calc.MEASURED_CELL_SECONDS`, so a re-measurement moves `--help`, both run
+banners and the dashboard estimate at once; check 9 holds the table above to
+the same numbers, so the docs cannot drift from it either.
 
 ⚠️  **It checks that a documented *configuration* matches the code; not that a
 documented *measurement* is current.** A stale number passes everything in it.

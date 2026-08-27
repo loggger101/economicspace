@@ -192,6 +192,31 @@ def parse_stages(text, parser):
     return sorted(seen)
 
 
+def _loaded_master():
+    """The already-imported master module.
+
+    `build_parser` runs after `load_master()`, so this is a dict lookup rather
+    than an import.  It asserts instead of falling back to a literal on
+    purpose: a hand-typed default here would be a SIXTH copy of a number this
+    project has already shipped stale once, and a missing import is a
+    programming error worth hearing about, not worth papering over with a
+    figure that cannot be re-measured."""
+    m = sys.modules.get("master")
+    assert m is not None, (
+        "build_parser() ran before load_master(); the --help text quotes "
+        "master.MEASURED_CELL_SECONDS and has nowhere to read it from"
+    )
+    return m
+
+
+def _benef_ratio() -> float:
+    return _loaded_master().beneficiation_cost_ratio(False)
+
+
+def _search_ratio() -> float:
+    return _loaded_master().programme_search_cost_ratio(False)
+
+
 def build_parser(destinations) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="run_pipeline",
@@ -222,7 +247,8 @@ def build_parser(destinations) -> argparse.ArgumentParser:
 
     ore = p.add_mutually_exclusive_group()
     ore.add_argument("--raw", dest="raw", action="store_true",
-                     help="fly run-of-mine ore (~4.7x faster than concentrate)")
+                     help="fly run-of-mine ore (~%.1fx faster than concentrate)"
+                          % _benef_ratio())
     ore.add_argument("--beneficiated", dest="raw", action="store_false",
                      help="concentrate the ore before flying it")
     p.set_defaults(raw=None)
@@ -230,7 +256,7 @@ def build_parser(destinations) -> argparse.ArgumentParser:
     prog = p.add_mutually_exclusive_group()
     prog.add_argument("--search", dest="search", action="store_true",
                       help="search programme scale: fleet x campaigns "
-                           "(~1.7x slower)")
+                           "(~%.1fx slower)" % _search_ratio())
     prog.add_argument("--no-search", dest="search", action="store_false",
                       help="price one mission per asteroid (N = 1)")
     p.set_defaults(search=None)
@@ -448,9 +474,19 @@ def print_banner(args, settings, cfg, stages) -> None:
 
     def fmt_rows(n):      return "every row" if not n else "{:,} (stride sample)".format(n)
     def fmt_ast(n):       return "all (1.55 M)" if not n else "{:,} per source".format(n)
-    def fmt_ore(raw):     return "run-of-mine" if raw else "beneficiated (~4.7x slower)"
-    def fmt_prog(s):      return ("fleet x campaigns searched (~1.7x slower)" if s
-                                  else "single mission (N = 1)")
+    # Ratios come from master.MEASURED_CELL_SECONDS, never typed here: these
+    # two labels printed the superseded 1.16.0 figures for three releases.
+    _m = sys.modules["master"]
+    def fmt_ore(raw):
+        if raw:
+            return "run-of-mine"
+        return "beneficiated (~%.1fx slower)" % _m.beneficiation_cost_ratio(
+            settings["search"])
+    def fmt_prog(s):
+        if not s:
+            return "single mission (N = 1)"
+        return "fleet x campaigns searched (~%.1fx slower)" % (
+            _m.programme_search_cost_ratio(not settings["raw"]))
 
     def mark(current, default, fmt):
         """[default] if it matches the dataclass, else what the default was."""

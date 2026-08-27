@@ -2,7 +2,7 @@
 """Documentation verification for the asteroid profitability pipeline.
 
 `verify.py` proves the MODEL did not change.  This proves the DOCS still
-describe it.  Nine checks, all mechanical, all fast (about a second):
+describe it.  Ten checks, all mechanical, all fast (about a second):
 
     1. defaults      every default the README's Tuning table quotes, against
                      the dataclass field it names
@@ -18,11 +18,13 @@ describe it.  Nine checks, all mechanical, all fast (about a second):
                      and README's `run.bat` block vs run.bat's own dispatcher
     8. help          every config dial the dashboard renders carries the
                      comment it shows as help text
-    9. transfer      every distinctive number in a --before snapshot still
+    9. runtime       README's cislunar wall clock, against the
+                     MEASURED_CELL_SECONDS every banner now derives from
+   10. transfer      every distinctive number in a --before snapshot still
                      appears somewhere in the docs afterwards
 
-    py verify_docs.py                       # checks 1-8
-    py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 9
+    py verify_docs.py                       # checks 1-9
+    py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 10
 
 WHY THIS FILE EXISTS
 --------------------
@@ -43,7 +45,10 @@ to stop.  What they caught, on the run that prompted writing them down:
   README's option list had quietly drifted from run.bat's own.    -> check 7
   26 measurements dropped rather than moved when the version history was split
   out into versions.md -- a line diff reported 302 differences and could not
-  tell any of them from a reflowed paragraph.                    -> check 9
+  tell any of them from a reflowed paragraph.                   -> check 10
+  The superseded 1.16.0 runtime ratios were still being PRINTED on every
+  run, in five files at once, three releases after the measurement that
+  retired them.                                                 -> check 9
   39 of 105 config fields showed a bare dial in the dashboard, because their
   comment block sat above a NEIGHBOURING field.                   -> check 8
 
@@ -519,7 +524,60 @@ def check_help() -> bool:
     return not bad
 
 
-# ----------------------------------------------------------------- 9. transfer
+# ------------------------------------------------------------------ 9. runtime
+CISLUNAR_ROW = re.compile(
+    r"^\|\s*`cislunar`\s*\|\s*\*{0,2}([\d,]+)\s*s\*{0,2}\s*"
+    r"\|\s*\*{0,2}([\d,]+)\s*s\*{0,2}\s*"
+    r"\|\s*\*{0,2}([\d,]+)\s*s\*{0,2}\s*"
+    r"\|\s*\*{0,2}([\d,]+)\s*s\*{0,2}\s*\|", re.M)
+
+
+def check_runtime() -> bool:
+    """README's cislunar wall clock, against `calc.MEASURED_CELL_SECONDS`.
+
+    Every user-facing quote of the beneficiation and programme-search cost
+    ratios now DERIVES from that dict, so the banners cannot go stale on their
+    own.  What can still drift is the docs: README tabulates the same four
+    numbers in prose, and prose is what this repo gets wrong.  Pinning the two
+    together means a re-measurement has exactly one place to start and one
+    check that says whether it finished.
+    """
+    try:
+        sys.path.insert(0, REPO)
+        with contextlib.redirect_stdout(io.StringIO()):
+            import master as _m
+    except Exception as exc:                       # noqa: BLE001
+        print("9. runtime     SKIPPED (%s: %s)" % (type(exc).__name__, exc))
+        return True
+
+    cells = getattr(_m, "MEASURED_CELL_SECONDS", None)
+    if not cells:
+        print("9. runtime     SKIPPED (no MEASURED_CELL_SECONDS in master)")
+        return True
+
+    m = CISLUNAR_ROW.search(read(os.path.join(REPO, "README.md")))
+    bad, n = [], 0
+    if m is None:
+        bad.append("README has no `cislunar` wall-clock row to check")
+    else:
+        # column order in README: raw N=1, raw searched, benef N=1, benef+search
+        want = [cells[(False, False)], cells[(False, True)],
+                cells[(True, False)], cells[(True, True)]]
+        labels = ["raw N=1", "raw searched", "benef N=1", "benef+searched"]
+        for got_s, exp, lab in zip(m.groups(), want, labels):
+            n += 1
+            got = int(got_s.replace(",", ""))
+            if got != exp:
+                bad.append("README cislunar %-15s says %s s, "
+                           "MEASURED_CELL_SECONDS says %d s" % (lab, got_s, exp))
+
+    print("9. runtime     %d cells checked, %d mismatched" % (n, len(bad)))
+    for b in bad:
+        print("     ! " + b)
+    return not bad
+
+
+# ---------------------------------------------------------------- 10. transfer
 def check_transfer(before: str, after: List[str]) -> bool:
     """Every distinctive number in `before` must survive somewhere in `after`.
 
@@ -537,7 +595,7 @@ def check_transfer(before: str, after: List[str]) -> bool:
         b = old.find("\n", m.end())
         seen[tok] = old[a:b if b > 0 else None].strip()
     lost = [(t, c) for t, c in seen.items() if t not in hay]
-    print("9. transfer    %d distinctive numbers in %s, %d lost"
+    print("10. transfer   %d distinctive numbers in %s, %d lost"
           % (len(seen), os.path.basename(before), len(lost)))
     for t, c in sorted(lost):
         print("     ! %-14s | %s" % (t, c[:110]))
@@ -562,7 +620,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                check_structure,
                check_dashes,
                check_manifests,
-               check_help):
+               check_help,
+               check_runtime):
         ok = fn() and ok
     if args.before:
         if len(args.before) < 2:
