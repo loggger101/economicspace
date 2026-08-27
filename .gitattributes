@@ -1,6 +1,6 @@
 # The pipeline sources are LF on disk and are pasted into Colab / Jupyter,
 # which expect LF.  Pin it so a checkout on Windows (where core.autocrlf is
-# often true — it is set in Git for Windows' system config by default) does
+# often true, it is set in Git for Windows' system config by default) does
 # not rewrite every file to CRLF.
 *.py    text eol=lf
 *.ipynb text eol=lf
@@ -8,6 +8,15 @@
 *.txt   text eol=lf
 .gitignore     text eol=lf
 .gitattributes text eol=lf
+
+# Shell scripts and git hooks MUST be LF.  core.autocrlf is true on this
+# machine and in Git for Windows' system config, so without this a fresh
+# clone checks the hooks out with CRLF and `#!/bin/sh` fails with
+# "bad interpreter: No such file or directory" -- silently, because a failing
+# hook is easy to miss.  These are the hooks that repair the Drive stat cache,
+# so the failure mode is the phantom-dirty tree they exist to prevent.
+*.sh         text eol=lf
+.githooks/*  text eol=lf
 
 # Batch files are CRLF by convention, and this one is all labels, goto and
 # call -- which is exactly where an LF-only .bat is known to misbehave.

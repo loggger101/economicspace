@@ -359,7 +359,11 @@ def check_structure() -> bool:
 # -------------------------------------------------------------------- 6. dashes
 EM, EN = "—", "–"
 ROOT_PY = ["ui.py", "ui_meta.py", "run_pipeline.py", "verify.py",
-           "build_master.py", "launch_ui.py"]
+           "build_master.py", "launch_ui.py",
+           # Not Python, but prose a reader sees, and it was outside the
+           # ratchet long enough to collect two em-dashes.  The hook's header
+           # is the only account of the Drive stat-cache bug there is.
+           ".githooks/drive-restat.sh", "Dashboard.vbs"]
 
 
 def check_dashes() -> bool:
