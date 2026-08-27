@@ -390,17 +390,28 @@ print(f"      Tank mass        : {'in the rocket equation' if MASTER_CONFIG.calc
 print(f"      Architecture     : {'searched per asteroid' if MASTER_CONFIG.calc.optimise_architecture_per_asteroid else 'fixed by config'}")
 print(f"      NRE amortise     : over {MASTER_CONFIG.calc.nre_amortization_missions} mission(s)")
 # Both of the next two default ON as of calc v1.17.0 and between them cost
-# ~7.8x the runtime of the raw single-mission run most of the older tables in
-# versions.md were measured at.  Print them so a long run is never a mystery.
+# MEASURED_CELL_SECONDS[(True, True)] / [(False, False)] times the runtime of
+# the raw single-mission run most of the older tables in versions.md were
+# measured at.  Print them so a long run is never a mystery, and QUOTE THE
+# RATIOS FROM THAT DICT rather than typing them: the numbers here were
+# hand-copied once and printed the superseded 1.16.0 figures for three
+# releases after the measurement that retired them.
+_both_on = (MEASURED_CELL_SECONDS[(True, True)]
+            / MEASURED_CELL_SECONDS[(False, False)])
 print(f"      Beneficiation    : "
-      + ("ON - concentrate, not run-of-mine ore (~4.7x runtime; False for the raw cell)"
+      + ("ON - concentrate, not run-of-mine ore (~%.1fx runtime; "
+         "False for the raw cell)"
+         % beneficiation_cost_ratio(MASTER_CONFIG.calc.optimise_programme_scale)
          if MASTER_CONFIG.calc.use_beneficiation else
          "off - flying run-of-mine ore at bulk grade"))
 print(f"      Programme        : "
-      + (f"(fleet <= {MASTER_CONFIG.calc.max_fleet_ships}) x (campaigns/ship) searched; "
-         f"N follows (~1.7x runtime)"
+      + ("(fleet <= %d) x (campaigns/ship) searched; N follows (~%.1fx runtime)"
+         % (MASTER_CONFIG.calc.max_fleet_ships,
+            programme_search_cost_ratio(MASTER_CONFIG.calc.use_beneficiation))
          if MASTER_CONFIG.calc.optimise_programme_scale else
          "fixed size (set calc.optimise_programme_scale to search it)"))
+if MASTER_CONFIG.calc.use_beneficiation and MASTER_CONFIG.calc.optimise_programme_scale:
+    print(f"                         both on: ~{_both_on:.1f}x the raw N = 1 cell")
 print(f"      Contingency      : {MASTER_CONFIG.calc.contingency_fraction:.0%}")
 print("=" * 75)
 

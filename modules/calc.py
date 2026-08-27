@@ -289,6 +289,8 @@ class CalcConfig:
     # full beneficiated cislunar pass measured 9,300 s against raw's 1,307 s
     # on calc 1.16.0, a ratio of 7.1x.  Six performance-only releases later it
     # is 3,424 s against 733 s, a ratio of 4.67x (2026-08-24, full catalog).
+    # Both figures come from MEASURED_CELL_SECONDS below; re-measure there
+    # and every banner that quotes them moves with it.
     # Set False for the raw cell (26.7863x), which is what most of the older
     # tables in versions.md were measured at.
     use_beneficiation:         bool  = True
@@ -660,7 +662,9 @@ class CalcConfig:
     #
     # It is NOT free.  Measured at 2.98x runtime on the full raw cislunar cell
     # on calc 1.16.0 (1,307 s -> 3,890 s); on 1.17.7 it is 1.71x (733 s ->
-    # 1,253 s).  The cost is real because the 2-D (F, W) search prices 40
+    # 1,253 s), which is MEASURED_CELL_SECONDS below and is where every banner
+    # quoting this ratio reads it from.  The cost is real because the 2-D
+    # (F, W) search prices 40
     # programmes per surviving candidate against the 1-D ladder's 8.  The
     # sample this release was developed on predicted 1.10x, and v1.15.0's
     # 1-D ladder measured 1.51x; neither carries over.
@@ -2156,6 +2160,48 @@ class CalcConfig:
     pipeline_version: str = "1.17.7"
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+#  MEASURED RUNTIME: the ONE place these numbers live
+# ═════════════════════════════════════════════════════════════════════════════
+# Wall clock for the four cislunar cells, full 1,555,667-row catalog, six
+# physical cores / 12 workers, calc 1.17.7, measured 2026-08-24.  All twenty
+# cells are tabulated in README.md under "Beneficiation".
+#
+# 🚨  EVERY user-facing quote of these ratios DERIVES from this dict: the
+# --help text and run banner in run_pipeline.py, the MASTER CONFIG READY banner
+# build_master.py writes into master.py, and the sidebar estimate in ui.py.
+# They used to be five hand-copied literals, and they went stale together: the
+# superseded 1.16.0 figures ("~7x" beneficiation, "~3x" the programme search)
+# were still being PRINTED TO THE USER ON EVERY RUN three releases after the
+# measurement that retired them.  A banner is the most-read copy of a number in
+# this project and was the least checked.  Re-measure, edit here, and every
+# consumer moves with it; `verify_docs.py` check 9 holds README's own table to
+# the same values.
+#
+# ⚠️  These are CISLUNAR, the cheapest destination.  leo, mars_surface and
+# earth_surface cost 2.1-2.7x more per cell.
+MEASURED_CELL_SECONDS: Dict[Tuple[bool, bool], int] = {
+    # (use_beneficiation, optimise_programme_scale): seconds
+    (False, False):   733,   # run-of-mine ore, one mission
+    (False, True):  1_253,   # run-of-mine ore, programme searched
+    (True,  False): 3_424,   # concentrate, one mission
+    (True,  True):  5_692,   # concentrate + programme search  <- BOTH DEFAULT ON
+}
+MEASURED_CELL_ROWS = 1_555_667   # catalog the cells above were measured on
+
+
+def beneficiation_cost_ratio(search: bool = False) -> float:
+    """How much longer a beneficiated pass takes than a raw one, same search."""
+    return (MEASURED_CELL_SECONDS[(True, search)]
+            / MEASURED_CELL_SECONDS[(False, search)])
+
+
+def programme_search_cost_ratio(beneficiated: bool = False) -> float:
+    """How much longer the programme search takes than N = 1, same ore."""
+    return (MEASURED_CELL_SECONDS[(beneficiated, True)]
+            / MEASURED_CELL_SECONDS[(beneficiated, False)])
+
+
 CONFIG = CalcConfig()
 os.makedirs(CONFIG.output_dir, exist_ok=True)
 
@@ -2163,10 +2209,12 @@ print(f"OK  Configuration loaded - output dir: {CONFIG.output_dir}")
 print(f"    Hardware       : {CONFIG.mining_hardware_kg:,.0f} kg mining rig "
       f"+ {CONFIG.return_vehicle_dry_kg:,.0f} kg return-capsule dry")
 print(f"    Mining cap     : {CONFIG.max_mining_fraction:.0%} of asteroid mass per mission")
-# Default ON as of v1.17.0 and worth ~4.7x the runtime of a raw pass, so say
-# so up front rather than leaving a multi-hour run unexplained.
+# Default ON as of v1.17.0, and the cost is quoted from MEASURED_CELL_SECONDS
+# rather than typed, so a re-measurement cannot leave this banner behind.
 print(f"    Beneficiation  : "
-      + ("concentrate (search also prices not concentrating at all)"
+      + ("concentrate, ~%.1fx the runtime of a raw pass "
+         "(search also prices not concentrating at all)"
+         % beneficiation_cost_ratio(CONFIG.optimise_programme_scale)
          if CONFIG.use_beneficiation else
          "off - run-of-mine ore at bulk grade"))
 print(f"    Return mode    : "
@@ -2177,7 +2225,9 @@ print(f"    Architecture   : "
 print(f"    Contingency    : {CONFIG.contingency_fraction:.0%}  |  "
       f"NRE amortised over {CONFIG.nre_amortization_missions} mission(s)")
 print(f"    Programme      : "
-      + (f"(fleet <= {CONFIG.max_fleet_ships}) x (campaigns/ship) searched; N follows"
+      + ("(fleet <= %d) x (campaigns/ship) searched; N follows (~%.1fx runtime)"
+         % (CONFIG.max_fleet_ships,
+            programme_search_cost_ratio(CONFIG.use_beneficiation))
          if CONFIG.optimise_programme_scale else
          f"fixed at N = {CONFIG.nre_amortization_missions} "
          f"(set optimise_programme_scale to search it)"))
