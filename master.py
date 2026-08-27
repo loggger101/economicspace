@@ -326,6 +326,9 @@ class CatalogConfig:
     # If you want the cache co-located with the catalog CSV instead, set this
     # to e.g. f"{output_dir}/_cache".
     cache_dir:           str   = ""
+
+    # How long the ssoBFT parquet cache is reused before it is re-downloaded.
+    # That download is ~500 MB, so raise this for repeated offline runs.
     cache_max_age_days:  float = 7.0
 
     # ─── PREVIEW & SUMMARY DISPLAY  (cosmetic, affects stdout only) ──────────
@@ -3557,9 +3560,7 @@ class MineralValueConfig:
     pipeline_version: str = "1.7.1"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
-    preview_rows: int = 20
-
-
+    preview_rows:      int = 20   # rows per table in the end-of-run preview
 MINERAL_CONFIG = MineralValueConfig()
 os.makedirs(MINERAL_CONFIG.output_dir, exist_ok=True)
 
@@ -5413,7 +5414,7 @@ class TransportConfig:
     use_reference_table: bool = True   # curated launch / propellant / Δv / ops
 
     # ─── NETWORK ─────────────────────────────────────────────────────────────
-    request_timeout: int = 60
+    request_timeout: int = 60   # seconds per HTTP call; a timeout is a soft failure
 
     # ─── OUTPUT ──────────────────────────────────────────────────────────────
     output_dir:       str = _DEFAULT_OUTPUT_DIR
@@ -5761,7 +5762,7 @@ class TransportConfig:
     #         until Stage 3 is next run for its own reasons.  Same call, and the
     #         same reason, as catalog v1.1.1.
     pipeline_version: str = "1.12.1"
-    preview_rows:     int = 15
+    preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 
 TRANSPORT_CONFIG = TransportConfig()
@@ -10566,6 +10567,11 @@ class CalcConfig:
     # `m_dry_return`   - return vehicle dry mass (TPS frame + chute + structure,
     #                    NOT the ablative TPS itself which scales with payload)
     mining_hardware_kg:        float = 2_000
+
+    # A FLOOR, not the whole return dry mass: `return_structure_frac_of_payload`
+    # adds 15% of the haul on top of it.  Flat 500 kg gave 250:1
+    # payload-to-structure against 0.4:1 (Cygnus) to 2:1 (Dragon) for real
+    # cargo craft, and nothing else bounded returned mass.
     return_vehicle_dry_kg:     float = 500
 
     # ─── RETURN VEHICLE SCALES WITH ITS CARGO  (v1.10.0) ─────────────────────
@@ -10721,6 +10727,10 @@ class CalcConfig:
     # demand: P/P0 = (1 + Q/Q_market)^(-1/ε).  Precious-metal demand is
     # inelastic (ε ≈ 0.5), so doubling world supply quarters the price.
     model_market_saturation:   bool  = True
+
+    # The elasticity in P/P0 = (1 + Q/Q_market)^(-1/eps).  0.5 is inelastic,
+    # which is right for precious metals: doubling world supply quarters the
+    # price.  Raising it makes the market absorb more before the price moves.
     demand_elasticity:         float = 0.5
 
     # ─── MODELLING COMPLETENESS, PART 2  (v1.8.0) ────────────────────────────
@@ -10779,6 +10789,10 @@ class CalcConfig:
     # array.  Capped because the binding constraint is Pu-238 supply (~1.5 kg/yr
     # of DOE production, ~one flagship RTG a year for the world), not money.
     allow_rtg_power:           bool  = True
+
+    # A SUPPLY cap rather than a money cap.  DOE makes ~1.5 kg of Pu-238 a
+    # year, about one flagship RTG for the entire world, so a mission wanting
+    # more than this goes back to solar and pays the mass.
     rtg_max_power_w:           float = 5_000.0
 
     # ─── MODELLING COMPLETENESS, PART 4  (v1.14.0) ───────────────────────────
@@ -10839,6 +10853,10 @@ class CalcConfig:
     # was billing $1.08B for a capability it never used.  Setting
     # `escape_direct_launch` True re-arms it, and nothing does that yet.
     charge_tanker_flights:     bool  = True
+
+    # Gates the tanker charge above.  Nothing sets it, because this module has
+    # no escape-direct architecture to bill: it reads payload_leo_kg and
+    # usd_per_kg_to_leo and nothing else.  Kept wired for the day it does.
     escape_direct_launch:      bool  = False
 
     # LAUNCH ACCELERATION (v1.12.0).  Module 3's `max_accel_g` exists to
@@ -11088,12 +11106,19 @@ class CalcConfig:
     nre_recurring_overlap_fraction: float = 0.30
     # Time-value of money; compound up-front costs over mission_duration_yr.
     apply_wacc_compounding:    bool  = True
+
+    # Flat contingency on the whole cost cascade, applied after every other
+    # line and before WACC.
     contingency_fraction:      float = 0.20
 
     # ─── VEHICLE / PROPELLANT SELECTION ──────────────────────────────────────
     # None = use everything operational; set lists to restrict candidates.
     candidate_vehicles:        Optional[List[str]] = None
-    candidate_propellants:     Optional[List[str]] = None
+    candidate_propellants:     Optional[List[str]] = None  # and the same, for propellants
+
+    # False admits Stage 3's development and concept rows.  That is where the
+    # 10,000 g launchers live, and max_payload_accel_g is what keeps them out
+    # once they are admitted.
     operational_vehicles_only: bool = True
     # v1.11.0.  Module 3 v1.9.0 grew the propellant table from 7 rows to 40,
     # and 17 of the additions are development or concept hardware: nuclear
@@ -11105,7 +11130,7 @@ class CalcConfig:
     operational_propellants_only: bool = True
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
-    top_n_preview:             int = 20
+    top_n_preview:             int = 20   # rows in the printed top-N ranking
     # Cap on rows evaluated.  0 = evaluate every row, and that is the default
     # as of v1.13.0.
     #

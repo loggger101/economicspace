@@ -2,7 +2,7 @@
 """Documentation verification for the asteroid profitability pipeline.
 
 `verify.py` proves the MODEL did not change.  This proves the DOCS still
-describe it.  Eight checks, all mechanical, all fast (about a second):
+describe it.  Nine checks, all mechanical, all fast (about a second):
 
     1. defaults      every default the README's Tuning table quotes, against
                      the dataclass field it names
@@ -16,11 +16,13 @@ describe it.  Eight checks, all mechanical, all fast (about a second):
     7. manifests     a list documented in one place, against the list actually
                      defined in another: requirements.txt vs _MASTER_REQUIRED,
                      and README's `run.bat` block vs run.bat's own dispatcher
-    8. transfer      every distinctive number in a --before snapshot still
+    8. help          every config dial the dashboard renders carries the
+                     comment it shows as help text
+    9. transfer      every distinctive number in a --before snapshot still
                      appears somewhere in the docs afterwards
 
-    py verify_docs.py                       # checks 1-7
-    py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 8
+    py verify_docs.py                       # checks 1-8
+    py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 9
 
 WHY THIS FILE EXISTS
 --------------------
@@ -41,7 +43,9 @@ to stop.  What they caught, on the run that prompted writing them down:
   README's option list had quietly drifted from run.bat's own.    -> check 7
   26 measurements dropped rather than moved when the version history was split
   out into versions.md -- a line diff reported 302 differences and could not
-  tell any of them from a reflowed paragraph.                    -> check 8
+  tell any of them from a reflowed paragraph.                    -> check 9
+  39 of 105 config fields showed a bare dial in the dashboard, because their
+  comment block sat above a NEIGHBOURING field.                   -> check 8
 
 SCOPE.  This reads the docs and the module dataclasses.  It does NOT run the
 pipeline, fetch anything, or check that a documented NUMBER is a correct
@@ -474,7 +478,48 @@ def check_manifests() -> bool:
     return not bad
 
 
-# ----------------------------------------------------------------- 8. transfer
+# --------------------------------------------------------------------- 8. help
+def check_help() -> bool:
+    """Every config field the dashboard shows as a dial must carry help text.
+
+    The UI scrapes its help straight out of the module sources, so a field's
+    comment IS its documentation.  The attachment rule is positional: a block
+    explains the field directly below it, and a comment block covering TWO
+    fields leaves the second one blank in the dashboard.  Thirty-nine of 105
+    fields were in that state, including `demand_elasticity`, `rtg_max_power_w`
+    and `contingency_fraction` -- bare numbers, at exactly the dials a reader is
+    most likely to change.  Fields listed in `ui_meta.PATH_FIELDS` are paths and
+    filenames and are exempt by design.
+    """
+    try:
+        sys.path.insert(0, REPO)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            import master as _m
+            import ui_meta as _um
+    except Exception as exc:                       # noqa: BLE001
+        print("8. help        SKIPPED (%s: %s)" % (type(exc).__name__, exc))
+        return True
+
+    pairs = [("catalog", _m.CATALOG_CONFIG), ("mineral", _m.MINERAL_CONFIG),
+             ("transport", _m.TRANSPORT_CONFIG), ("calc", _m.CALC_CONFIG)]
+    bad, n = [], 0
+    for key, cfg in pairs:
+        for spec in _um.build_field_specs(cfg, key):
+            if spec.name in _um.PATH_FIELDS:
+                continue
+            n += 1
+            if not (getattr(spec, "help", "") or "").strip():
+                bad.append("%s.%s has no comment, so the UI shows a bare dial"
+                           % (key, spec.name))
+
+    print("8. help        %d dials checked, %d with no help" % (n, len(bad)))
+    for b in bad:
+        print("     ! " + b)
+    return not bad
+
+
+# ----------------------------------------------------------------- 9. transfer
 def check_transfer(before: str, after: List[str]) -> bool:
     """Every distinctive number in `before` must survive somewhere in `after`.
 
@@ -492,7 +537,7 @@ def check_transfer(before: str, after: List[str]) -> bool:
         b = old.find("\n", m.end())
         seen[tok] = old[a:b if b > 0 else None].strip()
     lost = [(t, c) for t, c in seen.items() if t not in hay]
-    print("8. transfer    %d distinctive numbers in %s, %d lost"
+    print("9. transfer    %d distinctive numbers in %s, %d lost"
           % (len(seen), os.path.basename(before), len(lost)))
     for t, c in sorted(lost):
         print("     ! %-14s | %s" % (t, c[:110]))
@@ -516,7 +561,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                check_links,
                check_structure,
                check_dashes,
-               check_manifests):
+               check_manifests,
+               check_help):
         ok = fn() and ok
     if args.before:
         if len(args.before) < 2:

@@ -236,6 +236,9 @@ class CatalogConfig:
     # If you want the cache co-located with the catalog CSV instead, set this
     # to e.g. f"{output_dir}/_cache".
     cache_dir:           str   = ""
+
+    # How long the ssoBFT parquet cache is reused before it is re-downloaded.
+    # That download is ~500 MB, so raise this for repeated offline runs.
     cache_max_age_days:  float = 7.0
 
     # ─── PREVIEW & SUMMARY DISPLAY  (cosmetic, affects stdout only) ──────────

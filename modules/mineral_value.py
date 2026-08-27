@@ -459,9 +459,7 @@ class MineralValueConfig:
     pipeline_version: str = "1.7.1"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
-    preview_rows: int = 20
-
-
+    preview_rows:      int = 20   # rows per table in the end-of-run preview
 CONFIG = MineralValueConfig()
 os.makedirs(CONFIG.output_dir, exist_ok=True)
 
