@@ -12532,7 +12532,35 @@ class CalcConfig:
     #         harness rebuilt from memory; see that file's header for the
     #         eleven harness bugs that motivated committing one, five of them
     #         found while writing it.
-    pipeline_version: str = "1.17.7"
+    #
+    # v1.17.8  NO NUMBER.  Closes the VALUE half of the upstream-staleness
+    #         hole that CLAUDE.md has named as open since v1.14.0:
+    #         `schema_check` asks whether the Module 3 columns and rows this
+    #         version reads are PRESENT, and passes cleanly on a catalog whose
+    #         VALUES are a release out of date, because editing a density or a
+    #         boil-off rate leaves the schema identical.
+    #         Not hypothetical: during v1.12.0 the argon rows were rewritten,
+    #         Stage 3 was re-run, the CSV did not land, and two full-catalog
+    #         runs plus a determinism sweep were measured against the table
+    #         being replaced, with nothing anywhere saying so.  The documented
+    #         mitigation was to eyeball Stage 4's row counts against what
+    #         Stage 3 reported writing, every time.
+    #         `stamp_check` compares the transportation `pipeline_version`
+    #         STAMPED in each Stage 3 CSV against the Module 3 in this process,
+    #         which needed no new column because Stage 3 has stamped its CSVs
+    #         all along.  It turns "changing a number means bumping the
+    #         version" from a rule someone remembers into one the loader
+    #         enforces on the way past.
+    #         ⚠️  A DIAGNOSTIC, not an import: `TRANSPORT_CONFIG` exists only
+    #         when both modules share a process (master.py, the normal path).
+    #         A standalone calc.py run cannot know what Module 3 currently
+    #         says and stays silent rather than inventing a complaint.
+    #         Verified: four cells 139/139 columns bit-identical against the
+    #         committed v1.17.7 baseline, all four hashes MATCH; mass ledger
+    #         exact at 0.000000000 kg; both never-worse invariants hold with
+    #         zero exceptions; Stage 2 tables recompute identically.  The
+    #         stamp moves so a catalog still names the code that built it.
+    pipeline_version: str = "1.17.8"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -12839,6 +12867,11 @@ def integrity_check(catalogs: Dict[str, pd.DataFrame]) -> None:
               f"(expected: elements + ice + bulk categories)")
 
     schema_check(catalogs)
+    # The VALUE half of the same question: schema_check asks whether the
+    # columns and rows are present, stamp_check asks whether the file was
+    # written by the Module 3 in this process.  A catalog can pass the
+    # first and fail the second, which is exactly the v1.12.0 argon case.
+    stamp_check(catalogs)
 
 
 # Columns Module 3 v1.9.0 added that Module 4 v1.11.0 needs.  Each maps to the
@@ -12929,6 +12962,65 @@ def schema_check(catalogs: Dict[str, pd.DataFrame]) -> None:
     print("        -> Re-run Stage 3 (transportation).  It takes seconds, and "
           "until you do, the numbers below are not comparable to any "
           "committed figure.")
+
+
+def stamp_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
+    """Compare the transportation version STAMPED in each Stage 3 CSV against
+    the Module 3 in this process.  Returns True when they agree or cannot be
+    compared.
+
+    This closes the half of the staleness problem `schema_check` cannot see.
+    That one asks whether the columns and rows this module reads are PRESENT;
+    it passes cleanly on a catalog whose VALUES are a release out of date,
+    because editing a density or a boil-off rate leaves the schema identical.
+
+    It is not a hypothetical.  During v1.12.0 the argon rows were rewritten,
+    Stage 3 was re-run, the CSV did not actually land, and two full-catalog
+    runs plus a determinism sweep were measured against the table that was
+    being replaced.  Nothing anywhere said so.  The documented mitigation was
+    to read Stage 4's row counts against what Stage 3 said it wrote, by eye,
+    every time -- which is the kind of habit that works until the day it
+    matters.
+
+    What makes this checkable at all is that Stage 3 already stamps its
+    `pipeline_version` into every CSV it writes, so the file records the code
+    that produced it.  Comparing that to the live module turns "changing any
+    number means bumping the version" from a rule someone has to remember into
+    one the pipeline enforces on the way past.
+
+    ⚠️  It is a DIAGNOSTIC, not an import.  `TRANSPORT_CONFIG` exists only when
+    both modules are in one process, which is `master.py`, the normal path.  A
+    standalone `calc.py` run has no way to know what Module 3 currently says
+    and this returns True rather than inventing a complaint it cannot support.
+    That is deliberate: the modules hand off through CSVs on disk and must not
+    grow an import edge for a warning.
+    """
+    transport = globals().get("TRANSPORT_CONFIG")
+    live = getattr(transport, "pipeline_version", None)
+    if not live:
+        return True                       # standalone calc.py: nothing to compare
+
+    mismatched = []
+    for key, df in sorted(catalogs.items()):
+        if df is None or "pipeline_version" not in getattr(df, "columns", ()):
+            continue
+        stamps = {str(v) for v in df["pipeline_version"].dropna().unique()}
+        for stamped in sorted(stamps):
+            if stamped != str(live):
+                mismatched.append((key, stamped))
+
+    if not mismatched:
+        return True
+
+    print(f"\n     WARN  Module 3 catalog was written by a DIFFERENT "
+          f"transportation build (this process is {live}):")
+    for key, stamped in mismatched:
+        print(f"          * {key}.csv stamped {stamped}")
+    print("        -> The columns are all present, so nothing else will "
+          "complain, but a reference VALUE may be a release out of date.")
+    print("        -> Re-run Stage 3 (transportation) before trusting any "
+          "number below, or before comparing one to a committed figure.")
+    return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
