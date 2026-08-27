@@ -2132,6 +2132,26 @@ row-count comparison cannot see.
 
 ## Google Drive makes the tree look dirty: run the hooks
 
+🚨  **FIRST, CHECK WHICH WORKING COPY YOU ARE IN.** This section describes a
+checkout on a Drive File Stream mount whose `.git` is a **one-line pointer
+file** at an external git directory. A plain clone somewhere else, with a real
+`.git` directory, has neither the stat-cache bug nor any need for the hooks,
+and the two are trivial to tell apart:
+
+```bash
+ls -d .git && cat .git 2>/dev/null   # "gitdir: ..." means the Drive setup
+git rev-parse --show-toplevel
+```
+
+⚠️  **More than one working copy of this repo is the documented divergence
+hazard, not a convenience.** The project was once developed in two places at
+once and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things; see
+[the parallel-repo divergence](versions.md#the-parallel-repo-divergence). A
+second checkout that is many merges behind will happily rebuild `master.py`
+from *its* modules and produce a CSV stamped with a version that means
+something else. **Before building or measuring anywhere, confirm the branch and
+that it is up to date with the remote.**
+
 Symptom: `git status` reports files as modified, `git diff` shows nothing,
 and every blob hash matches. Then `git checkout` or `git merge --ff-only`
 aborts with *"your local changes would be overwritten"*, so a merged PR
