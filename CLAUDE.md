@@ -778,11 +778,38 @@ still being **printed to the user on every run**, in five files at once:
 | `verify.py` | the comment explaining why beneficiated cells run at a lower row cap |
 | `README.md` | a quoted example of the run banner |
 
-They are **4.67×** and **1.71×** on `1.17.7`. ⚠️  A banner is the *most* read
-copy of a number in this project and the least checked, so **when a ratio
-moves, grep the code as well as the prose**: `grep -rn "~7x\|2.98x\|7.1x"`.
-Comments and console text are not output, so this moves no `pipeline_version`;
-it does move `master.py`, which must be rebuilt and committed with it.
+They are **4.67×** and **1.71×** on `1.17.7`. A banner is the *most* read copy
+of a number in this project and was the least checked.
+
+✅  **THAT CLASS IS CLOSED NOW: THE RATIOS ARE DERIVED, NOT TYPED.**
+`modules/calc.py` holds `MEASURED_CELL_SECONDS`, the four measured cislunar
+wall clocks, plus `beneficiation_cost_ratio()` and
+`programme_search_cost_ratio()`. Every consumer computes from it:
+
+| consumer | what it derives |
+|---|---|
+| `run_pipeline.py` | `--help` for `--raw` and `--search`, and both `[default: ...]` banner labels |
+| `build_master.py` | the `MASTER CONFIG READY` banner, so `master.py` too |
+| `modules/calc.py` | its own Stage 4 preview banner |
+| `ui.py` | `_SECONDS_PER_ROW`, which was a second copy of the same four numbers |
+
+**Re-measure in one place and every printed ratio moves with it**, and because
+the ratio is computed per configuration the banner now says 4.67× at N = 1 and
+4.54× with the search on, which the single hand-typed figure could not.
+
+⚠️  **`run_pipeline.py` deliberately asserts rather than falling back to a
+literal** if master is somehow not loaded when the parser is built. A
+hand-typed default there would be a sixth copy of a number this project has
+already shipped stale once.
+
+✅  **`verify_docs.py` check 9 pins the constant to the docs**, comparing
+README's cislunar wall-clock row against `MEASURED_CELL_SECONDS` in both
+directions, so prose cannot drift from the code either. What is left to do by
+hand after a re-measurement is the *prose* elsewhere: this file and
+`versions.md` still quote 4.67× and 1.71× as text, and check 9 does not read
+them. Comments and console text are not output, so none of this moves a
+`pipeline_version`; it does move `master.py`, which must be rebuilt and
+committed with it.
 
 🚨  **This paragraph used to open "Three of these are mechanical now" and then
 describe four, against a file that had seven.** It is left corrected rather
