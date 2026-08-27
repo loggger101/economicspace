@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """Rig bound split and cadence, per cell.
 
-CLAUDE.md carries this table for cislunar only, where beneficiation swaps the
-two bounds over. This extends it to every destination.
+CLAUDE.md carried this table for cislunar only, where beneficiation swaps the
+two bounds over. This extended it to every destination; the result is now in
+CLAUDE.md under "The rig's two bounds, and the cadence, at every destination",
+where mars_surface inverts both splits.
 """
 import glob, gzip, os
 import pandas as pd
