@@ -148,7 +148,7 @@ class TransportConfig:
     use_reference_table: bool = True   # curated launch / propellant / Δv / ops
 
     # ─── NETWORK ─────────────────────────────────────────────────────────────
-    request_timeout: int = 60
+    request_timeout: int = 60   # seconds per HTTP call; a timeout is a soft failure
 
     # ─── OUTPUT ──────────────────────────────────────────────────────────────
     output_dir:       str = _DEFAULT_OUTPUT_DIR
@@ -496,7 +496,7 @@ class TransportConfig:
     #         until Stage 3 is next run for its own reasons.  Same call, and the
     #         same reason, as catalog v1.1.1.
     pipeline_version: str = "1.12.1"
-    preview_rows:     int = 15
+    preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 
 CONFIG = TransportConfig()
