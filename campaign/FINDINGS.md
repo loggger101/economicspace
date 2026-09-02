@@ -57,8 +57,11 @@ campaign/stage2/           the per-destination Stage 2 catalogs the cells were p
 ```
 
 The scripts that produced them (`run_queue.py`, `run_cell.py`, `analyse.py`,
-`extra_checks.py`, `rig_bounds.py`, `memwatch.py`) are alongside, and
-`campaign/README.md` carries the layout and the resume procedure.
+`extra_checks.py`, `rig_bounds.py`, `memwatch.py`) are alongside.
+`campaign/README.md` carries the layout and the frozen inputs; the resume
+procedure is `run_queue.py`'s own docstring, which is the thing that implements
+it: it skips every cell already in `results.csv` with `rc == 0`, so the queue is
+safe to kill and restart and loses at most the in-flight cell.
 
 ⚠️  **Do not re-run Stage 1, 2 or 3 to re-check anything here.** Stage 2
 re-fetches live prices and Stage 1 re-fetches a catalog JPL adds to daily;

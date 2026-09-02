@@ -2,14 +2,18 @@
 """Documentation verification for the asteroid profitability pipeline.
 
 `verify.py` proves the MODEL did not change.  This proves the DOCS still
-describe it.  Ten checks, all mechanical, all fast (about a second):
+describe it.  The checks below are all mechanical and all fast (about a
+second).  Their number is deliberately not written out here -- it read "Ten"
+against eleven of them for as long as check 11 had existed, which is the
+counts-in-prose failure this file was written to catch:
 
     1. defaults      every default the README's Tuning table quotes, against
                      the dataclass field it names
     2. versions      the Stage/Version table and CLAUDE.md's "Current:" line,
-                     against each module's `pipeline_version`; and the two
-                     "moved without moving a number" tables against the counts
-                     spelled out in prose beside them
+                     against each module's `pipeline_version`; and every count
+                     spelled out in prose beside a "moved without moving a
+                     number" table, in any doc that quotes one, against the
+                     rows of the table itself
     3. row counts    documented reference-table sizes, against the tables
     4. links         every markdown anchor resolves, in all three files
     5. structure     balanced fences, no ragged tables, no heading-level jumps,
@@ -47,7 +51,9 @@ to stop.  What they caught, on the run that prompted writing them down:
   calc 1.17.8 said "No number" in its own release section and was missing from
   BOTH tables of stamps that moved without moving a number, so the count beside
   each read "twelve" against thirteen rows -- the third time that particular
-  count has rotted.                                              -> check 2
+  count has rotted.  It then rotted a FOURTH time, in README, which quotes the
+  count and holds no table, and so was outside this check until 2026-09-02.
+                                                                 -> check 2
   "Propellants -- 40 rows" with development=7; the module loads 41 and 8, both
   stale by exactly the cryogenic-argon row v1.12.0 added.        -> check 3
   A README section promising "all five" checks above a table of six. -> by eye
@@ -261,6 +267,29 @@ def _stamp_table(text: str) -> Optional[List[str]]:
     return rows
 
 
+def _stamp_prose(doc: str, total: int, perf: int,
+                 seen: int, bad: List[str]):
+    """Hold every count spelled out beside a stamp table to the table itself.
+
+    Split out of `check_versions` so it can run against a file that quotes the
+    count but carries no table -- README did exactly that, and went stale for a
+    fourth time because nothing looked at it.
+    """
+    text = read(os.path.join(REPO, doc))
+    for pat, want, label in (
+            (r"([A-Za-z]+) stamps so far", total, "total"),
+            (r"stands unaltered across all ([a-z]+)", total, "total"),
+            (r"([A-Za-z]+) rows are \*?\*?performance", perf, "performance"),
+            (r"performance stamps and ([a-z]+) are not", total - perf, "other"),
+            (r"the other ([a-z]+) are `", total - perf, "other")):
+        for m in re.finditer(pat, text):
+            seen += 1
+            if _spelled(m.group(1).lower()) != want:
+                bad.append("%s says %r %s stamps, the table has %d"
+                           % (doc, m.group(1), label, want))
+    return seen, bad
+
+
 def check_versions(mods) -> bool:
     """Documented stamps against the dataclasses, and the stamp tables against
     the counts spelled beside them.
@@ -311,6 +340,12 @@ def check_versions(mods) -> bool:
     # having said "No number" in its own release section for a week.  The
     # paragraph warning against counts in prose is itself where they rot, so
     # this counts the rows instead.
+    #
+    # README carries the same sentence and NO table, which is exactly how it
+    # went stale a fourth time: it read "twelve stamps so far" until 2026-09-02
+    # while both tables held thirteen rows, and this check never looked at it.
+    # A file with no table of its own is scored against the canonical one.
+    canonical = None
     for doc in ("versions.md", "CLAUDE.md"):
         rows = _stamp_table(read(os.path.join(REPO, doc)))
         if rows is None:
@@ -318,18 +353,18 @@ def check_versions(mods) -> bool:
             continue
         total = len(rows)
         perf = sum("performance only" in r for r in rows)
-        for pat, want, label in (
-                (r"([A-Za-z]+) stamps so far", total, "total"),
-                (r"stands unaltered across all ([a-z]+)", total, "total"),
-                (r"([A-Za-z]+) rows are \*?\*?performance", perf, "performance"),
-                (r"performance stamps and ([a-z]+) are not", total - perf, "other"),
-                (r"the other ([a-z]+) are `", total - perf, "other")):
-            for m in re.finditer(pat, read(os.path.join(REPO, doc))):
-                got = m.group(1).lower()
-                seen += 1
-                if _spelled(got) != want:
-                    bad.append("%s says %r %s stamps, the table has %d"
-                               % (doc, m.group(1), label, want))
+        if canonical is None:
+            canonical = (total, perf)
+        elif canonical != (total, perf):
+            bad.append("%s's stamp table has %d rows (%d perf); the first "
+                       "table had %d (%d perf)"
+                       % (doc, total, perf, canonical[0], canonical[1]))
+        seen, bad = _stamp_prose(doc, total, perf, seen, bad)
+
+    if canonical is not None:
+        # Docs that quote the count but hold no table of their own.
+        for doc in ("README.md",):
+            seen, bad = _stamp_prose(doc, canonical[0], canonical[1], seen, bad)
 
     print("2. versions    %d stamps documented, %d wrong" % (seen, len(bad)))
     for b in bad:

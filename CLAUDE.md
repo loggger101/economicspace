@@ -792,9 +792,12 @@ anchors, document structure, the em-dash ratchet, two cross-file manifests
 `run.bat`'s dispatcher) and, with `--before`, whether a reorganisation dropped
 a measurement. Run it after touching any config field or reference table.
 
-✅  **Three of the counts this section keeps catching by hand are now checked,
-as of 2026-09.** They are the ones that are DERIVED rather than typed, which is
-why nobody thinks of them as measurements:
+✅  **The counts in this table are checked mechanically now, as of 2026-09.**
+They are the ones that are DERIVED rather than typed, which is why nobody
+thinks of them as measurements. ⚠️  **The row count is deliberately not stated
+here**: this paragraph opened "Three of these" above four rows until 2026-09,
+which is this section's own failure mode occurring in the section that names
+it.
 
 | what | why it rots | where |
 |---|---|---|
@@ -879,12 +882,28 @@ or more distinctive numbers across two files:
 | iodine overtaking xenon at `leo` (42.74 / 42.14) and winning `earth_surface` (47.31 / 35.50) | [Three population results...](README.md#three-population-results-the-single-cell-tables-could-not-show) | "Propellant and vehicle shares, all twenty cells" |
 | the four retired v1.11.0 beneficiated placeholders (35.8051 / 48.2714 / 55.3403) | [Current results](README.md#current-results-the-complete-20-cell-matrix) | the 20-cell matrix preamble |
 | the lunar staging figures: 5,920 m/s, and 10.96 against 4.99 kg in LEO per kg landed | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" (and again in `versions.md`, mineral_value `1.4.0`) |
+| the `replicated` win: 13.4% clear, 6,667 kg of thruster for 96.7 kW | [Current results](README.md#current-results-the-complete-20-cell-matrix) | "RETIRED: a `replicated`-scaling device DOES win" |
+| methalox going 1.6-1.8% raw to 11.11-15.23% beneficiated | [Three population results...](README.md#three-population-results-the-single-cell-tables-could-not-show) | "Propellant and vehicle shares, all twenty cells" |
+| the Mars cadence: 3.8-4.0 yr against ~1.37 everywhere else | [Current results](README.md#current-results-the-complete-20-cell-matrix) | "The rig's two bounds, and the cadence, at every destination" |
+| everything older than `1.17.7` being high by 1.78-4.32x | [Current results](README.md#current-results-the-complete-20-cell-matrix) | "Runtime, and the three quantities a sample cannot predict" |
+| the four cislunar wall clocks, 733 / 1,253 / 3,424 / 5,692 s | [Beneficiation](README.md#beneficiation) | "Runtime, and the three quantities a sample cannot predict" |
+
+⚠️  **The last five rows were added on 2026-09-02 by re-running the hunt this
+table describes**, which is the tell that the table is a snapshot and not a
+guarantee: it listed four pairs while nine existed. **Re-run the hunt rather
+than trusting the table.** ⚠️  And note the last row is only half checked:
+`verify_docs.py` check 9 pins README's copy of those four wall clocks to
+`MEASURED_CELL_SECONDS`, and reads nothing here, so this file's copy can drift
+from the code on its own.
 
 **Each pair is a copy, so each pair drifts.** They are kept rather than cut
 because this file's job is the reasoning and README's is the answer, and the
 reasoning reads badly with the answer removed; but **move both, or neither**.
-`grep -rn "<the old number>" *.md` finds them, which is why the rule two
-paragraphs up is a grep and not a diff.
+`grep -rn "<the old number>" --include='*.md' .` finds them, which is why the
+rule two paragraphs up is a grep and not a diff. ⚠️  **Use that form rather
+than `*.md`**, which expands to the three root documents only and so misses
+`campaign/`, whose `FINDINGS.md` carries the campaign's wall clock and catalog
+size despite saying its findings were promoted out of it.
 
 🚨  **THERE ARE THREE FILES TO GREP NOW, NOT TWO.** The release history moved
 out of the README into `versions.md` on 2026-08-24, so a measurement can go
@@ -892,7 +911,9 @@ stale in any of: this file (the working notes), `README.md` (the current
 answer) and `versions.md` (what the numbers used to be). The split is what
 makes that tractable; `versions.md` is *allowed* to hold superseded figures,
 and every table in it names the release and catalog it belongs to, but it
-means `grep -rn "<the old number>" *.md` is the check, not a two-file diff.
+means `grep -rn "<the old number>" --include='*.md' .` is the check, not a
+two-file diff. ⚠️  Five files answer to that glob, not three: `campaign/`
+holds two more.
 
 ✅  **Audit a split at FACT level rather than by eye, and do it with
 `verify_docs.py --before`.** Pull every distinctive numeric token out of the
@@ -2277,10 +2298,28 @@ mid-checkout, so they can't run, repair by hand afterwards.
 
 ## Environment
 
-Windows, Python 3.13, invoked as `py` (a bare `python` hits the Microsoft Store
-alias and fails). The working tree is on Google Drive with the git directory
-outside it; see the README's "Working copy" section, especially if the folder
-gets renamed again.
+Windows, **Python 3.14** (3.14.6), invoked as `py` (a bare `python` hits the
+Microsoft Store alias and fails). The working tree is on Google Drive with the
+git directory outside it; see the README's "Working copy" section, especially
+if the folder gets renamed again.
+
+🚨  **THE INTERPRETER MOVED, AND EVERY PERFORMANCE FIGURE IN THIS FILE PREDATES
+IT.** This section read "Python 3.13" until 2026-09-02, and 3.13 is no longer
+installed at all, so nothing in the measured record can be re-run on the
+interpreter it was measured on. **No model number is affected**: bit-identity is
+a property of the arithmetic, and every cell in this file is a ratio or a float,
+not a wall clock. What is affected is the *cost* record, which is the whole of
+"Measured and declined" plus every wall clock and speed-up in `versions.md`.
+
+⚠️  The `builtins.max` row of
+[Measured and declined](#measured-and-declined-so-nobody-re-derives-them) is the
+sharpest case, and it is that table's own warning coming true a second time. It
+was re-measured from ~6x to **1.2-2.4x** precisely *because* 3.13 specialised
+two-argument `max`, and the table already says the original figure "was stale by
+an interpreter version". It is now quoted forward across another one. **Do not
+re-open that item on the strength of a 3.13 number in either direction**;
+re-measure it on 3.14 first, and the same goes for anything else in that table
+whose verdict turns on a per-call cost.
 
 ### Entry points
 
@@ -2349,9 +2388,10 @@ that silently does not appear and a successful one becomes a server nobody can
 stop without Task Manager. `launch_ui.py` therefore puts up a small control
 window to **replace** the console rather than merely suppress it.
 
-Three Windows-specific traps were hit building it, each of which looks fine
-from a console and is broken everywhere else, the same shape as the `set /p`
-rule below:
+The Windows-specific traps below were hit building it, each of which looks
+fine from a console and is broken everywhere else, the same shape as the
+`set /p` rule below. Count the list rather than trusting a number here; it read
+"Three" above five of them until 2026-09:
 
 - 🚨  **`SO_REUSEADDR` is INVERTED on Windows.** On Unix it means "reuse a
   port stuck in TIME_WAIT"; on Windows it means "bind even though someone else
