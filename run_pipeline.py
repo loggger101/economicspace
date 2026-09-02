@@ -498,17 +498,38 @@ def print_banner(args, settings, cfg, stages) -> None:
     d_search = declared_default(cfg.calc,    "optimise_programme_scale")
     d_dest   = declared_default(cfg.mineral, "delivery_destination")
 
-    def fmt_rows(n):      return "every row" if not n else "{:,} (stride sample)".format(n)
-    def fmt_ast(n):       return "all (1.55 M)" if not n else "{:,} per source".format(n)
+    # The four banner formatters. Each renders ONE setting as the banner shows
+    # it, and the first two exist mostly to say what 0 MEANS: it is "no cap" in
+    # both, and would otherwise print as "0 rows" and "0 asteroids".
+    def fmt_rows(n):
+        """The row cap as the banner shows it. 0 is no cap, not no rows."""
+        return "every row" if not n else "{:,} (stride sample)".format(n)
+
+    def fmt_ast(n):
+        """The per-source fetch limit. 0 is unlimited, i.e. the whole catalog."""
+        return "all (1.55 M)" if not n else "{:,} per source".format(n)
+
     # Ratios come from master.MEASURED_CELL_SECONDS, never typed here: these
     # two labels printed the superseded 1.16.0 figures for three releases.
     _m = sys.modules["master"]
+
     def fmt_ore(raw):
+        """Ore setting, with what beneficiation costs AT THIS SEARCH SETTING.
+
+        Derived per configuration rather than quoted as one number, which the
+        single hand-typed figure could not do: it is 4.67x at N = 1 and 4.54x
+        with the programme search on.
+        """
         if raw:
             return "run-of-mine"
         return "beneficiated (~%.1fx slower)" % _m.beneficiation_cost_ratio(
             settings["search"])
+
     def fmt_prog(s):
+        """Programme setting, with what the search costs AT THIS ORE SETTING.
+
+        The mirror of `fmt_ore`: same dict, other axis.
+        """
         if not s:
             return "single mission (N = 1)"
         return "fleet x campaigns searched (~%.1fx slower)" % (

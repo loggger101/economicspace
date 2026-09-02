@@ -540,6 +540,7 @@ py verify_docs.py
 | 8 | help | a config dial the dashboard renders with no help text, because the UI scrapes its help from the field's own comment |
 | 9 | runtime | the cislunar wall clock above drifting from `calc.MEASURED_CELL_SECONDS`, which every banner and `--help` string derives its cost ratios from |
 | 10 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
+| 11 | docstrings | a module, class or function in the repo's own Python with no docstring |
 
 Check 6 is a ratchet rather than a style opinion: 1,342 em-dashes came out of
 the docs and 1,120 out of the module comments, and without a check they drift
@@ -561,6 +562,16 @@ dependencies` was sitting in this file. Twenty of them, twelve in `modules/`
 and eight in the docs, and the docs half was only found on a second pass
 because the first sweep looked at Python and stopped there. A mechanical rewrite of prose
 needs a check on what it *leaves*, not only on what it removes.
+
+Check 11 is a ratchet on the same argument as check 6. The premise of this repo
+is that a number without its reasoning attached gets "fixed" by the next person,
+and that applies to code as much as to config: **87 definitions carried neither
+a docstring nor a leading comment** when this was first measured, most of them
+in `ui.py` and `launch_ui.py`, which are almost entirely made of Windows traps
+that explain why the code looks the way it does. Nested functions count, because
+several of the sharpest notes in the repo sit on a six-line closure.
+`master.py` is exempt: it is generated, and its contents are the four modules,
+checked here at source.
 
 Checks 1, 3, 7 and 8 exist because they have already failed: `use_beneficiation`
 and `optimise_programme_scale` were both documented as `False` for several
