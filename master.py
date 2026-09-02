@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.22.0)
+"""Master Asteroid Profitability Pipeline (1.22.1)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -15,7 +15,7 @@ run top-to-bottom - the orchestrator at the bottom executes everything.
     Stage 3  ->  Transportation Data     (modules/transportation.py 1.14.0)
                 Launch vehicles + propellants + dv segments + ops costs
                 (UNCREWED autonomous mining - no crew costs)
-    Stage 4  ->  Profitability Calc      (modules/calc.py 1.19.0)
+    Stage 4  ->  Profitability Calc      (modules/calc.py 1.19.1)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2x, V-type 0.2x)
                 + delivery architecture: earth_surface / leo / geo /
@@ -10847,7 +10847,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.19.0"
+    pipeline_version: str = "1.19.1"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -11014,6 +11014,25 @@ def _parse_minerals_column(col: pd.Series) -> pd.Series:
                      index=col.index, name=col.name)
 
 
+# Which module WRITES each catalog, and the config global carrying that
+# module's version.  `stamp_check` reads this to compare a CSV against the code
+# that produced it; before v1.19.1 it compared every one of them against
+# Module 3, so `asteroids` (1.1.0) and `minerals` (1.7.1) could never match and
+# the check fired on every run.
+#
+# The config names are looked up through `globals()` rather than referenced,
+# because in a standalone `calc.py` none of them exist; only the concatenated
+# `master.py` has all four in one process.  See `stamp_check`.
+_CATALOG_PROVENANCE: Dict[str, Tuple[int, str]] = {
+    "asteroids":   (1, "CATALOG_CONFIG"),
+    "minerals":    (2, "MINERAL_CONFIG"),
+    "vehicles":    (3, "TRANSPORT_CONFIG"),
+    "propellants": (3, "TRANSPORT_CONFIG"),
+    "delta_v":     (3, "TRANSPORT_CONFIG"),
+    "ops":         (3, "TRANSPORT_CONFIG"),
+}
+
+
 def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
     """Load and lightly normalise the three upstream catalogs."""
     print("\n  Loading upstream catalogs ...")
@@ -11046,6 +11065,14 @@ def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
             "Module 3 operational costs",
         ),
     }
+
+    # v1.19.1: the provenance map must name every catalog and no others, or
+    # `stamp_check` silently stops checking whichever one was added without it.
+    # Asserted here rather than in the check, because HERE is where the two can
+    # drift apart: this dict is the definition and the map is the description.
+    assert set(catalogs) == set(_CATALOG_PROVENANCE), (
+        "load_all_catalogs and _CATALOG_PROVENANCE disagree about: %s"
+        % sorted(set(catalogs) ^ set(_CATALOG_PROVENANCE)))
 
     # Parse Module 1's comp_minerals list-column back into actual lists
     if "comp_minerals" in catalogs["asteroids"].columns:
@@ -11252,9 +11279,8 @@ def schema_check(catalogs: Dict[str, pd.DataFrame]) -> None:
 
 
 def stamp_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
-    """Compare the transportation version STAMPED in each Stage 3 CSV against
-    the Module 3 in this process.  Returns True when they agree or cannot be
-    compared.
+    """Compare the version STAMPED in each upstream CSV against the module that
+    WROTE it.  Returns True when they agree or cannot be compared.
 
     This closes the half of the staleness problem `schema_check` cannot see.
     That one asks whether the columns and rows this module reads are PRESENT;
@@ -11275,38 +11301,67 @@ def stamp_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
     number means bumping the version" from a rule someone has to remember into
     one the pipeline enforces on the way past.
 
-    ⚠️  It is a DIAGNOSTIC, not an import.  `TRANSPORT_CONFIG` exists only when
-    both modules are in one process, which is `master.py`, the normal path.  A
-    standalone `calc.py` run has no way to know what Module 3 currently says
-    and this returns True rather than inventing a complaint it cannot support.
-    That is deliberate: the modules hand off through CSVs on disk and must not
-    grow an import edge for a warning.
-    """
-    transport = globals().get("TRANSPORT_CONFIG")
-    live = getattr(transport, "pipeline_version", None)
-    if not live:
-        return True                       # standalone calc.py: nothing to compare
+    ⚠️  It is a DIAGNOSTIC, not an import.  The four config globals exist only
+    when every module is in one process, which is `master.py`, the normal path.
+    A standalone `calc.py` run has no way to know what Module 1, 2 or 3
+    currently says, so each comparison it cannot make is skipped rather than
+    invented.  That is deliberate: the modules hand off through CSVs on disk
+    and must not grow an import edge for a warning.
 
-    mismatched = []
+    🚨  v1.19.1 FIXED WHAT THIS COMPARED, AND IT HAD BEEN WRONG SINCE v1.17.8
+    SHIPPED IT.  Every frame in `catalogs` was compared against
+    `TRANSPORT_CONFIG`, including `asteroids` (written by Module 1) and
+    `minerals` (Module 2).  Those can never equal a transportation version, so
+    the check fired on **every run**, named the wrong module, and then advised
+    "Re-run Stage 3", which is the one action CLAUDE.md documents as destroying
+    every `verify.py` baseline you hold.  A check that cries wolf toward a
+    destructive remedy is worse than no check, and this one had been doing it
+    for two releases.  See `_CATALOG_PROVENANCE`.
+
+    ⚠️  A LAG HERE IS OFTEN DELIBERATE, which is why the wording below reports
+    rather than instructs.  catalog v1.1.1 and transportation v1.12.1 both
+    changed no CSV byte and deliberately did NOT re-run their stage; their
+    release notes say so.  This cannot tell that apart from a write that failed
+    to land, because both look like "the file predates the module".  It reports
+    the fact and names where the answer is.
+    """
+    stale, unknown = [], []
     for key, df in sorted(catalogs.items()):
         if df is None or "pipeline_version" not in getattr(df, "columns", ()):
             continue
-        stamps = {str(v) for v in df["pipeline_version"].dropna().unique()}
-        for stamped in sorted(stamps):
+        provenance = _CATALOG_PROVENANCE.get(key)
+        if provenance is None:
+            unknown.append(key)           # load_all_catalogs' assert should
+            continue                      # have caught this; say so anyway
+        stage, config_name = provenance
+        live = getattr(globals().get(config_name), "pipeline_version", None)
+        if not live:
+            continue                      # standalone run: nothing to compare
+        for stamped in sorted({str(v) for v in df["pipeline_version"]
+                               .dropna().unique()}):
             if stamped != str(live):
-                mismatched.append((key, stamped))
+                stale.append((key, stage, stamped, str(live)))
 
-    if not mismatched:
-        return True
+    if unknown:
+        print(f"\n     WARN  stamp_check has no provenance entry for "
+              f"{', '.join(unknown)}; those files were NOT checked.")
 
-    print(f"\n     WARN  Module 3 catalog was written by a DIFFERENT "
-          f"transportation build (this process is {live}):")
-    for key, stamped in mismatched:
-        print(f"          * {key}.csv stamped {stamped}")
-    print("        -> The columns are all present, so nothing else will "
-          "complain, but a reference VALUE may be a release out of date.")
-    print("        -> Re-run Stage 3 (transportation) before trusting any "
-          "number below, or before comparing one to a committed figure.")
+    if not stale:
+        return not unknown
+
+    print(f"\n     WARN  {len(stale)} upstream CSV(s) were written by a "
+          f"different build of the module that owns them:")
+    for key, stage, stamped, live in stale:
+        print(f"          * {key}.csv stamped {stamped} - "
+              f"Stage {stage} in this process is {live}")
+    print("        -> The columns and rows are all present, so nothing else "
+          "will complain, but a reference VALUE may be a release out of date.")
+    print("        -> This may be DELIBERATE. Several releases changed no CSV "
+          "byte and chose not to re-run their stage; read the release note in "
+          "versions.md before acting on this.")
+    print("        -> If you do re-run Stage 1, 2 or 3, it REFETCHES and "
+          "overwrites the only copy of its CSV, and every verify.py baseline "
+          "stops reproducing. Copy asteroid_pipeline/*.csv first.")
     return False
 
 
@@ -18122,7 +18177,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.22.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.22.1")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

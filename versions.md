@@ -23,8 +23,8 @@ history of how it got there.
 | 1 | `modules/catalog.py` | **1.1.1** | v1.1.1, `enrich_composition` by distinct taxonomy, 3.87× |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments |
-| 4 | `modules/calc.py` | **1.19.0** | v1.19.0, the `geo` delivery architecture |
-| - | `master.py` | **1.22.0** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.19.1** | v1.19.1, `stamp_check` compared every catalog to Module 3 |
+| - | `master.py` | **1.22.1** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -39,7 +39,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Nineteen stamps so far have moved without moving a number:
+Twenty stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -62,6 +62,7 @@ Nineteen stamps so far have moved without moving a number:
 | calc `1.19.0` | **a seventh destination** | bit-identical, verified |
 | mineral_value `1.9.0` | **a seventh destination** | bit-identical, verified |
 | transportation `1.14.0` | **four reference rows** | bit-identical, verified |
+| calc `1.19.1` | **a check that cried wolf** | bit-identical, verified |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -70,7 +71,7 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `transportation 1.14.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and eleven are not, and that split rotted in prose
+rows are performance stamps and twelve are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -102,6 +103,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [calc v1.19.1](#calc-v1191) | 2026-09-02 | a version check had been comparing every catalog against Module 3 |
 | [calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0](#calc-v1190--mineral_value-v190--transportation-v1140) | 2026-09-02 | **a seventh destination: a geostationary servicing depot** |
 | [calc v1.18.0 / mineral_value v1.8.0 / transportation v1.13.0](#calc-v1180--mineral_value-v180--transportation-v1130) | 2026-09-02 | **a sixth destination: a Mars-orbit depot** |
 | [calc v1.17.8](#calc-v1178) | 2026-08-27 | the loader now checks the Stage 3 stamp, not just its columns |
@@ -130,6 +132,100 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## calc v1.19.1
+
+**No number moved.** Console output only: no CSV byte changes, and the four
+cislunar cells are bit-identical.
+
+**`stamp_check` had been crying wolf on every run since v1.17.8 shipped it two
+releases earlier, and the action it recommended was the destructive one.**
+
+The check compares the `pipeline_version` stamped in an upstream CSV against
+the module that wrote it, so a write that silently failed to land is caught on
+the next run. That is what it was for. What it actually did was compare **every
+frame in `catalogs`** against `TRANSPORT_CONFIG`, and that dict holds
+`asteroids` (written by Module 1) and `minerals` (Module 2) alongside the four
+Stage 3 tables. A Module 1 version can never equal a Module 3 version, so:
+
+```
+     WARN  Module 3 catalog was written by a DIFFERENT transportation build
+          * asteroids.csv stamped 1.1.0
+          * minerals.csv stamped 1.7.1
+        -> Re-run Stage 3 (transportation) before trusting any number below
+```
+
+Three things wrong, and the third is the one that matters:
+
+1. **The wrong comparand** for two of the six files.
+2. **The wrong remedy named.** Re-running Stage 3 cannot change what Module 1
+   stamped into the asteroid catalog.
+3. 🚨  **The remedy is the single most destructive action in this repo.**
+   CLAUDE.md carries a section titled "RUNNING STAGE 2 OR STAGE 3 DESTROYS
+   EVERY BASELINE YOU HOLD", written after somebody did exactly that on
+   2026-08-23 and could not get the prices back. So a check written to enforce
+   the version discipline was, on every single run, advising the reader toward
+   an irreversible refetch, for two files it was misreading.
+
+**A check that cries wolf toward a destructive remedy is worse than no check**,
+and this is the same family as the harness bugs in
+[what "no number" claims rest on](#what-no-number-claims-rest-on): a broken
+checker looks exactly like a broken release.
+
+### What it does now
+
+`_CATALOG_PROVENANCE` maps each catalog key to the stage that writes it and the
+config global carrying that module's version, and `load_all_catalogs`
+**asserts** the map names exactly the catalogs it builds. The assert is in the
+loader rather than in the check, because the loader is where the two can drift:
+that dict is the definition and the map is the description, and a catalog added
+without a map entry would otherwise be silently unchecked forever. A key with
+no entry is now reported rather than skipped.
+
+The wording changed as much as the logic. It names the right stage per file, and
+it reports rather than instructs:
+
+```
+     WARN  6 upstream CSV(s) were written by a different build of the module
+           that owns them:
+          * asteroids.csv stamped 1.1.0 - Stage 1 in this process is 1.1.1
+          * minerals.csv stamped 1.7.1 - Stage 2 in this process is 1.9.0
+          * propellants.csv stamped 1.12.1 - Stage 3 in this process is 1.14.0
+        -> This may be DELIBERATE. Several releases changed no CSV byte and
+           chose not to re-run their stage; read the release note first.
+        -> If you do re-run Stage 1, 2 or 3, it REFETCHES and overwrites the
+           only copy of its CSV, and every verify.py baseline stops
+           reproducing. Copy asteroid_pipeline/*.csv first.
+```
+
+⚠️  **It still fires on the current tree, and that is now correct.** catalog
+v1.1.1 and transportation v1.12.1 both changed no CSV byte and deliberately did
+not re-run their stage, and v1.13.0 / v1.14.0 added reference rows on the same
+call. **The check cannot tell a deliberate lag from a write that failed to
+land**, because both look like "the file predates the module", so it states the
+fact and says where the answer is instead of prescribing a fix it cannot
+justify. That limit is now in the docstring rather than discovered by the
+reader.
+
+The two documented limits are unchanged: it is a **diagnostic, not an import**,
+so a standalone `calc.py` run where the upstream configs do not exist skips
+each comparison silently rather than inventing one; and it still cannot see an
+edit that did not bump a version.
+
+**Verified**: `verify.py check --tag 1.17.7` passes, all four cislunar cells
+139/139 identical, hashes MATCH.
+
+⚠️  **Noticed and deliberately not taken**, so nobody finds it and assumes it
+is a bug: v1.19.0 added `_V_LEO_KM_S` and `_V_ESC_LEO_KM_S` at module scope for
+the GEO capture, and `_leo_departure_dv_km_s` and `_cislunar_capture_dv_km_s`
+still derive the same two values inline, so there are now three copies of
+`sqrt(mu / R_LEO)`. They **cannot drift**, being one expression over one
+constant rather than the two-place derivations CLAUDE.md's defect class 4 is
+about, and consolidating them is bit-safe because hoisting an identical
+expression re-associates nothing. It is left alone because it is a performance
+change to the hottest function in the model, worth two `sqrt` per call, and
+this repo's rule is that those go in their own measured release rather than
+inside one arguing bit-identity.
 
 ## calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0
 
@@ -3074,6 +3170,20 @@ output column.
 
 Bit-identity re-verified on the same 270-point grid: **6,930 pre-existing leg
 values, zero mismatches**. No `geo` cell has been run.
+
+**`1.19.1`  `stamp_check` compared every catalog against Module 3.** Full
+write-up: [calc v1.19.1](#calc-v1191). Console output only; no column, no
+field, no CSV byte.
+
+- `_CATALOG_PROVENANCE` is new: catalog key to (stage, config global name).
+  The config is resolved through `globals()` rather than referenced, because a
+  standalone `calc.py` has none of the upstream configs.
+- `load_all_catalogs` gained an **assert** that the map names exactly the
+  catalogs it builds. It lives in the loader, not the check, because the loader
+  is where the definition and the description can drift apart.
+- `stamp_check` compares each file against the module that wrote it, names the
+  right stage in the message, reports a key with no provenance entry instead of
+  skipping it, and no longer instructs the reader to re-run a stage.
 
 # Measurement history
 

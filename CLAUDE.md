@@ -114,10 +114,10 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.1.1`, mineral_value `1.9.0`, transportation `1.14.0`,
-calc `1.19.0`, master `1.22.0` (the master version is a literal in
+calc `1.19.1`, master `1.22.1` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
-ℹ️  **NINETEEN stamps so far do NOT mean the numbers moved.** The rule
+ℹ️  **TWENTY stamps so far do NOT mean the numbers moved.** The rule
 is one-directional: *changing a number means bumping; bumping does not mean a
 number changed*, and reading a version as evidence that a result moved is the
 mistake this table exists to prevent.
@@ -149,15 +149,17 @@ and `1.19.0`, which shipped together.
 | `1.19.0` | **a seventh destination** | bit-identical, verified |
 | mineral_value `1.9.0` | **a seventh destination** | bit-identical, verified |
 | transportation `1.14.0` | **four reference rows** | bit-identical, verified |
+| `1.19.1` | **a check that cried wolf** | bit-identical, verified |
 
-**Every measured cell in this file stands unaltered across all nineteen; do not
+**Every measured cell in this file stands unaltered across all twenty; do not
 re-measure anything on account of any of them.** Each release's own section
 carries its verification.
 
 ⚠️  **Derive the taxonomy from the table above, not from a count in prose.**
-Eight rows are *performance* stamps; the other eleven are `1.17.0` (a default
+Eight rows are *performance* stamps; the other twelve are `1.17.0` (a default
 flip), `1.17.3` (a cleanup), `1.17.7` (a memory bound), `1.17.8` (a new
-upstream check), `1.7.1` (a silent default closed in another module), and two
+upstream check), `1.19.1` (that same check, fixed), `1.7.1` (a silent default
+closed in another module), and two
 trios that each add a delivery destination without touching any existing one:
 `1.18.0` / `1.8.0` / `1.13.0` for `mars_orbit` and `1.19.0` / `1.9.0` /
 `1.14.0` for `geo`. See
@@ -927,11 +929,21 @@ or more distinctive numbers across two files:
 | the Mars cadence: 3.8-4.0 yr against ~1.37 everywhere else | [Current results](README.md#current-results-the-complete-20-cell-matrix) | "The rig's two bounds, and the cadence, at every destination" |
 | everything older than `1.17.7` being high by 1.78-4.32x | [Current results](README.md#current-results-the-complete-20-cell-matrix) | "Runtime, and the three quantities a sample cannot predict" |
 | the four cislunar wall clocks, 733 / 1,253 / 3,424 / 5,692 s | [Beneficiation](README.md#beneficiation) | "Runtime, and the three quantities a sample cannot predict" |
+| why `mars_orbit` takes the BASE utility profile: the crust is 4,100 m/s of ascent away, against the 3,600 m/s of TMI that delivered the cargo | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
 
-⚠️  **The last five rows were added on 2026-09-02 by re-running the hunt this
+⚠️  **The last six rows were added on 2026-09-02 by re-running the hunt this
 table describes**, which is the tell that the table is a snapshot and not a
-guarantee: it listed four pairs while nine existed. **Re-run the hunt rather
-than trusting the table.** ⚠️  And note the last row is only half checked:
+guarantee: it listed four pairs while nine existed, and the tenth arrived the
+same day with `mars_orbit`. **Re-run the hunt rather than trusting the table**,
+and re-run it whenever you add a destination: a new row in README's delivered-cost
+table is a new opportunity for this file to restate it.
+
+⚠️  **`versions.md` now carries far more of these pairs than this file does,
+and that is FINE where this would not be.** The `geo` and `mars_orbit` prices,
+plane changes and capture figures all appear in both README and `versions.md`.
+That is the split working: `versions.md` is allowed superseded figures because
+every section there names the release it belongs to, where this file and README
+both claim to be current, which is what makes a pair between THEM a hazard. ⚠️  And note the last row is only half checked:
 `verify_docs.py` check 9 pins README's copy of those four wall clocks to
 `MEASURED_CELL_SECONDS`, and reads nothing here, so this file's copy can drift
 from the code on its own.
@@ -2139,17 +2151,35 @@ Undoing any of these silently corrupts the output:
   two full-catalog runs plus a determinism sweep were measured against the
   table that was being replaced. Nothing anywhere said so.
 
-  ✅  **`stamp_check()` closes that half as of calc `1.17.8`.** Stage 3 has
+  ✅  **`stamp_check()` closes that half as of calc `1.17.8`.** Every stage has
   stamped its own `pipeline_version` into every CSV it writes all along, and
   nothing had ever read it back; the loader now compares that stamp against the
-  Module 3 in this process and shouts, naming each stale file. It needed no new
-  column, and it makes the one-directional bump rule self-enforcing: follow it,
-  and a write that silently fails to land is caught on the next run.
-  ⚠️  **Two limits, both deliberate.** It is a *diagnostic, not an import*, so
-  it is silent in a standalone `calc.py` run where `TRANSPORT_CONFIG` does not
-  exist, rather than inventing a complaint it cannot support. And it cannot see
+  module that WROTE it and shouts, naming each stale file and its stage. It
+  needed no new column, and it makes the one-directional bump rule
+  self-enforcing: follow it, and a write that silently fails to land is caught
+  on the next run.
+
+  🚨  **AND IT SPENT TWO RELEASES COMPARING EVERY CATALOG AGAINST MODULE 3,
+  INCLUDING THE TWO MODULE 3 DID NOT WRITE.** `catalogs` holds `asteroids` and
+  `minerals` as well as the four Stage 3 tables, so it fired on **every run**,
+  named the wrong module, and closed with "Re-run Stage 3 (transportation)".
+  That is the action the section titled "RUNNING STAGE 2 OR STAGE 3 DESTROYS
+  EVERY BASELINE YOU HOLD" exists to prevent. **A check that cries wolf toward
+  a destructive remedy is worse than no check**, and the generalisation is the
+  one this file already makes about harnesses: *a broken checker looks exactly
+  like a broken release*. Fixed in calc `1.19.1` with `_CATALOG_PROVENANCE`,
+  which `load_all_catalogs` asserts against the dict it actually builds.
+
+  ⚠️  **Three limits, all deliberate.** It is a *diagnostic, not an import*, so
+  it is silent in a standalone `calc.py` run where the upstream configs do not
+  exist, rather than inventing a complaint it cannot support. It cannot see
   **an edit that did not bump the version**; what it closes is the case where
-  the discipline was followed and the CSV did not land.
+  the discipline was followed and the CSV did not land. And **it cannot tell a
+  deliberate lag from a failed write** -- catalog `1.1.1` and transportation
+  `1.12.1` both changed no CSV byte and chose not to re-run their stage, so the
+  check fires on them correctly and means nothing by it. That is why it now
+  reports the fact and points at the release note instead of prescribing a
+  fix.
 
   The cheap habit that catches it: **Stage 4's loader prints row counts for
   every Module 3 table it reads** (`Module 3 propellants  41 rows`). Read
