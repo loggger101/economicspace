@@ -26,8 +26,10 @@ describe it.  Ten checks, all mechanical, all fast (about a second):
                      MEASURED_CELL_SECONDS every banner now derives from
    10. transfer      every distinctive number in a --before snapshot still
                      appears somewhere in the docs afterwards
+   11. docstrings    every module, class and function in the repo's own Python
+                     carries one
 
-    py verify_docs.py                       # checks 1-9
+    py verify_docs.py                       # every check except 10
     py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 10
 
 WHY THIS FILE EXISTS
@@ -59,6 +61,9 @@ to stop.  What they caught, on the run that prompted writing them down:
   retired them.                                                 -> check 9
   39 of 105 config fields showed a bare dial in the dashboard, because their
   comment block sat above a NEIGHBOURING field.                   -> check 8
+  87 definitions carried neither a docstring nor a comment, most of them in
+  ui.py and launch_ui.py, where the Windows traps that justify the code are
+  the whole reason it looks the way it does.                     -> check 11
 
 SCOPE.  This reads the docs and the module dataclasses.  It does NOT run the
 pipeline, fetch anything, or check that a documented NUMBER is a correct
@@ -257,6 +262,15 @@ def _stamp_table(text: str) -> Optional[List[str]]:
 
 
 def check_versions(mods) -> bool:
+    """Documented stamps against the dataclasses, and the stamp tables against
+    the counts spelled beside them.
+
+    Two halves. The first reads README's Stage/Version table and CLAUDE.md's
+    `Current:` line; that one has rotted before, reading calc 1.16.0 while the
+    module was four releases past it. The second counts the rows of the
+    "moved without moving a number" table in each doc and holds the prose to
+    them, because that count has now rotted three times.
+    """
     actual = {a: mods[a].CONFIG.pipeline_version for a in mods}
     bad: List[str] = []
 
@@ -383,6 +397,13 @@ def check_row_counts(mods) -> bool:
     # comments spell it "seventeen" -- and a count spelled out in prose is
     # exactly what this repo keeps finding stale.
     def _truthy(row, key, default):
+        """A reference-table flag as a bool, with an explicit default if absent.
+
+        Says what a MISSING value means instead of letting truthiness decide,
+        which is the trap `.astype(bool)` springs on a nullable column: it reads
+        NaN as True, so a propellant row omitting `restartable` would count as
+        usable and one omitting `propellantless` would be classed as a sail.
+        """
         v = row.get(key, None)
         if v is None or (isinstance(v, float) and v != v):
             return default
@@ -823,6 +844,60 @@ def check_runtime() -> bool:
     return not bad
 
 
+# ---------------------------------------------------------------- 11. docstrings
+# Every .py this repo owns.  master.py is excluded because it is GENERATED: its
+# contents are the four modules, which are checked here at source, and
+# build_master.py strips their module docstrings by design.
+FIRST_PARTY_PY = (["build_master.py", "run_pipeline.py", "ui.py", "ui_meta.py",
+                   "verify.py", "launch_ui.py", os.path.basename(__file__)]
+                  + list(MODULES.values()) + CAMPAIGN_PY)
+
+
+def check_docstrings() -> bool:
+    """Every module, class and function in the repo's own Python has a docstring.
+
+    A ratchet, on the same argument as check 6.  This repo's premise is that a
+    number without its reasoning attached gets "fixed" by the next person, and
+    that applies to code as much as to config: 87 definitions carried neither a
+    docstring nor a leading comment when this was first measured, most of them
+    in `ui.py` and `launch_ui.py`, which are almost entirely made of Windows
+    traps that explain why the code looks the way it does.
+
+    NESTED functions count.  Several of the sharpest notes in here are on a
+    six-line closure -- `_as_designation` is the NEOWISE float-key bug, and
+    `_truthy` is the `.astype(bool)` trap -- and exempting them by size would
+    exempt exactly the ones worth reading.
+    """
+    bad, n = [], 0
+    for rel in FIRST_PARTY_PY:
+        path = os.path.join(REPO, rel)
+        if not os.path.exists(path):
+            continue
+        try:
+            tree = ast.parse(read(path))
+        except SyntaxError as exc:
+            bad.append("%s: could not parse (%s)" % (rel, exc))
+            continue
+        n += 1
+        if not ast.get_docstring(tree):
+            bad.append("%s has no module docstring" % rel)
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                     ast.ClassDef)):
+                continue
+            n += 1
+            if not ast.get_docstring(node):
+                bad.append("%s:%d  %s has no docstring"
+                           % (rel, node.lineno, node.name))
+
+    print("11. docstrings %d definitions checked, %d without one" % (n, len(bad)))
+    for b in bad[:20]:
+        print("     ! " + b)
+    if len(bad) > 20:
+        print("     ! ... and %d more" % (len(bad) - 20))
+    return not bad
+
+
 # ---------------------------------------------------------------- 10. transfer
 def check_transfer(before: str, after: List[str]) -> bool:
     """Every distinctive number in `before` must survive somewhere in `after`.
@@ -850,6 +925,13 @@ def check_transfer(before: str, after: List[str]) -> bool:
 
 # --------------------------------------------------------------------- driver
 def main(argv: Optional[List[str]] = None) -> int:
+    """Run every check except 10, plus 10 if `--before` names a snapshot.
+
+    Returns the process exit code: 0 if everything passed, 1 otherwise.
+
+    Every check runs even after one fails, because the point of a docs sweep is
+    the whole list: stopping at the first mismatch would hide the other nine.
+    """
     p = argparse.ArgumentParser(
         description="Documentation verification (see the module docstring).")
     p.add_argument("--before", nargs="+", metavar=("OLD", "NEW"),
@@ -867,7 +949,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                check_dashes,
                check_manifests,
                check_help,
-               check_runtime):
+               check_runtime,
+               check_docstrings):
         ok = fn() and ok
     if args.before:
         if len(args.before) < 2:
