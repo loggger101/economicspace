@@ -1,25 +1,25 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.20.8)
+"""Master Asteroid Profitability Pipeline (1.21.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom - the orchestrator at the bottom executes everything.
 
-    Stage 1  ->  Asteroid Catalog        (modules/catalog.py 1.1.0)
+    Stage 1  ->  Asteroid Catalog        (modules/catalog.py 1.1.1)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
-    Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.7.0)
+    Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.8.0)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
                 + destination pricing for EVERY commodity
-    Stage 3  ->  Transportation Data     (modules/transportation.py 1.11.0)
+    Stage 3  ->  Transportation Data     (modules/transportation.py 1.13.0)
                 Launch vehicles + propellants + dv segments + ops costs
                 (UNCREWED autonomous mining - no crew costs)
-    Stage 4  ->  Profitability Calc      (modules/calc.py 1.14.0)
+    Stage 4  ->  Profitability Calc      (modules/calc.py 1.18.0)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2x, V-type 0.2x)
                 + delivery architecture: earth_surface / leo / cislunar /
-                  lunar_surface / mars_surface, beneficiation,
+                  lunar_surface / mars_orbit / mars_surface, beneficiation,
                   low-thrust trip time, launch windows, learning curve,
                   market saturation, rig service life + terminal value,
                   mission reliability + growth, cryogenic boil-off,
@@ -3155,6 +3155,11 @@ class MineralValueConfig:
     #   "lunar_surface", sold at a Moon base.  $21,210/kg: nearest
     #                     destination, but airless, so all 5,920 m/s from LEO
     #                     is propulsive.
+    #   "mars_orbit"    - sold at a 1-sol Mars-orbit depot ($13,496/kg).  The
+    #                     Mars destination that nothing lands on, so it pays
+    #                     no entry-survival fraction and, crucially, competes
+    #                     with EARTH freight rather than with the Martian
+    #                     crust; see IN_SPACE_UTILITY_BY_DESTINATION.
     #   "mars_surface"  - sold at a Mars base.  $45,105/kg: far in Δv, but the
     #                     atmosphere brakes most of the arrival for free.
     #
@@ -3206,7 +3211,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.7.1"
+    pipeline_version: str = "1.8.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -3370,6 +3375,15 @@ _DELIVERY_LEGS: Dict[str, Optional[List[tuple]]] = {
         ("burn", 4_050.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TLI + LOI
         ("burn", 1_870.0, _TUG_ISP_S, _LANDER_DRY_MASS_FRAC),   # powered descent
     ],
+    # v1.8.0.  The 1-sol elliptical staging orbit (250 x 33,793 km), Module 3
+    # "LEO -> Mars 1-sol orbit depot".  Capture BINDS the orbit instead of
+    # circularising it, so MOI is 900 m/s where a 200-km orbit costs 2,100 at
+    # the same arrival energy; the same trade NRHO wins on at the Moon.
+    # Nothing lands, so there is no `edl` leg and no 30% survival fraction.
+    "mars_orbit": [
+        ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TMI
+        ("burn",   900.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # MOI, 1-sol capture
+    ],
     "mars_surface": [
         ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TMI
         ("edl",  _MARS_LANDED_MASS_FRACTION),                   # aeroentry + landing
@@ -3442,6 +3456,12 @@ _DESTINATION_NOTES = {
                      "descent (1,870 m/s) on a lander.  No atmosphere, so "
                      "every metre per second is propulsive — the Moon is the "
                      "nearest destination and among the dearest to land on.",
+    "mars_orbit":    "TMI (3,600 m/s), then 900 m/s of capture into the "
+                     "250 x 33,793 km 1-sol staging orbit (NASA DRA 5.0).  "
+                     "Binding an ellipse is far cheaper than circularising: "
+                     "the same arrival costs 2,100 m/s into a 200-km orbit.  "
+                     "Nothing enters the atmosphere, so unlike mars_surface "
+                     "there is no entry-survival fraction on top.",
     "mars_surface":  "TMI (3,600 m/s), then aeroentry surviving 30% of entry "
                      "mass (MSL / Perseverance measured), then 800 m/s of "
                      "retropropulsion.  Mars is far but its atmosphere does "
@@ -3517,6 +3537,7 @@ _DOWNLEG_BATCH_KG           = 10_000.0
 #   leo           - deorbit burn, ~120 m/s
 #   cislunar      - NRHO departure, ~450 m/s (symmetric with insertion)
 #   lunar_surface: ascent to LLO (1,870) + trans-Earth injection (~850)
+#   mars_orbit    - TEI at periapsis, ~900 m/s, symmetric with the capture
 #   mars_surface  - Mars ascent (4,100) + TEI from LMO (2,100)
 # The surface cases are punishing, and correctly so: hauling material back UP
 # out of a gravity well you just landed in is close to the worst thing you can
@@ -3527,6 +3548,13 @@ _DOWNLEG_DEPARTURE_DV_M_S = {
     "leo":            120.0,
     "cislunar":       450.0,
     "lunar_surface": 2_720.0,
+    # v1.8.0.  A seventh of the surface figure, and it is the single largest
+    # behavioural difference between the two Mars destinations: a commodity
+    # with no in-space market is valued by FLYING IT HOME, and from the
+    # surface that route costs $96,394/kg, more than any price in the catalog,
+    # so the PGMs are worth nothing at a Mars base.  From orbit the same
+    # kilogram routes home for $30,150 and they are worth something again.
+    "mars_orbit":      900.0,
     "mars_surface":  6_200.0,
 }
 
@@ -3650,6 +3678,24 @@ IN_SPACE_UTILITY_DEFAULT = 0.0
 IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
     "leo":      {},                  # base profile, no local resources
     "cislunar": {},                  # base profile, no local resources
+    # 🚨  v1.8.0.  mars_orbit TAKES THE BASE PROFILE, AND THE EMPTY DICT IS
+    # THE WHOLE POINT.  It will look like an oversight next to the block
+    # below, and copying mars_surface's overrides up into it is the one edit
+    # that would destroy this destination's meaning.
+    #
+    # The overrides below exist because a settlement STANDING ON a crust can
+    # dig up its own water, iron and rock, so asteroid material competes with
+    # local mining.  A depot in a 1-sol orbit competes with nothing of the
+    # kind: everything martian is 3,400 km down a gravity well that costs
+    # 4,100 m/s of ascent to climb, which is more than the 3,600 m/s of TMI
+    # that brought the cargo from Earth in the first place.  The alternative
+    # to importing a kilogram HERE is launching that kilogram from Earth,
+    # which is the exact condition the base profile is calibrated on.
+    #
+    # So the ISRU discount that carries the mars_surface result is not a
+    # property of Mars, it is a property of being ON Mars, and this
+    # destination is the control that says so.
+    "mars_orbit": {},                # base profile: the crust is 4,100 m/s away
     "lunar_surface": {
         # Polar ice is real and is the entire premise of a lunar base, but it
         # is in permanently shadowed craters at ~40 K with no sunlight to work
@@ -3770,6 +3816,14 @@ IN_SPACE_ANNUAL_DEMAND_KG: Dict[str, float] = {
     "leo":           500_000.0,
     "cislunar":      100_000.0,
     "lunar_surface":  50_000.0,
+    # v1.8.0.  LARGER than the surface base it serves, which is the one row of
+    # this table that does not fall off with distance.  A Mars-orbit depot is
+    # transport infrastructure rather than a settlement: what it holds is the
+    # propellant for descent, ascent and the trans-Earth stage, and in DRA 5.0
+    # that is tens of tonnes per opportunity against a base's consumables.
+    # 60 t/yr is ~128 t per 2.14-year synodic period, roughly one crewed
+    # mission's in-space propellant, and still well under cislunar's 100 t.
+    "mars_orbit":     60_000.0,
     "mars_surface":   20_000.0,
 }
 
@@ -5115,7 +5169,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.12.1"
+    pipeline_version: str = "1.13.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 
@@ -7891,6 +7945,38 @@ DELTA_V_REFERENCE: List[dict] = [
     {"segment": "Low Mars orbit  →  Earth (TEI)", "dv_m_per_s": 2_100, "duration_yr": 0.7,
      "notes": "Trans-Earth injection from LMO (NASA DRA 5.0)."},
 
+    # ── Mars orbit depot  (v1.13.0) ─────────────────────────────────────
+    # The 1-sol elliptical staging orbit, 250 x 33,793 km altitude, is where
+    # NASA DRA 5.0 parks a Mars vehicle.  Its period matches a sol (24.60 h
+    # against 24.62), and capture only has to BIND the orbit rather than
+    # circularise it.  That is the same argument NRHO wins on in cislunar
+    # space, and here it is worth 1.2 km/s against low Mars orbit.
+    #
+    # ⚠️  These three rows are the citation home for Module 2's
+    # _DELIVERY_LEGS["mars_orbit"] and Module 4's _MARS_1SOL constants.  The
+    # rule stated above _DELIVERY_LEGS is that every Δv it charges appears
+    # here; if you retune the depot orbit, retune it in this table first.
+    {"segment": "Mars arrival  →  1-sol orbit (MOI)", "dv_m_per_s": 900, "duration_yr": 0.01,
+     "notes": "Propulsive capture into the 250 x 33,793 km 1-sol orbit at a "
+              "Hohmann arrival v_infinity of 2.65 km/s (NASA DRA 5.0).  The "
+              "periapsis burn sqrt(v_esc^2 + v_inf^2) - v_ellipse at a radius "
+              "of 3,646 km is 0.90 km/s, against 2.10 km/s to circularise "
+              "into a 200-km orbit at the same arrival energy.  The saving is "
+              "the apoapsis that is never brought down."},
+    {"segment": "LEO  →  Mars 1-sol orbit depot", "dv_m_per_s": 4_500, "duration_yr": 0.7,
+     "notes": "TMI (3,600) + MOI (900).  This is the Δv a kilogram of asteroid "
+              "material delivered to a Mars-orbit depot AVOIDS being lifted "
+              "through, and it sets the mars_orbit sale price in Module 2.  "
+              "Nothing enters the atmosphere and nothing lands, so unlike "
+              "mars_surface there is no 30% entry-survival fraction stacked "
+              "on top of it."},
+    {"segment": "1-sol Mars orbit  →  Earth (TEI)", "dv_m_per_s": 900, "duration_yr": 0.7,
+     "notes": "Trans-Earth injection at periapsis, symmetric with MOI.  A "
+              "seventh of the 6,200 m/s a kilogram on the SURFACE has to pay "
+              "(4,100 ascent + 2,100 TEI from LMO), which is why material "
+              "mined for a Mars-orbit depot can still route home when "
+              "material landed on Mars cannot."},
+
     # ── Asteroid return legs by delivery destination  (v1.4.0) ───────────────
     # Reference magnitudes only; Module 4 computes these per-asteroid from the
     # actual arrival v_infinity.  Quoted here at v_inf = 3 km/s, a typical NEA
@@ -10303,6 +10389,13 @@ class CalcConfig:
     #                     out near Mars and are genuinely closer to it than to
     #                     Earth.  Aerocapture is available and worth several
     #                     km/s.
+    #   "mars_orbit"    - berthed at a 1-sol Mars-orbit depot (250 x 33,793
+    #                     km, NASA DRA 5.0).  The same heliocentric transfer
+    #                     as mars_surface, stopped one leg early: capture
+    #                     BINDS the ellipse rather than circularising, 0.90
+    #                     km/s against 2.10, and nothing lands, so there is no
+    #                     descent burn and no lander.  Berthing adapter at
+    #                     $60k/kg.  Aerocapture available.
     #
     # See DELIVERY_ARCHITECTURES for what each one actually changes.
     delivery_destination:      str   = "earth_surface"
@@ -10624,7 +10717,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.17.8"
+    pipeline_version: str = "1.18.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -12183,6 +12276,24 @@ DV_MARS_RETROPROP_KM_S = 0.800
 # fallback when aerocapture is switched off.  Mirrors the 4.1 km/s ascent.
 DV_MARS_POWERED_DESCENT_KM_S = 4.100
 
+# ── Mars orbit depot  (v1.18.0) ──────────────────────────────────────────────
+# The 1-sol elliptical staging orbit, 250 x 33,793 km altitude, Module 3
+# DELTA_V_REFERENCE "Mars arrival -> 1-sol orbit (MOI)".  Its period is 24.60 h
+# against a sol's 24.62, which is where the name comes from, and NASA DRA 5.0
+# stages there for the reason NRHO is the cislunar depot: capture only has to
+# BIND the orbit, and the burn happens deep at periapsis where Oberth pays.
+#
+# Both velocities below are constants of the DEPOT, not of the arriving
+# candidate, so they are resolved once here rather than per call.  That is
+# defect class 3 in CLAUDE.md, "a quantity asked at a finer granularity than it
+# has answers", and this function runs twice per catalog row.
+R_MARS_1SOL_PERIAPSIS_KM = 3_396.2 +    250.0
+R_MARS_1SOL_APOAPSIS_KM  = 3_396.2 + 33_793.0
+_A_MARS_1SOL_KM = (R_MARS_1SOL_PERIAPSIS_KM + R_MARS_1SOL_APOAPSIS_KM) / 2.0
+_V_ESC_MARS_1SOL_KM_S = math.sqrt(2.0 * MU_MARS_KM3_S2 / R_MARS_1SOL_PERIAPSIS_KM)
+_V_ELL_MARS_1SOL_KM_S = math.sqrt(MU_MARS_KM3_S2 * (2.0 / R_MARS_1SOL_PERIAPSIS_KM
+                                                    - 1.0 / _A_MARS_1SOL_KM))
+
 
 def _leo_departure_dv_km_s(v_inf_km_s: float) -> float:
     """Δv to go from circular LEO onto a hyperbola with this v_infinity.
@@ -12444,6 +12555,14 @@ def _asteroid_to_mars_dv_km_s(
     v_esc  = math.sqrt(2.0) * v_circ
     dv_capture = math.sqrt(v_esc * v_esc + v_inf_mars * v_inf_mars) - v_circ
 
+    # v1.18.0: capture into the 1-sol DEPOT orbit, which is a different and
+    # much cheaper manoeuvre than the circularisation above; at a Hohmann
+    # arrival (v_inf 2.65 km/s) it is 0.90 km/s against 2.10.  The saving is
+    # the apoapsis that never has to be brought down.
+    dv_capture_1sol = (math.sqrt(_V_ESC_MARS_1SOL_KM_S * _V_ESC_MARS_1SOL_KM_S
+                                 + v_inf_mars * v_inf_mars)
+                       - _V_ELL_MARS_1SOL_KM_S)
+
     return {
         "v_inf_mars":              v_inf_mars,
         "dv_depart_for_mars":      dv_depart,
@@ -12455,6 +12574,20 @@ def _asteroid_to_mars_dv_km_s(
         # reason nobody plans a Mars mission this way.
         "ret_mars_surface_prop":   dv_depart + dv_capture
                                    + DV_MARS_POWERED_DESCENT_KM_S,
+        # ── Mars ORBIT depot (v1.18.0) ───────────────────────────────────────
+        # Nothing lands, so neither the retropropulsion nor the powered
+        # descent applies and there is no entry-survival fraction on the
+        # price side either.  What is left is the departure burn and the
+        # capture.
+        "ret_mars_orbit_prop":     dv_depart + dv_capture_1sol,
+        # Aerocapture into the 1-sol ellipse, then a periapsis-raise burn to
+        # get out of the atmosphere: Odyssey and MRO flew exactly this at
+        # Mars.  Charged at the Earth aerobrake trim, which is CONSERVATIVE
+        # here; the real raise from an aerocapture periapsis to 250 km, taken
+        # at a 37,189 km apoapsis, is ~12 m/s against the 100 charged.  The
+        # existing sourced constant is preferred over a new invented one for
+        # a term this far inside the noise of the departure burn.
+        "ret_mars_orbit_aero":     dv_depart + DV_AEROBRAKE_TRIM_KM_S,
     }
 
 
@@ -12504,6 +12637,18 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "aero_allowed": False,
         "needs_lander": True,
         "label": "landed at a lunar surface base",
+    },
+    # v1.18.0.  No `needs_lander`, so this carries a $60k/kg berthing adapter
+    # rather than the $200k/kg lander mars_surface pays for; a depot is
+    # berthed with, not landed on.  That is the second of the two cost lines
+    # that separate the Mars pair, the first being the entry-survival
+    # fraction on the price side.
+    "mars_orbit": {
+        "returns_to_earth": False,
+        "aero_leg":  "ret_mars_orbit_aero",
+        "prop_leg":  "ret_mars_orbit_prop",
+        "aero_allowed": True,     # aerocapture into the ellipse; Odyssey / MRO
+        "label": "berthed at a 1-sol Mars-orbit depot",
     },
     "mars_surface": {
         "returns_to_earth": False,
@@ -17732,7 +17877,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.20.8")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.21.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

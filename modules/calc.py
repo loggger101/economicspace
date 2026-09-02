@@ -551,6 +551,13 @@ class CalcConfig:
     #                     out near Mars and are genuinely closer to it than to
     #                     Earth.  Aerocapture is available and worth several
     #                     km/s.
+    #   "mars_orbit"    - berthed at a 1-sol Mars-orbit depot (250 x 33,793
+    #                     km, NASA DRA 5.0).  The same heliocentric transfer
+    #                     as mars_surface, stopped one leg early: capture
+    #                     BINDS the ellipse rather than circularising, 0.90
+    #                     km/s against 2.10, and nothing lands, so there is no
+    #                     descent burn and no lander.  Berthing adapter at
+    #                     $60k/kg.  Aerocapture available.
     #
     # See DELIVERY_ARCHITECTURES for what each one actually changes.
     delivery_destination:      str   = "earth_surface"
@@ -872,7 +879,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.17.8"
+    pipeline_version: str = "1.18.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2431,6 +2438,24 @@ DV_MARS_RETROPROP_KM_S = 0.800
 # fallback when aerocapture is switched off.  Mirrors the 4.1 km/s ascent.
 DV_MARS_POWERED_DESCENT_KM_S = 4.100
 
+# ── Mars orbit depot  (v1.18.0) ──────────────────────────────────────────────
+# The 1-sol elliptical staging orbit, 250 x 33,793 km altitude, Module 3
+# DELTA_V_REFERENCE "Mars arrival -> 1-sol orbit (MOI)".  Its period is 24.60 h
+# against a sol's 24.62, which is where the name comes from, and NASA DRA 5.0
+# stages there for the reason NRHO is the cislunar depot: capture only has to
+# BIND the orbit, and the burn happens deep at periapsis where Oberth pays.
+#
+# Both velocities below are constants of the DEPOT, not of the arriving
+# candidate, so they are resolved once here rather than per call.  That is
+# defect class 3 in CLAUDE.md, "a quantity asked at a finer granularity than it
+# has answers", and this function runs twice per catalog row.
+R_MARS_1SOL_PERIAPSIS_KM = 3_396.2 +    250.0
+R_MARS_1SOL_APOAPSIS_KM  = 3_396.2 + 33_793.0
+_A_MARS_1SOL_KM = (R_MARS_1SOL_PERIAPSIS_KM + R_MARS_1SOL_APOAPSIS_KM) / 2.0
+_V_ESC_MARS_1SOL_KM_S = math.sqrt(2.0 * MU_MARS_KM3_S2 / R_MARS_1SOL_PERIAPSIS_KM)
+_V_ELL_MARS_1SOL_KM_S = math.sqrt(MU_MARS_KM3_S2 * (2.0 / R_MARS_1SOL_PERIAPSIS_KM
+                                                    - 1.0 / _A_MARS_1SOL_KM))
+
 
 def _leo_departure_dv_km_s(v_inf_km_s: float) -> float:
     """Δv to go from circular LEO onto a hyperbola with this v_infinity.
@@ -2692,6 +2717,14 @@ def _asteroid_to_mars_dv_km_s(
     v_esc  = math.sqrt(2.0) * v_circ
     dv_capture = math.sqrt(v_esc * v_esc + v_inf_mars * v_inf_mars) - v_circ
 
+    # v1.18.0: capture into the 1-sol DEPOT orbit, which is a different and
+    # much cheaper manoeuvre than the circularisation above; at a Hohmann
+    # arrival (v_inf 2.65 km/s) it is 0.90 km/s against 2.10.  The saving is
+    # the apoapsis that never has to be brought down.
+    dv_capture_1sol = (math.sqrt(_V_ESC_MARS_1SOL_KM_S * _V_ESC_MARS_1SOL_KM_S
+                                 + v_inf_mars * v_inf_mars)
+                       - _V_ELL_MARS_1SOL_KM_S)
+
     return {
         "v_inf_mars":              v_inf_mars,
         "dv_depart_for_mars":      dv_depart,
@@ -2703,6 +2736,20 @@ def _asteroid_to_mars_dv_km_s(
         # reason nobody plans a Mars mission this way.
         "ret_mars_surface_prop":   dv_depart + dv_capture
                                    + DV_MARS_POWERED_DESCENT_KM_S,
+        # ── Mars ORBIT depot (v1.18.0) ───────────────────────────────────────
+        # Nothing lands, so neither the retropropulsion nor the powered
+        # descent applies and there is no entry-survival fraction on the
+        # price side either.  What is left is the departure burn and the
+        # capture.
+        "ret_mars_orbit_prop":     dv_depart + dv_capture_1sol,
+        # Aerocapture into the 1-sol ellipse, then a periapsis-raise burn to
+        # get out of the atmosphere: Odyssey and MRO flew exactly this at
+        # Mars.  Charged at the Earth aerobrake trim, which is CONSERVATIVE
+        # here; the real raise from an aerocapture periapsis to 250 km, taken
+        # at a 37,189 km apoapsis, is ~12 m/s against the 100 charged.  The
+        # existing sourced constant is preferred over a new invented one for
+        # a term this far inside the noise of the departure burn.
+        "ret_mars_orbit_aero":     dv_depart + DV_AEROBRAKE_TRIM_KM_S,
     }
 
 
@@ -2752,6 +2799,18 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "aero_allowed": False,
         "needs_lander": True,
         "label": "landed at a lunar surface base",
+    },
+    # v1.18.0.  No `needs_lander`, so this carries a $60k/kg berthing adapter
+    # rather than the $200k/kg lander mars_surface pays for; a depot is
+    # berthed with, not landed on.  That is the second of the two cost lines
+    # that separate the Mars pair, the first being the entry-survival
+    # fraction on the price side.
+    "mars_orbit": {
+        "returns_to_earth": False,
+        "aero_leg":  "ret_mars_orbit_aero",
+        "prop_leg":  "ret_mars_orbit_prop",
+        "aero_allowed": True,     # aerocapture into the ellipse; Odyssey / MRO
+        "label": "berthed at a 1-sol Mars-orbit depot",
     },
     "mars_surface": {
         "returns_to_earth": False,

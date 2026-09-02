@@ -197,7 +197,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.12.1"
+    pipeline_version: str = "1.13.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 
@@ -2972,6 +2972,38 @@ DELTA_V_REFERENCE: List[dict] = [
               "Mars base is worth flying home."},
     {"segment": "Low Mars orbit  →  Earth (TEI)", "dv_m_per_s": 2_100, "duration_yr": 0.7,
      "notes": "Trans-Earth injection from LMO (NASA DRA 5.0)."},
+
+    # ── Mars orbit depot  (v1.13.0) ─────────────────────────────────────
+    # The 1-sol elliptical staging orbit, 250 x 33,793 km altitude, is where
+    # NASA DRA 5.0 parks a Mars vehicle.  Its period matches a sol (24.60 h
+    # against 24.62), and capture only has to BIND the orbit rather than
+    # circularise it.  That is the same argument NRHO wins on in cislunar
+    # space, and here it is worth 1.2 km/s against low Mars orbit.
+    #
+    # ⚠️  These three rows are the citation home for Module 2's
+    # _DELIVERY_LEGS["mars_orbit"] and Module 4's _MARS_1SOL constants.  The
+    # rule stated above _DELIVERY_LEGS is that every Δv it charges appears
+    # here; if you retune the depot orbit, retune it in this table first.
+    {"segment": "Mars arrival  →  1-sol orbit (MOI)", "dv_m_per_s": 900, "duration_yr": 0.01,
+     "notes": "Propulsive capture into the 250 x 33,793 km 1-sol orbit at a "
+              "Hohmann arrival v_infinity of 2.65 km/s (NASA DRA 5.0).  The "
+              "periapsis burn sqrt(v_esc^2 + v_inf^2) - v_ellipse at a radius "
+              "of 3,646 km is 0.90 km/s, against 2.10 km/s to circularise "
+              "into a 200-km orbit at the same arrival energy.  The saving is "
+              "the apoapsis that is never brought down."},
+    {"segment": "LEO  →  Mars 1-sol orbit depot", "dv_m_per_s": 4_500, "duration_yr": 0.7,
+     "notes": "TMI (3,600) + MOI (900).  This is the Δv a kilogram of asteroid "
+              "material delivered to a Mars-orbit depot AVOIDS being lifted "
+              "through, and it sets the mars_orbit sale price in Module 2.  "
+              "Nothing enters the atmosphere and nothing lands, so unlike "
+              "mars_surface there is no 30% entry-survival fraction stacked "
+              "on top of it."},
+    {"segment": "1-sol Mars orbit  →  Earth (TEI)", "dv_m_per_s": 900, "duration_yr": 0.7,
+     "notes": "Trans-Earth injection at periapsis, symmetric with MOI.  A "
+              "seventh of the 6,200 m/s a kilogram on the SURFACE has to pay "
+              "(4,100 ascent + 2,100 TEI from LMO), which is why material "
+              "mined for a Mars-orbit depot can still route home when "
+              "material landed on Mars cannot."},
 
     # ── Asteroid return legs by delivery destination  (v1.4.0) ───────────────
     # Reference magnitudes only; Module 4 computes these per-asteroid from the

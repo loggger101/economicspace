@@ -153,6 +153,11 @@ class MineralValueConfig:
     #   "lunar_surface", sold at a Moon base.  $21,210/kg: nearest
     #                     destination, but airless, so all 5,920 m/s from LEO
     #                     is propulsive.
+    #   "mars_orbit"    - sold at a 1-sol Mars-orbit depot ($13,496/kg).  The
+    #                     Mars destination that nothing lands on, so it pays
+    #                     no entry-survival fraction and, crucially, competes
+    #                     with EARTH freight rather than with the Martian
+    #                     crust; see IN_SPACE_UTILITY_BY_DESTINATION.
     #   "mars_surface"  - sold at a Mars base.  $45,105/kg: far in Δv, but the
     #                     atmosphere brakes most of the arrival for free.
     #
@@ -204,7 +209,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.7.1"
+    pipeline_version: str = "1.8.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -368,6 +373,15 @@ _DELIVERY_LEGS: Dict[str, Optional[List[tuple]]] = {
         ("burn", 4_050.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TLI + LOI
         ("burn", 1_870.0, _TUG_ISP_S, _LANDER_DRY_MASS_FRAC),   # powered descent
     ],
+    # v1.8.0.  The 1-sol elliptical staging orbit (250 x 33,793 km), Module 3
+    # "LEO -> Mars 1-sol orbit depot".  Capture BINDS the orbit instead of
+    # circularising it, so MOI is 900 m/s where a 200-km orbit costs 2,100 at
+    # the same arrival energy; the same trade NRHO wins on at the Moon.
+    # Nothing lands, so there is no `edl` leg and no 30% survival fraction.
+    "mars_orbit": [
+        ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TMI
+        ("burn",   900.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # MOI, 1-sol capture
+    ],
     "mars_surface": [
         ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TMI
         ("edl",  _MARS_LANDED_MASS_FRACTION),                   # aeroentry + landing
@@ -440,6 +454,12 @@ _DESTINATION_NOTES = {
                      "descent (1,870 m/s) on a lander.  No atmosphere, so "
                      "every metre per second is propulsive — the Moon is the "
                      "nearest destination and among the dearest to land on.",
+    "mars_orbit":    "TMI (3,600 m/s), then 900 m/s of capture into the "
+                     "250 x 33,793 km 1-sol staging orbit (NASA DRA 5.0).  "
+                     "Binding an ellipse is far cheaper than circularising: "
+                     "the same arrival costs 2,100 m/s into a 200-km orbit.  "
+                     "Nothing enters the atmosphere, so unlike mars_surface "
+                     "there is no entry-survival fraction on top.",
     "mars_surface":  "TMI (3,600 m/s), then aeroentry surviving 30% of entry "
                      "mass (MSL / Perseverance measured), then 800 m/s of "
                      "retropropulsion.  Mars is far but its atmosphere does "
@@ -515,6 +535,7 @@ _DOWNLEG_BATCH_KG           = 10_000.0
 #   leo           - deorbit burn, ~120 m/s
 #   cislunar      - NRHO departure, ~450 m/s (symmetric with insertion)
 #   lunar_surface: ascent to LLO (1,870) + trans-Earth injection (~850)
+#   mars_orbit    - TEI at periapsis, ~900 m/s, symmetric with the capture
 #   mars_surface  - Mars ascent (4,100) + TEI from LMO (2,100)
 # The surface cases are punishing, and correctly so: hauling material back UP
 # out of a gravity well you just landed in is close to the worst thing you can
@@ -525,6 +546,13 @@ _DOWNLEG_DEPARTURE_DV_M_S = {
     "leo":            120.0,
     "cislunar":       450.0,
     "lunar_surface": 2_720.0,
+    # v1.8.0.  A seventh of the surface figure, and it is the single largest
+    # behavioural difference between the two Mars destinations: a commodity
+    # with no in-space market is valued by FLYING IT HOME, and from the
+    # surface that route costs $96,394/kg, more than any price in the catalog,
+    # so the PGMs are worth nothing at a Mars base.  From orbit the same
+    # kilogram routes home for $30,150 and they are worth something again.
+    "mars_orbit":      900.0,
     "mars_surface":  6_200.0,
 }
 
@@ -648,6 +676,24 @@ IN_SPACE_UTILITY_DEFAULT = 0.0
 IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
     "leo":      {},                  # base profile, no local resources
     "cislunar": {},                  # base profile, no local resources
+    # 🚨  v1.8.0.  mars_orbit TAKES THE BASE PROFILE, AND THE EMPTY DICT IS
+    # THE WHOLE POINT.  It will look like an oversight next to the block
+    # below, and copying mars_surface's overrides up into it is the one edit
+    # that would destroy this destination's meaning.
+    #
+    # The overrides below exist because a settlement STANDING ON a crust can
+    # dig up its own water, iron and rock, so asteroid material competes with
+    # local mining.  A depot in a 1-sol orbit competes with nothing of the
+    # kind: everything martian is 3,400 km down a gravity well that costs
+    # 4,100 m/s of ascent to climb, which is more than the 3,600 m/s of TMI
+    # that brought the cargo from Earth in the first place.  The alternative
+    # to importing a kilogram HERE is launching that kilogram from Earth,
+    # which is the exact condition the base profile is calibrated on.
+    #
+    # So the ISRU discount that carries the mars_surface result is not a
+    # property of Mars, it is a property of being ON Mars, and this
+    # destination is the control that says so.
+    "mars_orbit": {},                # base profile: the crust is 4,100 m/s away
     "lunar_surface": {
         # Polar ice is real and is the entire premise of a lunar base, but it
         # is in permanently shadowed craters at ~40 K with no sunlight to work
@@ -768,6 +814,14 @@ IN_SPACE_ANNUAL_DEMAND_KG: Dict[str, float] = {
     "leo":           500_000.0,
     "cislunar":      100_000.0,
     "lunar_surface":  50_000.0,
+    # v1.8.0.  LARGER than the surface base it serves, which is the one row of
+    # this table that does not fall off with distance.  A Mars-orbit depot is
+    # transport infrastructure rather than a settlement: what it holds is the
+    # propellant for descent, ascent and the trans-Earth stage, and in DRA 5.0
+    # that is tens of tonnes per opportunity against a base's consumables.
+    # 60 t/yr is ~128 t per 2.14-year synodic period, roughly one crewed
+    # mission's in-space propellant, and still well under cislunar's 100 t.
+    "mars_orbit":     60_000.0,
     "mars_surface":   20_000.0,
 }
 

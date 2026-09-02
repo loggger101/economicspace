@@ -180,27 +180,27 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # -----------------------------------------------------------------------------
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.20.8)
+"""Master Asteroid Profitability Pipeline (1.21.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom - the orchestrator at the bottom executes everything.
 
-    Stage 1  ->  Asteroid Catalog        (modules/catalog.py 1.1.0)
+    Stage 1  ->  Asteroid Catalog        (modules/catalog.py 1.1.1)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
-    Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.7.0)
+    Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.8.0)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
                 + destination pricing for EVERY commodity
-    Stage 3  ->  Transportation Data     (modules/transportation.py 1.11.0)
+    Stage 3  ->  Transportation Data     (modules/transportation.py 1.13.0)
                 Launch vehicles + propellants + dv segments + ops costs
                 (UNCREWED autonomous mining - no crew costs)
-    Stage 4  ->  Profitability Calc      (modules/calc.py 1.14.0)
+    Stage 4  ->  Profitability Calc      (modules/calc.py 1.18.0)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2x, V-type 0.2x)
                 + delivery architecture: earth_surface / leo / cislunar /
-                  lunar_surface / mars_surface, beneficiation,
+                  lunar_surface / mars_orbit / mars_surface, beneficiation,
                   low-thrust trip time, launch windows, learning curve,
                   market saturation, rig service life + terminal value,
                   mission reliability + growth, cryogenic boil-off,
@@ -441,7 +441,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.20.8")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.21.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
