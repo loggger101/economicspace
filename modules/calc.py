@@ -535,6 +535,16 @@ class CalcConfig:
     #                     no recovery campaign, launch-only licence.  The most
     #                     EXPENSIVE return Δv in the model: circularising into
     #                     LEO means killing the whole arrival hyperbola.
+    #   "geo"           - berthed at a geostationary servicing depot.  The
+    #                     only destination in the model with a customer that
+    #                     exists today; MEV-1 and MEV-2 have docked with
+    #                     commercial GEO satellites already.  Capture is a
+    #                     SEARCH over two geometries, not one formula, and it
+    #                     pays 23.44 deg of plane change that no other
+    #                     destination does; see _geo_capture_dv_km_s.  The
+    #                     market is narrow: a depot refuels satellites, so
+    #                     the volatiles hold their value and the structural
+    #                     metals lose most of theirs.
     #   "cislunar"      - berthed at an NRHO depot.  Same cost savings as LEO,
     #                     and the cheapest return Δv of the orbital options,
     #                     because capture only has to bind the orbit and the
@@ -551,6 +561,13 @@ class CalcConfig:
     #                     out near Mars and are genuinely closer to it than to
     #                     Earth.  Aerocapture is available and worth several
     #                     km/s.
+    #   "mars_orbit"    - berthed at a 1-sol Mars-orbit depot (250 x 33,793
+    #                     km, NASA DRA 5.0).  The same heliocentric transfer
+    #                     as mars_surface, stopped one leg early: capture
+    #                     BINDS the ellipse rather than circularising, 0.90
+    #                     km/s against 2.10, and nothing lands, so there is no
+    #                     descent burn and no lander.  Berthing adapter at
+    #                     $60k/kg.  Aerocapture available.
     #
     # See DELIVERY_ARCHITECTURES for what each one actually changes.
     delivery_destination:      str   = "earth_surface"
@@ -872,7 +889,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.17.8"
+    pipeline_version: str = "1.19.1"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1039,6 +1056,25 @@ def _parse_minerals_column(col: pd.Series) -> pd.Series:
                      index=col.index, name=col.name)
 
 
+# Which module WRITES each catalog, and the config global carrying that
+# module's version.  `stamp_check` reads this to compare a CSV against the code
+# that produced it; before v1.19.1 it compared every one of them against
+# Module 3, so `asteroids` (1.1.0) and `minerals` (1.7.1) could never match and
+# the check fired on every run.
+#
+# The config names are looked up through `globals()` rather than referenced,
+# because in a standalone `calc.py` none of them exist; only the concatenated
+# `master.py` has all four in one process.  See `stamp_check`.
+_CATALOG_PROVENANCE: Dict[str, Tuple[int, str]] = {
+    "asteroids":   (1, "CATALOG_CONFIG"),
+    "minerals":    (2, "MINERAL_CONFIG"),
+    "vehicles":    (3, "TRANSPORT_CONFIG"),
+    "propellants": (3, "TRANSPORT_CONFIG"),
+    "delta_v":     (3, "TRANSPORT_CONFIG"),
+    "ops":         (3, "TRANSPORT_CONFIG"),
+}
+
+
 def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
     """Load and lightly normalise the three upstream catalogs."""
     print("\n  Loading upstream catalogs ...")
@@ -1071,6 +1107,14 @@ def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
             "Module 3 operational costs",
         ),
     }
+
+    # v1.19.1: the provenance map must name every catalog and no others, or
+    # `stamp_check` silently stops checking whichever one was added without it.
+    # Asserted here rather than in the check, because HERE is where the two can
+    # drift apart: this dict is the definition and the map is the description.
+    assert set(catalogs) == set(_CATALOG_PROVENANCE), (
+        "load_all_catalogs and _CATALOG_PROVENANCE disagree about: %s"
+        % sorted(set(catalogs) ^ set(_CATALOG_PROVENANCE)))
 
     # Parse Module 1's comp_minerals list-column back into actual lists
     if "comp_minerals" in catalogs["asteroids"].columns:
@@ -1277,9 +1321,8 @@ def schema_check(catalogs: Dict[str, pd.DataFrame]) -> None:
 
 
 def stamp_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
-    """Compare the transportation version STAMPED in each Stage 3 CSV against
-    the Module 3 in this process.  Returns True when they agree or cannot be
-    compared.
+    """Compare the version STAMPED in each upstream CSV against the module that
+    WROTE it.  Returns True when they agree or cannot be compared.
 
     This closes the half of the staleness problem `schema_check` cannot see.
     That one asks whether the columns and rows this module reads are PRESENT;
@@ -1300,38 +1343,67 @@ def stamp_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
     number means bumping the version" from a rule someone has to remember into
     one the pipeline enforces on the way past.
 
-    ⚠️  It is a DIAGNOSTIC, not an import.  `TRANSPORT_CONFIG` exists only when
-    both modules are in one process, which is `master.py`, the normal path.  A
-    standalone `calc.py` run has no way to know what Module 3 currently says
-    and this returns True rather than inventing a complaint it cannot support.
-    That is deliberate: the modules hand off through CSVs on disk and must not
-    grow an import edge for a warning.
-    """
-    transport = globals().get("TRANSPORT_CONFIG")
-    live = getattr(transport, "pipeline_version", None)
-    if not live:
-        return True                       # standalone calc.py: nothing to compare
+    ⚠️  It is a DIAGNOSTIC, not an import.  The four config globals exist only
+    when every module is in one process, which is `master.py`, the normal path.
+    A standalone `calc.py` run has no way to know what Module 1, 2 or 3
+    currently says, so each comparison it cannot make is skipped rather than
+    invented.  That is deliberate: the modules hand off through CSVs on disk
+    and must not grow an import edge for a warning.
 
-    mismatched = []
+    🚨  v1.19.1 FIXED WHAT THIS COMPARED, AND IT HAD BEEN WRONG SINCE v1.17.8
+    SHIPPED IT.  Every frame in `catalogs` was compared against
+    `TRANSPORT_CONFIG`, including `asteroids` (written by Module 1) and
+    `minerals` (Module 2).  Those can never equal a transportation version, so
+    the check fired on **every run**, named the wrong module, and then advised
+    "Re-run Stage 3", which is the one action CLAUDE.md documents as destroying
+    every `verify.py` baseline you hold.  A check that cries wolf toward a
+    destructive remedy is worse than no check, and this one had been doing it
+    for two releases.  See `_CATALOG_PROVENANCE`.
+
+    ⚠️  A LAG HERE IS OFTEN DELIBERATE, which is why the wording below reports
+    rather than instructs.  catalog v1.1.1 and transportation v1.12.1 both
+    changed no CSV byte and deliberately did NOT re-run their stage; their
+    release notes say so.  This cannot tell that apart from a write that failed
+    to land, because both look like "the file predates the module".  It reports
+    the fact and names where the answer is.
+    """
+    stale, unknown = [], []
     for key, df in sorted(catalogs.items()):
         if df is None or "pipeline_version" not in getattr(df, "columns", ()):
             continue
-        stamps = {str(v) for v in df["pipeline_version"].dropna().unique()}
-        for stamped in sorted(stamps):
+        provenance = _CATALOG_PROVENANCE.get(key)
+        if provenance is None:
+            unknown.append(key)           # load_all_catalogs' assert should
+            continue                      # have caught this; say so anyway
+        stage, config_name = provenance
+        live = getattr(globals().get(config_name), "pipeline_version", None)
+        if not live:
+            continue                      # standalone run: nothing to compare
+        for stamped in sorted({str(v) for v in df["pipeline_version"]
+                               .dropna().unique()}):
             if stamped != str(live):
-                mismatched.append((key, stamped))
+                stale.append((key, stage, stamped, str(live)))
 
-    if not mismatched:
-        return True
+    if unknown:
+        print(f"\n     WARN  stamp_check has no provenance entry for "
+              f"{', '.join(unknown)}; those files were NOT checked.")
 
-    print(f"\n     WARN  Module 3 catalog was written by a DIFFERENT "
-          f"transportation build (this process is {live}):")
-    for key, stamped in mismatched:
-        print(f"          * {key}.csv stamped {stamped}")
-    print("        -> The columns are all present, so nothing else will "
-          "complain, but a reference VALUE may be a release out of date.")
-    print("        -> Re-run Stage 3 (transportation) before trusting any "
-          "number below, or before comparing one to a committed figure.")
+    if not stale:
+        return not unknown
+
+    print(f"\n     WARN  {len(stale)} upstream CSV(s) were written by a "
+          f"different build of the module that owns them:")
+    for key, stage, stamped, live in stale:
+        print(f"          * {key}.csv stamped {stamped} - "
+              f"Stage {stage} in this process is {live}")
+    print("        -> The columns and rows are all present, so nothing else "
+          "will complain, but a reference VALUE may be a release out of date.")
+    print("        -> This may be DELIBERATE. Several releases changed no CSV "
+          "byte and chose not to re-run their stage; read the release note in "
+          "versions.md before acting on this.")
+    print("        -> If you do re-run Stage 1, 2 or 3, it REFETCHES and "
+          "overwrites the only copy of its CSV, and every verify.py baseline "
+          "stops reproducing. Copy asteroid_pipeline/*.csv first.")
     return False
 
 
@@ -2404,6 +2476,54 @@ MU_EARTH_KM3_S2  = 398_600.4418        # Earth gravitational parameter
 R_LEO_KM         = 6_378.14 + 200.0    # 200-km circular parking orbit
 
 
+# ── Geostationary orbit  (v1.19.0) ───────────────────────────────────────────
+# Every quantity here is a constant of the ORBIT, so all of it is resolved once
+# at import.  `_geo_capture_dv_km_s` runs twice per catalog row on every
+# destination, and re-deriving a per-destination constant per call is defect
+# class 3 in CLAUDE.md.
+R_GEO_KM = 42_164.14                   # geostationary radius
+# Asteroid arrivals are near the ecliptic and GEO is equatorial, so the
+# capture burn buys 23.44 deg of plane change as well as the speed change.
+# This is the term intuition drops, and it is worth several hundred m/s.
+_COS_ECLIPTIC_TILT = math.cos(math.radians(23.44))
+_V_GEO_KM_S      = math.sqrt(MU_EARTH_KM3_S2 / R_GEO_KM)
+_V_ESC_GEO_KM_S  = math.sqrt(2.0) * _V_GEO_KM_S
+_V_LEO_KM_S      = math.sqrt(MU_EARTH_KM3_S2 / R_LEO_KM)
+_V_ESC_LEO_KM_S  = math.sqrt(2.0) * _V_LEO_KM_S
+# The GEO transfer ellipse, LEO perigee to GEO apogee.
+_A_GTO_KM           = (R_LEO_KM + R_GEO_KM) / 2.0
+_V_GTO_PERIGEE_KM_S = math.sqrt(MU_EARTH_KM3_S2 * (2.0 / R_LEO_KM - 1.0 / _A_GTO_KM))
+_V_GTO_APOGEE_KM_S  = math.sqrt(MU_EARTH_KM3_S2 * (2.0 / R_GEO_KM - 1.0 / _A_GTO_KM))
+
+
+def _circularise_at_geo_km_s(v_apogee_km_s: float) -> float:
+    """One apogee burn that circularises at GEO and removes the plane change.
+
+    Law of cosines, not a sum: a burn that changes speed and direction at once
+    costs less than doing both separately, and adding them would overstate
+    every GEO arrival in the model.
+    """
+    return math.sqrt(v_apogee_km_s * v_apogee_km_s
+                     + _V_GEO_KM_S * _V_GEO_KM_S
+                     - 2.0 * v_apogee_km_s * _V_GEO_KM_S * _COS_ECLIPTIC_TILT)
+
+
+# Finishing a GTO-shaped capture: 1.836 km/s, and independent of how fast the
+# spacecraft arrived, which is why it is a constant rather than a term.
+_DV_GTO_APOGEE_TO_GEO_KM_S = _circularise_at_geo_km_s(_V_GTO_APOGEE_KM_S)
+
+# Aerocapture at Earth into an ellipse whose apogee is at GEO, then the same
+# apogee burn.  Drag removes the arrival energy whatever it was, so this is
+# FLAT in v_infinity: 1.737 km/s at every arrival speed.
+#
+# ⚠️  It is not an aerobrake TRIM like the LEO case.  At LEO drag can do the
+# whole job and the propulsive residue is 100 m/s; at GEO drag can only lower
+# the apogee to GEO, and circularising there is still 1.7 km/s of real burn.
+# Copying `DV_AEROBRAKE_TRIM_KM_S` here would understate a GEO arrival by 17x.
+_A_GEO_AEROCAPTURE_KM = ((6_378.14 + 100.0) + R_GEO_KM) / 2.0
+DV_GEO_AEROCAPTURE_ARRIVAL_KM_S = _circularise_at_geo_km_s(
+    math.sqrt(MU_EARTH_KM3_S2 * (2.0 / R_GEO_KM - 1.0 / _A_GEO_AEROCAPTURE_KM)))
+
 R_MOON_ORBIT_KM  = 384_400.0           # lunar mean orbital radius
 # NRHO insertion at apogee, Module 3 DELTA_V_REFERENCE "TLI → NRHO insertion".
 DV_NRHO_INSERTION_KM_S = 0.450
@@ -2430,6 +2550,24 @@ DV_MARS_RETROPROP_KM_S = 0.800
 # Propulsive descent from low Mars orbit with NO atmospheric help; the
 # fallback when aerocapture is switched off.  Mirrors the 4.1 km/s ascent.
 DV_MARS_POWERED_DESCENT_KM_S = 4.100
+
+# ── Mars orbit depot  (v1.18.0) ──────────────────────────────────────────────
+# The 1-sol elliptical staging orbit, 250 x 33,793 km altitude, Module 3
+# DELTA_V_REFERENCE "Mars arrival -> 1-sol orbit (MOI)".  Its period is 24.60 h
+# against a sol's 24.62, which is where the name comes from, and NASA DRA 5.0
+# stages there for the reason NRHO is the cislunar depot: capture only has to
+# BIND the orbit, and the burn happens deep at periapsis where Oberth pays.
+#
+# Both velocities below are constants of the DEPOT, not of the arriving
+# candidate, so they are resolved once here rather than per call.  That is
+# defect class 3 in CLAUDE.md, "a quantity asked at a finer granularity than it
+# has answers", and this function runs twice per catalog row.
+R_MARS_1SOL_PERIAPSIS_KM = 3_396.2 +    250.0
+R_MARS_1SOL_APOAPSIS_KM  = 3_396.2 + 33_793.0
+_A_MARS_1SOL_KM = (R_MARS_1SOL_PERIAPSIS_KM + R_MARS_1SOL_APOAPSIS_KM) / 2.0
+_V_ESC_MARS_1SOL_KM_S = math.sqrt(2.0 * MU_MARS_KM3_S2 / R_MARS_1SOL_PERIAPSIS_KM)
+_V_ELL_MARS_1SOL_KM_S = math.sqrt(MU_MARS_KM3_S2 * (2.0 / R_MARS_1SOL_PERIAPSIS_KM
+                                                    - 1.0 / _A_MARS_1SOL_KM))
 
 
 def _leo_departure_dv_km_s(v_inf_km_s: float) -> float:
@@ -2470,6 +2608,55 @@ def _cislunar_capture_dv_km_s(v_inf_km_s: float) -> float:
     a_ell = (R_LEO_KM + R_MOON_ORBIT_KM) / 2.0
     v_ell = math.sqrt(MU_EARTH_KM3_S2 * (2.0 / R_LEO_KM - 1.0 / a_ell))
     return max(0.0, v_hyp - v_ell) + DV_NRHO_INSERTION_KM_S
+
+
+def _geo_capture_dv_km_s(v_inf_km_s: float) -> float:
+    """Propulsive Δv to capture from an arrival hyperbola into GEO.
+
+    Two routes, and unlike the cislunar case NEITHER ALWAYS WINS, so both are
+    priced and the cheaper is taken:
+
+      (a) DIRECT.  Meet GEO at its own radius and kill the hyperbolic excess
+          plus the plane change in one burn out there.  Cheap when the
+          spacecraft arrives slowly, because there is little excess to kill
+          and the burn is done at a low orbital speed.
+
+      (b) OBERTH.  Capture at LEO perigee into a GTO-shaped ellipse, taking
+          the Oberth benefit deep in the well, then circularise and change
+          plane at apogee.  The perigee burn is efficient but the apogee burn
+          is fixed at 1.730 km/s however the spacecraft got there.
+
+    ⚠️  THAT 1.730 IS NOT MODULE 2's 1.836, AND THE TWO MUST NOT BE
+    RECONCILED.  They are the same manoeuvre buying a different plane change.
+    Module 2 prices a kilogram LAUNCHED from Earth, which parks at the 28.5
+    deg of a Canaveral ascent; this module prices a kilogram ARRIVING from an
+    asteroid, which comes in near the ecliptic, 23.44 deg off the equator.
+    Coplanar the same burn would be 1.477, so the inclination is worth 253 m/s
+    on arrival and 359 on launch.  Making them agree would put a launch
+    site's latitude into an interplanetary trajectory.
+
+    (a) wins below v_inf = 3.585 km/s and (b) above it: 2.05 against 2.55 at
+    v_inf = 1, and 4.00 against 3.58 at v_inf = 5.  **That is the difference
+    from `_cislunar_capture_dv_km_s`, where the Oberth route always wins**,
+    and the reason is the apogee burn.  A cislunar depot is captured into by
+    BINDING an ellipse, which costs 450 m/s; GEO has to be circularised into,
+    which costs four times that and does not fall with arrival speed.
+
+    So the destination that is cheapest to reach from an asteroid is still
+    cislunar, at 0.96 km/s against GEO's 2.05 at best.
+    """
+    # (a) direct capture at the GEO radius
+    v_hyp_at_geo = math.sqrt(_V_ESC_GEO_KM_S * _V_ESC_GEO_KM_S
+                             + v_inf_km_s * v_inf_km_s)
+    direct = _circularise_at_geo_km_s(v_hyp_at_geo)
+
+    # (b) Oberth capture at low perigee, then the fixed apogee burn
+    v_hyp_at_leo = math.sqrt(_V_ESC_LEO_KM_S * _V_ESC_LEO_KM_S
+                             + v_inf_km_s * v_inf_km_s)
+    oberth = ((v_hyp_at_leo - _V_GTO_PERIGEE_KM_S)
+              + _DV_GTO_APOGEE_TO_GEO_KM_S)
+
+    return direct if direct < oberth else oberth
 
 
 def _transfer_legs_for_apsis(
@@ -2545,6 +2732,13 @@ def _transfer_legs_for_apsis(
         "ret_leo_prop":           dv_match + dv_leo_capture,
         "ret_leo_aero":           dv_match + DV_AEROBRAKE_TRIM_KM_S,
         "ret_cislunar_prop":      dv_match + dv_cislunar,
+        # v1.19.0: GEO.  The propulsive route is a search over two capture
+        # geometries rather than one formula; see `_geo_capture_dv_km_s`.
+        # The aerocaptured route is FLAT in v_infinity because drag removes
+        # whatever arrival energy there was, and what is left is the
+        # circularisation, which is not a trim.
+        "ret_geo_prop":           dv_match + _geo_capture_dv_km_s(v_inf),
+        "ret_geo_aero":           dv_match + DV_GEO_AEROCAPTURE_ARRIVAL_KM_S,
         "ret_lunar_surface_prop": dv_match + dv_cislunar
                                   + DV_NRHO_TO_LUNAR_SURFACE_KM_S,
     }
@@ -2692,6 +2886,14 @@ def _asteroid_to_mars_dv_km_s(
     v_esc  = math.sqrt(2.0) * v_circ
     dv_capture = math.sqrt(v_esc * v_esc + v_inf_mars * v_inf_mars) - v_circ
 
+    # v1.18.0: capture into the 1-sol DEPOT orbit, which is a different and
+    # much cheaper manoeuvre than the circularisation above; at a Hohmann
+    # arrival (v_inf 2.65 km/s) it is 0.90 km/s against 2.10.  The saving is
+    # the apoapsis that never has to be brought down.
+    dv_capture_1sol = (math.sqrt(_V_ESC_MARS_1SOL_KM_S * _V_ESC_MARS_1SOL_KM_S
+                                 + v_inf_mars * v_inf_mars)
+                       - _V_ELL_MARS_1SOL_KM_S)
+
     return {
         "v_inf_mars":              v_inf_mars,
         "dv_depart_for_mars":      dv_depart,
@@ -2703,6 +2905,20 @@ def _asteroid_to_mars_dv_km_s(
         # reason nobody plans a Mars mission this way.
         "ret_mars_surface_prop":   dv_depart + dv_capture
                                    + DV_MARS_POWERED_DESCENT_KM_S,
+        # ── Mars ORBIT depot (v1.18.0) ───────────────────────────────────────
+        # Nothing lands, so neither the retropropulsion nor the powered
+        # descent applies and there is no entry-survival fraction on the
+        # price side either.  What is left is the departure burn and the
+        # capture.
+        "ret_mars_orbit_prop":     dv_depart + dv_capture_1sol,
+        # Aerocapture into the 1-sol ellipse, then a periapsis-raise burn to
+        # get out of the atmosphere: Odyssey and MRO flew exactly this at
+        # Mars.  Charged at the Earth aerobrake trim, which is CONSERVATIVE
+        # here; the real raise from an aerocapture periapsis to 250 km, taken
+        # at a 37,189 km apoapsis, is ~12 m/s against the 100 charged.  The
+        # existing sourced constant is preferred over a new invented one for
+        # a term this far inside the noise of the departure burn.
+        "ret_mars_orbit_aero":     dv_depart + DV_AEROBRAKE_TRIM_KM_S,
     }
 
 
@@ -2738,6 +2954,17 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "aero_allowed": True,     # aerocapture + multi-pass aerobraking
         "label": "berthed at an LEO depot",
     },
+    # v1.19.0.  A depot, so a berthing adapter and no lander, and the cargo
+    # never re-enters, so no capsule and no recovery campaign.  Aerocapture is
+    # allowed because the arrival passes through Earth's atmosphere on the way
+    # in, which is what separates this from `cislunar` directly below.
+    "geo": {
+        "returns_to_earth": False,
+        "aero_leg":  "ret_geo_aero",
+        "prop_leg":  "ret_geo_prop",
+        "aero_allowed": True,     # aerocapture into a GEO-apogee ellipse
+        "label": "berthed at a geostationary servicing depot",
+    },
     "cislunar": {
         "returns_to_earth": False,
         "aero_leg":  None,        # never passes through the atmosphere
@@ -2752,6 +2979,18 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "aero_allowed": False,
         "needs_lander": True,
         "label": "landed at a lunar surface base",
+    },
+    # v1.18.0.  No `needs_lander`, so this carries a $60k/kg berthing adapter
+    # rather than the $200k/kg lander mars_surface pays for; a depot is
+    # berthed with, not landed on.  That is the second of the two cost lines
+    # that separate the Mars pair, the first being the entry-survival
+    # fraction on the price side.
+    "mars_orbit": {
+        "returns_to_earth": False,
+        "aero_leg":  "ret_mars_orbit_aero",
+        "prop_leg":  "ret_mars_orbit_prop",
+        "aero_allowed": True,     # aerocapture into the ellipse; Odyssey / MRO
+        "label": "berthed at a 1-sol Mars-orbit depot",
     },
     "mars_surface": {
         "returns_to_earth": False,

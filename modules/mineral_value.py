@@ -146,6 +146,14 @@ class MineralValueConfig:
     #                     cost it avoids ($4,253/kg); precious metals are
     #                     worth nothing, because no orbital market for them
     #                     exists.  Favours water- and metal-rich bulk.
+    #   "geo"           - sold at a geostationary servicing depot
+    #                     ($12,526/kg).  The only destination in this model
+    #                     with a paying customer TODAY: ~550 active
+    #                     satellites, and MEV-1 / MEV-2 have already docked
+    #                     with commercial GEO spacecraft.  A narrow market
+    #                     though; see IN_SPACE_UTILITY_BY_DESTINATION, where
+    #                     it is the only destination that discounts the
+    #                     METALS rather than the volatiles.
     #   "cislunar"      - sold at a lunar-vicinity (NRHO) depot, worth the
     #                     larger launch cost avoided ($10,810/kg, derived).
     #                     Also the CHEAPEST of the orbital options to reach
@@ -153,6 +161,11 @@ class MineralValueConfig:
     #   "lunar_surface", sold at a Moon base.  $21,210/kg: nearest
     #                     destination, but airless, so all 5,920 m/s from LEO
     #                     is propulsive.
+    #   "mars_orbit"    - sold at a 1-sol Mars-orbit depot ($13,496/kg).  The
+    #                     Mars destination that nothing lands on, so it pays
+    #                     no entry-survival fraction and, crucially, competes
+    #                     with EARTH freight rather than with the Martian
+    #                     crust; see IN_SPACE_UTILITY_BY_DESTINATION.
     #   "mars_surface"  - sold at a Mars base.  $45,105/kg: far in Δv, but the
     #                     atmosphere brakes most of the arrival for free.
     #
@@ -204,7 +217,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.7.1"
+    pipeline_version: str = "1.9.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -361,12 +374,30 @@ _MARS_LANDED_MASS_FRACTION = 0.30
 _DELIVERY_LEGS: Dict[str, Optional[List[tuple]]] = {
     "earth_surface": None,                       # already at the market
     "leo": [],                                   # nothing above LEO
+    # v1.9.0.  Two stages, because that is how a GEO delivery is actually
+    # flown: an upper stage to GTO, then an apogee burn that circularises AND
+    # removes the 28.5 deg parking inclination in one go.  Staging is worth
+    # 5.3% here (2.945 kg in LEO per kg against 3.101), which is smaller than
+    # the lunar chain's 2x but is the same argument.
+    "geo": [
+        ("burn", 2_455.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # LEO -> GTO
+        ("burn", 1_836.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # GTO -> GEO + plane change
+    ],
     "cislunar": [
         ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TLI + NRHO insertion
     ],
     "lunar_surface": [
         ("burn", 4_050.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TLI + LOI
         ("burn", 1_870.0, _TUG_ISP_S, _LANDER_DRY_MASS_FRAC),   # powered descent
+    ],
+    # v1.8.0.  The 1-sol elliptical staging orbit (250 x 33,793 km), Module 3
+    # "LEO -> Mars 1-sol orbit depot".  Capture BINDS the orbit instead of
+    # circularising it, so MOI is 900 m/s where a 200-km orbit costs 2,100 at
+    # the same arrival energy; the same trade NRHO wins on at the Moon.
+    # Nothing lands, so there is no `edl` leg and no 30% survival fraction.
+    "mars_orbit": [
+        ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TMI
+        ("burn",   900.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # MOI, 1-sol capture
     ],
     "mars_surface": [
         ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TMI
@@ -435,11 +466,23 @@ _EARTH_SURFACE_WATER_USD_PER_KG = 0.001
 
 _DESTINATION_NOTES = {
     "leo":           "Falcon 9 reusable $/kg-to-LEO, straight off Module 3.",
+    "geo":           "LEO -> GTO (2,455 m/s), then an apogee burn of 1,836 "
+                     "m/s that circularises and removes 28.5 deg of "
+                     "inclination at once.  Coplanar that burn would be "
+                     "1,478, so 358 m/s of this price is the latitude of the "
+                     "launch site.  Dearer per kilogram than a cislunar "
+                     "depot, and a far narrower market once it arrives.",
     "cislunar":      "TLI + NRHO insertion (3,600 m/s) on one cryo stage.",
     "lunar_surface": "TLI + LOI (4,050 m/s) on a cryo stage, then powered "
                      "descent (1,870 m/s) on a lander.  No atmosphere, so "
                      "every metre per second is propulsive — the Moon is the "
                      "nearest destination and among the dearest to land on.",
+    "mars_orbit":    "TMI (3,600 m/s), then 900 m/s of capture into the "
+                     "250 x 33,793 km 1-sol staging orbit (NASA DRA 5.0).  "
+                     "Binding an ellipse is far cheaper than circularising: "
+                     "the same arrival costs 2,100 m/s into a 200-km orbit.  "
+                     "Nothing enters the atmosphere, so unlike mars_surface "
+                     "there is no entry-survival fraction on top.",
     "mars_surface":  "TMI (3,600 m/s), then aeroentry surviving 30% of entry "
                      "mass (MSL / Perseverance measured), then 800 m/s of "
                      "retropropulsion.  Mars is far but its atmosphere does "
@@ -513,8 +556,10 @@ _DOWNLEG_BATCH_KG           = 10_000.0
 # Δv to leave the destination onto an Earth-return trajectory, entering
 # directly.  All from Module 3's DELTA_V_REFERENCE.
 #   leo           - deorbit burn, ~120 m/s
+#   geo           - deorbit from GEO into the atmosphere, ~1,490 m/s
 #   cislunar      - NRHO departure, ~450 m/s (symmetric with insertion)
 #   lunar_surface: ascent to LLO (1,870) + trans-Earth injection (~850)
+#   mars_orbit    - TEI at periapsis, ~900 m/s, symmetric with the capture
 #   mars_surface  - Mars ascent (4,100) + TEI from LMO (2,100)
 # The surface cases are punishing, and correctly so: hauling material back UP
 # out of a gravity well you just landed in is close to the worst thing you can
@@ -523,8 +568,20 @@ _DOWNLEG_BATCH_KG           = 10_000.0
 # mine asteroids to deliver platinum to Mars and then fly it back.
 _DOWNLEG_DEPARTURE_DV_M_S = {
     "leo":            120.0,
+    # v1.9.0.  Twelve times the LEO figure and three times cislunar's, which
+    # is the price of GEO being a long way up a well it is expensive to fall
+    # back down.  Lowering perigee from the 3.075 km/s circular speed to an
+    # entry ellipse's 1.587 km/s apogee speed.
+    "geo":          1_490.0,
     "cislunar":       450.0,
     "lunar_surface": 2_720.0,
+    # v1.8.0.  A seventh of the surface figure, and it is the single largest
+    # behavioural difference between the two Mars destinations: a commodity
+    # with no in-space market is valued by FLYING IT HOME, and from the
+    # surface that route costs $96,394/kg, more than any price in the catalog,
+    # so the PGMs are worth nothing at a Mars base.  From orbit the same
+    # kilogram routes home for $30,150 and they are worth something again.
+    "mars_orbit":      900.0,
     "mars_surface":  6_200.0,
 }
 
@@ -647,7 +704,75 @@ IN_SPACE_UTILITY_DEFAULT = 0.0
 # pipeline.  These are judgements about economies that do not exist.
 IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
     "leo":      {},                  # base profile, no local resources
+    # \U0001f6a8  v1.9.0.  GEO IS THE FIRST DESTINATION WHOSE OVERRIDES RUN DOWNWARD
+    # ON THE METALS AND THE ROCK RATHER THAN ON THE VOLATILES, and it is a
+    # different ARGUMENT from every block below, not a different number.
+    #
+    # The lunar and martian overrides are about local SUPPLY: a settlement
+    # standing on a crust can dig up its own water and iron, so imported
+    # material competes with local mining.  Nothing is mined at GEO and
+    # nothing ever will be.  These discounts are about local DEMAND, which is
+    # the other half of what this table means: utility is "how good a
+    # substitute 1 kg of this is for a LAUNCHED kg here", and nobody launches
+    # a kilogram of copper to geostationary orbit.  A GEO depot exists to
+    # refuel and service satellites; there is no factory 36,000 km up, no
+    # crew, and no construction site.  So the volatiles keep most of their
+    # value and the feedstock loses nearly all of it.
+    #
+    # ⚠️  That makes GEO the destination most sensitive to this table, which
+    # is the softest thing in the pipeline.  The price above is derived from
+    # the rocket equation; the numbers below are judgement about a market
+    # that does not exist yet.  They are also still overrides that run
+    # DOWNWARD from the base profile, which is the invariant that keeps this
+    # table from becoming a way to manufacture viability.
+    "geo": {
+        # Propellant feedstock is the whole business case, and water is the
+        # feedstock: electrolysed for orbit-raising, or fed to a water
+        # thruster directly.  Discounted off the base 1.00 because a depot
+        # with no crew has no life support and no coolant loop to fill, which
+        # is two of the four uses the base profile is built on.
+        "water":            0.80,
+        # There is no manufacturing at GEO.  The base profile already
+        # discounts raw Fe-Ni to 0.70 for "the melting and forming plant that
+        # turns it into a pressure vessel is not costed anywhere in this
+        # pipeline"; at GEO that plant is not merely uncosted, it is
+        # implausible.  Ni / Co / Cu are discounted here where the two
+        # surfaces leave them alone, and the reason is the one above: those
+        # overrides are about there being no local ORE, this one is about
+        # there being no local FACTORY.
+        "iron":             0.15, "nickel":       0.15, "cobalt":     0.15,
+        "copper":           0.15, "nickel-iron":  0.15, "awaruite":   0.15,
+        "magnetite":        0.05, "troilite":     0.05,
+        # Bulk shielding is the one real use for rock here, and GEO spends
+        # most of its time outside the magnetosphere, so it is not zero.  It
+        # is not 0.25 either: nobody bolts raw olivine to a comsat.
+        "olivine":          0.05, "pyroxene":     0.05, "orthopyroxene": 0.05,
+        "enstatite":        0.05, "plagioclase":  0.05, "spinel":        0.05,
+        "phyllosilicates":  0.05, "oxides":       0.05, "silicates":     0.05,
+        # No chemical plant and no agriculture.
+        "carbon":           0.05,
+        "organics":         0.05,
+        # Precious metals stay at the base 0.00 and route down, as everywhere.
+    },
     "cislunar": {},                  # base profile, no local resources
+    # 🚨  v1.8.0.  mars_orbit TAKES THE BASE PROFILE, AND THE EMPTY DICT IS
+    # THE WHOLE POINT.  It will look like an oversight next to the block
+    # below, and copying mars_surface's overrides up into it is the one edit
+    # that would destroy this destination's meaning.
+    #
+    # The overrides below exist because a settlement STANDING ON a crust can
+    # dig up its own water, iron and rock, so asteroid material competes with
+    # local mining.  A depot in a 1-sol orbit competes with nothing of the
+    # kind: everything martian is 3,400 km down a gravity well that costs
+    # 4,100 m/s of ascent to climb, which is more than the 3,600 m/s of TMI
+    # that brought the cargo from Earth in the first place.  The alternative
+    # to importing a kilogram HERE is launching that kilogram from Earth,
+    # which is the exact condition the base profile is calibrated on.
+    #
+    # So the ISRU discount that carries the mars_surface result is not a
+    # property of Mars, it is a property of being ON Mars, and this
+    # destination is the control that says so.
+    "mars_orbit": {},                # base profile: the crust is 4,100 m/s away
     "lunar_surface": {
         # Polar ice is real and is the entire premise of a lunar base, but it
         # is in permanently shadowed craters at ~40 K with no sunlight to work
@@ -766,8 +891,24 @@ _UNLIMITED_MARKET_KG = 1.0e15
 # pay the same price for the 400th tonne as for the first.
 IN_SPACE_ANNUAL_DEMAND_KG: Dict[str, float] = {
     "leo":           500_000.0,
+    # v1.9.0.  The only row here anchored on hardware that EXISTS: ~550 active
+    # geostationary satellites at roughly 70 kg/yr of station-keeping
+    # propellant each.  That makes it the smallest in-space market in the
+    # table and the one most likely to saturate, which is the point of having
+    # it: `earth_surface` is the destination where saturation is numerically
+    # inert and 100% of rows run to the fleet ceiling, and nothing anchored
+    # the other end.
+    "geo":            40_000.0,
     "cislunar":      100_000.0,
     "lunar_surface":  50_000.0,
+    # v1.8.0.  LARGER than the surface base it serves, which is the one row of
+    # this table that does not fall off with distance.  A Mars-orbit depot is
+    # transport infrastructure rather than a settlement: what it holds is the
+    # propellant for descent, ascent and the trans-Earth stage, and in DRA 5.0
+    # that is tens of tonnes per opportunity against a base's consumables.
+    # 60 t/yr is ~128 t per 2.14-year synodic period, roughly one crewed
+    # mission's in-space propellant, and still well under cislunar's 100 t.
+    "mars_orbit":     60_000.0,
     "mars_surface":   20_000.0,
 }
 
