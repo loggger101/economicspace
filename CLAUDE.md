@@ -30,9 +30,16 @@ and add what it teaches to this file.**
 
 ## master.py is generated: never edit it
 
-`master.py` is ~9,600 lines assembled from `modules/*.py` by `build_master.py`.
-Edit the module, run `py build_master.py`, commit both. A change made
-directly in `master.py` is destroyed by the next build.
+`master.py` is assembled from `modules/*.py` by `build_master.py`, and it is
+the largest file in the repo by an order of magnitude. Edit the module, run
+`py build_master.py`, commit both. A change made directly in `master.py` is
+destroyed by the next build.
+
+⚠️  **A line count is not stated here on purpose.** This paragraph read
+"~9,600 lines" while the file was 19,707, having gone stale by a factor of two
+and out again as the modules grew and then lost their release notes. It is a
+count spelled out in prose, which is the failure this file names three times
+over; the build itself prints the real number on every run.
 
 `git status` immediately after a build is the sync check: clean means
 `master.py` matches the modules.
@@ -110,14 +117,14 @@ Current: catalog `1.1.1`, mineral_value `1.7.1`, transportation `1.12.1`,
 calc `1.17.8`, master `1.20.8` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
-ℹ️  **TWELVE stamps so far do NOT mean the numbers moved.** The rule is
+ℹ️  **THIRTEEN stamps so far do NOT mean the numbers moved.** The rule is
 one-directional: *changing a number means bumping; bumping does not mean a
 number changed*, and reading a version as evidence that a result moved is the
 mistake this table exists to prevent.
 
-⚠️  Every row is a **calc** stamp except the last, which is `mineral_value`, 
-the first non-calc entry this table has carried. Read the module, not just the
-number: `1.7.1` and `1.17.1` are different modules and unrelated releases.
+⚠️  Every row is a **calc** stamp except `mineral_value 1.7.1`, the only
+non-calc entry this table has carried. Read the module, not just the number:
+`1.7.1` and `1.17.1` are different modules and unrelated releases.
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -133,24 +140,31 @@ number: `1.7.1` and `1.17.1` are different modules and unrelated releases.
 | `1.17.6` | performance only | bit-identical, verified |
 | `1.17.7` | **memory bound** | bit-identical, verified |
 | mineral_value `1.7.1` | **silent default closed** | bit-identical, verified |
+| `1.17.8` | **a new upstream check** | bit-identical, verified |
 
-**Every measured cell in this file stands unaltered across all twelve; do not
+**Every measured cell in this file stands unaltered across all thirteen; do not
 re-measure anything on account of any of them.** Each release's own section
 carries its verification.
 
 ⚠️  **Derive the taxonomy from the table above, not from a count in prose.**
-Eight rows are *performance* stamps; the rest are `1.17.0` (a default flip),
-`1.17.3` (a cleanup), `1.17.7` (a memory bound) and `1.7.1` (a silent default
-closed in another module), which is why
-this file counts two sequences that run apart; see [calc v1.17.0](versions.md#calc-v1170)
-changed". That paragraph is where the count last rotted: it was written at
-`1.17.5` and still read "nine" and "seven" after `1.17.6` shipped, which is
-exactly the *counts-spelled-out-in-prose* failure the "When a number changes,
-grep the prose too" section names.
+Eight rows are *performance* stamps; the other five are `1.17.0` (a default
+flip), `1.17.3` (a cleanup), `1.17.7` (a memory bound), `1.17.8` (a new
+upstream check) and `1.7.1` (a silent default closed in another module). See
+[calc v1.17.0](versions.md#calc-v1170) for the one of those that changes what a
+configure-nothing run answers.
+
+🚨  **THIS PARAGRAPH IS WHERE THE COUNT KEEPS ROTTING, AND IT HAS NOW DONE SO
+THREE TIMES.** It was written at `1.17.5` and still read "nine" and "seven"
+after `1.17.6` shipped; it then read "eight and four" while `1.17.8` sat
+outside the table entirely, having said "No number" in its own release section
+since 2026-08-27. It is the *counts-spelled-out-in-prose* failure named under
+"When a number changes, grep the prose too", occurring in the paragraph that
+warns against it. **Count the table.**
 
 🚨  **`1.17.7` IS THE FIRST STAMP HERE THAT FIXES A DEFECT RATHER THAN A COST,
 and it is a defect no cell in this file could have shown.** `_CALENDAR_CACHE`
-was the one memo in the module keyed on a **per-candidate float**, so it grew
+(the name is historical; it is `_calendar_multipliers_cached` now) was the one
+memo in the module keyed on a **per-candidate float**, so it grew
 linearly with the catalog: ~45 entries per row, **~70 M entries and 11-18 GB**
 projected on a full-catalog default cell against a documented run peak of
 ~6 GB. It landed in `1.17.4` and **no full-catalog run has been made since
@@ -777,6 +791,16 @@ anchors, document structure, the em-dash ratchet, two cross-file manifests
 (`requirements.txt` against `_MASTER_REQUIRED`, README's option list against
 `run.bat`'s dispatcher) and, with `--before`, whether a reorganisation dropped
 a measurement. Run it after touching any config field or reference table.
+
+✅  **Three of the counts this section keeps catching by hand are now checked,
+as of 2026-09.** They are the ones that are DERIVED rather than typed, which is
+why nobody thinks of them as measurements:
+
+| what | why it rots | where |
+|---|---|---|
+| the size of the two "moved without moving a number" tables, against the count spelled beside each | a release that says "No number" has to be added by hand, and `1.17.8` was not | check 2 |
+| **21** usable propellants and **17** operational vehicles, the search GRID rather than a table length | a one-word edit to a row's `status` moves both, in README *and* in three `modules/calc.py` comments | check 3 |
+| whether `campaign/` obeys the em-dash ratchet and the structure rules at all | it did not, for the whole 20-cell campaign | checks 5, 6 |
 
 ⚠️  **It cannot see a stale measurement.** A number that is merely out of date
 passes everything in it, which is why the rest of this section is still a
@@ -2014,8 +2038,8 @@ Undoing any of these silently corrupts the output:
   now names each row Stage 4 needs alongside the model term its absence
   silently reverts. That closed the missing-row half.
 
-  Editing a number in a Module 3 table, a density, a status, a boil-off rate
-, leaves the schema identical, so nothing warned and Stage 4 quietly ran on
+  Editing a number in a Module 3 table, a density, a status, a boil-off rate,
+  leaves the schema identical, so nothing warned and Stage 4 quietly ran on
   the old figure. This cost a full measurement pass during v1.12.0: the argon
   rows were rewritten, Stage 3 was re-run, the CSV did not actually land, and
   two full-catalog runs plus a determinism sweep were measured against the
@@ -2124,8 +2148,8 @@ went in the bin on every run. The damage:
 | density measured | 0 | **438** |
 | V-type bodies | 3,988 | 2,614 |
 
-**Every number committed before v1.0.9 was measured on the degraded catalog**
-, roughly 1,900 real-taxonomy bodies instead of ~24,700. The V-type count is
+**Every number committed before v1.0.9 was measured on the degraded catalog**,
+roughly 1,900 real-taxonomy bodies instead of ~24,700. The V-type count is
 the tell: V-types are rare, and 3,988 of them was an artefact of guessing
 taxonomy from albedo.
 
@@ -2240,24 +2264,35 @@ gets renamed again.
 
 ### Entry points
 
-Four consumers of the built `master.py`, all at the repo root because
+Everything that consumes the built `master.py` sits at the repo root, because
 `build_master.py` concatenates `modules/` from four explicit paths and asserts
-a header/footer shape per file, plus two files that launch one of them, and
-one that reads the docs rather than the model:
+a header/footer shape per file, so a consumer inside `modules/` would be
+concatenated into the thing it consumes. **Read the `runs` column, and do not
+count the rows**; this paragraph said "four consumers ... plus two launchers"
+above a seven-row table, and contradicted itself eleven lines later with "the
+first three import master".
 
-| file | what it is |
-|---|---|
-| `run_pipeline.py` | headless CLI: `--preset`, `--stages`, `--destination`, row caps |
-| `ui.py` | Streamlit dashboard |
-| `verify.py` | the six release checks |
-| `verify_docs.py` | the **docs** checks, ten of them; imports the four configs, never runs the pipeline |
-| `run.bat` | Windows launcher, a terminal menu over the three above, no model behaviour of its own |
-| `Dashboard.vbs` | double-click entry point, starts the dashboard with no console, ever |
-| `launch_ui.py` | what it starts: supervises `streamlit run ui.py` and owns the stop button |
+| file | runs the model? | what it is |
+|---|---|---|
+| `run_pipeline.py` | yes | headless CLI: `--preset`, `--stages`, `--destination`, row caps |
+| `ui.py` | yes | Streamlit dashboard |
+| `verify.py` | yes | the six release checks |
+| `verify_docs.py` | no | the **docs** checks, ten of them; it imports master and the four configs for checks 8 and 9, but never builds a stage |
+| `run.bat` | no | Windows launcher: a terminal menu over `run_pipeline.py`, `verify.py`, `build_master.py` and the dashboard. No model behaviour of its own |
+| `Dashboard.vbs` | no | double-click entry point, starts the dashboard with no console, ever |
+| `launch_ui.py` | no | what it starts: supervises `streamlit run ui.py` and owns the stop button |
 
-The first three import master **by name** with the repo on `sys.path`, which is
-the only form the worker pool tolerates; see `_spawn_environment`, and the
-table of harness bugs under "The verification harness is committed now".
+The three that run the model import master **by name** with the repo on
+`sys.path`, which is the only form the worker pool tolerates; see
+`_spawn_environment`, and the table of harness bugs under "The verification
+harness is committed now".
+
+⚠️  **`campaign/` holds a fourth way in, and it is not in that table because it
+does not import master at all.** `campaign/run_cell.py` shells out to
+`run_pipeline.py` as a SUBPROCESS, one per cell, which is why it inherits
+`preflight()` and cannot hit the destination trap; the other campaign scripts
+read archived CSVs and never build a stage. If you add a Stage-4-only entry
+point that does not go through `run_pipeline.py`, call `preflight()` from it.
 `run.bat` is a launcher only; it adds no default the pipeline does not already
 have, except that its `quick` / `standard` presets cap rows and fly raw ore at
 N = 1 rather than starting the tens-of-hours default cell on a double-click.
@@ -2426,16 +2461,23 @@ and `STORAGE_REFERENCE` are written into `propellants.csv` and
 transformation was AST-driven and touched only the source segments of
 `print(...)` calls for exactly that reason.
 
-🚨  **It also left twelve comments ungrammatical, and nobody read them for
-ten days.** An em-dash that had opened a CONTINUATION line became a bare
+🚨  **It also left TWENTY lines ungrammatical, and nobody read them for ten
+days.** An em-dash that had opened a CONTINUATION line became a bare
 comma at the start of the line, so `modules/calc.py` carried, among eleven
 others, `#, and nothing in this module ever read it.` The pass was correct
 about what it must not touch and had no check on what it left behind; a
 converted comment is still prose a reader has to parse. Eight were re-joined in
 place on 2026-09-02, comma moved onto the previous line and no word added or
 reordered; the other four were inside the release notes that moved to
-`versions.md` in the same pass and were fixed as prose there. **The grep is
-`^\s*#,`**, and it belongs in any future mechanical rewrite of comment text.
+`versions.md` in the same pass and were fixed as prose there.
+
+⚠️  **And then eight more turned up in the DOCS on the next pass the same
+day**, including `, it auto-installs its own dependencies` in README, because
+the first sweep grepped `modules/*.py` and stopped there. Fixing one half of a defect class and not
+looking for the other half is how this one survived twice. ✅  It is
+`verify_docs.py` check 6 now, beside the dash ratchet, because it is the same
+pass's damage: **a mechanical rewrite of prose needs a check on what it LEAVES,
+not only on what it removes.**
 
 🚨  **`build_master.py`'s ANCHORS MATCH ON LINES THIS CHANGED, and one of them
 broke on the first rebuild**; `BUILD FAILED: catalog: INSTALLATION block

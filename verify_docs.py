@@ -7,12 +7,16 @@ describe it.  Ten checks, all mechanical, all fast (about a second):
     1. defaults      every default the README's Tuning table quotes, against
                      the dataclass field it names
     2. versions      the Stage/Version table and CLAUDE.md's "Current:" line,
-                     against each module's `pipeline_version`
+                     against each module's `pipeline_version`; and the two
+                     "moved without moving a number" tables against the counts
+                     spelled out in prose beside them
     3. row counts    documented reference-table sizes, against the tables
     4. links         every markdown anchor resolves, in all three files
     5. structure     balanced fences, no ragged tables, no heading-level jumps,
-                     no duplicate h1/h2 within a file
-    6. dashes        no em- or en-dash in prose a reader sees
+                     no duplicate h1/h2, in every markdown file in the repo
+    6. dashes        no em- or en-dash in prose a reader sees, and no line left
+                     opening with a bare comma by the pass that removed them;
+                     the docs, the root scripts and the campaign scripts
     7. manifests     a list documented in one place, against the list actually
                      defined in another: requirements.txt vs _MASTER_REQUIRED,
                      and README's `run.bat` block vs run.bat's own dispatcher
@@ -38,6 +42,10 @@ to stop.  What they caught, on the run that prompted writing them down:
   README documented `use_beneficiation` and `optimise_programme_scale` as
   False.  Both have been True since calc 1.17.0, so the two most consequential
   settings in the pipeline were documented backwards.            -> check 1
+  calc 1.17.8 said "No number" in its own release section and was missing from
+  BOTH tables of stamps that moved without moving a number, so the count beside
+  each read "twelve" against thirteen rows -- the third time that particular
+  count has rotted.                                              -> check 2
   "Propellants -- 40 rows" with development=7; the module loads 41 and 8, both
   stale by exactly the cryogenic-argon row v1.12.0 added.        -> check 3
   A README section promising "all five" checks above a table of six. -> by eye
@@ -57,6 +65,12 @@ pipeline, fetch anything, or check that a documented NUMBER is a correct
 measurement -- only that a documented CONFIGURATION matches the code.  A
 measurement can be stale and still pass everything here; that is what the
 release notes and `verify.py` are for.
+
+WHICH FILES.  Checks 4, 5 and 6 cover `campaign/` as well as the three
+authorities, since 2026-09.  Six campaign scripts and two campaign markdown
+files spent a whole measurement campaign outside every check in here, which is
+the state the dash ratchet exists to prevent: a file nothing checks is clean
+until it is not.
 """
 from __future__ import annotations
 
@@ -97,6 +111,19 @@ _force_utf8_stdout()
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 DOCS = ["README.md", "versions.md", "CLAUDE.md"]
+
+# Markdown that is not one of the three authorities but is still prose a reader
+# is sent to.  The campaign pair spent a whole measurement campaign outside
+# every check here, which is exactly how the docs drifted before any of these
+# existed: a file nothing checks is a file that is clean until it is not.
+CAMPAIGN_DOCS = ["campaign/FINDINGS.md", "campaign/README.md"]
+
+# The campaign scripts.  Prose a reader sees, checked whole like the root
+# scripts rather than comments-only like modules/: they hold no reference table,
+# so nothing in them is written into a CSV and none of their text is data.
+CAMPAIGN_PY = ["campaign/analyse.py", "campaign/extra_checks.py",
+               "campaign/memwatch.py", "campaign/rig_bounds.py",
+               "campaign/run_cell.py", "campaign/run_queue.py"]
 
 MODULES = {
     "catalog":   "modules/catalog.py",
@@ -196,6 +223,39 @@ def check_defaults(mods) -> bool:
 
 
 # ----------------------------------------------------------------- 2. versions
+
+# The stamp tables in versions.md and CLAUDE.md share this header exactly.
+_STAMP_HEADER = "| stamp | why it moved | what a re-run gives |"
+
+_WORDS = ("zero one two three four five six seven eight nine ten eleven twelve "
+          "thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty"
+          ).split()
+
+
+def _spelled(token: str) -> Optional[int]:
+    """`"thirteen"` or `"13"` as an int, else None."""
+    token = token.strip().lower()
+    if token.isdigit():
+        return int(token)
+    return _WORDS.index(token) if token in _WORDS else None
+
+
+def _stamp_table(text: str) -> Optional[List[str]]:
+    """Body rows of the no-number stamp table, or None if it is not there."""
+    lines = text.split("\n")
+    try:
+        i = next(k for k, l in enumerate(lines) if l.strip() == _STAMP_HEADER)
+    except StopIteration:
+        return None
+    rows = []
+    for l in lines[i + 1:]:
+        if not l.startswith("|"):
+            break
+        if "---" not in l:
+            rows.append(l)
+    return rows
+
+
 def check_versions(mods) -> bool:
     actual = {a: mods[a].CONFIG.pipeline_version for a in mods}
     bad: List[str] = []
@@ -230,6 +290,33 @@ def check_versions(mods) -> bool:
                     bad.append("CLAUDE.md Current: %-16s says %-8s actual %s"
                                % (label, m.group(1), actual[alias]))
 
+    # ---- the "moved without moving a number" tables, and the prose on them --
+    # Both files carry this table and both spell its size out in words beside
+    # it, and that count has now rotted THREE times: "nine"/"seven" after
+    # 1.17.6 shipped, then "twelve"/"four" while 1.17.8 sat outside the table
+    # having said "No number" in its own release section for a week.  The
+    # paragraph warning against counts in prose is itself where they rot, so
+    # this counts the rows instead.
+    for doc in ("versions.md", "CLAUDE.md"):
+        rows = _stamp_table(read(os.path.join(REPO, doc)))
+        if rows is None:
+            bad.append("%s: no `| stamp | why it moved |` table found" % doc)
+            continue
+        total = len(rows)
+        perf = sum("performance only" in r for r in rows)
+        for pat, want, label in (
+                (r"([A-Za-z]+) stamps so far", total, "total"),
+                (r"stands unaltered across all ([a-z]+)", total, "total"),
+                (r"([A-Za-z]+) rows are \*?\*?performance", perf, "performance"),
+                (r"performance stamps and ([a-z]+) are not", total - perf, "other"),
+                (r"the other ([a-z]+) are `", total - perf, "other")):
+            for m in re.finditer(pat, read(os.path.join(REPO, doc))):
+                got = m.group(1).lower()
+                seen += 1
+                if _spelled(got) != want:
+                    bad.append("%s says %r %s stamps, the table has %d"
+                               % (doc, m.group(1), label, want))
+
     print("2. versions    %d stamps documented, %d wrong" % (seen, len(bad)))
     for b in bad:
         print("     ! " + b)
@@ -240,9 +327,13 @@ def check_versions(mods) -> bool:
 def check_row_counts(mods) -> bool:
     """Documented sizes of the Stage 3 reference tables.
 
-    These are quoted in prose and in headings all over the docs, and they move
-    whenever a row is added -- v1.12.0 split argon and left "40 propellants"
-    standing in two places."""
+    Two kinds.  The TABLE sizes are quoted in prose and in headings all over the
+    docs and move whenever a row is added; v1.12.0 split argon and left
+    "40 propellants" standing in two places.  The DERIVED counts are what
+    survives the maturity and mission-profile filters, they are quoted in
+    `modules/calc.py`'s comments as well as in README, and they move whenever a
+    row's `status` changes, which is a one-word edit nobody thinks of as a
+    measurement."""
     t = mods["transport"]
     sizes = {
         "propellants": len(t.PROPELLANTS_REFERENCE),
@@ -280,9 +371,76 @@ def check_row_counts(mods) -> bool:
                 bad.append("README propellant status '%s' says %s, module has %d"
                            % (status, m.group(1), want))
 
+    # ---- DERIVED counts: the size of the SEARCH GRID, not of a table -------
+    # The row counts above are lengths.  These are what survives the filters,
+    # and they are quoted in `modules/calc.py`'s own comments as well as in
+    # README, which is the copy CLAUDE.md warns check 1 cannot reach: "it
+    # cannot see the copies that live in code."  They move whenever a row's
+    # `status` changes, which is a one-word edit nobody thinks of as a
+    # measurement.
+    #
+    # Matched as a digit OR as the English word, because three of the calc
+    # comments spell it "seventeen" -- and a count spelled out in prose is
+    # exactly what this repo keeps finding stale.
+    def _truthy(row, key, default):
+        v = row.get(key, None)
+        if v is None or (isinstance(v, float) and v != v):
+            return default
+        return bool(v)
+
+    ops_props = [r for r in t.PROPELLANTS_REFERENCE
+                 if str(r.get("status")) == "operational"]
+    derived = {
+        "operational propellants": len(ops_props),
+        # what can actually fly the profile: a solid cannot be relit for a
+        # return burn years later, and a sail reports an unbounded payload
+        "usable propellants": len([r for r in ops_props
+                                   if _truthy(r, "restartable", True)
+                                   and not _truthy(r, "propellantless", False)]),
+        "operational vehicles": len([r for r in t.LAUNCH_VEHICLES_REFERENCE
+                                     if str(r.get("status")) == "operational"]),
+    }
+    WORDS = {n: w for n, w in enumerate(
+        "zero one two three four five six seven eight nine ten eleven twelve "
+        "thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty"
+        .split())}
+    NUM = r"(\d+|[a-z]+)"
+    DERIVED_CLAIMS = [
+        ("README.md", r"Only the %s operational rows are in the default search"
+                      % NUM, "operational propellants"),
+        ("README.md", r"default search, and only %s of those" % NUM,
+         "usable propellants"),
+        ("modules/calc.py", r"%s propellants' worth of answers" % NUM,
+         "usable propellants"),
+        ("modules/calc.py", r"%s numbers that are fixed for" % NUM,
+         "operational vehicles"),
+        ("modules/calc.py", r"%s evaluations per propellant row" % NUM,
+         "operational vehicles"),
+        ("modules/calc.py", r"%s vehicles now share one" % NUM,
+         "operational vehicles"),
+    ]
+    for rel, pat, key in DERIVED_CLAIMS:
+        path = os.path.join(REPO, rel)
+        if not os.path.exists(path):
+            continue
+        want = derived[key]
+        found = re.findall(pat, read(path))
+        if not found:
+            bad.append("%s: no claim matching %r (expected %s = %d)"
+                       % (rel, pat, key, want))
+            continue
+        for got in found:
+            n += 1
+            if got != str(want) and got != WORDS.get(want):
+                bad.append("%s claims %r %s, the tables give %d"
+                           % (rel, got, key, want))
+
     print("3. row counts  %d claims checked, %d wrong  (propellants %d, "
-          "vehicles %d, storage %d)"
-          % (n, len(bad), sizes["propellants"], sizes["vehicles"], sizes["storage"]))
+          "vehicles %d, storage %d; %d usable propellants, %d operational "
+          "vehicles)"
+          % (n, len(bad), sizes["propellants"], sizes["vehicles"],
+             sizes["storage"], derived["usable propellants"],
+             derived["operational vehicles"]))
     for b in bad:
         print("     ! " + b)
     return not bad
@@ -315,7 +473,7 @@ LINK = re.compile(r"\[([^\]]*)\]\(([^)\s]+)\)")
 # at the root docs, which is why targets resolve relative to the LINKING FILE
 # rather than to REPO -- keying anchors by the path as written works only while
 # every doc sits at the root, and campaign/ does not.
-LINKED_DOCS = DOCS + ["campaign/FINDINGS.md", "campaign/README.md"]
+LINKED_DOCS = DOCS + CAMPAIGN_DOCS
 
 
 def check_links() -> bool:
@@ -355,8 +513,18 @@ def check_links() -> bool:
 
 # ---------------------------------------------------------------- 5. structure
 def check_structure() -> bool:
+    """Balanced fences, no ragged tables, no heading jumps, no duplicate h1/h2.
+
+    Over every markdown file in the repo, not only the three authorities: a
+    ragged table renders as literal pipes wherever it lives, and `campaign/`
+    was outside this until 2026-09.
+
+    A repeated h3 is normal here and is NOT flagged; nineteen release sections
+    each carry their own "### Verification (date)". Ambiguous LINK targets are
+    check 4's job, and it resolves GitHub's `-1` suffixes.
+    """
     bad = []
-    for d in DOCS:
+    for d in DOCS + CAMPAIGN_DOCS:
         p = os.path.join(REPO, d)
         if not os.path.exists(p):
             continue
@@ -402,7 +570,8 @@ def check_structure() -> bool:
             if c > 1:
                 bad.append("%s: duplicate heading %r (%dx)" % (d, h[:60], c))
 
-    print("5. structure   %d files checked, %d problems" % (len(DOCS), len(bad)))
+    print("5. structure   %d files checked, %d problems"
+          % (len(DOCS) + len(CAMPAIGN_DOCS), len(bad)))
     for b in bad:
         print("     ! " + b)
     return not bad
@@ -415,24 +584,36 @@ ROOT_PY = ["ui.py", "ui_meta.py", "run_pipeline.py", "verify.py",
            # Not Python, but prose a reader sees, and it was outside the
            # ratchet long enough to collect two em-dashes.  The hook's header
            # is the only account of the Drive stat-cache bug there is.
-           ".githooks/drive-restat.sh", "Dashboard.vbs"]
+           ".githooks/drive-restat.sh", "Dashboard.vbs"] + CAMPAIGN_PY
+
+
+# A line that begins with a bare comma is what the 2026-08-23 ASCII pass left
+# where an em-dash had OPENED a continuation line.  The sentence stops parsing
+# in English and nothing noticed for ten days: twelve in modules/*.py, then
+# eight more in the docs found a week later, because the first sweep only
+# looked at Python.  Anchored on start-of-line so a comma inside a sentence is
+# untouched, and it is checked in the same place as the dashes because it is
+# the same pass's damage.
+ORPHAN_COMMA = re.compile(r"^\s*(?:#\s*)?,\s+\S")
 
 
 def check_dashes() -> bool:
-    """No em- or en-dash in prose a person reads.
+    """No em- or en-dash in prose a person reads, and no orphaned comma.
 
-    The docs and the root scripts must be clean outright.  In modules/*.py
-    only COMMENTS and DOCSTRINGS are checked: the `notes` and `composition`
-    strings are written into propellants.csv, launch_vehicles.csv and the
-    asteroid catalog, so their text is DATA and keeps whatever it has.
+    The docs, the root scripts and the campaign scripts must be clean outright.
+    In modules/*.py only COMMENTS and DOCSTRINGS are checked: the `notes` and
+    `composition` strings are written into propellants.csv,
+    launch_vehicles.csv and the asteroid catalog, so their text is DATA and
+    keeps whatever it has.
 
     This is a ratchet, not a style opinion.  1,342 dashes came out of the docs
     and 1,120 out of the modules; without a check they drift back one commit
-    at a time.
+    at a time.  The orphan comma is the same conversion's leftover, and it is
+    checked here for that reason.
     """
     bad, files = [], 0
 
-    for name in DOCS + ROOT_PY:
+    for name in DOCS + CAMPAIGN_DOCS + ROOT_PY:
         p = os.path.join(REPO, name)
         if not os.path.exists(p):
             continue
@@ -442,7 +623,10 @@ def check_dashes() -> bool:
             if name == os.path.basename(__file__) and "[-:" in line:
                 continue
             if EM in line or EN in line:
-                bad.append("%s:%d  %s" % (name, i, line.strip()[:70]))
+                bad.append("%s:%d  em/en dash  %s" % (name, i, line.strip()[:60]))
+            elif ORPHAN_COMMA.match(line):
+                bad.append("%s:%d  line opens with a bare comma  %s"
+                           % (name, i, line.strip()[:60]))
 
     for rel in MODULES.values():
         p = os.path.join(REPO, rel)
@@ -469,10 +653,16 @@ def check_dashes() -> bool:
             bad.append("%s: could not parse (%s)" % (rel, exc))
             continue
         for i, line in enumerate(src.split("\n"), 1):
-            if i in rows and (EM in line or EN in line):
-                bad.append("%s:%d  %s" % (rel, i, line.strip()[:70]))
+            if i not in rows:
+                continue
+            if EM in line or EN in line:
+                bad.append("%s:%d  em/en dash  %s" % (rel, i, line.strip()[:60]))
+            elif ORPHAN_COMMA.match(line):
+                bad.append("%s:%d  comment opens with a bare comma  %s"
+                           % (rel, i, line.strip()[:60]))
 
-    print("6. dashes      %d files checked, %d lines with an em/en dash"
+    print("6. dashes      %d files checked, %d bad lines "
+          "(em/en dash, or a line opening with a bare comma)"
           % (files, len(bad)))
     for b in bad[:20]:
         print("     ! " + b)
