@@ -197,7 +197,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.13.0"
+    pipeline_version: str = "1.14.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 
@@ -2932,6 +2932,38 @@ DELTA_V_REFERENCE: List[dict] = [
      "notes": "TLI + NRHO insertion.  This is the Δv that a kilogram of "
               "asteroid material delivered to NRHO AVOIDS having to be lifted "
               "through — it sets the cislunar sale price in Module 2."},
+
+    # ── Geostationary orbit  (v1.14.0) ────────────────────────────────
+    # The one destination in this table with a paying customer today: ~550
+    # active satellites, and MEV-1 and MEV-2 have already docked with and
+    # station-kept commercial GEO spacecraft.
+    #
+    # ⚠️  The plane change is the term intuition drops.  A launch from
+    # Canaveral parks at 28.5 deg and GEO is equatorial, so the apogee burn
+    # buys the inclination as well as the circularisation, and it is 1,836 m/s
+    # rather than the 1,478 a coplanar circularisation would cost.
+    {"segment": "LEO  →  GTO (perigee burn)",     "dv_m_per_s":  2_455, "duration_yr": 0.001,
+     "notes": "Perigee burn from a 200-km parking orbit onto a transfer "
+              "ellipse with apogee at 42,164 km: v_p(GTO) 10.239 - v_LEO "
+              "7.784 km/s.  Matches the ~2.44-2.46 km/s every GTO launch "
+              "quotes."},
+    {"segment": "GTO  →  GEO (circularise + plane change)", "dv_m_per_s": 1_836, "duration_yr": 0.01,
+     "notes": "One apogee burn doing two jobs: raise 1.597 km/s to the 3.075 "
+              "km/s circular speed AND remove 28.5 deg of inclination, "
+              "combined by the law of cosines rather than added.  Coplanar it "
+              "would be 1,478; the 358 m/s difference is what an equatorial "
+              "launch site is worth."},
+    {"segment": "LEO  →  GEO depot",              "dv_m_per_s":  4_291, "duration_yr": 0.01,
+     "notes": "GTO (2,455) + apogee (1,836).  This is the Δv a kilogram "
+              "delivered to a GEO servicing depot AVOIDS being lifted "
+              "through, and it sets the geo sale price in Module 2.  Flown as "
+              "TWO stages there, and staging is worth 5.3%: 2.945 kg in LEO "
+              "per kg at GEO against 3.101 single-stage."},
+    {"segment": "GEO  →  Earth (deorbit to entry)", "dv_m_per_s": 1_488, "duration_yr": 0.01,
+     "notes": "Lowering perigee from GEO into the atmosphere: 3.075 circular "
+              "down to the 1.587 km/s apogee speed of an entry ellipse.  "
+              "Twelve times the LEO deorbit burn, because the whole point of "
+              "GEO is that it is a long way up."},
 
     # ── Lunar surface  (v1.5.0) ──────────────────────────────────────────────
     {"segment": "TLI  →  low lunar orbit (LOI)", "dv_m_per_s":    900, "duration_yr": 0.01,

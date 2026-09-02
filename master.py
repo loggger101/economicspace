@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.21.0)
+"""Master Asteroid Profitability Pipeline (1.22.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -8,18 +8,19 @@ run top-to-bottom - the orchestrator at the bottom executes everything.
     Stage 1  ->  Asteroid Catalog        (modules/catalog.py 1.1.1)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
-    Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.8.0)
+    Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.9.0)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
                 + destination pricing for EVERY commodity
-    Stage 3  ->  Transportation Data     (modules/transportation.py 1.13.0)
+    Stage 3  ->  Transportation Data     (modules/transportation.py 1.14.0)
                 Launch vehicles + propellants + dv segments + ops costs
                 (UNCREWED autonomous mining - no crew costs)
-    Stage 4  ->  Profitability Calc      (modules/calc.py 1.18.0)
+    Stage 4  ->  Profitability Calc      (modules/calc.py 1.19.0)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2x, V-type 0.2x)
-                + delivery architecture: earth_surface / leo / cislunar /
-                  lunar_surface / mars_orbit / mars_surface, beneficiation,
+                + delivery architecture: earth_surface / leo / geo /
+                  cislunar / lunar_surface / mars_orbit / mars_surface,
+                  beneficiation,
                   low-thrust trip time, launch windows, learning curve,
                   market saturation, rig service life + terminal value,
                   mission reliability + growth, cryogenic boil-off,
@@ -3148,6 +3149,14 @@ class MineralValueConfig:
     #                     cost it avoids ($4,253/kg); precious metals are
     #                     worth nothing, because no orbital market for them
     #                     exists.  Favours water- and metal-rich bulk.
+    #   "geo"           - sold at a geostationary servicing depot
+    #                     ($12,526/kg).  The only destination in this model
+    #                     with a paying customer TODAY: ~550 active
+    #                     satellites, and MEV-1 / MEV-2 have already docked
+    #                     with commercial GEO spacecraft.  A narrow market
+    #                     though; see IN_SPACE_UTILITY_BY_DESTINATION, where
+    #                     it is the only destination that discounts the
+    #                     METALS rather than the volatiles.
     #   "cislunar"      - sold at a lunar-vicinity (NRHO) depot, worth the
     #                     larger launch cost avoided ($10,810/kg, derived).
     #                     Also the CHEAPEST of the orbital options to reach
@@ -3211,7 +3220,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.8.0"
+    pipeline_version: str = "1.9.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -3368,6 +3377,15 @@ _MARS_LANDED_MASS_FRACTION = 0.30
 _DELIVERY_LEGS: Dict[str, Optional[List[tuple]]] = {
     "earth_surface": None,                       # already at the market
     "leo": [],                                   # nothing above LEO
+    # v1.9.0.  Two stages, because that is how a GEO delivery is actually
+    # flown: an upper stage to GTO, then an apogee burn that circularises AND
+    # removes the 28.5 deg parking inclination in one go.  Staging is worth
+    # 5.3% here (2.945 kg in LEO per kg against 3.101), which is smaller than
+    # the lunar chain's 2x but is the same argument.
+    "geo": [
+        ("burn", 2_455.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # LEO -> GTO
+        ("burn", 1_836.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # GTO -> GEO + plane change
+    ],
     "cislunar": [
         ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TLI + NRHO insertion
     ],
@@ -3451,6 +3469,12 @@ _EARTH_SURFACE_WATER_USD_PER_KG = 0.001
 
 _DESTINATION_NOTES = {
     "leo":           "Falcon 9 reusable $/kg-to-LEO, straight off Module 3.",
+    "geo":           "LEO -> GTO (2,455 m/s), then an apogee burn of 1,836 "
+                     "m/s that circularises and removes 28.5 deg of "
+                     "inclination at once.  Coplanar that burn would be "
+                     "1,478, so 358 m/s of this price is the latitude of the "
+                     "launch site.  Dearer per kilogram than a cislunar "
+                     "depot, and a far narrower market once it arrives.",
     "cislunar":      "TLI + NRHO insertion (3,600 m/s) on one cryo stage.",
     "lunar_surface": "TLI + LOI (4,050 m/s) on a cryo stage, then powered "
                      "descent (1,870 m/s) on a lander.  No atmosphere, so "
@@ -3535,6 +3559,7 @@ _DOWNLEG_BATCH_KG           = 10_000.0
 # Δv to leave the destination onto an Earth-return trajectory, entering
 # directly.  All from Module 3's DELTA_V_REFERENCE.
 #   leo           - deorbit burn, ~120 m/s
+#   geo           - deorbit from GEO into the atmosphere, ~1,490 m/s
 #   cislunar      - NRHO departure, ~450 m/s (symmetric with insertion)
 #   lunar_surface: ascent to LLO (1,870) + trans-Earth injection (~850)
 #   mars_orbit    - TEI at periapsis, ~900 m/s, symmetric with the capture
@@ -3546,6 +3571,11 @@ _DOWNLEG_BATCH_KG           = 10_000.0
 # mine asteroids to deliver platinum to Mars and then fly it back.
 _DOWNLEG_DEPARTURE_DV_M_S = {
     "leo":            120.0,
+    # v1.9.0.  Twelve times the LEO figure and three times cislunar's, which
+    # is the price of GEO being a long way up a well it is expensive to fall
+    # back down.  Lowering perigee from the 3.075 km/s circular speed to an
+    # entry ellipse's 1.587 km/s apogee speed.
+    "geo":          1_490.0,
     "cislunar":       450.0,
     "lunar_surface": 2_720.0,
     # v1.8.0.  A seventh of the surface figure, and it is the single largest
@@ -3677,6 +3707,56 @@ IN_SPACE_UTILITY_DEFAULT = 0.0
 # pipeline.  These are judgements about economies that do not exist.
 IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
     "leo":      {},                  # base profile, no local resources
+    # \U0001f6a8  v1.9.0.  GEO IS THE FIRST DESTINATION WHOSE OVERRIDES RUN DOWNWARD
+    # ON THE METALS AND THE ROCK RATHER THAN ON THE VOLATILES, and it is a
+    # different ARGUMENT from every block below, not a different number.
+    #
+    # The lunar and martian overrides are about local SUPPLY: a settlement
+    # standing on a crust can dig up its own water and iron, so imported
+    # material competes with local mining.  Nothing is mined at GEO and
+    # nothing ever will be.  These discounts are about local DEMAND, which is
+    # the other half of what this table means: utility is "how good a
+    # substitute 1 kg of this is for a LAUNCHED kg here", and nobody launches
+    # a kilogram of copper to geostationary orbit.  A GEO depot exists to
+    # refuel and service satellites; there is no factory 36,000 km up, no
+    # crew, and no construction site.  So the volatiles keep most of their
+    # value and the feedstock loses nearly all of it.
+    #
+    # ⚠️  That makes GEO the destination most sensitive to this table, which
+    # is the softest thing in the pipeline.  The price above is derived from
+    # the rocket equation; the numbers below are judgement about a market
+    # that does not exist yet.  They are also still overrides that run
+    # DOWNWARD from the base profile, which is the invariant that keeps this
+    # table from becoming a way to manufacture viability.
+    "geo": {
+        # Propellant feedstock is the whole business case, and water is the
+        # feedstock: electrolysed for orbit-raising, or fed to a water
+        # thruster directly.  Discounted off the base 1.00 because a depot
+        # with no crew has no life support and no coolant loop to fill, which
+        # is two of the four uses the base profile is built on.
+        "water":            0.80,
+        # There is no manufacturing at GEO.  The base profile already
+        # discounts raw Fe-Ni to 0.70 for "the melting and forming plant that
+        # turns it into a pressure vessel is not costed anywhere in this
+        # pipeline"; at GEO that plant is not merely uncosted, it is
+        # implausible.  Ni / Co / Cu are discounted here where the two
+        # surfaces leave them alone, and the reason is the one above: those
+        # overrides are about there being no local ORE, this one is about
+        # there being no local FACTORY.
+        "iron":             0.15, "nickel":       0.15, "cobalt":     0.15,
+        "copper":           0.15, "nickel-iron":  0.15, "awaruite":   0.15,
+        "magnetite":        0.05, "troilite":     0.05,
+        # Bulk shielding is the one real use for rock here, and GEO spends
+        # most of its time outside the magnetosphere, so it is not zero.  It
+        # is not 0.25 either: nobody bolts raw olivine to a comsat.
+        "olivine":          0.05, "pyroxene":     0.05, "orthopyroxene": 0.05,
+        "enstatite":        0.05, "plagioclase":  0.05, "spinel":        0.05,
+        "phyllosilicates":  0.05, "oxides":       0.05, "silicates":     0.05,
+        # No chemical plant and no agriculture.
+        "carbon":           0.05,
+        "organics":         0.05,
+        # Precious metals stay at the base 0.00 and route down, as everywhere.
+    },
     "cislunar": {},                  # base profile, no local resources
     # 🚨  v1.8.0.  mars_orbit TAKES THE BASE PROFILE, AND THE EMPTY DICT IS
     # THE WHOLE POINT.  It will look like an oversight next to the block
@@ -3814,6 +3894,14 @@ _UNLIMITED_MARKET_KG = 1.0e15
 # pay the same price for the 400th tonne as for the first.
 IN_SPACE_ANNUAL_DEMAND_KG: Dict[str, float] = {
     "leo":           500_000.0,
+    # v1.9.0.  The only row here anchored on hardware that EXISTS: ~550 active
+    # geostationary satellites at roughly 70 kg/yr of station-keeping
+    # propellant each.  That makes it the smallest in-space market in the
+    # table and the one most likely to saturate, which is the point of having
+    # it: `earth_surface` is the destination where saturation is numerically
+    # inert and 100% of rows run to the fleet ceiling, and nothing anchored
+    # the other end.
+    "geo":            40_000.0,
     "cislunar":      100_000.0,
     "lunar_surface":  50_000.0,
     # v1.8.0.  LARGER than the surface base it serves, which is the one row of
@@ -5169,7 +5257,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.13.0"
+    pipeline_version: str = "1.14.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 
@@ -7905,6 +7993,38 @@ DELTA_V_REFERENCE: List[dict] = [
               "asteroid material delivered to NRHO AVOIDS having to be lifted "
               "through — it sets the cislunar sale price in Module 2."},
 
+    # ── Geostationary orbit  (v1.14.0) ────────────────────────────────
+    # The one destination in this table with a paying customer today: ~550
+    # active satellites, and MEV-1 and MEV-2 have already docked with and
+    # station-kept commercial GEO spacecraft.
+    #
+    # ⚠️  The plane change is the term intuition drops.  A launch from
+    # Canaveral parks at 28.5 deg and GEO is equatorial, so the apogee burn
+    # buys the inclination as well as the circularisation, and it is 1,836 m/s
+    # rather than the 1,478 a coplanar circularisation would cost.
+    {"segment": "LEO  →  GTO (perigee burn)",     "dv_m_per_s":  2_455, "duration_yr": 0.001,
+     "notes": "Perigee burn from a 200-km parking orbit onto a transfer "
+              "ellipse with apogee at 42,164 km: v_p(GTO) 10.239 - v_LEO "
+              "7.784 km/s.  Matches the ~2.44-2.46 km/s every GTO launch "
+              "quotes."},
+    {"segment": "GTO  →  GEO (circularise + plane change)", "dv_m_per_s": 1_836, "duration_yr": 0.01,
+     "notes": "One apogee burn doing two jobs: raise 1.597 km/s to the 3.075 "
+              "km/s circular speed AND remove 28.5 deg of inclination, "
+              "combined by the law of cosines rather than added.  Coplanar it "
+              "would be 1,478; the 358 m/s difference is what an equatorial "
+              "launch site is worth."},
+    {"segment": "LEO  →  GEO depot",              "dv_m_per_s":  4_291, "duration_yr": 0.01,
+     "notes": "GTO (2,455) + apogee (1,836).  This is the Δv a kilogram "
+              "delivered to a GEO servicing depot AVOIDS being lifted "
+              "through, and it sets the geo sale price in Module 2.  Flown as "
+              "TWO stages there, and staging is worth 5.3%: 2.945 kg in LEO "
+              "per kg at GEO against 3.101 single-stage."},
+    {"segment": "GEO  →  Earth (deorbit to entry)", "dv_m_per_s": 1_488, "duration_yr": 0.01,
+     "notes": "Lowering perigee from GEO into the atmosphere: 3.075 circular "
+              "down to the 1.587 km/s apogee speed of an entry ellipse.  "
+              "Twelve times the LEO deorbit burn, because the whole point of "
+              "GEO is that it is a long way up."},
+
     # ── Lunar surface  (v1.5.0) ──────────────────────────────────────────────
     {"segment": "TLI  →  low lunar orbit (LOI)", "dv_m_per_s":    900, "duration_yr": 0.01,
      "notes": "Apollo lunar-orbit insertion, 0.9 km/s (NASA SP-4029).  Larger "
@@ -10373,6 +10493,16 @@ class CalcConfig:
     #                     no recovery campaign, launch-only licence.  The most
     #                     EXPENSIVE return Δv in the model: circularising into
     #                     LEO means killing the whole arrival hyperbola.
+    #   "geo"           - berthed at a geostationary servicing depot.  The
+    #                     only destination in the model with a customer that
+    #                     exists today; MEV-1 and MEV-2 have docked with
+    #                     commercial GEO satellites already.  Capture is a
+    #                     SEARCH over two geometries, not one formula, and it
+    #                     pays 23.44 deg of plane change that no other
+    #                     destination does; see _geo_capture_dv_km_s.  The
+    #                     market is narrow: a depot refuels satellites, so
+    #                     the volatiles hold their value and the structural
+    #                     metals lose most of theirs.
     #   "cislunar"      - berthed at an NRHO depot.  Same cost savings as LEO,
     #                     and the cheapest return Δv of the orbital options,
     #                     because capture only has to bind the orbit and the
@@ -10717,7 +10847,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.18.0"
+    pipeline_version: str = "1.19.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -12249,6 +12379,54 @@ MU_EARTH_KM3_S2  = 398_600.4418        # Earth gravitational parameter
 R_LEO_KM         = 6_378.14 + 200.0    # 200-km circular parking orbit
 
 
+# ── Geostationary orbit  (v1.19.0) ───────────────────────────────────────────
+# Every quantity here is a constant of the ORBIT, so all of it is resolved once
+# at import.  `_geo_capture_dv_km_s` runs twice per catalog row on every
+# destination, and re-deriving a per-destination constant per call is defect
+# class 3 in CLAUDE.md.
+R_GEO_KM = 42_164.14                   # geostationary radius
+# Asteroid arrivals are near the ecliptic and GEO is equatorial, so the
+# capture burn buys 23.44 deg of plane change as well as the speed change.
+# This is the term intuition drops, and it is worth several hundred m/s.
+_COS_ECLIPTIC_TILT = math.cos(math.radians(23.44))
+_V_GEO_KM_S      = math.sqrt(MU_EARTH_KM3_S2 / R_GEO_KM)
+_V_ESC_GEO_KM_S  = math.sqrt(2.0) * _V_GEO_KM_S
+_V_LEO_KM_S      = math.sqrt(MU_EARTH_KM3_S2 / R_LEO_KM)
+_V_ESC_LEO_KM_S  = math.sqrt(2.0) * _V_LEO_KM_S
+# The GEO transfer ellipse, LEO perigee to GEO apogee.
+_A_GTO_KM           = (R_LEO_KM + R_GEO_KM) / 2.0
+_V_GTO_PERIGEE_KM_S = math.sqrt(MU_EARTH_KM3_S2 * (2.0 / R_LEO_KM - 1.0 / _A_GTO_KM))
+_V_GTO_APOGEE_KM_S  = math.sqrt(MU_EARTH_KM3_S2 * (2.0 / R_GEO_KM - 1.0 / _A_GTO_KM))
+
+
+def _circularise_at_geo_km_s(v_apogee_km_s: float) -> float:
+    """One apogee burn that circularises at GEO and removes the plane change.
+
+    Law of cosines, not a sum: a burn that changes speed and direction at once
+    costs less than doing both separately, and adding them would overstate
+    every GEO arrival in the model.
+    """
+    return math.sqrt(v_apogee_km_s * v_apogee_km_s
+                     + _V_GEO_KM_S * _V_GEO_KM_S
+                     - 2.0 * v_apogee_km_s * _V_GEO_KM_S * _COS_ECLIPTIC_TILT)
+
+
+# Finishing a GTO-shaped capture: 1.836 km/s, and independent of how fast the
+# spacecraft arrived, which is why it is a constant rather than a term.
+_DV_GTO_APOGEE_TO_GEO_KM_S = _circularise_at_geo_km_s(_V_GTO_APOGEE_KM_S)
+
+# Aerocapture at Earth into an ellipse whose apogee is at GEO, then the same
+# apogee burn.  Drag removes the arrival energy whatever it was, so this is
+# FLAT in v_infinity: 1.737 km/s at every arrival speed.
+#
+# ⚠️  It is not an aerobrake TRIM like the LEO case.  At LEO drag can do the
+# whole job and the propulsive residue is 100 m/s; at GEO drag can only lower
+# the apogee to GEO, and circularising there is still 1.7 km/s of real burn.
+# Copying `DV_AEROBRAKE_TRIM_KM_S` here would understate a GEO arrival by 17x.
+_A_GEO_AEROCAPTURE_KM = ((6_378.14 + 100.0) + R_GEO_KM) / 2.0
+DV_GEO_AEROCAPTURE_ARRIVAL_KM_S = _circularise_at_geo_km_s(
+    math.sqrt(MU_EARTH_KM3_S2 * (2.0 / R_GEO_KM - 1.0 / _A_GEO_AEROCAPTURE_KM)))
+
 R_MOON_ORBIT_KM  = 384_400.0           # lunar mean orbital radius
 # NRHO insertion at apogee, Module 3 DELTA_V_REFERENCE "TLI → NRHO insertion".
 DV_NRHO_INSERTION_KM_S = 0.450
@@ -12335,6 +12513,55 @@ def _cislunar_capture_dv_km_s(v_inf_km_s: float) -> float:
     return max(0.0, v_hyp - v_ell) + DV_NRHO_INSERTION_KM_S
 
 
+def _geo_capture_dv_km_s(v_inf_km_s: float) -> float:
+    """Propulsive Δv to capture from an arrival hyperbola into GEO.
+
+    Two routes, and unlike the cislunar case NEITHER ALWAYS WINS, so both are
+    priced and the cheaper is taken:
+
+      (a) DIRECT.  Meet GEO at its own radius and kill the hyperbolic excess
+          plus the plane change in one burn out there.  Cheap when the
+          spacecraft arrives slowly, because there is little excess to kill
+          and the burn is done at a low orbital speed.
+
+      (b) OBERTH.  Capture at LEO perigee into a GTO-shaped ellipse, taking
+          the Oberth benefit deep in the well, then circularise and change
+          plane at apogee.  The perigee burn is efficient but the apogee burn
+          is fixed at 1.730 km/s however the spacecraft got there.
+
+    ⚠️  THAT 1.730 IS NOT MODULE 2's 1.836, AND THE TWO MUST NOT BE
+    RECONCILED.  They are the same manoeuvre buying a different plane change.
+    Module 2 prices a kilogram LAUNCHED from Earth, which parks at the 28.5
+    deg of a Canaveral ascent; this module prices a kilogram ARRIVING from an
+    asteroid, which comes in near the ecliptic, 23.44 deg off the equator.
+    Coplanar the same burn would be 1.477, so the inclination is worth 253 m/s
+    on arrival and 359 on launch.  Making them agree would put a launch
+    site's latitude into an interplanetary trajectory.
+
+    (a) wins below v_inf = 3.585 km/s and (b) above it: 2.05 against 2.55 at
+    v_inf = 1, and 4.00 against 3.58 at v_inf = 5.  **That is the difference
+    from `_cislunar_capture_dv_km_s`, where the Oberth route always wins**,
+    and the reason is the apogee burn.  A cislunar depot is captured into by
+    BINDING an ellipse, which costs 450 m/s; GEO has to be circularised into,
+    which costs four times that and does not fall with arrival speed.
+
+    So the destination that is cheapest to reach from an asteroid is still
+    cislunar, at 0.96 km/s against GEO's 2.05 at best.
+    """
+    # (a) direct capture at the GEO radius
+    v_hyp_at_geo = math.sqrt(_V_ESC_GEO_KM_S * _V_ESC_GEO_KM_S
+                             + v_inf_km_s * v_inf_km_s)
+    direct = _circularise_at_geo_km_s(v_hyp_at_geo)
+
+    # (b) Oberth capture at low perigee, then the fixed apogee burn
+    v_hyp_at_leo = math.sqrt(_V_ESC_LEO_KM_S * _V_ESC_LEO_KM_S
+                             + v_inf_km_s * v_inf_km_s)
+    oberth = ((v_hyp_at_leo - _V_GTO_PERIGEE_KM_S)
+              + _DV_GTO_APOGEE_TO_GEO_KM_S)
+
+    return direct if direct < oberth else oberth
+
+
 def _transfer_legs_for_apsis(
     a: float, e: float, i: float, r_target: float,
 ) -> Optional[Dict[str, float]]:
@@ -12408,6 +12635,13 @@ def _transfer_legs_for_apsis(
         "ret_leo_prop":           dv_match + dv_leo_capture,
         "ret_leo_aero":           dv_match + DV_AEROBRAKE_TRIM_KM_S,
         "ret_cislunar_prop":      dv_match + dv_cislunar,
+        # v1.19.0: GEO.  The propulsive route is a search over two capture
+        # geometries rather than one formula; see `_geo_capture_dv_km_s`.
+        # The aerocaptured route is FLAT in v_infinity because drag removes
+        # whatever arrival energy there was, and what is left is the
+        # circularisation, which is not a trim.
+        "ret_geo_prop":           dv_match + _geo_capture_dv_km_s(v_inf),
+        "ret_geo_aero":           dv_match + DV_GEO_AEROCAPTURE_ARRIVAL_KM_S,
         "ret_lunar_surface_prop": dv_match + dv_cislunar
                                   + DV_NRHO_TO_LUNAR_SURFACE_KM_S,
     }
@@ -12622,6 +12856,17 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "prop_leg":  "ret_leo_prop",
         "aero_allowed": True,     # aerocapture + multi-pass aerobraking
         "label": "berthed at an LEO depot",
+    },
+    # v1.19.0.  A depot, so a berthing adapter and no lander, and the cargo
+    # never re-enters, so no capsule and no recovery campaign.  Aerocapture is
+    # allowed because the arrival passes through Earth's atmosphere on the way
+    # in, which is what separates this from `cislunar` directly below.
+    "geo": {
+        "returns_to_earth": False,
+        "aero_leg":  "ret_geo_aero",
+        "prop_leg":  "ret_geo_prop",
+        "aero_allowed": True,     # aerocapture into a GEO-apogee ellipse
+        "label": "berthed at a geostationary servicing depot",
     },
     "cislunar": {
         "returns_to_earth": False,
@@ -17877,7 +18122,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.21.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.22.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

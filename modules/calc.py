@@ -535,6 +535,16 @@ class CalcConfig:
     #                     no recovery campaign, launch-only licence.  The most
     #                     EXPENSIVE return Δv in the model: circularising into
     #                     LEO means killing the whole arrival hyperbola.
+    #   "geo"           - berthed at a geostationary servicing depot.  The
+    #                     only destination in the model with a customer that
+    #                     exists today; MEV-1 and MEV-2 have docked with
+    #                     commercial GEO satellites already.  Capture is a
+    #                     SEARCH over two geometries, not one formula, and it
+    #                     pays 23.44 deg of plane change that no other
+    #                     destination does; see _geo_capture_dv_km_s.  The
+    #                     market is narrow: a depot refuels satellites, so
+    #                     the volatiles hold their value and the structural
+    #                     metals lose most of theirs.
     #   "cislunar"      - berthed at an NRHO depot.  Same cost savings as LEO,
     #                     and the cheapest return Δv of the orbital options,
     #                     because capture only has to bind the orbit and the
@@ -879,7 +889,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.18.0"
+    pipeline_version: str = "1.19.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2411,6 +2421,54 @@ MU_EARTH_KM3_S2  = 398_600.4418        # Earth gravitational parameter
 R_LEO_KM         = 6_378.14 + 200.0    # 200-km circular parking orbit
 
 
+# ── Geostationary orbit  (v1.19.0) ───────────────────────────────────────────
+# Every quantity here is a constant of the ORBIT, so all of it is resolved once
+# at import.  `_geo_capture_dv_km_s` runs twice per catalog row on every
+# destination, and re-deriving a per-destination constant per call is defect
+# class 3 in CLAUDE.md.
+R_GEO_KM = 42_164.14                   # geostationary radius
+# Asteroid arrivals are near the ecliptic and GEO is equatorial, so the
+# capture burn buys 23.44 deg of plane change as well as the speed change.
+# This is the term intuition drops, and it is worth several hundred m/s.
+_COS_ECLIPTIC_TILT = math.cos(math.radians(23.44))
+_V_GEO_KM_S      = math.sqrt(MU_EARTH_KM3_S2 / R_GEO_KM)
+_V_ESC_GEO_KM_S  = math.sqrt(2.0) * _V_GEO_KM_S
+_V_LEO_KM_S      = math.sqrt(MU_EARTH_KM3_S2 / R_LEO_KM)
+_V_ESC_LEO_KM_S  = math.sqrt(2.0) * _V_LEO_KM_S
+# The GEO transfer ellipse, LEO perigee to GEO apogee.
+_A_GTO_KM           = (R_LEO_KM + R_GEO_KM) / 2.0
+_V_GTO_PERIGEE_KM_S = math.sqrt(MU_EARTH_KM3_S2 * (2.0 / R_LEO_KM - 1.0 / _A_GTO_KM))
+_V_GTO_APOGEE_KM_S  = math.sqrt(MU_EARTH_KM3_S2 * (2.0 / R_GEO_KM - 1.0 / _A_GTO_KM))
+
+
+def _circularise_at_geo_km_s(v_apogee_km_s: float) -> float:
+    """One apogee burn that circularises at GEO and removes the plane change.
+
+    Law of cosines, not a sum: a burn that changes speed and direction at once
+    costs less than doing both separately, and adding them would overstate
+    every GEO arrival in the model.
+    """
+    return math.sqrt(v_apogee_km_s * v_apogee_km_s
+                     + _V_GEO_KM_S * _V_GEO_KM_S
+                     - 2.0 * v_apogee_km_s * _V_GEO_KM_S * _COS_ECLIPTIC_TILT)
+
+
+# Finishing a GTO-shaped capture: 1.836 km/s, and independent of how fast the
+# spacecraft arrived, which is why it is a constant rather than a term.
+_DV_GTO_APOGEE_TO_GEO_KM_S = _circularise_at_geo_km_s(_V_GTO_APOGEE_KM_S)
+
+# Aerocapture at Earth into an ellipse whose apogee is at GEO, then the same
+# apogee burn.  Drag removes the arrival energy whatever it was, so this is
+# FLAT in v_infinity: 1.737 km/s at every arrival speed.
+#
+# ⚠️  It is not an aerobrake TRIM like the LEO case.  At LEO drag can do the
+# whole job and the propulsive residue is 100 m/s; at GEO drag can only lower
+# the apogee to GEO, and circularising there is still 1.7 km/s of real burn.
+# Copying `DV_AEROBRAKE_TRIM_KM_S` here would understate a GEO arrival by 17x.
+_A_GEO_AEROCAPTURE_KM = ((6_378.14 + 100.0) + R_GEO_KM) / 2.0
+DV_GEO_AEROCAPTURE_ARRIVAL_KM_S = _circularise_at_geo_km_s(
+    math.sqrt(MU_EARTH_KM3_S2 * (2.0 / R_GEO_KM - 1.0 / _A_GEO_AEROCAPTURE_KM)))
+
 R_MOON_ORBIT_KM  = 384_400.0           # lunar mean orbital radius
 # NRHO insertion at apogee, Module 3 DELTA_V_REFERENCE "TLI → NRHO insertion".
 DV_NRHO_INSERTION_KM_S = 0.450
@@ -2497,6 +2555,55 @@ def _cislunar_capture_dv_km_s(v_inf_km_s: float) -> float:
     return max(0.0, v_hyp - v_ell) + DV_NRHO_INSERTION_KM_S
 
 
+def _geo_capture_dv_km_s(v_inf_km_s: float) -> float:
+    """Propulsive Δv to capture from an arrival hyperbola into GEO.
+
+    Two routes, and unlike the cislunar case NEITHER ALWAYS WINS, so both are
+    priced and the cheaper is taken:
+
+      (a) DIRECT.  Meet GEO at its own radius and kill the hyperbolic excess
+          plus the plane change in one burn out there.  Cheap when the
+          spacecraft arrives slowly, because there is little excess to kill
+          and the burn is done at a low orbital speed.
+
+      (b) OBERTH.  Capture at LEO perigee into a GTO-shaped ellipse, taking
+          the Oberth benefit deep in the well, then circularise and change
+          plane at apogee.  The perigee burn is efficient but the apogee burn
+          is fixed at 1.730 km/s however the spacecraft got there.
+
+    ⚠️  THAT 1.730 IS NOT MODULE 2's 1.836, AND THE TWO MUST NOT BE
+    RECONCILED.  They are the same manoeuvre buying a different plane change.
+    Module 2 prices a kilogram LAUNCHED from Earth, which parks at the 28.5
+    deg of a Canaveral ascent; this module prices a kilogram ARRIVING from an
+    asteroid, which comes in near the ecliptic, 23.44 deg off the equator.
+    Coplanar the same burn would be 1.477, so the inclination is worth 253 m/s
+    on arrival and 359 on launch.  Making them agree would put a launch
+    site's latitude into an interplanetary trajectory.
+
+    (a) wins below v_inf = 3.585 km/s and (b) above it: 2.05 against 2.55 at
+    v_inf = 1, and 4.00 against 3.58 at v_inf = 5.  **That is the difference
+    from `_cislunar_capture_dv_km_s`, where the Oberth route always wins**,
+    and the reason is the apogee burn.  A cislunar depot is captured into by
+    BINDING an ellipse, which costs 450 m/s; GEO has to be circularised into,
+    which costs four times that and does not fall with arrival speed.
+
+    So the destination that is cheapest to reach from an asteroid is still
+    cislunar, at 0.96 km/s against GEO's 2.05 at best.
+    """
+    # (a) direct capture at the GEO radius
+    v_hyp_at_geo = math.sqrt(_V_ESC_GEO_KM_S * _V_ESC_GEO_KM_S
+                             + v_inf_km_s * v_inf_km_s)
+    direct = _circularise_at_geo_km_s(v_hyp_at_geo)
+
+    # (b) Oberth capture at low perigee, then the fixed apogee burn
+    v_hyp_at_leo = math.sqrt(_V_ESC_LEO_KM_S * _V_ESC_LEO_KM_S
+                             + v_inf_km_s * v_inf_km_s)
+    oberth = ((v_hyp_at_leo - _V_GTO_PERIGEE_KM_S)
+              + _DV_GTO_APOGEE_TO_GEO_KM_S)
+
+    return direct if direct < oberth else oberth
+
+
 def _transfer_legs_for_apsis(
     a: float, e: float, i: float, r_target: float,
 ) -> Optional[Dict[str, float]]:
@@ -2570,6 +2677,13 @@ def _transfer_legs_for_apsis(
         "ret_leo_prop":           dv_match + dv_leo_capture,
         "ret_leo_aero":           dv_match + DV_AEROBRAKE_TRIM_KM_S,
         "ret_cislunar_prop":      dv_match + dv_cislunar,
+        # v1.19.0: GEO.  The propulsive route is a search over two capture
+        # geometries rather than one formula; see `_geo_capture_dv_km_s`.
+        # The aerocaptured route is FLAT in v_infinity because drag removes
+        # whatever arrival energy there was, and what is left is the
+        # circularisation, which is not a trim.
+        "ret_geo_prop":           dv_match + _geo_capture_dv_km_s(v_inf),
+        "ret_geo_aero":           dv_match + DV_GEO_AEROCAPTURE_ARRIVAL_KM_S,
         "ret_lunar_surface_prop": dv_match + dv_cislunar
                                   + DV_NRHO_TO_LUNAR_SURFACE_KM_S,
     }
@@ -2784,6 +2898,17 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "prop_leg":  "ret_leo_prop",
         "aero_allowed": True,     # aerocapture + multi-pass aerobraking
         "label": "berthed at an LEO depot",
+    },
+    # v1.19.0.  A depot, so a berthing adapter and no lander, and the cargo
+    # never re-enters, so no capsule and no recovery campaign.  Aerocapture is
+    # allowed because the arrival passes through Earth's atmosphere on the way
+    # in, which is what separates this from `cislunar` directly below.
+    "geo": {
+        "returns_to_earth": False,
+        "aero_leg":  "ret_geo_aero",
+        "prop_leg":  "ret_geo_prop",
+        "aero_allowed": True,     # aerocapture into a GEO-apogee ellipse
+        "label": "berthed at a geostationary servicing depot",
     },
     "cislunar": {
         "returns_to_earth": False,

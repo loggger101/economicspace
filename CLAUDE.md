@@ -113,19 +113,20 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.1.1`, mineral_value `1.8.0`, transportation `1.13.0`,
-calc `1.18.0`, master `1.21.0` (the master version is a literal in
+Current: catalog `1.1.1`, mineral_value `1.9.0`, transportation `1.14.0`,
+calc `1.19.0`, master `1.22.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
-ℹ️  **SIXTEEN stamps so far do NOT mean the numbers moved.** The rule
+ℹ️  **NINETEEN stamps so far do NOT mean the numbers moved.** The rule
 is one-directional: *changing a number means bumping; bumping does not mean a
 number changed*, and reading a version as evidence that a result moved is the
 mistake this table exists to prevent.
 
 ⚠️  Most rows are **calc** stamps. The exceptions are `mineral_value 1.7.1`,
-`mineral_value 1.8.0` and `transportation 1.13.0`, so read the module and not
-just the number: `1.7.1` and `1.17.1` are different modules and unrelated
-releases, and so are `1.13.0` and `1.18.0`, which shipped together.
+`mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0` and
+`transportation 1.14.0`, so read the module and not just the number: `1.7.1`
+and `1.17.1` are different modules and unrelated releases, and so are `1.14.0`
+and `1.19.0`, which shipped together.
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -145,17 +146,21 @@ releases, and so are `1.13.0` and `1.18.0`, which shipped together.
 | `1.18.0` | **a sixth destination** | bit-identical, verified |
 | mineral_value `1.8.0` | **a sixth destination** | bit-identical, verified |
 | transportation `1.13.0` | **three reference rows** | bit-identical, verified |
+| `1.19.0` | **a seventh destination** | bit-identical, verified |
+| mineral_value `1.9.0` | **a seventh destination** | bit-identical, verified |
+| transportation `1.14.0` | **four reference rows** | bit-identical, verified |
 
-**Every measured cell in this file stands unaltered across all sixteen; do not
+**Every measured cell in this file stands unaltered across all nineteen; do not
 re-measure anything on account of any of them.** Each release's own section
 carries its verification.
 
 ⚠️  **Derive the taxonomy from the table above, not from a count in prose.**
-Eight rows are *performance* stamps; the other eight are `1.17.0` (a default
+Eight rows are *performance* stamps; the other eleven are `1.17.0` (a default
 flip), `1.17.3` (a cleanup), `1.17.7` (a memory bound), `1.17.8` (a new
-upstream check), `1.7.1` (a silent default closed in another module), and the
-`1.18.0` / `1.8.0` / `1.13.0` trio, which adds a sixth delivery destination
-without touching any existing one. See
+upstream check), `1.7.1` (a silent default closed in another module), and two
+trios that each add a delivery destination without touching any existing one:
+`1.18.0` / `1.8.0` / `1.13.0` for `mars_orbit` and `1.19.0` / `1.9.0` /
+`1.14.0` for `geo`. See
 [calc v1.17.0](versions.md#calc-v1170) for the one of those that changes what a
 configure-nothing run answers.
 
@@ -336,14 +341,25 @@ Two facts everything below leans on: **`cislunar` is the best case on all four
 settings**, and **the programme search never changes the evaluable set** at any
 destination, as it must not, since N enters nothing in the mass cascade.
 
-🚨  **THE CAMPAIGN IS FIVE DESTINATIONS AND THE MODEL NOW HAS SIX.**
-`mars_orbit` landed in mineral_value `1.8.0` / calc `1.18.0` and **no cell of
-it has ever been run**. Every "at every destination" and "all twenty cells"
-below means the five that were measured on 2026-08-23/24: `cislunar`,
+🚨  **THE CAMPAIGN IS FIVE DESTINATIONS AND THE MODEL NOW HAS SEVEN.**
+`mars_orbit` landed in calc `1.18.0` and `geo` in calc `1.19.0`, and **no cell
+of either has ever been run**. Every "at every destination" and "all twenty
+cells" below means the five that were measured on 2026-08-23/24: `cislunar`,
 `lunar_surface`, `leo`, `mars_surface`, `earth_surface`. Nothing below is
-wrong, and nothing below covers the sixth; a full matrix is 24 cells now. See
-[the release](versions.md#calc-v1180--mineral_value-v180--transportation-v1130)
-for what it would cost and what is predicted of it.
+wrong, and nothing below covers the other two; a full matrix is **28 cells**
+now. See
+[mars_orbit](versions.md#calc-v1180--mineral_value-v180--transportation-v1130)
+and [geo](versions.md#calc-v1190--mineral_value-v190--transportation-v1140)
+for what each would cost and what is predicted of it.
+
+⚠️  **They are not two more of the same thing, and that is why they were worth
+adding together.** `mars_orbit` is the control on the ISRU discount: it takes
+the base utility profile, so it isolates how much of the `mars_surface` result
+is the crust rather than the distance. `geo` is the control on **saturation**:
+at 40,000 kg/yr it is the smallest in-space market in the model, where
+`earth_surface` is the one whose market is so deep that saturation is
+numerically inert and 100% of rows run to the fleet ceiling. Nothing anchored
+that end of the range before.
 
 ⚠️  **The four non-cislunar beneficiated figures in the v1.11.0 matrix were
 placeholders on the OLD 89,367-row catalog and are retired**: `lunar_surface`
