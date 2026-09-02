@@ -1622,6 +1622,14 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
     # ranks fill the gap" behaviour as before, expressed over a list.
     if "spins.period.value" in df.columns:
         def _first_period(v) -> float:
+            """Best-ranked rotation period from one body's spin-solution list.
+
+            ssoBFT ships the solutions best-rank-first, so the first non-null
+            positive element is the answer, which reproduces the old
+            "best rank wins, lower ranks fill the gap" behaviour over a list.
+            The `TypeError` arm catches a scalar arriving through a future
+            schema change rather than assuming the column stays a list.
+            """
             # pyarrow hands back None for absent lists and np.ndarray otherwise.
             if v is None:
                 return np.nan
@@ -1876,6 +1884,14 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
     # output CSV.  _extract_canonical_designation strips a trailing ".0"
     # defensively now as well, but do not rely on that and remove this.
     def _as_designation(numbers: pd.Series, prov: Optional[pd.Series]) -> pd.Series:
+        """IRSA's asteroid_number as a merge key, or the provisional designation.
+
+        Through `Int64` and only then to string, which is the whole point: IRSA
+        types the column float64 whenever the slice holds any unnumbered body,
+        and `.astype("string")` on that yields `"3.0"`, which matches no JPL
+        `pdes` and is not null either. That cost NEOWISE four releases of
+        contributing zero rows. See the block above.
+        """
         out = pd.Series(pd.NA, index=numbers.index, dtype="string")
         num = pd.to_numeric(numbers, errors="coerce")
         has_num = num.notna()
@@ -2274,6 +2290,13 @@ def _albedo_for_derivation(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
     need = albedo.isna() & tax.notna()
     if need.any():
         def _from_taxonomy(t: object) -> float:
+            """Median geometric albedo for a spectral type, or NaN if unknown.
+
+            Falls back to the ROOT letter ("Sq2" to "S"), matching the fallback
+            `_lookup()` already uses for composition, so a sub-type nobody
+            tabulated still sizes off its complex rather than dropping out of
+            the catalog.
+            """
             if not isinstance(t, str) or not t:
                 return np.nan
             s = t.strip()
@@ -2513,6 +2536,12 @@ def validate_and_filter(
     # "Bus / Tholen".  A row passes if EITHER column has a non-blank value.
     if config.require_spectral_type:
         def _blank(s: pd.Series) -> pd.Series:
+            """True where a taxonomy column holds nothing usable.
+
+            NaN and the empty string both count, and so does whitespace: a
+            source that writes `" "` for "no classification" would otherwise
+            pass strict mode with a blank type.
+            """
             return s.isna() | (s.astype(str).str.strip() == "")
 
         has_bus    = (~_blank(df["spectral_type"]))           if "spectral_type"        in df.columns else pd.Series(False, index=df.index)
@@ -2590,6 +2619,12 @@ def enrich_composition(df: pd.DataFrame) -> pd.DataFrame:
 
     # Capitalise to match Bus-DeMeo convention (e.g. "sq" → "Sq")
     def normalise_type(t):
+        """One spectral type in Bus-DeMeo capitalisation, or NA.
+
+        First letter upper, rest lower, so "sq" and "SQ" both become "Sq" and
+        meet the taxonomy tables' keys. Run through `_by_distinct`, so it is
+        called once per class rather than once per row.
+        """
         if pd.isna(t) or not isinstance(t, str):
             return pd.NA
         t = t.strip()

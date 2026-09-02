@@ -542,6 +542,12 @@ def check_parallel(m, names: List[str], workers: int = 8) -> bool:
 # BASELINE
 # -----------------------------------------------------------------------------
 def baseline_dir(tag: str) -> str:
+    """Directory holding one tagged baseline, under .verify/.
+
+    Tagged rather than single, so several can sit side by side: a release is
+    checked against the tag it branched from, and `run.bat verify` picks the
+    newest on disk rather than defaulting to one that may not exist.
+    """
     return os.path.join(REPO, ".verify", f"baseline-{tag}")
 
 

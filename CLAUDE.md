@@ -801,6 +801,7 @@ why nobody thinks of them as measurements:
 | the size of the two "moved without moving a number" tables, against the count spelled beside each | a release that says "No number" has to be added by hand, and `1.17.8` was not | check 2 |
 | **21** usable propellants and **17** operational vehicles, the search GRID rather than a table length | a one-word edit to a row's `status` moves both, in README *and* in three `modules/calc.py` comments | check 3 |
 | whether `campaign/` obeys the em-dash ratchet and the structure rules at all | it did not, for the whole 20-cell campaign | checks 5, 6 |
+| whether every module, class and function carries a docstring | 87 carried neither that nor a leading comment, most of them in `ui.py` and `launch_ui.py` | check 11 |
 
 ⚠️  **It cannot see a stale measurement.** A number that is merely out of date
 passes everything in it, which is why the rest of this section is still a
@@ -2296,7 +2297,7 @@ first three import master".
 | `run_pipeline.py` | yes | headless CLI: `--preset`, `--stages`, `--destination`, row caps |
 | `ui.py` | yes | Streamlit dashboard |
 | `verify.py` | yes | the six release checks |
-| `verify_docs.py` | no | the **docs** checks, ten of them; it imports master and the four configs for checks 8 and 9, but never builds a stage |
+| `verify_docs.py` | no | the **docs** checks; it imports master and the four configs for checks 8 and 9, but never builds a stage. Count them in its own docstring rather than quoting a number here |
 | `run.bat` | no | Windows launcher: a terminal menu over `run_pipeline.py`, `verify.py`, `build_master.py` and the dashboard. No model behaviour of its own |
 | `Dashboard.vbs` | no | double-click entry point, starts the dashboard with no console, ever |
 | `launch_ui.py` | no | what it starts: supervises `streamlit run ui.py` and owns the stop button |
