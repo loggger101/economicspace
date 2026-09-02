@@ -544,6 +544,11 @@ class _RunView:
     """
 
     def __init__(self, stages: Sequence[Stage]):
+        """Weight each selected stage by its prior duration, then paint at 0%.
+
+        The weights are floored at 0.05 minutes so a stage with no prior cannot
+        contribute zero and make the overall bar jump past it.
+        """
         self.stages = list(stages)
         self.weights = [max(_stage_minutes(s.key), 0.05) for s in self.stages]
         self.total_weight = sum(self.weights) or 1.0
@@ -615,6 +620,11 @@ class ProgressScan:
     """
 
     def __init__(self, tail_lines: int = 6):
+        """Empty scan state. `tail_lines` is how much of the log the UI shows.
+
+        `full` keeps everything for the run log, `tail` is a bounded deque for
+        the live view, and `_pending` holds a partial line between `feed` calls.
+        """
         self.full: List[str] = []
         self.tail = deque(maxlen=tail_lines)
         self.live = ""               # in-flight tqdm redraw, not yet a log line
@@ -700,6 +710,12 @@ class _StageMonitor(io.TextIOBase):
     """
 
     def __init__(self, view: _RunView, min_interval: float = 0.25):
+        """Claim a progress bar and a log slot for one stage.
+
+        `min_interval` is the repaint throttle in seconds: Stage 1 emits
+        thousands of lines and a tqdm bar redraws far faster than a browser can
+        follow, so an unthrottled paint makes the UI the bottleneck.
+        """
         self._view = view
         self._scan = ProgressScan()
         self._bar = st.progress(0.0)

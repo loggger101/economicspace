@@ -1542,6 +1542,12 @@ class _CompositionValues:
     __slots__ = ("bulk", "phases", "best")
 
     def __init__(self) -> None:
+        """All three slots start as None, meaning "not computed yet".
+
+        Distinguishable from every value they can legitimately hold, which are
+        all floats or a list, so a miss is never confused with a real answer of
+        zero. `__slots__` is what keeps ~25 of these off the per-instance dict.
+        """
         self.bulk = None
         self.phases = None
         self.best = None
@@ -7682,6 +7688,16 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
     progress = {"done": 0, "pct": 0}
 
     def report(rows_done: int) -> None:
+        """Tick the evaluated-row counter and print on each whole percent.
+
+        A CALLBACK rather than a loop counter because the parallel path reports
+        a chunk at a time and the serial path a row at a time; both tick the
+        same counter and print the same line, so only the granularity differs.
+
+        ⚠️  The wording is load-bearing: `ui.py`'s `ProgressScan` regexes
+        "i / n evaluated" out of the stream to size its bar, and rewording this
+        silently drops the dashboard back to an indeterminate bar.
+        """
         progress["done"] += rows_done
         i = progress["done"]
         if n >= 100 and (i * 100) // n != progress["pct"]:

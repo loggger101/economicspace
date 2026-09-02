@@ -58,6 +58,13 @@ def extract(path, dest, ore, search):
     b = ok.nsmallest(1, "_obj").iloc[0]
 
     def share(col, val=None, true_like=False):
+        """Percentage of rows where `col` equals `val`, as a rounded float.
+
+        `true_like` handles a boolean read back from CSV, which arrives as the
+        STRING "True": `.astype(bool)` would read that, and NaN, as True. An
+        absent column returns "" rather than 0, because a cell from an older
+        build did not measure 0% of anything, it did not have the column.
+        """
         if col not in p.columns:
             return ""
         s = p[col]
@@ -66,6 +73,12 @@ def extract(path, dest, ore, search):
         return round(100.0 * (s == val).mean(), 4)
 
     def top_shares(col, n=6):
+        """The n commonest values of `col` as "name=pct%; ..." for the ledger.
+
+        Six is enough for the propellant and vehicle splits every destination
+        table in the docs is built from, and it goes into one CSV cell so the
+        ledger stays one row per campaign cell.
+        """
         if col not in p.columns:
             return ""
         vc = p[col].value_counts(normalize=True).head(n) * 100
