@@ -57,9 +57,9 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.1.1 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
-| 2 | `modules/mineral_value.py` | 1.7.1 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.12.1 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
-| 4 | `modules/calc.py` | 1.17.8 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
+| 3 | `modules/transportation.py` | 1.14.0 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
+| 4 | `modules/calc.py` | 1.19.1 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -317,7 +317,7 @@ that actually move the answer:
 | Knob | Default | Effect |
 |------|---------|--------|
 | `MASTER_CONFIG.output_dir` | platform-dependent | Where everything lands |
-| `MASTER_CONFIG.delivery_destination` | `"earth_surface"` | **Read [Where the material is sold](#where-the-material-is-sold) before changing.** Sets every price *and* the mission architecture. One of `earth_surface`, `leo`, `cislunar`, `lunar_surface`, `mars_surface`. Writes Stage 2 and Stage 4 together, never set the two sub-configs separately |
+| `MASTER_CONFIG.delivery_destination` | `"earth_surface"` | **Read [Where the material is sold](#where-the-material-is-sold) before changing.** Sets every price *and* the mission architecture. One of `earth_surface`, `leo`, `geo`, `cislunar`, `lunar_surface`, `mars_orbit`, `mars_surface`. Writes Stage 2 and Stage 4 together, never set the two sub-configs separately |
 | `.calc.use_beneficiation` | `True` | Return concentrate instead of run-of-mine ore. Charges the extra dig time, processing energy and solar-array mass. **Default since calc v1.17.0**; almost every historical table is `False`. See [Beneficiation](#beneficiation) |
 | `.calc.beneficiation_recovery` | `0.90` | Fraction of the valuable phase reporting to concentrate |
 | `.calc.max_concentration_ratio` | `50.0` | Safety cap on feed:concentrate. The purity bound normally binds first |
@@ -813,9 +813,40 @@ actually be flown.
 |-------------|--------------------|------------------|-------|
 | `earth_surface` *(default)* | - | - | Terrestrial commodity prices |
 | `leo` | $4,253/kg | 1.00 | Falcon 9 reusable $/kg-to-LEO |
+| `geo` | $12,526/kg | 2.95 | LEO to GTO (2,455 m/s), then 1,836 m/s to circularise and remove 28.5 deg |
 | `cislunar` | $10,810/kg | 2.54 | TLI + NRHO insertion (3,600 m/s), cryo tug |
 | `lunar_surface` | $21,210/kg | 4.99 | TLI + LOI (4,050 m/s) tug, then 1,870 m/s lander |
+| `mars_orbit` | $13,496/kg | 3.17 | TMI (3,600 m/s) + MOI (900 m/s) into the 1-sol staging orbit |
 | `mars_surface` | $45,105/kg | 10.61 | TMI (3,600 m/s), aeroentry at 30% surviving mass, 800 m/s retroprop |
+
+`geo` is a geostationary servicing depot, and it is the only destination in
+this model with a **paying customer today**: roughly 550 active satellites,
+and MEV-1 and MEV-2 have already docked with and station-kept commercial GEO
+spacecraft. It is also the only one that pays a **plane change**. An asteroid
+arrives near the ecliptic and GEO is equatorial, so 23.44 deg has to be bought
+out on arrival; a launch from Canaveral parks at 28.5 deg and buys a slightly
+bigger one. Those are two different numbers for the same manoeuvre, 1,730 and
+1,836 m/s against 1,477 coplanar, and the model keeps them apart on purpose.
+
+Its market is the narrow one. A depot refuels and services satellites, so the
+volatiles hold most of their value and the structural metals lose most of
+theirs: water is worth $10,021/kg there against cislunar's $10,810, while iron
+is worth **$1,879/kg against cislunar's $7,567**. It is the first destination
+whose utility overrides run downward on the metals rather than the volatiles,
+and the argument is different in kind: the lunar and martian discounts are
+about local **supply**, and this one is about local **demand**. Nobody launches
+a kilogram of copper to geostationary orbit, so asteroid copper substitutes for
+nothing there.
+
+`mars_orbit` is the 250 x 33,793 km 1-sol elliptical staging orbit NASA
+DRA 5.0 parks a Mars vehicle in; its period matches a sol to within a minute.
+Capture there only has to **bind** the ellipse rather than circularise it, so
+MOI is 900 m/s where a 200-km orbit costs 2,100 at the same arrival energy,
+the same trade NRHO wins on at the Moon. It is the only Mars destination that
+enters no atmosphere and lands nothing, so it pays neither the entry-survival
+fraction below nor a lander, and it is the one in-space destination whose
+**utility profile is the base one**: everything martian sits 4,100 m/s of
+ascent away, so a depot there competes with Earth freight, not with the crust.
 
 Mars' entry survival fraction is measured, not assumed: MSL landed 899 kg of
 a 3,257 kg entry mass (27.6%) and Perseverance 1,025 of 3,440 (29.8%). The

@@ -22,6 +22,9 @@ import pandas as pd
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CELLS = os.path.join(ROOT, "campaign", "cells")
 RIG_KG = 2000.0
+# ⚠️  The five the campaign measured, not every destination the model has;
+# `mars_orbit` and `geo` landed afterwards and have no cells to analyse.  See
+# the note in run_queue.py.
 DESTS = ["cislunar", "lunar_surface", "leo", "mars_surface", "earth_surface"]
 
 
