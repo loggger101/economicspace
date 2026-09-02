@@ -6,7 +6,7 @@ the split between them is deliberate:
 | file | holds | is the authority for |
 |---|---|---|
 | [`README.md`](README.md) | what the pipeline is, how to run it, what the model does, and the **current** numbers | the current answer |
-| [`versions.md`](versions.md) | what changed in which release, and what every number used to be | the measurement history |
+| [`versions.md`](versions.md) | what changed in which release, what every number used to be, and the per-module changelogs | the measurement history |
 | **this file** | what will bite you: the traps, the invariants, and the reasoning behind decisions that look wrong | how to edit it safely |
 
 **It is meant to be grepped rather than read.** Six parts, in this order:
@@ -78,9 +78,28 @@ in every copy, add the name to `_EXPECTED_DUPES`.
 Each module carries a `pipeline_version` in its config dataclass, and it is
 stamped into every output CSV. That stamp is the only way to tell which code
 produced a given catalog, so changing any number a run produces means bumping
-it. The version-history comment block above each `pipeline_version` field is
-the real changelog for this project; it records the numerical impact of each
-change, often hand-verified. Add to it, don't replace it.
+it.
+
+🚨  **THE CHANGELOG IS `versions.md`, AND AS OF 2026-09-02 IT IS THE ONLY
+COPY.** It used to be a comment block above each `pipeline_version` field as
+well, 2,063 lines of it across the four modules, recording the numerical
+impact of each change, often hand-verified. That was a second copy of a
+measurement record standing beneath this file's own rule that two copies is a
+bug, and because `ui_meta` scrapes a field's comment block as its help text it
+was also what the dashboard rendered when you opened the version stamp. It is
+now [Module changelogs](versions.md#module-changelogs), one section per module,
+in numeric order, which the comment blocks were not. **A release writes in two
+places, and neither of them is the module:**
+
+| where | what goes there |
+|---|---|
+| [`versions.md` > Releases](versions.md#releases) | what the release did, and the measurement that says so |
+| [`versions.md` > Module changelogs](versions.md#module-changelogs) | the stamp, its pairing, and the config fields and output columns it adds |
+
+⚠️  **The schema half is the part with no other home.** Which release added
+`tank_cost_usd` and which added `cadence_window_bound` is what tells you
+whether an archived CSV can answer the question you are asking of it, and no
+release note above records it.
 
 This has already failed once: the project was briefly developed in two places
 at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
@@ -774,7 +793,7 @@ still being **printed to the user on every run**, in five files at once:
 |---|---|
 | `run_pipeline.py` | `--help` for `--raw` and `--search`, and the `[default: ...]` run banner |
 | `build_master.py` | the `MASTER CONFIG READY` banner, which is a `MASTER_ORCHESTRATOR` template, so it is in `master.py` too |
-| `modules/calc.py` | the `use_beneficiation` and `optimise_programme_scale` config comments, and their version-history blocks |
+| `modules/calc.py` | the `use_beneficiation` and `optimise_programme_scale` config comments, and the release notes that were then still in the module |
 | `verify.py` | the comment explaining why beneficiated cells run at a lower row cap |
 | `README.md` | a quoted example of the run banner |
 
@@ -835,7 +854,7 @@ means `grep -rn "<the old number>" *.md` is the check, not a two-file diff.
 `verify_docs.py --before`.** Pull every distinctive numeric token out of the
 old file (anything with a decimal point, a thousands separator, or four-plus
 digits) and assert each still appears somewhere in the new ones; that is
-check 7, and it exists because a line-level diff reported **302 differences**
+check 10, and it exists because a line-level diff reported **302 differences**
 on the first split and could not tell a dropped measurement from a reflowed
 paragraph. It found **26 measurements dropped rather than moved**: the whole
 v1.14.0 and v1.11.0 runtime tables, the `60.9284×` that is the only evidence
@@ -2231,7 +2250,7 @@ one that reads the docs rather than the model:
 | `run_pipeline.py` | headless CLI: `--preset`, `--stages`, `--destination`, row caps |
 | `ui.py` | Streamlit dashboard |
 | `verify.py` | the six release checks |
-| `verify_docs.py` | the seven **docs** checks; imports the four configs, never runs the pipeline |
+| `verify_docs.py` | the **docs** checks, ten of them; imports the four configs, never runs the pipeline |
 | `run.bat` | Windows launcher, a terminal menu over the three above, no model behaviour of its own |
 | `Dashboard.vbs` | double-click entry point, starts the dashboard with no console, ever |
 | `launch_ui.py` | what it starts: supervises `streamlit run ui.py` and owns the stop button |
@@ -2400,12 +2419,23 @@ CRASH IN PLACE.** Of **2,081** occurrences cp1252 cannot encode, just **372
 same bug, and `print("─" * 75)` crashes exactly as hard as a money bag.
 
 ⚠️  **Only PRINTED strings were converted.** Comments and docstrings keep
-theirs, the version-history blocks are this project's real changelog, and so
+theirs, because they are the reasoning this repo exists to preserve, and so
 does every DATA string, because the `notes` fields in `PROPELLANTS_REFERENCE`
 and `STORAGE_REFERENCE` are written into `propellants.csv` and
 `storage_systems.csv`, and rewriting them would change CSV bytes. The
 transformation was AST-driven and touched only the source segments of
 `print(...)` calls for exactly that reason.
+
+🚨  **It also left twelve comments ungrammatical, and nobody read them for
+ten days.** An em-dash that had opened a CONTINUATION line became a bare
+comma at the start of the line, so `modules/calc.py` carried, among eleven
+others, `#, and nothing in this module ever read it.` The pass was correct
+about what it must not touch and had no check on what it left behind; a
+converted comment is still prose a reader has to parse. Eight were re-joined in
+place on 2026-09-02, comma moved onto the previous line and no word added or
+reordered; the other four were inside the release notes that moved to
+`versions.md` in the same pass and were fixed as prose there. **The grep is
+`^\s*#,`**, and it belongs in any future mechanical rewrite of comment text.
 
 🚨  **`build_master.py`'s ANCHORS MATCH ON LINES THIS CHANGED, and one of them
 broke on the first rebuild**; `BUILD FAILED: catalog: INSTALLATION block

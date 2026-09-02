@@ -336,161 +336,21 @@ class CatalogConfig:
     top_n_spectral_types:   int = 20   # types listed in spectral-distribution bars
 
     # ─── PIPELINE VERSION  (bump when changing the schema) ───────────────────
-    # 1.0.3 : initial release with NEOWISE + SsODNet integration
-    # 1.0.4 : added PGM_ENRICHMENT_BY_TYPE table + comp_pgm_enrichment column.
-    #         Per-spectral-type multiplier for the rare-metal (Pt, Pd, Ru, Ir,
-    #         Os, Rh, Au) portion of the metal-fraction value.  Differentiated
-    #         core fragments (M / Xe = 2.0×), basaltic crust (V = 0.2×), mantle
-    #         fragments (A / R / O = 0.5×).  Consumed by Module 4 v1.3.4.
-    # 1.0.6 : lookup_asteroid_catalog() passes regex=False.  Designations and names
-    #         carry regex metacharacters, and pandas' str.contains defaults to
-    #         regex=True, so the "substring match" the docstring promised was
-    #         really a pattern match: lookup_asteroid_catalog(cat, "(1) Ceres")
-    #         silently matched "1 Ceres", and any unbalanced bracket raised
-    #         re.PatternError.  No other behaviour change.
-    # 1.0.5 : removed Asterank source (asterank.com/api).  Dropped:
-    #         • fetch_asterank() function + _ASTERANK_* constants
-    #         • use_asterank toggle from CatalogConfig
-    #         • "Asterank" entry from build_asteroid_catalog's sources dict
-    #         • Asterank-only output columns (provisional_des, delta_v_kms,
-    #           estimated_value_usd, estimated_profit_usd, accessibility_score,
-    #           source_asterank).  Module 4 v1.3.5+ no longer uses these.
-    #         Active sources reduced to: JPL SBDB, SsODNet, NEOWISE, MP3C.
-    # 1.0.7 : renumbering, no behaviour change.  This project was briefly
-    #         developed in two places at once and both shipped different code
-    #         as 1.0.6, so that stamp is ambiguous.  The reconciled module is
-    #         1.0.7 because it matches neither parent.  Treat any CSV stamped
-    #         1.0.6 as undated and re-run rather than trusting the number.
-    # 1.0.8 : realism audit: X-complex metal fractions were pre-Psyche.
-    #         M-type carried 0.80 metal at 5.30 g/cm³, the "exposed iron
-    #         core" picture.  No M-type has ever been measured near that
-    #         density: 16 Psyche is ~3.8-3.9 g/cm³ (Elkins-Tanton 2020,
-    #         Siltala & Granvik 2021) against 7.8 for iron meteorite, and
-    #         metal content is now put at ~30-60%.  Revised:
-    #             type   metal  0.80→0.50   density 5.30→3.90   (M)
-    #                    metal  0.75→0.45   density 5.00→3.80   (Xe)
-    #                    metal  0.50→0.25   density 3.80→3.60   (Xk)
-    #                    metal  0.40→0.30   density 3.50→3.30   (X)
-    #                    metal  0.30→0.10   density 3.50→3.20   (E)
-    #         Xk/E were independently inconsistent; both are described as
-    #         enstatite-dominant, and aubrites are near metal-free.
-    #         Fraction sums per type are unchanged, so the v1.3.3 residual
-    #         silicate floor behaves exactly as before.  Lowers M-type bulk
-    #         value; raises nothing.
-    # 1.0.9 : SsODNet was being fetched and then thrown away.  ssoBFT renamed
-    #         its identity columns (sso_number/sso_name/sso_id → number/name/
-    #         id), the column projection tolerated the loss, and merge_sources
-    #         then dropped the whole source for having no `designation`.  A
-    #         ~500 MB download and every literature diameter, density,
-    #         rotation and TAXONOMY in it went in the bin, silently, behind
-    #         one ⚠️ line.  Six more columns had drifted with it:
-    #             perihelion            → periapsis_distance
-    #             aphelion              → apoapsis_distance
-    #             perihelion_argument   → periapsis_argument
-    #             absolute_magnitude.value → absolute_magnitude.H.value
-    #             spins.<1..3>.period.value → spins.period.value (now a LIST)
-    #         Three separate things kept it quiet, all now fixed:
-    #           • the drift warning only fired when <5 of 24 columns matched.
-    #             14 matched, so losing every merge key read as healthy.  It
-    #             now always reports, and _SSODNET_REQUIRED makes the identity
-    #             columns fatal for the source instead of silently useless.
-    #           • the row-cap sort key `sso_number` sat behind an
-    #             `if in df.columns` guard, so truncation silently stopped
-    #             sorting and took an arbitrary 50,000 rows starting near
-    #             asteroid 367488 rather than Ceres.  Sort key is now required.
-    #           • pq.ParquetFile.schema is the PHYSICAL schema, which names a
-    #             nested list column by its inner path, so `spins.period.value`
-    #             read as absent.  Membership is tested against schema_arrow,
-    #             which is what read(columns=…) actually accepts.
-    #         EFFECT; this changes the evaluated population, so it changes
-    #         every downstream number.  Same run, sources otherwise identical
-    #         (JPL 50k, NEOWISE 50k, MP3C unreachable):
-    #             catalog entries            35,098 →  35,807
-    #             taxonomy MEASURED           1,854 →  24,675
-    #                 (source + tholen; was 1,358 + 496)
-    #             taxonomy GUESSED from albedo 33,235 → 11,131
-    #             density measured                0 →     438
-    #             V-type bodies               3,988 →   2,614
-    #         The V-type count is the tell that the old catalog was wrong:
-    #         V-types are rare, and 3,988 of them was an artefact of guessing
-    #         taxonomy from albedo.  Verified against literature after the
-    #         fix: Ceres 939.4 km / 2.162 g/cm³ / 9.074 h / C, Vesta 522.8 /
-    #         3.411 / 5.342 h / V, Pallas B, Psyche X, Eros 5.27 h / S.
-    #         Any CSV stamped 1.0.8 or earlier was built on the degraded
-    #         catalog; re-run rather than trusting it.
-    # 1.1.0 : POPULATION RELEASE.  Three things, all of which change how many
-    #         asteroids exist downstream, so every number moves.
-    #
-    #         (a) NEOWISE was contributing NOTHING, silently.  IRSA returns
-    #             `asteroid_number` as float64 whenever the result slice holds
-    #             any unnumbered body, so `.astype("string")` built the
-    #             designation "3.0" rather than "3".
-    #             _extract_canonical_designation matches neither `^(\d+)\s*$`
-    #             nor `^(\d+)\s+[A-Z][a-z]` against "3.0", so it passed the
-    #             value through unchanged and the merge key could never equal
-    #             JPL's "3".  Every NEOWISE row then died at validation for
-    #             having no semi-major axis.  The tell in a committed CSV is
-    #             all seven neowise_* columns present and 100% empty while the
-    #             fetcher printed "✅ 183,408 records fetched".
-    #             SCALE-DEPENDENT AND THEREFORE INVISIBLE: at a small cap the
-    #             slice is all-numbered, the dtype is int64, and it works.  It
-    #             broke at exactly the row counts nobody spot-checks.
-    #             Fixed at the source (format the number as an integer) and
-    #             defensively in _extract_canonical_designation, which now
-    #             strips a trailing ".0" from any source.
-    #             Population effect is small, JPL SBDB already ingests NEOWISE
-    #             diameters, so this recovers only 27 bodies JPL lacks, but it
-    #             restores IR albedo, beaming parameter and diameter
-    #             uncertainties for ~132,700 bodies that had none.
-    #
-    #         (b) ONE ROW CAP PER SOURCE, and 0 now means unlimited.  A single
-    #             shared `jpl_limit` capped four sources that each take their
-    #             lowest-numbered N bodies, so the sources overlapped almost
-    #             perfectly and the union was ~N rather than 4N.  See the
-    #             FETCH LIMITS block.  Defaults are now unlimited.
-    #
-    #         (c) DIAMETER DERIVED FROM H where none was measured, gated behind
-    #             `derive_diameter_from_h`.  See DERIVED DIAMETERS above and
-    #             ALBEDO_BY_SPECTRAL_TYPE / ALBEDO_BY_SEMI_MAJOR_AXIS_AU below.
-    #
-    #         EFFECT, measured 2026-08-08 against the live APIs:
-    #             JPL asteroids available            1,554,321
-    #             ...with a MEASURED diameter          139,582
-    #             ...with H and a valid orbit        1,553,812
-    #             catalog at jpl_limit=200,000          89,367  (v1.0.9)
-    #             catalog, measured diameters only     ~139,600  (v1.1.0, gate off)
-    #             catalog, H-derived enabled         ~1,553,800  (v1.1.0, default)
-    #         Any CSV stamped 1.0.9 or earlier was built on at most 89,367
-    #         bodies and is not comparable row-for-row with a 1.1.0 run.
-    #
-    # 1.1.1   PERFORMANCE ONLY: every column identical, verified on the full
-    #         1,555,667-row catalog.  `enrich_composition` resolved everything
-    #         keyed on `spectral_type` once per ROW: nine composition fields,
-    #         two capitalisation passes and the PGM multiplier, twelve
-    #         `.apply()` passes making ~19 MILLION Python calls, each running
-    #         `pd.isna` on a scalar at ~1 us, to produce the ~800 answers that
-    #         76 distinct taxonomy classes can give.  `_by_distinct` evaluates
-    #         each once per class: `enrich_composition` measures
-    #         **9.09 s -> 2.35 s, 3.87x**, on a 224 s Stage 1.
-    #         ⚠️  3.87x is the FUNCTION, not the twelve passes alone, the rest
-    #         of it (the Tholen and albedo fallbacks, the masks, the counts) is
-    #         unchanged and is what remains.  A micro-benchmark of the lookup
-    #         alone says 93x and is measuring something nobody runs.
-    #         Same finding and the same fix as calc 1.17.4's
-    #         `_parse_minerals_column`, at the other end of the same column, 
-    #         which is the point.  The pattern is "a column with few distinct
-    #         values, one Python call per row", and this pipeline had it in
-    #         both directions across a CSV boundary.
-    #         🚨  Verified by running BOTH builds on the same frame in one
-    #         process.  The first attempt FAILED it: filling an object array
-    #         and stopping there kept `None` as `None` where `.apply()` gives
-    #         float64/NaN (53 rows of four fraction columns) and left
-    #         `comp_pgm_enrichment` object rather than float64.  `.infer_objects()`
-    #         runs the same conversion `apply` does.  All 12 derived columns
-    #         identical after it, including `comp_minerals`, which holds LISTS
-    #         and is why the buffer is `np.empty(..., dtype=object)` filled
-    #         rather than `np.array([...])`, which reshapes equal-length lists
-    #         into a 2-D array.
+    # Stamped into every output CSV, and the only way to tell which code
+    # produced a given catalog.  BUMP IT when a change moves any number a run
+    # produces.  The rule is ONE-DIRECTIONAL: changing a number means bumping,
+    # and a bump does NOT mean a number changed, which is why nothing may read
+    # a version as evidence that a result moved.
+    # THE CHANGELOG IS versions.md, NOT THIS COMMENT.  It used to be 155 lines
+    # of release notes sitting right here, a second copy of a record versions.md
+    # already held, which is the documentation form of the defect this project
+    # keeps cataloguing; it was also what the dashboard rendered as this field's
+    # help text, because ui_meta scrapes a field's comment block.  Moved out on
+    # 2026-09-02.  Two places to write, neither of them here:
+    #     versions.md > Releases            what the release did, and what it
+    #                                       measured to say so
+    #     versions.md > Module changelogs   this module's own stamp-by-stamp
+    #                                       record: Stage 1 changelog
     pipeline_version: str = "1.1.1"
 
 
@@ -1678,6 +1538,12 @@ _SSODNET_NUMERIC = [
 
 
 def _ssodnet_cache_path(config: CatalogConfig) -> str:
+    """Where the ~500 MB ssoBFT parquet is cached.
+
+    Through `_resolve_cache_dir`, which defaults to the system temp directory
+    rather than beside the CSVs, so a working copy on Google Drive does not
+    round-trip half a gigabyte through Drive sync on every run.
+    """
     return os.path.join(_resolve_cache_dir(config), _SSODNET_CACHE_FILE)
 
 
@@ -3290,273 +3156,21 @@ class MineralValueConfig:
     PRICE_UNIT: str = "USD/kg"
 
     # ─── PIPELINE VERSION ────────────────────────────────────────────────────
-    # 1.1.0 : initial release
-    # 1.1.1 : cross-file audit cleanup (May 2026):
-    #         • removed unused imports (`field` from dataclasses, `Dict` from typing)
-    #         • refreshed _REF_PRICE_DATE stamp 2026-01-15 → 2026-05-29
-    # 1.1.4 : lookup_mineral() passes regex=False.  pandas' str.contains
-    #         defaults to regex=True, so a query containing metacharacters; 
-    #         "nickel-iron (alloy)", was read as a pattern rather than the
-    #         literal substring the docstring promises, and an unbalanced
-    #         bracket raised re.PatternError.  No other behaviour change.
-    # 1.1.3 : added rare-mineral phase entries (Option 3 from low-value audit):
-    #         • sperrylite  PtAs2     56.6% Pt  → ~$25k/kg implied
-    #         • laurite     RuS2      61.2% Ru  → ~$10k/kg implied
-    #         • awaruite    Ni3Fe     75.9% Ni + 5× PGM-enriched → ~$25k/kg
-    #         • native-pgm  (Pt,Pd,Ir,Os,Ru,Rh) → ~$55k/kg
-    #         These are NOT referenced by default in Module 1's TAXONOMY
-    #         (which uses bulk "nickel-iron" as the metal carrier).  They are
-    #         available targets for per-asteroid composition overrides or
-    #         future spectral-identification work; the integrity check in
-    #         Module 4 will report them as informational "extra" rows.
-    # 1.1.2 : calibration pass; fix low-value bugs found in Module 4 output:
-    #         • Iron price $0.12 → $0.50/kg.  Old number was the iron-ore
-    #           benchmark; mining produces refined Fe metal from nickel-iron
-    #           alloy, so the correct sale price is steel scrap ($0.25-0.50/kg).
-    #         • Gold $85k → $150k/kg (~$4,700/oz, May 2026 vs Jan-stamped value).
-    #         • Platinum $31.5k → $45k/kg (~$1,400/oz, Heraeus 2026 forecast mid).
-    #         • Palladium $32k → $48k/kg (~$1,495/oz, LBMA May 2026).
-    #         • Rhodium $150k → $320k/kg (~$9,950/oz, LBMA May 2026).
-    #         • Water $2,500 → $4,250/kg.  Was based on legacy Falcon 9 launch
-    #           cost; now matches Module 3 v1.2.4 reusable Falcon 9 $4,253/kg-to-LEO.
-    #         • nickel-iron yields: added ruthenium (3 ppm) + osmium (2 ppm), 
-    #           previously missing despite being in the element catalog.
-    #           Iridium 2 → 4 ppm; rhodium 2 → 1.5 ppm (rebalanced for ~37 ppm
-    #           total PGM matching siderite literature).
-    #         Numerical impact (hand-verified):
-    #           nickel-iron implied value  $3.26 → $4.60/kg  (+41%)
-    #           M-type bulk value          $2.61 → $3.69/kg  (+41%)
-    #           C-type bulk value          $375  → $638/kg   (+70%, water-driven)
-    #           B-type bulk value          $500  → $850/kg   (+70%, water-driven)
-    # 1.1.5 : renumbering, no behaviour change.  This project was briefly
-    #         developed in two places at once and both shipped different code
-    #         as 1.1.4, so that stamp is ambiguous.  The reconciled module is
-    #         1.1.5 because it matches neither parent.  Treat any CSV stamped
-    #         1.1.4 as undated and re-run rather than trusting the number.
-    # 1.2.0 : realism audit: water is now priced by DELIVERY DESTINATION.
-    #         Water was hardcoded at $4,250/kg, explicitly "the cost-to-LEO
-    #         of launching an equivalent water mass", i.e. the value of water
-    #         sitting in orbit, while Module 4's mission model flies the
-    #         cargo back down and lands it in a re-entry capsule.  Water on
-    #         Earth's surface is worth bulk-industrial rates.
-    #         The error was not marginal.  Measured across a real catalog,
-    #         water was 99.9-100.0% of the bulk value of EVERY water-bearing
-    #         type, so the entire profitability ranking was a proxy for
-    #         ice_fraction:
-    #             type   bulk $/kg   from water   share
-    #             D       1,062.63     1,062.50   100.0%
-    #             B         850.13       850.00   100.0%
-    #             C         637.63       637.50   100.0%
-    #             M           5.90         0.00     0.0%
-    #         New WATER_VALUE_BY_DESTINATION table + delivery_destination
-    #         config field (earth_surface / leo / cislunar).  Default is
-    #         earth_surface, which is what the Module 4 architecture actually
-    #         delivers, so C-type bulk value drops 637.63 → 0.13 $/kg and
-    #         the ranking inverts to metal-rich types.  Set 'leo' to recover
-    #         the old numbers, but only alongside a mission model that
-    #         actually stops at LEO.
-    #         New output columns: value_basis, delivery_destination.
-    # 1.3.0 : IN-SPACE DELIVERY: destination pricing generalised from water to
-    #         EVERY commodity.  Paired with Module 3 v1.4.0 / Module 4 v1.5.0.
-    #         v1.2.0 repriced water by destination and left every other
-    #         commodity at its terrestrial spot price, which is the same
-    #         inconsistency v1.2.0 existed to fix, just moved: iron delivered
-    #         to LEO was still valued at scrap-steel rates while the water
-    #         beside it in the same capsule was valued at launch cost avoided.
-    #         • WATER_VALUE_BY_DESTINATION → DELIVERY_DESTINATIONS, and the
-    #           in-space prices are now DERIVED rather than tabulated.  The
-    #           old cislunar figure was "~3x the LEO figure" by assertion;
-    #           it is now $4,253/kg-to-LEO carried a further 3,600 m/s
-    #           (Module 3's TLI + NRHO insertion) by an Isp 465 s stage of
-    #           dry-mass fraction 0.10, via the rocket equation in
-    #           delivered_cost_usd_per_kg().  That lands at $10,809/kg: 
-    #           15% below the old hand-waved $12,750, and now traceable.
-    #             earth_surface  $0/kg avoided (terrestrial prices stand)
-    #             leo            $4,253/kg
-    #             cislunar      $10,809/kg
-    #         • A kilogram at a depot is worth the BETTER OF TWO FATES, and
-    #           the choice is made per commodity:
-    #             USED IN SPACE   terrestrial price PLUS in_space_utility x
-    #                             launch cost avoided.  Note the PLUS; the
-    #                             launch bill is what delivering it saves, on
-    #                             top of the material itself.
-    #             SHIPPED DOWN    terrestrial price MINUS the downleg
-    #                             (downleg_cost_usd_per_kg): capsule + TPS +
-    #                             recovery, derived from the same Module 3
-    #                             rates Module 4 charges for an Earth return,
-    #                             plus the depot-departure burn.  ~$25,400/kg
-    #                             from LEO, ~$27,300/kg from NRHO.  Coming
-    #                             down is far cheaper than going up.
-    #           This is what puts an honest number on platinum at a depot:
-    #           nobody in orbit wants it, but it is still platinum, so it is
-    #           priced by shipping it home rather than written off.
-    #         • New IN_SPACE_UTILITY table: how good a substitute each
-    #           commodity is for the launched article.  Water 1.00, structural
-    #           metals 0.70, silicates 0.25, carbon 0.40, organics 0.20, and
-    #           0.00 for the precious metals, which routes them down the
-    #           ship-to-Earth branch rather than zeroing them.
-    #           THESE ARE JUDGEMENTS, not measurements; they are the softest
-    #           assumption in the in-space case and live in one table for that
-    #           reason.
-    #         • New apply_delivery_destination() step runs after merge_mineral_sources
-    #           so it overrides LIVE quotes as well as reference ones.
-    #         Numerical impact at LEO / cislunar (earth_surface unchanged):
-    #           nickel-iron  $4.73/kg  -> $2,978  / $7,567   (used in space)
-    #           water        $0.001    -> $4,253  / $10,810  (used in space)
-    #           platinum     $56,695   -> $31,285 / $29,378  (shipped down)
-    #           gold        $138,882   -> $113,472/ $111,565 (shipped down)
-    #         New output columns: terrestrial_price_usd_per_kg,
-    #         in_space_utility, downleg_cost_usd_per_kg, value_route.
-    # 1.4.0 : SURFACE DESTINATIONS: lunar_surface and mars_surface.  Paired
-    #         with Module 3 v1.5.0 and Module 4 v1.6.0.  Prices for the three
-    #         existing destinations are UNCHANGED.
-    #         • delivered_cost_usd_per_kg now walks a CHAIN OF LEGS
-    #           (_DELIVERY_LEGS) backwards from the payload instead of taking
-    #           one lumped Δv.  Staging is worth roughly 2x on a lunar
-    #           landing, a single stage flying the whole 5,920 m/s needs
-    #           10.96 kg in LEO per kg landed against 4.99 kg for the
-    #           TLI/LOI-tug + lander pair that would actually be flown, so
-    #           lumping it would have overstated the Moon by 2x.
-    #         • New "edl" leg type for atmospheric arrival, carrying a
-    #           surviving-mass fraction rather than a Δv.  Mars uses 0.30,
-    #           measured from MSL (3,257 kg entry -> 899 kg rover, 27.6%) and
-    #           Perseverance (3,440 -> 1,025, 29.8%).
-    #         • New _LANDER_DRY_MASS_FRAC 0.20; Apollo LM descent stage flew
-    #           2,134 kg dry on 8,200 kg propellant.  A lander is structurally
-    #           much heavier than a cryo tug for the same propellant load.
-    #         Delivered cost, and the mass that has to reach LEO for it:
-    #             leo             1.00 kg/kg      $4,253/kg
-    #             cislunar        2.54 kg/kg     $10,810/kg
-    #             lunar_surface   4.99 kg/kg     $21,210/kg
-    #             mars_surface   10.61 kg/kg     $45,105/kg
-    #         Downlegs (shipping back to the terrestrial market) rise the same
-    #         way: $25,410 from LEO, $27,317 from NRHO, $44,939 from the Moon,
-    #         $96,394 from Mars.  The last exceeds the terrestrial price of
-    #         platinum, so platinum delivered to a Mars base is worth exactly
-    #         nothing, which is the correct answer, not a bug.
-    #         ⚠️  Both surface figures are marginal-transport LOWER BOUNDS: 
-    #         no NRE, no programme overhead, no cadence limit.  CLPS lunar
-    #         landers really cost ~$1M/kg today at ~100 kg scale.
-    # 1.5.0 : market-size data for Module 4 v1.7.0's saturation model.
-    #         Prices were static at the point of sale: a mission could return
-    #         any quantity of platinum and sell every kilogram at spot, which
-    #         left the "fly more missions" lever with no stopping point.
-    #         • ANNUAL_WORLD_PRODUCTION_KG, USGS primary production.  The
-    #           targets asteroid mining always names are the small ones:
-    #           osmium ~1 t/yr, iridium 7.5 t, rhodium 23 t, platinum 180 t.
-    #         • IN_SPACE_ANNUAL_DEMAND_KG; what a theoretical base can absorb
-    #           per year, all commodities competing for one import budget.
-    #           LEO 500 t, cislunar 100 t, lunar surface 50 t, Mars 20 t.
-    #           ⚠️  JUDGEMENT, not measurement; no such market exists.
-    #         New output column: annual_market_kg (destination-aware).
-    # 1.6.0 : IN-SPACE MANUFACTURING is now costed instead of assumed.  The
-    #         gap between "kilogram of Fe-Ni at a depot" and "kilogram of
-    #         usable structure" used to hide inside the 0.70 utility factor,
-    #         so the refinery was assumed into existence and never paid for.
-    #         Now explicit and derived from Module 3 rates:
-    #           energy  kWh/kg x $6.08/kWh -- the capital cost of a kilowatt
-    #                   hour in deep space ($800/W-EOL over a 15-yr life),
-    #                   about 100x terrestrial industrial power
-    #           plant   $300k/kg of hardware at 100 kg/yr throughput per kg
-    #                   over 15 years = $200 per kg refined
-    #         Metals take 5 kWh/kg (electric-arc / direct-reduction
-    #         steelmaking is 4-5 kWh/kg terrestrially and there is no
-    #         carbothermic shortcut in vacuum), silicates 1, carbon 2,
-    #         water 0.5.  Deducted from the "used in space" route only --
-    #         material shipped down is refined on Earth.
-    #         The utility factor now means only what it says: how good a
-    #         substitute the finished article is for a launched one.
-    #         New output column: in_space_processing_usd_per_kg.
-    # 1.7.0 : UTILITY IS PER DESTINATION, and the import budget is per
-    #         commodity.  One utility table used to serve every in-space
-    #         destination, so olivine captured the same fraction of its freight
-    #         on the surface of Mars, a planet made of olivine, as at a
-    #         propellant depot in empty space.  The missing term is not
-    #         distance, it is LOCAL COMPETITION: the alternative to importing
-    #         is not always launching from Earth.
-    #         • IN_SPACE_UTILITY_BY_DESTINATION overrides the base table per
-    #           destination.  LEO and cislunar keep the base profile unchanged
-    #, nothing is available locally there at any price, so they are
-    #           the calibration anchor.  The two surfaces are discounted
-    #           against what they can dig up:
-    #             water        1.00 -> 0.60 Moon (PSR ice, ~40 K, no sunlight)
-    #                               -> 0.25 Mars (metres-thick ground ice,
-    #                                  1-3 wt% hydrated regolith per SAM)
-    #             iron/FeNi    0.70 -> 0.45 Moon (5-15 wt% FeO + ilmenite)
-    #                               -> 0.40 Mars (oxidised crust; loose
-    #                                  meteoritic iron at Meridiani)
-    #             silicates    0.25 -> 0.03 Moon / 0.02 Mars (it is the ground)
-    #             carbon       0.40 -> 0.02 Mars (95.3% CO2 atmosphere); NOT
-    #                                  discounted on the Moon, where carbon is
-    #                                  ~100 ppm solar-wind implantation
-    #             Ni/Co/Cu     undiscounted everywhere; no concentrated ore is
-    #                                  known on either body
-    #           Every override runs DOWNWARD.  Raising a utility is how this
-    #           table becomes a viability dial, so a settlement catalyst market
-    #           for the PGMs was considered and rejected; see the note on
-    #           IN_SPACE_UTILITY_BY_DESTINATION for why it needs a
-    #           quantity-aware route choice first.
-    #         • _DEMAND_SHARE_BY_CLASS splits the destination import budget
-    #           that IN_SPACE_ANNUAL_DEMAND_KG has described as shared since
-    #           v1.5.0 but never actually divided, every commodity used to get
-    #           the whole budget to itself.  Propellant 0.55 / structural 0.25 /
-    #           shielding 0.15 / chemical 0.05, plus a 0.0005 trace slice that
-    #           binds only if anyone ever gives the PGMs in-space utility.  So
-    #           Mars absorbs 11 t/yr of water where it used to absorb 20 t/yr
-    #           of every commodity independently.
-    #           Measured effect, raw, full catalog: this alone costs LEO 9.8%
-    #           and cislunar 46.6%, at destinations with NO utility override at
-    #           all.  Cislunar takes the bigger hit off the smaller budget.
-    #         • annual_market_kg is now ROUTED.  The market that saturates is
-    #           the one you sell into, so a commodity flown down is bounded by
-    #           terrestrial annual production, not by a depot's import budget.
-    #           It runs in BOTH directions and which way depends on the
-    #           commodity: platinum at LEO tightens (the depot's 500 t/yr
-    #           becomes the world's real 180 t/yr) while gold loosens (500 t/yr
-    #           becomes 3,000 t/yr).  Net effect on the best case is negative
-    #           at every destination measured.
-    #         Prices still RISE with distance; Mars freight is 10.6 kg-in-LEO
-    #         per kg delivered and that dominates, but they no longer rise as
-    #         fast as the freight does, and the volatiles that carried the Mars
-    #         result rise least.  Water at Mars is 2.7x its LEO price now,
-    #         against 11x before.
-    #         Numerical impact on price (mars_surface):
-    #           water     $44,902 -> $11,073   iron    $31,344 -> $17,812
-    #           olivine   $11,070 ->    $696   carbon  $17,831 ->    $691
-    #           nickel    unchanged at $31,360 (undiscounted)
-    #           platinum  unchanged at $0 (downleg still exceeds spot)
-    # 1.7.1 : Three commodities were falling through a SILENT DEFAULT, and the
-    #         stamp moves so a catalog still names the code that built it.  No
-    #         exported value changes: all 31 rows of the on-disk catalog
-    #         recompute identically, `annual_market_kg` and `in_space_utility`
-    #         alike.
-    #         • `sperrylite` (PtAs2), `laurite` (RuS2) and `native-pgm` had no
-    #           `_COMMODITY_CLASS` entry, so `annual_market_kg` handed them the
-    #           `.get(..., "shielding")` default: **0.15 of a destination's
-    #           entire import budget** instead of the trace slice the eight PGM
-    #           ELEMENTS get.  75,000 kg/yr at LEO against 250: a factor of 300,
-    #           for the ore minerals of exactly those metals.
-    #           ⚠️  INERT TODAY, and that is why it survived: their in-space
-    #           utility is 0.0 at every destination, so the price router always
-    #           returns "shipped to Earth" and the class is never read.  It is
-    #           the RTG lesson again; **an unreachable branch is not a verified
-    #           branch**, and the settlement-catalyst market that would make it
-    #           reachable is recorded in CLAUDE.md as considered-and-rejected,
-    #           not as impossible.  Reclassified to "trace", where they belong.
-    #         • An `assert` after MINERAL_REFERENCE now fails at import if any
-    #           commodity has no class, so the next one added cannot inherit
-    #           15% of a depot by accident.  Same precedent as the assert on
-    #           `_DEMAND_SHARE_BY_CLASS` summing to 1.0.
-    #         ⚠️  NOT fixed, deliberately, and measured rather than argued:
-    #         `nickel-iron` is absent from ANNUAL_WORLD_PRODUCTION_KG, so at
-    #         `earth_surface` it takes the same unlimited default and never
-    #         saturates.  It is one of only four phases Stage 4 actually sells.
-    #         Correcting it to world pig-iron (1.3e12 kg/yr) moves the
-    #         saturation multiplier by **7.7e-8 at 5e4 kg and 7.7e-5 at 5e7 kg**
-    #, nothing, but enough to break the bit-identity every release here
-    #         is argued from, on a destination not re-measured since calc
-    #         1.14.0.  Recorded in CLAUDE.md instead; do not "find" it again and
-    #         assume it is bigger.
+    # Stamped into every output CSV, and the only way to tell which code
+    # produced a given catalog.  BUMP IT when a change moves any number a run
+    # produces.  The rule is ONE-DIRECTIONAL: changing a number means bumping,
+    # and a bump does NOT mean a number changed, which is why nothing may read
+    # a version as evidence that a result moved.
+    # THE CHANGELOG IS versions.md, NOT THIS COMMENT.  It used to be 267 lines
+    # of release notes sitting right here, a second copy of a record versions.md
+    # already held, which is the documentation form of the defect this project
+    # keeps cataloguing; it was also what the dashboard rendered as this field's
+    # help text, because ui_meta scrapes a field's comment block.  Moved out on
+    # 2026-09-02.  Two places to write, neither of them here:
+    #     versions.md > Releases            what the release did, and what it
+    #                                       measured to say so
+    #     versions.md > Module changelogs   this module's own stamp-by-stamp
+    #                                       record: Stage 2 changelog
     pipeline_version: str = "1.7.1"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
@@ -3586,14 +3200,17 @@ KG_PER_TONNE   = 1_000.0
 
 
 def _per_troy_oz_to_per_kg(usd_per_oz: float) -> float:
+    """Precious-metal quote to $/kg. This is the yfinance path (GC=F, SI=F, PL=F, PA=F)."""
     return float(usd_per_oz) * TROY_OZ_PER_KG
 
 
 def _per_lb_to_per_kg(usd_per_lb: float) -> float:
+    """Copper's quote to $/kg. yfinance prices HG=F per pound, alone among these."""
     return float(usd_per_lb) * LB_PER_KG
 
 
 def _per_tonne_to_per_kg(usd_per_tonne: float) -> float:
+    """USGS and LME base-metal quotes to $/kg. Metric tonne, so exactly /1,000."""
     return float(usd_per_tonne) / KG_PER_TONNE
 
 
@@ -4551,8 +4168,8 @@ MINERAL_REFERENCE: List[dict] = [
             # PGM (per USGS Bulletin 1214 / Nichiporuk 1965).  Distribution
             # below sums to ~37 ppm total + 1 ppm Au, calibrated to IIIAB
             # medium-octahedrite means.  Ir bumped from 2→4 ppm (range cited
-            # at 0.01-19 ppm).  Ru + Os added (were missing in v1.1.0-1.1.1)
-            #, both concentrate in the metallic phase and are present at
+            # at 0.01-19 ppm).  Ru + Os added (were missing in v1.1.0-1.1.1),
+            # both concentrate in the metallic phase and are present at
             # 1-5 ppm in nearly every iron meteorite group.
             "platinum":  1.5e-5,   # 15 ppm   (Pt is the dominant PGM)
             "palladium": 1.0e-5,   # 10 ppm
@@ -4982,8 +4599,8 @@ def fetch_reference_table(config: MineralValueConfig) -> pd.DataFrame:
     print("\n  Reference table - loading curated prices + densities ...")
 
     # Every row here carries its TERRESTRIAL price.  The in-space repricing is
-    # applied once, uniformly, after the merge; see apply_delivery_destination
-    #, because it has to override live quotes too (platinum's LME price is
+    # applied once, uniformly, after the merge; see apply_delivery_destination,
+    # because it has to override live quotes too (platinum's LME price is
     # not what platinum is worth at a cislunar depot).
     rows = []
     for entry in MINERAL_REFERENCE:
@@ -5448,319 +5065,21 @@ class TransportConfig:
     contingency_fraction: float = 0.20
 
     # ─── PIPELINE VERSION ────────────────────────────────────────────────────
-    # 1.2.0 : initial release
-    # 1.2.1 : May 2026 source-audit: launch prices re-cited, hydrazine $700→$75/kg,
-    #         xenon $1.5k→$10k/kg, argon $1→$10/kg, H3 LEO 6.5→16.5t,
-    #         SLS $2.5B→$4.1B, Falcon 9 $70→$74M, every notes field source-tagged.
-    # 1.2.2 : second-pass sanity sweep:
-    #         • SLS LEO 42t→105t (was confused with TLI figure); $/kg recalc
-    #         • Falcon Heavy LEO 63.8t→57t to match the partial-reuse $97M price
-    #         • Xenon density 5.4→2.0 g/cm³ (5.4 was physically impossible)
-    #         • Starship escape: caveat that 27t assumes orbital refueling
-    #         • Crew + Mining-payload-recurring rows: citations added
-    # 1.2.3 : third-pass deep audit:
-    #         • Falcon 9 GTO 8.3t→5.5t (8.3t was expendable; row is reusable)
-    #         • Falcon 9 escape 4.0t→2.5t (4.0t was Mars-transfer, not C3=0 reusable)
-    #         • mission_cost_breakdown: fixed rocket-equation bug, outbound
-    #           prop now correctly includes return-prop dead-mass when ISRU off
-    #           (was understating launch mass by ~110% in worked example)
-    #         • Unused Optional import removed; docstring version stub generalised
-    #         • Blend math hand-verified: ρ_kerolox=1.015, ρ_hydrolox=0.361,
-    #           ρ_methalox=0.833, ρ_MMH/NTO=1.159 kg/L, all consistent.
-    # 1.2.4 : switched to UNCREWED autonomous-only mission model:
-    #         • Replaced 'Crew (if crewed mission)' row ($400M/crew-yr) with
-    #           'Autonomous mining control & AI (NRE)' ($200M per program)
-    #         • All downstream Module 4 cost cascades now uncrewed by design;
-    #           no life-support / crew-habitat mass overhead anywhere
-    # 1.2.5 : portability, no change to any number produced:
-    #         • output_dir defaults via _default_output_dir() instead of a
-    #           hardcoded /content/asteroid_pipeline, which on Windows
-    #           silently resolved to C:\content
-    #         • stdout/stderr forced to UTF-8 before the first print, the
-    #           emoji progress output crashed cp1252 consoles instantly
-    #         • RUN & PREVIEW moved under a main-guard so importing the
-    #           module no longer triggers a full run
-    # 1.3.0 : realism audit.  Two additions, both consumed by Module 4 v1.4.0:
-    #         • New `dv_penalty_factor` column on PROPELLANTS_REFERENCE.
-    #           The rocket equation does not care about thrust, but
-    #           trajectories do: a milli-newton electric stage cannot fly the
-    #           impulsive burns DELTA_V_REFERENCE assumes.  Spiralling out of
-    #           LEO costs ~7 km/s against ~3.2 km/s impulsive.  Chemical
-    #           systems carry 1.0; electric carry 1.5.  Without it, Isp
-    #           3,000 s wins the payload cascade on a Δv budget it cannot
-    #           achieve.
-    #         • New OPERATIONAL_COSTS row "Return capsule recurring cost" at
-    #           $150k/kg.  Module 4 was billing the return capsule at the
-    #           $300k/kg mining-payload rate, pricing a parachute-and-heat-
-    #           shield can as regolith-contact machinery.
-    #         New output column on propellants.csv: dv_penalty_factor.
-    # 1.4.0 : IN-SPACE DELIVERY ARCHITECTURE.  Reference data for selling the
-    #         mined material at an in-space destination instead of flying it
-    #         down.  Paired with Module 2 v1.3.0 and Module 4 v1.5.0.
-    #         Nothing existing changed value; this release is additive, so
-    #         every number a v1.3.0 earth_surface run produced is unchanged.
-    #         • 6 new DELTA_V_REFERENCE segments: the delivery ladder above
-    #           LEO (TLI 3,150 / NRHO insertion 450 / LEO→NRHO 3,600 m/s) and
-    #           the three asteroid return legs quoted at v_inf = 3 km/s
-    #           (LEO propulsive 3,626, cislunar Oberth capture 944, LEO
-    #           aerobraked 100 m/s).  The LEO→NRHO figure is what Module 2
-    #           integrates to price material sold at a cislunar depot.
-    #         • 3 new OPERATIONAL_COSTS rows: "Berthing adapter recurring
-    #           cost" ($60k/kg, replaces the re-entry capsule for in-space
-    #           delivery), "Depot berthing & handover operations" ($2M, 
-    #           replaces the $15M Earth recovery campaign), and "FAA Part 450
-    #           licensing (launch only)" ($1.2M, no re-entry licence).
-    #         The headline physical result these encode: cislunar is BOTH
-    #         cheaper to reach from an asteroid than LEO (960 vs 3,590 m/s,
-    #         because capture can take the Oberth benefit and NRHO is barely
-    #         bound) AND worth more per kg on arrival.  Earth's surface is the
-    #         cheapest to reach and worth the least.
-    # 1.5.0 : SURFACE DESTINATIONS.  Reference data for delivering to a lunar
-    #         or Mars surface base.  Paired with Module 2 v1.4.0 and Module 4
-    #         v1.6.0.  Additive again; no existing number changed.
-    #         • 8 new DELTA_V_REFERENCE segments: the lunar descent chain
-    #           (TLI→LOI 900, NRHO→LLO 730, LLO→surface 1,870, and the
-    #           LEO→lunar-surface total of 5,920 m/s), and the Mars chain
-    #           (TMI 3,600, entry→surface retropropulsion 800, plus the
-    #           surface→LMO 4,100 and LMO→Earth 2,100 return legs).
-    #         • 1 new OPERATIONAL_COSTS row: "Surface lander recurring cost"
-    #           at $200k/kg; a lander is active where a re-entry capsule is
-    #           passive, so it sits above the $150k/kg capsule and below the
-    #           $300k/kg mining rig.
-    #         The Moon is the awkward case these numbers expose: it is the
-    #         CLOSEST destination and among the most expensive to land on,
-    #         because there is no atmosphere and every metre per second of
-    #         the 5,920 m/s from LEO is paid propulsively.  Mars is four
-    #         times further in Δv terms from Earth but gets most of its
-    #         arrival braking free from an atmosphere.
-    # 1.6.0 : data for the modelling gaps Module 4 v1.7.0 closes.  Additive;
-    #         no existing number changed.
-    #         • "Electric thruster + PPU specific mass" 8 kg/kW and
-    #           "Electric propulsion efficiency" 0.60.  Together with the
-    #           existing power-system row these make low-thrust TRIP TIME
-    #           computable: T = 2·η·P/(Isp·g0), and a burn lasting
-    #           m_prop·(Isp·g0)²/(2·η·P).  Until now electric propulsion paid
-    #           a Δv penalty but flew instantly and drew no power.
-    #         • "Water liberation energy (bound water)" 2,500 Wh/kg.  C-type
-    #           water is bound in phyllosilicates and has to be baked out;
-    #           the pipeline was extracting it for free.
-    # 1.7.0 : data for Module 4 v1.8.0's rig terminal value, in-space
-    #         manufacturing, reliability and boil-off models.  Additive.
-    #         • New `boiloff_pct_per_day` column on PROPELLANTS_REFERENCE.
-    #           Hydrolox 0.05%/day is the one that bites: over a 5-year
-    #           mission that is 2.5x the return propellant, which is exactly
-    #           why no flown mission has ever done a deep-space arrival burn
-    #           on hydrolox after a multi-year cruise.  Storables and the
-    #           electrics are 0.
-    #         • 6 new OPERATIONAL_COSTS rows: launch reliability 0.97,
-    #           spacecraft MTBF 30 yr, first-of-kind mining success 0.75,
-    #           rig service life 15 yr, rig salvage fraction 0.50, and
-    #           in-space plant throughput 100 kg/yr per kg of plant.
-    # 1.8.0 : two rows for Module 4 v1.9.0's reliability-growth model:
-    #         "Mining reliability growth exponent" 0.30 (Duane alpha, bottom
-    #         of MIL-HDBK-189's active-growth band -- appropriate for hardware
-    #         that flies once every few years with no test fleet) and
-    #         "Mining system mature success probability" 0.95 (asymptotic
-    #         ceiling; mature spacecraft mechanisms run 97-99% and a
-    #         continuously-operating excavator is harder than a one-shot
-    #         deployment).
-    # 1.8.1 : recalibrated "Mining system first-of-kind success probability"
-    #         0.75 -> 0.85.  The v1.7.0 note cited three failures and none of
-    #         the successes; the full regolith-contact record is 11/13.  Notes
-    #         now list the whole tally, both ways of counting Hayabusa, and
-    #         why sustained-operation risk is not double-counted here.
-    # 1.8.2 : new ops row: "Electric propulsion system recurring cost",
-    #         $1.5M per kW of thruster + PPU (NEXT-C anchored, range
-    #         $0.5-3M/kW).  Module 4 v1.7.0 put the electric stage's array and
-    #         thruster into the ROCKET EQUATION and never into any cost line,
-    #         so a 309 kW / 14-tonne EP system was free, and once Module 4
-    #         v1.10.0 stopped selecting missions by "cheapest", electric
-    #         propulsion won everywhere on hardware nobody had to buy.  The
-    #         array is priced off the existing $800/W power-system row; this
-    #         row covers only the propulsion train.  Adds one category (35).
-    # 1.9.0 : CATALOG COMPLETENESS AUDIT.  The three reference tables held what
-    #         somebody happened to list, not what exists, and the omissions were
-    #         not neutral; they all ran in the same direction.  Paired with
-    #         Module 4 v1.11.0.
-    #         • PROPELLANTS 7 → 40.  Sixteen additions have FLOWN and were
-    #           simply absent: solid APCP, UDMH/NTO, Aerozine-50, green
-    #           monoprop, HTP monoprop and bipropellant, cold gas, krypton
-    #           (the most-flown electric propellant by unit count), iodine,
-    #           water electrothermal and water ion, hydrazine arcjet,
-    #           electrospray, FEEP, PPT, and mercury ion (retired, banned).
-    #           Seven more are in development (NTP, NEP, solar-thermal, solar
-    #           steam, VASIMR, MPD, metal/water) and nine are concepts
-    #           (Li/F2/H2, CO/LOX, mass driver, Orion pulse, fusion, antimatter,
-    #           magsail, tether, beamed laser-thermal).
-    #         • TANK MASS IS DERIVED, NOT IGNORED.  New `storage_class` and
-    #           `tank_kg_per_L` per row.  density_kg_per_L had been computed and
-    #           exported since v1.2.0 and read by NOTHING, so every low-density
-    #           propellant flew its tank for free.  Anchored on flight articles:
-    #           hydrolox lands at 9.7% of propellant mass against Centaur's
-    #           measured ~9.7%, APCP at 6.9% against Star 48B's 6.4%, cold gas
-    #           at 46%.  Bare LH2 pays 53%, which is what nuclear thermal now
-    #           has to earn its 900 s against.
-    #         • New `status` / `trl` / `restartable` / `propellantless` /
-    #           `isru_feed_kg_per_kg` / `isru_feed_material` / `first_flight`
-    #           columns.  status gates the search exactly as it already did for
-    #           vehicles.  restartable=False takes solids out permanently; a
-    #           return burn fires years after launch, and propellantless=True
-    #           takes sails out, because infinite Isp otherwise reports an
-    #           unbounded payload.  isru_feed_* generalises what Module 4 had
-    #           hardcoded as "hydrolox only": a steam rocket burns asteroid
-    #           water at 1.00 kg feed per kg propellant against hydrolox's
-    #           1.286, and a mass driver throws raw regolith.
-    #         • LAUNCH VEHICLES 12 → 36.  Six operational (LVM3, Ariane 62,
-    #           Long March 7, Vega C, PSLV-XL, Alpha), two retired (Delta IV
-    #           Heavy, H-IIA: the vehicle that launched Hayabusa2), eight in
-    #           development (Neutron, Terran R, Nova, Eclipse, Zhuque-3,
-    #           Tianlong-3, Long March 9 and 10), and eight NON-ROCKET concepts
-    #           (SpinLaunch, light-gas gun, StarTram, Skylon, Sea Dragon, lunar
-    #           mass driver, lunar and Earth space elevators).
-    #         • New `launch_type` / `origin` / `trl` / `max_accel_g` /
-    #           `tanker_flights_for_escape` columns.  max_accel_g is the one
-    #           that matters: the kinetic launchers are not expensive, they are
-    #           10,000-30,000 g and can lift propellant but not a mining rig.
-    #           tanker_flights_for_escape finally implements what the Starship
-    #           row's own notes had asked for since v1.4.0.
-    #         • NEW TABLE: STORAGE_REFERENCE, 20 systems across four domains
-    #           (propellant tankage and cryocooling, cargo containment, onboard
-    #           energy storage, in-space depots), exported as
-    #           storage_systems.csv.  Storage was previously one column.
-    #         • New ops row "RTG specific power" 5.0 W/kg, and the RTG cost row
-    #, present since v1.2.0 and never read by anything, is now
-    #           consumed by Module 4.  Crossover against the 60 W/kg solar row
-    #           is 3.46 AU, and this catalog runs well past it.
-    # 1.10.0 : realism audit of the v1.9.0 tables.  Three changes, two of which
-    #         move every number.
-    #         • THRUSTER SYSTEMS: the DEVICE, as distinct from the propellant.
-    #           This table has always been half propellant and half propulsion
-    #           system (isp_vac_s, restartable and dv_penalty_factor are device
-    #           properties), and it carried nothing about whether the device can
-    #           be BUILT at the size Module 4 flies.  So Module 4 sized an
-    #           electric stage on power alone and a third of its winning
-    #           missions were pulsed plasma thrusters: 860 uN in flight, asked
-    #           for ~10 N.  New `_THRUSTER_SYSTEMS` block supplies
-    #           `thruster_kg_per_n`, `thruster_efficiency` and `thrust_scaling`
-    #           per technology, every figure anchored on a flight or ground
-    #           article.  The `continuous` / `replicated` split is the physics:
-    #           a discharge or beam you can enlarge stays at 6-90 kg/N however
-    #           big you build it; discrete emitters, needles and pulses are
-    #           stuck at 2,500-10,000 kg/N forever.  `_apply_thruster_data`
-    #           RAISES on an electric row with no entry rather than defaulting,
-    #           and tests dv_penalty_factor > 1 to match Module 4's own
-    #           is_electric test; keying off `type` would have missed
-    #           nuclear_electric, direct fusion drive and antimatter, and it
-    #           caught all three.
-    #         • NEW OPS ROW "Power processing unit specific mass" 4.7 kg/kW,
-    #           splitting the lumped 8 kg/kW "thruster + PPU".  A per-kW figure
-    #           cannot express a per-newton constraint, which is what allowed
-    #           the above.
-    #         • ARGON WAS A FREE RESOURCE, and the row said so itself.  It
-    #           carried liquid-argon density (1.395 kg/L, which only exists at
-    #           its 87.3 K boiling point) with a boil-off of ZERO, and its own
-    #           two comments, "liquid NBP (cryogenic storage)" and "stored
-    #           supercritical at ambient temperature", sat three lines apart.
-    #           The combination bought the lightest tank of any gas here, 2.1%
-    #           of propellant mass, AND exemption from the hold-time penalty
-    #           every other cryogen pays.  Measured at cislunar, argon was
-    #           chosen for 25.0% of raw winners and 27.3% of beneficiated ones;
-    #           correctly bottled it takes 2.4% and 0.0%, and 1,059 bodies stop
-    #           being feasible.  It also carried the whole Mars result at both
-    #           settings, which has not been re-run.  Note what did NOT move:
-    #           both cislunar headline ratios are bit-identical either way,
-    #           because the best missions were never flying argon.
-    #           Split into the two real articles: `ArgonSC`, supercritical in a
-    #           COPV at 18 MPa and 0.30 kg/L, which is what has FLOWN (no
-    #           spacecraft has ever carried cryogenic argon), and `ArgonLIQ`,
-    #           the liquid feed a multi-tonne stage would want, tagged
-    #           `development` and paying derived boil-off.  Honestly bottled,
-    #           argon pays 22.9% of its own mass in tankage, worse than
-    #           krypton's 12.5% and xenon's 1.9%, because it is the LIGHTEST of
-    #           the three and tank fraction goes as 1/M once pressure cancels.
-    #           Density derived two ways (Peng-Robinson and generalised
-    #           compressibility), boil-off derived from this table's own LOX
-    #           figure.  See _COMPONENTS and _LAR_BOILOFF_PCT_PER_DAY.
-    #         • NEW OPS ROW "Propellant tank recurring cost", $6,000/kg,
-    #           Centaur-derived.  Module 3 has produced tank MASS since v1.9.0
-    #           and Module 4 has flown it since, and nothing ever bought one.
-    #         Propellants 40 → 41 (23 operational, 8 development).
-    # 1.11.0 : the reference DATA was right and unreachable.  Four new
-    #         OPERATIONAL_COSTS rows, and not one of them is a new measurement:
-    #         every figure already existed in STORAGE_REFERENCE, where it had
-    #         been sitting behind a "⚠️  Not modelled in Module 4" note since
-    #         v1.9.0.  Module 4 loads operational_costs.csv and does NOT load
-    #         storage_systems.csv, so the whole table was documentation.
-    #         That is a new instance of the prescriptive-comment failure this
-    #         project keeps finding, with a twist worth naming: v1.9.0 wrote
-    #         down the gap, the gap was quoted in CLAUDE.md as a known
-    #         limitation for two releases, and writing it down was mistaken for
-    #         closing it.  A table nobody reads is not a model.
-    #         • "Eclipse / night-side dark fraction" 0.50.  The sun sets on a
-    #           rig anchored to a rotating body.  This is a SIZING factor, so no
-    #           W/kg row could ever have absorbed it.
-    #         • "Energy storage usable specific energy" 104 Wh/kg: 130 Wh/kg
-    #           system-level Li-ion × 0.80 DoD, folded so a consumer cannot
-    #           forget the DoD.
-    #         • "Power-system row baseline dark period" 0.58 h.  The deduction
-    #           that stops the battery being charged twice, and the resolution
-    #           of a contradiction: "Power system specific mass" claimed to
-    #           cover both a LEO eclipse and an asteroid night, which no single
-    #           number can.  That claim is removed from its notes.  Same shape
-    #           as argon in v1.10.0, a row asserting two incompatible physical
-    #           states, and it is worth noticing that the argon audit did not
-    #           catch it, because it was looking at propellants.
-    #         • "Volatile cargo containment" 0.05 kg/kg.  Water sold at a depot
-    #           has to still be water on arrival.  The best cislunar missions
-    #           are ~88% water by mass, so this is the largest single unpriced
-    #           item the model had left, not a rounding term.
-    #         No propellant, vehicle or Δv figure moved.  Every number Module 4
-    #         produces does, because it can now read these.
-    # 1.12.0 : ONE new OPERATIONAL_COSTS row, and it is the missing half of a
-    #         bound this table has carried since v1.7.0.
-    #         • "Mining rig maximum trips" 5 (range 2-12).  "Mining rig service
-    #           life" is 15 YEARS, and Module 4 turned that into a mission count
-    #           by dividing by the stay, so at the ~1.25 yr stay the winning
-    #           cislunar mission actually flies, one rig served 12 consecutive
-    #           campaigns.  Calendar time is not what wears out a machine that
-    #           cuts rock; duty cycles are, and nothing in this table said how
-    #           many.  A rig idle between campaigns ages slowly and one digging
-    #           continuously does not.
-    #           ⚠️  JUDGEMENT, and the row says so at length.  Nothing has ever
-    #           mined an asteroid twice, so it is bracketed between terrestrial
-    #           mining plant (major overhaul at ~2-3 yr of continuous duty, 2-3
-    #           rebuilds before retirement, in a workshop that does not exist
-    #           at an asteroid) and the flight record for regolith-contact
-    #           mechanisms (single-campaign by design, or failed inside one).
-    #           5 is the optimistic reading of both.
-    #         No propellant, vehicle, Δv or storage figure moved.
-    # 1.12.1 : ONE line in validate_transport(), and no table row moved at all.  The two
-    #         propellant sanity bands selected their rows with
-    #         `~propellant_df["propellantless"].astype(bool)`, which is the trap
-    #         CLAUDE.md names under "Correctness invariants that were expensive
-    #         to find", correct today ONLY because every one of the 41 rows
-    #         states the flag, so pandas infers dtype `bool`.  Add one row that
-    #         omits it and the column comes back `object` with a NaN, which
-    #         `.astype(bool)` reads as **True**: the new row would be silently
-    #         classed as a sail and dropped from both the Isp band and the price
-    #         band, i.e. the two checks would stop covering exactly the row most
-    #         likely to be new and wrong.  Now `.ne(True)`, "not flagged
-    #         propellantless", resolved once and read twice rather than written
-    #         out at both bands.  It is total: `bool` out from a `bool` column
-    #         and from an `object` one alike, so a missing value reads as "has a
-    #         mass ratio", which is true of every real propellant.
-    #         ⚠️  NOT `.fillna(False).astype(bool)`, which was tried first and
-    #         is worse in the one case this exists for: on an object column
-    #         pandas raises `FutureWarning: Downcasting object dtype arrays on
-    #         .fillna is deprecated`, so that fix would emit a deprecation
-    #         warning exactly when it fires.
-    #         ⚠️  Changes no exported column and no CSV, so Stage 3 does NOT
-    #         need re-running for this, and should not be, casually: a Stage 3
-    #         run re-fetches live yfinance prices, which moves `cost_usd_per_kg`
-    #         and with it every Stage 4 baseline.  The stamp moves so the module
-    #         still names its own code; the on-disk propellants.csv keeps 1.12.0
-    #         until Stage 3 is next run for its own reasons.  Same call, and the
-    #         same reason, as catalog v1.1.1.
+    # Stamped into every output CSV, and the only way to tell which code
+    # produced a given catalog.  BUMP IT when a change moves any number a run
+    # produces.  The rule is ONE-DIRECTIONAL: changing a number means bumping,
+    # and a bump does NOT mean a number changed, which is why nothing may read
+    # a version as evidence that a result moved.
+    # THE CHANGELOG IS versions.md, NOT THIS COMMENT.  It used to be 313 lines
+    # of release notes sitting right here, a second copy of a record versions.md
+    # already held, which is the documentation form of the defect this project
+    # keeps cataloguing; it was also what the dashboard rendered as this field's
+    # help text, because ui_meta scrapes a field's comment block.  Moved out on
+    # 2026-09-02.  Two places to write, neither of them here:
+    #     versions.md > Releases            what the release did, and what it
+    #                                       measured to say so
+    #     versions.md > Module changelogs   this module's own stamp-by-stamp
+    #                                       record: Stage 3 changelog
     pipeline_version: str = "1.12.1"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
@@ -6718,8 +6037,8 @@ _REF_YEAR_PROP = 2026
 # t = p·r/2σ and
 #
 #     m_tank = 4πr²·t·ρ_mat = 2πr³·p·ρ_mat/σ = 1.5 · p · V / (σ/ρ)_mat
-#
-#, exactly proportional to volume, independent of size.  For a low-pressure
+#,
+# exactly proportional to volume, independent of size.  For a low-pressure
 # liquid tank the ullage pressure term alone underpredicts (bosses, baffles,
 # PMDs, mounts and thrust structure are not pressure-driven), so the base
 # figure is taken from flight articles rather than from the formula:
@@ -7066,8 +6385,8 @@ _COMPONENTS = {
     #
     # Note the result barely moves with pressure, and that is the physics
     # rather than a coincidence: COPV mass goes as 1.5·p/(PV/W) and stored
-    # density goes as p·M/(ZRT), so the tank FRACTION is ~1.5·Z·R·T/(M·(PV/W))
-    #, pressure cancels and molar mass is what is left.  Argon at 30 MPa pays
+    # density goes as p·M/(ZRT), so the tank FRACTION is ~1.5·Z·R·T/(M·(PV/W)),
+    # pressure cancels and molar mass is what is left.  Argon at 30 MPa pays
     # 22.3% against 22.9% at 18 MPa.  Xenon 1.9% / krypton 12.5% / argon 22.9%
     # is just M = 131.3 / 83.8 / 39.9 read backwards, and it is the whole
     # reason a cheap propellant is not automatically a good one.
@@ -9900,6 +9219,7 @@ def fetch_yfinance_fuel_prices(
 # REFERENCE-TABLE LOADERS  (always-on)
 # ─────────────────────────────────────────────────────────────────────────────
 def load_launch_vehicles() -> pd.DataFrame:
+    """`LAUNCH_VEHICLES_REFERENCE` as a frame. Always on; nothing is fetched."""
     print("\n  Loading launch-vehicles reference ...")
     df = pd.DataFrame(LAUNCH_VEHICLES_REFERENCE)
     print(f"     OK  {len(df)} vehicles")
@@ -9907,6 +9227,14 @@ def load_launch_vehicles() -> pd.DataFrame:
 
 
 def load_propellants() -> pd.DataFrame:
+    """`PROPELLANTS_REFERENCE` as a frame, with the thruster columns filled in.
+
+    The only loader here that does more than wrap a list: `_apply_thruster_data`
+    attaches `thruster_kg_per_n`, `thruster_efficiency` and `thrust_scaling` per
+    technology, and RAISES on an electric row with no entry rather than
+    defaulting, because a missing per-newton figure is what let Stage 4 size
+    micronewton devices as ten-newton cargo tugs.
+    """
     print("\n  Loading propellants reference ...")
     df = pd.DataFrame(PROPELLANTS_REFERENCE)
     _apply_thruster_data(df)
@@ -9917,6 +9245,7 @@ def load_propellants() -> pd.DataFrame:
 
 
 def load_delta_v() -> pd.DataFrame:
+    """`DELTA_V_REFERENCE` as a frame: the trajectory segments, in m/s."""
     print("\n  Loading mission dv reference ...")
     df = pd.DataFrame(DELTA_V_REFERENCE)
     print(f"     OK  {len(df)} trajectory segments")
@@ -9924,6 +9253,12 @@ def load_delta_v() -> pd.DataFrame:
 
 
 def load_operational_costs() -> pd.DataFrame:
+    """`OPERATIONAL_COSTS_REFERENCE` as a frame.
+
+    The one Stage 4 leans on hardest, and the one it checks by ROW as well as
+    by column (`schema_check`), because the table is keyed by category so a
+    missing figure is invisible to a column test.
+    """
     print("\n  Loading operational-costs reference ...")
     df = pd.DataFrame(OPERATIONAL_COSTS_REFERENCE)
     print(f"     OK  {len(df)} cost categories")
@@ -9931,6 +9266,13 @@ def load_operational_costs() -> pd.DataFrame:
 
 
 def load_storage() -> pd.DataFrame:
+    """`STORAGE_REFERENCE` as a frame, written to storage_systems.csv.
+
+    ⚠️  Stage 4 does NOT load that CSV. Everything in here it needs was moved
+    into `OPERATIONAL_COSTS_REFERENCE` in v1.11.0, after this table had spent
+    two releases being quoted as a model while being documentation. If you add
+    a figure here that Stage 4 should read, add it there too.
+    """
     print("\n   Loading storage-systems reference ...")
     df = pd.DataFrame(STORAGE_REFERENCE)
     print(f"     OK  {len(df)} storage systems")
@@ -11232,1334 +10574,21 @@ class CalcConfig:
     prune_infeasible_combos:   bool = True
 
     # ─── PIPELINE VERSION ────────────────────────────────────────────────────
-    # 1.3.0 : initial profitability calculator
-    # 1.3.1 : switched to UNCREWED autonomous-mission model (paired with
-    #         Module 3 v1.2.4):
-    #         • Added 'autonomy_nre_cost' line item to mission_cost_usd, 
-    #           sourced from Module 3's new 'Autonomous mining control & AI
-    #           (NRE)' row (replaces legacy 'Crew' row)
-    #         • Docstring + cascade comments updated to explicitly state no
-    #           crew cost, no life-support, no human in the loop past LEO
-    # 1.3.2 : deep accuracy audit (5 fixes, all numerically verified):
-    #         • TPS mass now lives IN the rocket-eq cascade, was costed but
-    #           not pushed.  Reduces max payload by ~32% on a typical NEA.
-    #           New closed-form: m_p_max = (M_LEO/R_out − m_hw
-    #             − s·m_dry·R_ret) / (s·R_ret − 1)   where s = 1 + tps_frac.
-    #         • Launch insurance basis fixed: now % of (launch + spacecraft
-    #           book value), was wrongly % of (launch + future revenue).
-    #         • Capsule recurring cost added: dry_return × $/kg-recurring.
-    #           Previously the 500-kg capsule had no manufacturing cost.
-    #         • Mining-rig vs capsule cost split: rig amortises across
-    #           nre_amortization_missions (stays at asteroid), capsule
-    #           is per-mission (fly-and-die).
-    #         • WACC compounding time-bucketed: upfront × (1+W)^T,
-    #           ongoing × (1+W)^(T/2), end × 1.0  (was all to end).
-    # 1.3.6 : correctness + performance.  No change to any number produced by
-    #         a default-config run (verified bitwise across all 53 numeric
-    #         output columns on a 500-asteroid catalog):
-    #         • Return-payload is now bounded by return-capsule VOLUME, not
-    #           just by mining fraction.  With use_isru_return_propellant=True
-    #           AND use_aerocapture_return=False, tps_frac collapses to 0 and
-    #           nothing in the rocket equation scales with payload, so the
-    #           launch-mass constraint went slack: a 30 km body "returned"
-    #           7.4e14 kg in a 500 kg capsule for a $7.8e17 profit that topped
-    #           the rankings.  The volume check already existed and already
-    #           flagged it (volume_fits=False) but was never applied.  It now
-    #           caps the payload; that case yields 144,000 kg / -$2.67e9.
-    #           Both sane toggle combinations are unchanged to the bit.
-    #         • lookup_asteroid() passes regex=False, designations carry
-    #           regex metacharacters, so "(1) Ceres" silently matched
-    #           "1 Ceres" and an unbalanced bracket raised re.PatternError.
-    #         • Ops-cost and mineral-price lookups memoised; candidate
-    #           vehicle × propellant grid hoisted out of the per-asteroid
-    #           loop (it depends only on config).  Module 4 went from
-    #           8 to 469 asteroids/s; a 5,000-row run is ~11s, was ~10.6min.
-    # 1.3.5 : removed Asterank-dependent code (paired with Module 1 v1.0.5):
-    #         • asteroid_dv_m_s no longer reads asteroid_row["delta_v_kms"];
-    #           all missions use config.default_dv_outbound_m_s / return.
-    #         • Output dict no longer emits asterank_value_usd /
-    #           asterank_profit_usd / asterank_accessibility columns.
-    #         No behavioural change for catalogs without Asterank columns
-    #         (which is now every catalog); v1.3.4 already fell back to
-    #         defaults when the field was absent.
-    # 1.3.4 : per-asteroid PGM enrichment (paired with Module 1 v1.0.4
-    #         + Module 2 v1.1.3).  Three changes:
-    #         • Added RARE_METAL_ELEMENTS = {Pt, Pd, Rh, Ir, Os, Ru, Au}.
-    #         • _mineral_implied_value() now takes a `pgm_enrichment`
-    #           multiplier; scales rare-metal yields only, leaves base
-    #           metals (Fe, Ni, Co) untouched.
-    #         • asteroid_bulk_value_usd_per_kg() pulls comp_pgm_enrichment
-    #           from each asteroid row and applies it to the nickel-iron
-    #           mineral lookup only.  Default 1.0× (chondritic) preserves
-    #           v1.3.3 behaviour for catalogs from M1 < v1.0.4.
-    #         Hand-verified per-type effect:
-    #           Type   Enrich  nickel-iron $/kg   asteroid bulk $/kg
-    #           ----   ------  ----------------   ------------------
-    #           M, Xe   2.0×   $4.60 → $7.10      $3.69 → $5.69  (+54%)
-    #           X, E    1.5×   $4.60 → $5.85      -              (+30%-ish)
-    #           A, R    0.5×   $4.60 → $3.35      -              (−9% to −20%)
-    #           V       0.2×   $4.60 → $2.60      $0.28 → $0.18  (−36%)
-    #           others  1.0×   unchanged          unchanged
-    #         For a 9,865-kg M-type return: gross $36k → $56k (+54%).
-    #         C/B-type water-rich asteroids are unaffected (no metal phase).
-    # 1.3.3 : fix silent under-counting in asteroid_bulk_value_usd_per_kg:
-    #         • Module 1's 4 composition fractions sum to 0.76-0.96
-    #           depending on taxonomy class; the residual (4-24%) was
-    #           silently zero-valued.  Now treated as bulk silicate floor
-    #           (≈$0.05/kg), adds 0.2-1.2% to gross value, more honest.
-    #         • Pairs with Module 2 v1.1.2's price + yield calibration:
-    #           refined-iron Fe $0.50/kg (was iron-ore $0.12), Au $150k,
-    #           Pt $45k, Pd $48k, Rh $320k, Water $4,250/kg (Falcon 9
-    #           reusable launch cost-savings), plus Ru/Os added to and
-    #           Ir bumped in nickel-iron PGM yields.
-    #         Combined hand-verified effect (Module 4 output):
-    #           Asteroid bulk USD/kg   OLD      NEW
-    #           M-type                $2.61   $3.69    (+41%)
-    #           S/Q-type              $0.6    $0.85    (+39%)
-    #           C-type                $375    $638     (+70%, water-driven)
-    #           B-type                $500    $850     (+70%, water-driven)
-    #         For a single Falcon Heavy + methalox aerocapture mission
-    #         (9.9 t returned), C-type gross value rises $3.7M → $6.3M.
-    #         Single-mission profitability is still tough but the top of
-    #         the rankings now shows realistic million-dollar gross values
-    #         for water-bearing C/B-type targets.
-    # 1.3.7 : renumbering, no behaviour change.  This project was briefly
-    #         developed in two places at once and both shipped different code
-    #         as 1.3.6, so that stamp is ambiguous.  The reconciled module is
-    #         1.3.7 because it matches neither parent.  Treat any CSV stamped
-    #         1.3.6 as undated and re-run rather than trusting the number.
-    # 1.4.0 : realism audit.  Every number this module produces changes.
-    #         • PER-ASTEROID Δv.  v1.3.5 removed the Asterank per-target
-    #           override and never replaced it, so every asteroid received
-    #           identical Δv.  Measured on a 150-row run, max_payload_kg,
-    #           total_cost_usd, m_launch_kg, mission_duration_yr, vehicle and
-    #           propellant each had exactly ONE unique value catalog-wide;
-    #           only bulk_value_usd_per_kg varied.  The profitability ranking
-    #           was a spectral-type ranking, and a main-belt body was costed
-    #           the same as a co-orbital NEA.  New patched-conic estimator
-    #           (asteroid_transfer_dv_km_s) from a / e / i, validated to
-    #           within ~10% of Module 3's table and of published Bennu /
-    #           Eros / Itokawa figures.  Aerocapture saving is now
-    #           per-asteroid rather than a flat 4,000 m/s.
-    #           Toggle: use_per_asteroid_dv.
-    #         • MINING THROUGHPUT.  Extraction was instantaneous and
-    #           unbounded; duration came only from Δv plus a flat 0.5 yr,
-    #           whether the mission returned 33 kg or 50 tonnes.  Payload is
-    #           now capped by what the rig can dig inside
-    #           max_mining_duration_yr, and the actual dig time flows into
-    #           mission duration, ops cost and WACC.
-    #           Config: mining_rate_kg_per_day_per_kg_rig, and see
-    #           mining_duration_yr() / max_payload_by_throughput_kg().
-    #         • LOW-THRUST Δv PENALTY.  Applies Module 3 v1.3.0's
-    #           dv_penalty_factor, so electric propulsion no longer wins the
-    #           mass cascade on an impulsive budget it cannot fly.
-    #         • COST DE-DUPLICATION.  The return capsule is priced off
-    #           Module 3's new capsule rate ($150k/kg) instead of the
-    #           mining-payload rate ($300k/kg), and
-    #           nre_recurring_overlap_fraction removes the development share
-    #           already embedded in the per-kg recurring brackets.
-    #           Set that field to 0.0 to restore the old double-booking.
-    #         New output columns: dv_penalty_factor, mining_duration_yr,
-    #         throughput_cap_kg, throughput_fits.
-    # 1.5.0 : IN-SPACE DELIVERY ARCHITECTURE.  Paired with Module 2 v1.3.0 and
-    #         Module 3 v1.4.0.  `delivery_destination` was a Module 2 price
-    #         label that Module 4 ignored: whatever it said, this module flew a
-    #         re-entry capsule to Earth's surface and costed a full recovery
-    #         campaign.  Setting it to 'cislunar' therefore priced the cargo at
-    #         a depot while paying to land it in Utah; the exact inconsistency
-    #         the field was added to prevent.  It is now an architecture
-    #         selector that Module 4 honours, and the two modules are checked
-    #         against each other at load time (destination_check).
-    #         • RETURN Δv IS NOW PER-DESTINATION, derived per asteroid from the
-    #           arrival v_infinity rather than assumed.  asteroid_transfer_dv_km_s
-    #           returns a dict of legs instead of a 3-tuple.  New
-    #           _cislunar_capture_dv_km_s captures at low perigee into an
-    #           ellipse reaching lunar distance (taking the Oberth benefit),
-    #           then inserts into NRHO at apogee.
-    #           At v_inf = 3 km/s the three architectures cost:
-    #               earth_surface (direct entry)  dv_match + 0      km/s
-    #               cislunar (Oberth + NRHO)      dv_match + 0.96   km/s
-    #               leo (propulsive capture)      dv_match + 3.59   km/s
-    #           LEO is the most expensive destination to reach AND worth less
-    #           per kg than cislunar, the two effects compound, and the
-    #           ranking now shows it.
-    #         • COST LINES SWAP BY ARCHITECTURE.  An in-space delivery carries
-    #           a $60k/kg berthing adapter instead of a $150k/kg re-entry
-    #           capsule, $2M of depot handover instead of a $15M Earth recovery
-    #           campaign, and the $1.2M launch-only Part 450 licence instead of
-    #           the $2.5M launch+re-entry one.
-    #         • TPS IS ARCHITECTURE-GATED (uses_tps).  A cislunar delivery never
-    #           enters an atmosphere, so use_aerocapture_return is ignored there
-    #           and no heat-shield mass enters the cascade.  LEO honours it as
-    #           aerocapture + multi-pass aerobraking.
-    #         earth_surface runs are UNCHANGED to the bit, the architecture
-    #         table reproduces the old code path exactly for that destination.
-    #         New output columns: delivery_destination, delivery_arch,
-    #         returns_to_earth, flies_tps.
-    #
-    #         BENEFICIATION (use_beneficiation, default False, off preserves
-    #         v1.4.0 output bit-for-bit).  The pipeline flew home run-of-mine
-    #         regolith at bulk grade while the rig's own throughput cap sat 66x
-    #         above the rocket-equation payload limit and never bound: all that
-    #         processing capacity was modelled as idle.  Terrestrial mines ship
-    #         concentrate, not ore.  With it on:
-    #         • The throughput cap now bounds the FEED, not the payload.  The
-    #           rig digs everything it can reach inside max_mining_duration_yr
-    #           and loads only concentrate.
-    #         • THE LOAD IS OPTIMISED, NOT SPECIFIED.  A mission is not sent
-    #           for a named mineral; it brings back the most valuable load it
-    #           can assemble from what the target actually contains.  With a
-    #           fixed mass budget and divisible per-kg-priced phases that is a
-    #           fractional knapsack, so greedy selection by $/kg is provably
-    #           optimal: fill the hold with the best phase available, then the
-    #           next, until full or the feed runs out (optimal_payload_mix,
-    #           over asteroid_phase_table).
-    #           Both honest bounds fall out of it automatically; CONTENT (you
-    #           cannot load more of a phase than the processed feed held, times
-    #           beneficiation_recovery) and PURITY (once the hold is pure best
-    #           phase there is nothing better to add).  Worked example, M-type
-    #           at 50% metal / 45% silicate, recovery 0.90:
-    #               feed 1.0x -> $5,135/kg, hold 90% full, in-situ ratios
-    #               feed 2.0x -> $7,081/kg, 90% metal
-    #               feed 2.2x -> $7,567/kg, 100% metal: saturated
-    #               feed 5.0x -> $7,567/kg, no further gain
-    #           The saturation ratio is 1/(frac_best x recovery), which is what
-    #           sets target_ratio.
-    #         • TIME is charged on the feed: mining_duration_yr now takes
-    #           feed_kg, so a 50:1 ratio costs 50x the dig time, which flows
-    #           into mission duration, ops cost and WACC.
-    #         • ENERGY and MASS are charged and FED BACK.  Module 3's 200 Wh/kg
-    #           excavation and 500 Wh/kg beneficiation rates over the stay time
-    #           give a continuous power draw; Module 3's new 60 W/kg-at-1-AU
-    #           power-system row, scaled 1/r^2 by the target's semi-major axis,
-    #           turns that into array mass; the array enters the SAME rocket
-    #           equation as the rig, so grade is bought with payload.  The
-    #           circular dependency (payload -> feed -> power -> mass -> payload)
-    #           is solved by fixed-point iteration, not assumed away.
-    #         New config: use_beneficiation, beneficiation_recovery,
-    #         max_concentration_ratio.
-    #         New output columns: beneficiation, feed_processed_kg,
-    #         concentration_ratio, delivered_value_usd_per_kg,
-    #         best_phase_usd_per_kg, purity_bound_binds, payload_mix,
-    #         payload_dominant_phase, payload_dominant_frac,
-    #         processing_power_w, power_system_kg, power_w_per_kg_at_target,
-    #         hardware_total_kg, power_system_cost_usd.
-    # 1.6.0 : SURFACE DESTINATIONS: lunar_surface and mars_surface.  Paired
-    #         with Module 2 v1.4.0 and Module 3 v1.5.0.  The three existing
-    #         destinations are unchanged; an earth_surface run is still
-    #         bit-identical to v1.4.0.
-    #         • Lunar surface = cislunar capture + 2.6 km/s of NRHO→LLO→
-    #           surface (Module 3), entirely propulsive.  No TPS: there is no
-    #           atmosphere, so use_aerocapture_return is ignored, exactly as
-    #           for cislunar.
-    #         • MARS IS A DIFFERENT JOURNEY, not a discounted Earth return.
-    #           New _asteroid_to_mars_dv_km_s runs the same patched-conic
-    #           treatment but terminates the heliocentric transfer at Mars'
-    #           orbit (1.524 AU) rather than Earth's, so the departure burn,
-    #           the arrival v_infinity and the capture into Mars' well are all
-    #           computed separately.  Modelling it as "Earth return minus
-    #           something" would have hidden the interesting part: plenty of
-    #           NEAs have aphelia near Mars and are genuinely more accessible
-    #           from a Mars base than from Earth.
-    #           Aerocapture IS available at Mars and is worth several km/s, so
-    #           mars_surface carries TPS where lunar_surface cannot.
-    #         • Surface deliveries carry a $200k/kg lander (Module 3's new
-    #           row) rather than a $60k/kg berthing adapter or a $150k/kg
-    #           re-entry capsule, a lander flies itself down.
-    #         New Δv legs on asteroid_transfer_dv_km_s: ret_lunar_surface_prop,
-    #         ret_mars_surface_aero, ret_mars_surface_prop, v_inf_mars,
-    #         dv_depart_for_mars.
-    # 1.7.0 : MODELLING COMPLETENESS.  Five things the pipeline previously got
-    #         for free.  Unlike v1.5.0/1.6.0 these are CORRECTIONS, not new
-    #         options: they default ON and every number moves.  Paired with
-    #         Module 2 v1.5.0 and Module 3 v1.6.0.
-    #         • LOW-THRUST TRIP TIME.  Electric propulsion paid a Δv penalty
-    #           but flew its burns instantly on power it never carried.  A
-    #           thruster's power fixes its thrust, T = 2ηP/(Isp·g0), so
-    #           burning m_prop takes m_prop(Isp·g0)²/(2ηP), high Isp buys
-    #           propellant mass at a QUADRATIC cost in time-or-power.  The EP
-    #           stage is now sized to finish inside ep_target_thrust_yr, its
-    #           array (1/r²) and thruster/PPU mass enter the rocket equation,
-    #           and the thrusting time enters mission duration.  Validated
-    #           against Dawn: 5.0-9.3 yr predicted at its 2.2-3.0 AU operating
-    #           distance against ~5.9 yr actually flown.
-    #           This was load-bearing; v1.6.0's headline Mars result was a
-    #           1,500 s Hall thruster that would have needed 48 kW and a
-    #           4-tonne array at 2.26 AU.
-    #         • LAUNCH WINDOWS.  Departure needs phasing, and alignments recur
-    #           at the synodic period, so expected wait after mining is half a
-    #           period.  Punishes NEAs hardest; a body at a = 1.05 AU has a
-    #           10-year synodic period with Earth against 1.3 years for a
-    #           main-belt object.  Δv accessibility and TIME accessibility
-    #           pull in opposite directions and only one was modelled.
-    #         • BOUND-WATER LIBERATION.  C/B/D "ice" is water in
-    #           phyllosilicates, baked out at ~700 K, not scooped: 2,500 Wh
-    #           per kg of water (Module 3).  It was being extracted free and
-    #           sold at full launch-cost-avoided.
-    #         • LEARNING CURVE.  Wright's law at 85% on the per-mission
-    #           articles (capsule/lander, power system).  The amortised mining
-    #           rig is excluded; it is one shared unit, not N built.  Exactly
-    #           1.0 at nre_amortization_missions = 1, so a single-mission run
-    #           is untouched.
-    #         • MARKET SATURATION.  P/P0 = (1 + Q/Q_market)^(-1/ε) against
-    #           Module 2's annual_market_kg.  Returning 180 t/yr of platinum
-    #           doubles world supply and quarters the price; delivering 6.6
-    #           t/yr of water to a 20 t/yr Mars base cuts it to 0.57.  Without
-    #           this the "fly more missions" lever had no stopping point.
-    #         New config: model_low_thrust_time, ep_target_thrust_yr,
-    #         max_mission_duration_yr, model_launch_windows,
-    #         model_water_liberation, learning_curve_rate,
-    #         model_market_saturation, demand_elasticity.
-    #         New output columns: is_electric, ep_power_w, ep_system_kg,
-    #         ep_thrust_yr, synodic_period_yr, launch_window_wait_yr,
-    #         water_liberated_kg, saturation_multiplier, learning_curve_factor.
-    # 1.8.0 : MODELLING COMPLETENESS, PART 2.  Four more corrections, all
-    #         default ON.  Paired with Module 2 v1.6.0 and Module 3 v1.7.0.
-    #         • RIG SERVICE LIFE + TERMINAL VALUE.  The rig was amortised
-    #           across nre_amortization_missions with no upper bound, so a
-    #           programme could spread one machine across 100 missions of two
-    #           years each -- 200 years of duty from something chewing rock.
-    #           A 15-year life now CAPS the amortisation, and the cap makes
-    #           long-stay programmes markedly MORE expensive, not less:
-    #           at a 2-year stay one rig serves 7 missions, not 100, so the
-    #           per-mission charge is 13.8x what the old flat division gave.
-    #           Life left when the programme ends is credited at the salvage
-    #           fraction (0.50) -- but only when nre_amortization_missions > 1.
-    #           A rig parked at an asteroid nobody revisits is stranded, not
-    #           an asset, so a single-mission run is unchanged.
-    #         • MISSION RELIABILITY.  Revenue was certain.  Expected revenue
-    #           is now p_launch(0.97) x exp(-T/MTBF)(30 yr) x p_mining(0.75),
-    #           about 0.62 for a 5-year mission.  COSTS are charged in full,
-    #           which is the correct treatment -- you spend the money either
-    #           way -- and launch insurance replaces hardware, not revenue, so
-    #           there is no double count.  p_mining is the honest one: nobody
-    #           has ever sustained-mined an asteroid, and regolith-contact
-    #           mechanisms are where deep-space missions fail.
-    #         • CRYOGENIC BOIL-OFF.  Return propellant sits in the tank from
-    #           launch to the departure burn -- years.  Hydrolox loses
-    #           0.05%/day even actively cooled, so a 5-year hold means loading
-    #           ~2.5x what the rocket equation burns.  Folded into an
-    #           effective return Δv, which leaves the closed-form cascade
-    #           exact: since m_return_prop scales with (R-1), inflating that
-    #           term by k is R_eff = 1 + (R-1)k.  ISRU is exempt.
-    #           Without this, hydrolox won long missions it could not
-    #           physically store propellant for.
-    #         • IN-SPACE MANUFACTURING is costed in Module 2 v1.6.0 rather
-    #           than hidden inside the 0.70 utility factor -- ~$230/kg for
-    #           metals, energy at $6.08/kWh (the capital cost of a Watt in
-    #           deep space) plus $200/kg of amortised refinery.
-    #         New config: model_rig_service_life, model_reliability,
-    #         model_propellant_boiloff.
-    #         New output columns: p_success, boiloff_factor,
-    #         dv_ret_effective_m_s, rig_terminal_value_usd,
-    #         missions_sharing_rig.
-    # 1.9.0 : RELIABILITY GROWTH.  p_mining was pinned at its first-of-kind
-    #         0.75 however many missions a programme flew, which was the one
-    #         place the model was pessimistic rather than optimistic: a fleet
-    #         that has flown ten rigs has found and fixed failure modes the
-    #         first one discovered the hard way.
-    #         Duane / AMSAA: q(n) = q_first * n^(-alpha), alpha = 0.30 from
-    #         MIL-HDBK-189's active-growth band, capped at a 0.95 mature
-    #         ceiling because growth is asymptotic -- no heritage makes a
-    #         machine grinding rock in vacuum certain to work.
-    #         Reported as the MEAN over missions 1..N, not the terminal value.
-    #         That is what the rest of the cost model needs: NRE and the rig
-    #         are amortised across the whole programme, so per-mission
-    #         expected revenue must use the programme average.  Quoting the
-    #         last mission's reliability would credit every mission with
-    #         heritage only the last one has.
-    #             N=1   p_mining 0.750  (unchanged -- single-mission runs
-    #                                    are bit-identical to v1.8.0)
-    #             N=10           0.838
-    #             N=100          0.912
-    #         Launch and cruise reliability deliberately do not grow: launch
-    #         vehicles are already mature, and MTBF is a duration exposure
-    #         rather than a heritage question.
-    #         New config: model_reliability_growth.
-    #         New output column: p_mining.
-    # 1.9.1 : recalibrated the first-of-kind mining success probability from
-    #         0.75 to 0.85.  The old figure was counted from failures alone
-    #         (OSIRIS-REx's jammed flap, Hayabusa's dead projectile, Philae's
-    #         harpoons) with none of the successes, which is selection bias.
-    #         The full regolith-contact flight record is 10 clean successes
-    #         (Apollo, Luna 16/20/24, Stardust, Phoenix, Curiosity,
-    #         Hayabusa2, OSIRIS-REx, Perseverance, Chang'e 5 and 6), one
-    #         partial (Hayabusa returned its sample despite the sampler
-    #         failing) and two failures (Philae's harpoons, InSight's mole):
-    #         11/13 = 0.85, or 0.77 if Hayabusa is counted as a loss.  0.85
-    #         is taken because Hayabusa did return its sample.
-    #         Sustained-operation risk is NOT double-counted here; none of
-    #         those missions was sustained mining, and the exposure is
-    #         already carried by the spacecraft MTBF term.
-    #         Effect: P(success) on a 5-year mission rises 0.62 -> 0.70, and
-    #         every cost/revenue ratio improves ~13%.
-    # 1.10.0 : PER-ASTEROID ARCHITECTURE SEARCH, plus three physical
-    #         corrections it exposed.  Every number this module produces
-    #         changes; the committed result tables need re-measuring.
-    #         • RETURN MODE IS NOW CHOSEN, NOT SET.  use_aerocapture_return
-    #           forced aerocapture on every asteroid wherever the destination
-    #           allowed it.  But aerocapture is a trade, not a saving: it buys
-    #           Δv with a heat shield massing 15% of the returned payload,
-    #           hauled outbound as dead mass and pushed back through the return
-    #           burn.  Whether that pays depends on the target's arrival
-    #           v_infinity and on the stage's Isp, both per-asteroid.  Both
-    #           modes are now priced and the profitable one flown.  The flag
-    #           now means "available", not "mandatory".
-    #         • RENDEZVOUS APSIS IS NOW SEARCHED.  The Δv estimator met every
-    #           target at its aphelion unless the whole orbit was interior to
-    #           Earth's.  That rule is right for most main-belt bodies and
-    #           wrong for others: meeting at aphelion means a slow transfer
-    #           with a cheap match burn and an expensive departure, meeting at
-    #           perihelion the reverse, and which dominates is a property of
-    #           a and e together.  Both are priced now, and, because the two
-    #           legs are costed against different bodies; the winner is
-    #           resolved against the DESTINATION, so a body best met at
-    #           aphelion for an Earth return can be met at perihelion for Mars.
-    #           New asteroid_transfer_options_km_s / asteroid_dv_options.
-    #         • ISRU IS NOW PHYSICAL, AND PER-ASTEROID.  The old switch deleted
-    #           the return propellant from the cascade for EVERY asteroid and
-    #           charged $50/kg.  It never asked what the body was made of (an
-    #           M-type with zero ice made propellant out of nothing), never
-    #           asked what the propellant was (xenon and argon are noble gases;
-    #           the switch synthesised them at a rubble pile), and never
-    #           charged the feed, the dig time or the bake-out energy, which
-    #           is the entire cost of ISRU.  Now: hydrolox only, at bodies with
-    #           a non-zero ice fraction, at the stoichiometric 1.286 kg of
-    #           water per kg of propellant, and the rock it takes comes off the
-    #           rig's throughput and the body's mineable mass BEFORE any ore is
-    #           loaded, costs dig time, and pays the 2,500 Wh/kg liberation
-    #           energy through the same power plant and the same rocket
-    #           equation as everything else.  Default flipped False -> True:
-    #           gated and costed, it is an option a real programme would
-    #           evaluate, and denying it outright was its own distortion.
-    #         • BOIL-OFF NOW USES THE REAL HOLD TIME.  It was computed once,
-    #           before the sizing loop, against a stay of station_keeping_floor_yr
-    #           (0.25 yr), but the stay is dig time plus the launch-window
-    #           wait, which run to years on exactly the targets that want a
-    #           cryogenic stage.  Now solved inside the fixed point with the
-    #           other coupled terms.  Hydrolox on a 4-year hold loads 2.1x what
-    #           it burns, against the ~1.1x the old estimate implied.
-    #         • EARTH-SURFACE PROPULSIVE RETURN PAYS ITS DEORBIT BURN.  The leg
-    #           was documented as "capture into LEO, then deorbit" and priced
-    #           as capture only, making it numerically identical to ret_leo_prop.
-    #           +100 m/s.
-    #         New config: optimise_architecture_per_asteroid.
-    #         New output columns: aerocapture_return, isru_return,
-    #         isru_propellant_kg, isru_feed_kg, rendezvous_apsis.
-    # 1.10.1 : PERFORMANCE ONLY.  NO NUMBER IN THIS MODULE'S OUTPUT CHANGES.
-    #         Verified, not asserted: serial and parallel runs of the same
-    #         rows produce byte-identical CSVs (sha256 compared, cislunar and
-    #         earth_surface, beneficiated and raw), and the pre-change build
-    #         produces the same file as the post-change one.  The five-
-    #         destination tables and the programme-scale curve stand as
-    #         measured on 1.10.0; do NOT re-measure them on account of this
-    #         version.  The stamp moves only so that a CSV still names the
-    #         code that produced it.
-    #         • THE MAIN LOOP IS PARALLEL.  Asteroids are independent, so the
-    #           search was always embarrassingly parallel, and it had always
-    #           run on exactly one core.  New `parallel_workers`; chunks are
-    #           consumed in submission order so the row order, and therefore
-    #           the tie order under the non-stable sort, is unchanged.
-    #         • CATALOG ROWS ARE DICTS IN THE HOT PATH.  Every consumer reads
-    #           a row with `.get(key)` / `[key]` and nothing else, but pandas
-    #           resolves each through the index at ~5 us; the search does
-    #           ~7,400 per asteroid.  That was ~38% of total runtime spent
-    #           re-deriving positions in an index that never changes.
-    #           Series.to_dict() unboxes numpy scalars to Python ones, which
-    #           is value-preserving; np.float64 IS a C double.  1.73x.
-    #         • The five ops-table constants the sizing loop needs are
-    #           memoised instead of looked up per (asteroid × vehicle ×
-    #           propellant × architecture × ratio): ~24M lookups of five
-    #           unchanging numbers.  A further 1.09x.
-    #         Net ~1.9x per core, ~7x wall-clock on 12 threads.
-    # 1.11.0 : STORAGE, AND A MUCH WIDER CATALOG.  Pairs with Module 3 v1.9.0,
-    #         which took the propellant table from 7 rows to 40 and the vehicle
-    #         table from 12 to 36.  Every number moves.
-    #         • PROPELLANT TANKAGE IS IN THE ROCKET EQUATION.  Module 3 has
-    #           computed `density_kg_per_L` since v1.2.0 and NOTHING read it,
-    #           so a tank's mass, which scales with VOLUME, not with the
-    #           propellant mass inside it, was free.  That was a straight
-    #           subsidy to whichever propellant had the lowest density, which
-    #           is the same propellant that has the highest Isp, so the error
-    #           compounded rather than cancelling.  The closed form generalises
-    #           with two scalars: k = 1/(1 − t(R_ret−1)) on the return leg,
-    #           where the tank flies home with the cargo, and k_out on the
-    #           outbound leg, where it is staged at the asteroid.  Both are 1
-    #           at t = 0, so `model_tank_mass = False` reproduces v1.10.1
-    #           exactly.  t(R−1) ≥ 1 is "the tank cannot close" and is
-    #           infeasible rather than expensive.
-    #         • THE MATURITY GATE NOW APPLIES TO PROPELLANTS.  17 of Module 3's
-    #           new rows are development or concept hardware; ungated, a
-    #           profit-maximising search flies every asteroid on antimatter.
-    #           `operational_propellants_only` mirrors the vehicle flag.  Two
-    #           further filters are about the mission profile rather than
-    #           maturity and apply regardless: `restartable` excludes solids
-    #           (a return burn fires years after launch and a solid cannot be
-    #           relit) and `propellantless` excludes sails (infinite Isp
-    #           otherwise reports an unbounded payload).
-    #         • THE RTG ROW IS FINALLY READ.  Module 3 has priced radioisotope
-    #           power since v1.2.0, with a note saying it is for past ~3 AU,
-    #           and no code ever looked at it, so every main-belt body flew a
-    #           photovoltaic array starved by 1/r².  Solar is 60 W/kg at 1 AU
-    #           and an RTG is 5 W/kg everywhere, so they cross at 3.46 AU.
-    #           Capped by `rtg_max_power_w` because the binding constraint is
-    #           Pu-238 supply (~1.5 kg/yr of DOE production), not money, and
-    #           charged at its own $500k/W rather than the $800/W solar rate.
-    #           Deliberately not applied to the EP array; see
-    #           power_source_for_target.
-    #         • ORBITAL REFUELLING IS CHARGED.  Starship's escape payload
-    #           EXCEEDS its GTO payload, which is only possible because the
-    #           escape figure assumes tanker flights.  Module 3's row has said
-    #           so in prose since v1.4.0, including the fix; this implements it
-    #           via `tanker_flights_for_escape`.  12 flights at list price is
-    #           $1.08B on top of a $90M launch.
-    #         • ISRU IS NO LONGER HYDROLOX-ONLY.  v1.10.0 hardcoded the tuple
-    #           ("hydrolox",), which was right about the chemistry it knew and
-    #           wrong about the question: electrolysing water to cryogenic
-    #           hydrogen is the HARDEST thing to do with asteroid water, not
-    #           the only one.  A steam rocket boils it at 1.00 kg of water per
-    #           kg of propellant against hydrolox's 1.286, with no
-    #           electrolyser and no cryogenic tank, and buys that at 190 s
-    #           against 452.  Which wins varies by body, so it belongs in the
-    #           per-asteroid search.  Feed ratio and feed MATERIAL now come off
-    #           the propellant row, and the water-liberation energy follows the
-    #           propellant instead of a constant.
-    #         • Lunar-origin launch systems are excluded structurally rather
-    #           than by status: this module departs from Earth, and their
-    #           payload columns are annual throughput, so reading them would be
-    #           a unit error rather than merely optimism.
-    #         New output columns: tank_mass_frac, m_tank_return_kg,
-    #         m_tank_outbound_kg, propellant_storage_class, power_source,
-    #         tanker_flights, tanker_cost_usd, isru_feed_material.
-    # 1.12.0 : a realism audit.  Every item is a term that existed on one side
-    #         of the model and not the other, and all of them move the answer
-    #         the same way: WORSE.  Full catalog at cislunar, raw 31.7712x ->
-    #         33.2342x (+4.60%), beneficiated 22.4665x -> 23.9169x (+6.46%).
-    #         Cislunar is still the best case and its winner is unchanged
-    #         (7753 B, now concentrating 5.311x).
-    #         ⚠️  THE RATIOS ARE NOT THE HEADLINE.  Evaluable rows HALVED,
-    #         ~31,000 -> ~15,500, because half the catalog was closing its mass
-    #         budget on a micronewton thruster sized as a cargo tug.  Those
-    #         missions were never physical.  Any per-row comparison against a
-    #         v1.11.0 catalog compares different populations.
-    #         • THE DEVICE WAS NEVER MODELLED, ONLY THE PROPELLANT, the
-    #           largest correction here.  Launch is an integrated vehicle with
-    #           a payload it can lift; in-space propulsion was a bare Isp.  One
-    #           side had a capacity limit and the other did not.  The EP stage
-    #           was sized on POWER alone, so 31.8% of raw winners were PULSED
-    #           PLASMA THRUSTERS (EO-1: 860 uN) and 24.3% ELECTROSPRAY (ST7-DRS:
-    #           5-30 uN each), being asked for ~7-10 N.  Fixed by MASS, not by a
-    #           threshold: `ep_thrust_required_n` (T = m_prop*ve/t, which owes
-    #           nothing to efficiency) times Module 3's per-technology
-    #           `thruster_kg_per_n`.  A uN/kg device reports thousands of tonnes
-    #           of thruster and fails to close on its own, exactly as a
-    #           low-density propellant does on tankage.  `thruster_efficiency`
-    #           likewise replaces one shared 0.60; a PPT is ~8%, a gridded ion
-    #           thruster 70%, so the array differs ~9x.  The lumped 8 kg/kW
-    #           "thruster + PPU" row is split: PPU scales with POWER (4.7 kg/kW,
-    #           NEXT-C), thruster head with THRUST.  Zero replicated-scaling
-    #           devices survive; chemical propulsion stops being extinct
-    #           (hydrolox 5.5% of rows).
-    #         ⚠️  The ARGON fix below moved NEITHER headline cell; the best
-    #         missions at cislunar were never flying argon, while changing the
-    #         chosen propellant for a quarter of the catalog (argon 25.0% ->
-    #         2.4% of raw winners, 27.3% -> 0.0% beneficiated) and making 1,059
-    #         bodies infeasible.  Read that before using a single best-case
-    #         cell as a regression test: it is blind to a change that is wrong
-    #         everywhere except at the top.  The propellant-share breakdown and
-    #         the evaluable-row count are what caught it.
-    #         • THE CARGO-WATER ARRAY WAS PRICED AND NEVER FLOWN.  Liberation
-    #           energy for water sold as cargo was added to `processing_power_w`
-    #           AFTER the cascade had been built, so `power_system_kg` came out
-    #           0.8-2.7% above the figure inside `hardware_total_kg` on every
-    #           row that liberated any, and the comment there asserted the
-    #           cascade had already flown it.  97 of 357 sample rows violated
-    #           `hardware_total_kg == mining_hardware_kg + power_system_kg +
-    #           ep_system_kg`, by up to 408 kg.  Now zero.  This is the free-EP
-    #           -stage bug pointing the other way: a price with no mass.
-    #           A RAW mission to an icy body was the worse case; it paid for an
-    #           array and flew none of it, because the sizing loop skipped the
-    #           term entirely unless beneficiating.
-    #         • PROPELLANT TANKAGE HAD NO COST LINE.  Flown through the rocket
-    #           equation since v1.11.0, charged its launch $/kg, and built for
-    #           free.  ~0.003-0.1% of mission cost; kept because the recurring
-    #           defect in this codebase is a mass in one cascade with no entry
-    #           in the other, and those are only found by checking every term.
-    #         • LAUNCH INSURANCE UNDER-BOOKED THE SPACECRAFT.  Book value was
-    #           rig + capsule, which was the whole vehicle in v1.4.0.  It never
-    #           picked up the v1.5.0 power plant, the v1.10.0-priced electric
-    #           stage or v1.11.0 tankage; a 300 kW electric stage is a
-    #           nine-figure article and it was flying uninsured.
-    #         • THE TANKER CHARGE WAS KEYED TO THE WRONG SCENARIO.  Module 3's
-    #           note asked for it "in the ESCAPE-DIRECT scenario"; v1.11.0
-    #           levied it on every mission.  This module reads `payload_leo_kg`
-    #           and `usd_per_kg_to_leo` and nothing else, so the vehicle is a
-    #           LEO lifter and the stack departs on its own stage; no mission
-    #           here is refuelled.  Gated behind `escape_direct_launch`, which
-    #           nothing sets.  This is the one item that runs the other way, and
-    #           it is currently inert because Starship is `development`.
-    #         • `max_accel_g` WAS EXPORTED AND READ BY NOBODY.  Module 3 added
-    #           it in v1.9.0 expressly to disqualify the kinetic launchers.
-    #           Only maturity was excluding them; ungated, a 10,000 g slingshot
-    #           at $6,250/kg wins on price and powders the rig.
-    #           `max_payload_accel_g` = 15 g.
-    #         New config: escape_direct_launch, max_payload_accel_g.
-    #         New output column: tank_cost_usd.
-    # 1.13.0 : POPULATION RELEASE.  No change to the mission model at all: not
-    #         one term, coefficient or search axis moved, and a run over the
-    #         same rows produces the same numbers.  What changed is how many
-    #         rows arrive and which ones a cap keeps.
-    #         • `eval_row_cap` DEFAULTS TO 0 (evaluate everything) instead of
-    #           5,000.  Module 1 v1.1.0 can hand this module ~1.55 M asteroids
-    #           and the old default discarded 99.7% of them behind a single
-    #           line of stdout.  Every published figure in CLAUDE.md was
-    #           measured with the cap explicitly set to 0 through the UI, so
-    #           this makes the default agree with documented practice rather
-    #           than changing what a documented run does.
-    #         • CAPPED RUNS NOW SAMPLE, THEY DO NOT TRUNCATE.  The catalog
-    #           arrives sorted by semi-major axis, so `.head(n)` returned the
-    #           innermost n bodies, at 5,000 rows of a 1.55 M-row catalog,
-    #           everything inside ~2.1 AU, with no outer belt, no Hildas, no
-    #           Trojans and an S-complex-skewed spectral mix.  A "quick check
-    #           before the full run" was therefore made on a population that
-    #           does not resemble the full run.  `eval_row_sampling = "stride"`
-    #           takes evenly-spaced rows across the whole catalog; "head"
-    #           restores the old behaviour exactly.
-    #           ⚠️  THIS CHANGES THE NUMBERS ANY CAPPED RUN PRODUCES.  It does
-    #           not change an uncapped one, which is every figure on record.
-    #         Stride is deterministic (np.linspace over positions, no RNG), so
-    #         the serial/parallel byte-identity property of v1.10.1 survives.
-    #         New config: eval_row_sampling.
-    # 1.14.0 : realism audit.  Five findings, and the first three are all the
-    #         same shape: a term that was WRITTEN DOWN as missing and then
-    #         quoted as a known limitation until being written down was mistaken
-    #         for being fixed.  Module 3 has carried every figure below since
-    #         its v1.9.0, in STORAGE_REFERENCE, behind "⚠️  Not modelled in
-    #         Module 4", and Module 4 does not load storage_systems.csv, so the
-    #         whole table was documentation.  They are moved to
-    #         OPERATIONAL_COSTS, which this module does read, in Module 3 v1.11.0.
-    #         All of them move the answer the same way: worse.
-    #         • VOLATILE CARGO CONTAINMENT.  The pipeline sells water at every
-    #           in-space destination and charged NOTHING to keep it from
-    #           subliming across a multi-year cruise.  That is not a rounding
-    #           term; the best cislunar missions run ~88% water by mass, so the
-    #           commodity carrying the entire result was the one flying free.
-    #           0.05 kg/kg of sealed shaded hold, INCREMENTAL to the 0.15 ore
-    #           restraint, folded into `structure_frac` so the closed-form
-    #           solver carries it with no change to its algebra, and settled at
-    #           the payload actually flown rather than the loop's estimate.
-    #         • THE SUN NEVER SET ON THE PROCESSING PLANT.
-    #           `processing_power_w()` returns a CONTINUOUS average draw and the
-    #           plant was sized straight off it, which is only right if the rig
-    #           is never in shadow.  It stands on a rotating body.  Two terms:
-    #           an array OVERSIZE of [(1−f) + f/η]/(1−f) = 2.11×, which is a
-    #           sizing factor and therefore something no W/kg row could ever
-    #           have absorbed however its notes were worded; and storage sized
-    #           on the BODY'S OWN rotation period, which finally makes
-    #           `rotation_period_h`, carried since Module 1 v1.0.0 and read by
-    #           nothing, a quantity the model uses.  Both collapse exactly into
-    #           an effective W/kg (see `eclipse_effective_w_per_kg`), so the RTG
-    #           comparison is now decided on real plant mass and its crossover
-    #           moves well inside 3.46 AU.  Exempt: radioisotope plants (flat
-    #           output) and the EP array (permanent sunlight).
-    #         • MARKET SATURATION COULD NOT SEE THE PROGRAMME.  Its own config
-    #           comment says it exists because "the 'fly more missions' lever had
-    #           no stopping point", and it never read
-    #           `nre_amortization_missions`, that name appears in exactly four
-    #           places and none of them was here.  A 100-mission programme
-    #           divided its NRE by 100, grew its reliability, and sold 100
-    #           payloads at the price one payload commands.  The rate is now the
-    #           programme's concurrent output, ceil(N / missions_sharing_rig),
-    #           derived from the rig service-life cap this module already
-    #           computes.  Exactly 1 at N = 1, so no committed figure moves.
-    #         • TPS was the one recurring article with no learning curve, while
-    #           the capsule, power system, electric stage and tankage all carry
-    #           one.  An ablative shield is the most literally per-mission
-    #           article on the vehicle.
-    #         • TPS was also missing from the INSURED book value.  v1.12.0 swept
-    #           that list against the mass cascade and caught the plant, the
-    #           electric stage and the tankage; TPS is billed from a different
-    #           variable and was missed.
-    #         Also: `schema_check` now checks Module 3 ROWS as well as columns.
-    #         The ops table is row-keyed, so a missing figure was invisible to a
-    #         column test, the exact hole CLAUDE.md names, and the one that
-    #         cost a full measurement pass in v1.12.0.
-    #         New config: model_eclipse_power, default_rotation_period_h,
-    #         max_dark_period_h, model_volatile_containment.
-    #         New output columns: solar_w_per_kg_bare, array_oversize_factor,
-    #         dark_period_h, dark_period_clamped, rotation_period_h,
-    #         cargo_water_kg, containment_frac, m_containment_kg,
-    #         concurrent_missions.
-    # 1.14.1 : PERFORMANCE ONLY.  NO NUMBER IN THIS MODULE'S OUTPUT CHANGES.
-    #         Same contract as 1.10.1, and verified the same way rather than
-    #         asserted: a pruned build and an unpruned one produce byte-
-    #         identical CSVs, and the stamp moves only so that a CSV still names
-    #         the code that produced it.  Do NOT re-measure the v1.14.0 tables
-    #         on account of this version.
-    #         • THE SEARCH SPENT ~85-94% OF ITSELF PROVING MISSIONS INFEASIBLE.
-    #           Profiled at cislunar: of 134,538 calls to
-    #           `_evaluate_combo_at_ratio` for 200 raw asteroids, 8,292 reached
-    #           the cost model: 6.2%.  Beneficiated, 19,445 of 266,584-7.3%.
-    #           The other 90-odd per cent paid ~20 us of prologue (eclipse,
-    #           synodic period, ISRU chemistry, tankage, EP sizing) so that
-    #           `max_return_payload_kg` could tell them what a dozen flops
-    #           already knew.
-    #         • THE FIXED POINT'S FIRST ITERATION IS ITS MOST OPTIMISTIC ONE,
-    #           and it is closed form.  It runs at hardware = mining_hardware_kg
-    #           (the plant and the electric stage are both still zero), at
-    #           containment_frac = 0, and at the shortest stay the model allows.
-    #           Every later pass only adds mass and lengthens the hold, both of
-    #           which shrink the launch bracket.  So if pass 1 does not close,
-    #           nothing downstream does.  `_combo_can_close` evaluates exactly
-    #           that condition up front.
-    #         • AND IT IS INDEPENDENT OF TWO AXES THE LOOP WAS RE-RUNNING IT
-    #           FOR.  Pass 1 cannot see `power_mode` (no plant yet) or the
-    #           concentration ratio (no feed yet), so a combo that could not
-    #           close was being re-refuted once per power source and once per
-    #           point of the concentration sweep; nine times over, which is
-    #           why a dead candidate costs 305 us beneficiated against 32 us
-    #           raw.  Hoisting the test above both loops kills the sweep whole.
-    #         Measured at cislunar: 70.6% of raw (combo × dv × ISRU) tuples
-    #         pruned and 69.5% of beneficiated ones, with ZERO of them
-    #         producing a result when solved in full.
-    #         • PER-BODY CONSTANTS WERE RE-DERIVED PER CANDIDATE.  The dark
-    #           period, the eclipse-corrected specific power, the 1/r² solar
-    #           figure, the synodic period, the mineable mass and the throughput
-    #           cap are functions of (asteroid × config) and of nothing else,
-    #           and all six were computed inside `_evaluate_combo_at_ratio`: 
-    #           38,643 times apiece for 200 asteroids, re-answering the same
-    #           question about the same rock. `AsteroidContext` computes them
-    #           once per body. Same shape and same justification as 1.10.1's
-    #           ops-constant memo: the arithmetic is unchanged, the REPETITION
-    #           was the cost.
-    #         Measured against HEAD, same rows, serial: raw 7.86 s → 4.07 s
-    #         (1.93x), beneficiated 28.07 s → 16.73 s (1.68x), every one of 124
-    #         output columns identical and sha256 matching in both.
-    #         New config: prune_infeasible_combos (default True; off restores
-    #         the 1.14.0 search exactly, and is the diff to run if an output
-    #         ever moves).
-    #         New stdout line: the pruned-candidate count, so that a population
-    #         where the pre-filter stops firing is visible rather than silent.
-    # 1.14.2  PERFORMANCE ONLY, every number identical to 1.14.1, same contract
-    #         as 1.10.1 and 1.14.1. The stamp moves so a CSV still names the code
-    #         that produced it. DO NOT re-measure any table on account of it.
-    #         Four findings, and the first is the largest single item ever found
-    #         in this module:
-    #         • SCALAR ARITHMETIC WAS GOING THROUGH NUMPY. `max_return_payload_kg`
-    #           and `_combo_can_close` called `np.isfinite` and `np.exp` on
-    #           Python floats. Measured here: np.isfinite 698 ns against
-    #           math.isfinite 32 ns, float(np.exp(x)) 694 ns against math.exp
-    #           47 ns, ufunc dispatch on a scalar, 15-22x. Seven of them per
-    #           call to a function invoked 496,000 times per 150 beneficiated
-    #           asteroids was about half that function and a quarter of the
-    #           search. math.exp was checked BITWISE against np.exp over 400,000
-    #           samples spanning this model's (Δv, Isp) range: zero mismatches.
-    #         • THE KNAPSACK RE-SORTED THE SAME PHASE LIST ~2,100 times per
-    #           asteroid. Memoised per list (`_PHASE_ORDER_CACHE`) rather than
-    #           sorted at source; see the warning in `optimal_payload_mix`, the
-    #           table's natural order is load-bearing on the last ULP.
-    #         • SIX PER-PROPELLANT CONSTANTS AND ONE PER-VEHICLE were re-parsed
-    #           per surviving candidate, each through `pd.isna`: ~980,000
-    #           pd.isna calls per 150 rows. Attached to the row dict in
-    #           `candidate_combos` like the pre-filter constants, so they cross
-    #           the worker boundary too. `tank_frac` had been derived twice from
-    #           the same two columns; one derivation now, two readers.
-    #         • THE PRE-FILTER IS MONOTONE IN LAUNCH CAPACITY, so seventeen
-    #           vehicles were re-deriving one propellant's exponentials, boil-off
-    #           and tankage closure. Split into `_combo_close_terms` (no vehicle)
-    #           and `_closes_with` (vehicle). The coefficients are hoisted rather
-    #           than the threshold they imply, because rearranging `bracket > 0`
-    #           re-associates the arithmetic and would move the prune boundary.
-    #         Measured against HEAD, same rows, one process, serial: raw 2.70 s →
-    #         1.13 s (2.39x), beneficiated 9.19 s → 4.51 s (2.04x), every one of
-    #         124 output columns identical and sha256 matching in both.
-    #         Measured and NOT taken: hoisting the ratio-independent prologue out
-    #         of the concentration sweep. Instrumented at 7.6% of a beneficiated
-    #         run, so ~6.7% recoverable, too little to justify splitting a
-    #         570-line function with ~40 locals crossing the seam. Items above
-    #         removed most of what made that prologue expensive.
-    # 1.15.0 : PROGRAMME SCALE BECOMES A SEARCHED AXIS, and the rig finally wears
-    #         out on something other than a calendar.  Paired with Module 3
-    #         v1.12.0.  Two findings, and the first is a correction that runs the
-    #         usual direction (worse) while the second is an optimisation that
-    #         can only run the other way.
-    #         • THE RIG HAD NO CYCLE LIMIT.  `missions_sharing_rig` was
-    #           min(N, life_yr // stay_yr) and `life_yr` is a CALENDAR figure: 
-    #           15 years of "will not have corroded meanwhile".  At the ~1.25 yr
-    #           stay the winning cislunar mission actually flies that made one rig
-    #           good for 12 consecutive campaigns, on the strength of a number
-    #           that never claimed to bound duty cycles.  Calendar time is not
-    #           what wears out a machine that cuts rock.  Module 3's new "Mining
-    #           rig maximum trips" (5, range 2-12) is the other bound, and
-    #           `rig_trips_per_ship` takes the MIN of the two, so a long-stay
-    #           mission is still calendar-limited and a short-stay one is now
-    #           cycle-limited, which is the correct way round.
-    #           Gated by `model_rig_trip_limit` (default True); False restores
-    #           1.14.2 exactly.
-    #         • PROGRAMME SIZE WAS AN INPUT TO A MODEL THAT KNOWS WHAT IT COSTS.
-    #           v1.14.0 made market saturation see `nre_amortization_missions`
-    #           and thereby made the programme-scale curve TURN; the optimum N
-    #           became interior.  Nothing then searched for it: N stayed a config
-    #           field and the curve was mapped by re-running the whole pipeline at
-    #           N = 1, 10, 100.  Three points do not locate an optimum, and this
-    #           file's own tables say so.
-    #           `optimise_programme_scale` (default False) searches it instead,
-    #           jointly with every other architecture axis.  Two structural facts
-    #           make that nearly free rather than |N| times the work:
-    #             1. N ENTERS NOTHING IN THE MASS CASCADE.  It appears in
-    #                `mission_cost_usd`, the saturation block and the reliability
-    #                block, and nowhere else, so the rocket equation, the fixed
-    #                point, the knapsack and the concentration sweep are all
-    #                solved ONCE per candidate and the whole programme ladder is
-    #                priced off the result.
-    #             2. THE OPTIMUM N IS ALWAYS AN EXACT MULTIPLE OF trips_per_ship.
-    #                Within one fleet band the concurrent output, and therefore
-    #                the saturation multiplier, is constant, while NRE/N, the
-    #                learning curve, the rig share and p_mining all improve
-    #                strictly with N.  So the best N in the band is its top, N =
-    #                F × trips.  The search is therefore over the FLEET, F, and N
-    #                follows; every N that cannot be optimal is skipped without
-    #                being evaluated.  See `programme_options`.
-    #           Which also answers the user-facing question directly: the number
-    #           of ships in the fleet IS the decision variable, and programme size
-    #           is its consequence.
-    #         MEASURED, full 1,554,353-row catalog, cislunar, raw, 12 workers,
-    #         both cells in one process (2026-08-11), 650,516 evaluable each:
-    #           search OFF  26.7863x  1,306 s   2021 CX5, New Glenn, xenon,  N=1
-    #           search ON   14.1730x  1,978 s   2021 CX5, New Glenn, iodine, N=5
-    #         Never-worse on the whole population: 650,516 pairs, 0 worse,
-    #         650,515 improved, median improvement 45.3%.  N = F x trips on every
-    #         row.  Fleet median 2, max 64; 2,393 rows (0.37%) sit AT
-    #         max_fleet_ships and are flagged on stdout; those are bodies with no
-    #         finite market, where the objective is monotone and the ladder's top
-    #         rung is where the loop stopped rather than an optimum.
-    #         The OFF cell REPRODUCES the committed 1.14.0 figures exactly: ratio,
-    #         evaluable rows, winner, vehicle, propellant, payload to the kg,
-    #         saturation multiplier, p_mining, RTG share and the propellant split, 
-    #         so 1.14.1's and 1.14.2's bit-identity claims and this release's
-    #         inertness at N = 1 all now hold on 1.55 M bodies at once, rather than
-    #         on the 150-2,500-row samples each was argued from.
-    #         ⚠️  The search costs 1.51x runtime, NOT the 1.04-1.13x a 2,500-row
-    #         sample showed.  Third time a stride sample has mispredicted
-    #         full-catalog runtime here, and the first time it did so for a RATIO
-    #         between two settings rather than an absolute wall clock; the ladder
-    #         is priced per SURVIVING candidate, and the sample's survivors are not
-    #         the population's.
-    #         New config: model_rig_trip_limit, optimise_programme_scale,
-    #         max_fleet_ships, programme_search_steps.
-    #         New output columns: programme_missions, fleet_ships, trips_per_ship,
-    #         rig_trips_calendar_cap, rig_trip_limit_binds,
-    #         programme_options_priced.
-    # v1.16.0 PROGRAMME CALENDAR TIME.  A programme took years and was charged for
-    #         none of them, and that was the last item this module's own config
-    #         comment named as an open gap.
-    #         • THE AMORTISED LINES WERE CARRIED FOR FREE.  WACC compounds each
-    #           mission's up-front costs over `mission_duration_yr`, right for one
-    #           mission, wrong for a programme.  The bus NRE, the autonomy NRE and
-    #           the rig are bought ONCE at t = 0 and amortised across W campaigns
-    #           that one rig can only fly one after another, so they are carried
-    #           across `T + (W-1) x cadence` of calendar and were compounded over
-    #           `T`.  `programme_calendar_multipliers` charges the difference as a
-    #           closed-form mean over the programme, exactly 1.0 at W = 1.
-    #           Terminal value gets the RECIPROCAL series, because salvage is
-    #           collected at the END: compounding a refund forward alongside the
-    #           cost it is netted against would pay a bonus for taking longer to
-    #           collect it.
-    #         • CADENCE IS THE DIG, OR THE WINDOW, WHICHEVER IS SLOWER.  Successive
-    #           campaigns on one rig are paced by the stay, but a capsule can only
-    #           be dispatched when a window opens, so `campaign_cadence_yr` takes
-    #           the max of the stay and the synodic period.  That lands hardest on
-    #           NEAs, whose synodic periods run to a decade, and they are what this
-    #           model likes.  A single mission pays that wait once; a programme of
-    #           W pays it W-1 more times.
-    #         • THE BAND ARGUMENT IS RETIRED AND THE SEARCH IS 2-D.  v1.15.0 could
-    #           search fleet size alone because within a band every lever improved
-    #           with N and none pushed back.  The calendar charge is the lever that
-    #           pushes back, it grows like y^W against NRE/N falling like 1/N, so
-    #           campaigns-per-ship is now a real decision with an interior optimum.
-    #           F stays a ladder; W is ENUMERATED EXHAUSTIVELY, because it is at
-    #           most `max_trips` integers and a dimension small enough to enumerate
-    #           should not be argued about.  N = 1 is consequently IN the search
-    #           set rather than dominated by it.
-    #         • `missions_sharing_rig` is derived from the fleet, min(trips,
-    #           ceil(N/F)), rather than min(N, trips), which claimed 5 campaigns
-    #           on a rig that flies 4 whenever N was not a whole multiple.
-    #         Gated by `model_programme_calendar` (default True); False restores
-    #         1.15.0 exactly, in all four respects.
-    #         ⚠️  INERT AT W = 1, hence at N = 1, hence on every committed cell in
-    #         CLAUDE.md and the README except the N = 10 / N = 100 curve, which is
-    #         a 1.14.0 measurement and moves.
-    #         New config: model_programme_calendar.
-    #         New output columns: missions_per_ship, campaign_cadence_yr,
-    #         cadence_window_bound, programme_span_yr,
-    #         programme_calendar_multiplier.
-    # v1.17.0 DEFAULTS: BENEFICIATION ON, PROGRAMME SEARCH ON.  No model term,
-    #         coefficient, table value or search axis moved.  An explicitly
-    #         configured run produces bit-identical output to 1.16.0; what moves
-    #         is what you get when you configure NOTHING, which is the whole
-    #         point of the bump; the rule in CLAUDE.md is that changing any
-    #         number a run produces means bumping, and the default run's numbers
-    #         change.  Same contract as 1.10.1 / 1.14.1 / 1.14.2 (a stamp that
-    #         does not mean the model moved), for a different reason: those were
-    #         performance, this is configuration.
-    #         • `use_beneficiation` False -> True.  Weakly dominant by
-    #           construction; the search always also prices `beneficiate=False`
-    #, so this cannot make any row's objective worse.  Verified on
-    #           the full catalog: 650,921 cislunar pairs, max benef/raw
-    #           1.000000, zero exceptions, 15.79% declining at exactly 1.0.
-    #           Cost 7.1x runtime at the time (1,307 s -> 9,300 s); 4.67x as
-    #           re-measured on 1.17.7 (733 s -> 3,424 s).
-    #         • `optimise_programme_scale` False -> True.  NOT weakly dominant
-    #           in the same sense; it is a change of QUESTION, from the best
-    #           single mission to the best programme, but never-worse against
-    #           N = 1 holds by construction since v1.16.0 put (F, W) = (1, 1) in
-    #           the search set.  Verified: 650,921 pairs, max searched/unsearched
-    #           1.000000, zero worse, median improvement 42.4%.
-    #           Cost 2.98x runtime at the time (1,307 s -> 3,890 s); 1.71x as
-    #           re-measured on 1.17.7 (733 s -> 1,253 s).
-    #         ⚠️  A DEFAULT RUN NO LONGER REPRODUCES THE OLDER TABLES, because
-    #         almost all of them are N = 1 raw.  Both flags restore them, and
-    #         both OFF cells were re-measured on the full catalog on 2026-08-11
-    #         and reproduce EXACTLY: 26.7863x raw (unmoved across 1.14.0 ->
-    #         1.16.0) and 20.5895x beneficiated.  Nothing was retired; the
-    #         defaults just stopped answering the smallest question by default.
-    #
-    # 1.17.1  PERFORMANCE ONLY; every number identical, the stamp moves only so
-    #         that a CSV still names the code that produced it.  FOURTH such
-    #         stamp after 1.10.1 / 1.14.1 / 1.14.2, and the first aimed at the
-    #         COST cascade rather than the mass cascade, because v1.17.0 made
-    #         `optimise_programme_scale` a default, and the programme ladder
-    #         prices a median of 40 options per candidate mission, so every
-    #         per-call cost in `mission_cost_usd` is now multiplied by 40.
-    #         Measured (interleaved A/B, both builds in one process, best of 5,
-    #         cislunar stride samples):
-    #             raw, search off            1.04x
-    #             beneficiated, search off   1.29x
-    #             raw, search on             1.25x
-    #             beneficiated + search      1.35x   <- the v1.17.0 DEFAULT
-    #         • `_ops_cost_constants`; the 22 Module 3 rows the cost cascade
-    #           reads, memoised on `ops_df` identity exactly as v1.10.1 did for
-    #           the sizing loop.  `_ops_value` was running 8.06 MILLION times on
-    #           a 150-row beneficiated+search sample, 11.7% of the profile, to
-    #           re-read numbers that never move.  `rig_trips_per_ship` reads the
-    #           same tuple.
-    #         • `optimal_payload_mix(want_phase=...)`; `_cargo_water_kg` is
-    #           97.3% of that function's callers and reads ONE key of the mix,
-    #           so it was building the mix dict, the value sum and the
-    #           dominant-phase max() and discarding all three.
-    #         • `AsteroidContext.cargo_ice_frac`, a per-BODY quantity that the
-    #           raw arm of `_cargo_water_kg` was re-deriving (`.get` + `pd.isna`
-    #           + `float`) per candidate per pass of the sizing loop.
-    #         • `mission_cost_usd(totals_only=True)`, the ladder compares
-    #           options on `total_cost` alone; building a 40-key dict to discard
-    #           39 of them measures ~3.4 us a call.  Early return before the
-    #           dict, winner re-priced once in full.
-    #         • `rig_trips` passed into `mission_cost_usd`; it is
-    #           (ops_df, config, stay_yr), all three fixed across a ladder.
-    #         • `delivery_architecture` memoised on its raw argument (458,337
-    #           calls to normalise one string).  Warning path deliberately not
-    #           memoised, so an unknown destination still shouts every time.
-    #         Verified: four cells (raw / benef / raw+search / benef+search)
-    #         135/135 columns bit-identical with sha256 MATCH against HEAD;
-    #         serial vs 8 workers byte-identical on benef+search (1,500-row
-    #         stride) and raw+search (2,500-row stride); mass ledger exact at
-    #         0.000000000 kg on three cells; both never-worse invariants hold
-    #         (max 1.000000, zero exceptions).
-    #
-    # 1.17.2  PERFORMANCE ONLY, every number identical.  FIFTH such stamp after
-    #         1.10.1 / 1.14.1 / 1.14.2 / 1.17.1, and the second in a row aimed
-    #         at the programme ladder, because that is where v1.17.0's default
-    #         flip put the work.  Measured (interleaved A/B, both builds in one
-    #         process, best of 7, cislunar stride samples, TWO independent
-    #         passes which agreed to within 0.02x on every cell):
-    #             raw, search off            1.01x / 0.99x
-    #             beneficiated, search off   1.02x / 1.00x
-    #             raw, search on             1.46x / 1.45x
-    #             beneficiated + search      1.35x / 1.37x  <- v1.17.0's DEFAULT
-    #         ⚠️  Two passes, because ONE is not a measurement on this host: a
-    #         best-of-5 pass taken while the machine was loaded put the inert
-    #         "beneficiated, search off" cell at 1.19x, and HEAD's own absolute
-    #         times moved 30-45% between passes.  The RATIOS on the searched
-    #         cells held across all of it; the inert cells did not, and would
-    #         have been reported as a gain from a single pass.
-    #         ⚠️  Note the SHAPE of that table, which is the release in one
-    #         picture and is the opposite of 1.17.1's: the two search-off cells
-    #         are inert to within noise, because both items remove work that
-    #         only exists when a LADDER exists.  A run with
-    #         `optimise_programme_scale` off gains nothing here and should not
-    #         be expected to.
-    #         • `mission_cost_usd` SPLIT into `_mission_cost_prologue` (the ~90%
-    #           that does not move with programme size) and `_mission_cost_tail`
-    #           (the ~30 arithmetic ops that do).  The ladder builds the
-    #           prologue once and calls the tail per option, instead of
-    #           re-deriving ~10 max() calls, ~6 dict lookups, ~15 float()
-    #           conversions, a `delivery_architecture` call and a 22-tuple
-    #           unpack forty times over to change three numbers.
-    #           🚨  v1.17.1's "what this release does NOT close" section named
-    #           this and REFUSED it, on the grounds that it "re-associates the
-    #           final sums" and so would cost the bit-identity every release
-    #           here is argued from.  The premise is right and the conclusion
-    #           does not follow: every N-dependent line factors as
-    #           `<N-independent base> * lc`, and `a * b * lc` is ALREADY
-    #           evaluated as `(a * b) * lc`, so hoisting `a * b` is the same two
-    #           operations in the same order rather than an algebraic
-    #           rearrangement.  What genuinely cannot be hoisted is a partial
-    #           SUM interleaved with N-dependent terms, and `hardware_cost`,
-    #           `spacecraft_book_value` and `upfront_lines` are therefore
-    #           restated verbatim in the tail.  The distinction is the whole
-    #           release; see `_mission_cost_prologue`'s docstring.
-    #         • The market-saturation sum memoised per FLEET inside
-    #           `_price_programme`.  It reads F and nothing else the ladder
-    #           varies, and the ladder is the F ladder crossed with W, so ~40
-    #           options over ~8 distinct fleets re-derived the same sum five
-    #           times each.  Bit-identical by construction: the same F re-runs
-    #           the same `+=` over the same list in the same order.
-    #         • `max(1, missions_sharing_rig)` computed once instead of three
-    #           times in the tail.
-    #         Verified: four cells (raw / benef / raw+search / benef+search)
-    #         135/135 columns bit-identical with sha256 MATCH against HEAD;
-    #         serial vs 8 workers byte-identical on benef+search and raw+search;
-    #         mass ledger exact at 0.000000000 kg; both never-worse invariants
-    #         hold (max 1.000000, zero exceptions).
-    #
-    # 1.17.4  PERFORMANCE ONLY, every number identical.  EIGHTH stamp in this
-    #         project that does not mean the model moved, and the SIXTH that is
-    #         performance.  Interleaved A/B, both builds in ONE process, cells
-    #         alternated, best of 3 (the construction v1.17.1 had to adopt after
-    #         a separate-process measurement reported a 0.88x SLOWDOWN purely
-    #         from host drift):
-    #             raw, search off            1.854 s -> 1.223 s   1.52x
-    #             beneficiated, search off   4.901 s -> 2.486 s   1.97x
-    #             raw, search on             3.160 s -> 2.369 s   1.33x
-    #             beneficiated + search      6.533 s -> 4.157 s   1.57x   (DEFAULT)
-    #         Plus a fixed ~15 s off the LOAD of every run at any row cap
-    #         (30.38 s -> 15.36 s for load + integrity_check), and 3.44x off
-    #         the per-ROW walk every catalog row pays whether or not it turns
-    #         out to be evaluable (61.0 -> 17.7 us, so ~67-78 s a full pass).
-    #         ⚠️  The shape is the OPPOSITE of 1.17.2's, which was inert with
-    #         the search off and worth 1.45x with it on.  This one lands on the
-    #         MASS cascade, so beneficiated-without-search gains most and
-    #         raw-with-search least; the searched cells dilute it because the
-    #         cost ladder is a bigger share of what is left.  Do not quote one
-    #         number for it either.
-    #
-    #         (a) THE LOAD WAS NEVER PROFILED, AND IT WAS THE BIGGEST SINGLE
-    #             ITEM IN THE RUN.  `comp_minerals` was `ast.literal_eval`'d
-    #             once per ROW: 1,555,667 parses to produce the TWENTY-FIVE
-    #             distinct compositions the taxonomy can assign, ~19 s, more
-    #             than the 862 MB CSV read in front of it.  `integrity_check`
-    #             then walked the same 1.55 M lists to build a set of fourteen
-    #             names, ~1.3 s.  Both now go by distinct value:
-    #             `_parse_minerals_column` 13.0x, the integrity walk 3.2x, and
-    #             the parsed column verified identical element for element.
-    #             Every perf release before this one (1.10.1, 1.14.1, 1.14.2,
-    #             1.17.1, 1.17.2) went after the SEARCH, because that is where a
-    #             full-catalog run spends its hours, and a fixed ~20 s that a
-    #             10-hour cell can ignore is most of the wall clock of the 150-
-    #             and 400-row cells this project actually verifies itself on.
-    #
-    #         (b) THE PRE-FILTER GAINS A SECOND STAGE, the big one.  v1.14.1
-    #             refutes at PASS 1 of the sizing loop (no plant, no electric
-    #             stage, shortest hold) and argues correctly that pass 1 is the
-    #             most optimistic pass.  It never asked what happens at pass 2.
-    #             Measured at cislunar, beneficiated, search on: of 219,054
-    #             calls to `_evaluate_combo_at_ratio`, **162,816 (74.3%) return
-    #             None on `if not cascade["viable"]` after exactly TWO cascade
-    #             solves**, on pass 2, the first pass that flies the electric
-    #             stage pass 1 has just sized, which on an electric mission is
-    #             tonnes.  And that stage is sized off a cascade that can see
-    #             neither the concentration ratio nor the power source, so the
-    #             identical refutation was being re-derived ~8 to ~16 times.
-    #             `_closes_carrying_its_own_stage` runs it ONCE per (vehicle x
-    #             propellant x Δv x ISRU).  Calls to `_evaluate_combo_at_ratio`
-    #             fall 219,054 -> 32,342 (-85%) and to `max_return_payload_kg`
-    #             500,860 -> 183,677 (-63%).
-    #             🚨  Sound rather than heuristic, and the argument is
-    #             monotonicity, not measurement: viability is `bracket > 0` /
-    #             `base_launch <= leo`, both monotone decreasing in `hardware_kg`
-    #             and in `r_ret`, and BOTH only grow from pass 1 to pass 2 (the
-    #             plant is >= 0; `trial_dur` is floored at
-    #             station_keeping_floor_yr).  `structure_frac` grows too and
-    #             appears in `denom`, where larger only helps, so the test runs
-    #             at pass 1's value, whose `denom` is already positive.
-    #
-    #         (c) `_calendar_multipliers_cached`; the ladder is the F ladder
-    #             CROSSED WITH W, and `programme_calendar_multipliers` reads W
-    #             and nothing else that varies, so ~40 options asked it for at
-    #             most `trips` (<= 5) answers: 369,166 calls, eight askings per
-    #             answer, two `**` apiece.
-    #
-    #         (d) `_iter_row_dicts`, both the serial loop and `_evaluate_chunk`
-    #             walked the catalog with `iterrows()`, building a pandas
-    #             Series per row that `_row_to_dict` then threw away: 61.0 us a
-    #             row against 17.7 for `to_dict("records")` over a 256-row
-    #             block.  ~50 us on EVERY catalog row, evaluable or not.
-    #             ⚠️  A block at a time, not one `to_dict` over 1.55 M rows, 
-    #             the conversion amortises at 256 just as well and nothing
-    #             large is ever materialised.
-    #
-    #         (e) `_ep_device_consts` and `_ep_stage_kg`, extracted so the new
-    #             filter sizes the stage off ONE definition rather than a second
-    #             copy.  Same operations in the same order, so the extraction is
-    #             bit-identical rather than merely equal.  Written this way
-    #             deliberately: `tank_frac` spent three releases derived in two
-    #             places under a v1.14.2 note claiming it was derived in one.
-    #
-    #         Verified: four cells 139/139 columns bit-identical, sha256 MATCH,
-    #         less BOTH provenance columns; prune ON vs OFF identical on all
-    #         four; stage 2 ACTIVE vs NEUTRALISED identical on all four; and
-    #         pairwise, every one of 20,533 (vehicle x propellant x Δv x ISRU)
-    #         tuples stage 2 killed was then solved in full at every power mode
-    #         and every ratio, and ZERO produced a mission.  That last one is the
-    #         check that matters: a bound that is too tight drops a candidate
-    #         WITHOUT changing a row count, so no output diff could see it.
-    # 1.17.3  DEAD CODE AND DUPLICATION REMOVED, every number identical.  SIXTH
-    #         stamp that does not mean the numbers moved, and the first for
-    #         neither performance nor a default flip: nothing here is meant to
-    #         make the module faster, only smaller and harder to drift.
-    #         • `low_thrust_burn_time_yr` DELETED, no caller in four releases.
-    #           It is the t-form of `ep_power_required_w`, and this model always
-    #           picks a trip time and buys the array rather than the reverse.
-    #           ⚠️  Its section comment carries the DAWN VALIDATION (5.0-9.3 yr
-    #           predicted at 2.2-3.0 AU against ~5.9 yr flown, and 1.0 yr if the
-    #           1/r² term is lost), which is load-bearing and was KEPT, re-
-    #           anchored on `ep_power_required_w`.  Do not delete that comment
-    #           on the grounds that the function it sat above is gone.
-    #         • `asteroid_dv_m_s` DELETED, no caller.  Its docstring claimed it
-    #           was kept "for interactive use", and nothing advertised it, which
-    #           is the opposite of `cheapest_launch_to` in Module 3 (dead to the
-    #           pipeline, but named in that module's own preview output).
-    #         • `_tank_frac_per_kg`, ONE derivation of tank mass per kg, read by
-    #           `_sizing_propellant_consts` and `_prefilter_propellant_consts`.
-    #           🚨  v1.14.2 claimed to have closed this ("one derivation now, two
-    #           readers") and had in fact MOVED the second copy, which still
-    #           divided the same two columns ten lines away under a comment
-    #           saying it matched the first "exactly".  A note that documented an
-    #           intention as an accomplishment, and it survived a release argued
-    #           entirely from bit-identity because nothing a hash can see was
-    #           wrong.
-    #         • `_phase_prices` / `_pgm_enrichment`; the walk of
-    #           FRACTION_TO_MINERAL existed THREE times.  The two byte-identical
-    #           copies (`asteroid_phase_table`, `asteroid_best_phase_usd_per_kg`)
-    #           are now one generator.  ⚠️  `asteroid_bulk_value_usd_per_kg` is
-    #           deliberately NOT folded in: it admits a fraction of exactly 0.0
-    #           where the others skip it, and unifying it would be numerically
-    #           negligible and would still cost the bit-identity this project
-    #           argues from, the v1.14.2 phase-sort lesson.
-    #         • Five slots of the `ctx.ops` unpack in `_evaluate_combo_at_ratio`
-    #           `_`-prefixed.  They are dead HERE only; the tuple's ORDER is the
-    #           contract with `_ops_sizing_constants`, so they must still be
-    #           unpacked, and v1.14.1 moved the arithmetic that read them onto
-    #           `AsteroidContext` because it is per-body.
-    #         Verified: four cells (raw / benef / raw+search / benef+search)
-    #         139/139 columns bit-identical with sha256 MATCH against 1.17.2,
-    #         less the two PROVENANCE columns; serial vs 8 workers byte-identical
-    #         on raw+search and benef+search; mass ledger exact at
-    #         0.000000000 kg; both never-worse invariants hold.
-    #         🚨  Those provenance columns are `pipeline_version` AND
-    #         `catalog_date`, and the second one is not obvious.  An earlier
-    #         pass dropped only the version and reported the two BENEFICIATED
-    #         cells as differing; the entire difference was `catalog_date`,
-    #         because midnight fell between the raw cells and the beneficiated
-    #         ones.  Half a run dated 08-12 and half 08-13 looks precisely like
-    #         a real defect confined to the beneficiation path.  A full
-    #         beneficiated cell is ~10 h, so a 2x2 CANNOT be run inside one
-    #         date: strip every provenance column before hashing.
-    # v1.17.5  PERFORMANCE ONLY, every number bit-identical to 1.17.4.  Aimed
-    #         at the programme LADDER, which is where 1.17.0's default flip put
-    #         the work: it prices a median of ~42 options per candidate mission,
-    #         and four items were re-deriving, per option, answers that move
-    #         with far less than the option does.
-    #         • THE RIG SHARES AND THE CALENDAR MULTIPLIERS are a function of
-    #           `missions_sharing_rig` (i.e. of W) and of the PROLOGUE, not of
-    #           N, so ~42 options asked for at most `trips` x 2 distinct
-    #           answers, and `trips` is `min(life / stay, max_trips)` with
-    #           `max_trips` = 5.  `_mission_cost_tail` takes an opt-in
-    #           `rig_cache` and `_price_programme` owns one per candidate, the
-    #           same shape as v1.17.2's `sat_by_fleet` one level out.  It also
-    #           ABSORBS the `_calendar_multipliers_cached` call v1.17.4 added,
-    #           rather than repeating it.  Worth ~3.5% on both searched cells.
-    #           ⚠️  v1.17.4 measured this block at 3.2% and declined it as
-    #           "under this file's own bar".  That figure was for the rig block
-    #           ALONE; folding the calendar lookup into the same entry is what
-    #           moves it, and the cache is opt-in, so `mission_cost_usd` and
-    #           every other caller keep the 1.17.4 path exactly.
-    #         • THE TWO O(N) MEMOS re-built their keys in Python.
-    #           `(int(n), float(rate))` is two conversions and a tuple
-    #           allocation before the lookup starts, at 455,094 calls apiece; 
-    #           the key construction WAS the cost, not the miss.
-    #           `functools.lru_cache` hashes in C: 159 -> 92 ns and
-    #           249 -> 131 ns measured.  The `int()`/`float()` normalisation was
-    #           doing nothing the cache does not, since Python already hashes
-    #           1 and 1.0 to one slot, and both callers pass an int anyway.
-    #         • `_objective_key` ran `str(x).strip().lower()` on EVERY call: 
-    #           457,776 of them on a 150-row sample, to re-derive one boolean
-    #           from a config field fixed for the run.  93 ns against a dict
-    #           lookup's 31 ns.  Memoised in `_selects_on_profit`; the parse is
-    #           unchanged, only its repetition.
-    #         • `isru_feed_kg_per_kg_propellant` re-answered a per-PROPELLANT
-    #           question per (asteroid x propellant x Δv option).  Four rows in
-    #           five fall through to the legacy name test: a strip/lower plus a
-    #           substring scan, to conclude "no": 48,600 of 62,018 calls on a
-    #           150-row sample.  Split into `_isru_propellant_consts`, attached
-    #           in `candidate_combos` beside the pre-filter and sizing tuples.
-    #         • Dead: `AU_KM`, unreferenced anywhere in four modules, `ui.py`,
-    #           `ui_meta.py` or `build_master.py`.
-    #         Measured interleaved A/B, both builds in ONE process, cells
-    #         alternated A,B,A,B..., best of 4; the construction v1.17.1 had to
-    #         adopt after a separate-process run reported a SLOWDOWN purely from
-    #         host drift:
-    #             raw, search off            1.186 -> 1.175 s   1.01x
-    #             beneficiated, search off   2.260 -> 2.256 s   1.00x
-    #             raw + search               2.262 -> 2.127 s   1.06x
-    #             benef + search (DEFAULT)   4.283 -> 4.029 s   1.06x
-    #         🚨  SHAPED LIKE v1.17.2, NOT LIKE v1.17.4: every item removes work
-    #         that only exists when a LADDER exists, so both search-OFF cells are
-    #         inert and should be.  Do not quote one number for this release.
-    #         Verified: four cells 135/135 columns bit-identical against HEAD,
-    #         sha256 MATCH, less BOTH provenance columns; pre-filter on vs off
-    #         MATCH on all four; serial vs 8 workers byte-identical on
-    #         raw+search and benef+search; mass ledger exact at 0.000000000 kg;
-    #         both never-worse invariants hold with zero exceptions, the
-    #         searched-vs-unsearched median landing on +42.5% against the
-    #         committed full-catalog +42.4%.
-    #         ⚠️  The ratio-independent PROLOGUE of `_evaluate_combo_at_ratio`
-    #         was re-measured rather than inherited, and it is now **2.3% of the
-    #         default cell and 2.6% of raw**, against the 7.6% v1.14.2 recorded
-    #         when it declined the split.  Only ~89% of that is recoverable, so
-    #         the item is ~2% for splitting a 570-line function with ~40 locals
-    #         crossing the seam.  Still correctly declined, now on a current
-    #         number.
-    #     v1.17.6  PERFORMANCE ONLY, every number bit-identical to 1.17.5.
-    #         The first perf release here that lands on the PER-ROW WALK rather
-    #         than on the search, so it is the first that is worth MORE on raw
-    #         than on the default cell.  Interleaved A/B, both builds in one
-    #         process, best of 3, at caps big enough that the fixed ~1.6 s
-    #         (catalog integrity walk + pre-filter probe) stops dominating:
-    #             raw, 6,000 rows           18.61 -> 16.28 s   1.14x
-    #                     (repeat pass)     19.15 -> 16.14 s   1.19x
-    #             beneficiated, 800 rows    13.49 -> 12.96 s   1.04x
-    #                     (repeat pass)     13.73 -> 12.81 s   1.07x
-    #             raw + search, 3,000 rows  16.71 -> 14.42 s   1.16x
-    #                     (repeat pass)     16.58 -> 14.33 s   1.16x
-    #             benef + search, 800 rows  22.81 -> 20.51 s   1.11x
-    #                     (repeat pass)     22.55 -> 20.45 s   1.10x
-    #         Net of that fixed cost the PER-ROW figures are 1.15 / 1.05 / 1.18
-    #         / 1.12x.  At the 150/400-row caps every previous release measured
-    #         itself on, the same build reads 1.03-1.10x; the fixed cost is half
-    #         of those cells, so quote the cap with the ratio.
-    #         ⚠️  Two full interleaved passes are recorded rather than one
-    #         because the RAW cell moved 1.14x -> 1.19x between them on an
-    #         otherwise identical build.  That is host drift, and it is the
-    #         reason v1.17.1 had to adopt the interleaved construction in the
-    #         first place; treat raw as ~1.15x, not as 1.19x.
-    #         Five findings, and the first is the one that matters:
-    #           • COMPOSITION IS A PER-TAXONOMY FACT.
-    #             `asteroid_bulk_value_usd_per_kg`, `asteroid_phase_table` and
-    #             `asteroid_best_phase_usd_per_kg` read five values off the row
-    #             and nothing else, all of them derived by Module 1 from
-    #             `spectral_type`: ~25 distinct composition tuples across
-    #             1,555,667 rows.  Measured on a 4,000-row stride of the real
-    #             catalog: 14.84 + 13.97 + 27.66 = 56.5 us/row, ~88 s of every
-    #             full BENEFICIATED pass and ~41 s of a raw one, paid by every
-    #             row whether or not it turns out to be evaluable.  Memoised on
-    #             the composition: 1.21 / 1.25 / 1.28 us, i.e. 12.3x / 11.2x /
-    #             21.6x.  Same finding as v1.17.4 made on both sides of the CSV
-    #             boundary, in the one place between them it did not look.
-    #           • `_infeasible` was a NESTED def inside `max_return_payload_kg`,
-    #             rebuilt on all 500,860 calls of the hottest function in the
-    #             mass cascade at ~99 ns a def: ~5% of a 2.1 us call.
-    #           • The programme LADDER is a function of `trips` and the config.
-    #             `programme_options` + `fleet_refinement` were rebuilt per
-    #             surviving candidate (10,741 times per 150-row sample) for one
-    #             of a handful of answers; ~3.6% of the default cell.
-    #           • ONE per-propellant cache entry in the combo loop instead of
-    #             four lookups, plus the Δv options resolved to scalars once per
-    #             asteroid, plus the vehicle's LEO capacity derived once per RUN
-    #             rather than in three places per candidate.
-    #           • Five reliability ops rows and the ranking objective, both
-    #             resolved once instead of per candidate / per ladder rung.
-    #         Verified: four cells 139/139 columns bit-identical against HEAD,
-    #         sha256 MATCH, less BOTH provenance columns, and the four hashes
-    #         are the ones committed for v1.17.4, so they reproduce across two
-    #         releases.  Pre-filter on vs off MATCH; serial vs 8 workers
-    #         byte-identical; mass ledger exact; both never-worse invariants
-    #         hold with zero exceptions.
-    # 1.17.7 : MEMORY, not speed, and the first stamp here that fixes a defect
-    #         nothing would have noticed until a full-catalog run ran out of
-    #         RAM.  `_CALENDAR_CACHE` was the ONE memo in this module keyed on a
-    #         per-candidate float (`cadence_yr` = max(stay, synodic)), so where
-    #         every other cache reaches a ceiling and sits there: 69 entries
-    #         for the two reliability memos after 2.4 M hits, ~25 for
-    #         `_COMPOSITION_CACHE`; this one grew LINEARLY with the catalog at
-    #         ~45 entries per row:
-    #             cap 100 -> 3,983    cap 400 -> 17,729    cap 800 -> 36,071
-    #         which projects to ~70 M entries and 11-18 GB on a full-catalog
-    #         default cell, against a documented run peak of ~6 GB.  It landed
-    #         in v1.17.4 and no full-catalog run has been made since v1.16.0,
-    #         so it had never been exercised at the scale that shows it.
-    #         • Now `functools.lru_cache(maxsize=1024)`.  Replaying the real
-    #           223,538-call sequence through bounded LRUs, ALL reuse is local
-    #           to one candidate mission, v1.17.5's per-candidate `rig_cache`
-    #           already absorbs the cross-option traffic, so 36,071 entries
-    #           were buying 0.1 pp of hit rate over 64:
-    #               unbounded 83.9%  |  maxsize 1024 83.9%  |  maxsize 64 83.8%
-    #         • It is also FASTER, because lru_cache hashes in C rather than
-    #           building a key tuple in Python: 180.1 -> 91.0 ns a hit, and a
-    #           bounded lru_cache is not measurably slower than an unbounded one
-    #           (93.4 ns).  Bounding it is not a trade against speed.
-    #         ⚠️  Cannot change an output value, by CONSTRUCTION rather than by
-    #         rounding: it is a memo of a deterministic pure function, so
-    #         evicting an entry only forces recomputation of the identical
-    #         float.  That is a stronger guarantee than any arithmetic change in
-    #         this file can offer, and it is why this one is safe.
-    #         SECOND item, unrelated: `_load_csv` reads with `low_memory=False`.
-    #         The default reader infers dtypes from CHUNKS, so the dtype depends
-    #         on how values fall across them; the same "the dtype depends on
-    #         the data" hazard that cost NEOWISE four releases, and it emitted
-    #         `DtypeWarning: Columns (3,22) have mixed types` on every load of
-    #         the 1.55 M-row catalog.  A warning that always fires is one nobody
-    #         reads, and this module's rule is to remove the cause rather than
-    #         suppress it.  Taken only because it was MEASURED neutral: on the
-    #         real 1,555,667-row catalog, single-pass against chunked inference
-    #         changes 0 of 46 dtypes and 0 values.
-    #         Verified: four cells bit-identical against v1.17.6 by hash and
-    #         column, and the four hashes are the ones committed for v1.17.4 and
-    #         v1.17.6 : so they now reproduce across THREE releases.  Pre-filter
-    #         on vs off MATCH; serial vs 8 workers byte-identical; mass ledger
-    #         exact; both never-worse invariants hold with zero exceptions.
-    #         Checks now run from the committed `verify.py` rather than a
-    #         harness rebuilt from memory; see that file's header for the
-    #         eleven harness bugs that motivated committing one, five of them
-    #         found while writing it.
-    #
-    # v1.17.8  NO NUMBER.  Closes the VALUE half of the upstream-staleness
-    #         hole that CLAUDE.md has named as open since v1.14.0:
-    #         `schema_check` asks whether the Module 3 columns and rows this
-    #         version reads are PRESENT, and passes cleanly on a catalog whose
-    #         VALUES are a release out of date, because editing a density or a
-    #         boil-off rate leaves the schema identical.
-    #         Not hypothetical: during v1.12.0 the argon rows were rewritten,
-    #         Stage 3 was re-run, the CSV did not land, and two full-catalog
-    #         runs plus a determinism sweep were measured against the table
-    #         being replaced, with nothing anywhere saying so.  The documented
-    #         mitigation was to eyeball Stage 4's row counts against what
-    #         Stage 3 reported writing, every time.
-    #         `stamp_check` compares the transportation `pipeline_version`
-    #         STAMPED in each Stage 3 CSV against the Module 3 in this process,
-    #         which needed no new column because Stage 3 has stamped its CSVs
-    #         all along.  It turns "changing a number means bumping the
-    #         version" from a rule someone remembers into one the loader
-    #         enforces on the way past.
-    #         ⚠️  A DIAGNOSTIC, not an import: `TRANSPORT_CONFIG` exists only
-    #         when both modules share a process (master.py, the normal path).
-    #         A standalone calc.py run cannot know what Module 3 currently
-    #         says and stays silent rather than inventing a complaint.
-    #         Verified: four cells 139/139 columns bit-identical against the
-    #         committed v1.17.7 baseline, all four hashes MATCH; mass ledger
-    #         exact at 0.000000000 kg; both never-worse invariants hold with
-    #         zero exceptions; Stage 2 tables recompute identically.  The
-    #         stamp moves so a catalog still names the code that built it.
+    # Stamped into every output CSV, and the only way to tell which code
+    # produced a given catalog.  BUMP IT when a change moves any number a run
+    # produces.  The rule is ONE-DIRECTIONAL: changing a number means bumping,
+    # and a bump does NOT mean a number changed, which is why nothing may read
+    # a version as evidence that a result moved.
+    # THE CHANGELOG IS versions.md, NOT THIS COMMENT.  It used to be 1,328 lines
+    # of release notes sitting right here, a second copy of a record versions.md
+    # already held, which is the documentation form of the defect this project
+    # keeps cataloguing; it was also what the dashboard rendered as this field's
+    # help text, because ui_meta scrapes a field's comment block.  Moved out on
+    # 2026-09-02.  Two places to write, neither of them here:
+    #     versions.md > Releases            what the release did, and what it
+    #                                       measured to say so
+    #     versions.md > Module changelogs   this module's own stamp-by-stamp
+    #                                       record: Stage 4 changelog
     pipeline_version: str = "1.17.8"
 
 
@@ -13667,8 +11696,8 @@ def solar_specific_power_w_per_kg(
 # POWER SOURCE SELECTION  (v1.11.0)
 # ─────────────────────────────────────────────────────────────────────────────
 # Module 3 has carried an "RTG (radioisotope power)" row since v1.2.0: $500k
-# per Watt-electric, with a note reading "only used past ~3 AU when PV starves"
-#, and nothing in this module ever read it.  Every asteroid in the catalog
+# per Watt-electric, with a note reading "only used past ~3 AU when PV starves",
+# and nothing in this module ever read it.  Every asteroid in the catalog
 # flew photovoltaics, including the ones at 3.5 AU where the 1/r² term makes
 # the array seven times heavier than at 1 AU.  So the main belt was being
 # punished for an architecture choice a real mission would simply not make.
@@ -15683,6 +13712,11 @@ def learning_curve_factor(n_units: int, rate: float) -> float:
 # local and whose key space is not is a leak wearing an optimisation's clothes.
 @functools.lru_cache(maxsize=None)
 def _learning_curve_cached(n_units: int, rate: float) -> float:
+    """`learning_curve_factor`, memoised on (units, rate).
+
+    Unbounded because the key space is nameable: `n_units` is a rung of the
+    programme ladder and `rate` is a config constant. See the block above.
+    """
     return learning_curve_factor(n_units, rate)
 
 
@@ -15690,6 +13724,12 @@ def _learning_curve_cached(n_units: int, rate: float) -> float:
 def _mining_reliability_cached(
     n_missions: int, p_first: float, alpha: float, p_mature: float,
 ) -> float:
+    """`mining_success_probability`, memoised on (missions, and three constants).
+
+    Unbounded on the same argument as `_learning_curve_cached`: the last three
+    arguments are config constants and the first is a ladder rung, so the two
+    memos together held 69 entries after 2.4 M hits on an 800-row default cell.
+    """
     return mining_success_probability(n_missions, p_first, alpha, p_mature)
 
 
@@ -17751,8 +15791,8 @@ def _evaluate_combo_at_ratio(
         dominant_frac          = 0.0
 
     # Time is charged on the FEED, not the product: the rig has to dig all
-    # of it, and that stay time flows into ops cost and WACC.  ISRU feed counts
-    #, propellant made on site is rock the same rig had to move.
+    # of it, and that stay time flows into ops cost and WACC.  ISRU feed counts,
+    # propellant made on site is rock the same rig had to move.
     # (`mining_yr` was computed above, where the power plant was settled; it
     # depends only on the feed, which the cascade rebuild does not change.)
 
@@ -17963,8 +16003,8 @@ def _evaluate_combo_at_ratio(
             g, sat, delivered = entry
         # Revenue was certain.  It is not: the launch fails, the spacecraft dies
         # on the way, or the mining chain does not work when it arrives.  Costs
-        # are charged in FULL, which is correct; you spend the money either way
-        #, and launch insurance replaces hardware, not revenue, so this is not
+        # are charged in FULL, which is correct; you spend the money either way,
+        # and launch insurance replaces hardware, not revenue, so this is not
         # a double count.
         ps = 1.0
         pm = 1.0
@@ -18930,8 +16970,8 @@ def evaluate_asteroid(
                     # Stage 1 refutes at pass 1 of the sizing loop, which flies
                     # no electric stage because pass 1 is what SIZES one.  On
                     # the real population 74.3% of the candidates that get past
-                    # stage 1 then die on pass 2, when that stage becomes mass
-                    #, and they die identically at every concentration ratio
+                    # stage 1 then die on pass 2, when that stage becomes mass,
+                    # and they die identically at every concentration ratio
                     # and every power source, because the stage is sized off a
                     # cascade that can see neither.
                     #

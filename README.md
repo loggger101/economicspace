@@ -29,7 +29,8 @@ modules/
 campaign/              The 20-cell measurement campaign: results.csv, the
                        archived cells, the logs, and the scripts that ran it
 README.md              This file: what it is, how to run it, current numbers
-versions.md            What changed in which release, and what numbers used to be
+versions.md            What changed in which release, what numbers used to be,
+                       and the per-module changelogs
 CLAUDE.md              Working notes: the traps and invariants. Read before editing
 ```
 
@@ -39,7 +40,7 @@ in this repo is a stale sentence rather than a missing table:
 | file | holds | is the authority for |
 |---|---|---|
 | `README.md` | what the pipeline is, how to run it, what the model does, and the **current** numbers | the current answer |
-| [`versions.md`](versions.md) | what changed in which release, and what every number used to be | the measurement history |
+| [`versions.md`](versions.md) | what changed in which release, what every number used to be, and the per-module changelogs | the measurement history |
 | [`CLAUDE.md`](CLAUDE.md) | the traps, the invariants, and the reasoning behind decisions that look wrong | how to edit it safely |
 
 `run.bat`, `run_pipeline.py`, `ui.py` and `ui_meta.py` sit at the root rather
@@ -1266,6 +1267,13 @@ Every release note, and every measurement table these results superseded, is in
 **[`versions.md`](versions.md)**: reorganised newest-first, with the module
 versions each release carried. It used to live in this file and had grown to
 roughly half of it.
+
+It also carries the **[per-module changelogs](versions.md#module-changelogs)**,
+one section per stage in numeric order, which is where the *schema* history
+lives: which release added which config field and which output column, i.e. what
+tells you whether an archived CSV can answer the question you are asking of it.
+Those were 2,063 lines of comment above the four `pipeline_version` fields
+until 2026-09-02.
 
 The three that most often get quoted out of date:
 

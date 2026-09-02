@@ -71,6 +71,30 @@ import sys
 import tokenize
 from typing import Dict, List, Optional, Tuple
 
+
+
+def _force_utf8_stdout() -> None:
+    """Make stdout survive a non-ASCII character on a cp1252 console.
+
+    Every `print` in this repo's own modules is pure ASCII, and check 6 is the
+    ratchet that keeps them that way.  This file is the one that prints text it
+    did NOT write: check 10 echoes the source line each lost number came from,
+    and those lines are comments and docstrings, where the arrows, sigmas and
+    warning glyphs are still allowed.  Windows picks cp1252 for a redirected
+    stdout, so `--before` on a module source died with UnicodeEncodeError
+    part-way through its own report, the same failure `run_pipeline.py`'s
+    identical guard exists for.  `errors="replace"` is the load-bearing half.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass          # already detached, or not a text stream
+
+
+_force_utf8_stdout()
+
 REPO = os.path.dirname(os.path.abspath(__file__))
 DOCS = ["README.md", "versions.md", "CLAUDE.md"]
 
@@ -88,6 +112,12 @@ YEAR = re.compile(r"20\d\d")
 
 
 def read(path: str) -> str:
+    """Whole file as text, always UTF-8.
+
+    Explicit rather than relying on the locale: on Windows the default is
+    cp1252, and every doc and module here carries arrows, Greek and warning
+    glyphs in its prose, so a locale read would raise on the first one.
+    """
     with io.open(path, encoding="utf-8") as fh:
         return fh.read()
 
@@ -109,6 +139,12 @@ def load_modules() -> Dict[str, object]:
 
 
 def _num(x) -> Optional[float]:
+    """`x` as a float if it reads as one, else None.
+
+    Strips `_` and `,` so a documented `1,555,667` or a source-side `1_555_667`
+    compares equal to the int on the dataclass; check 1 uses it to accept a
+    difference of NOTATION while still failing on a difference of value.
+    """
     try:
         return float(str(x).replace("_", "").replace(",", ""))
     except (TypeError, ValueError):
@@ -121,6 +157,15 @@ TUNING_ROW = re.compile(
 
 
 def check_defaults(mods) -> bool:
+    """Every default README's Tuning table quotes, against the field it names.
+
+    Reads the table rather than a hand-kept list, so a row added there is
+    checked from the moment it is written. A row naming a field that does not
+    exist is a failure too, not a skip: that is a rename the docs did not
+    follow. This is the check that caught `use_beneficiation` and
+    `optimise_programme_scale` being documented as False for several releases
+    after calc v1.17.0 flipped them.
+    """
     txt = read(os.path.join(REPO, "README.md"))
     bad: List[str] = []
     n = 0
@@ -274,6 +319,13 @@ LINKED_DOCS = DOCS + ["campaign/FINDINGS.md", "campaign/README.md"]
 
 
 def check_links() -> bool:
+    """Every intra-repo markdown anchor resolves, in all five linked docs.
+
+    Targets resolve relative to the LINKING FILE, not to the repo root, because
+    `campaign/` does not sit at the root and keying anchors by the path as
+    written works only while every doc does. External links are skipped; this
+    checks what the repo controls.
+    """
     files = [d for d in LINKED_DOCS if os.path.exists(os.path.join(REPO, d))]
     anchors = {os.path.normpath(os.path.join(REPO, d)):
                slugs(os.path.join(REPO, d)) for d in files}
@@ -612,7 +664,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         description="Documentation verification (see the module docstring).")
     p.add_argument("--before", nargs="+", metavar=("OLD", "NEW"),
                    help="OLD.md then the file(s) its content should now be in; "
-                        "adds check 7")
+                        "adds check 10")
     args = p.parse_args(argv)
 
     mods = load_modules()

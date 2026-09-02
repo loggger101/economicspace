@@ -126,6 +126,13 @@ SPEC_INDEX: Dict[str, FieldSpec] = {
 
 @dataclasses.dataclass(frozen=True)
 class Stage:
+    """One pipeline stage as the UI sees it: its config key, number and blurb.
+
+    `key` is the name of the sub-config on `MASTER_CONFIG`, so it is also what
+    `ui_meta` keys its field specs by; the four Stage objects are the only place
+    the UI states the stage order, and everything else derives from them.
+    """
+
     key: str
     number: int
     label: str
@@ -206,6 +213,14 @@ def cached_mineral_destination() -> Optional[str]:
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _help_for(spec: FieldSpec) -> str:
+    """Tooltip for one config field: its name, then the module's own comment.
+
+    The comment is scraped rather than paraphrased, on purpose. The premise of
+    this repo is that a number without its reasoning attached gets "fixed" by
+    the next person, so the dial shows the reasoning that is already next to the
+    default in the source. A field with no comment says so, which is what
+    `verify_docs.py` check 8 exists to prevent.
+    """
     return f"`{spec.name}`\n\n{spec.help or 'No comment in the module source.'}"
 
 
@@ -312,6 +327,13 @@ def render_mirror(spec: FieldSpec) -> None:
 
 @st.cache_data(show_spinner=False)
 def _read_name_column(path: str, mtime: float) -> List[str]:
+    """Sorted unique values of a reference CSV's name column, for a multiselect.
+
+    `mtime` is not used in the body: it is part of the CACHE KEY, so editing the
+    CSV on disk invalidates the cached list instead of serving a stale one for
+    the life of the session. Returns [] on any failure, because a missing
+    reference file should leave the picker empty rather than break the page.
+    """
     try:
         df = pd.read_csv(path)
     except Exception:
@@ -567,6 +589,7 @@ class _RunView:
             pass
 
     def finish_stage(self) -> None:
+        """Bank the finished stage's weight and repaint at 0% of the next one."""
         self.done_weight += self.weights[self.index]
         self.paint(0.0)
 
@@ -601,6 +624,13 @@ class ProgressScan:
         self._pending = ""
 
     def feed(self, text: str) -> None:
+        """Absorb a chunk of the stage's stdout. May be a partial line.
+
+        Carriage returns are resolved the way a terminal would: tqdm redraws its
+        bar with `\r` and no newline, so only the text after the LAST `\r` is
+        real. Without that the log becomes one enormous line of superimposed
+        redraws and `_pending` grows without bound across a 500 MB download.
+        """
         self._pending += text.replace("\r\n", "\n")
         while "\n" in self._pending:
             line, self._pending = self._pending.split("\n", 1)
@@ -610,25 +640,36 @@ class ProgressScan:
             self._scan(self.live)
 
     def close(self) -> None:
+        """Flush a final line that arrived without a trailing newline."""
         if self._pending.strip():
             self._record(self._pending.rsplit("\r", 1)[-1])
         self._pending = ""
 
     @property
     def display_lines(self) -> List[str]:
+        """The log tail, plus the in-flight tqdm redraw if one is mid-line."""
         return list(self.tail) + ([self.live] if self.live else [])
 
     @property
     def log(self) -> str:
+        """Everything the stage printed, one line per redraw-resolved line."""
         return "\n".join(self.full)
 
     def _record(self, line: str) -> None:
+        """Commit one completed line to the log and the tail, and scan it."""
         self.live = ""
         self.full.append(line)
         self.tail.append(line)
         self._scan(line)
 
     def _scan(self, line: str) -> None:
+        """Update phase and progress counts from one line of output.
+
+        Two numeric signals give a determinate bar, Stage 4's "i / n evaluated"
+        and tqdm's percentage. Everything else is a PHASE header, recognised by
+        being unindented and containing letters, which is why the UI needs no
+        table of phase names to rot the first time a module is reworded.
+        """
         line = line.rstrip()
         if not line:
             return
@@ -668,19 +709,28 @@ class _StageMonitor(io.TextIOBase):
         self._min_interval = min_interval
 
     def write(self, s: str) -> int:
+        """TextIOBase hook: the stage's stdout arrives here and is repainted."""
         self._scan.feed(s)
         self._paint()
         return len(s)
 
     def flush(self) -> None:
+        """No-op: there is no buffer to flush, `write` paints as it goes."""
         pass
 
     def finish(self) -> str:
+        """Close the scan, force one last repaint, and return the whole log."""
         self._scan.close()
         self._paint(force=True)
         return self._scan.log
 
     def _paint(self, force: bool = False) -> None:
+        """Repaint the stage bar, throttled to `_min_interval` unless forced.
+
+        Where there is no count to read it creeps against the stage prior rather
+        than showing a stalled 0%, capped short of full so it never claims to be
+        finished when it does not know.
+        """
         now = time.monotonic()
         if not force and now - self._last_paint < self._min_interval:
             return
@@ -831,6 +881,12 @@ def load_results(path: str, token: float) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def _taxonomy_counts(path: str, mtime: float) -> Dict[str, int]:
+    """`spectral_type_source` value counts from the catalog, for the provenance panel.
+
+    Reads ONE column of a file that runs to 862 MB, which is what makes this
+    cheap enough to do on every page render. `mtime` is a cache-key argument as
+    in `_read_name_column`.
+    """
     try:
         col = pd.read_csv(path, usecols=["spectral_type_source"], low_memory=False)
     except Exception:
@@ -894,6 +950,13 @@ HEADLINE_COLUMNS = [
 
 
 def render_results(df: pd.DataFrame) -> None:
+    """The four headline metrics, then the table, charts and drilldown.
+
+    ⚠️  `cost_revenue_ratio` is computed HERE, by `load_results`; it is not a
+    column the pipeline writes. The objective Stage 4 actually ranks on is
+    `total_cost_usd / gross_value_usd`, and a harness that went looking for a
+    column by this name is entry 7 in `verify.py`'s table of harness bugs.
+    """
     ranked = df.dropna(subset=["cost_revenue_ratio"]).sort_values("cost_revenue_ratio")
     n_viable = int(df["viable"].sum()) if "viable" in df.columns else None
 
@@ -944,6 +1007,14 @@ def _search_mask(view: pd.DataFrame, needle: str) -> pd.Series:
 
 
 def _render_table(ranked: pd.DataFrame) -> None:
+    """The ranked results table, with the spectral-type, search and top-N filters.
+
+    Ranked ascending by cost/revenue rather than by `profit_usd`, and the
+    caption says why: revenue sits far below cost in most configurations, so a
+    profit ranking is a Delta-v table in disguise. The row search passes
+    `regex=False`, the same trap the pipeline's own lookup helpers hit, because
+    designations carry regex metacharacters.
+    """
     st.caption(
         "Ranked by **cost / revenue**, ascending: lower is better, 1.0 is "
         "breakeven. Not by `profit_usd`, because revenue is far below cost in "
@@ -994,6 +1065,13 @@ def _render_table(ranked: pd.DataFrame) -> None:
 
 
 def _render_charts(ranked: pd.DataFrame) -> None:
+    """Altair charts over the ranked rows: the distribution and the trade-offs.
+
+    Altair ships with Streamlit, so this adds no requirement. The row slider is
+    clamped rather than trusted: a slider whose min exceeds its max, or whose
+    value sits below its min, raises outright, and with fewer than 50 rows there
+    is nothing to choose anyway.
+    """
     if ranked.empty:
         st.info("Nothing to chart.")
         return
@@ -1132,6 +1210,12 @@ _MODEL_TERMS = [
 
 
 def _cell(row: pd.Series, key: str, default: Any = None) -> Any:
+    """One value off a result row, with NaN normalised to `default`.
+
+    Both halves matter: a column absent from an older catalog and a column
+    present but null must read the same way, or the drilldown renders `nan` for
+    a field the run simply never computed.
+    """
     value = row.get(key, default)
     return default if pd.isna(value) else value
 
@@ -1149,6 +1233,11 @@ def _numeric_table(row: pd.Series, fields: Iterable[Tuple[str, str]],
 
 
 def _render_drilldown(ranked: pd.DataFrame) -> None:
+    """One asteroid at a time: its mission, mass cascade, cost lines and payload.
+
+    Capped at the top 300 rows, because the picker is a selectbox and the label
+    for each entry is built eagerly; the full ranking is the table's job.
+    """
     if ranked.empty:
         st.info("Nothing to drill into.")
         return
@@ -1277,6 +1366,17 @@ def _runtime_estimate(selected: Sequence[str]) -> str:
 
 
 def render_sidebar() -> None:
+    """Destination, stage selection, row caps, the runtime estimate and the run button.
+
+    Two things here are deliberate and easy to undo by accident. The destination
+    selectbox seeds from the CATALOG ON DISK rather than from the config
+    default, because calc defaults to `earth_surface` while the catalog is
+    almost always `cislunar`, and seeding from the config made a freshly-opened
+    page disagree with its own data, mark Stage 2 stale, and turn the first
+    click of "Run pipeline" into a live re-price nobody asked for. And a cached
+    stage defaults to OFF unless it is Stage 4, because Stages 1-3 all FETCH,
+    and each overwrites the only copy of its CSV.
+    """
     st.sidebar.title("🪐 Asteroid pipeline")
 
     # Covers both "not seeded yet" and "seeded with something no longer legal",
@@ -1431,6 +1531,13 @@ def render_sidebar() -> None:
 # ═════════════════════════════════════════════════════════════════════════════
 
 def render_config_page() -> None:
+    """The Common tab plus one tab per config, every field introspected at runtime.
+
+    Nothing here lists the fields: `ui_meta.build_field_specs` walks the
+    dataclasses, so a field added to `CalcConfig` tomorrow appears without
+    anyone editing this file. The only editorial step is which fields are
+    curated onto the Common tab.
+    """
     st.caption(
         "Every field of all four config dataclasses, introspected at runtime. "
         "Hover the ⓘ on any field for the module's own comment explaining it. "
@@ -1491,6 +1598,11 @@ def render_config_page() -> None:
 
 
 def render_results_page() -> None:
+    """Load the profitability catalog from disk and render it, or say there is none.
+
+    Reads the CSV rather than holding the last run's frame in memory, so the
+    page is the same whether the run happened in this session or last week.
+    """
     path = os.path.join(MASTER.output_dir, MASTER.calc.output_filename)
     if not os.path.exists(path):
         st.info("No profitability catalog yet. Pick your stages in the sidebar "
@@ -1542,6 +1654,12 @@ def render_run_report() -> None:
 
 
 def main() -> None:
+    """Streamlit entry point: sidebar, then one of the two pages.
+
+    The reset has to be handled FIRST, before any widget exists, because
+    Streamlit owns the session-state slot behind each widget key and raises if
+    you write to it after the widget has been created. See `reset_config()`.
+    """
     # Before any widget exists. See reset_config().
     if st.session_state.pop("reset_requested", False):
         reset_config()
