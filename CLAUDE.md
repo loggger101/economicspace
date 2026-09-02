@@ -866,6 +866,25 @@ the digits: "best case", "still comes in", counts spelled out in prose and
 headings, and the name of whichever destination used to win. Check that
 summary paragraphs still agree with the tables below them in the same file.
 
+⚠️  **AND CHECK THE OTHER FILE, BECAUSE THIS ONE RESTATES README HEADLINES
+BEFORE ADDING DEPTH TO THEM.** The rule at the top of the 20-cell section says
+the result highlights "are in README.md, and are not copied here". They partly
+are, and the surviving pairs were found by hunting sentences that share three
+or more distinctive numbers across two files:
+
+| the shared measurement | in README under | here under |
+|---|---|---|
+| the winners: 2021 CX5 taking 10 of 20 cells, 2016 PN38 taking `earth_surface`, the three `mars_surface` winners | [Current results](README.md#current-results-the-complete-20-cell-matrix) | "Winners, and one that is new" |
+| iodine overtaking xenon at `leo` (42.74 / 42.14) and winning `earth_surface` (47.31 / 35.50) | [Three population results...](README.md#three-population-results-the-single-cell-tables-could-not-show) | "Propellant and vehicle shares, all twenty cells" |
+| the four retired v1.11.0 beneficiated placeholders (35.8051 / 48.2714 / 55.3403) | [Current results](README.md#current-results-the-complete-20-cell-matrix) | the 20-cell matrix preamble |
+| the lunar staging figures: 5,920 m/s, and 10.96 against 4.99 kg in LEO per kg landed | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" (and again in `versions.md`, mineral_value `1.4.0`) |
+
+**Each pair is a copy, so each pair drifts.** They are kept rather than cut
+because this file's job is the reasoning and README's is the answer, and the
+reasoning reads badly with the answer removed; but **move both, or neither**.
+`grep -rn "<the old number>" *.md` finds them, which is why the rule two
+paragraphs up is a grep and not a diff.
+
 🚨  **THERE ARE THREE FILES TO GREP NOW, NOT TWO.** The release history moved
 out of the README into `versions.md` on 2026-08-24, so a measurement can go
 stale in any of: this file (the working notes), `README.md` (the current
