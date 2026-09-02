@@ -236,6 +236,15 @@ def _csv(df) -> str:
 
 
 def cell_hash(df) -> str:
+    """First 16 hex digits of the sha256 of the cell's comparable CSV.
+
+    Sixteen because that is the width every release note in versions.md quotes,
+    and this harness reproduces the four hashes committed for v1.17.4 and
+    v1.17.6 exactly. It goes through `_csv` / `_comparable`, which strips BOTH
+    provenance columns and deliberately does NOT sort the remaining ones:
+    sorting would be tidier and would silently make every hash printed here
+    incomparable with the ones already on record.
+    """
     return hashlib.sha256(_csv(df).encode("utf-8")).hexdigest()[:16]
 
 
@@ -290,6 +299,12 @@ def _blanks(s) -> list:
 
 
 def _isnan(v):
+    """numpy's isnan, imported lazily so the module imports without pandas.
+
+    Only ever called on a value already known to be a float, which is why there
+    is no type guard: `math.isnan` would do as well here and numpy is already
+    loaded by the time any comparison runs.
+    """
     import numpy as np
     return np.isnan(v)
 
@@ -531,10 +546,24 @@ def baseline_dir(tag: str) -> str:
 
 
 def _cell_file(d: str, name: str) -> str:
+    """Path of one baselined cell inside a baseline directory.
+
+    `+` becomes `_` because two of the four cell names carry one
+    (`raw+search`, `benef+search`) and it is not a portable filename character.
+    """
     return os.path.join(d, name.replace("+", "_") + ".csv")
 
 
 def cmd_baseline(args) -> int:
+    """Build each cell and write it, plus an index.json of hashes, under .verify.
+
+    RUN THIS ON A CLEAN TREE, BEFORE THE FIRST EDIT. It is not a check and
+    cannot fail; the whole value of the file it writes is that it records what
+    the code did before you touched it, so a baseline captured afterwards
+    verifies a change against itself. `index.json` also stamps the destination
+    and the calc version, which is what lets `check` print
+    "calc 1.17.7 -> 1.17.8" rather than comparing two unnamed runs.
+    """
     m = load_master()
     d = baseline_dir(args.tag)
     os.makedirs(d, exist_ok=True)
@@ -561,6 +590,19 @@ def cmd_baseline(args) -> int:
 
 
 def cmd_check(args) -> int:
+    """All six checks against a baseline, most-important first.
+
+    Check 1 is the one with a prerequisite, and its failure mode is the reason
+    this function tracks `unchecked` rather than just `ok`: a cell absent from
+    the baseline used to `continue` without touching `ok`, so a run against a
+    missing or partial baseline printed hashes, compared NOTHING, and finished
+    with ALL CHECKS PASSED. It now returns 1 and names the cells. **A check
+    that cannot run must never say it passed.**
+
+    Checks 2 and 3 are the slow half and are what `--skip prune parallel`
+    turns off for the ~5 minute loop; 4, 5 and 6 need no baseline and are also
+    available on their own as `invariants`.
+    """
     import pandas as pd
 
     m = load_master()
@@ -647,6 +689,12 @@ def cmd_invariants(args) -> int:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    """Dispatch `baseline` / `check` / `invariants`; returns the exit code.
+
+    `--cells` and `--skip` exist for the edit loop rather than for a release:
+    a release runs everything, and a verification you will not run is worse
+    than a slow one.
+    """
     p = argparse.ArgumentParser(
         description="Release verification harness (see the module docstring).")
     p.add_argument("command", choices=("baseline", "check", "invariants"))

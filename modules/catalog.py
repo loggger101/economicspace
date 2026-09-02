@@ -246,161 +246,21 @@ class CatalogConfig:
     top_n_spectral_types:   int = 20   # types listed in spectral-distribution bars
 
     # ─── PIPELINE VERSION  (bump when changing the schema) ───────────────────
-    # 1.0.3 : initial release with NEOWISE + SsODNet integration
-    # 1.0.4 : added PGM_ENRICHMENT_BY_TYPE table + comp_pgm_enrichment column.
-    #         Per-spectral-type multiplier for the rare-metal (Pt, Pd, Ru, Ir,
-    #         Os, Rh, Au) portion of the metal-fraction value.  Differentiated
-    #         core fragments (M / Xe = 2.0×), basaltic crust (V = 0.2×), mantle
-    #         fragments (A / R / O = 0.5×).  Consumed by Module 4 v1.3.4.
-    # 1.0.6 : lookup_asteroid() passes regex=False.  Designations and names
-    #         carry regex metacharacters, and pandas' str.contains defaults to
-    #         regex=True, so the "substring match" the docstring promised was
-    #         really a pattern match: lookup_asteroid(cat, "(1) Ceres")
-    #         silently matched "1 Ceres", and any unbalanced bracket raised
-    #         re.PatternError.  No other behaviour change.
-    # 1.0.5 : removed Asterank source (asterank.com/api).  Dropped:
-    #         • fetch_asterank() function + _ASTERANK_* constants
-    #         • use_asterank toggle from CatalogConfig
-    #         • "Asterank" entry from build_catalog's sources dict
-    #         • Asterank-only output columns (provisional_des, delta_v_kms,
-    #           estimated_value_usd, estimated_profit_usd, accessibility_score,
-    #           source_asterank).  Module 4 v1.3.5+ no longer uses these.
-    #         Active sources reduced to: JPL SBDB, SsODNet, NEOWISE, MP3C.
-    # 1.0.7 : renumbering, no behaviour change.  This project was briefly
-    #         developed in two places at once and both shipped different code
-    #         as 1.0.6, so that stamp is ambiguous.  The reconciled module is
-    #         1.0.7 because it matches neither parent.  Treat any CSV stamped
-    #         1.0.6 as undated and re-run rather than trusting the number.
-    # 1.0.8 : realism audit: X-complex metal fractions were pre-Psyche.
-    #         M-type carried 0.80 metal at 5.30 g/cm³, the "exposed iron
-    #         core" picture.  No M-type has ever been measured near that
-    #         density: 16 Psyche is ~3.8-3.9 g/cm³ (Elkins-Tanton 2020,
-    #         Siltala & Granvik 2021) against 7.8 for iron meteorite, and
-    #         metal content is now put at ~30-60%.  Revised:
-    #             type   metal  0.80→0.50   density 5.30→3.90   (M)
-    #                    metal  0.75→0.45   density 5.00→3.80   (Xe)
-    #                    metal  0.50→0.25   density 3.80→3.60   (Xk)
-    #                    metal  0.40→0.30   density 3.50→3.30   (X)
-    #                    metal  0.30→0.10   density 3.50→3.20   (E)
-    #         Xk/E were independently inconsistent; both are described as
-    #         enstatite-dominant, and aubrites are near metal-free.
-    #         Fraction sums per type are unchanged, so the v1.3.3 residual
-    #         silicate floor behaves exactly as before.  Lowers M-type bulk
-    #         value; raises nothing.
-    # 1.0.9 : SsODNet was being fetched and then thrown away.  ssoBFT renamed
-    #         its identity columns (sso_number/sso_name/sso_id → number/name/
-    #         id), the column projection tolerated the loss, and merge_sources
-    #         then dropped the whole source for having no `designation`.  A
-    #         ~500 MB download and every literature diameter, density,
-    #         rotation and TAXONOMY in it went in the bin, silently, behind
-    #         one ⚠️ line.  Six more columns had drifted with it:
-    #             perihelion            → periapsis_distance
-    #             aphelion              → apoapsis_distance
-    #             perihelion_argument   → periapsis_argument
-    #             absolute_magnitude.value → absolute_magnitude.H.value
-    #             spins.<1..3>.period.value → spins.period.value (now a LIST)
-    #         Three separate things kept it quiet, all now fixed:
-    #           • the drift warning only fired when <5 of 24 columns matched.
-    #             14 matched, so losing every merge key read as healthy.  It
-    #             now always reports, and _SSODNET_REQUIRED makes the identity
-    #             columns fatal for the source instead of silently useless.
-    #           • the row-cap sort key `sso_number` sat behind an
-    #             `if in df.columns` guard, so truncation silently stopped
-    #             sorting and took an arbitrary 50,000 rows starting near
-    #             asteroid 367488 rather than Ceres.  Sort key is now required.
-    #           • pq.ParquetFile.schema is the PHYSICAL schema, which names a
-    #             nested list column by its inner path, so `spins.period.value`
-    #             read as absent.  Membership is tested against schema_arrow,
-    #             which is what read(columns=…) actually accepts.
-    #         EFFECT; this changes the evaluated population, so it changes
-    #         every downstream number.  Same run, sources otherwise identical
-    #         (JPL 50k, NEOWISE 50k, MP3C unreachable):
-    #             catalog entries            35,098 →  35,807
-    #             taxonomy MEASURED           1,854 →  24,675
-    #                 (source + tholen; was 1,358 + 496)
-    #             taxonomy GUESSED from albedo 33,235 → 11,131
-    #             density measured                0 →     438
-    #             V-type bodies               3,988 →   2,614
-    #         The V-type count is the tell that the old catalog was wrong:
-    #         V-types are rare, and 3,988 of them was an artefact of guessing
-    #         taxonomy from albedo.  Verified against literature after the
-    #         fix: Ceres 939.4 km / 2.162 g/cm³ / 9.074 h / C, Vesta 522.8 /
-    #         3.411 / 5.342 h / V, Pallas B, Psyche X, Eros 5.27 h / S.
-    #         Any CSV stamped 1.0.8 or earlier was built on the degraded
-    #         catalog; re-run rather than trusting it.
-    # 1.1.0 : POPULATION RELEASE.  Three things, all of which change how many
-    #         asteroids exist downstream, so every number moves.
-    #
-    #         (a) NEOWISE was contributing NOTHING, silently.  IRSA returns
-    #             `asteroid_number` as float64 whenever the result slice holds
-    #             any unnumbered body, so `.astype("string")` built the
-    #             designation "3.0" rather than "3".
-    #             _extract_canonical_designation matches neither `^(\d+)\s*$`
-    #             nor `^(\d+)\s+[A-Z][a-z]` against "3.0", so it passed the
-    #             value through unchanged and the merge key could never equal
-    #             JPL's "3".  Every NEOWISE row then died at validation for
-    #             having no semi-major axis.  The tell in a committed CSV is
-    #             all seven neowise_* columns present and 100% empty while the
-    #             fetcher printed "✅ 183,408 records fetched".
-    #             SCALE-DEPENDENT AND THEREFORE INVISIBLE: at a small cap the
-    #             slice is all-numbered, the dtype is int64, and it works.  It
-    #             broke at exactly the row counts nobody spot-checks.
-    #             Fixed at the source (format the number as an integer) and
-    #             defensively in _extract_canonical_designation, which now
-    #             strips a trailing ".0" from any source.
-    #             Population effect is small, JPL SBDB already ingests NEOWISE
-    #             diameters, so this recovers only 27 bodies JPL lacks, but it
-    #             restores IR albedo, beaming parameter and diameter
-    #             uncertainties for ~132,700 bodies that had none.
-    #
-    #         (b) ONE ROW CAP PER SOURCE, and 0 now means unlimited.  A single
-    #             shared `jpl_limit` capped four sources that each take their
-    #             lowest-numbered N bodies, so the sources overlapped almost
-    #             perfectly and the union was ~N rather than 4N.  See the
-    #             FETCH LIMITS block.  Defaults are now unlimited.
-    #
-    #         (c) DIAMETER DERIVED FROM H where none was measured, gated behind
-    #             `derive_diameter_from_h`.  See DERIVED DIAMETERS above and
-    #             ALBEDO_BY_SPECTRAL_TYPE / ALBEDO_BY_SEMI_MAJOR_AXIS_AU below.
-    #
-    #         EFFECT, measured 2026-08-08 against the live APIs:
-    #             JPL asteroids available            1,554,321
-    #             ...with a MEASURED diameter          139,582
-    #             ...with H and a valid orbit        1,553,812
-    #             catalog at jpl_limit=200,000          89,367  (v1.0.9)
-    #             catalog, measured diameters only     ~139,600  (v1.1.0, gate off)
-    #             catalog, H-derived enabled         ~1,553,800  (v1.1.0, default)
-    #         Any CSV stamped 1.0.9 or earlier was built on at most 89,367
-    #         bodies and is not comparable row-for-row with a 1.1.0 run.
-    #
-    # 1.1.1   PERFORMANCE ONLY: every column identical, verified on the full
-    #         1,555,667-row catalog.  `enrich_composition` resolved everything
-    #         keyed on `spectral_type` once per ROW: nine composition fields,
-    #         two capitalisation passes and the PGM multiplier, twelve
-    #         `.apply()` passes making ~19 MILLION Python calls, each running
-    #         `pd.isna` on a scalar at ~1 us, to produce the ~800 answers that
-    #         76 distinct taxonomy classes can give.  `_by_distinct` evaluates
-    #         each once per class: `enrich_composition` measures
-    #         **9.09 s -> 2.35 s, 3.87x**, on a 224 s Stage 1.
-    #         ⚠️  3.87x is the FUNCTION, not the twelve passes alone, the rest
-    #         of it (the Tholen and albedo fallbacks, the masks, the counts) is
-    #         unchanged and is what remains.  A micro-benchmark of the lookup
-    #         alone says 93x and is measuring something nobody runs.
-    #         Same finding and the same fix as calc 1.17.4's
-    #         `_parse_minerals_column`, at the other end of the same column, 
-    #         which is the point.  The pattern is "a column with few distinct
-    #         values, one Python call per row", and this pipeline had it in
-    #         both directions across a CSV boundary.
-    #         🚨  Verified by running BOTH builds on the same frame in one
-    #         process.  The first attempt FAILED it: filling an object array
-    #         and stopping there kept `None` as `None` where `.apply()` gives
-    #         float64/NaN (53 rows of four fraction columns) and left
-    #         `comp_pgm_enrichment` object rather than float64.  `.infer_objects()`
-    #         runs the same conversion `apply` does.  All 12 derived columns
-    #         identical after it, including `comp_minerals`, which holds LISTS
-    #         and is why the buffer is `np.empty(..., dtype=object)` filled
-    #         rather than `np.array([...])`, which reshapes equal-length lists
-    #         into a 2-D array.
+    # Stamped into every output CSV, and the only way to tell which code
+    # produced a given catalog.  BUMP IT when a change moves any number a run
+    # produces.  The rule is ONE-DIRECTIONAL: changing a number means bumping,
+    # and a bump does NOT mean a number changed, which is why nothing may read
+    # a version as evidence that a result moved.
+    # THE CHANGELOG IS versions.md, NOT THIS COMMENT.  It used to be 155 lines
+    # of release notes sitting right here, a second copy of a record versions.md
+    # already held, which is the documentation form of the defect this project
+    # keeps cataloguing; it was also what the dashboard rendered as this field's
+    # help text, because ui_meta scrapes a field's comment block.  Moved out on
+    # 2026-09-02.  Two places to write, neither of them here:
+    #     versions.md > Releases            what the release did, and what it
+    #                                       measured to say so
+    #     versions.md > Module changelogs   this module's own stamp-by-stamp
+    #                                       record: Stage 1 changelog
     pipeline_version: str = "1.1.1"
 
 
@@ -1588,6 +1448,12 @@ _SSODNET_NUMERIC = [
 
 
 def _ssodnet_cache_path(config: CatalogConfig) -> str:
+    """Where the ~500 MB ssoBFT parquet is cached.
+
+    Through `_resolve_cache_dir`, which defaults to the system temp directory
+    rather than beside the CSVs, so a working copy on Google Drive does not
+    round-trip half a gigabyte through Drive sync on every run.
+    """
     return os.path.join(_resolve_cache_dir(config), _SSODNET_CACHE_FILE)
 
 
