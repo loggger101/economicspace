@@ -119,9 +119,12 @@ run.bat build      rebuild master.py from modules/
 run.bat help       run_pipeline.py --help
 ```
 
-It is a launcher and nothing else; every path through it goes through
-`run_pipeline.py` or `ui.py`, and from there through `master.py`. No model
-behaviour lives in it.
+It is a launcher and nothing else. Four of its options go through
+`run_pipeline.py` and one through the dashboard, and from there through
+`master.py`; `verify` calls `verify.py` and `build` calls `build_master.py`.
+No model behaviour lives in it, and it adds no default the pipeline does not
+already have, except that `quick` and `standard` cap rows and fly raw ore at
+N = 1 rather than starting the multi-hour default cell on a double-click.
 
 **Stages 1-3 re-fetch and overwrite, so they ask first.** Each replaces the
 only copy of its CSV; there is no history and no undo, and every `verify.py`
@@ -207,8 +210,8 @@ Or run a single stage:
 python modules/transportation.py
 ```
 
-`master.py` is also designed to be pasted straight into a Colab or Jupyter cell
-, it auto-installs its own dependencies and runs top-to-bottom.
+`master.py` is also designed to be pasted straight into a Colab or Jupyter cell,
+it auto-installs its own dependencies and runs top-to-bottom.
 
 ### The UI
 
@@ -528,11 +531,11 @@ py verify_docs.py
 | # | check | catches |
 |---|---|---|
 | 1 | defaults | a documented default that no longer matches its dataclass field |
-| 2 | versions | the Stage/Version table or CLAUDE.md's `Current:` line drifting from `pipeline_version` |
+| 2 | versions | the Stage/Version table or CLAUDE.md's `Current:` line drifting from `pipeline_version`, and the "moved without moving a number" tables drifting from the count spelled out beside them |
 | 3 | row counts | "40 propellants" after a row was added |
 | 4 | links | a markdown anchor that does not resolve |
-| 5 | structure | unbalanced fences, ragged tables, heading-level jumps, duplicate h1/h2 |
-| 6 | dashes | an em- or en-dash creeping back into prose a reader sees |
+| 5 | structure | unbalanced fences, ragged tables, heading-level jumps, duplicate h1/h2, in every markdown file in the repo |
+| 6 | dashes | an em- or en-dash creeping back into prose a reader sees, or a line left opening with a bare comma by the pass that removed them: the docs, the root scripts, the campaign scripts, and comments in `modules/` |
 | 7 | manifests | a list documented in one place drifting from the list defined in another: `requirements.txt` against `_MASTER_REQUIRED`, and the `run.bat` block above against run.bat's own dispatcher |
 | 8 | help | a config dial the dashboard renders with no help text, because the UI scrapes its help from the field's own comment |
 | 9 | runtime | the cislunar wall clock above drifting from `calc.MEASURED_CELL_SECONDS`, which every banner and `--help` string derives its cost ratios from |
@@ -542,7 +545,22 @@ Check 6 is a ratchet rather than a style opinion: 1,342 em-dashes came out of
 the docs and 1,120 out of the module comments, and without a check they drift
 back one commit at a time. It reads `modules/*.py` through `tokenize` and `ast`
 so it sees only comments and docstrings, because the `notes` and `composition`
-strings are written into the CSVs and their text is data.
+strings are written into the CSVs and their text is data. Everything else, the
+docs, the root scripts and the campaign scripts, is checked whole: none of them
+holds a reference table, so none of their text is data.
+
+⚠️  **`campaign/` was outside checks 5 and 6 until 2026-09**, through the whole
+20-cell campaign, and its eight files happened to be clean when they were
+brought in. That is the argument for the ratchet rather than a reprieve from it:
+a file nothing checks is clean until it is not.
+
+🚨  **Check 6 also catches what the conversion that removed those dashes left
+behind.** An em-dash that had opened a *continuation* line became a bare
+leading comma, so the sentence stopped parsing: `, it auto-installs its own
+dependencies` was sitting in this file. Twenty of them, twelve in `modules/`
+and eight in the docs, and the docs half was only found on a second pass
+because the first sweep looked at Python and stopped there. A mechanical rewrite of prose
+needs a check on what it *leaves*, not only on what it removes.
 
 Checks 1, 3, 7 and 8 exist because they have already failed: `use_beneficiation`
 and `optimise_programme_scale` were both documented as `False` for several
@@ -950,8 +968,8 @@ antimatter, which is why the gate exists.
 
 Three of the additions matter more than the row count suggests:
 
-- **Krypton** is, by unit count, the most-flown electric propellant in history
-, every Starlink v1.0 Hall thruster ran it, and it was absent. It is 30×
+- **Krypton** is, by unit count, the most-flown electric propellant in history,
+  every Starlink v1.0 Hall thruster ran it, and it was absent. It is 30×
   cheaper than xenon at two-thirds the Isp, and it pays for that with a much
   worse tank (0.55 kg/L supercritical against xenon's 2.0, so 12.5% of its own
   mass in COPV against 1.9%).
@@ -1032,8 +1050,8 @@ documented gaps, and all three currently run in the optimistic direction. See
 
 **On by default since calc v1.17.0** (`CALC_CONFIG.use_beneficiation`).
 Terrestrial mines ship concentrate, not ore; switched off, the pipeline flies
-home run-of-mine regolith at bulk grade while the rig's own throughput capacity
-, 66× the rocket-equation payload limit, sits idle. Switched on, the rig digs
+home run-of-mine regolith at bulk grade while the rig's own throughput capacity,
+66× the rocket-equation payload limit, sits idle. Switched on, the rig digs
 surplus feed, rejects the gangue, and loads concentrate.
 
 ⚠️  **Almost every table dated before 2026-08-11 is the `False` case.** Set it
@@ -1218,8 +1236,8 @@ with the programme search on, 2014 YN (M) takes rank 1 on **FEEP** at 41.8068×,
 13.4% clear of the runner-up, carrying 6,667 kg of thruster for 96.7 kW. Every
 previous measurement had one of these devices surviving but never winning, at
 best rank 5. The thrust gate is not broken; `thruster_kg_per_n` is a mass
-penalty rather than a threshold, and this mission pays the mass and wins anyway
-, but "never wins anywhere" is retired.
+penalty rather than a threshold, and this mission pays the mass and wins anyway,
+but "never wins anywhere" is retired.
 
 **`earth_surface`'s searched cells are not optima.** There the saturation
 multiplier departs from 1.0 by a median of 2.3e−11, against cislunar's 1.9e−1:

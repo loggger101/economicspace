@@ -39,6 +39,18 @@ FIELDS = [
 
 
 def extract(path, dest, ore, search):
+    """The headline and population statistics for one finished cell.
+
+    Everything the ledger records about a cell that is not a wall clock: the
+    winner and its whole architecture, the programme structure, and the
+    population shares (propellant, vehicle, aerocapture, RTG, ISRU).
+
+    The shares are the point, not the headline. A best-case cell is a poor
+    detector for anything wrong below the top: v1.12.0's argon fix moved NEITHER
+    cislunar headline while changing the chosen propellant for a quarter of the
+    catalog, and it was the share breakdown and the evaluable-row count that
+    caught it.
+    """
     import pandas as pd
     p = pd.read_csv(path, low_memory=False)
     p["_obj"] = p["total_cost_usd"] / p["gross_value_usd"]
@@ -90,6 +102,16 @@ def extract(path, dest, ore, search):
 
 
 def main():
+    """Copy the frozen Stage 2 catalog into place, run Stage 4, archive, record.
+
+    The ledger row is appended whether the cell succeeded or failed, with `rc`
+    recording which, because that is what makes `run_queue.py` resumable: a
+    missing row means "never attempted", not "attempted and lost".
+
+    Stage 2 is COPIED from `campaign/stage2/`, never re-fetched. Re-running
+    Stage 3 or a live Stage 2 mid-campaign would move the inputs underneath
+    every cell already measured, and the previous prices are not recoverable.
+    """
     dest, ore, search = sys.argv[1], sys.argv[2], sys.argv[3]
     assert ore in ("raw", "benef") and search in ("off", "on")
     cell = f"{dest}__{ore}__search-{search}"
