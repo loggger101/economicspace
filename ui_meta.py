@@ -385,10 +385,13 @@ _BARE_RULE_RE = re.compile(rf"^#\s*[{_RULE_CHARS}]{{4,}}\s*$")
 def _banner_title(line: str) -> Optional[str]:
     """Section title if `line` is a section banner, else None.
 
-    A banner must have an actual title. The version-history blocks above each
-    `pipeline_version` are markdown-ish tables whose separator rows otherwise
-    match the banner shape and produce a group literally named
-    `------  ----------------`.
+    A banner must have an actual title, or an ASCII table drawn in a comment
+    becomes a section: a separator row like `------  ----------------` matches
+    the banner shape exactly and produced a group heading with that literal
+    text. The instance this was written for was the version-history block above
+    each `pipeline_version`, which moved to versions.md in 2026-09; the guard
+    stays because a comment is free to draw a table at any time, and a UI that
+    invents a section from one is worse than a bare dial.
     """
     match = _BANNER_RE.match(line.strip())
     if not match:
@@ -401,6 +404,12 @@ def _banner_title(line: str) -> Optional[str]:
 
 
 def _clean_comment(line: str) -> str:
+    """A comment line with its `#` and one following space removed.
+
+    Exactly ONE space, so the modules' hanging indents survive into the help
+    text: several config blocks lay out a small table or a bulleted list under
+    a field, and stripping the leading whitespace would flatten them.
+    """
     body = line.lstrip()[1:]
     return body[1:] if body.startswith(" ") else body
 
@@ -526,10 +535,20 @@ class FieldSpec:
 
     @property
     def curated(self) -> bool:
+        """True if this field belongs on the UI's front page rather than behind
+        the full introspected list. Membership is by hand in `CURATED_KEYS`;
+        the introspection is total, so this is the only editorial step."""
         return f"{self.section_key}::{self.name}" in CURATED_KEYS
 
 
 def _kind_for(name: str, field: dataclasses.Field, default: Any) -> str:
+    """Which widget a field gets: readonly / choice / list / bool / int / float / str.
+
+    Order matters twice, and both orderings are bugs that were hit. `bool` is
+    tested before `int` because in Python a bool IS an int, so a checkbox would
+    otherwise render as a number stepper. And the ANNOTATION beats the default's
+    runtime type, because several float fields are written with an int literal.
+    """
     ann = str(field.type)
 
     if name in READONLY_FIELDS:
@@ -556,6 +575,13 @@ def _kind_for(name: str, field: dataclasses.Field, default: Any) -> str:
 
 def _infer_bounds(name: str, default: Any,
                   kind: str) -> Optional[Tuple[float, float, float]]:
+    """(min, max, step) for a numeric widget, or None to leave it unbounded.
+
+    `BOUNDS` wins where a field has a real physical range worth enforcing;
+    everything else gets a permissive non-negative window sized off the default,
+    because a guessed ceiling that is too LOW silently prevents an experiment,
+    which is worse than no ceiling at all.
+    """
     if name in BOUNDS:
         return BOUNDS[name]
     if default is None or kind not in ("int", "float"):
