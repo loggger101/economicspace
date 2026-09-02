@@ -26,6 +26,15 @@ DESTS = ["cislunar", "lunar_surface", "leo", "mars_surface", "earth_surface"]
 
 
 def load(dest, ore, search):
+    """One archived cell as a frame, with the objective added, or None if absent.
+
+    `float_precision="round_trip"` is mandatory and is the fourth entry in
+    `verify.py`'s table of harness bugs: the default CSV float parser is fast
+    rather than correctly rounded and returns a float64 one ULP from the one
+    written, so a comparison built on it reports differences that are not there.
+    It belongs HERE, in a comparison, and never in Stage 4's own loader, where it
+    would move every number in the model.
+    """
     p = os.path.join(CELLS, f"{dest}__{ore}__search-{search}.csv.gz")
     if not os.path.exists(p):
         return None
@@ -36,6 +45,12 @@ def load(dest, ore, search):
 
 
 def best(df):
+    """(best objective, evaluable rows) for one cell. Lower is better.
+
+    Evaluable means the objective is finite and positive, which is the same
+    population every headline in the docs is quoted over; a row with no feasible
+    mission carries NaN and is not a zero.
+    """
     ok = df[df["_obj"].notna() & (df["_obj"] > 0)]
     return ok["_obj"].min(), len(ok)
 
@@ -59,6 +74,16 @@ def never_worse(lo, hi, label):
 
 
 def mass_ledger(df, label):
+    """Assert `hardware_total_kg == rig + power_system_kg + ep_system_kg`, exactly.
+
+    The one-line check for CLAUDE.md's first defect class, a mass in one cascade
+    with no price in the other. ⚠️  `mining_hardware_kg` is NOT a column: the rig
+    is the config constant `RIG_KG`, and writing the assertion verbatim against
+    the CSV raises `KeyError`, which it has done to two harnesses.
+
+    An EMPTY frame reports as a failure rather than passing quietly. A check
+    that cannot run must never say it passed.
+    """
     if df is None:
         return f"  {label:34s} -- missing"
     if df.empty:
@@ -70,6 +95,17 @@ def mass_ledger(df, label):
 
 
 def programme_invariants(df, label):
+    """The three structural facts a searched cell must satisfy.
+
+    `N == F x W` on every row and `W > trips` never are hard invariants; `W <
+    trips` is a COUNT rather than a check, and it is the interesting one,
+    because it is the number of bodies that decline to use up the rig. A 400-row
+    sample reported it as zero and was read as "the 2-D search is not yet
+    load-bearing"; the full population puts it at 2,077 rows at cislunar.
+
+    ⚠️  Only meaningful with the search ON. At N = 1, W = 1 and `trips` is 2-5,
+    so a search-OFF cell reports ~100% trivially.
+    """
     if df is None or df.empty:
         return f"  {label:34s} -- missing"
     n, f, w = df["programme_missions"], df["fleet_ships"], df["missions_per_ship"]
@@ -84,6 +120,7 @@ def programme_invariants(df, label):
 
 
 def report(dest):
+    """Print one destination's 2x2 table, then every invariant, to stdout."""
     print(f"\n{'='*78}\n  {dest.upper()}\n{'='*78}")
     cells = {(o, s): load(dest, o, s) for o in ("raw", "benef") for s in ("off", "on")}
     have = {k: v for k, v in cells.items() if v is not None}
@@ -125,6 +162,7 @@ def report(dest):
 
 
 def main():
+    """Report on the named destinations, or on all five by default."""
     args = sys.argv[1:]
     targets = DESTS if (not args or args[0] == "--all") else args
     for d in targets:

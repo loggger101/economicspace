@@ -26,7 +26,9 @@
 # way nobody has ever fully documented; CRLF is what wscript expects.
 *.vbs   text eol=crlf
 
-# Machine-generated: one 6,300-line file assembled by build_master.py.
-# Marking it linguist-generated keeps it out of diff noise on hosts that
-# understand the attribute.
+# Machine-generated: the four modules concatenated by build_master.py, and by
+# a wide margin the largest file here.  Marking it linguist-generated keeps it
+# out of diff noise on hosts that understand the attribute.  No line count is
+# quoted, deliberately: the one that used to be here read 6,300 against a file
+# of 17,747, and nothing checks this file.
 master.py linguist-generated=true

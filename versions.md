@@ -39,7 +39,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Twelve stamps so far have moved without moving a number:
+Thirteen stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -55,13 +55,16 @@ Twelve stamps so far have moved without moving a number:
 | calc `1.17.6` | performance only | bit-identical, verified |
 | calc `1.17.7` | **memory bound** | bit-identical, verified |
 | mineral_value `1.7.1` | **silent default closed** | bit-identical, verified |
+| calc `1.17.8` | **a new upstream check** | bit-identical, verified |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
-modules and unrelated releases; every row above is calc except the last.
+modules and unrelated releases; every row above is calc except
+`mineral_value 1.7.1`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and four are not, and that split has rotted in
-prose twice. A count is a number; re-derive it.
+rows are performance stamps and five are not, and that split has now rotted in
+prose three times: `1.17.8` says "No number" in its own section and sat outside
+this table, in both files, until 2026-09. A count is a number; re-derive it.
 
 **Console text is not output.** The 2026-08-23 pass that rewrote all 243
 `print()` calls to pure ASCII bumped nothing, because no CSV byte changed. That
@@ -210,8 +213,9 @@ went after cost, or a default, or dead code. This one fixes a **defect**, and
 one that no cell in this repo could have shown, because the run that shows it
 has not been made since v1.16.0.
 
-**A cache grew without bound.** `_CALENDAR_CACHE` memoised a pair of programme
-calendar multipliers on `(campaigns-per-ship, cadence, WACC)`. The first two of
+**A cache grew without bound.** `_CALENDAR_CACHE`, the hand-rolled dict this
+release replaced with `_calendar_multipliers_cached`, memoised a pair of
+programme calendar multipliers on `(campaigns-per-ship, cadence, WACC)`. The first two of
 those are small; the third, `cadence`, is `max(stay, synodic period)`, a fresh
 float for **every candidate mission**. So unlike every other memo in the module,
 which reaches a ceiling and sits there, this one grew **linearly with the
@@ -430,8 +434,8 @@ whether or not it is evaluable, so ~67-78 s a pass, about **5-6% of the raw cisl
 cell**. Value- and type-preserving, checked cell by cell over 20,000 rows.
 
 **And the same finding upstream, shipped as catalog v1.1.1.**
-`enrich_composition` resolved everything keyed on `spectral_type` once per row
-, nine composition fields, two capitalisation passes, the PGM multiplier, twelve
+`enrich_composition` resolved everything keyed on `spectral_type` once per row,
+nine composition fields, two capitalisation passes, the PGM multiplier, twelve
 `.apply()` passes making ~19 M Python calls to produce the ~800 answers that 76
 taxonomy classes can give. **9.09 s → 2.35 s**, all 12 derived columns
 identical. It is the *same column* Stage 4 fixes at the other end of the CSV
@@ -739,13 +743,12 @@ show on 400 bodies, which is why this release could only record it as
 "necessary but not yet load-bearing".
 
 ⚠️  **On its own sample the band argument would still have given the right
-answer**
-, campaigns-per-ship comes out at the rig's trip life on all 168 rows. The proof
-is what broke, not the answer: once a lever pushes back, a dimension whose
-optimum is no longer guaranteed has to be searched rather than assumed. It does
-bite when trips are longer, against the older Stage 3 table, where nothing
-capped duty cycles and trips reached 20, 12 of 168 bodies choose to retire a rig
-early rather than pay the calendar to use it up.
+answer**, campaigns-per-ship comes out at the rig's trip life on all 168 rows.
+The proof is what broke, not the answer: once a lever pushes back, a dimension
+whose optimum is no longer guaranteed has to be searched rather than assumed.
+It does bite when trips are longer: against the older Stage 3 table, where
+nothing capped duty cycles and trips reached 20, 12 of 168 bodies choose to
+retire a rig early rather than pay the calendar to use it up.
 
 Brute-forced rather than argued: every (fleet × campaigns-per-ship) on a 20 × 8
 grid, priced exhaustively, per body. **Campaigns-per-ship is exact on 49 of 49
@@ -1587,7 +1590,7 @@ including the three separate things that kept it quiet, is
 [the SsODNet outage that wasn't an outage](CLAUDE.md#the-ssodnet-outage-that-wasnt-an-outage-fixed-in-v109);
 the summary is in [Earlier releases](#earlier-releases). ssoBFT renamed its
 identity columns (`sso_number` / `sso_name` / `sso_id` became `number` / `name`
-/ `id`) and six more had drifted with them:
+/ `id`), and these had drifted with them:
 
 | old name | new name |
 |---|---|
@@ -2679,8 +2682,9 @@ five reliability ops rows and the ranking objective resolve once.
 **`1.17.7`  MEMORY, not speed.** Full write-up:
 [calc v1.17.7 / transportation v1.12.1](#calc-v1177--transportation-v1121). The
 first stamp here that fixes a defect nothing would have noticed until a
-full-catalog run ran out of RAM. `_CALENDAR_CACHE` was the ONE memo in this
-module keyed on a per-candidate float, so it grew LINEARLY with the catalog at
+full-catalog run ran out of RAM. `_CALENDAR_CACHE`, now
+`_calendar_multipliers_cached`, was the ONE memo in this module keyed on a
+per-candidate float, so it grew LINEARLY with the catalog at
 ~45 entries per row, projecting to ~70 M entries and 11-18 GB against a
 documented run peak of ~6 GB. Now `lru_cache(maxsize=1024)`, which is also
 FASTER, because `lru_cache` hashes in C rather than building a key tuple in

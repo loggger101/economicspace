@@ -22,6 +22,13 @@ for p in sorted(glob.glob(os.path.join('campaign', 'cells', '*.csv.gz'))):
         d = pd.read_csv(fh, low_memory=False, usecols=use)
 
     def pct(col, val):
+        """Percentage of rows where `col` equals `val`, tolerating a CSV bool.
+
+        A flag read back from CSV arrives as the STRING "True", and
+        `.astype(bool)` reads that, and `NaN`, as True. This tests the strings
+        explicitly instead, the same trap the pipeline's own `_truthy` exists
+        for.
+        """
         if col not in d.columns:
             return float('nan')
         s = d[col]
