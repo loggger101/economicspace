@@ -67,9 +67,12 @@ fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
 authority is the dataclass field in each module, never this table.
 
 **What each version changed is in [`versions.md`](versions.md)**, newest first.
-⚠️  A version bump does **not** mean a number moved; twelve stamps so far have
-moved without one, for performance, dead code or a flipped default. The rule is
-one-directional.
+⚠️  A version bump does **not** mean a number moved: performance, dead code
+and a flipped default have all moved a stamp on their own. The rule is
+one-directional, and the stamps that did it are listed in
+[versions.md](versions.md#how-the-version-numbers-work). Count that table
+rather than trusting a number here: this sentence has now carried a stale one
+four times.
 
 ## Running it
 
@@ -188,7 +191,7 @@ wasted run.
 
 ### From source
 
-Python 3.9+ (developed and run on 3.13). Then:
+Python 3.9+ (developed on 3.13, currently run on 3.14). Then:
 
 ```bash
 pip install -r requirements.txt
@@ -519,6 +522,16 @@ which is why the report prints **both** a hash and a column diff: when the two
 disagree, the hash is the one that is right, and the disagreement is itself the
 signal that the comparator is at fault.
 
+⚠️  **It covers Stage 4, and it never re-runs Stages 1-3.** That is
+deliberate: a Stage 1 run fetches a different catalog (JPL adds bodies daily)
+and a Stage 3 run re-fetches live metal and fuel prices, either of which moves
+the inputs underneath the comparison and invalidates every baseline in the same
+session. The consequence is that **a change to an upstream module can pass
+every check here and still be wrong**: v1.12.1's propellant-flag fix lives in
+Stage 3's `validate()`, which Stage 4 never calls, and had to be checked by
+running that function under `-W error::FutureWarning` instead. If you change
+Stage 1, 2 or 3, this file is not your evidence.
+
 ### Verifying the docs
 
 `verify.py` proves the model did not change. **`verify_docs.py` proves the docs
@@ -531,7 +544,7 @@ py verify_docs.py
 | # | check | catches |
 |---|---|---|
 | 1 | defaults | a documented default that no longer matches its dataclass field |
-| 2 | versions | the Stage/Version table or CLAUDE.md's `Current:` line drifting from `pipeline_version`, and the "moved without moving a number" tables drifting from the count spelled out beside them |
+| 2 | versions | the Stage/Version table or CLAUDE.md's `Current:` line drifting from `pipeline_version`, and the "moved without moving a number" tables drifting from the count spelled out beside them, in any doc that quotes it, including one holding no table of its own |
 | 3 | row counts | "40 propellants" after a row was added |
 | 4 | links | a markdown anchor that does not resolve |
 | 5 | structure | unbalanced fences, ragged tables, heading-level jumps, duplicate h1/h2, in every markdown file in the repo |
@@ -599,15 +612,11 @@ the same numbers, so the docs cannot drift from it either.
 documented *measurement* is current.** A stale number passes everything in it.
 That is what the release notes and `verify.py` are for.
 
-⚠️  **It covers Stage 4 and nothing else.** It does not re-run Stages 1-3,
-deliberately: a Stage 1 run fetches a different catalog (JPL adds bodies daily)
-and a Stage 3 run re-fetches live metal and fuel prices, either of which would
-move the inputs underneath the comparison and invalidate every baseline in the
-same session. The consequence is that **a change to an upstream module can pass
-every check here and still be wrong**: v1.12.1's propellant-flag fix lives in
-Stage 3's `validate()`, which Stage 4 never calls, and had to be checked by
-running that function under `-W error::FutureWarning` instead. If you change
-Stage 1, 2 or 3, this file is not your evidence.
+⚠️  **It reads the docs and the module dataclasses, and runs nothing.** No
+stage, no fetch, no baseline, which is why it costs a second and works on any
+tree. It reaches all four modules, not just Stage 4: check 1 reads every
+config dataclass, check 2 every `pipeline_version`, check 3 Module 3's
+reference tables.
 
 ## Working copy
 
