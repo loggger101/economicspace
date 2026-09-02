@@ -33,6 +33,12 @@ OUT_PATH = os.path.join(HERE, "master.py")
 
 
 def read(path):
+    """Whole file as text, always UTF-8.
+
+    Explicit rather than locale-default: the modules carry non-ASCII in their
+    comments and data strings, and on Windows the default is cp1252, which
+    raises on the first box-drawing rule.
+    """
     with open(path, encoding="utf-8") as f:
         return f.read()
 
@@ -507,6 +513,12 @@ if MASTER_AUTORUN:
 # -----------------------------------------------------------------------------
 
 def section_banner(name):
+    """The `# ===` rule that separates one module's code from the next in master.py.
+
+    ASCII `=` rather than a box-drawing rule, and a COMMENT rather than a
+    print, so it sits outside both the ASCII-output rule and `ui_meta`'s
+    banner scraping.
+    """
     bar = "=" * 73
     return f"\n\n# {bar}\n# {name}\n# {bar}\n\n"
 

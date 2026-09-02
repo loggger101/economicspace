@@ -142,6 +142,12 @@ def load_master():
 
 
 def human(seconds: float) -> str:
+    """Seconds as H:MM:SS, for the per-stage and total timings.
+
+    Truncated to whole seconds deliberately: the shortest thing this times is a
+    Stage 3 build measured in seconds and the longest is a Stage 4 cell measured
+    in hours, and a fractional part is noise at both ends.
+    """
     return str(timedelta(seconds=int(seconds)))
 
 
@@ -210,14 +216,34 @@ def _loaded_master():
 
 
 def _benef_ratio() -> float:
+    """Cost of beneficiation, for the `--raw` help text.
+
+    Quoted at `search=False` because `--help` is rendered before any flag is
+    parsed, so there is no run to ask about yet; the RUN banner re-derives both
+    ratios against the settings actually chosen. Neither is ever typed as a
+    literal: see the note above `_loaded_master`.
+    """
     return _loaded_master().beneficiation_cost_ratio(False)
 
 
 def _search_ratio() -> float:
+    """Cost of the programme search, for the `--search` help text.
+
+    Quoted at `beneficiated=False` for the same reason as `_benef_ratio`.
+    """
     return _loaded_master().programme_search_cost_ratio(False)
 
 
 def build_parser(destinations) -> argparse.ArgumentParser:
+    """The whole CLI surface, built AFTER `load_master()` and not before.
+
+    Two flags quote a measured runtime ratio in their help text, so the parser
+    cannot be constructed until master is importable; `_loaded_master` asserts
+    that rather than falling back to a literal, because a hand-typed default
+    here would be a sixth copy of a number this repo has already shipped stale
+    once. `destinations` comes from `master.DELIVERY_DESTINATIONS` so
+    `--destination` can only offer routes Stage 2 actually prices.
+    """
     p = argparse.ArgumentParser(
         prog="run_pipeline",
         description="Run the asteroid mining profitability pipeline.",
@@ -585,6 +611,16 @@ def overwrite_warning(cfg, stages) -> list:
 
 
 def confirm_overwrite(cfg, stages) -> bool:
+    """Ask before Stages 1-3 overwrite a CSV that already exists.
+
+    NOT the same question as `confirm_long_run`, and the distinction is the
+    point: that one asks about spending hours, this one asks about spending
+    something you cannot get back. A Stage 2 run takes five seconds and
+    re-fetches live metal prices over the only copy of the catalog those prices
+    are in, which silently invalidates every `.verify` baseline on disk; a
+    runtime question would wave it straight through. Skipped by `--yes`, which
+    `run.bat` passes on every scripted invocation.
+    """
     for line in overwrite_warning(cfg, stages):
         print(("  " + line) if line else "")
     try:
@@ -601,6 +637,12 @@ def confirm_overwrite(cfg, stages) -> bool:
 
 
 def confirm_long_run() -> bool:
+    """Ask before an uncapped Stage 4, which runs for hours.
+
+    Refusing on EOF is the right default for a run measured in hours, but it has
+    to say WHY: a bare "Cancelled." plus a non-zero exit reads as a run that
+    failed, which is the trap the `run.bat` destination prompt fell into.
+    """
     print()
     print("  WARNING: an uncapped Stage 4 over the full catalog runs for")
     print("  hours, and beneficiated with the programme search on has never")
@@ -623,6 +665,18 @@ def confirm_long_run() -> bool:
 
 
 def main() -> int:
+    """Resolve the settings, guard the run, then build each stage in order.
+
+    The ORDER in the first half is load-bearing and is why this is one function
+    rather than several: `cfg.apply()` pushes `output_dir` into all four
+    sub-configs AND re-asserts the destination across Stage 2 and Stage 4, so it
+    has to run BEFORE `--destination` is written, not after. `preflight` then
+    refuses (exit 2) rather than warning, because there is no reading of a
+    destination-mismatched run worth the hours it costs.
+
+    Returns the process exit code: 0 done, 1 the user declined a confirmation,
+    2 preflight refused.
+    """
     print("Importing the pipeline ...", flush=True)
     master = load_master()
 
