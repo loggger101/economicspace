@@ -2643,7 +2643,10 @@ def _geo_capture_dv_km_s(v_inf_km_s: float) -> float:
     which costs four times that and does not fall with arrival speed.
 
     So the destination that is cheapest to reach from an asteroid is still
-    cislunar, at 0.96 km/s against GEO's 2.05 at best.
+    cislunar, at 0.59 km/s against GEO's 2.05, BOTH AT v_inf = 1.  Quote them
+    at one arrival speed or not at all: cislunar's oft-quoted 0.96 is its
+    v_inf = 3 figure, and pairing that with GEO's v_inf = 1 best case compares
+    two different arrivals.  Cislunar wins at every v_inf either way.
     """
     # (a) direct capture at the GEO radius
     v_hyp_at_geo = math.sqrt(_V_ESC_GEO_KM_S * _V_ESC_GEO_KM_S
@@ -8033,7 +8036,11 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
 
     # ── Step 5, Export ──────────────────────────────────────────────────────
     out_path = os.path.join(config.output_dir, config.output_filename)
-    df.to_csv(out_path, index=False)
+    # lineterminator is pinned because pandas defaults it to os.linesep,
+    # which makes a catalog written on Linux differ from the same catalog
+    # written on Windows in every line, for no model reason.  CRLF is the
+    # existing Windows output, so pinning it changes nothing here.
+    df.to_csv(out_path, index=False, lineterminator="\r\n")
     print(f"\n       Profitability catalog -> {out_path}  ({len(df):,} rows)")
 
     # ── What the architecture search actually chose ──────────────────────────

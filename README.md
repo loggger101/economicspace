@@ -14,10 +14,16 @@ profitability table.
 Dashboard.vbs          Double-click this: opens the dashboard, no terminal
 launch_ui.py           What it runs -- starts the server, owns the stop button
 run.bat                Windows launcher: a terminal menu over everything below
+run.sh                 Linux / macOS launcher: the same options, POSIX
 run_pipeline.py        Headless CLI the launcher drives (presets + flags)
 build_master.py        Build tool: assembles modules/ into master.py
 verify.py              Release verification: the six checks every change runs
 verify_docs.py         Docs verification: the docs still describe the code
+platform_check.py      Can THIS host reproduce the committed numbers? ~10 s
+platform_reference.json  What it compares against, recorded on the ref host
+requirements-lock.txt  The exact versions every committed number was measured on
+Dockerfile             Container image for a second host. No CUDA layer, on purpose
+SPARK_SETUP.md         Standing this up on a DGX Spark (aarch64 Linux)
 master.py              GENERATED single-file pipeline - do not edit by hand
 ui.py                  Streamlit front end (optional): configure, run, inspect
 ui_meta.py             Config introspection + curation for ui.py
@@ -102,6 +108,47 @@ taskbar. Windows Script Host is the only launcher that can start a process with
 no window at all. It decides nothing itself -- which port, whether a
 dashboard is already up, what to do when Streamlit is missing, all of that
 lives in `launch_ui.py` where it can be read and tested.
+
+### On Linux or macOS, from a terminal: `run.sh`
+
+The POSIX counterpart of `run.bat`, with the same options and the same
+semantics, so `./run.sh quick leo` does what `run.bat quick leo` does:
+
+```
+./run.sh setup     create .venv and install the pinned requirements
+./run.sh platform  can this host reproduce the committed numbers (~10 s)
+./run.sh inputs    are the CSVs Stage 4 reads on disk (fetches nothing)
+./run.sh build     rebuild master.py from modules/
+./run.sh quick     400-row sample, all four stages
+./run.sh rerun     Stage 4 only, against the catalogs already on disk
+./run.sh standard  20,000-row sample, Stage 4 only
+./run.sh full      THE PIPELINE DEFAULTS (1.6 h cislunar, 3.8 h default dest.)
+./run.sh verify    verify.py against the newest baseline on disk
+./run.sh campaign  the resumable measurement queue
+./run.sh ui        the dashboard, in the foreground, reachable over the network
+./run.sh help      run_pipeline.py --help
+```
+
+Three differences from `run.bat`, all of them about the host rather than the
+model. `setup` exists because Linux has no equivalent of the Windows launcher
+finding an interpreter for you. `platform` and `inputs` exist because a second
+host is the case where the arithmetic and the input files are both worth
+checking before spending a day, and neither question arises on the machine the
+numbers were measured on. And `ui` runs Streamlit in the foreground on
+`0.0.0.0` rather than handing off to `Dashboard.vbs`, because a headless box
+has no desktop to put a control window on; it prints the addresses that will
+resolve from another machine, and Ctrl-C is the stop button.
+
+It inherits `run.bat`'s rule that **nothing prompts once an argument was
+given**. `read` against a stdin that a scheduled job holds open but never
+writes to hangs rather than exiting, so the destination prompt is guarded on
+both "no argument" and "stdin is a terminal"; the test is
+`./run.sh quick < /dev/null`, not a run from a console.
+
+[`SPARK_SETUP.md`](SPARK_SETUP.md) is the long version: what was already
+portable, what was not, the one thing that cannot be guaranteed on a second
+host and has to be measured instead, and the ~868 MB of input CSVs that git
+does not carry.
 
 ### On Windows, from a terminal: `run.bat`
 
@@ -830,8 +877,8 @@ bigger one. Those are two different numbers for the same manoeuvre, 1,730 and
 
 Its market is the narrow one. A depot refuels and services satellites, so the
 volatiles hold most of their value and the structural metals lose most of
-theirs: water is worth $10,021/kg there against cislunar's $10,810, while iron
-is worth **$1,879/kg against cislunar's $7,567**. It is the first destination
+theirs: water is worth $9,818/kg there against cislunar's $10,607, while iron
+is worth **$1,649/kg against cislunar's $7,337**. It is the first destination
 whose utility overrides run downward on the metals rather than the volatiles,
 and the argument is different in kind: the lunar and martian discounts are
 about local **supply**, and this one is about local **demand**. Nobody launches
