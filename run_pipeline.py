@@ -53,6 +53,13 @@ from datetime import datetime, timedelta
 REPO = os.path.dirname(os.path.abspath(__file__))
 
 
+# The launcher to name in a printed instruction.  `py` is the Windows launcher
+# and exists nowhere else, so preflight telling a Linux host to run `py` is
+# wrong advice at exactly the moment the advice is being read: a fresh clone on
+# a second machine is where the missing-input refusal actually fires.
+_PY = "py" if os.name == "nt" else os.path.basename(sys.executable)
+
+
 def _force_utf8_stdout() -> None:
     """Survive a redirected stdout on Windows, whatever reaches it.
 
@@ -289,6 +296,10 @@ def build_parser(destinations) -> argparse.ArgumentParser:
 
     p.add_argument("--yes", "-y", action="store_true",
                    help="skip the confirmation prompt on a long run")
+    p.add_argument("--check-inputs", action="store_true",
+                   help="report whether the CSVs Stage 4 reads are on disk, "
+                        "with their sizes, and exit. Nothing is fetched, "
+                        "nothing is written, and no stage runs.")
     return p
 
 
@@ -349,6 +360,90 @@ def check_defaults_preset(cfg) -> None:
           "run_pipeline.py.")
 
 
+def required_inputs(cfg, stages) -> list:
+    """Every file Stage 4 will read that a SKIPPED stage would have written.
+
+    Extracted from `preflight` so that the list exists once.  `--check-inputs`
+    reports the same files preflight refuses on, and a manifest quoted in two
+    places is the defect this repo catalogues at length: the second copy is
+    right until the day a config field is renamed and only one of them moves.
+
+    Returns `(filename, absolute path, the stage that writes it)` triples.
+    """
+    need = []
+    if 4 in stages:
+        if 1 not in stages:
+            need.append((cfg.calc.asteroid_catalog_file,
+                         os.path.join(cfg.calc.input_dir,
+                                      cfg.calc.asteroid_catalog_file), 1))
+        if 2 not in stages:
+            need.append((cfg.calc.mineral_catalog_file,
+                         os.path.join(cfg.calc.input_dir,
+                                      cfg.calc.mineral_catalog_file), 2))
+        if 3 not in stages:
+            tdir = os.path.join(cfg.calc.input_dir,
+                                cfg.calc.transportation_subdir)
+            for fname in (cfg.calc.launch_vehicles_file,
+                          cfg.calc.propellants_file,
+                          cfg.calc.delta_v_segments_file,
+                          cfg.calc.operational_costs_file):
+                need.append((fname, os.path.join(tdir, fname), 3))
+    return need
+
+
+def report_inputs(cfg, stages) -> int:
+    """Print what Stage 4 needs, whether it is here, and how big it is.
+
+    `--check-inputs`.  It exists because NONE of these files is in git: the
+    whole of `asteroid_pipeline/` is gitignored, being regenerable per run, so
+    a fresh clone on a second host has the code and the frozen Stage 2 prices
+    and none of the ~868 MB Stage 4 actually reads.  `preflight` already
+    refuses that run in a second rather than dying inside the loader, which is
+    the important half; this is the half that answers the question BEFORE a
+    campaign is queued, and prints the sizes so a copy can be checked.
+
+    Regenerating them instead of copying them is not equivalent and the
+    difference is silent: Stage 1 re-fetches from JPL, which adds bodies daily,
+    so the catalog comes back a different length and nothing produced from it
+    is comparable with any committed number.
+
+    Returns the process exit code: 0 everything present, 2 something missing.
+    """
+    need = required_inputs(cfg, stages)
+    print()
+    print("  Stage 4 reads these, and none of them is in git:")
+    print()
+    missing = 0
+    for fname, path, stage in need:
+        if os.path.isfile(path):
+            n = os.path.getsize(path)
+            # KB below a megabyte: five of the six are reference tables of a
+            # few dozen rows, and printing "0.0 MB" beside them reads as an
+            # empty file, which is the one failure this is meant to show.
+            size = ("%.1f MB" % (n / 1048576.0) if n >= 1048576
+                    else "%.1f KB" % (n / 1024.0))
+            print("    [ok]      %-28s Stage %d  %10s" % (fname, stage, size))
+        else:
+            missing += 1
+            print("    [MISSING] %-28s Stage %d" % (fname, stage))
+    print()
+    if not missing:
+        print("  All present.  `--stages 4` will run against them.")
+        print()
+        return 0
+    print("  %d missing.  Copy them from the host that built them, which is" % missing)
+    print("  the only way to keep a run comparable with the committed numbers:")
+    print()
+    print("      rsync -avP <reference-host>:<repo>/asteroid_pipeline/ \\")
+    print("            %s/" % cfg.calc.input_dir)
+    print()
+    print("  Re-running Stages 1-3 to make them instead re-fetches live data:")
+    print("  a different JPL catalog and different metal prices, so the result")
+    print("  is valid and NOT comparable with anything already measured.")
+    print()
+    return 2
+
+
 def preflight(cfg, stages, destination_given: bool) -> list:
     """Refuse a run whose inputs cannot support it, BEFORE it starts.
 
@@ -383,24 +478,7 @@ def preflight(cfg, stages, destination_given: bool) -> list:
 
     Returns the lines of a printable error, or [] if the run can proceed.
     """
-    need = []
-    if 4 in stages:
-        if 1 not in stages:
-            need.append((cfg.calc.asteroid_catalog_file,
-                         os.path.join(cfg.calc.input_dir,
-                                      cfg.calc.asteroid_catalog_file), 1))
-        if 2 not in stages:
-            need.append((cfg.calc.mineral_catalog_file,
-                         os.path.join(cfg.calc.input_dir,
-                                      cfg.calc.mineral_catalog_file), 2))
-        if 3 not in stages:
-            tdir = os.path.join(cfg.calc.input_dir,
-                                cfg.calc.transportation_subdir)
-            for fname in (cfg.calc.launch_vehicles_file,
-                          cfg.calc.propellants_file,
-                          cfg.calc.delta_v_segments_file,
-                          cfg.calc.operational_costs_file):
-                need.append((fname, os.path.join(tdir, fname), 3))
+    need = required_inputs(cfg, stages)
 
     missing = [(f, path, st) for f, path, st in need if not os.path.isfile(path)]
     if missing:
@@ -411,8 +489,8 @@ def preflight(cfg, stages, destination_given: bool) -> list:
         lines += ["",
                   "Run those stages first:",
                   "",
-                  "      py run_pipeline.py --stages %s"
-                  % "".join(str(s) for s in stages_needed + [4])]
+                  "      %s run_pipeline.py --stages %s"
+                  % (_PY, "".join(str(s) for s in stages_needed + [4]))]
         return lines
 
     # -- (2) the destination the on-disk prices were built for ---------------
@@ -725,6 +803,12 @@ def main() -> int:
         cfg.calc.parallel_workers = args.workers
 
     check_defaults_preset(cfg)
+
+    # Before the banner: this is a question about the disk, not a run, and the
+    # banner describes a run that is not going to happen.
+    if args.check_inputs:
+        return report_inputs(cfg, stages)
+
     print_banner(args, settings, cfg, stages)
 
     problem = preflight(cfg, stages, bool(args.destination))
