@@ -830,8 +830,8 @@ bigger one. Those are two different numbers for the same manoeuvre, 1,730 and
 
 Its market is the narrow one. A depot refuels and services satellites, so the
 volatiles hold most of their value and the structural metals lose most of
-theirs: water is worth $10,021/kg there against cislunar's $10,810, while iron
-is worth **$1,879/kg against cislunar's $7,567**. It is the first destination
+theirs: water is worth $9,818/kg there against cislunar's $10,607, while iron
+is worth **$1,649/kg against cislunar's $7,337**. It is the first destination
 whose utility overrides run downward on the metals rather than the volatiles,
 and the argument is different in kind: the lunar and martian discounts are
 about local **supply**, and this one is about local **demand**. Nobody launches

@@ -4822,7 +4822,11 @@ def build_transportation_catalog(
     }
     for fname, df in files.items():
         path = os.path.join(out_dir, fname)
-        df.to_csv(path, index=False)
+        # lineterminator is pinned because pandas defaults it to os.linesep,
+        # which makes a catalog written on Linux differ from the same catalog
+        # written on Windows in every line, for no model reason.  CRLF is the
+        # existing Windows output, so pinning it changes nothing here.
+        df.to_csv(path, index=False, lineterminator="\r\n")
         print(f"       {fname:32s} -> {path}  ({len(df):,} rows)")
 
     elapsed = (datetime.now() - t0).total_seconds()
