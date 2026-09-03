@@ -91,6 +91,13 @@ import pandas as pd
 import requests
 from tqdm.auto import tqdm
 
+# The launcher to name in a printed instruction.  `py` is the Windows launcher
+# and exists nowhere else, so a hint that says it is wrong advice on the host
+# that most needs the hint.  Deliberately not shared with the other modules:
+# each has to stay standalone for the Colab paste, and build_master.py's AST
+# scan is what catches it if a second copy ever appears.
+_PY = "py" if os.name == "nt" else os.path.basename(sys.executable)
+
 # Silence the chronic noise the data libraries emit during a typical run, but
 # DON'T globally suppress everything, real RuntimeWarnings (e.g. divide-by-zero
 # in our mass calculation) should still surface so we can spot bugs.
@@ -1579,7 +1586,7 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
                       f"row would be dropped at merge time.  Skipping SsODNet.")
                 print(f"         Inspect the real schema and update "
                       f"_SSODNET_WANTED / _SSODNET_RENAME:")
-                print(f"         py -c \"import pyarrow.parquet as pq; "
+                print(f"         {_PY} -c \"import pyarrow.parquet as pq; "
                       f"print(pq.ParquetFile(r'{cache_path}').schema_arrow.names)\"")
                 return pd.DataFrame()
             df = pf.read(columns=cols).to_pandas()

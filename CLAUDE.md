@@ -2381,28 +2381,77 @@ mid-checkout, so they can't run, repair by hand afterwards.
 
 ## Environment
 
-Windows, **Python 3.14** (3.14.6), invoked as `py` (a bare `python` hits the
+Windows, **Python 3.13** (3.13.9), invoked as `py` (a bare `python` hits the
 Microsoft Store alias and fails). The working tree is on Google Drive with the
 git directory outside it; see the README's "Working copy" section, especially
 if the folder gets renamed again.
 
-🚨  **THE INTERPRETER MOVED, AND EVERY PERFORMANCE FIGURE IN THIS FILE PREDATES
-IT.** This section read "Python 3.13" until 2026-09-02, and 3.13 is no longer
-installed at all, so nothing in the measured record can be re-run on the
-interpreter it was measured on. **No model number is affected**: bit-identity is
-a property of the arithmetic, and every cell in this file is a ratio or a float,
-not a wall clock. What is affected is the *cost* record, which is the whole of
-"Measured and declined" plus every wall clock and speed-up in `versions.md`.
+🚨  **THIS SECTION SAID "PYTHON 3.14 (3.14.6)" FROM 2026-09-02 TO
+2026-09-03, AND 3.14 HAS NEVER BEEN INSTALLED ON THIS MACHINE.** It is corrected
+rather than quietly rewritten because of what the wrong version was made to
+argue: a 🚨 block beneath it announced that "THE INTERPRETER MOVED, AND EVERY
+PERFORMANCE FIGURE IN THIS FILE PREDATES IT", and told the reader not to
+re-open the `builtins.max` item on the strength of a 3.13 number without
+re-measuring on 3.14 first. **All of that was false, and it is retracted**;
+the cost record is on the interpreter that is installed, and nothing in
+"Measured and declined" needs re-measuring on account of an interpreter. Check
+it rather than believing either version of this paragraph:
 
-⚠️  The `builtins.max` row of
-[Measured and declined](#measured-and-declined-so-nobody-re-derives-them) is the
-sharpest case, and it is that table's own warning coming true a second time. It
-was re-measured from ~6x to **1.2-2.4x** precisely *because* 3.13 specialised
-two-argument `max`, and the table already says the original figure "was stale by
-an interpreter version". It is now quoted forward across another one. **Do not
-re-open that item on the strength of a 3.13 number in either direction**;
-re-measure it on 3.14 first, and the same goes for anything else in that table
-whose verdict turns on a per-call cost.
+```
+py -0        ->  -V:3.13 *   Python 3.13 (64-bit)
+                 -V:Astral/CPython3.11.16
+py -3.14 -c "import sys"  ->  No suitable Python runtime found
+```
+
+⚠️  The lesson is the one this file makes about counts, one level up: a
+**version spelled out in prose** is a number waiting to rot, and this one rotted
+into an alarm that would have cost somebody a day of re-measurement. It is the
+one fact here that the machine can answer in a second. `requirements-lock.txt`
+and the `Dockerfile` both pin 3.13.9, and `platform_check.py` prints the running
+version beside the reference host's on every run, so there are now three copies
+that derive it and one, this sentence, that types it.
+
+### Another host: Linux, and what does not travel
+
+The campaign is moving to a DGX Spark (GB10, aarch64, Ubuntu).
+[`SPARK_SETUP.md`](SPARK_SETUP.md) is the long form; four things belong here
+because they are traps rather than instructions.
+
+🚨  **`lineterminator="\r\n"` IS PINNED IN THE FIVE CSV WRITERS AND IN
+`verify.py`, AND IT MUST NOT BE "CLEANED UP".** `pandas.to_csv` defaults it to
+`os.linesep`, and `cell_hash` is taken over exactly that text, so every hash in
+`versions.md` is a hash of CRLF. Unpin it and a byte-perfect Linux run reports
+DIFFER on all four cells with every float identical: trap #12, and the same
+shape as the eleven in `verify.py`'s header. It reads on Linux like a Windows
+leftover, which is precisely why it is called out here. On Windows the pin is a
+measured no-op (`5fc52123ed1ecc3a` either way; LF gives `9f6e314f49dc64ef`).
+
+🚨  **THE INPUTS ARE NOT IN GIT, AND THAT IS WHAT STOPS A SECOND HOST
+FIRST.** `asteroid_pipeline/` is gitignored in full, so a fresh clone has the
+code, the frozen Stage 2 prices under `campaign/stage2/`, and none of the
+~868 MB Stage 4 reads. `preflight()` refuses that run in a second rather than
+dying inside the loader, and `run_pipeline.py --check-inputs` (`./run.sh
+inputs`) answers it before a campaign is queued. **Copy them; do not regenerate
+them.** Stage 1 re-fetches from JPL, which adds bodies daily, so a rebuilt
+catalog is a different length and comparable with nothing already measured.
+
+⚠️  **BIT-IDENTITY IS NOT PROMISED ACROSS HOSTS AND CANNOT BE MADE SO.**
+`math.exp`, `math.log` and `math.cos` are the platform libm and numpy picks SIMD
+kernels per architecture; none is required by IEEE 754 to be correctly rounded.
+The rocket equation is `math.exp(dv / ve)` and `estimated_mass_kg` comes out of
+`np.power(10.0, -H / 5.0)`, so this is not a corner. `platform_check.py` answers
+it in ten seconds against `platform_reference.json` by hashing raw IEEE bit
+patterns over the model's own argument ranges, with `math.sqrt` as a control
+since IEEE *does* require correct rounding there. If it reports divergence,
+re-baseline on that host and compare across hosts on values with a tolerance.
+**Do not file the deltas as regressions.**
+
+⚠️  **The queue is the five measured destinations, not seven.**
+`campaign/run_queue.py`'s `DESTS` holds the twenty cells of the 2026-08
+campaign, and adding `mars_orbit` or `geo` is not a one-line edit: there is no
+frozen Stage 2 catalog for either, and making one means a live Stage 2 run at
+today's prices, which is not the 2026-08-23 pricing the other twenty share.
+That is a methodology decision, not a portability gap.
 
 ### Entry points
 

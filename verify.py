@@ -125,6 +125,14 @@ REPO = os.path.dirname(os.path.abspath(__file__))
 # -----------------------------------------------------------------------------
 # LOADING THE PIPELINE
 # -----------------------------------------------------------------------------
+
+# The launcher to name in a printed instruction.  `py` is the Windows launcher
+# and does not exist anywhere else, so a hint that says it is wrong advice on
+# the host that most needs the hint.  Not shared between files on purpose: the
+# four modules must stay standalone for the Colab paste, and this is one
+# expression, not a manifest.
+_PY = "py" if os.name == "nt" else os.path.basename(sys.executable)
+
 def load_master():
     """Import the built master.py in the one way the worker pool tolerates.
 
@@ -683,7 +691,7 @@ def cmd_check(args) -> int:
         print("\n*** NOT VERIFIED: check 1 compared nothing for %s."
               % ", ".join(unchecked))
         print("    Build a baseline on a CLEAN tree BEFORE editing:")
-        print("        py verify.py baseline --tag %s" % args.tag)
+        print("        %s verify.py baseline --tag %s" % (_PY, args.tag))
         return 1
     print("\n" + ("ALL CHECKS PASSED" if ok else "*** FAILURES ABOVE ***"))
     return 0 if ok else 1
