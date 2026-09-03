@@ -23,8 +23,8 @@ history of how it got there.
 | 1 | `modules/catalog.py` | **1.1.1** | v1.1.1, `enrich_composition` by distinct taxonomy, 3.87× |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments |
-| 4 | `modules/calc.py` | **1.19.1** | v1.19.1, `stamp_check` compared every catalog to Module 3 |
-| - | `master.py` | **1.22.1** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.19.2** | v1.19.2, `mars_orbit` phased its launch windows against Earth |
+| - | `master.py` | **1.22.2** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -103,6 +103,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [calc v1.19.2](#calc-v1192) | 2026-09-03 | **`mars_orbit` waited for the wrong planet** |
 | [calc v1.19.1](#calc-v1191) | 2026-09-02 | a version check had been comparing every catalog against Module 3 |
 | [calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0](#calc-v1190--mineral_value-v190--transportation-v1140) | 2026-09-02 | **a seventh destination: a geostationary servicing depot** |
 | [calc v1.18.0 / mineral_value v1.8.0 / transportation v1.13.0](#calc-v1180--mineral_value-v180--transportation-v1130) | 2026-09-02 | **a sixth destination: a Mars-orbit depot** |
@@ -132,6 +133,90 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## calc v1.19.2
+
+🚨  **`mars_orbit` PHASED ITS LAUNCH WINDOWS AGAINST EARTH**, and had done so
+since v1.18.0 shipped it. One conditional, written in two places:
+
+```python
+a_dest_au = (A_MARS_AU
+             if str(config.delivery_destination).strip().lower() == "mars_surface"
+             else 1.0)
+```
+
+`synodic_period_yr(a_asteroid, a_dest)` returns the years between successive
+departure windows, and its second argument is the heliocentric orbit the cargo
+is delivered to. A depot in a 1-sol Mars orbit is reached by the **same
+heliocentric transfer** as the surface 3,400 km beneath it: the same
+`_asteroid_to_mars_dv_km_s`, the same transfer ellipse terminating at 1.524 AU,
+the same arrival `v_infinity`. It therefore waits on the same Earth/Mars
+alignment. The test named one of the model's two Mars destinations and silently
+got the other one wrong.
+
+### What it was worth
+
+Measured on the catalog's 1,555,667 semi-major axes, on a 38,892-row stride
+sample of them:
+
+| phased against | median synodic period | mean | at the 10-yr cap |
+|---|---|---|---|
+| Earth, 1.000 AU, what `mars_orbit` got | 1.2976 yr | 1.3473 | 0.17% |
+| **Mars, 1.524 AU**, what it should get | **3.3033 yr** | 3.4988 | 0.71% |
+
+**The two answers differ on 99.97% of rows, and the old one is too SHORT on
+99.46% of them**, by a median of 2.0079 yr and by as much as 8.2397.
+
+✅  **The committed `mars_surface` cadence is what makes the old value visibly
+wrong rather than merely different.** CLAUDE.md records a Mars campaign
+repeating every **3.798 yr raw** against ~1.37 everywhere else, and names the
+cause: the Earth/Mars synodic period, and a transfer that is a separate
+heliocentric leg. `mars_orbit` was being handed the ~1.37 that belongs to a
+destination in Earth's orbit, for a mission that flies to Mars.
+
+The term is not decorative. `synodic_yr` feeds `window_wait_yr`
+(`0.5 x synodic`), and `campaign_cadence_yr` is `max(stay, synodic)`, so it
+sets how often a rig can fly, how long return propellant sits boiling off, the
+programme span, and **which of the rig's two bounds retires it**. Mars is the
+one destination where the calendar bound does most of the work, precisely
+because the cadence is long; `mars_orbit` was being scored as though it were
+not.
+
+### The fix is a table entry, not a better conditional
+
+`DELIVERY_ARCHITECTURES` is where a destination already declares its physical
+mission, so it now declares this too:
+
+```python
+"window_phasing_au": A_MARS_AU,     # mars_orbit, mars_surface
+"window_phasing_au": 1.0,           # everything riding Earth's orbit
+```
+
+and `window_phasing_au(destination)` reads it back. Everything in Earth's
+system, `leo`, `geo`, `cislunar`, `lunar_surface` and `earth_surface`, phases
+against 1 AU because they all ride Earth's orbit around the Sun.
+
+⚠️  **The field is asserted at import, not defaulted.** A `.get(..., 1.0)`
+would have been a silent default of the wrong value for any future destination
+off Earth's orbit, which is this defect exactly. The next destination is asked
+the question beside the table it is being added to, rather than in two
+conditionals 4,000 lines away that name a destination it is not. That is the
+same reasoning `mineral_value` v1.7.1 applied to its own silent default.
+
+### Verification
+
+**Six of the seven destinations are bit-identical by construction**, since
+`window_phasing_au` returns exactly the `1.0` or `A_MARS_AU` the conditional
+returned for them; the resolved value was checked for all seven.
+`verify.py check --tag 1.17.7` passes: all four cislunar cells **139/139
+columns identical**, hashes MATCH, mass ledger `0.000000000 kg`, never-worse
+clean.
+
+**`mars_orbit` changes, and that is the point.** No `mars_orbit` cell has ever
+been run, so no committed measurement moves; every prediction made for it in
+[calc v1.18.0](#calc-v1180--mineral_value-v180--transportation-v1130) that
+touches cadence, span or the rig bounds should be read against Mars phasing
+now.
 
 ## calc v1.19.1
 
@@ -3184,6 +3269,21 @@ field, no CSV byte.
 - `stamp_check` compares each file against the module that wrote it, names the
   right stage in the message, reports a key with no provenance entry instead of
   skipping it, and no longer instructs the reader to re-run a stage.
+
+**`1.19.2`  `mars_orbit` phased its launch windows against Earth.** Full
+write-up: [calc v1.19.2](#calc-v1192). No config field and no output column;
+`synodic_period_yr`, `window_wait_yr`, `campaign_cadence_yr` and everything
+downstream of them **change at `mars_orbit` only**, and are bit-identical at
+the other six destinations.
+
+- `DELIVERY_ARCHITECTURES` gains a required `window_phasing_au` on every entry:
+  `A_MARS_AU` for `mars_orbit` and `mars_surface`, `1.0` for the five that ride
+  Earth's orbit. Asserted at import rather than defaulted, so a destination
+  added without it fails on the way in.
+- `window_phasing_au(destination)` is new and reads that field back. It
+  replaces a `== "mars_surface"` conditional that existed in two places, one
+  the real computation in `AsteroidContext` and one the pre-filter's diagnostic
+  probe, which had to agree and were free not to.
 
 # Measurement history
 

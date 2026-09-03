@@ -114,7 +114,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.1.1`, mineral_value `1.9.0`, transportation `1.14.0`,
-calc `1.19.1`, master `1.22.1` (the master version is a literal in
+calc `1.19.2`, master `1.22.2` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **TWENTY stamps so far do NOT mean the numbers moved.** The rule
@@ -353,6 +353,29 @@ now. See
 [mars_orbit](versions.md#calc-v1180--mineral_value-v180--transportation-v1130)
 and [geo](versions.md#calc-v1190--mineral_value-v190--transportation-v1140)
 for what each would cost and what is predicted of it.
+
+🚨  **AND THE FIRST THING A `mars_orbit` CELL WOULD HAVE MEASURED WAS A
+DEFECT: IT PHASED ITS LAUNCH WINDOWS AGAINST EARTH.** `synodic_period_yr`'s
+second argument was chosen by a conditional testing `== "mars_surface"`,
+written in two places, so the destination added one release later took the
+`else` branch and waited on Earth/Mars alignment that a 1-sol Mars depot does
+not fly to. On a 38,892-row stride sample of the catalog, wrong on **99.97%
+of rows** and too short on 99.46%: a median synodic period of 1.2976 yr against
+the correct **3.3033**. Fixed in
+calc `1.19.2`, which reads the figure off `DELIVERY_ARCHITECTURES` instead.
+See [calc v1.19.2](versions.md#calc-v1192).
+
+⚠️  **The lesson is the one this file already states about branches, arriving
+from the other side.** "An unreachable branch is not a verified branch" is
+about a branch nothing fires; this is a branch that fires for **the wrong
+member of a family**, and it is invisible for exactly the same reason: no cell
+of the affected destination had been run, so the term was never looked at. The
+general shape is **a conditional that names one member of a set instead of
+asking the set a question**, and the defence is the one taken here: put the
+answer in the table where a destination already declares what it is, and
+assert the field is total. ⚠️  Note the counting rule this does NOT break: the
+release is absent from the "moved without moving a number" table above on
+purpose, because it **does** move a number, at `mars_orbit`.
 
 ⚠️  **They are not two more of the same thing, and that is why they were worth
 adding together.** `mars_orbit` is the control on the ISRU discount: it takes
@@ -930,11 +953,15 @@ or more distinctive numbers across two files:
 | everything older than `1.17.7` being high by 1.78-4.32x | [Current results](README.md#current-results-the-complete-20-cell-matrix) | "Runtime, and the three quantities a sample cannot predict" |
 | the four cislunar wall clocks, 733 / 1,253 / 3,424 / 5,692 s | [Beneficiation](README.md#beneficiation) | "Runtime, and the three quantities a sample cannot predict" |
 | why `mars_orbit` takes the BASE utility profile: the crust is 4,100 m/s of ascent away, against the 3,600 m/s of TMI that delivered the cargo | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
+| the base in-space utility profile itself: water 1.00, structural metals 0.70, silicates 0.25, carbon 0.40, and the Mars overrides against it | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
 
-⚠️  **The last six rows were added on 2026-09-02 by re-running the hunt this
-table describes**, which is the tell that the table is a snapshot and not a
-guarantee: it listed four pairs while nine existed, and the tenth arrived the
-same day with `mars_orbit`. **Re-run the hunt rather than trusting the table**,
+⚠️  **The last row was added on 2026-09-03, and the six above it on
+2026-09-02, each time by re-running the hunt this table describes**, which is
+the tell that the table is a snapshot and not a guarantee: it listed four pairs
+while nine existed, the tenth arrived the same day with `mars_orbit`, and the
+eleventh, the utility profile, had been sitting in both files the whole time
+and was found only by running the hunt again over a destination change that had
+nothing to do with it. **Re-run the hunt rather than trusting the table**,
 and re-run it whenever you add a destination: a new row in README's delivered-cost
 table is a new opportunity for this file to restate it.
 
