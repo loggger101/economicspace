@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.22.2)
+"""Master Asteroid Profitability Pipeline (1.23.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -172,6 +172,10 @@ else:
 # ─────────────────────────────────────────────────────────────────────────────
 import json
 import os
+# Aliased because build_master.py concatenates four modules into one namespace,
+# and a bare `time` is a name three of them could plausibly bind to something
+# else.  The alias is local to this module's own usage either way.
+import time as _time
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
@@ -278,6 +282,22 @@ class CatalogConfig:
     jpl_limit:       int = 0   # 0 = all 1.55 M asteroids (orbital elements)
     ssodnet_limit:   int = 0   # 0 = whole cached ssoBFT table
     neowise_limit:   int = 0   # 0 = all 183 k NEOWISE rows
+
+    # Ask IRSA for the NEOWISE table as an asynchronous (IVOA UWS) job rather
+    # than a single synchronous request.  A sync query holds one connection
+    # open for the server-side query AND the ~19 MB transfer, so a proxy
+    # timeout anywhere in that window discards the whole result with nothing to
+    # retry; that is the 502 that made NEOWISE contribute 0 rows to the run
+    # behind the committed cislunar 2x2.  Async runs the job server-side and
+    # leaves the result at a stable, re-fetchable URL.  Falls back to the
+    # synchronous path on any failure, so turning this off only removes a way
+    # to succeed.  Same ADQL and same rows either way, verified byte-identical.
+    neowise_use_async: bool = True
+
+    # How long to poll an async NEOWISE job before giving up and falling back.
+    # The full table completes in well under a minute; this is a ceiling for a
+    # service under load, not an expected wait.
+    neowise_async_max_wait_s: int = 900
     mp3c_limit:      int = 0   # 0 = whatever MP3C will serve
     request_timeout: int = 300 # seconds per HTTP request before giving up (5 min)
 
@@ -359,7 +379,7 @@ class CatalogConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 1 changelog
-    pipeline_version: str = "1.1.1"
+    pipeline_version: str = "1.2.0"
 
 
 # Instantiate and create the output dir.  Edit CATALOG_CONFIG values above this line
@@ -956,6 +976,44 @@ _JPL_FIELDS = [
     "om",              # longitude of ascending node (deg)
     "w",               # argument of perihelion (deg)
     "ma",              # mean anomaly at epoch (deg)
+    # epoch, the osculating element epoch as a Julian date (TDB).  `ma` above
+    # is "mean anomaly AT EPOCH" and was fetched for nine releases without it,
+    # which made it unusable rather than merely unused: a mean anomaly fixes no
+    # date without the epoch it is referred to.  Nothing downstream reads any
+    # of om / w / ma today, so this changes no number; it is here so that the
+    # next Stage 1 run captures it rather than requiring a second full refetch
+    # the day somebody wants a real launch window.
+    #
+    # It must stay PER ROW.  Most bodies share a common epoch, but not all: a
+    # 2,000-row NEO sample returned 1,999 at JD 2461200.5 and one at
+    # JD 2455562.5, 5,638 days apart.  A hardcoded constant would be silently
+    # wrong for exactly the minority most likely to matter.
+    "epoch",
+
+    # ── Orbit quality ────────────────────────────────────────────────────────
+    # 🚨  THE RANKING IS DERIVED FROM ORBITAL ELEMENTS AND HAD NO IDEA WHICH
+    # ELEMENTS WERE ANY GOOD.  `condition_code` is the MPC orbit-uncertainty
+    # parameter U, 0 (well determined) to 9 (barely constrained).  Delta-v, and
+    # therefore the entire economic ranking, is computed from a, e and i; a
+    # body with U = 9 from a four-day arc has elements that are provisional.
+    #
+    # Measured 2026-09-03 against the profitability catalog on disk: of the top
+    # 30 bodies by cost/revenue, 43.3% carry U >= 5 against 13.9% in the
+    # population, a 3.1x enrichment at p = 8.3e-05, and the effect is strongest
+    # at the very top of the ranking (Q1 35.9%, Q2 5.1%).  That is a winner's
+    # curse: ranking on a quantity derived from noisy elements preferentially
+    # selects the bodies whose errors happen to flatter them.
+    #
+    # These are FETCHED, not applied.  Filtering or down-weighting on them
+    # changes what the model answers and is a modelling decision; this only
+    # makes the information available to make it.  All seven are 100% populated.
+    "condition_code",  # MPC orbit uncertainty U, 0 = well determined, 9 = barely
+    "data_arc",        # days between first and last observation
+    "n_obs_used",      # observations used in the orbit fit
+    "rms",             # RMS residual of that fit, arcsec
+    "moid",            # Earth minimum orbit intersection distance (AU)
+    "class",           # orbit class code: MBA, APO, AMO, ATE, TNO, ...
+    "soln_date",       # when the orbit solution was last updated
     "per",             # orbital period (yr)
     "n",               # mean motion (deg/day)
     # H, absolute magnitude.  Added in v1.1.0 and it is the single highest-
@@ -986,6 +1044,14 @@ _JPL_RENAME = {
     "om":             "longitude_asc_node_deg",
     "w":              "arg_perihelion_deg",
     "ma":             "mean_anomaly_deg",
+    "epoch":          "element_epoch_jd",
+    "condition_code": "orbit_condition_code",
+    "data_arc":       "observation_arc_days",
+    "n_obs_used":     "n_observations",
+    "rms":            "orbit_fit_rms_arcsec",
+    "moid":           "earth_moid_au",
+    "class":          "orbit_class",
+    "soln_date":      "orbit_solution_date",
     "per":            "orbital_period_yr",
     "n":              "mean_motion_deg_day",
     "H":              "absolute_magnitude_h",
@@ -1000,6 +1066,15 @@ _JPL_NUMERIC = [
     "aphelion_au", "inclination_deg", "longitude_asc_node_deg",
     "arg_perihelion_deg", "mean_anomaly_deg", "orbital_period_yr",
     "mean_motion_deg_day", "absolute_magnitude_h",
+    # SBDB returns the epoch as a STRING ("2461200.5").  It must be coerced
+    # here or it lands in the CSV as text, which is the float-typed-identifier
+    # trap in the other direction: a number that never compares numerically.
+    "element_epoch_jd",
+    # Same for the orbit-quality numerics.  `orbit_class` and
+    # `orbit_solution_date` are deliberately NOT here: one is a category code
+    # and the other a date, and coercing either would silently null it.
+    "orbit_condition_code", "observation_arc_days", "n_observations",
+    "orbit_fit_rms_arcsec", "earth_moid_au",
 ]
 
 
@@ -1017,7 +1092,11 @@ def fetch_jpl_sbdb(config: CatalogConfig) -> pd.DataFrame:
 
     # Minimal field set guaranteed to exist in every SBDB query response.
     # Used as fallback if the full list causes a 400.
-    _SAFE_FIELDS = "pdes,name,spkid,neo,pha,diameter,diameter_sigma,albedo,rot_per,e,a,q,ad,i,om,w,ma,per,n,H"
+    # `epoch` is carried here as well as in _JPL_FIELDS deliberately: `ma` is in
+    # this list, and a mean anomaly without its epoch is unusable, so omitting
+    # it from the fallback would reintroduce the exact defect the full list
+    # fixes, on precisely the runs where the full list already failed.
+    _SAFE_FIELDS = "pdes,name,spkid,neo,pha,diameter,diameter_sigma,albedo,rot_per,e,a,q,ad,i,om,w,ma,epoch,per,n,H,condition_code,data_arc,n_obs_used,rms,moid,class,soln_date"
 
     base_params = {
         "sb-kind":   "a",           # asteroids only
@@ -1819,7 +1898,18 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
 #   stacked_flag, reference, notes, reference2, type, cntr
 
 _NEOWISE_TAP_URL    = "https://irsa.ipac.caltech.edu/TAP/sync"
+# IVOA UWS async endpoint.  A synchronous TAP query holds ONE connection open
+# for the server-side query AND the whole ~19 MB transfer, so any proxy timeout
+# in that window discards the entire result with no retry surface.  That is the
+# `502 Proxy Error` that made NEOWISE contribute 0 rows to the run behind the
+# committed cislunar 2x2.  Async splits the three phases: the job runs
+# server-side with nothing held open, and the result sits at a stable URL that
+# can be re-fetched.  Same ADQL, same rows, verified byte-identical.
+_NEOWISE_TAP_ASYNC  = "https://irsa.ipac.caltech.edu/TAP/async"
 _NEOWISE_TAP_TABLE  = "neowisesbpropv2"
+
+# Terminal UWS phases.  Anything else means the job is still running.
+_UWS_TERMINAL = ("COMPLETED", "ERROR", "ABORTED")
 
 _NEOWISE_SELECT = (
     "asteroid_number, prov_desig, absolute_mag, "
@@ -1852,6 +1942,78 @@ _NEOWISE_NUMERIC = [
 ]
 
 
+def _neowise_fetch_async(params: dict, config: CatalogConfig) -> Optional[bytes]:
+    """Run the NEOWISE query as an IVOA UWS async job; return the body or None.
+
+    Three phases, and the point of all of them is that nothing is held open
+    while the server works:
+
+      1. POST the query to /async.  IRSA answers 303 with a job URL in the
+         Location header.  Redirects are NOT followed, because following one
+         fetches the job's description page instead of leaving us the URL we
+         need to drive its phase endpoints.
+      2. POST PHASE=RUN, then poll until a terminal phase.  A poll that raises
+         is deliberately NOT fatal: the job is still running server-side, and
+         surviving a transient failure here is the entire reason for using
+         async rather than sync.
+      3. GET the result.  This URL is stable, so a failed transfer is
+         retryable in a way a synchronous query's is not.
+
+    Returns None on any failure, which puts the caller back on the sync path.
+    """
+    try:
+        session = requests.Session()
+        resp = session.post(
+            _NEOWISE_TAP_ASYNC, data=params,
+            allow_redirects=False, timeout=config.request_timeout,
+        )
+        if resp.status_code not in (200, 302, 303):
+            print(f"     WARN  async submit returned HTTP {resp.status_code}")
+            return None
+        job = resp.headers.get("Location")
+        if not job:
+            print("     WARN  async submit returned no job URL")
+            return None
+        print(f"     job   {job}")
+
+        session.post(f"{job}/phase", data={"PHASE": "RUN"},
+                     timeout=config.request_timeout)
+
+        waited, phase = 0.0, "UNKNOWN"
+        while waited < float(config.neowise_async_max_wait_s):
+            try:
+                phase = session.get(
+                    f"{job}/phase", timeout=config.request_timeout,
+                ).text.strip()
+            except requests.exceptions.RequestException:
+                phase = "UNKNOWN"          # keep waiting; the job is server-side
+            if phase in _UWS_TERMINAL:
+                break
+            _time.sleep(2.0)
+            waited += 2.0
+
+        if phase != "COMPLETED":
+            print(f"     WARN  async job ended in phase {phase}")
+            return None
+
+        for attempt in (1, 2, 3):
+            try:
+                res = session.get(f"{job}/results/result",
+                                  timeout=config.request_timeout)
+                if res.status_code == 200:
+                    return res.content
+                print(f"     WARN  result HTTP {res.status_code} "
+                      f"(attempt {attempt})")
+            except requests.exceptions.RequestException as exc:
+                print(f"     WARN  result attempt {attempt}: {type(exc).__name__}")
+            _time.sleep(2.0 * attempt)
+        return None
+
+    except requests.exceptions.RequestException as exc:
+        print(f"     WARN  async TAP unavailable ({type(exc).__name__})")
+        return None
+
+
 def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
     """
     Fetch NEOWISE V2.0 diameters & albedos via IPAC IRSA's TAP service.
@@ -1859,6 +2021,11 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
     NEOWISE is a PHYSICAL-only catalog, no orbital elements, so it can't
     stand alone.  Once merged it upgrades diameter / albedo for the ~150k
     rows where it overlaps the JPL backbone.
+
+    Tries the async (UWS) endpoint first and falls back to the synchronous one,
+    so the worst case is the behaviour this function had before async existed.
+    Both paths return the same bytes for the same ADQL; only their failure
+    surfaces differ.  See `_neowise_fetch_async`.
 
     Returns EMPTY DataFrame on any unrecoverable error.
     """
@@ -1872,12 +2039,37 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
     # ORDER BY asteroid_number so small-N runs include the low-numbered
     # (most famous) bodies: Ceres, Vesta, etc.
     top = f"TOP {int(config.neowise_limit)} " if config.neowise_limit else ""
+    # 🚨  THE ORDER BY MUST BE TOTAL, AND `asteroid_number` ALONE IS NOT.
+    #
+    # NEOWISE carries 183,408 rows for 143,318 bodies, and 27,864 bodies have
+    # more than one.  `deduplicate_catalog` sorts by completeness with
+    # `kind="stable"` and keeps the first, so among rows of EQUAL completeness
+    # the winner is decided by nothing but the order they arrived in.
+    #
+    # 27,802 bodies are in exactly that state with DIFFERENT diameters:
+    # median spread 11.6%, p90 27.4%, max 86.3%.  Diameter cubes into
+    # `estimated_mass_kg`, which is what the whole ranking runs on, so an 11.6%
+    # diameter is a 39% mass.
+    #
+    # Ordering on `asteroid_number` alone leaves those ties for the server to
+    # break however it plans the query, and it does not break them the same way
+    # twice: a sync and an async pull of the identical ADQL returned the same
+    # 183,408 rows with the same content hash in a DIFFERENT order.  So this
+    # was never reproducible, and the async path only made it visible.
+    #
+    # Ordering on enough columns to be total makes the same rows win on every
+    # run and every transport.  It deliberately does NOT try to pick the
+    # physically best measurement; `fit_code` and `stacked_flag` are the fields
+    # that would express that, and choosing among them is a modelling decision,
+    # not a reproducibility fix.
     adql = (
         f"SELECT {top}{_NEOWISE_SELECT} "
         f"FROM {_NEOWISE_TAP_TABLE} "
         f"WHERE type != 'comet' "
         f"  AND (asteroid_number IS NOT NULL OR prov_desig IS NOT NULL) "
-        f"ORDER BY asteroid_number ASC"
+        f"ORDER BY asteroid_number ASC, prov_desig ASC, diameter ASC, "
+        f"diameter_err ASC, v_albedo ASC, ir_albedo ASC, "
+        f"beaming_param ASC, fit_code ASC, reference ASC"
     )
     params = {
         "REQUEST": "doQuery",
@@ -1886,34 +2078,46 @@ def fetch_neowise(config: CatalogConfig) -> pd.DataFrame:
         "QUERY":   adql,
     }
 
-    try:
-        with requests.get(
-            _NEOWISE_TAP_URL,
-            params=params,
-            timeout=config.request_timeout,
-            stream=True,
-        ) as resp:
-            if resp.status_code != 200:
-                snippet = resp.text[:300].replace("\n", " ")
-                print(f"     FAIL  HTTP {resp.status_code} - {snippet}")
-                return pd.DataFrame()
+    # Async first.  On success the sync block below is skipped; on any failure
+    # `body` stays None and the original synchronous path runs unchanged, so
+    # this can only add a way to succeed, never remove one.
+    body = None
+    if config.neowise_use_async:
+        body = _neowise_fetch_async(params, config)
+        if body is not None:
+            print(f"     OK  async TAP returned {len(body):,} bytes")
+        else:
+            print("     NOTE  falling back to synchronous TAP")
 
-            total_bytes = int(resp.headers.get("content-length") or 0) or None
-            chunks: list = []
-            with tqdm(
-                total=total_bytes,
-                desc="     NEOWISE",
-                unit="B",
-                unit_scale=True,
-                unit_divisor=1024,
-                leave=True,
-                mininterval=0.3,
-            ) as pbar:
-                for chunk in resp.iter_content(chunk_size=65536):
-                    if chunk:
-                        chunks.append(chunk)
-                        pbar.update(len(chunk))
-            body = b"".join(chunks)
+    try:
+        if body is None:
+            with requests.get(
+                _NEOWISE_TAP_URL,
+                params=params,
+                timeout=config.request_timeout,
+                stream=True,
+            ) as resp:
+                if resp.status_code != 200:
+                    snippet = resp.text[:300].replace("\n", " ")
+                    print(f"     FAIL  HTTP {resp.status_code} - {snippet}")
+                    return pd.DataFrame()
+
+                total_bytes = int(resp.headers.get("content-length") or 0) or None
+                chunks: list = []
+                with tqdm(
+                    total=total_bytes,
+                    desc="     NEOWISE",
+                    unit="B",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    leave=True,
+                    mininterval=0.3,
+                ) as pbar:
+                    for chunk in resp.iter_content(chunk_size=65536):
+                        if chunk:
+                            chunks.append(chunk)
+                            pbar.update(len(chunk))
+                body = b"".join(chunks)
 
     except requests.exceptions.Timeout:
         print("     FAIL  NEOWISE TAP timed out")
@@ -18264,7 +18468,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.22.2")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.23.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

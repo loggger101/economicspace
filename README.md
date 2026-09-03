@@ -34,19 +34,26 @@ modules/
     calc.py            Stage 4 - profitability calculation
 campaign/              The 20-cell measurement campaign: results.csv, the
                        archived cells, the logs, and the scripts that ran it
+research/              Investigations that are not part of a run. starred-repos/
+                       audits 17 external projects against this pipeline and
+                       carries the probes that measured what they were worth
 README.md              This file: what it is, how to run it, current numbers
 versions.md            What changed in which release, what numbers used to be,
                        and the per-module changelogs
+CITATIONS.md           Every source, dataset and borrowed line, and what each
+                       obliges. Two of them require citation as a condition of use
 CLAUDE.md              Working notes: the traps and invariants. Read before editing
 ```
 
-**Three documents, and the split is deliberate**, because the recurring failure
-in this repo is a stale sentence rather than a missing table:
+**The split between these documents is deliberate**, because the recurring
+failure in this repo is a stale sentence rather than a missing table. The table
+is the list; its length is deliberately not spelled out beside it:
 
 | file | holds | is the authority for |
 |---|---|---|
 | `README.md` | what the pipeline is, how to run it, what the model does, and the **current** numbers | the current answer |
 | [`versions.md`](versions.md) | what changed in which release, what every number used to be, and the per-module changelogs | the measurement history |
+| [`CITATIONS.md`](CITATIONS.md) | where every source, dataset and borrowed line came from, and what each obliges | references and attribution |
 | [`CLAUDE.md`](CLAUDE.md) | the traps, the invariants, and the reasoning behind decisions that look wrong | how to edit it safely |
 
 `run.bat`, `run_pipeline.py`, `ui.py` and `ui_meta.py` sit at the root rather
@@ -62,7 +69,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
-| 1 | `modules/catalog.py` | 1.1.1 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
+| 1 | `modules/catalog.py` | 1.2.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.14.0 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
 | 4 | `modules/calc.py` | 1.19.2 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
@@ -1455,12 +1462,27 @@ Stated plainly so results aren't over-read:
   asteroid, so `mining_rate_kg_per_day_per_kg_rig` is an engineering
   assumption. It is a single obvious dial rather than a hidden infinity, but
   it is still an assumption.
-- **Δv is analytic, not trajectory-optimised.** The patched-conic estimator
-  lands within ~10% of published figures and slightly high on the easiest
-  co-orbital targets, where real mission design finds better transfers.
+- **Δv is analytic, not trajectory-optimised, and it is OPTIMISTIC.** The
+  patched-conic estimator meets the target at an apsis and takes the whole
+  inclination change at departure, using `a`, `e` and `i` only. Measured
+  against a Lambert porkchop with real 3-D geometry over 400 sampled bodies, it
+  understates outbound Δv by a **median 1.30 km/s (11.9%), on 86% of bodies**;
+  against the three real missions whose published figures it is validated on it
+  is low by a consistent **0.40 to 0.46 km/s**. The whole 20-cell campaign
+  inherits that bias, and every ratio in it is correspondingly favourable.
+
+  ⚠️  **The obvious fix makes it worse.** The estimator also *over*charges the
+  plane change, by a median 4.87%, and the two errors partially cancel;
+  correcting only the overcharge increases the total error in every inclination
+  band. Neither term should move without the other. Both measurements, and the
+  validated solver behind them, are in
+  [`research/starred-repos/FINDINGS.md`](research/starred-repos/FINDINGS.md).
 - **Launch windows are statistical, not ephemeris-based.** The synodic period
   gives an expected wait; the model does not compute actual departure dates,
-  so it cannot tell you *which* window.
+  so it cannot tell you *which* window. As of catalog `1.2.0` the catalog does
+  at least carry `element_epoch_jd`, so `mean_anomaly_deg` can be referred to a
+  date; before that it could not, which made real phasing impossible rather
+  than merely unimplemented.
 - **Composition is uniform.** Each asteroid is its taxonomy class's mean
   composition all the way through: no core/mantle structure, no regolith
   versus bedrock, no ore grade. Beneficiation concentrates *against that mean*,
@@ -1860,6 +1882,13 @@ would pay a bonus for taking longer to collect it. Both multipliers are exactly
 - **yfinance**: live futures prices (metals; fuel-cost proxies)
 - **USGS Mineral Commodity Summaries + LME**: reference prices for metals yfinance doesn't expose
 - **metals.dev**: optional; set `MINERAL_CONFIG.metals_api_key` (defaults to `"DEMO"`, i.e. skipped)
+
+🔔  **[`CITATIONS.md`](CITATIONS.md) is the authority for how to cite these**,
+and two of them ask for citation as a **condition of use** rather than as a
+courtesy: SsODNet (Berthier et al. 2023) and NEOWISE V2.0 (Mainzer et al. 2019,
+doi:10.26033/18S3-2Z54). If a figure from this pipeline is published, those
+travel with it. The list above says what each source supplies; it deliberately
+does not restate the citations.
 
 ### Source outages change the population, not just the coverage
 

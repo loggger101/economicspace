@@ -39,3 +39,12 @@ Dockerfile   text eol=lf
 # quoted, deliberately: the one that used to be here read 6,300 against a file
 # of 17,747, and nothing checks this file.
 master.py linguist-generated=true
+
+# Archival data committed verbatim.  `sdsstax_ast.tab` is a PDS3 fixed-width
+# table from the NASA Planetary Data System, and it arrives CRLF.  Marking it
+# -text means git never converts it, on any host: the bytes that were
+# downloaded are the bytes that are checked out.  That matters twice over here,
+# because this repo already argues its releases from byte-identity, and because
+# a mechanically rewritten archive file is no longer the artefact its citation
+# names.  See CITATIONS.md.
+*.tab -text
