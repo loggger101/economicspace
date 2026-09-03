@@ -127,7 +127,12 @@ DOCS = ["README.md", "versions.md", "CLAUDE.md"]
 # is sent to.  The campaign pair spent a whole measurement campaign outside
 # every check here, which is exactly how the docs drifted before any of these
 # existed: a file nothing checks is a file that is clean until it is not.
-CAMPAIGN_DOCS = ["campaign/FINDINGS.md", "campaign/README.md"]
+CAMPAIGN_DOCS = ["campaign/FINDINGS.md", "campaign/README.md",
+                 # Not a campaign doc, but the same argument: it is prose a
+                 # reader is sent to, it quotes measured figures (the GPU
+                 # result, the memory peaks, the CRLF hashes), and a file
+                 # nothing checks is a file that is clean until it is not.
+                 "SPARK_SETUP.md"]
 
 # The campaign scripts.  Prose a reader sees, checked whole like the root
 # scripts rather than comments-only like modules/: they hold no reference table,
@@ -636,11 +641,14 @@ def check_structure() -> bool:
 # -------------------------------------------------------------------- 6. dashes
 EM, EN = "—", "–"
 ROOT_PY = ["ui.py", "ui_meta.py", "run_pipeline.py", "verify.py",
-           "build_master.py", "launch_ui.py",
+           "build_master.py", "launch_ui.py", "platform_check.py",
            # Not Python, but prose a reader sees, and it was outside the
            # ratchet long enough to collect two em-dashes.  The hook's header
            # is the only account of the Drive stat-cache bug there is.
-           ".githooks/drive-restat.sh", "Dashboard.vbs"] + CAMPAIGN_PY
+           # run.sh is here for the same reason and one more: it is the only
+           # account of which run.bat traps do and do not carry to POSIX.
+           ".githooks/drive-restat.sh", "Dashboard.vbs",
+           "run.sh"] + CAMPAIGN_PY
 
 
 # A line that begins with a bare comma is what the 2026-08-23 ASCII pass left
@@ -779,6 +787,30 @@ def check_manifests() -> bool:
             bad.append("README documents 'run.bat %s', dispatcher rejects it"
                        % extra)
 
+    # README's `./run.sh` block <-> the words run.sh's dispatcher accepts.
+    # Same check as the one above and for the same reason: `run.bat help`
+    # shipped accepted-but-undocumented for several releases, and run.sh is the
+    # newer of the two launchers, so its list is the one still moving.  The
+    # dispatcher is a `case` over $ACTION; a label may carry alternatives
+    # (`help|--help|-h`), and only the bare word forms are options a reader
+    # would type.  `menu` is the empty-argument fallthrough, not an option.
+    sh_p = os.path.join(REPO, "run.sh")
+    if os.path.exists(sh_p) and os.path.exists(readme_p):
+        sh = read(sh_p)
+        block = sh.partition('case "$ACTION" in')[2]
+        accepted = set()
+        for label in re.findall(r"^\s{0,4}([A-Za-z|\-\"]+)\)", block, re.M):
+            accepted |= {w for w in label.split("|") if w.isalpha()}
+        accepted -= {"menu"}
+        documented = set(re.findall(r"^\./run\.sh\s+([a-z]+)",
+                                    read(readme_p), re.M))
+        n += 1
+        for miss in sorted(accepted - documented):
+            bad.append("run.sh accepts '%s', README does not document it" % miss)
+        for extra in sorted(documented - accepted):
+            bad.append("README documents './run.sh %s', dispatcher rejects it"
+                       % extra)
+
     print("7. manifests   %d manifests checked, %d mismatched" % (n, len(bad)))
     for b in bad:
         print("     ! " + b)
@@ -884,7 +916,8 @@ def check_runtime() -> bool:
 # contents are the four modules, which are checked here at source, and
 # build_master.py strips their module docstrings by design.
 FIRST_PARTY_PY = (["build_master.py", "run_pipeline.py", "ui.py", "ui_meta.py",
-                   "verify.py", "launch_ui.py", os.path.basename(__file__)]
+                   "verify.py", "launch_ui.py", "platform_check.py",
+                   os.path.basename(__file__)]
                   + list(MODULES.values()) + CAMPAIGN_PY)
 
 

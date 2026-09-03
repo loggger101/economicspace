@@ -182,6 +182,13 @@ import pandas as pd
 import requests
 from tqdm.auto import tqdm
 
+# The launcher to name in a printed instruction.  `py` is the Windows launcher
+# and exists nowhere else, so a hint that says it is wrong advice on the host
+# that most needs the hint.  Deliberately not shared with the other modules:
+# each has to stay standalone for the Colab paste, and build_master.py's AST
+# scan is what catches it if a second copy ever appears.
+_PY = "py" if os.name == "nt" else os.path.basename(sys.executable)
+
 # Silence the chronic noise the data libraries emit during a typical run, but
 # DON'T globally suppress everything, real RuntimeWarnings (e.g. divide-by-zero
 # in our mass calculation) should still surface so we can spot bugs.
@@ -1670,7 +1677,7 @@ def fetch_ssodnet(config: CatalogConfig) -> pd.DataFrame:
                       f"row would be dropped at merge time.  Skipping SsODNet.")
                 print(f"         Inspect the real schema and update "
                       f"_SSODNET_WANTED / _SSODNET_RENAME:")
-                print(f"         py -c \"import pyarrow.parquet as pq; "
+                print(f"         {_PY} -c \"import pyarrow.parquet as pq; "
                       f"print(pq.ParquetFile(r'{cache_path}').schema_arrow.names)\"")
                 return pd.DataFrame()
             df = pf.read(columns=cols).to_pandas()
@@ -2954,11 +2961,19 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
     catalog_path  = os.path.join(config.output_dir, config.catalog_filename)
     rejected_path = os.path.join(config.output_dir, config.rejected_filename)
 
-    catalog.to_csv(catalog_path, index=False)
+    # lineterminator is pinned because pandas defaults it to os.linesep,
+    # which makes a catalog written on Linux differ from the same catalog
+    # written on Windows in every line, for no model reason.  CRLF is the
+    # existing Windows output, so pinning it changes nothing here.
+    catalog.to_csv(catalog_path, index=False, lineterminator="\r\n")
     print(f"\n       Catalog saved  -> {catalog_path}")
 
     if not rejections.empty:
-        rejections.to_csv(rejected_path, index=False)
+        # lineterminator is pinned because pandas defaults it to os.linesep,
+        # which makes a catalog written on Linux differ from the same catalog
+        # written on Windows in every line, for no model reason.  CRLF is the
+        # existing Windows output, so pinning it changes nothing here.
+        rejections.to_csv(rejected_path, index=False, lineterminator="\r\n")
         print(f"       Rejections log -> {rejected_path}")
 
     # ── Summary ───────────────────────────────────────────────────────────────
@@ -5069,7 +5084,11 @@ def build_mineral_value_catalog(
 
     # ── Step 6, Save ────────────────────────────────────────────────────────
     out_path = os.path.join(config.output_dir, config.catalog_filename)
-    catalog.to_csv(out_path, index=False)
+    # lineterminator is pinned because pandas defaults it to os.linesep,
+    # which makes a catalog written on Linux differ from the same catalog
+    # written on Windows in every line, for no model reason.  CRLF is the
+    # existing Windows output, so pinning it changes nothing here.
+    catalog.to_csv(out_path, index=False, lineterminator="\r\n")
     print(f"\n       Catalog saved -> {out_path}")
 
     # ── Summary ──────────────────────────────────────────────────────────────
@@ -9882,7 +9901,11 @@ def build_transportation_catalog(
     }
     for fname, df in files.items():
         path = os.path.join(out_dir, fname)
-        df.to_csv(path, index=False)
+        # lineterminator is pinned because pandas defaults it to os.linesep,
+        # which makes a catalog written on Linux differ from the same catalog
+        # written on Windows in every line, for no model reason.  CRLF is the
+        # existing Windows output, so pinning it changes nothing here.
+        df.to_csv(path, index=False, lineterminator="\r\n")
         print(f"       {fname:32s} -> {path}  ({len(df):,} rows)")
 
     elapsed = (datetime.now() - t0).total_seconds()
@@ -12601,7 +12624,10 @@ def _geo_capture_dv_km_s(v_inf_km_s: float) -> float:
     which costs four times that and does not fall with arrival speed.
 
     So the destination that is cheapest to reach from an asteroid is still
-    cislunar, at 0.96 km/s against GEO's 2.05 at best.
+    cislunar, at 0.59 km/s against GEO's 2.05, BOTH AT v_inf = 1.  Quote them
+    at one arrival speed or not at all: cislunar's oft-quoted 0.96 is its
+    v_inf = 3 figure, and pairing that with GEO's v_inf = 1 best case compares
+    two different arrivals.  Cislunar wins at every v_inf either way.
     """
     # (a) direct capture at the GEO radius
     v_hyp_at_geo = math.sqrt(_V_ESC_GEO_KM_S * _V_ESC_GEO_KM_S
@@ -17991,7 +18017,11 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
 
     # ── Step 5, Export ──────────────────────────────────────────────────────
     out_path = os.path.join(config.output_dir, config.output_filename)
-    df.to_csv(out_path, index=False)
+    # lineterminator is pinned because pandas defaults it to os.linesep,
+    # which makes a catalog written on Linux differ from the same catalog
+    # written on Windows in every line, for no model reason.  CRLF is the
+    # existing Windows output, so pinning it changes nothing here.
+    df.to_csv(out_path, index=False, lineterminator="\r\n")
     print(f"\n       Profitability catalog -> {out_path}  ({len(df):,} rows)")
 
     # ── What the architecture search actually chose ──────────────────────────
