@@ -18,6 +18,13 @@
 *.sh         text eol=lf
 .githooks/*  text eol=lf
 
+# Same rule, and for the Dockerfile it is not cosmetic: a CRLF line
+# ending after a backslash continuation puts the CR into the argument,
+# so a multi-line RUN breaks on the build host.  The JSON is the
+# platform probe's reference, read on both platforms.
+Dockerfile   text eol=lf
+*.json       text eol=lf
+
 # Batch files are CRLF by convention, and this one is all labels, goto and
 # call -- which is exactly where an LF-only .bat is known to misbehave.
 *.bat   text eol=crlf

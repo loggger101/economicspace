@@ -9,7 +9,7 @@ Stages 1 and 3 are NEVER run here.  Stage 2 is never re-fetched -- it is copied
 from campaign/stage2/, which was priced once on 2026-08-23 for all five
 destinations with verified-identical live prices.
 
-    py campaign/run_cell.py <destination> <raw|benef> <off|on>
+    python campaign/run_cell.py <destination> <raw|benef> <off|on>
 """
 import csv
 import gzip
@@ -25,6 +25,22 @@ CAMP = os.path.join(ROOT, "campaign")
 OUT = os.path.join(ROOT, "asteroid_pipeline", "profitability_catalog.csv")
 STAGE2_LIVE = os.path.join(ROOT, "asteroid_pipeline", "mineral_value_catalog.csv")
 LEDGER = os.path.join(CAMP, "results.csv")
+
+# The 20-cell campaign was measured at 12 workers, so 12 is what the wall
+# clocks in the ledger mean and it stays the default.  CAMPAIGN_WORKERS
+# overrides it for a host with a different core count -- the DGX Spark has 20.
+# Worker count cannot move a RESULT (verify.py check 3 holds serial and
+# parallel to the same hash), so this is a wall-clock dial only; a ledger row
+# measured at a different width is still a valid cell, just not a comparable
+# time.
+WORKERS = int(os.environ.get("CAMPAIGN_WORKERS", "12"))
+
+# `open(log, "w")` and the gzip archive both assume these exist.  They are
+# committed with content on this machine but `campaign/cells/` is gitignored,
+# so a fresh clone has no `cells/` at all and the first cell dies AFTER paying
+# for the run.
+for _d in (os.path.join(CAMP, "logs"), os.path.join(CAMP, "cells")):
+    os.makedirs(_d, exist_ok=True)
 
 FIELDS = [
     "cell", "destination", "ore", "search", "started", "wall_s", "rc",
@@ -135,9 +151,9 @@ def main():
     shutil.copyfile(src2, STAGE2_LIVE)
 
     cmd = [
-        "py", os.path.join(ROOT, "run_pipeline.py"),
+        sys.executable, os.path.join(ROOT, "run_pipeline.py"),
         "--stages", "4", "--destination", dest, "--rows", "0",
-        "--workers", "12", "--yes",
+        "--workers", str(WORKERS), "--yes",
         "--beneficiated" if ore == "benef" else "--raw",
         "--search" if search == "on" else "--no-search",
     ]

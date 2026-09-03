@@ -127,7 +127,12 @@ DOCS = ["README.md", "versions.md", "CLAUDE.md"]
 # is sent to.  The campaign pair spent a whole measurement campaign outside
 # every check here, which is exactly how the docs drifted before any of these
 # existed: a file nothing checks is a file that is clean until it is not.
-CAMPAIGN_DOCS = ["campaign/FINDINGS.md", "campaign/README.md"]
+CAMPAIGN_DOCS = ["campaign/FINDINGS.md", "campaign/README.md",
+                 # Not a campaign doc, but the same argument: it is prose a
+                 # reader is sent to, it quotes measured figures (the GPU
+                 # result, the memory peaks, the CRLF hashes), and a file
+                 # nothing checks is a file that is clean until it is not.
+                 "SPARK_SETUP.md"]
 
 # The campaign scripts.  Prose a reader sees, checked whole like the root
 # scripts rather than comments-only like modules/: they hold no reference table,
@@ -636,11 +641,14 @@ def check_structure() -> bool:
 # -------------------------------------------------------------------- 6. dashes
 EM, EN = "—", "–"
 ROOT_PY = ["ui.py", "ui_meta.py", "run_pipeline.py", "verify.py",
-           "build_master.py", "launch_ui.py",
+           "build_master.py", "launch_ui.py", "platform_check.py",
            # Not Python, but prose a reader sees, and it was outside the
            # ratchet long enough to collect two em-dashes.  The hook's header
            # is the only account of the Drive stat-cache bug there is.
-           ".githooks/drive-restat.sh", "Dashboard.vbs"] + CAMPAIGN_PY
+           # run.sh is here for the same reason and one more: it is the only
+           # account of which run.bat traps do and do not carry to POSIX.
+           ".githooks/drive-restat.sh", "Dashboard.vbs",
+           "run.sh"] + CAMPAIGN_PY
 
 
 # A line that begins with a bare comma is what the 2026-08-23 ASCII pass left
@@ -884,7 +892,8 @@ def check_runtime() -> bool:
 # contents are the four modules, which are checked here at source, and
 # build_master.py strips their module docstrings by design.
 FIRST_PARTY_PY = (["build_master.py", "run_pipeline.py", "ui.py", "ui_meta.py",
-                   "verify.py", "launch_ui.py", os.path.basename(__file__)]
+                   "verify.py", "launch_ui.py", "platform_check.py",
+                   os.path.basename(__file__)]
                   + list(MODULES.values()) + CAMPAIGN_PY)
 
 
