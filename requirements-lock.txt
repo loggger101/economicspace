@@ -1,0 +1,38 @@
+# The exact versions every committed number was measured on.
+#
+# requirements.txt is the loose list, and it mirrors _MASTER_REQUIRED in
+# master.py so the pipeline stays Colab-pasteable.  This file is the opposite:
+# it is what a SECOND host installs when the point is to reproduce a hash
+# rather than to run the model.
+#
+# The reason it exists is numpy.  Its ufuncs pick SIMD kernels per
+# architecture AND per release, and `np.power(10.0, -H / 5.0)` in catalog.py
+# sets `estimated_mass_kg`, which is what the whole ranking runs on.  A numpy
+# minor upgrade is exactly the kind of thing that moves a float in the last
+# bit, and this project argues every release from bit-identity, so the version
+# is part of the measurement.  Same reasoning that made v1.17.4 measure the
+# pyarrow CSV engine at 4.8x and REJECT it for moving that column by 1e-13.
+#
+# Recorded 2026-09-02 on the reference host: CPython 3.13.9, Windows, x86-64.
+# `platform_check.py` is what says whether a host running these actually
+# reproduces the reference arithmetic; a matching version list is necessary
+# and NOT sufficient, because the C library underneath is not pip's to pin.
+#
+#     python -m pip install -r requirements-lock.txt
+#     python platform_check.py
+
+# --- the pipeline itself -----------------------------------------------------
+numpy==2.2.6
+pandas==2.3.3
+pyarrow==24.0.0
+requests==2.32.5
+tqdm==4.67.1
+yfinance==1.4.1
+
+# --- pandas' own runtime deps, pinned because a date parser is not inert ------
+python-dateutil==2.9.0.post0
+pytz==2025.2
+tzdata==2025.2
+
+# --- the dashboard, which no headless run needs ------------------------------
+streamlit==1.61.1
