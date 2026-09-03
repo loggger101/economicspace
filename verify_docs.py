@@ -787,6 +787,30 @@ def check_manifests() -> bool:
             bad.append("README documents 'run.bat %s', dispatcher rejects it"
                        % extra)
 
+    # README's `./run.sh` block <-> the words run.sh's dispatcher accepts.
+    # Same check as the one above and for the same reason: `run.bat help`
+    # shipped accepted-but-undocumented for several releases, and run.sh is the
+    # newer of the two launchers, so its list is the one still moving.  The
+    # dispatcher is a `case` over $ACTION; a label may carry alternatives
+    # (`help|--help|-h`), and only the bare word forms are options a reader
+    # would type.  `menu` is the empty-argument fallthrough, not an option.
+    sh_p = os.path.join(REPO, "run.sh")
+    if os.path.exists(sh_p) and os.path.exists(readme_p):
+        sh = read(sh_p)
+        block = sh.partition('case "$ACTION" in')[2]
+        accepted = set()
+        for label in re.findall(r"^\s{0,4}([A-Za-z|\-\"]+)\)", block, re.M):
+            accepted |= {w for w in label.split("|") if w.isalpha()}
+        accepted -= {"menu"}
+        documented = set(re.findall(r"^\./run\.sh\s+([a-z]+)",
+                                    read(readme_p), re.M))
+        n += 1
+        for miss in sorted(accepted - documented):
+            bad.append("run.sh accepts '%s', README does not document it" % miss)
+        for extra in sorted(documented - accepted):
+            bad.append("README documents './run.sh %s', dispatcher rejects it"
+                       % extra)
+
     print("7. manifests   %d manifests checked, %d mismatched" % (n, len(bad)))
     for b in bad:
         print("     ! " + b)

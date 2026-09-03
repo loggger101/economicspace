@@ -36,3 +36,12 @@ tzdata==2025.2
 
 # --- the dashboard, which no headless run needs ------------------------------
 streamlit==1.61.1
+
+# --- campaign tooling, which the pipeline itself never imports ---------------
+# campaign/memwatch.py only.  Deliberately NOT in requirements.txt: that file
+# asserts in its own first line that it mirrors _MASTER_REQUIRED, and
+# verify_docs.py check 7 holds it to that, so adding psutil there would make
+# every Colab paste pip-install a process inspector it never calls.  It is here
+# because a second host standing the campaign up wants the memory curve, and
+# discovering the import error after the first cell is the wrong time.
+psutil==7.1.0
