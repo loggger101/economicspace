@@ -17958,7 +17958,11 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
 
     # ── Step 5, Export ──────────────────────────────────────────────────────
     out_path = os.path.join(config.output_dir, config.output_filename)
-    df.to_csv(out_path, index=False)
+    # lineterminator is pinned because pandas defaults it to os.linesep,
+    # which makes a catalog written on Linux differ from the same catalog
+    # written on Windows in every line, for no model reason.  CRLF is the
+    # existing Windows output, so pinning it changes nothing here.
+    df.to_csv(out_path, index=False, lineterminator="\r\n")
     print(f"\n       Profitability catalog -> {out_path}  ({len(df):,} rows)")
 
     # ── What the architecture search actually chose ──────────────────────────
