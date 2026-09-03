@@ -231,8 +231,17 @@ def _csv(df) -> str:
 
     to_csv writes floats at repr precision, so nothing is lost on the way OUT.
     Reading them back is the lossy direction: see _read_baseline.
+
+    lineterminator is PINNED, and leaving it off is trap #12.  pandas defaults
+    it to `os.linesep`, so this function returns CRLF text on Windows and LF
+    text on Linux -- and the hash is taken over exactly this string.  Every
+    cell hash in versions.md was computed on Windows, over CRLF, so the same
+    build on Linux reproduces every float and still reports DIFFER on all four
+    cells.  That is the eleven-entry table in this header happening a twelfth
+    time: a broken comparator that looks exactly like a broken release.  CRLF
+    is pinned rather than LF because CRLF is what the committed hashes are OF.
     """
-    return _comparable(df).to_csv(index=False)
+    return _comparable(df).to_csv(index=False, lineterminator="\r\n")
 
 
 def cell_hash(df) -> str:
