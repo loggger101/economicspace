@@ -180,7 +180,7 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # -----------------------------------------------------------------------------
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.22.1)
+"""Master Asteroid Profitability Pipeline (1.22.2)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -196,7 +196,7 @@ run top-to-bottom - the orchestrator at the bottom executes everything.
     Stage 3  ->  Transportation Data     (modules/transportation.py 1.14.0)
                 Launch vehicles + propellants + dv segments + ops costs
                 (UNCREWED autonomous mining - no crew costs)
-    Stage 4  ->  Profitability Calc      (modules/calc.py 1.19.1)
+    Stage 4  ->  Profitability Calc      (modules/calc.py 1.19.2)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2x, V-type 0.2x)
                 + delivery architecture: earth_surface / leo / geo /
@@ -347,7 +347,12 @@ class MasterConfig:
 
     @property
     def delivery_destination(self) -> str:
-        """Where the mined material is sold - 'earth_surface', 'leo', 'cislunar'."""
+        """Where the mined material is sold.
+
+        Valid values are the keys of `DELIVERY_DESTINATIONS`, which is the
+        live list and is deliberately not restated here: this docstring was
+        still naming three of the seven when it was found.
+        """
         return self.mineral.delivery_destination
 
     @delivery_destination.setter
@@ -442,7 +447,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.22.1")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.22.2")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
