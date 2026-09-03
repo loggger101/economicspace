@@ -113,18 +113,20 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.1.1`, mineral_value `1.7.1`, transportation `1.12.1`,
-calc `1.17.8`, master `1.20.8` (the master version is a literal in
+Current: catalog `1.1.1`, mineral_value `1.9.0`, transportation `1.14.0`,
+calc `1.19.1`, master `1.22.1` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
-ℹ️  **THIRTEEN stamps so far do NOT mean the numbers moved.** The rule is
-one-directional: *changing a number means bumping; bumping does not mean a
+ℹ️  **TWENTY stamps so far do NOT mean the numbers moved.** The rule
+is one-directional: *changing a number means bumping; bumping does not mean a
 number changed*, and reading a version as evidence that a result moved is the
 mistake this table exists to prevent.
 
-⚠️  Every row is a **calc** stamp except `mineral_value 1.7.1`, the only
-non-calc entry this table has carried. Read the module, not just the number:
-`1.7.1` and `1.17.1` are different modules and unrelated releases.
+⚠️  Most rows are **calc** stamps. The exceptions are `mineral_value 1.7.1`,
+`mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0` and
+`transportation 1.14.0`, so read the module and not just the number: `1.7.1`
+and `1.17.1` are different modules and unrelated releases, and so are `1.14.0`
+and `1.19.0`, which shipped together.
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -141,25 +143,45 @@ non-calc entry this table has carried. Read the module, not just the number:
 | `1.17.7` | **memory bound** | bit-identical, verified |
 | mineral_value `1.7.1` | **silent default closed** | bit-identical, verified |
 | `1.17.8` | **a new upstream check** | bit-identical, verified |
+| `1.18.0` | **a sixth destination** | bit-identical, verified |
+| mineral_value `1.8.0` | **a sixth destination** | bit-identical, verified |
+| transportation `1.13.0` | **three reference rows** | bit-identical, verified |
+| `1.19.0` | **a seventh destination** | bit-identical, verified |
+| mineral_value `1.9.0` | **a seventh destination** | bit-identical, verified |
+| transportation `1.14.0` | **four reference rows** | bit-identical, verified |
+| `1.19.1` | **a check that cried wolf** | bit-identical, verified |
 
-**Every measured cell in this file stands unaltered across all thirteen; do not
+**Every measured cell in this file stands unaltered across all twenty; do not
 re-measure anything on account of any of them.** Each release's own section
 carries its verification.
 
 ⚠️  **Derive the taxonomy from the table above, not from a count in prose.**
-Eight rows are *performance* stamps; the other five are `1.17.0` (a default
+Eight rows are *performance* stamps; the other twelve are `1.17.0` (a default
 flip), `1.17.3` (a cleanup), `1.17.7` (a memory bound), `1.17.8` (a new
-upstream check) and `1.7.1` (a silent default closed in another module). See
+upstream check), `1.19.1` (that same check, fixed), `1.7.1` (a silent default
+closed in another module), and two
+trios that each add a delivery destination without touching any existing one:
+`1.18.0` / `1.8.0` / `1.13.0` for `mars_orbit` and `1.19.0` / `1.9.0` /
+`1.14.0` for `geo`. See
 [calc v1.17.0](versions.md#calc-v1170) for the one of those that changes what a
 configure-nothing run answers.
 
-🚨  **THIS PARAGRAPH IS WHERE THE COUNT KEEPS ROTTING, AND IT HAS NOW DONE SO
-THREE TIMES.** It was written at `1.17.5` and still read "nine" and "seven"
-after `1.17.6` shipped; it then read "eight and four" while `1.17.8` sat
-outside the table entirely, having said "No number" in its own release section
-since 2026-08-27. It is the *counts-spelled-out-in-prose* failure named under
-"When a number changes, grep the prose too", occurring in the paragraph that
-warns against it. **Count the table.**
+🚨  **THIS PARAGRAPH IS WHERE THE COUNT KEPT ROTTING, AND IT IS THE ONE PLACE
+IN THIS FILE WHERE A SPELLED COUNT IS NOW CORRECT TO KEEP.** It was written at
+`1.17.5` and still read "nine" and "seven" after `1.17.6` shipped; it then read
+"eight and four" while `1.17.8` sat outside the table entirely, having said
+"No number" in its own release section since 2026-08-27; and it read
+"THIRTEEN" and "the only non-calc entry" until the `mars_orbit` trio landed
+three stamps at once, two of them non-calc.
+
+This file's general rule is `Name the list; do not state its length`, and
+deleting the count here was tried on 2026-09-02 and **reverted the same hour**,
+because `verify_docs.py` check 2 now counts both copies of this table, holds
+them to each other, and holds every sentence beside them to the rows. The count
+is spelled out *because* it is enforced. **That is the general lesson, not an
+exception to it: a count nothing checks is a number waiting to rot, and the fix
+is a checker or a deletion, never a correction.** Three corrections did not
+stop this one. **Count the table.**
 
 🚨  **`1.17.7` IS THE FIRST STAMP HERE THAT FIXES A DEFECT RATHER THAN A COST,
 and it is a defect no cell in this file could have shown.** `_CALENDAR_CACHE`
@@ -320,6 +342,26 @@ per-destination depth, the invariants, and the claims each cell retired.
 Two facts everything below leans on: **`cislunar` is the best case on all four
 settings**, and **the programme search never changes the evaluable set** at any
 destination, as it must not, since N enters nothing in the mass cascade.
+
+🚨  **THE CAMPAIGN IS FIVE DESTINATIONS AND THE MODEL NOW HAS SEVEN.**
+`mars_orbit` landed in calc `1.18.0` and `geo` in calc `1.19.0`, and **no cell
+of either has ever been run**. Every "at every destination" and "all twenty
+cells" below means the five that were measured on 2026-08-23/24: `cislunar`,
+`lunar_surface`, `leo`, `mars_surface`, `earth_surface`. Nothing below is
+wrong, and nothing below covers the other two; a full matrix is **28 cells**
+now. See
+[mars_orbit](versions.md#calc-v1180--mineral_value-v180--transportation-v1130)
+and [geo](versions.md#calc-v1190--mineral_value-v190--transportation-v1140)
+for what each would cost and what is predicted of it.
+
+⚠️  **They are not two more of the same thing, and that is why they were worth
+adding together.** `mars_orbit` is the control on the ISRU discount: it takes
+the base utility profile, so it isolates how much of the `mars_surface` result
+is the crust rather than the distance. `geo` is the control on **saturation**:
+at 40,000 kg/yr it is the smallest in-space market in the model, where
+`earth_surface` is the one whose market is so deep that saturation is
+numerically inert and 100% of rows run to the fleet ceiling. Nothing anchored
+that end of the range before.
 
 ⚠️  **The four non-cislunar beneficiated figures in the v1.11.0 matrix were
 placeholders on the OLD 89,367-row catalog and are retired**: `lunar_surface`
@@ -1023,6 +1065,19 @@ can dig up (Mars water 1.00 → 0.25, carbon 0.40 → 0.02, silicates 0.25 → 0
 Moon water → 0.60, iron → 0.45). Ni/Co/Cu are undiscounted everywhere; no
 concentrated ore of either body is known. Carbon is undiscounted on the Moon,
 where solar-wind implantation leaves it at ~100 ppm.
+
+🚨  **`mars_orbit` TAKES THE BASE PROFILE, AND THE EMPTY DICT IS THE POINT.**
+It sits directly above `mars_surface`'s long override block and will read as an
+oversight; copying those overrides up into it is the one edit that destroys the
+destination's meaning. The overrides exist because a settlement STANDING ON a
+crust digs up its own water, iron and rock. A depot in a 1-sol orbit competes
+with nothing of the kind: everything martian is 3,400 km down a well costing
+4,100 m/s of ascent, **more than the 3,600 m/s of TMI that brought the cargo
+from Earth**, so the alternative to importing a kilogram there is launching it
+from Earth, which is exactly what the base profile is calibrated on. The ISRU
+discount that carries the `mars_surface` result is not a property of Mars; it
+is a property of being ON Mars, and this destination is the control that says
+so.
 
 Two things not to "fix" here. **Every override runs downward**, deliberately:
 raising a utility is precisely how this table becomes a way to manufacture
@@ -2086,17 +2141,35 @@ Undoing any of these silently corrupts the output:
   two full-catalog runs plus a determinism sweep were measured against the
   table that was being replaced. Nothing anywhere said so.
 
-  ✅  **`stamp_check()` closes that half as of calc `1.17.8`.** Stage 3 has
+  ✅  **`stamp_check()` closes that half as of calc `1.17.8`.** Every stage has
   stamped its own `pipeline_version` into every CSV it writes all along, and
   nothing had ever read it back; the loader now compares that stamp against the
-  Module 3 in this process and shouts, naming each stale file. It needed no new
-  column, and it makes the one-directional bump rule self-enforcing: follow it,
-  and a write that silently fails to land is caught on the next run.
-  ⚠️  **Two limits, both deliberate.** It is a *diagnostic, not an import*, so
-  it is silent in a standalone `calc.py` run where `TRANSPORT_CONFIG` does not
-  exist, rather than inventing a complaint it cannot support. And it cannot see
+  module that WROTE it and shouts, naming each stale file and its stage. It
+  needed no new column, and it makes the one-directional bump rule
+  self-enforcing: follow it, and a write that silently fails to land is caught
+  on the next run.
+
+  🚨  **AND IT SPENT TWO RELEASES COMPARING EVERY CATALOG AGAINST MODULE 3,
+  INCLUDING THE TWO MODULE 3 DID NOT WRITE.** `catalogs` holds `asteroids` and
+  `minerals` as well as the four Stage 3 tables, so it fired on **every run**,
+  named the wrong module, and closed with "Re-run Stage 3 (transportation)".
+  That is the action the section titled "RUNNING STAGE 2 OR STAGE 3 DESTROYS
+  EVERY BASELINE YOU HOLD" exists to prevent. **A check that cries wolf toward
+  a destructive remedy is worse than no check**, and the generalisation is the
+  one this file already makes about harnesses: *a broken checker looks exactly
+  like a broken release*. Fixed in calc `1.19.1` with `_CATALOG_PROVENANCE`,
+  which `load_all_catalogs` asserts against the dict it actually builds.
+
+  ⚠️  **Three limits, all deliberate.** It is a *diagnostic, not an import*, so
+  it is silent in a standalone `calc.py` run where the upstream configs do not
+  exist, rather than inventing a complaint it cannot support. It cannot see
   **an edit that did not bump the version**; what it closes is the case where
-  the discipline was followed and the CSV did not land.
+  the discipline was followed and the CSV did not land. And **it cannot tell a
+  deliberate lag from a failed write** -- catalog `1.1.1` and transportation
+  `1.12.1` both changed no CSV byte and chose not to re-run their stage, so the
+  check fires on them correctly and means nothing by it. That is why it now
+  reports the fact and points at the release note instead of prescribing a
+  fix.
 
   The cheap habit that catches it: **Stage 4's loader prints row counts for
   every Module 3 table it reads** (`Module 3 propellants  41 rows`). Read

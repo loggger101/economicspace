@@ -197,7 +197,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.12.1"
+    pipeline_version: str = "1.14.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 
@@ -2933,6 +2933,38 @@ DELTA_V_REFERENCE: List[dict] = [
               "asteroid material delivered to NRHO AVOIDS having to be lifted "
               "through — it sets the cislunar sale price in Module 2."},
 
+    # ── Geostationary orbit  (v1.14.0) ────────────────────────────────
+    # The one destination in this table with a paying customer today: ~550
+    # active satellites, and MEV-1 and MEV-2 have already docked with and
+    # station-kept commercial GEO spacecraft.
+    #
+    # ⚠️  The plane change is the term intuition drops.  A launch from
+    # Canaveral parks at 28.5 deg and GEO is equatorial, so the apogee burn
+    # buys the inclination as well as the circularisation, and it is 1,836 m/s
+    # rather than the 1,478 a coplanar circularisation would cost.
+    {"segment": "LEO  →  GTO (perigee burn)",     "dv_m_per_s":  2_455, "duration_yr": 0.001,
+     "notes": "Perigee burn from a 200-km parking orbit onto a transfer "
+              "ellipse with apogee at 42,164 km: v_p(GTO) 10.239 - v_LEO "
+              "7.784 km/s.  Matches the ~2.44-2.46 km/s every GTO launch "
+              "quotes."},
+    {"segment": "GTO  →  GEO (circularise + plane change)", "dv_m_per_s": 1_836, "duration_yr": 0.01,
+     "notes": "One apogee burn doing two jobs: raise 1.597 km/s to the 3.075 "
+              "km/s circular speed AND remove 28.5 deg of inclination, "
+              "combined by the law of cosines rather than added.  Coplanar it "
+              "would be 1,478; the 358 m/s difference is what an equatorial "
+              "launch site is worth."},
+    {"segment": "LEO  →  GEO depot",              "dv_m_per_s":  4_291, "duration_yr": 0.01,
+     "notes": "GTO (2,455) + apogee (1,836).  This is the Δv a kilogram "
+              "delivered to a GEO servicing depot AVOIDS being lifted "
+              "through, and it sets the geo sale price in Module 2.  Flown as "
+              "TWO stages there, and staging is worth 5.3%: 2.945 kg in LEO "
+              "per kg at GEO against 3.101 single-stage."},
+    {"segment": "GEO  →  Earth (deorbit to entry)", "dv_m_per_s": 1_488, "duration_yr": 0.01,
+     "notes": "Lowering perigee from GEO into the atmosphere: 3.075 circular "
+              "down to the 1.587 km/s apogee speed of an entry ellipse.  "
+              "Twelve times the LEO deorbit burn, because the whole point of "
+              "GEO is that it is a long way up."},
+
     # ── Lunar surface  (v1.5.0) ──────────────────────────────────────────────
     {"segment": "TLI  →  low lunar orbit (LOI)", "dv_m_per_s":    900, "duration_yr": 0.01,
      "notes": "Apollo lunar-orbit insertion, 0.9 km/s (NASA SP-4029).  Larger "
@@ -2972,6 +3004,38 @@ DELTA_V_REFERENCE: List[dict] = [
               "Mars base is worth flying home."},
     {"segment": "Low Mars orbit  →  Earth (TEI)", "dv_m_per_s": 2_100, "duration_yr": 0.7,
      "notes": "Trans-Earth injection from LMO (NASA DRA 5.0)."},
+
+    # ── Mars orbit depot  (v1.13.0) ─────────────────────────────────────
+    # The 1-sol elliptical staging orbit, 250 x 33,793 km altitude, is where
+    # NASA DRA 5.0 parks a Mars vehicle.  Its period matches a sol (24.60 h
+    # against 24.62), and capture only has to BIND the orbit rather than
+    # circularise it.  That is the same argument NRHO wins on in cislunar
+    # space, and here it is worth 1.2 km/s against low Mars orbit.
+    #
+    # ⚠️  These three rows are the citation home for Module 2's
+    # _DELIVERY_LEGS["mars_orbit"] and Module 4's _MARS_1SOL constants.  The
+    # rule stated above _DELIVERY_LEGS is that every Δv it charges appears
+    # here; if you retune the depot orbit, retune it in this table first.
+    {"segment": "Mars arrival  →  1-sol orbit (MOI)", "dv_m_per_s": 900, "duration_yr": 0.01,
+     "notes": "Propulsive capture into the 250 x 33,793 km 1-sol orbit at a "
+              "Hohmann arrival v_infinity of 2.65 km/s (NASA DRA 5.0).  The "
+              "periapsis burn sqrt(v_esc^2 + v_inf^2) - v_ellipse at a radius "
+              "of 3,646 km is 0.90 km/s, against 2.10 km/s to circularise "
+              "into a 200-km orbit at the same arrival energy.  The saving is "
+              "the apoapsis that is never brought down."},
+    {"segment": "LEO  →  Mars 1-sol orbit depot", "dv_m_per_s": 4_500, "duration_yr": 0.7,
+     "notes": "TMI (3,600) + MOI (900).  This is the Δv a kilogram of asteroid "
+              "material delivered to a Mars-orbit depot AVOIDS being lifted "
+              "through, and it sets the mars_orbit sale price in Module 2.  "
+              "Nothing enters the atmosphere and nothing lands, so unlike "
+              "mars_surface there is no 30% entry-survival fraction stacked "
+              "on top of it."},
+    {"segment": "1-sol Mars orbit  →  Earth (TEI)", "dv_m_per_s": 900, "duration_yr": 0.7,
+     "notes": "Trans-Earth injection at periapsis, symmetric with MOI.  A "
+              "seventh of the 6,200 m/s a kilogram on the SURFACE has to pay "
+              "(4,100 ascent + 2,100 TEI from LMO), which is why material "
+              "mined for a Mars-orbit depot can still route home when "
+              "material landed on Mars cannot."},
 
     # ── Asteroid return legs by delivery destination  (v1.4.0) ───────────────
     # Reference magnitudes only; Module 4 computes these per-asteroid from the

@@ -21,10 +21,10 @@ history of how it got there.
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.1.1** | v1.1.1, `enrich_composition` by distinct taxonomy, 3.87× |
-| 2 | `modules/mineral_value.py` | **1.7.1** | v1.7.1, three PGM ore minerals reclassified out of a silent default |
-| 3 | `modules/transportation.py` | **1.12.1** | v1.12.1, `.astype(bool)` on the propellantless flag |
-| 4 | `modules/calc.py` | **1.17.8** | v1.17.8, the loader checks its upstream stamps |
-| - | `master.py` | **1.20.8** | a literal in `build_master.py`, in **two** places |
+| 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
+| 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments |
+| 4 | `modules/calc.py` | **1.19.1** | v1.19.1, `stamp_check` compared every catalog to Module 3 |
+| - | `master.py` | **1.22.1** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -39,7 +39,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Thirteen stamps so far have moved without moving a number:
+Twenty stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -56,15 +56,25 @@ Thirteen stamps so far have moved without moving a number:
 | calc `1.17.7` | **memory bound** | bit-identical, verified |
 | mineral_value `1.7.1` | **silent default closed** | bit-identical, verified |
 | calc `1.17.8` | **a new upstream check** | bit-identical, verified |
+| calc `1.18.0` | **a sixth destination** | bit-identical, verified |
+| mineral_value `1.8.0` | **a sixth destination** | bit-identical, verified |
+| transportation `1.13.0` | **three reference rows** | bit-identical, verified |
+| calc `1.19.0` | **a seventh destination** | bit-identical, verified |
+| mineral_value `1.9.0` | **a seventh destination** | bit-identical, verified |
+| transportation `1.14.0` | **four reference rows** | bit-identical, verified |
+| calc `1.19.1` | **a check that cried wolf** | bit-identical, verified |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
-modules and unrelated releases; every row above is calc except
-`mineral_value 1.7.1`.
+modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
+together. Every row above is calc except `mineral_value 1.7.1`,
+`mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0` and
+`transportation 1.14.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and five are not, and that split has now rotted in
-prose three times: `1.17.8` says "No number" in its own section and sat outside
-this table, in both files, until 2026-09. A count is a number; re-derive it.
+rows are performance stamps and twelve are not, and that split rotted in prose
+three times before `verify_docs.py` check 2 started holding both copies of this
+table to each other and both sentences to the tables. It is spelled out here
+*because* it is checked; a count nothing checks is a number waiting to rot.
 
 **Console text is not output.** The 2026-08-23 pass that rewrote all 243
 `print()` calls to pure ASCII bumped nothing, because no CSV byte changed. That
@@ -93,6 +103,9 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [calc v1.19.1](#calc-v1191) | 2026-09-02 | a version check had been comparing every catalog against Module 3 |
+| [calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0](#calc-v1190--mineral_value-v190--transportation-v1140) | 2026-09-02 | **a seventh destination: a geostationary servicing depot** |
+| [calc v1.18.0 / mineral_value v1.8.0 / transportation v1.13.0](#calc-v1180--mineral_value-v180--transportation-v1130) | 2026-09-02 | **a sixth destination: a Mars-orbit depot** |
 | [calc v1.17.8](#calc-v1178) | 2026-08-27 | the loader now checks the Stage 3 stamp, not just its columns |
 | [mineral_value v1.7.1](#mineral_value-v171) | 2026-08-21 | three PGM ore minerals were falling through a silent default |
 | [calc v1.17.7 / transportation v1.12.1](#calc-v1177--transportation-v1121) | 2026-08-21 | a cache grew without bound; `.astype(bool)` on a nullable flag |
@@ -119,6 +132,305 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## calc v1.19.1
+
+**No number moved.** Console output only: no CSV byte changes, and the four
+cislunar cells are bit-identical.
+
+**`stamp_check` had been crying wolf on every run since v1.17.8 shipped it two
+releases earlier, and the action it recommended was the destructive one.**
+
+The check compares the `pipeline_version` stamped in an upstream CSV against
+the module that wrote it, so a write that silently failed to land is caught on
+the next run. That is what it was for. What it actually did was compare **every
+frame in `catalogs`** against `TRANSPORT_CONFIG`, and that dict holds
+`asteroids` (written by Module 1) and `minerals` (Module 2) alongside the four
+Stage 3 tables. A Module 1 version can never equal a Module 3 version, so:
+
+```
+     WARN  Module 3 catalog was written by a DIFFERENT transportation build
+          * asteroids.csv stamped 1.1.0
+          * minerals.csv stamped 1.7.1
+        -> Re-run Stage 3 (transportation) before trusting any number below
+```
+
+Three things wrong, and the third is the one that matters:
+
+1. **The wrong comparand** for two of the six files.
+2. **The wrong remedy named.** Re-running Stage 3 cannot change what Module 1
+   stamped into the asteroid catalog.
+3. 🚨  **The remedy is the single most destructive action in this repo.**
+   CLAUDE.md carries a section titled "RUNNING STAGE 2 OR STAGE 3 DESTROYS
+   EVERY BASELINE YOU HOLD", written after somebody did exactly that on
+   2026-08-23 and could not get the prices back. So a check written to enforce
+   the version discipline was, on every single run, advising the reader toward
+   an irreversible refetch, for two files it was misreading.
+
+**A check that cries wolf toward a destructive remedy is worse than no check**,
+and this is the same family as the harness bugs in
+[what "no number" claims rest on](#what-no-number-claims-rest-on): a broken
+checker looks exactly like a broken release.
+
+### What it does now
+
+`_CATALOG_PROVENANCE` maps each catalog key to the stage that writes it and the
+config global carrying that module's version, and `load_all_catalogs`
+**asserts** the map names exactly the catalogs it builds. The assert is in the
+loader rather than in the check, because the loader is where the two can drift:
+that dict is the definition and the map is the description, and a catalog added
+without a map entry would otherwise be silently unchecked forever. A key with
+no entry is now reported rather than skipped.
+
+The wording changed as much as the logic. It names the right stage per file, and
+it reports rather than instructs:
+
+```
+     WARN  6 upstream CSV(s) were written by a different build of the module
+           that owns them:
+          * asteroids.csv stamped 1.1.0 - Stage 1 in this process is 1.1.1
+          * minerals.csv stamped 1.7.1 - Stage 2 in this process is 1.9.0
+          * propellants.csv stamped 1.12.1 - Stage 3 in this process is 1.14.0
+        -> This may be DELIBERATE. Several releases changed no CSV byte and
+           chose not to re-run their stage; read the release note first.
+        -> If you do re-run Stage 1, 2 or 3, it REFETCHES and overwrites the
+           only copy of its CSV, and every verify.py baseline stops
+           reproducing. Copy asteroid_pipeline/*.csv first.
+```
+
+⚠️  **It still fires on the current tree, and that is now correct.** catalog
+v1.1.1 and transportation v1.12.1 both changed no CSV byte and deliberately did
+not re-run their stage, and v1.13.0 / v1.14.0 added reference rows on the same
+call. **The check cannot tell a deliberate lag from a write that failed to
+land**, because both look like "the file predates the module", so it states the
+fact and says where the answer is instead of prescribing a fix it cannot
+justify. That limit is now in the docstring rather than discovered by the
+reader.
+
+The two documented limits are unchanged: it is a **diagnostic, not an import**,
+so a standalone `calc.py` run where the upstream configs do not exist skips
+each comparison silently rather than inventing one; and it still cannot see an
+edit that did not bump a version.
+
+**Verified**: `verify.py check --tag 1.17.7` passes, all four cislunar cells
+139/139 identical, hashes MATCH.
+
+## calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0
+
+**No number moved, and nothing has been measured yet.** A seventh
+`delivery_destination`, `geo`, and no value at any of the six that existed.
+**No `geo` cell has been run.**
+
+**It is the only destination in this model with a paying customer today.**
+Roughly 550 active geostationary satellites, and MEV-1 and MEV-2 have docked
+with and station-kept commercial GEO spacecraft for real money. Every other
+destination in the table is an architecture study.
+
+### Two plane changes, and they must not be reconciled
+
+GEO is the first destination that pays for **inclination**, and the model
+carries two different figures for what is nominally the same apogee burn:
+
+| the burn | plane change | Δv |
+|---|---|---|
+| coplanar, for reference | 0 deg | 1,477 m/s |
+| a kilogram **arriving** from an asteroid | 23.44 deg, ecliptic to equator | **1,730 m/s** |
+| a kilogram **launched** from Earth | 28.5 deg, a Canaveral parking orbit | **1,836 m/s** |
+
+Module 2 prices the launched kilogram, because launch cost avoided is what
+in-space material is worth; Module 4 prices the arriving one. **Making them
+agree would put a launch site's latitude into an interplanetary trajectory.**
+Both are combined by the law of cosines rather than added, which is the other
+thing intuition gets wrong here: a burn that changes speed and direction at
+once costs less than doing both separately.
+
+### Capture is a search, because neither route always wins
+
+`_cislunar_capture_dv_km_s` has one answer. `_geo_capture_dv_km_s` prices two
+and takes the cheaper:
+
+| v_inf | direct capture at GEO | Oberth at perigee, then circularise |
+|---|---|---|
+| 1 km/s | **2.046** | 2.545 |
+| 3 km/s | **2.749** | 2.901 |
+| 5 km/s | 3.997 | **3.582** |
+
+**The crossover is at v_inf = 3.585 km/s**, and the reason is the apogee burn.
+A cislunar depot is captured into by *binding* an ellipse, 450 m/s. GEO has to
+be *circularised* into, which is four times that and does not fall with
+arrival speed, so the Oberth benefit has less to work with. Cislunar remains
+the cheapest destination to reach from an asteroid: 0.96 km/s against GEO's
+2.05 at best.
+
+⚠️  **Aerocapture here is not an aerobrake trim.** At LEO drag does the whole
+job and the propulsive residue is 100 m/s; at GEO drag can only lower the
+apogee, and circularising there is still **1.737 km/s** of real burn, flat in
+v_infinity. Copying `DV_AEROBRAKE_TRIM_KM_S` across would understate a GEO
+arrival by 17x.
+
+### The market is the narrow one, and the argument is new
+
+`geo` is priced at **$12,526.34/kg**, between cislunar and mars_orbit. What
+separates it is the utility table, and it is **the first destination whose
+overrides run downward on the metals and the rock rather than on the
+volatiles**:
+
+| | at `geo` | at `cislunar` |
+|---|---|---|
+| water | 0.80, **$10,021/kg** | 1.00, $10,810/kg |
+| iron | 0.15, **$1,879/kg** | 0.70, $7,567/kg |
+| olivine | 0.05 | 0.25 |
+| carbon | 0.05 | 0.40 |
+
+✅  **That is a different ARGUMENT from the lunar and martian blocks, not a
+different number.** Those are about local **supply**: a settlement standing on
+a crust digs up its own water and iron, so imported material competes with
+local mining. Nothing is mined at GEO and nothing ever will be. These
+discounts are about local **demand**, which is the other half of what the
+table means. Utility is "how good a substitute 1 kg of this is for a
+**launched** kg here", and nobody launches a kilogram of copper to
+geostationary orbit: there is no factory 36,000 km up, no crew, and no
+construction site. So GEO is a volatiles destination and nothing else.
+
+Ni / Co / Cu are discounted here where the two surfaces deliberately leave
+them alone, and that is the same distinction: those overrides are about there
+being no local **ore**, this one is about there being no local **factory**.
+
+**Demand is 40,000 kg/yr**, the only row of that table anchored on hardware
+that exists: ~550 satellites at roughly 70 kg/yr of station-keeping
+propellant. That makes it the smallest in-space market in the model and the
+one most likely to saturate, **which is the point of having it**.
+`earth_surface` is the destination where saturation is numerically inert and
+100% of rows run to the fleet ceiling, and nothing anchored the other end.
+
+### Verification, and one thing not measured
+
+Across a 270-point grid of orbital elements, a 0.6-5.2 AU x e 0.0-0.95 x
+i 0-80 deg, **6,930 pre-existing leg values compare bit-for-bit against
+v1.17.8 with zero mismatches**, with `geo` and `mars_orbit` contributing four
+new keys and nothing else. The six existing destinations reprice to the cent.
+
+✅  **`verify.py check --tag 1.17.7` passes with both destinations in
+place**: all four cislunar cells **139/139 columns identical** and hashes
+MATCH (`4184f13cf57a6df7` / `66d88054984b014a` / `b88b5dac5d2fe43d` /
+`2a4f610ec97bf6f2`), mass ledger `0.000000000 kg` on all four, never-worse
+clean at the committed medians (+39.5% beneficiated, +42.5% searched), and
+Stage 2's 31 rows recompute identically at cislunar. That is the end-to-end
+form of the grid check above: adding a destination moved nothing.
+
+⚠️  **The per-row cost of the new legs is NOT established, and the honest
+answer is that the A/B did not resolve on this host.** `_transfer_legs_for_apsis`
+computes every destination's legs unconditionally, as it always has, so a
+cislunar run now derives a GEO capture it will never read. In isolation
+`_geo_capture_dv_km_s` measures a stable **1.29 us per call** and runs twice
+per row, which bounds the addition at roughly **3-4 us/row, ~5 s on a full
+1.55 M-row pass**, against a 733 s raw cell. But the end-to-end A/B swung
+between 1.22x and 2.35x across fifteen alternating passes, and **the unchanged
+build alone varied 2x between passes inside one process**, so no ratio from it
+is worth committing. THE SAMPLING RULE's cousin: a benchmark whose control
+moves 2x is not measuring the treatment.
+
+Making the legs conditional on the destination is the obvious fix if it turns
+out to matter, and it is deliberately **not** taken here: it changes control
+flow in the hottest function in the model, and belongs in its own measured
+release rather than inside one whose whole claim is that it moves no number.
+
+## calc v1.18.0 / mineral_value v1.8.0 / transportation v1.13.0
+
+**No number moved, and nothing has been measured yet.** This release adds a
+sixth `delivery_destination`, `mars_orbit`, and changes no value at any of the
+five that existed. **No `mars_orbit` cell has been run**; the figures below are
+derivations and table entries, not results, and the 20-cell campaign is
+untouched.
+
+**A depot in Mars orbit is the same heliocentric transfer as `mars_surface`,
+stopped one leg early**, which is why it costs three tables and two return legs
+rather than a new transfer model. `_asteroid_to_mars_dv_km_s` already computed
+the arrival at Mars; what is new is a capture into a **1-sol elliptical
+staging orbit** (250 x 33,793 km, NASA DRA 5.0) instead of a circularisation
+into a 200-km one, and no descent after it.
+
+The orbit is chosen on the argument NRHO is chosen on in cislunar space:
+capture only has to **bind** the ellipse, and the burn happens deep at
+periapsis where Oberth pays. Its period is 24.60 h against a sol's 24.62.
+
+| at a Hohmann arrival, v_inf 2.65 km/s | Δv |
+|---|---|
+| capture into the 1-sol orbit | **0.90 km/s** |
+| circularise into a 200-km orbit | 2.10 km/s |
+
+That 2.10 reproduces Module 3's independently-sourced "Low Mars orbit → Earth
+(TEI)" figure of 2,100 m/s from the geometry, which is the cross-check that the
+0.90 is right too.
+
+**What separates the two Mars destinations is four things, and only the first
+is Δv:**
+
+| | `mars_orbit` | `mars_surface` |
+|---|---|---|
+| launch cost avoided | **$13,496/kg** | $45,105/kg |
+| kg in LEO per kg delivered | **3.17** | 10.61 |
+| entry-survival fraction | none, nothing enters | 0.30 (MSL / Perseverance) |
+| return vehicle | berthing adapter, $60k/kg | lander, $200k/kg |
+| downleg to Earth | 900 m/s, **$30,150/kg** | 6,200 m/s, $96,394/kg |
+| utility profile | **the base one** | the ISRU-discounted one |
+
+✅  **The last row is the point of the destination.** The `mars_surface`
+overrides exist because a settlement standing on a crust digs up its own water,
+iron and rock, so asteroid material competes with local mining. A depot in a
+1-sol orbit competes with nothing of the kind: everything martian is 3,400 km
+down a well that costs 4,100 m/s of ascent to climb, which is **more than the
+3,600 m/s of TMI that brought the cargo from Earth**. So the alternative to
+importing a kilogram there is launching that kilogram from Earth, which is the
+exact condition `IN_SPACE_UTILITY`'s base profile is calibrated on, and
+`IN_SPACE_UTILITY_BY_DESTINATION["mars_orbit"]` is deliberately `{}`.
+
+⚠️  **The empty dict will read as an oversight next to the block below it, and
+copying `mars_surface`'s overrides up into it would destroy the destination's
+meaning.** The ISRU discount that carries the `mars_surface` result is not a
+property of Mars; it is a property of being **on** Mars, and this destination
+is the control that says so.
+
+The downleg row is the second consequence. A commodity with no in-space market
+is valued by flying it home, and from the surface that route costs more per
+kilogram than any price in the catalog, so the PGMs are worth **zero** at a
+Mars base. From orbit the same kilogram routes home for $30,150 and they are
+worth something again.
+
+**Verified bit-identical where it has to be.** `_asteroid_to_mars_dv_km_s`
+gained two keys and no arithmetic was re-associated; across a 270-point grid of
+orbital elements spanning a 0.6-5.2 AU, e 0.0-0.95, i 0-80 deg, **6,930
+pre-existing leg values compare bit-for-bit against v1.17.8 with zero
+mismatches**, and the only difference is the two added keys. Stage 2's five
+existing destinations reprice to the cent.
+
+✅  **`verify.py check --tag 1.17.7` passes**, all four cislunar cells 139/139
+identical with hashes MATCH; the full result is recorded under
+[the `geo` release](#calc-v1190--mineral_value-v190--transportation-v1140),
+which was verified with both destinations in place.
+
+⚠️  **Two re-runs are owed before this destination can be measured, and both
+destroy baselines.** Stage 3 must be re-run for the three new Δv rows to reach
+`delta_v_segments.csv`; Stage 2 must be re-run at `--destination mars_orbit` to
+price a catalog for it. Both re-fetch. Copy `asteroid_pipeline/*.csv` first; see
+CLAUDE.md, "Running Stage 2 or Stage 3 destroys every baseline you hold".
+
+⚠️  **Neither is urgent, because nothing downstream reads the Δv table.**
+Module 4 derives every Δv it uses from orbital elements; `DELTA_V_REFERENCE` is
+the citation home and the cross-check, which is why the three new rows are
+there. `mars_orbit` is fully usable against the Stage 3 CSVs as they stand.
+
+❗  **Found while checking that claim: `stamp_check` has been crying wolf since
+calc v1.17.8 shipped, and the action it recommends is the destructive one.** It
+compares `TRANSPORT_CONFIG.pipeline_version` against **every** frame in
+`catalogs`, including `asteroids` (1.1.0) and `minerals` (1.7.1), neither of
+which can ever equal a transportation version, and then prints "Re-run Stage 3
+(transportation)". A check written to enforce the version discipline therefore
+recommends, on every run, the one action CLAUDE.md documents as destroying every
+baseline you hold. It fired before this release and is not caused by it. Not
+fixed here: a version-stamp check is not a delivery destination, and mixing them
+would put a behaviour change inside a release whose whole claim is that it moves
+no number.
 
 ## calc v1.17.8
 
@@ -1889,6 +2201,52 @@ class.
 No exported value changes; all 31 rows of the on-disk catalog recompute
 identically. The stamp moves so a catalog still names the code that built it.
 
+**`1.8.0`  a sixth delivery destination: `mars_orbit`.** Full write-up:
+[calc v1.18.0 / mineral_value v1.8.0 / transportation v1.13.0](#calc-v1180--mineral_value-v180--transportation-v1130).
+A 1-sol elliptical Mars depot (250 x 33,793 km, NASA DRA 5.0), priced at
+**$13,495.71/kg** on a 3.17 kg-in-LEO-per-kg stack.
+
+Five table entries, no new config field and no new column:
+
+| table | entry |
+|---|---|
+| `_DELIVERY_LEGS` | `[("burn", 3_600, tug), ("burn", 900, tug)]`, TMI + MOI, and no `edl` leg |
+| `_DESTINATION_NOTES` | the derivation, and why binding beats circularising |
+| `_DOWNLEG_DEPARTURE_DV_M_S` | **900 m/s**, against the surface's 6,200 |
+| `IN_SPACE_ANNUAL_DEMAND_KG` | **60,000 kg/yr** |
+| `IN_SPACE_UTILITY_BY_DESTINATION` | **`{}`**, the base profile, deliberately |
+
+`delivery_destination` gains a sixth accepted value, so `DELIVERY_DESTINATIONS`
+grows a key and both `--destination` and the dashboard picker offer it; each
+derives its option list from that dict, so neither needed editing.
+
+The demand figure is the one row of that table that does not fall off with
+distance: 60 t/yr is larger than the 20 t/yr surface base it serves, because a
+depot is transport infrastructure rather than a settlement, and what it holds is
+the propellant for descent, ascent and the trans-Earth stage. That is ~128 t per
+2.14-year synodic period, roughly one DRA 5.0 crewed mission's in-space
+propellant, and still under cislunar's 100 t/yr.
+
+The five existing destinations reprice to the cent, and no exported value moves.
+
+**`1.9.0`  a seventh delivery destination: `geo`.** Full write-up:
+[calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0](#calc-v1190--mineral_value-v190--transportation-v1140).
+A geostationary servicing depot at **$12,526.34/kg**, on a two-stage chain
+(LEO to GTO, then an apogee burn that circularises and removes 28.5 deg at
+once) worth 5.3% over flying it single-stage.
+
+`IN_SPACE_UTILITY_BY_DESTINATION` gains its **first override block that runs
+downward on the metals**: iron / nickel / cobalt / copper / nickel-iron /
+awaruite to 0.15, the silicates to 0.05, carbon and organics to 0.05, and water
+held at 0.80. Ni / Co / Cu are discounted here where the two surfaces leave
+them undiscounted, and the reason is in the release note: those blocks are
+about no local ORE, this one is about no local FACTORY.
+`IN_SPACE_ANNUAL_DEMAND_KG` gains **40,000 kg/yr**, the smallest in-space
+market in the table and the only one anchored on hardware that exists.
+`_DOWNLEG_DEPARTURE_DV_M_S` gains **1,490 m/s**, twelve times the LEO figure.
+
+The six existing destinations reprice to the cent, and no exported value moves.
+
 ## Stage 3 changelog: `modules/transportation.py`
 
 **`1.2.0`  initial release.**
@@ -2105,6 +2463,42 @@ for this, and should not be**: a Stage 3 run re-fetches live yfinance prices,
 which moves `cost_usd_per_kg` and with it every Stage 4 baseline. The on-disk
 `propellants.csv` keeps `1.12.0` until Stage 3 is next run for its own reasons.
 Same call, and the same reason, as catalog v1.1.1.
+
+**`1.13.0`  three Δv segments for a Mars-orbit depot.** Full write-up:
+[calc v1.18.0 / mineral_value v1.8.0 / transportation v1.13.0](#calc-v1180--mineral_value-v180--transportation-v1130).
+`DELTA_V_REFERENCE` gains "Mars arrival → 1-sol orbit (MOI)" at **900 m/s**,
+"LEO → Mars 1-sol orbit depot" at **4,500**, and "1-sol Mars orbit → Earth
+(TEI)" at **900**. No column, no field, and no existing row changes.
+
+These exist because Module 2's `_DELIVERY_LEGS` states the invariant that every
+Δv it charges appears in this table. Module 4 reads none of them; it derives its
+Δv from orbital elements, and this table is the citation home and the
+cross-check. The cross-check earns its keep: computing capture into a 200-km
+orbit from the same geometry gives **2.10 km/s**, reproducing the
+independently-sourced "Low Mars orbit → Earth (TEI)" row of 2,100 m/s that has
+been in this table since v1.5.0.
+
+⚠️  The three rows do not reach `delta_v_segments.csv` until Stage 3 is next
+run, and Stage 3 should **not** be run for this: it re-fetches live yfinance
+prices and moves every Stage 4 baseline. Nothing downstream reads the table, so
+nothing is waiting on it. Same call, and the same reason, as v1.12.1 above.
+
+**`1.14.0`  four Δv segments for a geostationary depot.** Full write-up:
+[calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0](#calc-v1190--mineral_value-v190--transportation-v1140).
+`DELTA_V_REFERENCE` gains "LEO → GTO (perigee burn)" at **2,455 m/s**,
+"GTO → GEO (circularise + plane change)" at **1,836**, "LEO → GEO depot" at
+**4,291**, and "GEO → Earth (deorbit to entry)" at **1,488**. No column, no
+field, and no existing row changes.
+
+The 1,836 is the row to read the notes on. It is one burn doing two jobs, and
+the plane change is bought by the law of cosines rather than added: coplanar it
+would be 1,478, so **358 m/s of the GEO price is the latitude of the launch
+site**. Module 4 carries a different figure, 1,730, for the same burn on an
+arriving asteroid, which comes in near the ecliptic at 23.44 deg rather than
+off a 28.5 deg parking orbit. They are not meant to agree.
+
+⚠️  Does not reach `delta_v_segments.csv` until Stage 3 is next run, and Stage 3
+should not be run for it. Same call, and the same reason, as v1.13.0 above.
 
 ## Stage 4 changelog: `modules/calc.py`
 
@@ -2711,6 +3105,73 @@ inventing a complaint it cannot support.
 
 No config or column change; the stamp moves so a catalog still names the code
 that built it.
+
+**`1.18.0`  the `mars_orbit` delivery architecture.** Full write-up:
+[calc v1.18.0 / mineral_value v1.8.0 / transportation v1.13.0](#calc-v1180--mineral_value-v180--transportation-v1130).
+`delivery_destination` accepts a sixth value. No new config field and no new
+output column; every column a `mars_orbit` run writes already exists.
+
+- `DELIVERY_ARCHITECTURES` gains `mars_orbit`: `aero_allowed` **True**
+  (aerocapture into the ellipse, which Odyssey and MRO flew for real at Mars),
+  and **no `needs_lander`**, so the return vehicle is billed as a $60k/kg
+  berthing adapter rather than the $200k/kg lander `mars_surface` pays for.
+- `_asteroid_to_mars_dv_km_s` gains two keys, `ret_mars_orbit_prop`
+  (departure + a 1-sol capture) and `ret_mars_orbit_aero` (departure + the
+  aerobrake trim). Nothing existing is re-associated.
+- Four module constants describe the depot orbit: `R_MARS_1SOL_PERIAPSIS_KM`,
+  `R_MARS_1SOL_APOAPSIS_KM`, and the two velocities precomputed from them.
+  They are constants of the DEPOT, not of the arriving candidate, so they are
+  resolved once at module scope; that function runs twice per catalog row, and
+  per-call re-derivation of a per-destination constant is defect class 3.
+
+The aero leg is charged at `DV_AEROBRAKE_TRIM_KM_S` (100 m/s), which is
+**conservative** at Mars: the real periapsis raise out of the atmosphere, taken
+at a 37,189 km apoapsis, is ~12 m/s. An existing sourced constant was preferred
+to a new invented one for a term this far inside the departure burn.
+
+**Bit-identity, measured rather than argued.** Across a 270-point grid of
+orbital elements, a 0.6-5.2 AU x e 0.0-0.95 x i 0-80 deg, **6,930 pre-existing
+leg values compare bit-for-bit against v1.17.8, zero mismatches**, with the two
+new keys the only difference. No `mars_orbit` cell has been run.
+
+**`1.19.0`  the `geo` delivery architecture.** Full write-up:
+[calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0](#calc-v1190--mineral_value-v190--transportation-v1140).
+`delivery_destination` accepts a seventh value. No new config field and no new
+output column.
+
+- `DELIVERY_ARCHITECTURES` gains `geo`: a depot, so a berthing adapter and no
+  lander, and `aero_allowed` **True**, which is what separates it from
+  `cislunar` directly below it in that table.
+- `_geo_capture_dv_km_s` is new and is a **search, not a formula**: it prices a
+  direct capture at the GEO radius against an Oberth capture at perigee plus a
+  circularisation, and takes the cheaper. Neither always wins; the crossover is
+  v_inf = 3.585 km/s.
+- `_circularise_at_geo_km_s` combines the speed change and the plane change by
+  the law of cosines. Adding them would overstate every GEO arrival.
+- `_transfer_legs_for_apsis` gains `ret_geo_prop` and `ret_geo_aero`. The aero
+  leg is **flat in v_infinity** at `DV_GEO_AEROCAPTURE_ARRIVAL_KM_S` = 1.737
+  km/s, because drag removes whatever arrival energy there was and what is left
+  is a circularisation.
+- Nine module constants describe the orbit and the transfer ellipse, all
+  resolved at import: they are constants of the ORBIT, and this function runs
+  twice per catalog row on every destination.
+
+Bit-identity re-verified on the same 270-point grid: **6,930 pre-existing leg
+values, zero mismatches**. No `geo` cell has been run.
+
+**`1.19.1`  `stamp_check` compared every catalog against Module 3.** Full
+write-up: [calc v1.19.1](#calc-v1191). Console output only; no column, no
+field, no CSV byte.
+
+- `_CATALOG_PROVENANCE` is new: catalog key to (stage, config global name).
+  The config is resolved through `globals()` rather than referenced, because a
+  standalone `calc.py` has none of the upstream configs.
+- `load_all_catalogs` gained an **assert** that the map names exactly the
+  catalogs it builds. It lives in the loader, not the check, because the loader
+  is where the definition and the description can drift apart.
+- `stamp_check` compares each file against the module that wrote it, names the
+  right stage in the message, reports a key with no provenance entry instead of
+  skipping it, and no longer instructs the reader to re-run a stage.
 
 # Measurement history
 
