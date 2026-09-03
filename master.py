@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.22.1)
+"""Master Asteroid Profitability Pipeline (1.22.2)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -15,7 +15,7 @@ run top-to-bottom - the orchestrator at the bottom executes everything.
     Stage 3  ->  Transportation Data     (modules/transportation.py 1.14.0)
                 Launch vehicles + propellants + dv segments + ops costs
                 (UNCREWED autonomous mining - no crew costs)
-    Stage 4  ->  Profitability Calc      (modules/calc.py 1.19.1)
+    Stage 4  ->  Profitability Calc      (modules/calc.py 1.19.2)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2x, V-type 0.2x)
                 + delivery architecture: earth_surface / leo / geo /
@@ -10870,7 +10870,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.19.1"
+    pipeline_version: str = "1.19.2"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -12915,6 +12915,8 @@ def _asteroid_to_mars_dv_km_s(
 #
 #   uses_tps        heat shield hauled outbound and pushed back through the
 #                   return burn (direct entry, or aerobraked capture)
+#   window_phasing_au  the heliocentric orbit a DEPARTURE WINDOW is phased
+#                   against; see `window_phasing_au()` below
 #   returns_to_earth  the cargo enters the atmosphere.  Drives the re-entry
 #                   capsule, the Earth recovery campaign, and the full
 #                   launch+re-entry Part 450 licence.
@@ -12929,6 +12931,7 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "aero_leg":  "ret_earth_surface_aero",
         "prop_leg":  "ret_earth_surface_prop",
         "aero_allowed": True,
+        "window_phasing_au": 1.0,
         "label": "re-entry capsule to Earth's surface",
     },
     "leo": {
@@ -12936,6 +12939,7 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "aero_leg":  "ret_leo_aero",
         "prop_leg":  "ret_leo_prop",
         "aero_allowed": True,     # aerocapture + multi-pass aerobraking
+        "window_phasing_au": 1.0,
         "label": "berthed at an LEO depot",
     },
     # v1.19.0.  A depot, so a berthing adapter and no lander, and the cargo
@@ -12947,6 +12951,7 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "aero_leg":  "ret_geo_aero",
         "prop_leg":  "ret_geo_prop",
         "aero_allowed": True,     # aerocapture into a GEO-apogee ellipse
+        "window_phasing_au": 1.0,
         "label": "berthed at a geostationary servicing depot",
     },
     "cislunar": {
@@ -12954,6 +12959,7 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "aero_leg":  None,        # never passes through the atmosphere
         "prop_leg":  "ret_cislunar_prop",
         "aero_allowed": False,
+        "window_phasing_au": 1.0,
         "label": "berthed at a cislunar (NRHO) depot",
     },
     "lunar_surface": {
@@ -12962,6 +12968,7 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "prop_leg":  "ret_lunar_surface_prop",
         "aero_allowed": False,
         "needs_lander": True,
+        "window_phasing_au": 1.0,
         "label": "landed at a lunar surface base",
     },
     # v1.18.0.  No `needs_lander`, so this carries a $60k/kg berthing adapter
@@ -12974,6 +12981,9 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "aero_leg":  "ret_mars_orbit_aero",
         "prop_leg":  "ret_mars_orbit_prop",
         "aero_allowed": True,     # aerocapture into the ellipse; Odyssey / MRO
+        # v1.19.2: MARS, not Earth.  A depot in Mars orbit is reached by
+        # the same heliocentric transfer as the surface below it.
+        "window_phasing_au": A_MARS_AU,
         "label": "berthed at a 1-sol Mars-orbit depot",
     },
     "mars_surface": {
@@ -12982,9 +12992,22 @@ DELIVERY_ARCHITECTURES: Dict[str, dict] = {
         "prop_leg":  "ret_mars_surface_prop",
         "aero_allowed": True,     # Mars aerocapture is worth several km/s
         "needs_lander": True,
+        "window_phasing_au": A_MARS_AU,
         "label": "landed at a Mars surface base",
     },
 }
+
+
+# Asserted rather than defaulted, and asserted at IMPORT.  A `.get(..., 1.0)`
+# here would be a silent default of the WRONG value for any destination off
+# Earth's orbit, which is the exact defect v1.19.2 fixed: `mars_orbit` shipped
+# in v1.18.0 phasing its launch windows against Earth because the test that
+# picked Mars named `mars_surface` and nothing else.  A destination that forgets
+# to declare this now fails loudly on the way in, next to the table it forgot.
+assert all("window_phasing_au" in a for a in DELIVERY_ARCHITECTURES.values()), (
+    "DELIVERY_ARCHITECTURES entries missing window_phasing_au: %s"
+    % sorted(k for k, a in DELIVERY_ARCHITECTURES.items()
+             if "window_phasing_au" not in a))
 
 
 _ARCH_BY_RAW_KEY: Dict[Any, dict] = {}
@@ -13023,6 +13046,39 @@ def delivery_architecture(destination: str) -> dict:
     except TypeError:
         pass
     return arch
+
+
+def window_phasing_au(destination: str) -> float:
+    """Heliocentric semi-major axis a departure window to `destination` is
+    phased against, in AU.
+
+    Launch windows recur at the SYNODIC period between the asteroid and the
+    body the cargo is delivered to, so the figure that belongs here is the
+    DESTINATION's orbit around the Sun, not Earth's.  Everything in Earth's
+    system, LEO, GEO, a cislunar depot, the lunar surface and Earth itself,
+    rides Earth's orbit and phases against 1 AU; a Mars delivery waits on
+    Earth-Mars alignment whichever end of the well it stops at.
+
+    🚨  v1.19.2.  This existed as a conditional testing `== "mars_surface"`,
+    written in two places, and `mars_orbit` therefore phased against EARTH from
+    the moment v1.18.0 shipped it: the same heliocentric transfer, the same
+    arrival at Mars' orbit, and a launch cadence taken from the wrong planet.
+    Measured on a 38,892-row stride sample of the catalog's 1,555,667
+    semi-major axes, that is the wrong answer on 99.97% of rows, and it is too
+    SHORT on 99.46% of them: the median synodic period goes 1.2976 yr against
+    Earth to 3.3033 yr against Mars.
+    The `mars_surface` cadence CLAUDE.md records, 3.798 yr raw against ~1.37
+    everywhere else, is the same term doing the same thing one leg further
+    down, which is what makes the old value visibly wrong rather than merely
+    different.
+
+    Reading it off `DELIVERY_ARCHITECTURES` rather than re-testing a name is
+    the point: the architecture table is where a destination already declares
+    its physical mission, so the next one to be added is asked this question
+    where its author is already working, instead of in two conditionals
+    thousands of lines away that name a destination it is not.
+    """
+    return delivery_architecture(destination)["window_phasing_au"]
 
 
 def uses_tps(config: CalcConfig) -> bool:
@@ -15566,9 +15622,7 @@ def asteroid_context(
     # The launch-window wait depends only on the target and the destination, but
     # it is part of the stay, and the stay is how long cryogenic return
     # propellant sits in the tank boiling off.
-    a_dest_au = (A_MARS_AU
-                 if str(config.delivery_destination).strip().lower() == "mars_surface"
-                 else 1.0)
+    a_dest_au = window_phasing_au(config.delivery_destination)
     synodic_yr = synodic_period_yr(asteroid_row.get("semi_major_axis_au"), a_dest_au)
 
     # The dark period belongs to the BODY.  `dark_clamped` is carried so that a
@@ -17231,9 +17285,7 @@ def _prefilter_probe(
     """
     window_wait_yr = 0.0
     if config.model_launch_windows:
-        a_dest_au = (A_MARS_AU
-                     if str(config.delivery_destination).strip().lower() == "mars_surface"
-                     else 1.0)
+        a_dest_au = window_phasing_au(config.delivery_destination)
         window_wait_yr = 0.5 * synodic_period_yr(
             asteroid_row.get("semi_major_axis_au"), a_dest_au)
 
@@ -18112,7 +18164,12 @@ class MasterConfig:
 
     @property
     def delivery_destination(self) -> str:
-        """Where the mined material is sold - 'earth_surface', 'leo', 'cislunar'."""
+        """Where the mined material is sold.
+
+        Valid values are the keys of `DELIVERY_DESTINATIONS`, which is the
+        live list and is deliberately not restated here: this docstring was
+        still naming three of the seven when it was found.
+        """
         return self.mineral.delivery_destination
 
     @delivery_destination.setter
@@ -18207,7 +18264,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.22.1")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.22.2")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
