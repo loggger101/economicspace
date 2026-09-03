@@ -29,6 +29,11 @@
     "np_sqrt": "42c19ab9eb5385fd",
     "np_sum": "d81a0885c7a1699c"
   },
+  "pandas": {
+    "bool_with_gap": "object",
+    "empty_is_nan": true,
+    "str_dtype": "str"
+  },
   "spawn": {
     "hash": "54cd5625b78510d7",
     "ok": true

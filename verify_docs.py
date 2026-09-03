@@ -132,7 +132,19 @@ CAMPAIGN_DOCS = ["campaign/FINDINGS.md", "campaign/README.md",
                  # reader is sent to, it quotes measured figures (the GPU
                  # result, the memory peaks, the CRLF hashes), and a file
                  # nothing checks is a file that is clean until it is not.
-                 "SPARK_SETUP.md"]
+                 "SPARK_SETUP.md",
+                 # The citation authority.  It carries two attribution
+                 # obligations that are conditions of use rather than
+                 # courtesies, so it is prose that must not rot quietly.
+                 "CITATIONS.md",
+                 # The starred-repo audit.  Same argument again: it quotes
+                 # measured figures (the plane-change split, the Lambert gap,
+                 # the taxonomy disagreement, the orbit-quality enrichment)
+                 # and README and versions.md both link into it.
+                 "research/starred-repos/README.md",
+                 "research/starred-repos/FINDINGS.md",
+                 "research/starred-repos/SOURCES.md",
+                 "research/starred-repos/SPACE-MAP.md"]
 
 # The campaign scripts.  Prose a reader sees, checked whole like the root
 # scripts rather than comments-only like modules/: they hold no reference table,

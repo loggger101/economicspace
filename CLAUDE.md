@@ -1,13 +1,21 @@
 # Notes for working in this repo
 
-Context for anyone (human or agent) editing this pipeline. Three files, and
-the split between them is deliberate:
+Context for anyone (human or agent) editing this pipeline. The split between
+these files is deliberate, and the table is the list; **do not restate its
+length in prose**, which is the failure this file catalogues three times over
+and which caught this very paragraph on 2026-09-03:
 
 | file | holds | is the authority for |
 |---|---|---|
 | [`README.md`](README.md) | what the pipeline is, how to run it, what the model does, and the **current** numbers | the current answer |
 | [`versions.md`](versions.md) | what changed in which release, what every number used to be, and the per-module changelogs | the measurement history |
+| [`CITATIONS.md`](CITATIONS.md) | where every source, dataset and borrowed line came from, and what each obliges | references and attribution |
 | **this file** | what will bite you: the traps, the invariants, and the reasoning behind decisions that look wrong | how to edit it safely |
+
+⚠️  **`CITATIONS.md` holds references, never values.** A number's source is
+cited on the row that carries it, in `modules/*.py`; that row stays the
+authority for the number. Two of the sources ask to be cited as a condition of
+use, so it is not decorative.
 
 **It is meant to be grepped rather than read.** Six parts, in this order:
 
@@ -113,8 +121,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.1.1`, mineral_value `1.9.0`, transportation `1.14.0`,
-calc `1.19.2`, master `1.22.2` (the master version is a literal in
+Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.14.0`,
+calc `1.19.2`, master `1.23.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **TWENTY stamps so far do NOT mean the numbers moved.** The rule
@@ -980,19 +988,25 @@ because this file's job is the reasoning and README's is the answer, and the
 reasoning reads badly with the answer removed; but **move both, or neither**.
 `grep -rn "<the old number>" --include='*.md' .` finds them, which is why the
 rule two paragraphs up is a grep and not a diff. ⚠️  **Use that form rather
-than `*.md`**, which expands to the three root documents only and so misses
+than `*.md`**, which expands to the root documents only and so misses
 `campaign/`, whose `FINDINGS.md` carries the campaign's wall clock and catalog
-size despite saying its findings were promoted out of it.
+size despite saying its findings were promoted out of it, and `research/`,
+whose `starred-repos/` audit carries measured Delta-v and taxonomy figures.
 
-🚨  **THERE ARE THREE FILES TO GREP NOW, NOT TWO.** The release history moved
-out of the README into `versions.md` on 2026-08-24, so a measurement can go
-stale in any of: this file (the working notes), `README.md` (the current
-answer) and `versions.md` (what the numbers used to be). The split is what
+🚨  **A MEASUREMENT CAN NOW GO STALE IN MORE PLACES THAN THE ROOT
+DOCUMENTS.** The release history moved out of the README into `versions.md` on
+2026-08-24, so a measurement can go stale in this file (the working notes),
+`README.md` (the current answer) or `versions.md` (what the numbers used to
+be), and since 2026-09-03 in `research/starred-repos/` as well. The split is what
 makes that tractable; `versions.md` is *allowed* to hold superseded figures,
 and every table in it names the release and catalog it belongs to, but it
 means `grep -rn "<the old number>" --include='*.md' .` is the check, not a
-two-file diff. ⚠️  Five files answer to that glob, not three: `campaign/`
-holds two more.
+two-file diff. ⚠️  **Run the find, do not trust a count here**; this sentence
+has said "five files" and "three" and both went stale:
+
+```bash
+find . -name '*.md' -not -path './.git/*'
+```
 
 ✅  **Audit a split at FACT level rather than by eye, and do it with
 `verify_docs.py --before`.** Pull every distinctive numeric token out of the
@@ -2408,35 +2422,55 @@ mid-checkout, so they can't run, repair by hand afterwards.
 
 ## Environment
 
-Windows, **Python 3.13** (3.13.9), invoked as `py` (a bare `python` hits the
-Microsoft Store alias and fails). The working tree is on Google Drive with the
-git directory outside it; see the README's "Working copy" section, especially
-if the folder gets renamed again.
+Windows, invoked as `py` (a bare `python` hits the Microsoft Store alias and
+fails). The working tree is on Google Drive with the git directory outside it;
+see the README's "Working copy" section, especially if the folder gets renamed
+again.
 
-🚨  **THIS SECTION SAID "PYTHON 3.14 (3.14.6)" FROM 2026-09-02 TO
-2026-09-03, AND 3.14 HAS NEVER BEEN INSTALLED ON THIS MACHINE.** It is corrected
-rather than quietly rewritten because of what the wrong version was made to
-argue: a 🚨 block beneath it announced that "THE INTERPRETER MOVED, AND EVERY
-PERFORMANCE FIGURE IN THIS FILE PREDATES IT", and told the reader not to
-re-open the `builtins.max` item on the strength of a 3.13 number without
-re-measuring on 3.14 first. **All of that was false, and it is retracted**;
-the cost record is on the interpreter that is installed, and nothing in
-"Measured and declined" needs re-measuring on account of an interpreter. Check
-it rather than believing either version of this paragraph:
+🚨  **THE INTERPRETER VERSION IS NOT STATED HERE ANY MORE, AND THAT IS THE
+FIX.** This paragraph has now been wrong in BOTH directions inside three days.
+It said 3.14 while 3.13 was installed, was corrected on 2026-09-03 with a 🚨
+block insisting "3.14 HAS NEVER BEEN INSTALLED ON THIS MACHINE" and quoting
+`py -0` as proof, and by **2026-09-03** that correction was itself false: `py`
+resolves to **3.14.6**, and 3.13 is no longer installed at all. Two corrections
+in three days is the argument for deleting the number rather than fixing it a
+third time. **Ask the machine:**
 
-```
-py -0        ->  -V:3.13 *   Python 3.13 (64-bit)
-                 -V:Astral/CPython3.11.16
-py -3.14 -c "import sys"  ->  No suitable Python runtime found
+```bash
+py -VV && py -0
+py platform_check.py     # prints the running versions beside the reference host's
 ```
 
-⚠️  The lesson is the one this file makes about counts, one level up: a
-**version spelled out in prose** is a number waiting to rot, and this one rotted
-into an alarm that would have cost somebody a day of re-measurement. It is the
-one fact here that the machine can answer in a second. `requirements-lock.txt`
-and the `Dockerfile` both pin 3.13.9, and `platform_check.py` prints the running
-version beside the reference host's on every run, so there are now three copies
-that derive it and one, this sentence, that types it.
+⚠️  **The libraries moved with it, and further.** The reference host recorded in
+`platform_reference.json` is Python 3.13.9 / numpy 2.2.6 / pandas 2.3.3;
+`requirements-lock.txt` and the `Dockerfile` still pin those. What is installed
+is 3.14.6 / numpy 2.5.2 / **pandas 3.0.5**, a MAJOR pandas version whose
+headline change is that object columns now infer as Arrow-backed `str`.
+
+✅  **Every numeric probe still matches**, which is the thing that actually
+mattered: libm, the numpy kernels, the CRLF pin and the float round trip are
+all identical, so `platform_check.py` reports cell hashes on this host as
+directly comparable with the ones in `versions.md`. The 3.13-era performance
+figures in "Measured and declined" stand; nothing there needs re-measuring on
+account of an interpreter.
+
+⚠️  **But `platform_check.py` could not see the pandas half until 2026-09-03**,
+because its probes were libm, numpy and the CSV FLOAT path, and every dtype
+trap this file catalogues lives on the OBJECT path: `.astype(bool)` reading
+`NaN` as `True`, the empty string that is not `NaN` "except that in a CSV it
+is", and `_truthy(series, default=...)` existing at all. `probe_pandas_dtypes`
+now covers those three, and the reference records `str_dtype` as **`str`**,
+i.e. recorded on the CURRENT host rather than the 3.13.9 one; on pandas 2.3.3
+it would read `object`. **That one key therefore asserts this host, not the
+documented reference host**, which is a decision worth revisiting the moment
+anybody either re-pins the lockfile to 3.14.6 or restores 3.13.9.
+
+⚠️  The general lesson is the one this file makes about counts, one level up: a
+**version spelled out in prose** is a number waiting to rot. It rotted into a
+false alarm, then into a false all-clear. It is the one fact here the machine
+answers in a second, and three files (`requirements-lock.txt`, the `Dockerfile`,
+`platform_reference.json`) already derive or pin it. This sentence no longer
+types it.
 
 ### Another host: Linux, and what does not travel
 
