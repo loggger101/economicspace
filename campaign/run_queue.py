@@ -6,9 +6,9 @@ runs the rest in order via run_cell.py.  Safe to kill and restart: at most the
 in-flight cell is lost, because run_cell.py appends its ledger row the moment a
 cell finishes.
 
-    py campaign/run_queue.py            # run everything outstanding
-    py campaign/run_queue.py --list     # show the queue and stop
-    py campaign/run_queue.py --only cislunar lunar_surface
+    python campaign/run_queue.py            # run everything outstanding
+    python campaign/run_queue.py --list     # show the queue and stop
+    python campaign/run_queue.py --only cislunar lunar_surface
 """
 import csv
 import os
@@ -72,7 +72,8 @@ def main():
     for i, (d, o, s) in enumerate(todo, 1):
         print(f"\n{'=' * 78}\n[{i}/{len(todo)}] {d} | {o} | search-{s}"
               f" | elapsed {(time.time()-t_start)/3600:.2f} h\n{'=' * 78}", flush=True)
-        rc = subprocess.call(["py", os.path.join(CAMP, "run_cell.py"), d, o, s], cwd=ROOT)
+        rc = subprocess.call([sys.executable, os.path.join(CAMP, "run_cell.py"), d, o, s],
+                             cwd=ROOT)
         if rc != 0:
             print(f"!! cell failed (rc={rc}) -- continuing to next cell", flush=True)
     print(f"\nqueue finished in {(time.time()-t_start)/3600:.2f} h", flush=True)

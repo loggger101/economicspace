@@ -1,0 +1,36 @@
+{
+  "csv": {
+    "crlf": true,
+    "float_round_trip": true,
+    "repr_hash": "769360b27b1ce487"
+  },
+  "host": {
+    "cpu_count": 12,
+    "float_repr_style": 15,
+    "implementation": "CPython",
+    "libc": "n/a",
+    "machine": "AMD64",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "python": "3.13.9",
+    "system": "Windows"
+  },
+  "libm": {
+    "cos": "e70ea7be12ef629a",
+    "exp": "5f278ed7076e0d42",
+    "log": "8e04eade16e17b6a",
+    "pow": "1cb2330af5f5848b",
+    "sqrt": "a27709f8ac321249"
+  },
+  "numpy": {
+    "np_exp": "d5c831bac4290811",
+    "np_log": "f9d4ea6320423dea",
+    "np_power_h": "58450751cf9dd4aa",
+    "np_sqrt": "42c19ab9eb5385fd",
+    "np_sum": "d81a0885c7a1699c"
+  },
+  "spawn": {
+    "hash": "54cd5625b78510d7",
+    "ok": true
+  }
+}
