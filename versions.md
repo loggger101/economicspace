@@ -103,6 +103,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [catalog v1.2.0](#catalog-v120) | 2026-09-03 | **NEOWISE dedup decided by row order on 27,802 bodies**; the ranking could not see orbit quality; `ma` had no epoch; async TAP |
 | [calc v1.19.2](#calc-v1192) | 2026-09-03 | **`mars_orbit` waited for the wrong planet** |
 | [calc v1.19.1](#calc-v1191) | 2026-09-02 | a version check had been comparing every catalog against Module 3 |
 | [calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0](#calc-v1190--mineral_value-v190--transportation-v1140) | 2026-09-02 | **a seventh destination: a geostationary servicing depot** |
@@ -133,6 +134,225 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## catalog v1.2.0
+
+Four items. Two were the intended ones and change no number. The third was
+found while verifying the second, **does** change a number, and is the reason
+this is a minor bump rather than a patch: NEOWISE's `ORDER BY` was not total,
+so which of a body's duplicate rows survived deduplication was decided by
+nothing at all. The fourth came from an audit of another project and adds the
+orbit-quality fields the ranking never had.
+
+🚨  **THE THIRD ITEM IS THE ONE TO READ.** It was not on any plan. It surfaced
+because switching transports produced two frames with the same content hash and
+different row order, and the only reason that was noticed is that the change
+was verified by comparing the two paths instead of by reasoning that they must
+agree.
+
+### `ORDER BY asteroid_number` is not total, and dedup is order-sensitive
+
+`deduplicate_catalog` sorts by completeness with `kind="stable"` and keeps the
+first row. A **stable** sort preserves input order among equal keys, so for two
+rows of equal completeness the winner is whichever arrived first.
+
+NEOWISE returns **183,408 rows for 143,318 bodies**. Measured on the live
+table:
+
+| | count |
+|---|---|
+| bodies with more than one NEOWISE row | 27,864 |
+| of those, top completeness is **tied** | 27,819 |
+| of those, `diameter_km` actually differs | **27,802** |
+
+Relative spread of those diameters: **median 11.6%, p90 27.4%, max 86.3%.**
+
+⚠️  **Diameter cubes into `estimated_mass_kg`, which is what the whole ranking
+runs on.** A median 11.6% diameter spread is a **39% mass** spread, and the
+worst body spans 3.832 km to 27.99 km, a factor of 380 in mass.
+
+The ordering was left to the server, and the server does not do it the same way
+twice: a sync and an async pull of the **identical** ADQL returned the same
+183,408 rows with the same content hash in a **different order**. So the
+diameter of ~28,000 bodies has never been reproducible, and no committed run
+can be said to have picked them deliberately.
+
+The fix orders on enough columns to be total. Both transports then produce
+byte-identical frames (`5e4872ba51d9b70d`), and repeated async pulls are stable.
+
+✅  **It deliberately does NOT try to pick the physically best measurement.**
+`fit_code` and `stacked_flag` are the NEOWISE fields that express fit quality,
+and preferring them is a **modelling** decision with a defensible answer that
+somebody should choose on the physics. This release only makes the choice
+*defined*. Reproducibility first; correctness of the criterion is a separate
+question, and still open.
+
+⚠️  **This does move numbers, on the next Stage 1 run.** Diameters for up to
+27,802 bodies may change relative to the catalog on disk, and mass, value and
+ranking move with them. Nothing changes until Stage 1 is re-run; the existing
+catalog is untouched.
+
+### The ranking had no idea which orbital elements were any good
+
+SBDB exposes **79 queryable fields** (`?info=field` lists them). This pipeline
+requested **23**, and among the 56 it did not was `condition_code`, the MPC
+orbit-uncertainty parameter U: 0 for a well-determined orbit, 9 for one barely
+constrained.
+
+⚠️  **Δv is computed from `a`, `e` and `i`, and the entire economic ranking is
+computed from Δv.** So an orbit fitted to a four-day arc with 18 observations
+produces a cost/revenue ratio quoted to six figures, and nothing in the
+pipeline could tell it apart from a body observed for 70 years.
+
+Measured against the profitability catalog on disk, joined to SBDB:
+
+| set | n | U >= 5 | vs population | binomial p |
+|---|---|---|---|---|
+| **top 30 by cost/revenue** | 30 | **43.3%** | **3.1x** | **8.3e-05** |
+| top 50 | 50 | 30.0% | 2.2x | 2.5e-03 |
+| all matched rows | 157 | 18.5% | 1.3x | 0.065 |
+| SBDB population (1,562,105 bodies) | - | 13.9% | 1.0x | - |
+
+🚨  **The enrichment is concentrated at the very top and vanishes down the
+ranking**, which is the signature of a winner's curse rather than of a bad
+population. Quartiles of the same 157 rows: Q1 **35.9%** at U >= 5, then 5.1%,
+15.4%, 17.5%. Ranking on a quantity derived from noisy elements preferentially
+selects the bodies whose fit errors happen to flatter them, and the extreme of
+the ranking is exactly where that bias is strongest.
+
+The best-ranked bodies with barely-determined orbits:
+
+| designation | ratio | U | arc (days) | observations |
+|---|---|---|---|---|
+| **2017 MC1** (rank 1) | 18.26 | **7** | 32 | 28 |
+| 2015 BN515 (rank 2) | 21.27 | **8** | 12 | 17 |
+| 2024 SS4 | 32.67 | **7** | **5** | 33 |
+| 2024 XY11 | 36.59 | **8** | **4** | 24 |
+| 2015 KJ292 | 37.52 | **9** | **4** | 18 |
+
+✅  **This release FETCHES the information and applies none of it.** Filtering
+or down-weighting on orbit quality changes what the model answers, and choosing
+the rule is a modelling decision with several defensible answers (a hard U
+cutoff, an arc-length floor, a confidence-weighted ranking). Making the data
+available is the part that is unambiguously right; **the top of the ranking
+should not be read as a target list until one of those is chosen.**
+
+⚠️  Six related fields came with it, all 100% populated: `data_arc`,
+`n_obs_used`, `rms`, `moid` (Earth MOID, a standard accessibility proxy this
+model derives nothing from), `class` and `soln_date`. Fields with negligible
+coverage were checked and **deliberately not added**: `H_sigma` 0.00%, `G`
+0.10%, `BV` 0.85%, `UB` 0.81%, `IR` 0.00%, `GM` 0.01%, `extent` 0.02%.
+
+ℹ️  Found by auditing `julie-dujardin/space-map` (AGPL-3.0, read not copied),
+whose SBDB mirror queries the `?info=field` discovery endpoint instead of
+hardcoding a field list. A pipeline that discovers the schema would have
+surfaced both this and the missing `epoch` on its own.
+
+### The two intended items
+
+Neither changes a number this pipeline computes. The first is a **latent**
+defect: a field that has been fetched since `1.0.3` and was never usable. The
+second is robustness on a source that has already failed once in the record.
+
+### `ma` was fetched without `epoch`, so it was unusable rather than unused
+
+`_JPL_FIELDS` requested `ma`, commented in the module as "mean anomaly at
+epoch (deg)", and never requested `epoch`. A mean anomaly fixes no date without
+the epoch it is referred to, so `mean_anomaly_deg` has been present in every
+catalog this project has written and has never been capable of answering the
+question it exists to answer.
+
+⚠️  **It was invisible because nothing downstream reads it.** Module 4 prices
+transfers from `a`, `e` and `i` only; `longitude_asc_node_deg`,
+`arg_perihelion_deg`, `mean_anomaly_deg`, `mean_motion_deg_day` and
+`orbital_period_yr` have **zero references** outside Module 1. So a column that
+was silently useless sat beside four that were merely unused, and no check
+could tell them apart. That is the same shape as "an unreachable branch is not
+a verified branch": an unread column is not a validated column.
+
+The fix is one entry in `_JPL_FIELDS`, one in `_JPL_RENAME`, one in
+`_JPL_NUMERIC` (SBDB returns the epoch as a **string**, so it must be coerced
+or it lands in the CSV as text), and one in `_SAFE_FIELDS`.
+
+🚨  **`_SAFE_FIELDS` mattered more than it looks.** That fallback already
+carried `ma`, so omitting `epoch` from it would have reproduced the exact
+defect on precisely the runs where the primary field list had already failed,
+i.e. the runs least likely to be examined closely.
+
+⚠️  **The epoch must stay PER ROW.** Most bodies share one, but not all: a
+2,000-row NEO sample returned 1,999 at JD 2461200.5 and one at JD 2455562.5,
+**5,638 days apart**. A hardcoded constant would be silently wrong for exactly
+the minority most likely to be interesting.
+
+**No number moves.** Nothing reads the column; it is added so the next Stage 1
+run captures it rather than requiring a second full refetch the day anyone
+wants a dated launch window. The stamp moves because the output gains a column,
+which is the schema half of the bump rule.
+
+### NEOWISE now asks IRSA for an async job
+
+`fetch_neowise` posted its ADQL to `/TAP/sync` and streamed the body. A
+synchronous TAP query holds **one** connection open for the server-side query
+**and** the whole ~19 MB transfer, so a proxy timeout anywhere in that window
+discards the entire result, with no retry surface and no partial success.
+
+That is not hypothetical here. The run behind the committed cislunar 2x2 saw
+IRSA return `502 Proxy Error` all evening and `Source summary` read
+`'NEOWISE': 0`.
+
+The IVOA UWS pattern splits it into three phases: submit, run server-side with
+nothing held open, then fetch the result from a **stable URL** that can be
+re-fetched. A poll that fails is explicitly not fatal, because the job is still
+running on the server, which is the entire point.
+
+Measured against the live service on 2026-09-03, same ADQL both ways:
+
+| path | result |
+|---|---|
+| `/TAP/sync` | HTTP 200, 584 bytes, 3.9 s |
+| `/TAP/async` | submit 303, COMPLETED after 5 polls, 584 bytes, 5.7 s |
+
+**Byte-identical.** Async costs a few seconds of polling on a small query and
+buys the retry surface on a large one.
+
+✅  **It can only add a way to succeed.** On any async failure `body` stays
+`None` and the original synchronous block runs unchanged, so the worst case is
+the behaviour this function had before. All of the existing body validation
+(VOTable envelope, HTML error page, empty body, unexpected header) is untouched
+and runs on whichever path produced the bytes.
+
+New config fields: `neowise_use_async` (default `True`),
+`neowise_async_max_wait_s` (default 900).
+
+### What this release does NOT contain
+
+⚠️  A measured Δv change was **considered and refused**, and the reasoning is
+worth keeping because the measurement looked good in isolation. Module 4 takes
+the entire inclination change at Earth departure; splitting it optimally saves
+a median 4.87% of `dv_out` on a 38,892-row stride sample, and the split
+contains the shipped rule as an endpoint so it is never-worse by construction.
+
+Against a **Lambert oracle** with real 3-D geometry it makes the model worse in
+every inclination band, because the shipped estimator carries a second, larger
+error of the opposite sign:
+
+| band | shipped error | after the split | |
+|---|---|---|---|
+| i < 5 deg | -1.139 | -1.288 | worse |
+| 5-15 deg | -1.601 | -2.312 | worse |
+| i > 15 deg | -0.533 | -2.656 | worse |
+
+Negative means the model understates the cost. The two errors partially cancel,
+the cancellation is accidental and inclination-dependent, and **removing only
+the overcharge exposes the undercharge in full.** See
+`research/starred-repos/FINDINGS.md` F1 and F4 for both measurements and the
+validated solver they were taken with.
+
+ℹ️  The standing consequence, which no release fixes: **the pipeline's outbound
+Δv is optimistic by roughly 0.4 to 1.3 km/s**, and the whole 20-cell campaign
+inherits that. It is a model limitation, not a regression, and it is recorded
+here rather than fixed because fixing it correctly means both terms moving
+together and a full re-measurement.
 
 ## calc v1.19.2
 
@@ -2058,6 +2278,37 @@ identical.
 
 No config or column change; the stamp moves so a catalog still names the code
 that built it.
+
+**`1.2.0`  a total NEOWISE sort order, the element epoch, and async TAP.**
+Full write-up: [catalog v1.2.0](#catalog-v120). NEOWISE's `ORDER BY` named only
+`asteroid_number`, which is not total over a table with 183,408 rows for
+143,318 bodies, so `deduplicate_catalog`'s stable sort resolved 27,802 bodies
+by arrival order alone; `ma` had been fetched since `1.0.3` without `epoch`,
+which made `mean_anomaly_deg` unusable rather than merely unused; and
+`fetch_neowise` moved from synchronous TAP to an IVOA UWS async job with the
+synchronous path kept as the fallback.
+
+New output columns: `element_epoch_jd` (osculating element epoch, JD TDB, from
+SBDB's `epoch`), plus seven orbit-quality and accessibility fields, all 100%
+populated: `orbit_condition_code` (MPC uncertainty U, 0-9),
+`observation_arc_days`, `n_observations`, `orbit_fit_rms_arcsec`,
+`earth_moid_au`, `orbit_class` and `orbit_solution_date`. All added to
+`_JPL_FIELDS`, `_JPL_RENAME` and `_SAFE_FIELDS`; the five numeric ones also to
+`_JPL_NUMERIC`, while `orbit_class` and `orbit_solution_date` are deliberately
+excluded from it, being a category code and a date.
+
+New config fields: `neowise_use_async` (bool, default `True`),
+`neowise_async_max_wait_s` (int, default 900).
+
+⚠️  **A catalog stamped `1.1.1` or earlier has no `element_epoch_jd`**, so its
+`mean_anomaly_deg` cannot be referred to a date and no dated launch window can
+be computed from it. Every other column is unchanged and remains comparable.
+
+⚠️  **This is the first Stage 1 stamp whose CSV has not been regenerated.** The
+catalog on disk is still `1.1.1`, so `stamp_check()` will report it as stale on
+every Stage 4 run until Stage 1 is next run. That is the deliberate-lag case
+the check explicitly cannot distinguish from a failed write; it is correct to
+fire and means nothing by it here.
 
 ## Stage 2 changelog: `modules/mineral_value.py`
 
