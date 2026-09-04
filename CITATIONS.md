@@ -256,7 +256,7 @@ lacking. The licence column is the part that does not go stale.
 | OpenSCvx/OpenSCvx | Apache-2.0 | nothing |
 | esa/pygmo2 | MPL-2.0 | nothing |
 | pola-rs/polars | MIT | nothing |
-| typpo/spacekit | MIT | nothing |
+| typpo/spacekit | MIT | nothing. Its per-body Kepler solve is the technique behind `ui.py`'s orbit diagram, but that diagram is written against `research/starred-repos/orbital.py` and Altair, and no line of spacekit was read into it |
 | duncaneddy/brahe | MIT | nothing yet. Its native SPICE reader and Horizons SPK client are the recommended way to bound F4's oracle |
 | Small-Bodies-Node/pds4_tools | BSD-3 (Univ. of Maryland) | nothing |
 | nyx-space/nyx | **AGPL-3.0** | nothing |
