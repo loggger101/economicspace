@@ -96,6 +96,41 @@ exactly this reason; quote it.
 
 ---
 
+### Sources read only by the research probes
+
+Not pipeline inputs. Nothing below is fetched by any stage, and none of it
+reaches a CSV; they are the external oracles
+[`research/starred-repos/SECOND-PASS.md`](research/starred-repos/SECOND-PASS.md)
+measures the model against.
+
+- **NASA JPL NHATS**, `https://ssd-api.jpl.nasa.gov/nhats.api`. Optimised
+  round-trip delta-v and mission duration for the near-Earth asteroids
+  accessible to human spaceflight. Read by
+  `research/starred-repos/probe_nhats.py`.
+- **NASA JPL Horizons**, `https://ssd-api.jpl.nasa.gov/horizons.api`, and the
+  **NAIF** kernel archive. Recommended in F7 for bounding the two-body error in
+  F4's Lambert oracle; not yet used.
+- **NEODyS** (University of Pisa and SpaceDyS),
+  `https://newton.spacedys.com/neodys/`. Per-object orbital elements with the
+  full 6x6 covariance. Recommended in F9; not yet used.
+- **Asterank**, `http://www.asterank.com/api/asterank`, MIT. Used for its `dv`
+  column only, which is the **Shoemaker-Helin** closed-form delta-v
+  approximation. Its economic columns return degenerate values through the
+  public endpoint and are not used.
+
+  > Shoemaker, E. M. and Helin, E. F. (1978). *Earth-approaching asteroids as
+  > targets for exploration.* NASA CP-2053, pp. 245-256.
+
+- **Bus-DeMeo asteroid taxonomy**, PDS Small Bodies Node bundle
+  `urn:nasa:pds:ast.bus-demeo.taxonomy`. Fetched and inspected in the second
+  pass; not committed and not used by any stage.
+
+  > DeMeo, F. E., Binzel, R. P., Slivan, S. M., and Bus, S. J. (2009). *An
+  > extension of the Bus asteroid taxonomy into the near-infrared.* Icarus,
+  > 202(1), 160-180.
+
+---
+
 ## 2. Data committed to this repository
 
 ### 🔔 SDSS-based Asteroid Taxonomy V1.1
@@ -203,11 +238,16 @@ A survey of 17 repositories is recorded in
 [`research/starred-repos/`](research/starred-repos/). Most were read and
 nothing was taken. This table is the licence position for all of them.
 
+Read twice: the second pass is in
+[`SECOND-PASS.md`](research/starred-repos/SECOND-PASS.md), and it moved rows
+here, because a repository can add exactly the thing it was rejected for
+lacking. The licence column is the part that does not go stale.
+
 | repository | licence | what was taken |
 |---|---|---|
 | skyfielders/python-skyfield | MIT | **code**, adapted; see section 3 |
-| juliensimon/space-datasets | MIT | **the PDS3 column layout** for the SDSS table; see section 2 |
-| astropy/astroquery | BSD-3 | nothing. It showed that IRSA's async TAP was the right approach; the implementation here is written against `requests` |
+| juliensimon/space-datasets | MIT | **the PDS3 column layout** for the SDSS table (section 2), and the JPL NHATS endpoint used by `probe_nhats.py` |
+| astropy/astroquery | BSD-3 | nothing. It showed that IRSA's async TAP was the right approach; the implementation here is written against `requests`. Its NEODyS client is where the covariance service was found |
 | julie-dujardin/space-map | **AGPL-3.0** | nothing. It showed that SBDB publishes a field list, which is how `condition_code` was found missing |
 | Z3Prover/z3 | MIT | nothing yet |
 | Pyomo/pyomo | BSD-3 | nothing |
@@ -217,7 +257,7 @@ nothing was taken. This table is the licence position for all of them.
 | esa/pygmo2 | MPL-2.0 | nothing |
 | pola-rs/polars | MIT | nothing |
 | typpo/spacekit | MIT | nothing |
-| duncaneddy/brahe | MIT | nothing |
+| duncaneddy/brahe | MIT | nothing yet. Its native SPICE reader and Horizons SPK client are the recommended way to bound F4's oracle |
 | Small-Bodies-Node/pds4_tools | BSD-3 (Univ. of Maryland) | nothing |
 | nyx-space/nyx | **AGPL-3.0** | nothing |
 | cuspaceflight/CamPyRoS | **GPL-3.0** | nothing |
