@@ -1,5 +1,6 @@
 ' ==========================================================================
-'  Asteroid mining profitability pipeline -- double-click entry point.
+'  Asteroid mining profitability pipeline -- THE ENTRY POINT.
+'  Double-click this file.
 '
 '  Opens the dashboard in your browser. No terminal window, at any point.
 '
@@ -32,7 +33,7 @@ target = here & "\launch_ui.py"
 If Not fso.FileExists(target) Then
   MsgBox "launch_ui.py is not next to this file." & vbCrLf & vbCrLf & _
          "Looked in:" & vbCrLf & here & vbCrLf & vbCrLf & _
-         "Keep Dashboard.vbs in the repository folder.", _
+         "Keep this file in the repository folder.", _
          16, "Asteroid Pipeline"
   WScript.Quit 1
 End If
