@@ -96,7 +96,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | 1 | `modules/catalog.py` | 1.2.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.14.0 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
-| 4 | `modules/calc.py` | 1.19.2 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.20.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -439,6 +439,7 @@ that actually move the answer:
 | `.calc.model_tank_mass` | `True` | Put propellant tankage in the rocket equation. Tank mass scales with volume, so this is what stops low-density propellants flying their tanks for free |
 | `.calc.allow_rtg_power` | `True` | Let the processing plant use radioisotope power where it is lighter than solar (past 3.46 AU), capped by `rtg_max_power_w` |
 | `.calc.charge_tanker_flights` | `True` | Charge the orbital-refuelling flights a vehicle's escape payload assumes |
+| `.calc.charge_insurance` | `False` | Charge Module 3's two insurance premiums: a $1.5M third-party liability flat and launch insurance at 10% of (launch + spacecraft book value). **Off since calc v1.20.0** because a premium is priced off an underwriter's book rather than off a mass; every table measured before it is a `True` run. See [What the model deliberately does not charge for](#what-the-model-deliberately-does-not-charge-for) |
 | `.calc.optimise_architecture_per_asteroid` | `True` | Search return mode and propellant sourcing per target rather than fixing them catalog-wide |
 | `.calc.selection_objective` | `"cost_revenue_ratio"` | What the per-asteroid search maximises. `"profit"` restores pre-v1.10.0 behaviour |
 | `.calc.return_structure_frac_of_payload` | `0.15` | Return-vehicle structure as a fraction of the haul, on top of the 500 kg base |
@@ -809,7 +810,7 @@ to look at first:
 | `m_launch_kg`, `m_outbound_prop_kg`, `m_return_prop_kg`, `m_at_asteroid_kg`, `tps_mass_kg` | The mass cascade |
 | `m_dry_return_kg` | Return-vehicle dry mass actually flown, the 500 kg base plus `return_structure_frac_of_payload` of the haul. Compare it to `max_payload_kg`: a ratio far above ~7:1 means something has gone slack |
 | `ep_system_kg`, `ep_power_w`, `ep_system_cost_usd` | The electric stage. Before v1.10.0 the first two existed and the third did not, which is exactly the bug |
-| `*_cost_usd` (23 columns) | The cost cascade, line by line: launch, outbound and return propellant, hardware, mining rig, power system, EP stage, tankage, tanker flights, capsule, heat shield, ops, recovery, liability, licensing, launch insurance, NRE, autonomy NRE, contingency. Four of the 23 are the time-bucket aggregates in the next row, plus `total_cost_usd` |
+| `*_cost_usd` (23 columns) | The cost cascade, line by line: launch, outbound and return propellant, hardware, mining rig, power system, EP stage, tankage, tanker flights, capsule, heat shield, ops, recovery, liability, licensing, launch insurance, NRE, autonomy NRE, contingency. Four of the 23 are the time-bucket aggregates in the next row, plus `total_cost_usd`. `liability_cost_usd` and `launch_insurance_cost_usd` are **0.0** unless `charge_insurance` is set; the columns stay so a charged run and an uncharged one have the same schema |
 | `upfront_cost_usd`, `ongoing_cost_usd`, `end_of_mission_cost_usd`, `wacc_multiplier*` | Cost by time bucket, and the WACC factor applied to each |
 | `pipeline_version`, `catalog_date` | Which version of Stage 4 produced this row, and when |
 
@@ -1329,6 +1330,14 @@ compute, zero failures. `master.py` rebuilt from the modules with a clean
 prices verified identical across all five, so the destinations are comparable
 by construction; Stages 1 and 3 were frozen for the whole campaign.
 
+🚨  **EVERY CELL BELOW WAS MEASURED WITH INSURANCE CHARGED, AND A DEFAULT RUN
+NO LONGER CHARGES IT.** calc v1.20.0 defaults `charge_insurance` to `False`,
+which takes **5.5% to 9.6%** off the cost/revenue ratio depending on the cell.
+Nothing here is wrong and nothing here is reproducible by a configure-nothing
+run; set `charge_insurance` True to reproduce one. See
+[calc v1.20.0](versions.md#calc-v1200) for what the premiums were worth and
+why the improvement is twice their share of cost.
+
 Best cost/revenue, lower is better, 1.0 is breakeven:
 
 | destination | raw, N = 1 | raw, searched | benef, N = 1 | **benef + searched** (default) |
@@ -1679,7 +1688,8 @@ asteroid nobody revisits is stranded, not an asset.
 revenue is now `p_launch(0.97) × exp(−T/MTBF)(30 yr) × p_mining(0.85)`, about
 0.70 for a five-year mission. ⚠️  **Costs are still charged in full**, which is
 both conservative and correct: you spend the money whether or not it works.
-Launch insurance replaces hardware, not revenue, so there is no double count.
+Insurance never entered this term, it replaced hardware on failure rather than
+revenue, so calc v1.20.0 turning both premiums off changes nothing here.
 
 `p_mining` is counted from the full flight record of regolith-contact
 mechanisms, not from the failures alone:
@@ -1915,6 +1925,51 @@ flow later and its cost/revenue ratio does not move.
 *end*; compounding a refund forward alongside the cost it is netted against
 would pay a bonus for taking longer to collect it. Both multipliers are exactly
 1.0 at one campaign per ship, which is what makes the term inert at N = 1.
+
+## What the model deliberately does not charge for
+
+The list above is what the model was getting **free** and now pays for. This is
+the shorter list of the opposite kind: costs that are real, that a real
+programme pays, and that this pipeline does not price because they are not the
+question it is asking.
+
+**Insurance** (`charge_insurance`, default `False` since calc v1.20.0). Module 3
+prices two premiums, a **$1.5M** third-party liability flat and launch insurance
+at **10%** of (launch + spacecraft book value), and until v1.20.0 every mission
+was charged both. They are not wrong. They are out of scope: everything else in
+the cascade is a mass, a Delta-v, a kilowatt or a flight-rate, and a premium is
+priced off an underwriter's book. The two surface delivery prices are already
+declared [marginal-transport lower bounds](#what-a-kilogram-is-worth) with no
+NRE-style programme overhead in them, and a premium is exactly that kind of
+overhead.
+
+It is also the model saying one thing twice. `model_reliability` already
+discounts expected revenue by `p_launch x exp(-T/MTBF) x p_mining` while
+charging every cost in full; a premium is what a programme pays to turn that
+same risk into a certain payment.
+
+⚠️  **Turning it off is worth more than the invoice says**, because a
+premium is an *upfront* line and so is multiplied by contingency and then
+compounded at the upfront WACC multiplier: it is **2.4% to 4.3%** of total cost
+and removing it improves the ratio by **5.5% to 9.6%**. The two are not
+interchangeable; quote the improvement.
+
+✅  **Launch insurance is essentially all of it.** The flat liability
+premium lands at a median 0.03% to 0.05% of total cost. Full measurement, and
+why the programme search makes insurance matter *more* rather than less, in
+[calc v1.20.0](versions.md#calc-v1200).
+
+⚠️  **Every measurement committed in this project predates the flag and
+was taken with both premiums charged**, the 20-cell campaign included. Set
+`charge_insurance` True to reproduce one.
+
+**What is not on this list, and why.** Crew costs are absent because every
+mission here is uncrewed, not because they were declined; Module 3 replaced its
+legacy `Crew` line with the autonomous-control NRE, which *is* charged. Orbital
+refuelling is not here either: that charge is gated because it is **incorrect**
+for this module rather than out of scope, and `escape_direct_launch` re-arms it
+the day an escape-direct architecture exists. The test for this section is that
+the charge would be **right** and is still not asked for.
 
 ## Data sources
 

@@ -42,6 +42,7 @@ re-introduced here):
     launch + outbound prop + return prop + mining hardware recurring
     + mission ops × mission_duration_yr  + heat shield (if aerocapture)
     + sample recovery + 3rd-party liability + launch insurance %
+      (both premiums OFF by default since v1.20.0; see charge_insurance)
     + spacecraft bus NRE / N_missions_amortization
     + autonomous mining control & AI NRE / N_missions_amortization
     × (1 + contingency_fraction)
@@ -380,9 +381,10 @@ class CalcConfig:
     # been demonstrated at all.  Expected revenue is multiplied by
     #     P = p_launch · exp(−T/MTBF) · p_mining
     # while COSTS are still charged in full, which is the conservative and
-    # correct treatment; you spend the money either way.  Launch insurance
-    # already in the cost model replaces hardware on failure, not revenue, so
-    # there is no double count.
+    # correct treatment; you spend the money either way.  v1.20.0 turned both
+    # insurance premiums off and this term is unaffected either way: insurance
+    # replaced hardware on failure and never revenue, so there was no double
+    # count to remove.
     model_reliability:         bool  = True
     # RELIABILITY GROWTH.  The mining chain learns: a programme's second rig
     # is not as likely to jam as its first.  p_mining becomes the FLEET
@@ -485,6 +487,26 @@ class CalcConfig:
     # no escape-direct architecture to bill: it reads payload_leo_kg and
     # usd_per_kg_to_leo and nothing else.  Kept wired for the day it does.
     escape_direct_launch:      bool  = False
+
+    # INSURANCE (v1.20.0).  OFF, and it is the one cost flag here whose default
+    # is OFF because the charge is IRRELEVANT rather than wrong.  Module 3
+    # prices two premiums, a $1.5M third-party liability flat and launch
+    # insurance at 10% of (launch + spacecraft book value), and both are real
+    # money a real programme pays.  They are not what this pipeline asks.  It
+    # prices the marginal physics and hardware of moving a kilogram, on the
+    # same "industrial scale, no programme overhead" framing that makes the two
+    # surface delivery prices LOWER BOUNDS, and a premium is priced off an
+    # underwriter's book rather than off a mass, a Delta-v or a kilowatt.  It
+    # is also a second statement of a risk the model already carries
+    # explicitly: `model_reliability` discounts revenue by P and charges every
+    # cost in full.
+    #
+    # Set True to restore both lines and to reproduce anything measured on calc
+    # 1.19.2 or earlier.  `liability_cost_usd` and `launch_insurance_cost_usd`
+    # stay in the CSV either way, at 0.0 when this is off, so no schema moves
+    # and a run that charged them is still one column away from one that did
+    # not.
+    charge_insurance:          bool  = False
 
     # LAUNCH ACCELERATION (v1.12.0).  Module 3's `max_accel_g` exists to
     # disqualify the kinetic launchers and was read by nothing.  Spacecraft
@@ -889,7 +911,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.19.2"
+    pipeline_version: str = "1.20.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -963,6 +985,10 @@ print(f"    Programme      : "
          if CONFIG.optimise_programme_scale else
          f"fixed at N = {CONFIG.nre_amortization_missions} "
          f"(set optimise_programme_scale to search it)"))
+print(f"    Insurance      : "
+      + ("third-party liability + launch insurance charged"
+         if CONFIG.charge_insurance else
+         "NOT charged - premiums are out of scope for a marginal-cost model"))
 print(f"    Calendar       : "
       + ("programme span charged - amortised NRE and rig compound over "
          "T + (W-1)xcadence" if CONFIG.model_programme_calendar else
@@ -4991,6 +5017,16 @@ def _mission_cost_prologue(
      liability_cost, launch_ins_raw,
      nre_total, autonomy_nre_total, wacc_rate) = _ops_cost_constants(ops_df)
 
+    # ── Insurance (v1.20.0) ──────────────────────────────────────────────────
+    # Both premiums are zeroed HERE rather than at their two use sites, so the
+    # sums in the tail stay written out term for term and in order.  Adding 0.0
+    # to a finite float is exact, so nothing is re-associated and no other line
+    # moves; that is the same discipline as the three sums the tail must not
+    # pre-add.  See `charge_insurance` for why they are off.
+    if not config.charge_insurance:
+        liability_cost = 0.0
+        launch_ins_raw = 0.0
+
     cost_per_kg_prop = float(propellant["cost_usd_per_kg"])
     launch_cost      = float(mass_cascade["m_launch"]) * float(vehicle["usd_per_kg_to_leo"])
 
@@ -5173,6 +5209,12 @@ def _mission_cost_prologue(
     # missed; it is the one item on the launch stack whose cost line sits
     # outside `hardware_cost`.  On an Earth-return mission it is a 15%-of-payload
     # article at $50,000/kg, so it is not a rounding term where it exists at all.
+    #
+    # v1.20.0: `launch_ins_raw` is 0.0 unless `charge_insurance` is set, so all
+    # of the above is the arithmetic that flag restores rather than what a
+    # default run pays.  The basis is kept rather than deleted because it took
+    # three releases to get right, and it is what a reader turning the flag
+    # back on inherits.
     launch_ins_pct        = launch_ins_raw / 100.0
 
     # Spacecraft bus NRE amortised across N missions, less the share already
@@ -5558,7 +5600,8 @@ def mission_cost_usd(
         UPFRONT     - launch, outbound prop, return prop (if not ISRU),
                       mining-rig hardware (amortised), capsule (per mission),
                       heat shield, NRE (bus + autonomy, amortised),
-                      licensing, liability, launch insurance
+                      licensing, liability and launch insurance (the last
+                      two are 0.0 unless charge_insurance)
         ONGOING     - mission ops × duration_yr, ISRU return prop (if ISRU)
         END-OF-MISSION, sample recovery
         × (1 + contingency_fraction)
@@ -6588,9 +6631,10 @@ def _evaluate_combo_at_ratio(
             g, sat, delivered = entry
         # Revenue was certain.  It is not: the launch fails, the spacecraft dies
         # on the way, or the mining chain does not work when it arrives.  Costs
-        # are charged in FULL, which is correct; you spend the money either way,
-        # and launch insurance replaces hardware, not revenue, so this is not
-        # a double count.
+        # are charged in FULL, which is correct; you spend the money either
+        # way.  v1.20.0's `charge_insurance` does not reach this term: a
+        # premium replaced hardware rather than revenue, so there was no
+        # double count here to begin with and none is created by removing it.
         ps = 1.0
         pm = 1.0
         if config.model_reliability:
