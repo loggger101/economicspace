@@ -122,7 +122,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.14.0`,
-calc `1.19.2`, master `1.23.0` (the master version is a literal in
+calc `1.20.0`, master `1.24.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **TWENTY stamps so far do NOT mean the numbers moved.** The rule
@@ -350,6 +350,17 @@ per-destination depth, the invariants, and the claims each cell retired.
 Two facts everything below leans on: **`cislunar` is the best case on all four
 settings**, and **the programme search never changes the evaluable set** at any
 destination, as it must not, since N enters nothing in the mass cascade.
+
+🚨  **EVERY CELL IN THIS SECTION WAS MEASURED WITH INSURANCE CHARGED, AND A
+DEFAULT RUN NO LONGER CHARGES IT.** calc `1.20.0` defaults `charge_insurance`
+to False, worth **5.5-9.6%** off the cost/revenue ratio depending on the cell.
+Set it True to reproduce anything here. ⚠️  The **ratios, splits and
+shares** below are far more robust to it than the levels are: the premium is
+close to proportional to the launch stack, so on the sampled cells it rescaled
+the ranking without reordering it and the winner did not move in any of the
+four. That is a 400/150-row observation, not a full-catalog one; treat a
+*level* here as superseded and a *share* as probably intact until measured.
+See [calc v1.20.0](versions.md#calc-v1200).
 
 🚨  **THE CAMPAIGN IS FIVE DESTINATIONS AND THE MODEL NOW HAS SEVEN.**
 `mars_orbit` landed in calc `1.18.0` and `geo` in calc `1.19.0`, and **no cell
@@ -962,16 +973,19 @@ or more distinctive numbers across two files:
 | the four cislunar wall clocks, 733 / 1,253 / 3,424 / 5,692 s | [Beneficiation](README.md#beneficiation) | "Runtime, and the three quantities a sample cannot predict" |
 | why `mars_orbit` takes the BASE utility profile: the crust is 4,100 m/s of ascent away, against the 3,600 m/s of TMI that delivered the cargo | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
 | the base in-space utility profile itself: water 1.00, structural metals 0.70, silicates 0.25, carbon 0.40, and the Mars overrides against it | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
+| the insurance premiums: 2.4-4.3% of total cost against 5.5-9.6% of the answer, and liability alone at 0.03-0.05% | [What the model deliberately does not charge for](README.md#what-the-model-deliberately-does-not-charge-for) | "The corrections the model accumulated" |
 
-⚠️  **The last row was added on 2026-09-03, and the six above it on
-2026-09-02, each time by re-running the hunt this table describes**, which is
-the tell that the table is a snapshot and not a guarantee: it listed four pairs
-while nine existed, the tenth arrived the same day with `mars_orbit`, and the
-eleventh, the utility profile, had been sitting in both files the whole time
-and was found only by running the hunt again over a destination change that had
-nothing to do with it. **Re-run the hunt rather than trusting the table**,
-and re-run it whenever you add a destination: a new row in README's delivered-cost
-table is a new opportunity for this file to restate it.
+⚠️  **The last row was added on 2026-09-04 by the change that created it,
+the row above it on 2026-09-03, and the six above that on 2026-09-02, each
+time by re-running the hunt this table describes**, which is the tell that the
+table is a snapshot and not a guarantee: it listed four pairs while nine
+existed, the tenth arrived the same day with `mars_orbit`, and the eleventh,
+the utility profile, had been sitting in both files the whole time and was
+found only by running the hunt again over a destination change that had nothing
+to do with it. **Re-run the hunt rather than trusting the table**, and re-run
+it whenever you add a destination or a cost term: a new row in README's
+delivered-cost table, or a new charge, is a new opportunity for this file to
+restate it.
 
 ⚠️  **`versions.md` now carries far more of these pairs than this file does,
 and that is FINE where this would not be.** The `geo` and `mars_orbit` prices,
@@ -1614,6 +1628,34 @@ two categories, because "it defaults OFF" used to carry half the argument.
 charge billed a real cost against a scenario this module does not have, which
 makes it an error rather than a correction. Gated off, not deleted, so the day
 this module gains a direct-injection architecture the charge becomes correct.
+
+🚨  **AND CALC `1.20.0` IS THE FIRST ENTRY THAT RUNS THE OTHER WAY: A CHARGE
+THAT IS CORRECT AND WAS STILL REMOVED.** Insurance (`charge_insurance`, now
+False) fails the membership test in the direction nothing had failed it before.
+The model was not getting it free; it was paying for it, and the payment is
+real. It is out of **scope**, which is a different objection from the tanker
+charge's, and the two are worth telling apart because the remedy looks
+identical:
+
+| | the charge is | the flag means |
+|---|---|---|
+| `charge_tanker_flights` + `escape_direct_launch` | **wrong here** | re-arm it when the scenario exists |
+| `charge_insurance` | **right, and not asked** | turn it on if you want the invoice rather than the physics |
+
+The test that separates them: **would the charge be correct if you levied it
+today?** The tanker charge would not; insurance would. So this one gets a
+README section of its own,
+[what the model deliberately does not charge for](README.md#what-the-model-deliberately-does-not-charge-for),
+rather than a line on the corrections list, and it must not be added to that
+list by a later reader tidying up.
+
+⚠️  **Its magnitude does not read off its invoice, and this is the general
+shape rather than a fact about insurance.** A premium is an **upfront** line,
+so it carries contingency and the full upfront WACC multiplier: 2.4-4.3% of
+total cost, and 5.5-9.6% of the answer, an effective 2.12-2.38x. **Any upfront
+line in this cascade is worth roughly twice its face value**, and any
+end-of-mission line is worth its face exactly (`mult_end` is 1.0). Costing one
+by its share of `total_cost_usd` understates it by that factor.
 
 ⚠️  **Two entries are inert at N = 1**, the rig's duty cycles and programme
 calendar time, because both bound programmes rather than missions. No
