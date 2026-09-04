@@ -47,7 +47,7 @@ touching:
 | the interpreter was hardcoded as `py` | `campaign/run_cell.py`, `campaign/run_queue.py` | the campaign runner would not start at all; `py` is the Windows launcher |
 | output directories assumed to exist | `campaign/run_cell.py` | `campaign/cells/` is gitignored, so a fresh clone dies on the archive step AFTER paying for the whole cell |
 | the CSV line terminator followed the platform | the four writers, and `verify.py` | see below; the dangerous one |
-| no POSIX entry point | repo root | `run.bat` and `Dashboard.vbs` are the only launchers |
+| no POSIX entry point | repo root | `run.bat` and `_START HERE.vbs` are the only launchers |
 | printed instructions said `py` | `run_pipeline.py`, `verify.py`, `modules/catalog.py` | the message telling you which stage to run next named the Windows launcher, on the host that most needs the advice |
 
 ### The line terminator, which is the dangerous one
@@ -352,7 +352,7 @@ reached over ssh has no desktop:
 
 | | Windows | Spark |
 |---|---|---|
-| started by | `run.bat ui`, which hands off to `Dashboard.vbs` | `./run.sh ui`, in the foreground |
+| started by | `run.bat ui`, which hands off to `_START HERE.vbs` | `./run.sh ui`, in the foreground |
 | window | a small Tk control window, no console | none; the terminal you started it in |
 | stopped by | the control window's button | Ctrl-C |
 | reached at | `localhost:8501`, opened for you | this host's LAN address, printed at start |
@@ -381,7 +381,7 @@ ssh -L 8501:localhost:8501 <user>@<spark>
 
 Both the dashboard and a campaign run in the foreground, and closing the ssh
 session sends them a hangup. That is the one convenience the Windows launcher
-has that a terminal does not: `Dashboard.vbs` starts a detached process with
+has that a terminal does not: `_START HERE.vbs` starts a detached process with
 its own control window, and there is nothing to detach from here. Use `tmux`,
 which is the same answer for both and is the reason not to build a second
 launcher:

@@ -8,10 +8,34 @@ databases → price the minerals those asteroids contain → cost the
 transportation → run the rocket-equation and cost cascade to produce a ranked
 profitability table.
 
+## Start here
+
+**Double-click `_START HERE.vbs`.** That is the whole answer on Windows: it
+opens the dashboard in your browser with no terminal window, and the small
+control panel it puts up is what you close when you are done.
+
+| you are on | open this | what you get |
+|---|---|---|
+| **Windows, no terminal** | **`_START HERE.vbs`** (double-click) | the dashboard, and nothing else to think about |
+| Windows, a terminal | `run.bat` | a menu over the dashboard, the headless runs, verification and the build |
+| Linux or macOS | `./run.sh` | the same menu, POSIX |
+| any host, scripted | `py run_pipeline.py --preset quick` | one headless run, no menu |
+
+⚠️  **`master.py` is not the entry point**, though it is the biggest file here
+and looks like one. It is generated, it is what the four launchers above drive,
+and editing it is destroyed by the next build. If you opened it looking for the
+start button, close it and double-click `_START HERE.vbs`.
+
+The dashboard opens ready to re-run Stage 4 against the catalogs already on
+disk, which is the loop you want almost every time; press **Quick sample** in
+the sidebar for a run that finishes in minutes. The long version of all of this
+is [Running it](#running-it), and the dashboard itself carries the same three
+steps behind a **Start here** panel at the top of the page.
+
 ## Layout
 
 ```
-Dashboard.vbs          Double-click this: opens the dashboard, no terminal
+_START HERE.vbs        Double-click this: opens the dashboard, no terminal
 launch_ui.py           What it runs -- starts the server, owns the stop button
 run.bat                Windows launcher: a terminal menu over everything below
 run.sh                 Linux / macOS launcher: the same options, POSIX
@@ -89,7 +113,7 @@ four times.
 
 ## Running it
 
-### On Windows: double-click `Dashboard.vbs`
+### On Windows: double-click `_START HERE.vbs`
 
 That opens the dashboard in your browser with **no terminal window at any
 point**. A small control panel appears while the server boots -- it says what
@@ -142,7 +166,7 @@ finding an interpreter for you. `platform` and `inputs` exist because a second
 host is the case where the arithmetic and the input files are both worth
 checking before spending a day, and neither question arises on the machine the
 numbers were measured on. And `ui` runs Streamlit in the foreground on
-`0.0.0.0` rather than handing off to `Dashboard.vbs`, because a headless box
+`0.0.0.0` rather than handing off to `_START HERE.vbs`, because a headless box
 has no desktop to put a control window on; it prints the addresses that will
 resolve from another machine, and Ctrl-C is the stop button.
 
@@ -165,7 +189,7 @@ anything missing, and dispatches. It takes an argument if you would rather skip
 the menu:
 
 ```
-run.bat ui         open the dashboard (hands off to Dashboard.vbs, then
+run.bat ui         open the dashboard (hands off to _START HERE.vbs, then
                    closes this window -- no terminal stays up)
 run.bat quick      400-row sample, all four stages
 run.bat rerun      Stage 4 only, against the catalogs already on disk
@@ -285,12 +309,22 @@ py -m streamlit run ui.py
 
 It imports `master.py` (side-effect free, since the auto-run is guarded on
 `__name__`) and drives `MASTER_CONFIG`, so it is exactly the documented way to
-tune the orchestrator, with a browser attached. Three things worth knowing:
+tune the orchestrator, with a browser attached. What is worth knowing, in the
+order you meet it:
 
+- **A Start here panel** names the file that opens the page and the three
+  steps, expanded on a machine that has never produced a profitability catalog
+  and collapsed once it has.
+- **The three presets are the launcher's**, imported from `run_pipeline.py`
+  rather than restated, so the sidebar's **Quick sample** and `run.bat quick`
+  are the same run by construction. Each button says what it sets, and a line
+  underneath says what the dials currently add up to.
 - **Every config field is introspected**, not hand-listed, so a field added to
   any of the four dataclasses appears automatically. The help text on each
   field is scraped from that field's own comment block in the module source.
-  A curated ⭐ Common tab pins the dials that actually move results.
+  A curated ⭐ Common tab pins the dials that actually move results, and a
+  **Find a setting** box searches names and help text across all four configs
+  at once, replacing the tabs while it has anything in it.
 - **Stages are individually selectable and reuse the CSVs on disk.** Re-running
   Stage 4 alone against a cached catalog is the normal working loop, and it
   saves the 224-second catalog rebuild a full run repeats. Pair it with
@@ -304,6 +338,15 @@ tune the orchestrator, with a browser attached. Three things worth knowing:
   snapshot, the stages run, and the diff from defaults. `pipeline_version`
   identifies the code that produced a CSV but not the configuration, and this
   repo's recurring failure is a number nobody can trace.
+- **The drilldown draws the orbit**, top down and edge on, from the body's own
+  elements read back out of the Stage 1 catalog, with the apsis the
+  architecture search chose to meet it at marked. Earth and Mars are drawn as
+  circles because that is what the Delta-v model assumes, and a truer ellipse
+  would disagree with the numbers beside it. It also reports how well the orbit
+  is KNOWN when the catalog says: the top of this ranking is enriched roughly
+  threefold in bodies whose orbits are provisional, which
+  [`research/starred-repos`](research/starred-repos/SPACE-MAP.md) measured and
+  which no cost figure can show on its own.
 
 The UI ranks by `total_cost_usd / gross_value_usd` rather than `profit_usd`,
 for the reason given in [Reading `profitability_catalog.csv`](#reading-profitability_catalogcsv).

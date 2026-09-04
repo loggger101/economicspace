@@ -2531,13 +2531,86 @@ first three import master".
 | `verify.py` | yes | the six release checks |
 | `verify_docs.py` | no | the **docs** checks; it imports master and the four configs for checks 8 and 9, but never builds a stage. Count them in its own docstring rather than quoting a number here |
 | `run.bat` | no | Windows launcher: a terminal menu over `run_pipeline.py`, `verify.py`, `build_master.py` and the dashboard. No model behaviour of its own |
-| `Dashboard.vbs` | no | double-click entry point, starts the dashboard with no console, ever |
+| `_START HERE.vbs` | no | double-click entry point, starts the dashboard with no console, ever |
 | `launch_ui.py` | no | what it starts: supervises `streamlit run ui.py` and owns the stop button |
 
 The three that run the model import master **by name** with the repo on
 `sys.path`, which is the only form the worker pool tolerates; see
 `_spawn_environment`, and the table of harness bugs under "The verification
 harness is committed now".
+
+🚨  **THE ENTRY POINT WAS `Dashboard.vbs` UNTIL 2026-09-04.** It is
+`_START HERE.vbs`, renamed for the one reason a launcher has a name at all:
+Windows Explorer hides extensions by default, so what a person opening this
+folder sees is the words **START HERE**, and the question "which file do I
+open" stops being one. Everything that named the old file was moved with it,
+and `grep -rn "Dashboard.vbs" .` is the check.
+
+⚠️  **BOTH ODDITIES IN THAT NAME ARE LOAD-BEARING. Do not tidy either away.**
+The leading underscore pins it to the top of the listing and the space is what
+makes it read as an instruction rather than an identifier.
+
+🚨  **THE PREFIX IS `_` AND NOT `!` BECAUSE `run.bat` RUNS
+`setlocal EnableDelayedExpansion`.** `!` is the conventional sort-to-top
+character and it is the one that breaks this. **Measured, not predicted:** two
+throwaway `.bat` files, each with `setlocal EnableDelayedExpansion` and the
+name written as a LITERAL, against two `.vbs` files differing only in the
+prefix.
+
+```
+probe_underscore.bat   ->  PASS, the vbs ran
+probe_bang.bat         ->  GUARD-MISS, the vbs never ran
+```
+
+The `!` run never reached `start` at all: it failed at `if not exist "!PROBE
+NAME.vbs"`, because cmd expands `!...!` inside a line under delayed expansion
+and the name it then tested for was not the name on disk. So the failure mode
+is **a launcher that cannot find itself, and a fallback path taken silently**,
+caused by a character chosen for a file manager. `_` has no meaning to cmd,
+PowerShell or sh. ⚠️  Note it is the LITERAL in the source that breaks; passing
+the same name as an argument does not, which is why a probe has to be written
+the way the real caller is written.
+
+✅  **The sort order was measured, not assumed.** Explorer sorts with
+`StrCmpLogicalW` from shlwapi, which is callable directly, so the candidates
+were ranked against this repo's real root listing rather than against a guess
+about ASCII:
+
+```python
+import ctypes, functools, os
+cmp_w = ctypes.windll.shlwapi.StrCmpLogicalW
+cmp_w.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
+sorted(os.listdir("."), key=functools.cmp_to_key(cmp_w))
+```
+
+Unprefixed it ranked **17th of 22**. `_`, `!`, `@`, `~`, `#`, `+` and a leading
+digit all rank **1st**; `-` does not move it at all, which is the result worth
+knowing, because a hyphen is the other obvious choice and Explorer's logical
+sort simply ignores it. ⚠️  Folders still sort above files by default, so the
+launcher is first among FILES, not first in the window.
+
+⚠️  **The space costs two things.** Any new caller must QUOTE it, and
+`run.bat`'s hand-off is the form to copy:
+
+```
+start "" wscript.exe "_START HERE.vbs"
+```
+
+The empty `""` was already there as the window title, which is what stops
+`start` reading the quoted path as one; without it a quoted first argument
+becomes the title and nothing launches. And a markdown link to the file would
+need `%20`, which `verify_docs.py` check 4 then cannot resolve on disk, so
+README names it in backticks rather than linking it. **Neither is a reason to
+rename it back**, but both are reasons to reach for the existing call rather
+than write a new one. ⚠️  In prose, keep it in backticks for a third reason:
+a bare leading `_` opens markdown emphasis.
+
+✅  The rename was verified by running it, not by reading it: `wscript` on the
+file brought up the control window, wrote `.launcher/running.json`, and
+`/_stcore/health` on the port it recorded answered `200 ok`. The `start`
+quoting was verified separately, on the throwaway `.bat` and `.vbs` pair
+described above, because that line is where a quoting bug would live and it is
+not exercised by double-clicking the file.
 
 ⚠️  **`campaign/` holds a fourth way in, and it is not in that table because it
 does not import master at all.** `campaign/run_cell.py` shells out to
@@ -2598,7 +2671,7 @@ fine from a console and is broken everywhere else, the same shape as the
   closed, measured at 120 s+ against 0.46 s. `<nul >nul 2>&1` on the `start`
   line does NOT fix it. What does is going through Windows Script Host, whose
   `Run` does not pass the caller's handles to the process it creates, so
-  `:ui` delegates to `Dashboard.vbs`, which also leaves one windowless-start
+  `:ui` delegates to `_START HERE.vbs`, which also leaves one windowless-start
   implementation instead of two.
 - ⚠️  **`Tk.after` is not thread-safe and raises once the main loop is gone.**
   Reporting progress from the boot thread with `root.after` produced
@@ -2677,6 +2750,81 @@ the worse of the two. Both the destination prompt and the unrecognised-option
 retry had to be moved behind `if defined ARG1`. If you add a menu entry, the
 test is `run.bat <your-option>` from a non-interactive shell, not from a
 console.
+
+### Charts, presets and the dashboard's own defect classes
+
+The 2026-09-04 UI pass found the repo's existing defect classes wearing a front
+end, plus one environment trap that is not one of them. Count the items below
+rather than trusting a number here: this paragraph said "four things ... and
+one" over six of them before it had been read once, which is the failure this
+file names oftener than any other, committed in the section documenting it.
+
+🚨  **`mark_bar` ON A LOG SCALE DRAWS NOTHING, AND SAYS NOTHING.** A bar runs
+from an implicit zero baseline, `log(0)` is negative infinity, so the "Best
+cost/revenue by spectral type" chart rendered an axis, a legend, five type
+labels and **no bars at all**, with no console error and no exception. The
+spread it is plotting runs from about 18x to 1e5, which is exactly the range
+that needs a log axis, so the MARK is what gives way: it is a dot plot now,
+sized by how many targets of that type the run evaluated. **This is defect
+class 5, "the wrong behaviour is the quiet one", in a chart**: the failure
+looks like an empty result rather than a broken one, so it reads as "no
+`replicated` device survived" rather than "this chart does not work".
+
+🚨  **A LAYERED ALTAIR CHART SHARES ONE SCALE PER CHANNEL, and the explicit
+domain wins.** The orbit diagram layers three orbits coloured by body over two
+apsis markers coloured by role. The marker layer declares its own colour
+domain, that domain swallowed the orbit layer's, "Earth" / "Mars" /
+the designation were all off-domain, and **the orbits drew with no colour**,
+leaving a picture of a sun and two diamonds. `resolve_scale(color="independent")`
+is the fix and it is load-bearing rather than tidying. Same shape as the bar:
+a chart that is wrong renders, it just renders less.
+
+✅  **THE THREE PRESETS ARE IMPORTED, NOT RESTATED.** `run.bat quick` and the
+dashboard's **Quick sample** now go through one `run_pipeline.apply_preset`,
+because a second copy of "what quick means" is two definitions waiting to
+disagree, which is the class this file names first and oftenest. The UI adds
+one thing on top: which session keys to clear after applying a preset is
+**derived**, by snapshotting every introspected field before and after and
+dropping the ones that moved, rather than by listing the fields `apply_preset`
+writes today. Listing them means a fifth field added there is written onto the
+config and then immediately overwritten from a stale session value, which is a
+silent wrong answer rather than an error.
+
+⚠️  **A CONFIG SEARCH MUST REPLACE THE TABS, NOT SIT ABOVE THEM.** The widget
+key IS the storage key, so a field rendered in the search results AND on its
+own tab in the same run is a duplicate-key exception. Search mode and browse
+mode are exclusive by construction, which is also why the curated fields
+already render as read-only mirrors on their module tabs. Anything that adds a
+second place a field can appear has to answer this.
+
+⚠️  **`usecols` RAISES ON A COLUMN THE FILE DOES NOT HAVE**, which matters the
+moment the UI reads anything Stage 1 added recently. `orbit_condition_code`,
+`observation_arc_days` and `n_observations` arrived in catalog `1.2.0` and no
+catalog built before it carries them, including the one on disk here, so the
+element read takes the header first and intersects. The panel then SAYS the
+catalog cannot answer the question rather than rendering nothing, because a
+silent gap reads as a clean bill of health.
+
+🚨  **AND `py` IS NOT NECESSARILY THE INTERPRETER THE DASHBOARD RUNS ON.** This
+machine has two registered Python 3.14 installations: `py` resolves to
+`...\Programs\Python\Python314`, while `_START HERE.vbs` probes `pyw -3` and
+reached `...\Local\Python\pythoncore-3.14-64`, which is where `launch_ui.py`
+then installed Streamlit. So `py -m streamlit run ui.py` fails with
+`ModuleNotFoundError` on a machine whose dashboard works perfectly, and
+`.claude/launch.json` needs the interpreter spelled out rather than `py`.
+**Ask the machine which one answered before concluding a dependency is
+missing:**
+
+```bash
+py -0
+py -c "import sys; print(sys.executable)"
+```
+
+⚠️  It is the interpreter-version lesson one level along: this file already
+refuses to spell the version out because it rotted twice in three days, and the
+same reasoning applies to which install `py` picks. `launch_ui.py` is right to
+use `sys.executable` and `_console_python()` rather than shelling out to `py`;
+do not "simplify" either into a bare interpreter name.
 
 ### The console output is ASCII, and must stay that way
 

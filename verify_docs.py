@@ -665,7 +665,7 @@ ROOT_PY = ["ui.py", "ui_meta.py", "run_pipeline.py", "verify.py",
            # is the only account of the Drive stat-cache bug there is.
            # run.sh is here for the same reason and one more: it is the only
            # account of which run.bat traps do and do not carry to POSIX.
-           ".githooks/drive-restat.sh", "Dashboard.vbs",
+           ".githooks/drive-restat.sh", "_START HERE.vbs",
            "run.sh"] + CAMPAIGN_PY
 
 

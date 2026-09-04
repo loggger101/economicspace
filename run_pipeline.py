@@ -331,6 +331,27 @@ def declared_default(config_obj, field_name):
     return None
 
 
+def apply_preset(cfg, settings: dict) -> None:
+    """Write one resolved preset onto the live config objects.
+
+    The four assignments below are the WHOLE meaning of a preset, and they used
+    to sit inline in `main()` where only this file could reach them.  The
+    dashboard offers the same three presets, so a second copy of this mapping
+    would be two definitions of "quick" waiting to disagree, which is the
+    defect class CLAUDE.md names first and oftenest.  One definition, two
+    readers: `main()` below, and `ui.py`'s sidebar.
+
+    `cfg` is `MASTER_CONFIG`, and `raw` is written as the NEGATION of
+    `use_beneficiation` because the preset names the ore while the config names
+    the upgrade.  Nothing here touches the destination: that is not a preset
+    question, and `MasterConfig` owns writing both of its copies.
+    """
+    cfg.catalog.jpl_limit = settings["asteroids"]
+    cfg.calc.eval_row_cap = settings["rows"]
+    cfg.calc.use_beneficiation = not settings["raw"]
+    cfg.calc.optimise_programme_scale = settings["search"]
+
+
 def check_defaults_preset(cfg) -> None:
     """Verify `full` still IS the defaults instead of merely saying so.
 
@@ -795,10 +816,7 @@ def main() -> int:
 
     if args.destination:
         cfg.delivery_destination = args.destination      # writes BOTH copies
-    cfg.catalog.jpl_limit = settings["asteroids"]
-    cfg.calc.eval_row_cap = settings["rows"]
-    cfg.calc.use_beneficiation = not settings["raw"]
-    cfg.calc.optimise_programme_scale = settings["search"]
+    apply_preset(cfg, settings)
     if args.workers is not None:
         cfg.calc.parallel_workers = args.workers
 
