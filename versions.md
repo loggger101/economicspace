@@ -23,8 +23,8 @@ history of how it got there.
 | 1 | `modules/catalog.py` | **1.1.1** | v1.1.1, `enrich_composition` by distinct taxonomy, 3.87× |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments |
-| 4 | `modules/calc.py` | **1.19.2** | v1.19.2, `mars_orbit` phased its launch windows against Earth |
-| - | `master.py` | **1.22.2** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.20.0** | v1.20.0, both insurance premiums are out of scope, and off |
+| - | `master.py` | **1.24.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -103,6 +103,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [calc v1.20.0](#calc-v1200) | 2026-09-04 | **both insurance premiums are off**: a transfer priced off an underwriter's book, in a model that prices masses |
 | [catalog v1.2.0](#catalog-v120) | 2026-09-03 | **NEOWISE dedup decided by row order on 27,802 bodies**; the ranking could not see orbit quality; `ma` had no epoch; async TAP |
 | [calc v1.19.2](#calc-v1192) | 2026-09-03 | **`mars_orbit` waited for the wrong planet** |
 | [calc v1.19.1](#calc-v1191) | 2026-09-02 | a version check had been comparing every catalog against Module 3 |
@@ -134,6 +135,150 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## calc v1.20.0
+
+**Both insurance premiums are off**, behind a new `charge_insurance` flag that
+defaults **False**. Module 3 prices two of them and the cost cascade charged
+both on every mission:
+
+| Module 3 row | basis | value |
+|---|---|---|
+| Third-party liability insurance | flat, per mission | $1,500,000 |
+| Launch insurance | percent of (launch + spacecraft book value) | 10% |
+
+Neither is wrong, and that is what makes this different from every other cost
+flag in the module. `charge_tanker_flights` is gated because the charge is
+**incorrect** here; it bills a scenario this module does not have. These two
+are correct, real, and **out of scope**: this pipeline prices the marginal
+physics and hardware of moving a kilogram, on the same framing that makes the
+two surface delivery prices
+[marginal-transport lower bounds](README.md#what-a-kilogram-is-worth) with no
+NRE-style programme overhead in them. A premium is priced off an underwriter's
+book. It is not a mass, a Delta-v or a kilowatt, and nothing else in the
+cascade is priced that way.
+
+It is also a second statement of a risk the model already carries explicitly.
+`model_reliability` multiplies expected revenue by
+`p_launch x exp(-T/MTBF) x p_mining` and charges every cost in full; a premium
+is what a programme pays to convert that risk into a certain payment, so
+pricing both is pricing one uncertainty in two currencies.
+
+⚠️  **This does not disturb the reliability term, in either direction.** That
+block's own note has said since v1.8.0 that insurance "replaces hardware on
+failure, not revenue, so there is no double count". That was true, so there is
+no double count to remove now, and `charge_insurance` reaches none of
+`p_launch`, `p_cruise` or `p_mining`. The two comments that made the argument
+are corrected in place rather than deleted.
+
+### What the two premiums were worth
+
+Measured on a cislunar stride sample, Stage 4 only, on the four cells and caps
+`verify.py` uses, each run twice against an identical catalog in one process,
+so every ratio below is over identical rows:
+
+| cell | rows | best cost/revenue, charged | off | median improvement | premium, % of total cost |
+|---|---|---|---|---|---|
+| raw | 155 | 52.0009 | **48.4982** | **5.85%** | 2.752% |
+| raw + search | 155 | 30.0398 | **26.5704** | **9.57%** | 4.342% |
+| beneficiated | 65 | 27.4143 | **25.7366** | **5.49%** | 2.409% |
+| beneficiated + search | 65 | 16.5339 | **14.8549** | **9.33%** | 3.923% |
+
+`median improvement` is `median(1 - r)` with `r = off / charged`, the
+convention every never-worse figure in this project uses; the reciprocal
+reading is 1.7x larger and is not the one on record.
+
+🚨  **THE IMPROVEMENT IS TWICE THE PREMIUM'S SHARE OF COST, AND THAT IS THE PART TO
+UNDERSTAND BEFORE READING ANY OF IT.** A premium is an **upfront** line, so it
+is multiplied by contingency (1.20) and then compounded over the whole mission
+at the upfront WACC multiplier before it reaches `total_cost`. Removing $1 of
+it removes $2.12 to $2.38 of the answer:
+
+| cell | premium share | median improvement | effective multiplier |
+|---|---|---|---|
+| raw | 2.752% | 5.847% | **2.124** |
+| raw + search | 4.342% | 9.571% | **2.204** |
+| beneficiated | 2.409% | 5.489% | **2.279** |
+| beneficiated + search | 3.923% | 9.329% | **2.378** |
+
+The share column is the line as Module 3 prices it. **Quote the improvement and
+not the share**, unless you mean the invoice rather than the answer.
+
+✅  **"Insurance" here is one term with a rounding error attached.**
+Third-party liability is a flat $1.5M and lands at a median **0.027% to
+0.045%** of total cost; launch insurance is 2.383% to 4.322% of it. Everything
+above is the 10% of the launch stack, and the flat premium would not have been
+worth a release on its own.
+
+🚨  **The programme search makes insurance MATTER MORE, not less**, 4.342% against
+2.752% raw, and it is the only cost line in the module that behaves that way.
+Both NREs amortise across N and the rig is shared across a fleet; a premium is
+underwritten **per launch** and per spacecraft, so it does not amortise at all.
+As a programme grows, insurance grows into the space the amortised lines
+vacate.
+
+### Verification
+
+**With the flag ON, calc 1.20.0 is bit-identical to 1.19.1**, which is the
+claim every default flip in this project has to make. All four cells against
+the `baseline-1.19.1` on disk:
+
+| cell | columns | hash | |
+|---|---|---|---|
+| raw | 139/139 | `4184f13cf57a6df7` | MATCH |
+| raw + search | 139/139 | `66d88054984b014a` | MATCH |
+| beneficiated | 139/139 | `b88b5dac5d2fe43d` | MATCH |
+| beneficiated + search | 139/139 | `2a4f610ec97bf6f2` | MATCH |
+
+The new default's own hashes, for the next release to compare against:
+`7f7cc1eed2628150` / `8969c36dd236efaf` / `84445d43812af21c` /
+`72e888e3d83d7de8`.
+
+**`verify.py check --tag 1.20.0` passes all six on the new default**, the
+full pass rather than the five-minute loop: the pre-filter on against off is
+139/139 columns and MATCH on all four cells, serial against 8 workers is MATCH
+on both searched cells, the mass ledger is `0.000000000 kg` on all four,
+never-worse has zero exceptions on all three pairings, and Stage 2 recomputes
+identical on 31 rows.
+
+Three properties hold in all four cells and are worth re-checking if anything
+here is touched:
+
+- **The evaluable set does not move.** 155 / 155 / 65 / 65 rows charged and
+  off, the same designations both ways. Feasibility is a question about two
+  masses; a premium enters no mass cascade, so it cannot make a mission close
+  or fail to close.
+- **Never-worse, and it is provable rather than lucky.** Every option's cost
+  falls weakly and no revenue moves, so every option's ratio falls and so does
+  the argmax over them. Measured anyway: **0 worse** in all four cells, worst
+  `r` 0.9534 / 0.9317 / 0.9492 / 0.9258.
+- **The winner does not change.** 2017 KJ5 raw, 2017 MC1 raw-searched, 2010
+  FG81 in both beneficiated cells, on both settings. The premium is close to
+  proportional to the launch stack, so it rescales the ranking far more than it
+  reorders it.
+
+⚠️  **The column count is unchanged: 141 both ways.** `liability_cost_usd`
+and `launch_insurance_cost_usd` stay in the CSV at 0.0, so no consumer schema
+moves, the dashboard's cost breakdown still resolves, and a charged run is one
+column away from an uncharged one rather than a different file format.
+
+### What this retires
+
+🚨  **EVERY MEASUREMENT COMMITTED IN THIS PROJECT IS A `charge_insurance = True`
+MEASUREMENT**, including the whole 20-cell campaign of 2026-08-23/24 and every
+table in [Measurement history](#measurement-history). None of them is wrong and
+none of them is reproducible by a configure-nothing run any more; set
+`charge_insurance` True to reproduce one. This is calc v1.17.0's situation
+exactly, a default that changes the question a default run asks, and the same
+rule applies: **do not read any table as covering a `charge_insurance = False`
+run unless it says so.**
+
+⚠️  **Do not scale a committed cell by any ratio above.** These are
+stride-sample cells at caps of 400 and 150, and the four *levels* in the table
+(52.0009 and the rest) are sample bests rather than the full-catalog cells.
+What a sample estimates well here is the ratio between two settings over
+identical rows, which is the better-conditioned half of THE SAMPLING RULE; the
+levels are the half that has been wrong four times.
 
 ## catalog v1.2.0
 
@@ -3535,6 +3680,27 @@ the other six destinations.
   replaces a `== "mars_surface"` conditional that existed in two places, one
   the real computation in `AsteroidContext` and one the pre-filter's diagnostic
   probe, which had to agree and were free not to.
+
+**`1.20.0`  both insurance premiums are off.** Full write-up:
+[calc v1.20.0](#calc-v1200). One new config field and no new output column;
+`liability_cost_usd` and `launch_insurance_cost_usd` are **0.0** on a default
+run, and every cost, ratio and rank downstream of them moves at every
+destination.
+
+- `charge_insurance` is new in `CalcConfig` and defaults **False**. It is the
+  only cost flag in the module that is off because the charge is out of SCOPE
+  rather than incorrect; `charge_tanker_flights` is the other shape, gated
+  because this module has no scenario the charge belongs to.
+- `_mission_cost_prologue` zeroes `liability_cost` and `launch_ins_raw`
+  immediately after the `_ops_cost_constants` unpack, not at their two use
+  sites, so the three sums `_mission_cost_tail` must keep written out term for
+  term are untouched. Adding 0.0 to a finite float is exact, which is why
+  `charge_insurance = True` is bit-identical to 1.19.1 rather than merely equal
+  to it.
+- The Stage 4 preview banner gains an `Insurance` line, beside `Programme` and
+  `Calendar`.
+- **Module 3 is not touched and its two rows are still read.** No Stage 3
+  re-run, no CSV schema change, and nothing in `_MODULE3_REQUIRED_OPS` moves.
 
 # Measurement history
 
