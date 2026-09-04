@@ -21,6 +21,12 @@ DELIBERATELY NOT IN `modules/`. `build_master.py` concatenates that directory
 into `master.py` and asserts a specific header/footer shape per module; this is
 a consumer of the built `master.py`, not a part of it.
 
+ON THE THREE PRESETS. `run_pipeline.PRESETS` and `run_pipeline.apply_preset`
+are imported rather than restated, so the "Quick sample" button here and
+`run.bat quick` are the same run by construction. Importing that module is
+side-effect free apart from its stdout reconfiguration; it does not import
+master, and its own run is behind an `if __name__` guard.
+
 ON MUTATING CONFIG INSTANCES. CLAUDE.md says to edit a field's default inside
 the dataclass rather than mutating the instance, because mutation defeats having
 one editable source of truth. A UI is the exception the MasterConfig docstring
@@ -49,6 +55,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 import pandas as pd
 import streamlit as st
 
+import run_pipeline
 import ui_meta
 from ui_meta import FieldSpec
 
@@ -61,6 +68,14 @@ st.set_page_config(
 
 RUN_CONFIG_FILENAME = "ui_run_config.json"
 NA = "n/a"
+
+# The two sections, named once. They used to be matched with
+# `page.endswith("Configure")`, i.e. on the tail of a string carrying a leading
+# emoji and two spaces, which is a comparison that breaks the moment anyone
+# edits the label.
+PAGE_CONFIGURE = "Configure"
+PAGE_RESULTS = "Results"
+PAGES = [PAGE_CONFIGURE, PAGE_RESULTS]
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -388,6 +403,75 @@ def apply_config() -> List[str]:
     # destination across Stages 2 and 4.
     MASTER.apply()
     return changes
+
+
+def effective(section: str, name: str) -> Any:
+    """What a run started right now would use for one config field.
+
+    Session state is the truth for anything the user has touched, because
+    `apply_config()` does not push it onto the config objects until the run
+    starts. Reading the config object alone made the sidebar summary contradict
+    the Configure page the moment anyone edited a dial.
+    """
+    spec = SPEC_INDEX.get(f"{section}::{name}")
+    if spec is not None and spec.key in st.session_state:
+        return st.session_state[spec.key]
+    return getattr(CONFIG_OBJECTS[section], name, None)
+
+
+PRESET_LABELS = {
+    "quick":    "Quick sample",
+    "standard": "Standard",
+    "full":     "Full run",
+}
+
+
+def preset_summary(name: str) -> str:
+    """One line describing what a preset actually sets, read off run_pipeline.
+
+    Built from the settings dict rather than from `blurb`, because the blurb is
+    prose written for a `--help` epilog and this has to fit under a button.
+    """
+    s = run_pipeline.PRESETS[name]
+    rows = "every row" if not s["rows"] else f"{s['rows']:,} rows"
+    ore = "run-of-mine ore" if s["raw"] else "beneficiated"
+    prog = "programme search" if s["search"] else "single mission"
+    return f"{rows}, {ore}, {prog}"
+
+
+def apply_run_preset(name: str) -> None:
+    """Set the run-size dials to one of run_pipeline's three presets.
+
+    Deliberately NOT called `apply_preset`: `run_pipeline.apply_preset` is the
+    one that defines what a preset means, this one is the UI wrapper that also
+    reconciles session state, and two functions of one name reading each other
+    is how a reader ends up sure the mapping lives here.
+
+    Runs at the TOP of a script run for the same reason `reset_config` does:
+    it clears session keys, and a key Streamlit has already bound to a live
+    widget is exactly the write it forbids. The sidebar button sets a flag and
+    reruns.
+
+    Which session keys to clear is DERIVED, by snapshotting every introspected
+    field before and after and dropping the ones that moved, rather than by
+    listing the four fields `run_pipeline.apply_preset` happens to write today.
+    A fifth field added there would otherwise be written onto the config and
+    then immediately overwritten from a stale session value, which is a silent
+    wrong answer rather than an error.
+    """
+    settings = dict(run_pipeline.PRESETS[name])
+    settings.pop("blurb", None)
+
+    before = {spec.key: getattr(CONFIG_OBJECTS[spec.section_key], spec.name, None)
+              for specs in SPECS.values() for spec in specs}
+    run_pipeline.apply_preset(MASTER, settings)
+
+    for specs in SPECS.values():
+        for spec in specs:
+            now = getattr(CONFIG_OBJECTS[spec.section_key], spec.name, None)
+            if now != before[spec.key]:
+                st.session_state.pop(spec.key, None)
+    MASTER.apply()
 
 
 def reset_config() -> None:
@@ -864,6 +948,17 @@ def run_stages(selected_keys: Sequence[str]) -> None:
         list(selected_keys), changes)
     st.session_state["results_token"] = time.time()   # busts the results cache
 
+    # Land on the answer. Someone who just pressed Run wants the output, and
+    # leaving them on the Configure page meant a run finished with no visible
+    # sign of it except a green line above the dials they had been editing.
+    #
+    # DEFERRED, like the reset and the presets, and for the same reason: the
+    # section control is created in main() BEFORE this function is called, so
+    # writing its key here is the write Streamlit forbids. main() reads the
+    # flag at the top of the next run, before any widget exists.
+    if "calc" in selected_keys:
+        st.session_state["goto_results"] = True
+
     # The sidebar rendered its cache status BEFORE these stages wrote anything,
     # so it is now describing a state that no longer exists, most visibly still
     # warning about a destination mismatch this run just fixed. Rerun so it
@@ -962,6 +1057,12 @@ HEADLINE_COLUMNS = [
     "max_payload_kg", "gross_value_usd", "total_cost_usd", "profit_usd",
     "mission_duration_yr", "dv_out_m_s", "dv_ret_m_s", "diameter_km",
     "semi_major_axis_au", "is_neo", "viable",
+    # Present only in a catalog built by Stage 1 v1.2.0 or later, and dropped
+    # silently by `_render_table` when they are not. Listed here rather than
+    # left to the "119 more available" expander because how well an orbit is
+    # known is a property of the RANKING, not a detail of one row: the top of
+    # this table is 3.1x enriched in bodies whose orbits are provisional.
+    "orbit_condition_code", "observation_arc_days", "n_observations",
 ]
 
 
@@ -1139,14 +1240,29 @@ def _render_charts(ranked: pd.DataFrame) -> None:
                      count=("cost_revenue_ratio", "size"))
                 .reset_index().rename(columns={"spectral_type": "type"})
             )
+            # A DOT plot, not bars, and the reason is a bug this chart shipped
+            # with: a bar is drawn from an implicit zero baseline, log(0) is
+            # -inf, so `mark_bar` on a log scale renders an axis, a legend, five
+            # labels and NO BARS. The spread here runs from ~18x to ~1e5, which
+            # is exactly the range that needs a log axis, so the mark is what
+            # gives way. Size carries the population behind each best, which a
+            # bar could not show at all.
             st.altair_chart(
-                alt.Chart(by_type).mark_bar().encode(
-                    x=alt.X("best:Q", title="best cost/revenue",
+                alt.Chart(by_type).mark_circle(opacity=0.85).encode(
+                    x=alt.X("best:Q", title="best cost/revenue (lower better)",
                             scale=alt.Scale(type="log")),
                     y=alt.Y("type:N", sort="x", title=None),
+                    size=alt.Size("count:Q", title="targets"),
                     tooltip=["type", "best", "count"],
                 ).properties(height=340),
                 use_container_width=True,
+            )
+            st.caption(
+                "One dot per spectral type at its best target. The dot is "
+                "sized by how many targets of that type the run evaluated, so "
+                "a large dot far right is a well-sampled type that simply does "
+                "not pay, and a small dot on the left is one good body rather "
+                "than a good class."
             )
 
     with right:
@@ -1245,6 +1361,324 @@ def _numeric_table(row: pd.Series, fields: Iterable[Tuple[str, str]],
         pd.DataFrame(data, columns=list(columns)),
         use_container_width=True, hide_index=True,
         column_config={columns[1]: st.column_config.NumberColumn(format=fmt)},
+    )
+
+
+ORBITAL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "research", "starred-repos", "orbital.py")
+
+# The elements a picture of an orbit needs. Stage 4 carries only
+# `semi_major_axis_au` through to the profitability catalog, so the rest are
+# read back out of the Stage 1 catalog on demand.
+_ELEMENT_COLUMNS = ["designation", "semi_major_axis_au", "eccentricity",
+                    "inclination_deg", "longitude_asc_node_deg",
+                    "arg_perihelion_deg"]
+
+# HOW WELL THE ORBIT ABOVE IS KNOWN, which catalog v1.2.0 added and which no
+# catalog built before it carries. Optional for exactly that reason: an 862 MB
+# CSV written by an older Stage 1 has none of these columns, and naming a
+# missing column in `usecols` is a ValueError rather than a NaN.
+#
+# It earns a panel of its own because of what research/starred-repos found:
+# the top 30 of this ranking runs 43.3% at condition code 5 or worse against
+# 13.9% of the population, a 3.1x enrichment at p = 8.3e-05, and the effect
+# disappears further down the ranking. Selecting the extreme of a ranking
+# derived from noisy elements preferentially selects the bodies whose fit
+# errors flatter them, so a rank-1 result with U = 7 is a different kind of
+# claim from a rank-1 result with U = 0.
+_ORBIT_QUALITY_COLUMNS = ["orbit_condition_code", "observation_arc_days",
+                          "n_observations"]
+
+
+@st.cache_resource(show_spinner=False)
+def orbital_module():
+    """`research/starred-repos/orbital.py`, or None if it is not there.
+
+    Imported by path rather than restated, because that file already carries a
+    Kepler solver and an `elements_to_state` adapted from skyfield with the
+    attribution recorded in CITATIONS.md. A second copy of the same rotation
+    would be one more thing to keep in step, and the ATTRIBUTION would be on
+    the copy nobody reads.
+
+    `spec_from_file_location` is entry 5 in verify.py's table of harness bugs,
+    but that entry is about a WORKER re-importing master; this is the parent
+    process importing a numpy-only leaf module whose directory has a hyphen in
+    it, which no plain import statement can name.
+    """
+    if not os.path.exists(ORBITAL_PATH):
+        return None
+    try:
+        import importlib.util                       # noqa: PLC0415
+        spec = importlib.util.spec_from_file_location("_ui_orbital", ORBITAL_PATH)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception:
+        return None
+
+
+@st.cache_data(show_spinner="Reading orbital elements ...")
+def orbit_elements(path: str, mtime: float,
+                   designations: Tuple[str, ...]) -> pd.DataFrame:
+    """The elements for the given bodies, out of the Stage 1 catalog.
+
+    Six columns of an 862 MB CSV is a ~7 s read, so it is filtered down to the
+    bodies actually on screen and cached on the file's mtime. `mtime` is a
+    cache key and is not read in the body, as in `_read_name_column`.
+    """
+    try:
+        # The header first, because `usecols` raises on a column the file does
+        # not have, and the orbit-quality trio only exists in a catalog built
+        # by Stage 1 v1.2.0 or later.
+        available = set(pd.read_csv(path, nrows=0).columns)
+        wanted_cols = [c for c in _ELEMENT_COLUMNS + _ORBIT_QUALITY_COLUMNS
+                       if c in available]
+        if not set(_ELEMENT_COLUMNS) <= available:
+            return pd.DataFrame(columns=_ELEMENT_COLUMNS)
+        df = pd.read_csv(path, usecols=wanted_cols, low_memory=False)
+    except Exception:
+        return pd.DataFrame(columns=_ELEMENT_COLUMNS)
+    wanted = df["designation"].astype(str).isin(set(designations))
+    return df.loc[wanted].drop_duplicates("designation").reset_index(drop=True)
+
+
+def _ellipse(orbital, a_au: float, e: float, i_deg: float,
+             raan_deg: float, argp_deg: float, label: str) -> pd.DataFrame:
+    """One closed orbit as 361 ecliptic points, in AU.
+
+    `elements_to_state` is called with `a` in AU rather than km: the shape of
+    the conic is `p / (1 + e cos nu)` and scales with `a`, so the position comes
+    back in whatever unit went in. Only the VELOCITY it also returns would care
+    about mu, and nothing here reads it.
+    """
+    import numpy as np                              # noqa: PLC0415
+    nu = np.linspace(0.0, 2.0 * np.pi, 361)
+    r, _v = orbital.elements_to_state(
+        a_au, e, np.radians(i_deg), np.radians(raan_deg),
+        np.radians(argp_deg), nu)
+    return pd.DataFrame({"x": r[0], "y": r[1], "z": r[2],
+                         "body": label, "step": range(len(nu))})
+
+
+def _orbit_kind(body: str, target: str) -> str:
+    """Which of the two roles a drawn orbit plays: target, or reference.
+
+    Drives a dash pattern rather than only a colour, so which line is the
+    subject survives a colour-blind reader, a light theme and a greyscale
+    screenshot. Colour alone had Mars and the asteroid within one hue of each
+    other at a two-pixel stroke.
+    """
+    return "target" if body == target else "reference"
+
+
+def _render_orbit_quality(e_row: pd.Series) -> None:
+    """How well this body's orbit is actually known, when the catalog says.
+
+    Delta-v comes from a, e and i; the whole economic ranking comes from
+    Delta-v. So a cost/revenue ratio quoted to six figures against a 32-day
+    observation arc is a different claim from the same figure against a
+    70-year one, and until Stage 1 v1.2.0 the catalog carried nothing that
+    could tell the two apart.
+
+    Says so plainly when the columns are absent rather than rendering nothing,
+    because "this catalog cannot answer that" is the answer, and a silent gap
+    reads as a clean bill of health.
+    """
+    if "orbit_condition_code" not in e_row.index:
+        st.caption(
+            "This catalog carries no orbit-quality columns, so how well the "
+            "elements above are known is unknown. Stage 1 v1.2.0 added "
+            "`orbit_condition_code`, `observation_arc_days` and "
+            "`n_observations`; a catalog built before it, like the one on "
+            "disk here, predates them."
+        )
+        return
+
+    def _number(key):
+        """One orbit-quality field as a float, or None if it is not one.
+
+        Stage 1 coerces all three to numeric, so a non-numeric MPC code arrives
+        as NaN and `pd.isna` is enough. Read defensively anyway: no catalog on
+        this machine has these columns yet, so this branch has never run
+        against real data, and a drilldown that raises is a worse answer than
+        one that says it does not know.
+        """
+        value = e_row.get(key)
+        try:
+            return None if pd.isna(value) else float(value)
+        except (TypeError, ValueError):
+            return None
+
+    code = _number("orbit_condition_code")
+    arc = _number("observation_arc_days")
+    obs = _number("n_observations")
+
+    cols = st.columns(3)
+    cols[0].metric("Orbit condition code U",
+                   NA if code is None else str(int(code)),
+                   help="MPC orbit uncertainty, 0 = well determined, "
+                        "9 = barely constrained.")
+    cols[1].metric("Observation arc",
+                   NA if arc is None else f"{arc:,.0f} days")
+    cols[2].metric("Observations", NA if obs is None else f"{obs:,.0f}")
+    known = None if code is None else int(code)
+
+    if known is not None and known >= 5:
+        st.warning(
+            f"**U = {known}: this orbit is provisional.** Delta-v comes from "
+            "a, e and i, and the ranking comes from Delta-v, so a body this "
+            "poorly determined can be flattered by its own fit errors. "
+            "research/starred-repos measured the top 30 of this ranking at "
+            "43.3% U >= 5 against 13.9% of the population, and the enrichment "
+            "vanishes further down, which is the signature of a winner's "
+            "curse rather than a bad catalog.",
+            icon="⚠️",
+        )
+
+
+def _render_orbit(row: pd.Series) -> None:
+    """Where this body actually is, drawn from its own elements.
+
+    The one thing the tables cannot show: two targets with the same Delta-v can
+    be a nearly circular body just outside Earth's orbit and a steeply inclined
+    one crossing it, and which of those you are looking at is the whole story
+    of the mission. Technique from typpo/spacekit (MIT), which solves Kepler
+    per body to draw a million at once; here it is one body at a time, so numpy
+    and Altair are enough and no WebGL is needed.
+
+    Earth and Mars are drawn as CIRCLES because that is what the model assumes:
+    `A_MARS_AU` is a semi-major axis used as a circular orbit radius in
+    `_asteroid_to_mars_dv_km_s`, and the Earth legs work in canonical units
+    where Earth's orbit is the unit circle. A truer ellipse for either would
+    make the picture disagree with the numbers beside it.
+    """
+    orbital = orbital_module()
+    if orbital is None:
+        return
+
+    designation = str(_cell(row, "designation", "") or "")
+    if not designation:
+        return
+
+    catalog = os.path.join(MASTER.output_dir, MASTER.catalog.catalog_filename)
+    if not os.path.exists(catalog):
+        st.caption("The orbit diagram needs the Stage 1 catalog, which is not "
+                   "on disk. Everything above comes from the Stage 4 output.")
+        return
+
+    elements = orbit_elements(catalog, os.path.getmtime(catalog), (designation,))
+    if elements.empty:
+        st.caption(f"`{designation}` is not in the Stage 1 catalog on disk, so "
+                   "there are no elements to draw. That happens when the "
+                   "profitability catalog came from a different run.")
+        return
+
+    import altair as alt                             # noqa: PLC0415
+    e_row = elements.iloc[0]
+    a_au = float(e_row["semi_major_axis_au"])
+    ecc = float(e_row["eccentricity"])
+    inc = float(e_row["inclination_deg"])
+
+    orbits = pd.concat([
+        _ellipse(orbital, 1.0, 0.0, 0.0, 0.0, 0.0, "Earth"),
+        _ellipse(orbital, master.A_MARS_AU, 0.0, 0.0, 0.0, 0.0, "Mars"),
+        _ellipse(orbital, a_au, ecc, inc,
+                 float(e_row["longitude_asc_node_deg"]),
+                 float(e_row["arg_perihelion_deg"]), designation),
+    ], ignore_index=True)
+    orbits["kind"] = [_orbit_kind(b, designation) for b in orbits["body"]]
+
+    # Perihelion is nu = 0 and aphelion nu = pi, which are steps 0 and 180 of
+    # the 361 sampled above. Marking the one the search CHOSE is the point:
+    # `rendezvous_apsis` is a decision the model makes per body AND per
+    # destination, and as a word in a table it is invisible.
+    target = orbits[orbits["body"] == designation].reset_index(drop=True)
+    apsis = str(_cell(row, "rendezvous_apsis", "") or "").lower()
+    marks = pd.DataFrame([
+        {"x": target.loc[0, "x"], "y": target.loc[0, "y"],
+         "z": target.loc[0, "z"], "point": "perihelion"},
+        {"x": target.loc[180, "x"], "y": target.loc[180, "y"],
+         "z": target.loc[180, "z"], "point": "aphelion"},
+    ])
+    # A STRING rather than the boolean this started as: the legend renders the
+    # encoded values verbatim, so a boolean column labelled the two apsides
+    # "true" and "false" under a heading of "rendezvous", which is a caption
+    # nobody can read without the source.
+    marks["role"] = [("met here" if p == apsis else "other apsis")
+                     for p in marks["point"]]
+
+    span = float(max(orbits[["x", "y"]].abs().to_numpy().max(),
+                     master.A_MARS_AU)) * 1.1
+    domain = [-span, span]
+
+    def _plane(horiz: str, vert: str, title: str):
+        """One projection of the three orbits, with the sun and the apsides."""
+        line = alt.Chart(orbits).mark_line(strokeWidth=2).encode(
+            x=alt.X(f"{horiz}:Q", title=f"{horiz.upper()} (AU)",
+                    scale=alt.Scale(domain=domain, nice=False)),
+            y=alt.Y(f"{vert}:Q", title=f"{vert.upper()} (AU)",
+                    scale=alt.Scale(domain=domain, nice=False)),
+            order="step:Q",
+            color=alt.Color("body:N", title=None,
+                            sort=["Earth", "Mars", designation],
+                            scale=alt.Scale(
+                                domain=["Earth", "Mars", designation],
+                                range=["#4c78a8", "#9d6b53", "#e45756"])),
+            strokeDash=alt.StrokeDash(
+                "kind:N", legend=None,
+                scale=alt.Scale(domain=["reference", "target"],
+                                range=[[4, 3], [1, 0]])),
+            tooltip=["body:N"],
+        )
+        sun = alt.Chart(pd.DataFrame([{"x": 0.0, "y": 0.0, "z": 0.0}])).mark_point(
+            shape="circle", size=90, filled=True, color="#f5b301").encode(
+            x=f"{horiz}:Q", y=f"{vert}:Q")
+        apsides = alt.Chart(marks).mark_point(
+            shape="diamond", filled=True, size=110).encode(
+            x=f"{horiz}:Q", y=f"{vert}:Q",
+            color=alt.Color("role:N", title="apsis",
+                            scale=alt.Scale(domain=["met here", "other apsis"],
+                                            range=["#f2f2f2", "#8c8c8c"])),
+            tooltip=["point:N", "role:N"])
+        # `resolve_scale(color="independent")` is load-bearing, not tidying.
+        # Layered charts share a scale per channel by default, so the apsis
+        # layer's explicit colour domain swallowed the orbit layer's:
+        # "Earth", "Mars" and the designation were all off-domain, drew with no
+        # colour at all, and the chart rendered as a sun and two diamonds with
+        # the orbits invisible and no error anywhere.
+        return (line + sun + apsides).resolve_scale(
+            color="independent").properties(width=330, height=330, title=title)
+
+    st.markdown("#### Where it is")
+    left_panel, right_panel = st.columns(2)
+    # Explicit equal width and height on a SHARED domain, rather than
+    # use_container_width: an orbit drawn on unequal axes is a picture of a
+    # different orbit, and the edge-on panel is legible at all only because it
+    # shares the top-down panel's scale.
+    with left_panel:
+        st.altair_chart(_plane("x", "y", "Looking down on the ecliptic"))
+    with right_panel:
+        st.altair_chart(_plane("x", "z", "Edge on: the inclination"))
+
+    st.caption(
+        f"**a** {a_au:,.3f} AU  |  **e** {ecc:,.4f}  |  **i** {inc:,.2f} deg  "
+        f"|  perihelion {a_au * (1 - ecc):,.3f} AU  |  aphelion "
+        f"{a_au * (1 + ecc):,.3f} AU. A flat line in the right-hand panel is a "
+        "body in the ecliptic; a tall one is the plane change the Delta-v model "
+        "is charging for. The pale diamond is the apsis the architecture "
+        "search chose to meet it at, which CLAUDE.md is emphatic "
+        "must stay a search and not a rule: at a = 0.6, e = 0.8 the old "
+        "aphelion-if-above-1-AU rule cost 18.5 km/s outbound where perihelion "
+        "needs 12.1."
+    )
+    _render_orbit_quality(e_row)
+
+    st.caption(
+        "Earth and Mars are circles at 1.000 and "
+        f"{master.A_MARS_AU:,.3f} AU because that is what the Delta-v model "
+        "assumes; a truer ellipse here would disagree with the numbers above. "
+        "The node and the argument of perihelion are read from the Stage 1 "
+        "catalog, which is the only place they survive."
     )
 
 
@@ -1360,6 +1794,9 @@ def _render_drilldown(ranked: pd.DataFrame) -> None:
         st.markdown("#### Model terms")
         _numeric_table(row, _MODEL_TERMS, ("term", "value"), "%.4g")
 
+    st.divider()
+    _render_orbit(row)
+
     with st.expander("Every column for this row"):
         st.dataframe(
             pd.DataFrame({"field": row.index, "value": row.astype(str).values}),
@@ -1431,6 +1868,43 @@ def render_sidebar() -> None:
         )
 
     st.sidebar.divider()
+    st.sidebar.subheader("How big a run")
+    st.sidebar.caption(
+        "The same three presets `run.bat` and `run.sh` offer, imported from "
+        "`run_pipeline.py` so they cannot drift apart. Each one writes the row "
+        "caps and the two big flags; everything else is left alone, and you "
+        "can still edit any dial afterwards on the Configure page."
+    )
+    # Stacked rather than in three columns: a sidebar is ~250 px wide, and
+    # three columns truncated the labels to "Quick ...", "Stand...", "Full run",
+    # which is a menu that hides which option you are choosing.
+    for name in ("quick", "standard", "full"):
+        if st.sidebar.button(PRESET_LABELS[name], key=f"preset::{name}",
+                             use_container_width=True,
+                             help=run_pipeline.PRESETS[name]["blurb"]):
+            # Deferred for the same reason the reset is: apply_run_preset
+            # clears widget-bound session keys, which is only legal before the
+            # widgets for this run exist. main() handles the flag on entry.
+            st.session_state["preset_requested"] = name
+            st.rerun()
+        st.sidebar.caption(preset_summary(name))
+    # 0 means "no cap", so it is spelled as a phrase rather than run through
+    # the same pluralisation as a count: the first version of this line read
+    # "every evaluated rows".
+    cap = effective("calc", "eval_row_cap") or 0
+    if not cap:
+        rows = "every row"
+    else:
+        rows = f"{cap:,} evaluated row" + ("" if cap == 1 else "s")
+    st.sidebar.divider()
+    st.sidebar.caption(
+        f"**Currently set to {rows}**, "
+        + ("beneficiated" if effective("calc", "use_beneficiation")
+           else "run-of-mine ore") + ", "
+        + ("programme search" if effective("calc", "optimise_programme_scale")
+           else "single mission") + "."
+    )
+
     st.sidebar.subheader("Stages to run")
 
     stale_mineral = bool(cached_dest and cached_dest != destination)
@@ -1546,6 +2020,41 @@ def render_sidebar() -> None:
 # PAGES
 # ═════════════════════════════════════════════════════════════════════════════
 
+def render_search_results(needle: str) -> None:
+    """Every config field whose name or help text matches, across all four configs.
+
+    Replaces the tabs rather than sitting above them, and that is a correctness
+    requirement rather than a layout preference: the widget key IS the storage
+    key, so rendering one field here AND on its tab in the same run is a
+    duplicate-key error. Search mode and browse mode are exclusive.
+    """
+    hits = [spec
+            for section in CONFIG_OBJECTS
+            for spec in SPECS[section]
+            if needle in spec.name.lower() or needle in (spec.help or "").lower()]
+
+    if not hits:
+        st.info(f"No config field matches `{needle}`. The search covers field "
+                "names and the module comment attached to each one.", icon="🔍")
+        return
+
+    st.caption(
+        f"**{len(hits)}** field{'' if len(hits) == 1 else 's'} match "
+        f"`{needle}`, from every config at once. Clear the box to go back to "
+        "the tabs."
+    )
+    for section in CONFIG_OBJECTS:
+        found = [s for s in hits if s.section_key == section]
+        if not found:
+            continue
+        st.markdown(f"##### {ui_meta.SECTION_LABELS[section]}")
+        cols = st.columns(2)
+        for i, spec in enumerate(found):
+            with cols[i % 2]:
+                render_field(spec)
+        st.divider()
+
+
 def render_config_page() -> None:
     """The Common tab plus one tab per config, every field introspected at runtime.
 
@@ -1560,6 +2069,18 @@ def render_config_page() -> None:
         "Those comments are the real documentation for this model, and they are "
         "there to stop someone 'fixing' a result that only looks wrong."
     )
+
+    needle = st.text_input(
+        "Find a setting", "", placeholder="e.g. beneficiation, rtg, wacc, tank",
+        help="Matches the field name AND the module comment behind it, across "
+             "all four configs at once. While this box has anything in it the "
+             "tabs below are replaced by the matches, which is also what keeps "
+             "a field from being rendered twice.",
+    ).strip().lower()
+
+    if needle:
+        render_search_results(needle)
+        return
 
     tabs = st.tabs(["⭐ Common"] + [ui_meta.SECTION_LABELS[k] for k in CONFIG_OBJECTS])
 
@@ -1650,6 +2171,54 @@ def render_results_page() -> None:
     render_results(df)
 
 
+def render_getting_started() -> None:
+    """The three steps, and the name of the file that opens this page.
+
+    Expanded on a machine that has never produced a profitability catalog and
+    collapsed afterwards, so it is a first-run guide rather than a permanent
+    banner. The entry-point sentence is here and not only in README.md because
+    somebody looking at this page is exactly the person who no longer needs to
+    read a README, and the question "what did I open, and how do I open it
+    again" is the one a dashboard cannot answer from outside itself.
+    """
+    results_path = os.path.join(MASTER.output_dir, MASTER.calc.output_filename)
+    first_run = not os.path.exists(results_path)
+
+    with st.expander("Start here: how this page works", expanded=first_run):
+        a, b = st.columns([3, 2])
+        with a:
+            st.markdown(
+                "**1. Pick where the material is sold.** The destination in "
+                "the sidebar sets both the price of a kilogram and the "
+                "architecture that delivers it. Changing it forces Stage 2 to "
+                "re-run, which re-fetches live metal prices.")
+            st.markdown(
+                "**2. Pick how big a run you want.** The three preset buttons "
+                "are the ones the command line offers. **Quick sample** "
+                "finishes in minutes and is the right first move; **Full "
+                "run** is the model's own defaults and takes hours.")
+            st.markdown(
+                "**3. Press Run pipeline.** Stage 4 is ticked and Stages 1 to "
+                "3 are not, because those three fetch live data and each "
+                "overwrites the only copy of its CSV. Re-running Stage 4 "
+                "against the catalogs already on disk is the normal loop.")
+            st.markdown(
+                "Results land on the **Results** tab and are read back from "
+                "disk, so they survive closing this page.")
+        with b:
+            st.markdown("**Opening this dashboard again**")
+            st.code("_START HERE.vbs", language="text")
+            st.caption(
+                "Double-click that file in the repository folder. It is the "
+                "one entry point that needs no terminal. `run.bat` (Windows) "
+                "and `./run.sh` (Linux and macOS) offer the same dashboard "
+                "plus the headless runs, and this page itself is `ui.py`."
+            )
+            st.caption(
+                f"Reading and writing `{MASTER.output_dir}`."
+            )
+
+
 def render_run_report() -> None:
     """Replay the last run's outcome and log from session state."""
     if error := st.session_state.get("run_error"):
@@ -1676,9 +2245,13 @@ def main() -> None:
     Streamlit owns the session-state slot behind each widget key and raises if
     you write to it after the widget has been created. See `reset_config()`.
     """
-    # Before any widget exists. See reset_config().
+    # Before any widget exists. See reset_config() and apply_run_preset().
     if st.session_state.pop("reset_requested", False):
         reset_config()
+    if preset := st.session_state.pop("preset_requested", None):
+        apply_run_preset(preset)
+    if st.session_state.pop("goto_results", False):
+        st.session_state["page"] = PAGE_RESULTS
 
     render_sidebar()
 
@@ -1688,8 +2261,26 @@ def main() -> None:
                f"transportation {MASTER.transport.pipeline_version} · "
                f"calc {MASTER.calc.pipeline_version}")
 
-    page = st.radio("Section", ["⚙️  Configure", "📊  Results"],
-                    horizontal=True, label_visibility="collapsed")
+    render_getting_started()
+
+    # `segmented_control` when the installed Streamlit has it (1.40 and up),
+    # because two radio dots read as a question and a segmented control reads
+    # as a place you ARE. requirements-ui.txt only asks for >= 1.30, so the
+    # radio stays as the fallback rather than becoming a version bump.
+    #
+    # Seeded rather than passed as `default=`, because a widget given both a
+    # default AND a session-state value warns about it on every run, and this
+    # key is written by the deferred jump at the top of this function.
+    st.session_state.setdefault("page", PAGE_CONFIGURE)
+    if hasattr(st, "segmented_control"):
+        # It returns None when nothing is selected, so the seeded value is the
+        # fallback rather than a crash on `page ==`.
+        page = st.segmented_control(
+            "Section", PAGES, key="page",
+            label_visibility="collapsed") or PAGE_CONFIGURE
+    else:
+        page = st.radio("Section", PAGES, key="page",
+                        horizontal=True, label_visibility="collapsed")
 
     if requested := st.session_state.pop("run_requested", None):
         st.subheader("Running the pipeline")
@@ -1703,10 +2294,10 @@ def main() -> None:
     if st.session_state.get("run_logs"):
         render_run_report()
 
-    if page.endswith("Configure"):
-        render_config_page()
-    else:
+    if page == PAGE_RESULTS:
         render_results_page()
+    else:
+        render_config_page()
 
 
 main()

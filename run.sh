@@ -18,7 +18,7 @@
 #       not start the tens-of-hours default cell; everything else is
 #       run_pipeline.py's own.
 #
-#  The dashboard target is not a port of run.bat's: there is no Dashboard.vbs
+#  The dashboard target is not a port of run.bat's: there is no _START HERE.vbs
 #  and no windowless-start problem here, and a DGX Spark is usually headless,
 #  so it runs streamlit in the foreground on 0.0.0.0 and prints the URL.
 # ---------------------------------------------------------------------------
@@ -231,7 +231,7 @@ case "$ACTION" in
     # The same dashboard run.bat opens, and the same ui.py: it drives
     # the pipeline in-process, imports nothing platform-specific and
     # spawns no subprocess, so nothing here is a port.  What differs is
-    # the WAY it is started.  run.bat hands off to Dashboard.vbs for a
+    # the WAY it is started.  run.bat hands off to _START HERE.vbs for a
     # windowless start and a control window in place of a console; a
     # Spark reached over ssh has no desktop to put either on, so this
     # runs the server in the foreground and Ctrl-C is the stop button.
