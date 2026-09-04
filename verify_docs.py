@@ -144,7 +144,13 @@ CAMPAIGN_DOCS = ["campaign/FINDINGS.md", "campaign/README.md",
                  "research/starred-repos/README.md",
                  "research/starred-repos/FINDINGS.md",
                  "research/starred-repos/SOURCES.md",
-                 "research/starred-repos/SPACE-MAP.md"]
+                 "research/starred-repos/SPACE-MAP.md",
+                 # The second pass over the same seventeen.  Same argument
+                 # again, and one more: it carries the NHATS and
+                 # Shoemaker-Helin rank agreements, which are the only
+                 # external check on the delta-v model that this repo did not
+                 # build itself.
+                 "research/starred-repos/SECOND-PASS.md"]
 
 # The campaign scripts.  Prose a reader sees, checked whole like the root
 # scripts rather than comments-only like modules/: they hold no reference table,
