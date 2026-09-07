@@ -88,6 +88,32 @@ The post-build AST scan catches new collisions. Do not ignore its warning;
 either add a rename or, if the duplication really is deliberate and identical
 in every copy, add the name to `_EXPECTED_DUPES`.
 
+🚨  **`word_replace` REWRITES COMMENTS AND STRING LITERALS TOO, NOT ONLY CODE**,
+and since Stage 3 became an adapter over an external package that is no longer
+a curiosity. It is `re.sub(r"\b" + name + r"\b", ...)` over the whole file
+text, so every one of these is rewritten:
+
+| what | how it broke |
+|---|---|
+| `from spacecost import validate as _v` | the **imported** name is still a bare word, so master.py asked the package for `validate_transport` and got `ImportError` |
+| `"TRANSPORT CONFIG DRIFT: ..."` | a message that reads `TRANSPORT TRANSPORT_CONFIG DRIFT` in master.py |
+| a comment explaining this very trap | both spellings came out identical, so the warning became nonsense |
+
+⚠️  **Aliasing the local name is NOT enough**, which is the part that looks
+like it should work. `from X import validate as _v` still spells `validate`.
+The fix is on the other side: `spacecost` exports `validate_tables` as a
+collision-proof second name, and the adapter imports that.
+
+✅  **The general rule: never spell a rewritten word anywhere in a module that
+reaches OUTSIDE itself.** For this module the rewritten words are the config
+global and `validate`. Reach the package through `spacecost.` and **read the
+built `master.py`** rather than the module, because they are not the same text
+and only one of them runs.
+
+⚠️  Note what caught this: `verify_docs.py` checks 8 and 9, which import master
+and would have skipped silently in an older revision. Nothing in `verify.py`
+looks at Stage 3, and the pipeline itself would only have failed at run time.
+
 ## Bump `pipeline_version` when output changes
 
 Each module carries a `pipeline_version` in its config dataclass, and it is
@@ -122,8 +148,12 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.14.0`,
-calc `1.20.0`, master `1.24.0` (the master version is a literal in
+calc `1.20.0`, master `1.25.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
+
+ℹ️  **transportation `1.14.0` is now spacecost's data-contract version**, not a
+number this repo owns. The tables moved out; the stamp did not move with them,
+because the stamp identifies the data and the data is unchanged.
 
 ℹ️  **TWENTY stamps so far do NOT mean the numbers moved.** The rule
 is one-directional: *changing a number means bumping; bumping does not mean a
@@ -2123,6 +2153,50 @@ and console text is not in one.
 not obligations: the rule is one-directional. If you would rather every source
 change carry a stamp, bump it; just do not read this decision as an oversight.
 
+## Stage 3 lives in another repository now
+
+`modules/transportation.py` is an adapter. Every reference row, all 141 of
+them, is in [`spacecost`](https://github.com/loggger101/spacecost), pinned to
+tag `v0.1.1` in `requirements.txt` and in `_MASTER_REQUIRED`.
+
+🚨  **THIS PROJECT HAS ALREADY BEEN BURNED BY A SPLIT, AND THE LESSON WAS NOT
+"DO NOT SPLIT".** It was developed in two places at once and `1.0.6` / `1.1.4` /
+`1.3.6` each shipped as two different things; see
+[the parallel-repo divergence](versions.md#the-parallel-repo-divergence). What
+made that expensive is that **nothing checked it**. So this split is arranged
+so that drift cannot be committed:
+
+| | how it is held | what fails |
+|---|---|---|
+| the **data** | one copy, in spacecost; this repo holds none | nothing can drift |
+| the **dials** | ten fields, mirrored, compared at import time | `_check_config_surface()` raises, so the import fails, not the run |
+| the **output** | six CSVs, byte for byte, both paths | `verify_stage3.py`, which names the file and the side |
+
+⚠️  **The dials are the mirrored surface, and they are mirrored on purpose.**
+Two of the ten defaults are this project's rather than a library's:
+`output_dir` points into `asteroid_pipeline/`, and `use_yfinance` is **True**
+here and **False** in spacecost, because a pipeline stage is expected to fetch
+and a library must not. That is why `TransportConfig` did not move, and why the
+field-set assertion exists.
+
+⚠️  **`ui_meta` scrapes `TransportConfig`'s comments for the dashboard's help
+text**, which is the other reason it stayed. Move it and 10 dials lose their
+help and `verify_docs.py` check 8 goes red. If you ever do move it, repoint
+`CONFIG_SOURCES["transport"]` at spacecost's `config.py` in the same commit.
+
+✅  **`pipeline_version` did NOT move, and that was a decision.** The stamp
+identifies the DATA; the data did not change; spacecost's data-contract version
+is the same `1.14.0`. Bumping it would have desynchronised every archived
+catalog in order to announce a refactor. The **master** version moved instead,
+`1.24.0` → `1.25.0`, which is where a structural change belongs.
+
+⚠️  **`master.py` lost roughly a quarter of its lines** -- the build prints the
+real number, and this file does not state one, for the reason given under
+"master.py is generated" -- **and it is no longer self-contained in the "pure
+PyPI" sense**: it pip-installs spacecost from a git URL at import. That is the trade the dependency buys. **Pin the tag.** An
+untagged URL would let a fresh Colab paste install a different table with
+nothing in this repo moving, which is the same failure the divergence was.
+
 ## Config discipline
 
 Configs are dataclasses instantiated once at module scope. Edit the field
@@ -2571,6 +2645,7 @@ first three import master".
 | `run_pipeline.py` | yes | headless CLI: `--preset`, `--stages`, `--destination`, row caps |
 | `ui.py` | yes | Streamlit dashboard |
 | `verify.py` | yes | the six release checks |
+| `verify_stage3.py` | no | the Stage 3 seam: this repo's adapter against the `spacecost` package it drives. Builds into a temp dir, needs no baseline and no network |
 | `verify_docs.py` | no | the **docs** checks; it imports master and the four configs for checks 8 and 9, but never builds a stage. Count them in its own docstring rather than quoting a number here |
 | `run.bat` | no | Windows launcher: a terminal menu over `run_pipeline.py`, `verify.py`, `build_master.py` and the dashboard. No model behaviour of its own |
 | `_START HERE.vbs` | no | double-click entry point, starts the dashboard with no console, ever |

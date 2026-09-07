@@ -287,6 +287,12 @@ if defined TAG (
   echo       py verify.py baseline --tag mytag
 )
 echo.
+echo   Stage 3's tables live in the spacecost package, so the seam
+echo   between this repo and that one is checked first. It needs no
+echo   baseline, touches nothing, and takes seconds.
+echo.
+%PY% verify_stage3.py
+echo.
 echo   A full check builds ~20 cells and takes about half an hour.
 echo   This skips checks 2 and 3 to run in ~5 minutes, and still catches
 echo   any change to any number. Drop --skip before committing.
