@@ -5592,20 +5592,16 @@ cheapest_propellant_for      = spacecost.cheapest_propellant_for
 mission_cost_breakdown       = spacecost.mission_cost_breakdown
 
 
-def validate_transport(
-    launch_df:      pd.DataFrame,
-    propellant_df:  pd.DataFrame,
-    delta_v_df:     pd.DataFrame,
-    ops_df:         pd.DataFrame,
-) -> None:
-    """Print sanity warnings over the loaded tables.  Never raises.
-
-    `build_master.py` renames this function on the way into master.py,
-    because Module 2 defines one with the same name.  That rename is exactly
-    why the underlying call is imported under a private alias at the top of
-    this file, and why the package exports a second, collision-proof name.
-    """
-    return _spacecost_validate(launch_df, propellant_df, delta_v_df, ops_df)
+# Sanity bands over the loaded tables; prints warnings and never raises.  An
+# ALIAS rather than a wrapper, because a function whose whole body forwards its
+# arguments is a layer with no reader: `help()` on it would show this file's
+# paraphrase instead of the real docstring.
+#
+# `build_master.py` rewrites this name on the way into master.py, because
+# Module 2 defines one that collides.  That rewrite is exactly why the target is
+# imported under a private alias at the top of this file, and why the package
+# exports a second, collision-proof name for it.
+validate_transport = _spacecost_validate
 
 
 def build_transportation_catalog(

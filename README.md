@@ -106,14 +106,12 @@ py verify_stage3.py
 was briefly developed in two places and three version stamps each shipped as
 two different things (see
 [the parallel-repo divergence](versions.md#the-parallel-repo-divergence)). What
-made that expensive was that nothing checked it, so this split is arranged so
-drift cannot be committed rather than merely being unlikely:
-
-| | how it is held | what fails if it drifts |
-|---|---|---|
-| the **data** | single-sourced; this repo holds no copy of any row | nothing can drift, there is one copy |
-| the **dials** | mirrored, ten fields, compared at import | `_check_config_surface()` raises, so the import fails |
-| the **output** | compared byte for byte, both paths | `verify_stage3.py` reports which file and which side |
+made that expensive was that nothing checked it, so this one is arranged so that
+drift cannot be committed rather than merely being unlikely: the data is
+single-sourced, the ten config dials are compared at import, and the output is
+compared byte for byte. **The invariants, and what fails when each breaks, are
+in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now)**, which is
+where the editing rules live.
 
 **spacecost is pinned to a tagged release**, `v0.1.1`, in both
 `requirements.txt` and `_MASTER_REQUIRED`. An untagged URL would let a fresh
