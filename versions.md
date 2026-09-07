@@ -16,6 +16,54 @@ you need to actually run the thing.
 Where the two overlap, `README.md` is the current answer and this file is the
 history of how it got there.
 
+## Contents
+
+Newest first. Every table names the release and the catalog it belongs to;
+one that does not say is not to be used.
+
+- [Current versions](#current-versions)
+- [How the version numbers work](#how-the-version-numbers-work)
+- [What "no number" claims rest on](#what-no-number-claims-rest-on)
+- [Releases](#releases)
+- [master v1.25.0 - Stage 3 moved to the `spacecost` package](#master-v1250---stage-3-moved-to-the-spacecost-package)
+- [calc v1.20.0](#calc-v1200)
+- [catalog v1.2.0](#catalog-v120)
+- [calc v1.19.2](#calc-v1192)
+- [calc v1.19.1](#calc-v1191)
+- [calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0](#calc-v1190--mineral_value-v190--transportation-v1140)
+- [calc v1.18.0 / mineral_value v1.8.0 / transportation v1.13.0](#calc-v1180--mineral_value-v180--transportation-v1130)
+- [calc v1.17.8](#calc-v1178)
+- [mineral_value v1.7.1](#mineral_value-v171)
+- [calc v1.17.7 / transportation v1.12.1](#calc-v1177--transportation-v1121)
+- [calc v1.17.6](#calc-v1176)
+- [calc v1.17.5](#calc-v1175)
+- [calc v1.17.4 / catalog v1.1.1](#calc-v1174--catalog-v111)
+- [calc v1.17.3](#calc-v1173)
+- [calc v1.17.2](#calc-v1172)
+- [calc v1.17.1](#calc-v1171)
+- [calc v1.17.0](#calc-v1170)
+- [calc v1.16.0](#calc-v1160)
+- [calc v1.15.0 / transportation v1.12.0](#calc-v1150--transportation-v1120)
+- [calc v1.14.2](#calc-v1142)
+- [calc v1.14.1](#calc-v1141)
+- [calc v1.14.0 / transportation v1.11.0](#calc-v1140--transportation-v1110)
+- [catalog v1.1.0 / calc v1.13.0](#catalog-v110--calc-v1130)
+- [calc v1.12.0 / transportation v1.10.0](#calc-v1120--transportation-v1100)
+- [calc v1.11.0 / transportation v1.9.0](#calc-v1110--transportation-v190)
+- [calc v1.10.1](#calc-v1101)
+- [calc v1.10.0](#calc-v1100)
+- [Earlier releases](#earlier-releases)
+- [Stage 1 changelog: `modules/catalog.py`](#stage-1-changelog-modulescatalogpy)
+- [Stage 2 changelog: `modules/mineral_value.py`](#stage-2-changelog-modulesmineral_valuepy)
+- [Stage 3 changelog: `modules/transportation.py`](#stage-3-changelog-modulestransportationpy)
+- [Stage 4 changelog: `modules/calc.py`](#stage-4-changelog-modulescalcpy)
+- [Cost/revenue matrices](#costrevenue-matrices)
+- [What the v1.17.x line was worth](#what-the-v117x-line-was-worth)
+- [The sampling rule](#the-sampling-rule)
+- [Runtime history](#runtime-history)
+- [The programme-scale curves](#the-programme-scale-curves)
+- [The parallel-repo divergence](#the-parallel-repo-divergence)
+
 ## Current versions
 
 | Stage | Module | Version | Last changed |
