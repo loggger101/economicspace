@@ -11,6 +11,7 @@ and which caught this very paragraph on 2026-09-03:
 | [`versions.md`](versions.md) | what changed in which release, what every number used to be, and the per-module changelogs | the measurement history |
 | [`CITATIONS.md`](CITATIONS.md) | where every source, dataset and borrowed line came from, and what each obliges | references and attribution |
 | **this file** | what will bite you: the traps, the invariants, and the reasoning behind decisions that look wrong | how to edit it safely |
+| the [`spacecost`](https://github.com/loggger101/spacecost) repo | Stage 3's reference tables, their citations, and their release history | every launch, propellant, delta-v, operational and storage row |
 
 ⚠️  **`CITATIONS.md` holds references, never values.** A number's source is
 cited on the row that carries it, in `modules/*.py`; that row stays the
@@ -35,6 +36,29 @@ gone and `versions.md` is the authority. What stayed here is the part that was
 editing guidance rather than record: the defect classes, the traps, and the
 things already measured and declined. **Add a release note to `versions.md`,
 and add what it teaches to this file.**
+
+## Contents
+
+Six parts, and this file is meant to be grepped rather than read straight
+through. Skim for the section that names what you are about to change.
+
+- [master.py is generated: never edit it](#masterpy-is-generated-never-edit-it)
+- [The build makes surgical assumptions about module structure](#the-build-makes-surgical-assumptions-about-module-structure)
+- [Name collisions are handled by hand](#name-collisions-are-handled-by-hand)
+- [Bump `pipeline_version` when output changes](#bump-pipeline_version-when-output-changes)
+- [What the model currently says, and what that retired](#what-the-model-currently-says-and-what-that-retired)
+- [When a number changes, grep the prose too](#when-a-number-changes-grep-the-prose-too)
+- [Model assumptions that are load-bearing](#model-assumptions-that-are-load-bearing)
+- [The older matrices, and the claims they retired](#the-older-matrices-and-the-claims-they-retired)
+- [The corrections the model accumulated](#the-corrections-the-model-accumulated)
+- [Durable lessons from the release history](#durable-lessons-from-the-release-history)
+- [The verification harness is committed now](#the-verification-harness-is-committed-now)
+- [Stage 3 lives in another repository now](#stage-3-lives-in-another-repository-now)
+- [Config discipline](#config-discipline)
+- [Correctness invariants that were expensive to find](#correctness-invariants-that-were-expensive-to-find)
+- [Data sources fail softly by design](#data-sources-fail-softly-by-design)
+- [Google Drive makes the tree look dirty: run the hooks](#google-drive-makes-the-tree-look-dirty-run-the-hooks)
+- [Environment](#environment)
 
 ## master.py is generated: never edit it
 
@@ -1486,21 +1510,14 @@ on top of cislunar's 10.6.
 > runtime sentence in this file is only ever true of the release it names**, 
 > which is this section's own point, arriving on schedule.
 
-The table below is calc `1.11.0` / six physical cores, on the **old ~31,000-row
-catalog**, measured 2026-08-08. It is kept because the *ratios* between cells
-are still the right way to reason about relative cost; the absolute seconds
-are two orders of magnitude out of date:
-
-| | raw | beneficiated | ratio |
-|---|---|---|---|
-| `cislunar` | 89 s | 462 s | 5.2× |
-| `lunar_surface` | 84 s | 437 s | 5.2× |
-| `mars_surface` | 158 s | 966 s | 6.1× |
-| `leo` | 177 s | 948 s | 5.4× |
-| `earth_surface` | 174 s | 1,017 s | 5.8× |
-
-The whole ten-cell sweep is **about 70 minutes** including a Stage 2 re-run per
-destination.
+⚠️  **The per-destination table this paragraph used to restate is in
+[versions.md](versions.md#calc-v1110--transportation-v190), and was a second copy of it.** What is
+guidance rather than record, and so belongs here: the calc `1.11.0` numbers
+were measured on the **old ~31,000-row catalog** and their absolute seconds are
+two orders of magnitude out of date, but the **ratios between cells** are still
+the right way to reason about relative cost. Beneficiation ran 5.2-6.1× raw
+across all five destinations, and the ordering of the cells by cost has been
+stable across every re-measurement since.
 
 On calc `1.12.0`, cislunar measures **88 s raw / 502 s beneficiated** against
 89 s / 462 s; raw unchanged, beneficiated up ~9%. That is `_cargo_water_kg`
@@ -2287,7 +2304,8 @@ Undoing any of these silently corrupts the output:
   about the DTYPE being inferred from the data, not about where the data came
   from**: any `.astype(bool)` on a column that a future row could leave blank
   is the same bug.
-- **Re-run Stage 3 after upgrading it.** Every Module 3 column Module 4 reads
+- **Re-run Stage 3 after upgrading it**, where "upgrading it" now means moving
+  the pinned `spacecost` tag. Every Module 3 column Module 4 reads
   is read defensively, so a stale `propellants.csv` does not raise; it
   reverts tank mass to zero, drops the maturity gate, and un-excludes solids
   and sails, all silently. `schema_check()` in `calc.py` now names each
@@ -2300,6 +2318,14 @@ Undoing any of these silently corrupts the output:
   missing *figure* was invisible to a column test, and `_MODULE3_REQUIRED_OPS`
   now names each row Stage 4 needs alongside the model term its absence
   silently reverts. That closed the missing-row half.
+
+  🚨  **A MODULE 3 TABLE IS NOW A `spacecost` EDIT, AND THAT IS FOUR STEPS, NOT
+  ONE.** Change the row there, bump its `pipeline_version` if the number moves,
+  cut a release and a tag, then repin the tag **here** in `requirements.txt`
+  and `_MASTER_REQUIRED` and rebuild `master.py`. Skip the repin and this repo
+  keeps installing the old tag, so the edit silently does not land -- the same
+  failure the paragraph below describes, with a new way to reach it.
+  `verify_stage3.py` catches it: it compares against the installed package.
 
   Editing a number in a Module 3 table, a density, a status, a boil-off rate,
   leaves the schema identical, so nothing warned and Stage 4 quietly ran on
