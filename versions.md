@@ -20,11 +20,11 @@ history of how it got there.
 
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
-| 1 | `modules/catalog.py` | **1.1.1** | v1.1.1, `enrich_composition` by distinct taxonomy, 3.87× |
+| 1 | `modules/catalog.py` | **1.2.0** | v1.2.0, orbit quality, a total NEOWISE sort, the element epoch |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
-| 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments |
+| 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments. ⚠️  Owned by [`spacecost`](https://github.com/loggger101/spacecost) since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.20.0** | v1.20.0, both insurance premiums are out of scope, and off |
-| - | `master.py` | **1.24.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.25.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -135,6 +135,95 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.25.0 - Stage 3 moved to the `spacecost` package
+
+**No number moved, and that is the claim this release has to make rather than
+assume.** Stage 3's reference tables left this repository for
+[`spacecost`](https://github.com/loggger101/spacecost), an independent MIT
+package pinned here at tag `v0.1.1`. `modules/transportation.py` went from
+5,054 lines to 368 and is now the adapter that drives it.
+
+Two thirds of that module was annotated reference data -- 36 launch vehicles,
+41 propellants, 33 delta-v segments, 44 operational costs, 20 storage systems,
+141 cited rows in total -- and nothing in its schema knew what an asteroid was.
+The extraction sliced source line ranges rather than re-typing anything, so
+every citation crossed over byte for byte.
+
+### What did not move
+
+| | |
+|---|---|
+| `pipeline_version` | **1.14.0**, unchanged, and deliberately so |
+| the six Stage 3 CSVs | byte identical, all six, verified both ways |
+| all four Stage 4 cells | 139/139 columns identical, hashes MATCH against the committed `1.20.0` baseline |
+| every measurement in this file | unaffected; nothing here needs re-measuring |
+
+The stamp identifies the DATA, the data did not change, and spacecost's own
+data-contract version is the same `1.14.0` this module last shipped. Bumping it
+would have desynchronised every archived catalog in order to announce a
+refactor. The **master** version carries the structural change instead:
+`1.24.0` -> `1.25.0`.
+
+### Verification
+
+```
+verify_stage3.py   config 10 dials identical | contract 1.14.0 = 1.14.0
+                   six CSVs byte-identical through adapter and package
+                   five tables match spacecost's committed reference/
+verify.py check --tag 1.20.0 --skip prune parallel
+                   raw           139/139 identical | 7f7cc1eed2628150 | MATCH
+                   raw+search    139/139 identical | 8969c36dd236efaf | MATCH
+                   benef         139/139 identical | 84445d43812af21c | MATCH
+                   benef+search  139/139 identical | 72e888e3d83d7de8 | MATCH
+                   mass ledger 0.000000000 kg on all four | never-worse clean
+verify_docs.py     all 11 checks
+```
+
+The Stage 3 comparison was also run against a build of the **pre-adapter**
+module captured before any edit: all six files identical, `f12f099e36635025`
+and the other five hashes reproducing exactly.
+
+### The split is checked, because the last one was not
+
+This project was once developed in two places at once and `1.0.6` / `1.1.4` /
+`1.3.6` each shipped as two different things; see
+[the parallel-repo divergence](#the-parallel-repo-divergence). What made that
+expensive was not the split, it was that nothing checked it. So:
+
+- the **data** is single-sourced, one copy, in spacecost
+- the **dials** are mirrored, ten fields, and compared at import by
+  `_check_config_surface()`, which raises rather than warns
+- the **output** is compared byte for byte by `verify_stage3.py`
+
+`use_yfinance` differs on purpose -- **True** here, **False** in spacecost --
+because a pipeline stage is expected to fetch and a library must not. It is one
+of the two defaults that kept `TransportConfig` in this repo.
+
+### One defect, found by a docs check
+
+`build_master.py` resolves name collisions with a whole-word regex over the
+entire module text, **comments and string literals included**. The adapter's
+`from spacecost import validate as _v` had the imported name rewritten to
+`validate_transport`, so `master.py` asked the package for an attribute it does
+not have. Two string literals were mangled the same way.
+
+⚠️  Aliasing the local name does not help: the imported name is still a bare
+word. The fix is on the package side -- spacecost exports `validate_tables` as
+a collision-proof second name. **Nothing in `verify.py` looks at Stage 3**, and
+the pipeline would only have failed at run time; `verify_docs.py` checks 8 and
+9 caught it because they import master.
+
+### Also in this release
+
+`verify_docs.py` check 7 could not parse a PEP 508 direct reference
+(`spacecost @ git+https://...`) and reported a mismatch that was not one: the
+checker not understanding the manifest format it checks. It now strips the
+`@ url` form before comparing.
+
+`master.py` is **13,954 lines, down from 18,577**, and pip-installs spacecost
+from a pinned git tag at import. ⚠️  Keep the tag pinned; an untagged URL would
+let a fresh Colab paste install a different table with nothing here moving.
 
 ## calc v1.20.0
 
@@ -2741,6 +2830,17 @@ market in the table and the only one anchored on hardware that exists.
 The six existing destinations reprice to the cent, and no exported value moves.
 
 ## Stage 3 changelog: `modules/transportation.py`
+
+⚠️  **AS OF master `1.25.0` THIS STAMP IS OWNED BY ANOTHER REPOSITORY.** The
+tables moved to [`spacecost`](https://github.com/loggger101/spacecost) and
+`pipeline_version` is now that package's data-contract version. It did not
+change in the move and the entries below still describe it exactly; what
+changed is where a future entry gets written. **A new table row is now a
+spacecost release**, recorded in its `CHANGELOG.md`, and this repo follows by
+moving the pinned tag in `requirements.txt` and `_MASTER_REQUIRED`.
+
+The entries below are the record up to and including `1.14.0`, and spacecost's
+changelog carries a copy of them for readers who arrive from that side.
 
 **`1.2.0`  initial release.**
 

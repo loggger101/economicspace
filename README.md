@@ -42,6 +42,7 @@ run.sh                 Linux / macOS launcher: the same options, POSIX
 run_pipeline.py        Headless CLI the launcher drives (presets + flags)
 build_master.py        Build tool: assembles modules/ into master.py
 verify.py              Release verification: the six checks every change runs
+verify_stage3.py       Stage 3 verification: this repo and spacecost agree
 verify_docs.py         Docs verification: the docs still describe the code
 platform_check.py      Can THIS host reproduce the committed numbers? ~10 s
 platform_reference.json  What it compares against, recorded on the ref host
@@ -54,7 +55,7 @@ ui_meta.py             Config introspection + curation for ui.py
 modules/
     catalog.py         Stage 1 - asteroid catalog
     mineral_value.py   Stage 2 - mineral prices + densities
-    transportation.py  Stage 3 - launch / propellant / Δv / ops costs
+    transportation.py  Stage 3 - ADAPTER over the spacecost package
     calc.py            Stage 4 - profitability calculation
 campaign/              The 20-cell measurement campaign: results.csv, the
                        archived cells, the logs, and the scripts that ran it
@@ -80,6 +81,44 @@ is the list; its length is deliberately not spelled out beside it:
 | [`CITATIONS.md`](CITATIONS.md) | where every source, dataset and borrowed line came from, and what each obliges | references and attribution |
 | [`CLAUDE.md`](CLAUDE.md) | the traps, the invariants, and the reasoning behind decisions that look wrong | how to edit it safely |
 
+### Stage 3's tables live in another repository
+
+**[`spacecost`](https://github.com/loggger101/spacecost)** holds every Stage 3
+reference row: the 36 launch vehicles, the 41 propellants with their storage
+classes and derived tankage, the Δv segments, the operational costs and the
+storage systems, each with its inline citation. `modules/transportation.py` is
+now a thin adapter that drives it, where two thirds of what it used to hold
+was reference data.
+
+They left because nothing in their schema knew what an asteroid was, and a
+launch price is useful to anyone costing a mission. This pipeline is that
+package's first consumer.
+
+**Nothing about the model changed.** The six CSVs Stage 4 reads are byte
+identical, `pipeline_version` is the same `1.14.0`, and all four Stage 4 cells
+reproduce their committed hashes. Two checks say so and both are cheap:
+
+```bash
+py verify_stage3.py
+```
+
+⚠️  **A split is what caused this project's worst recorded incident**, when it
+was briefly developed in two places and three version stamps each shipped as
+two different things (see
+[the parallel-repo divergence](versions.md#the-parallel-repo-divergence)). What
+made that expensive was that nothing checked it, so this split is arranged so
+drift cannot be committed rather than merely being unlikely:
+
+| | how it is held | what fails if it drifts |
+|---|---|---|
+| the **data** | single-sourced; this repo holds no copy of any row | nothing can drift, there is one copy |
+| the **dials** | mirrored, ten fields, compared at import | `_check_config_surface()` raises, so the import fails |
+| the **output** | compared byte for byte, both paths | `verify_stage3.py` reports which file and which side |
+
+**spacecost is pinned to a tagged release**, `v0.1.1`, in both
+`requirements.txt` and `_MASTER_REQUIRED`. An untagged URL would let a fresh
+install pick up a different table with nothing here moving.
+
 `run.bat`, `run_pipeline.py`, `ui.py` and `ui_meta.py` sit at the root rather
 than in `modules/` on purpose:
 `build_master.py` concatenates everything in that directory into `master.py`
@@ -95,7 +134,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.2.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.14.0 | 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
+| 3 | `modules/transportation.py` | 1.14.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
 | 4 | `modules/calc.py` | 1.20.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
@@ -154,7 +193,7 @@ semantics, so `./run.sh quick leo` does what `run.bat quick leo` does:
 ./run.sh rerun     Stage 4 only, against the catalogs already on disk
 ./run.sh standard  20,000-row sample, Stage 4 only
 ./run.sh full      THE PIPELINE DEFAULTS (1.6 h cislunar, 3.8 h default dest.)
-./run.sh verify    verify.py against the newest baseline on disk
+./run.sh verify    verify_stage3.py, then verify.py against the newest baseline
 ./run.sh campaign  the resumable measurement queue
 ./run.sh ui        the dashboard, in the foreground, reachable over the network
 ./run.sh help      run_pipeline.py --help
@@ -195,7 +234,7 @@ run.bat quick      400-row sample, all four stages
 run.bat rerun      Stage 4 only, against the catalogs already on disk
 run.bat standard   20,000-row sample, Stage 4 only
 run.bat full       THE PIPELINE DEFAULTS (1.6 h cislunar, 3.8 h default dest.)
-run.bat verify     verify.py against the committed baseline
+run.bat verify     verify_stage3.py, then verify.py against the baseline
 run.bat build      rebuild master.py from modules/
 run.bat help       run_pipeline.py --help
 ```
@@ -620,7 +659,27 @@ which is why the report prints **both** a hash and a column diff: when the two
 disagree, the hash is the one that is right, and the disagreement is itself the
 signal that the comparator is at fault.
 
-⚠️  **It covers Stage 4, and it never re-runs Stages 1-3.** That is
+### Verifying Stage 3
+
+`verify.py` deliberately does not cover Stage 3, and since the tables moved to
+`spacecost` there is a seam that needs its own check. `verify_stage3.py` is it,
+it needs no baseline and no network, and it takes a few seconds:
+
+```bash
+py verify_stage3.py
+```
+
+It asserts four things: the ten config dials match the package's field for
+field, the `pipeline_version` this repo stamps is the package's data-contract
+version, the six CSVs are byte identical whether built through the adapter or
+through the package directly, and the five tables match the CSVs spacecost
+commits under `reference/`. The third would still pass if both sides moved
+together, which is what the fourth is for.
+
+⚠️  It builds into a temporary directory and never touches
+`asteroid_pipeline/`, for the reason the next paragraph gives.
+
+⚠️  **`verify.py` covers Stage 4, and it never re-runs Stages 1-3.** That is
 deliberate: a Stage 1 run fetches a different catalog (JPL adds bodies daily)
 and a Stage 3 run re-fetches live metal and fuel prices, either of which moves
 the inputs underneath the comparison and invalidates every baseline in the same
@@ -1087,6 +1146,13 @@ Every output row carries `delivery_destination`, `delivery_arch` and
 produced it.
 
 ## The propulsion and storage catalog
+
+ℹ️  **These tables live in [`spacecost`](https://github.com/loggger101/spacecost)
+now**, not in this repository; `modules/transportation.py` drives that package.
+The row counts and the reasoning below are unchanged and still describe exactly
+what Stage 4 reads, and `verify_docs.py` check 3 still holds every count here to
+the tables themselves. See
+[Stage 3's tables live in another repository](#stage-3s-tables-live-in-another-repository).
 
 Stage 3 v1.9.0 rewrote the reference tables to hold the field rather than a
 sample of it. The previous tables held what somebody had happened to list, and

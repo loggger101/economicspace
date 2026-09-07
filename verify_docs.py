@@ -356,6 +356,48 @@ def check_versions(mods) -> bool:
                     bad.append("CLAUDE.md Current: %-16s says %-8s actual %s"
                                % (label, m.group(1), actual[alias]))
 
+    # versions.md's own "Current versions" table:
+    #     | 3 | `modules/transportation.py` | **1.14.0** | ... |
+    # This one was NOT checked until 2026-09-07, and it had rotted: it read
+    # catalog 1.1.1 while the module was at 1.2.0, stale since the 1.2.0
+    # release, in the document that calls itself the authority for the
+    # measurement history.  Both other copies of the same table were checked,
+    # which is what let this one sit wrong -- the check covered the places
+    # somebody had already been burned by and not the third.
+    versions = read(os.path.join(REPO, "versions.md"))
+    for alias, rel in MODULES.items():
+        pat = re.compile(r"\|\s*`%s`\s*\|\s*\**([0-9]+\.[0-9]+\.[0-9]+)\**\s*\|"
+                         % re.escape(rel))
+        m = pat.search(versions)
+        if not m:
+            bad.append("versions.md Current-versions table has no row for %s" % rel)
+            continue
+        seen += 1
+        if m.group(1) != actual[alias]:
+            bad.append("versions.md Current versions: %-28s says %-8s actual %s"
+                       % (rel, m.group(1), actual[alias]))
+
+    # The master version is a literal in build_master.py, in two places, and
+    # versions.md quotes it in the same table.  It is not a dataclass field, so
+    # check 1 cannot reach it either.
+    bm = read(os.path.join(REPO, "build_master.py"))
+    lits = set(re.findall(r"MASTER ASTEROID PROFITABILITY PIPELINE - v"
+                          r"([0-9]+\.[0-9]+\.[0-9]+)", bm))
+    lits |= set(re.findall(r"Master Asteroid Profitability Pipeline "
+                           r"\(([0-9]+\.[0-9]+\.[0-9]+)\)", bm))
+    if len(lits) > 1:
+        bad.append("build_master.py master version disagrees with itself: %s"
+                   % sorted(lits))
+    elif lits:
+        want = lits.pop()
+        mm = re.search(r"\|\s*`master\.py`\s*\|\s*\**([0-9]+\.[0-9]+\.[0-9]+)\**\s*\|",
+                       versions)
+        if mm:
+            seen += 1
+            if mm.group(1) != want:
+                bad.append("versions.md master.py says %-8s build_master.py has %s"
+                           % (mm.group(1), want))
+
     # ---- the "moved without moving a number" tables, and the prose on them --
     # Both files carry this table and both spell its size out in words beside
     # it, and that count has now rotted THREE times: "nine"/"seven" after
@@ -773,7 +815,18 @@ def check_manifests() -> bool:
     if os.path.exists(req_p) and os.path.exists(bm_p):
         req = [ln.strip() for ln in read(req_p).split("\n")
                if ln.strip() and not ln.strip().startswith("#")]
-        req = [re.split(r"[<>=!~]", r)[0].strip() for r in req]
+        # A requirement line reduces to its DISTRIBUTION NAME, which is what
+        # `_MASTER_REQUIRED` lists.  Three forms appear here:
+        #     numpy                     a bare name
+        #     numpy>=1.24               a version specifier
+        #     spacecost @ git+https://  a PEP 508 direct reference
+        # The last arrived when Stage 3's tables moved out to `spacecost`, which
+        # is not on PyPI and so installs from a tagged git ref.  Splitting on the
+        # specifier characters alone left the whole URL in the name and reported
+        # a mismatch that was not one: the checker failing to understand the
+        # manifest format it is checking.
+        req = [r.split("@", 1)[0].strip() for r in req]
+        req = [re.split(r"[<>=!~;\[]", r)[0].strip() for r in req]
         m = re.search(r"_MASTER_REQUIRED\s*=\s*\[(.*?)\]", read(bm_p), re.S)
         if m is None:
             bad.append("build_master.py: no _MASTER_REQUIRED list found")
