@@ -8,6 +8,32 @@ databases → price the minerals those asteroids contain → cost the
 transportation → run the rocket-equation and cost cascade to produce a ranked
 profitability table.
 
+## Contents
+
+What the pipeline is, how to run it, and the current numbers. The release
+history is in [versions.md](versions.md); the editing traps are in
+[CLAUDE.md](CLAUDE.md).
+
+- [Start here](#start-here)
+- [Layout](#layout)
+- [Running it](#running-it)
+- [Rebuilding master.py](#rebuilding-masterpy)
+- [Verifying a change](#verifying-a-change)
+- [Working copy](#working-copy)
+- [Output](#output)
+- [Programme scale](#programme-scale)
+- [Where the material is sold](#where-the-material-is-sold)
+- [The propulsion and storage catalog](#the-propulsion-and-storage-catalog)
+- [Beneficiation](#beneficiation)
+- [Results](#results)
+- [Version history](#version-history)
+- [Mission model](#mission-model)
+- [What the model does not capture](#what-the-model-does-not-capture)
+- [What the model charges for](#what-the-model-charges-for)
+- [What the model deliberately does not charge for](#what-the-model-deliberately-does-not-charge-for)
+- [Data sources](#data-sources)
+- [History](#history)
+
 ## Start here
 
 **Double-click `_START HERE.vbs`.** That is the whole answer on Windows: it
@@ -80,6 +106,7 @@ is the list; its length is deliberately not spelled out beside it:
 | [`versions.md`](versions.md) | what changed in which release, what every number used to be, and the per-module changelogs | the measurement history |
 | [`CITATIONS.md`](CITATIONS.md) | where every source, dataset and borrowed line came from, and what each obliges | references and attribution |
 | [`CLAUDE.md`](CLAUDE.md) | the traps, the invariants, and the reasoning behind decisions that look wrong | how to edit it safely |
+| the [`spacecost`](https://github.com/loggger101/spacecost) repo | Stage 3's reference tables, their citations, and their release history | every launch, propellant, delta-v, operational and storage row |
 
 ### Stage 3's tables live in another repository
 
