@@ -197,6 +197,14 @@ cmd_campaign() {
 }
 
 cmd_verify() {
+  # Stage 3's tables live in the `spacecost` package, so the seam between this
+  # repo and that one gets checked first: it needs no baseline, writes nothing
+  # outside a temp dir, and takes seconds.  It runs before the exec below,
+  # which never returns.
+  echo "  Stage 3 seam (this repo against the spacecost package):"
+  "$PY" verify_stage3.py || return 1
+  echo
+
   # verify.py defaults to `--tag head`, and there is usually no baseline-head,
   # which would silently turn the most important of the six checks into a hash
   # print.  Use the newest baseline actually on disk.

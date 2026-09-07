@@ -276,6 +276,8 @@ rights reserved, so that failure runs in the dangerous direction.
 
 ## 6. Software this pipeline depends on
 
+⚠️  **spacecost** is this project's own, extracted from Stage 3 and MIT licensed; it is pinned to tag `v0.1.0` and carries every launch, propellant, Delta-v, operational and storage row, with the citations for them.
+
 Runtime, from `requirements.txt`: **requests**, **pandas**, **numpy**,
 **yfinance**, **tqdm**, **pyarrow**. Dashboard, from `requirements-ui.txt`:
 **streamlit**, **psutil**. Exact pins are in `requirements-lock.txt`; do not
@@ -289,7 +291,7 @@ This file does not duplicate them. It says where they are.
 
 | what | where its sources are cited |
 |---|---|
-| launch vehicles, propellants, storage systems, Delta-v segments, operational costs | the `notes` field of each row in `modules/transportation.py`, with `reference_year` tagging staleness |
+| launch vehicles, propellants, storage systems, Delta-v segments, operational costs | the `notes` field of each row in the [`spacecost`](https://github.com/loggger101/spacecost) package, with `reference_year` tagging staleness. They left `modules/transportation.py` at master v1.25.0; that repo's `CITATIONS.md` is their bibliography now |
 | commodity prices and market depths | per-commodity in `modules/mineral_value.py` |
 | taxonomy to composition | `TAXONOMY_COMPOSITION` in `modules/catalog.py` |
 | delivery architectures and utility factors | `modules/mineral_value.py` and `modules/calc.py`; these are **engineering judgements**, not measurements, and README says so |

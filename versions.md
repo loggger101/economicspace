@@ -20,11 +20,11 @@ history of how it got there.
 
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
-| 1 | `modules/catalog.py` | **1.1.1** | v1.1.1, `enrich_composition` by distinct taxonomy, 3.87× |
+| 1 | `modules/catalog.py` | **1.2.0** | v1.2.0, orbit quality, a total NEOWISE sort, the element epoch |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
-| 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments |
+| 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments. ⚠️  Owned by [`spacecost`](https://github.com/loggger101/spacecost) since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.20.0** | v1.20.0, both insurance premiums are out of scope, and off |
-| - | `master.py` | **1.24.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.25.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -135,6 +135,95 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.25.0 - Stage 3 moved to the `spacecost` package
+
+**No number moved, and that is the claim this release has to make rather than
+assume.** Stage 3's reference tables left this repository for
+[`spacecost`](https://github.com/loggger101/spacecost), an independent MIT
+package pinned here at tag `v0.1.1`. `modules/transportation.py` went from
+5,054 lines to 368 and is now the adapter that drives it.
+
+Two thirds of that module was annotated reference data -- 36 launch vehicles,
+41 propellants, 33 delta-v segments, 44 operational costs, 20 storage systems,
+141 cited rows in total -- and nothing in its schema knew what an asteroid was.
+The extraction sliced source line ranges rather than re-typing anything, so
+every citation crossed over byte for byte.
+
+### What did not move
+
+| | |
+|---|---|
+| `pipeline_version` | **1.14.0**, unchanged, and deliberately so |
+| the six Stage 3 CSVs | byte identical, all six, verified both ways |
+| all four Stage 4 cells | 139/139 columns identical, hashes MATCH against the committed `1.20.0` baseline |
+| every measurement in this file | unaffected; nothing here needs re-measuring |
+
+The stamp identifies the DATA, the data did not change, and spacecost's own
+data-contract version is the same `1.14.0` this module last shipped. Bumping it
+would have desynchronised every archived catalog in order to announce a
+refactor. The **master** version carries the structural change instead:
+`1.24.0` -> `1.25.0`.
+
+### Verification
+
+```
+verify_stage3.py   config 10 dials identical | contract 1.14.0 = 1.14.0
+                   six CSVs byte-identical through adapter and package
+                   five tables match spacecost's committed reference/
+verify.py check --tag 1.20.0 --skip prune parallel
+                   raw           139/139 identical | 7f7cc1eed2628150 | MATCH
+                   raw+search    139/139 identical | 8969c36dd236efaf | MATCH
+                   benef         139/139 identical | 84445d43812af21c | MATCH
+                   benef+search  139/139 identical | 72e888e3d83d7de8 | MATCH
+                   mass ledger 0.000000000 kg on all four | never-worse clean
+verify_docs.py     all 11 checks
+```
+
+The Stage 3 comparison was also run against a build of the **pre-adapter**
+module captured before any edit: all six files identical, `f12f099e36635025`
+and the other five hashes reproducing exactly.
+
+### The split is checked, because the last one was not
+
+This project was once developed in two places at once and `1.0.6` / `1.1.4` /
+`1.3.6` each shipped as two different things; see
+[the parallel-repo divergence](#the-parallel-repo-divergence). What made that
+expensive was not the split, it was that nothing checked it. So:
+
+- the **data** is single-sourced, one copy, in spacecost
+- the **dials** are mirrored, ten fields, and compared at import by
+  `_check_config_surface()`, which raises rather than warns
+- the **output** is compared byte for byte by `verify_stage3.py`
+
+`use_yfinance` differs on purpose -- **True** here, **False** in spacecost --
+because a pipeline stage is expected to fetch and a library must not. It is one
+of the two defaults that kept `TransportConfig` in this repo.
+
+### One defect, found by a docs check
+
+`build_master.py` resolves name collisions with a whole-word regex over the
+entire module text, **comments and string literals included**. The adapter's
+`from spacecost import validate as _v` had the imported name rewritten to
+`validate_transport`, so `master.py` asked the package for an attribute it does
+not have. Two string literals were mangled the same way.
+
+⚠️  Aliasing the local name does not help: the imported name is still a bare
+word. The fix is on the package side -- spacecost exports `validate_tables` as
+a collision-proof second name. **Nothing in `verify.py` looks at Stage 3**, and
+the pipeline would only have failed at run time; `verify_docs.py` checks 8 and
+9 caught it because they import master.
+
+### Also in this release
+
+`verify_docs.py` check 7 could not parse a PEP 508 direct reference
+(`spacecost @ git+https://...`) and reported a mismatch that was not one: the
+checker not understanding the manifest format it checks. It now strips the
+`@ url` form before comparing.
+
+`master.py` is **13,954 lines, down from 18,577**, and pip-installs spacecost
+from a pinned git tag at import. ⚠️  Keep the tag pinned; an untagged URL would
+let a fresh Colab paste install a different table with nothing here moving.
 
 ## calc v1.20.0
 
@@ -2742,257 +2831,38 @@ The six existing destinations reprice to the cent, and no exported value moves.
 
 ## Stage 3 changelog: `modules/transportation.py`
 
-**`1.2.0`  initial release.**
+🚨  **THIS RECORD MOVED WITH THE TABLES IT DESCRIBES, AND
+[`spacecost`](https://github.com/loggger101/spacecost) IS THE ONLY COPY.** It
+was 251 lines here and a verbatim second copy there, which is the documentation
+form of the defect this project catalogues first and oftenest: *two copies of
+one measurement is a bug, and you must name one authority or you have two.*
+Deleted on 2026-09-07 by the same reasoning that deleted the 2,063 lines of
+module-comment changelog on 2026-09-02.
 
-**`1.2.1`  May 2026 source audit.** Launch prices re-cited; hydrazine
-$700 → $75/kg, xenon $1.5k → $10k/kg, argon $1 → $10/kg, H3 LEO 6.5 → 16.5 t,
-SLS $2.5B → $4.1B, Falcon 9 $70 → $74M, and every `notes` field source-tagged.
+**Read it at
+[spacecost/CHANGELOG.md](https://github.com/loggger101/spacecost/blob/main/CHANGELOG.md#data-contract-history)**,
+under "Data contract history". All 21 stamps, `1.2.0` through `1.14.0`,
+unaltered.
 
-**`1.2.2`  second-pass sanity sweep.** SLS LEO 42 t → 105 t (42 was the TLI
-figure) with the $/kg recalculated; Falcon Heavy LEO 63.8 t → 57 t, to match
-the partial-reuse $97M price; xenon density 5.4 → 2.0 g/cm³, 5.4 being
-physically impossible; a caveat on Starship's 27 t escape figure, which assumes
-orbital refuelling; and citations added to the crew and mining-payload-recurring
-rows.
+⚠️  **NOTHING WAS DROPPED, AND THAT WAS CHECKED RATHER THAN ASSUMED**, with
+`verify_docs.py --before`, which is the tool this project built for exactly
+this move: it pulls every distinctive numeric token out of the old text and
+asserts each still appears in the new. It exists because a line-level diff
+reported 302 differences on the first such split and could not tell a dropped
+measurement from a reflowed paragraph.
 
-**`1.2.3`  third-pass deep audit.** Falcon 9 GTO 8.3 t → 5.5 t (8.3 was
-expendable and the row is reusable) and escape 4.0 t → 2.5 t (4.0 was
-Mars-transfer, not C3=0 reusable); a rocket-equation bug fixed in
-`mission_cost_breakdown`, where outbound propellant now correctly includes
-return-propellant dead mass when ISRU is off, having understated launch mass by
-~110% in the worked example; an unused `Optional` import removed; and the blend
-maths hand-verified: rho_kerolox 1.015, rho_hydrolox 0.361, rho_methalox
-**0.833**, rho_MMH/NTO **1.159** kg/L, all consistent.
+⚠️  **What you probably came here for is the SCHEMA half**, and it is the half
+with no other home: which release added which output column is what tells you
+whether an archived CSV can answer the question you are asking of it. That is
+in spacecost's copy too, per stamp. A catalog on disk stamped
+`transportation 1.9.0` was written by the tables that package now versions as
+data contract `1.9.0`; the numbering is continuous across the move, because the
+stamp identifies the DATA and the data did not change.
 
-**`1.2.4`  uncrewed autonomous-only mission model.** The
-`Crew (if crewed mission)` row ($400M per crew-year) is replaced by
-`Autonomous mining control & AI (NRE)` at $200M per programme, so every
-downstream Stage 4 cost cascade is uncrewed by design with no life-support or
-crew-habitat mass anywhere.
-
-**`1.2.5`  portability, no change to any number produced.** `output_dir`
-defaults via `_default_output_dir()` instead of a hardcoded
-`/content/asteroid_pipeline`, which on Windows silently resolved to
-`C:\content`; stdout and stderr forced to UTF-8 before the first print, the
-emoji progress output having crashed cp1252 consoles instantly; and the
-`RUN & PREVIEW` block moved under a main-guard so importing the module no longer
-triggers a full run.
-
-**`1.3.0`  realism audit.** Two additions, both consumed by calc v1.4.0.
-
-- New `dv_penalty_factor` column on `PROPELLANTS_REFERENCE`. The rocket equation
-  does not care about thrust, but trajectories do: a milli-newton electric stage
-  cannot fly the impulsive burns `DELTA_V_REFERENCE` assumes, and spiralling out
-  of LEO costs ~7 km/s against ~3.2 impulsive. Chemical systems carry 1.0,
-  electric 1.5. Without it, Isp 3,000 s wins the payload cascade on a Δv budget
-  it cannot achieve.
-- New `OPERATIONAL_COSTS` row `Return capsule recurring cost` at $150k/kg.
-  Stage 4 was billing the return capsule at the $300k/kg mining-payload rate,
-  pricing a parachute-and-heat-shield can as regolith-contact machinery.
-
-New output column on `propellants.csv`: `dv_penalty_factor`.
-
-**`1.4.0`  IN-SPACE DELIVERY ARCHITECTURE.** Reference data for selling the
-mined material at an in-space destination instead of flying it down. Paired with
-mineral_value v1.3.0 and calc v1.5.0. Additive, so every number a v1.3.0
-`earth_surface` run produced is unchanged.
-
-- Six new `DELTA_V_REFERENCE` segments: the delivery ladder above LEO (TLI
-  **3,150** / NRHO insertion 450 / LEO to NRHO 3,600 m/s) and the three asteroid
-  return legs quoted at v_inf = 3 km/s (LEO propulsive **3,626**, cislunar
-  Oberth capture 944, LEO aerobraked 100 m/s). The LEO-to-NRHO figure is what
-  Stage 2 integrates to price material sold at a cislunar depot.
-- Three new `OPERATIONAL_COSTS` rows: `Berthing adapter recurring cost`
-  ($60k/kg, replacing the re-entry capsule for in-space delivery),
-  `Depot berthing & handover operations` ($2M, replacing the $15M Earth recovery
-  campaign) and `FAA Part 450 licensing (launch only)` ($1.2M, no re-entry
-  licence).
-
-The headline physical result these encode: cislunar is BOTH cheaper to reach
-from an asteroid than LEO (960 against **3,590** m/s, because capture can take
-the Oberth benefit and NRHO is barely bound) AND worth more per kg on arrival.
-Earth's surface is the cheapest to reach and worth the least.
-
-**`1.5.0`  SURFACE DESTINATIONS.** Reference data for delivering to a lunar or
-Mars surface base. Paired with mineral_value v1.4.0 and calc v1.6.0. Additive
-again; no existing number changed.
-
-- Eight new `DELTA_V_REFERENCE` segments: the lunar descent chain (TLI to LOI
-  900, NRHO to LLO 730, LLO to surface 1,870, and the LEO-to-lunar-surface total
-  of 5,920 m/s) and the Mars chain (TMI 3,600, entry to surface retropropulsion
-  800, plus the surface-to-LMO **4,100** and LMO-to-Earth 2,100 return legs).
-- One new `OPERATIONAL_COSTS` row, `Surface lander recurring cost` at $200k/kg:
-  a lander is active where a re-entry capsule is passive, so it sits above the
-  $150k/kg capsule and below the $300k/kg mining rig.
-
-The Moon is the awkward case these numbers expose: it is the CLOSEST destination
-and among the most expensive to land on, because there is no atmosphere and
-every metre per second of the 5,920 m/s from LEO is paid propulsively. Mars is
-four times further in Δv terms from Earth and gets most of its arrival braking
-free from an atmosphere.
-
-**`1.6.0`  data for the modelling gaps calc v1.7.0 closes.** Additive; no
-existing number changed.
-
-- `Electric thruster + PPU specific mass` 8 kg/kW and
-  `Electric propulsion efficiency` 0.60. Together with the existing
-  power-system row these make low-thrust TRIP TIME computable:
-  T = 2·eta·P/(Isp·g0), and a burn lasting m_prop·(Isp·g0)²/(2·eta·P). Until now
-  electric propulsion paid a Δv penalty but flew instantly and drew no power.
-- `Water liberation energy (bound water)` 2,500 Wh/kg. C-type water is bound in
-  phyllosilicates and has to be baked out; the pipeline was extracting it for
-  free.
-
-**`1.7.0`  data for calc v1.8.0's rig terminal value, in-space manufacturing,
-reliability and boil-off models.** Additive.
-
-- New `boiloff_pct_per_day` column on `PROPELLANTS_REFERENCE`. Hydrolox at
-  0.05%/day is the one that bites: over a 5-year mission that is 2.5× the return
-  propellant, which is exactly why no flown mission has ever done a deep-space
-  arrival burn on hydrolox after a multi-year cruise. Storables and the
-  electrics are 0.
-- Six new `OPERATIONAL_COSTS` rows: launch reliability 0.97, spacecraft MTBF
-  30 yr, first-of-kind mining success 0.75, rig service life 15 yr, rig salvage
-  fraction 0.50, and in-space plant throughput 100 kg/yr per kg of plant.
-
-**`1.8.0`  two rows for calc v1.9.0's reliability-growth model.**
-`Mining reliability growth exponent` 0.30, the Duane alpha at the bottom of
-MIL-HDBK-189's active-growth band, appropriate for hardware that flies once
-every few years with no test fleet; and
-`Mining system mature success probability` 0.95, the asymptotic ceiling, mature
-spacecraft mechanisms running 97-99% while a continuously-operating excavator is
-harder than a one-shot deployment.
-
-**`1.8.1`  first-of-kind mining success recalibrated 0.75 → 0.85.** The v1.7.0
-note cited three failures and none of the successes; the full regolith-contact
-record is 11/13. The notes now list the whole tally, both ways of counting
-Hayabusa, and why sustained-operation risk is not double-counted here.
-
-**`1.8.2`  the electric stage was flying on hardware nobody had to buy.** New
-ops row `Electric propulsion system recurring cost`, $1.5M per kW of thruster
-plus PPU, NEXT-C anchored, range $0.5-3M/kW. calc v1.7.0 put the electric
-stage's array and thruster into the ROCKET EQUATION and never into any cost
-line, so a 309 kW / 14-tonne EP system was free, and once calc v1.10.0 stopped
-selecting missions by "cheapest", electric propulsion won everywhere. The array
-is priced off the existing $800/W power-system row; this row covers only the
-propulsion train. Adds one category, to 35.
-
-**`1.9.0`  CATALOG COMPLETENESS AUDIT.** Full write-up:
-[calc v1.11.0 / transportation v1.9.0](#calc-v1110--transportation-v190). The
-three reference tables held what somebody happened to list rather than what
-exists, and the omissions all ran in the same direction. Propellants 7 → 40
-(sixteen additions that have flown and were simply absent, seven in development,
-nine concepts); tank mass DERIVED rather than ignored, via new `storage_class`
-and `tank_kg_per_L` columns; new `status` / `trl` / `restartable` /
-`propellantless` / `isru_feed_kg_per_kg` / `isru_feed_material` / `first_flight`
-columns; launch vehicles 12 → 36, including eight non-rocket concepts; new
-`launch_type` / `origin` / `trl` / `max_accel_g` / `tanker_flights_for_escape`
-columns; a new `STORAGE_REFERENCE` table of 20 systems exported as
-`storage_systems.csv`; and a new ops row `RTG specific power` at 5.0 W/kg, which
-finally gives the RTG cost row (present since v1.2.0 and never read by anything)
-a consumer in Stage 4.
-
-⚠️  `STORAGE_REFERENCE` is the table calc v1.14.0 later had to move into
-`OPERATIONAL_COSTS` wholesale, because Stage 4 does not load
-`storage_systems.csv` and the whole thing was documentation. See v1.11.0 below.
-
-**`1.10.0`  realism audit of the v1.9.0 tables.** Full write-up:
-[calc v1.12.0 / transportation v1.10.0](#calc-v1120--transportation-v1100).
-Three changes, two of which move every number: a `_THRUSTER_SYSTEMS` block
-supplying `thruster_kg_per_n`, `thruster_efficiency` and `thrust_scaling` per
-technology, so the DEVICE is modelled and not only the propellant; a new ops row
-`Power processing unit specific mass` at 4.7 kg/kW, splitting the lumped
-8 kg/kW figure, because a per-kW number cannot express a per-newton constraint;
-argon split into `ArgonSC` and `ArgonLIQ`, the row having carried a cryogenic
-liquid's density with an ambient gas's zero boil-off and its own two comments
-contradicting each other three lines apart; and a new ops row
-`Propellant tank recurring cost` at $6,000/kg, Centaur-derived, tank MASS having
-existed since v1.9.0 with nothing ever buying one.
-
-Propellants 40 → 41 (23 operational, 8 development).
-
-**`1.11.0`  the reference DATA was right and unreachable.** Full write-up:
-[calc v1.14.0 / transportation v1.11.0](#calc-v1140--transportation-v1110). Four
-new `OPERATIONAL_COSTS` rows, not one of them a new measurement: every figure
-already existed in `STORAGE_REFERENCE`, where it had sat behind a
-"Not modelled in Module 4" note since v1.9.0, and Stage 4 loads
-`operational_costs.csv` and does NOT load `storage_systems.csv`. The rows are
-`Eclipse / night-side dark fraction` 0.50,
-`Energy storage usable specific energy` 104 Wh/kg,
-`Power-system row baseline dark period` 0.58 h and
-`Volatile cargo containment` 0.05 kg/kg.
-
-No propellant, vehicle or Δv figure moved. Every number Stage 4 produces does,
-because it can now read these.
-
-**`1.12.0`  the rig had a calendar life and no duty-cycle limit.** Full
-write-up:
-[calc v1.15.0 / transportation v1.12.0](#calc-v1150--transportation-v1120). One
-new `OPERATIONAL_COSTS` row, `Mining rig maximum trips` 5 (range 2-12), the
-missing half of a bound the table has carried since v1.7.0.
-`Mining rig service life` is 15 YEARS and Stage 4 turned that into a mission
-count by dividing by the stay, so at the ~1.25 yr stay the winning cislunar
-mission actually flies, one rig served 12 consecutive campaigns. ⚠️  **A
-judgement, and the row says so at length**: nothing has ever mined an asteroid
-twice, so it is bracketed between terrestrial mining plant and the flight record
-for regolith-contact mechanisms, and 5 is the optimistic reading of both.
-
-No propellant, vehicle, Δv or storage figure moved.
-
-**`1.12.1`  one line in `validate()`, and no table row moved at all.** Full
-write-up:
-[calc v1.17.7 / transportation v1.12.1](#calc-v1177--transportation-v1121). The
-two propellant sanity bands selected their rows with
-`~propellant_df["propellantless"].astype(bool)`, correct today ONLY because
-every one of the 41 rows states the flag, so pandas infers dtype `bool`. Add a
-row that omits it and the column comes back `object` with a NaN, which
-`.astype(bool)` reads as **True**: the new row would be silently classed as a
-sail and dropped from both bands, i.e. the two checks would stop covering
-exactly the row most likely to be new and wrong. Now `.ne(True)`, resolved once
-and read twice.
-
-⚠️  Changes no exported column and no CSV, so **Stage 3 does not need re-running
-for this, and should not be**: a Stage 3 run re-fetches live yfinance prices,
-which moves `cost_usd_per_kg` and with it every Stage 4 baseline. The on-disk
-`propellants.csv` keeps `1.12.0` until Stage 3 is next run for its own reasons.
-Same call, and the same reason, as catalog v1.1.1.
-
-**`1.13.0`  three Δv segments for a Mars-orbit depot.** Full write-up:
-[calc v1.18.0 / mineral_value v1.8.0 / transportation v1.13.0](#calc-v1180--mineral_value-v180--transportation-v1130).
-`DELTA_V_REFERENCE` gains "Mars arrival → 1-sol orbit (MOI)" at **900 m/s**,
-"LEO → Mars 1-sol orbit depot" at **4,500**, and "1-sol Mars orbit → Earth
-(TEI)" at **900**. No column, no field, and no existing row changes.
-
-These exist because Module 2's `_DELIVERY_LEGS` states the invariant that every
-Δv it charges appears in this table. Module 4 reads none of them; it derives its
-Δv from orbital elements, and this table is the citation home and the
-cross-check. The cross-check earns its keep: computing capture into a 200-km
-orbit from the same geometry gives **2.10 km/s**, reproducing the
-independently-sourced "Low Mars orbit → Earth (TEI)" row of 2,100 m/s that has
-been in this table since v1.5.0.
-
-⚠️  The three rows do not reach `delta_v_segments.csv` until Stage 3 is next
-run, and Stage 3 should **not** be run for this: it re-fetches live yfinance
-prices and moves every Stage 4 baseline. Nothing downstream reads the table, so
-nothing is waiting on it. Same call, and the same reason, as v1.12.1 above.
-
-**`1.14.0`  four Δv segments for a geostationary depot.** Full write-up:
-[calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0](#calc-v1190--mineral_value-v190--transportation-v1140).
-`DELTA_V_REFERENCE` gains "LEO → GTO (perigee burn)" at **2,455 m/s**,
-"GTO → GEO (circularise + plane change)" at **1,836**, "LEO → GEO depot" at
-**4,291**, and "GEO → Earth (deorbit to entry)" at **1,488**. No column, no
-field, and no existing row changes.
-
-The 1,836 is the row to read the notes on. It is one burn doing two jobs, and
-the plane change is bought by the law of cosines rather than added: coplanar it
-would be 1,478, so **358 m/s of the GEO price is the latitude of the launch
-site**. Module 4 carries a different figure, 1,730, for the same burn on an
-arriving asteroid, which comes in near the ecliptic at 23.44 deg rather than
-off a 28.5 deg parking orbit. They are not meant to agree.
-
-⚠️  Does not reach `delta_v_segments.csv` until Stage 3 is next run, and Stage 3
-should not be run for it. Same call, and the same reason, as v1.13.0 above.
-
+**Where a new entry goes now.** A table row changes in spacecost, so it is a
+spacecost release, recorded in that repo's `CHANGELOG.md`. This repo follows by
+moving the pinned tag in `requirements.txt` and `_MASTER_REQUIRED`, and that
+move is a `master` release recorded above.
 ## Stage 4 changelog: `modules/calc.py`
 
 **`1.3.0`  initial profitability calculator.**

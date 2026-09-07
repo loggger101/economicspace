@@ -180,7 +180,7 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # -----------------------------------------------------------------------------
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.24.0)
+"""Master Asteroid Profitability Pipeline (1.25.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -291,14 +291,24 @@ if _os.environ.get("ASTEROID_PIPELINE_WORKER") == "1":
 import subprocess as _subprocess
 
 _MASTER_REQUIRED = [
-    "requests", "pandas", "numpy", "yfinance", "tqdm", "pyarrow",
+    "requests", "pandas", "numpy", "yfinance", "tqdm", "pyarrow", "spacecost",
 ]
+# import-name -> pip argument, for the packages where those differ.  Only
+# `spacecost` does: it holds Stage 3's reference tables and is not on PyPI yet,
+# so it installs from a TAGGED git ref rather than by name.  The tag is pinned
+# rather than tracking main, because an untagged URL would silently change what
+# a Colab paste installs.
+# IF SPACECOST IS EVER PUBLISHED: put "spacecost==0.1.0" in requirements.txt
+# and delete this dict; nothing else here changes.
+_MASTER_PIP_SPEC = {
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.1.1",
+}
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
     try:
         __import__(_pkg)
     except ImportError:
-        _master_missing.append(_pkg)
+        _master_missing.append(_MASTER_PIP_SPEC.get(_pkg, _pkg))
 if _master_missing:
     print(f"PKG  Installing: {_master_missing} ...")
     _subprocess.check_call(
@@ -447,7 +457,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.24.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.25.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
