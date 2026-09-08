@@ -322,8 +322,14 @@ py run_pipeline.py --help
 
 `--market-model` is applied **after** the preset, so
 `--preset full --market-model single_mission` pins N = 1 whatever the preset
-said about the programme search. Use `--market-model elasticity` to reproduce
-any figure measured before calc v1.21.0.
+said about the programme search. `--market-model elasticity` restores the pre-v1.21.0 demand curve.
+
+⚠️  It does **not** reproduce pre-v1.21.0 figures exactly. calc v1.21.1 gave the
+composition residual a market ceiling, and that defect was in the curve too, so
+the curve moved with it: the raw cislunar cells by +2.36% and +5.82%, the
+beneficiated ones not at all. For an exact reproduction use a build of the
+release you are reproducing, which is what the `pipeline_version` stamp on every
+CSV is for.
 
 `--stages` takes digits, so `--stages 4` reuses the CSVs already on disk for
 the other three, the normal working loop, and what saves the 224-second
