@@ -5924,8 +5924,13 @@ class CalcConfig:
     #                   no ceiling.  The question every figure measured before
     #                   calc v1.17.0 was answering.
     #   elasticity      The v1.14.0 demand curve, P/P0 = (1+Q/Qm)^(-1/eps).
-    #                   Reproduces every figure measured between v1.14.0 and
-    #                   v1.20.0 bit-identically; that is its acceptance test.
+    #                   ⚠️  It reproduced v1.14.0 to v1.20.0 bit-identically
+    #                   until v1.21.1 gave the composition residual the market
+    #                   ceiling it was already priced against.  That defect was
+    #                   in the curve too, so fixing it moved the curve: the raw
+    #                   cislunar cells by +2.36% and +5.82%, the beneficiated
+    #                   ones not at all.  It is the v1.14.0 CURVE, not a
+    #                   bug-for-bug replay of v1.20.0.
     #   unbounded       Constant prices and no ceiling at all.  A DIAGNOSTIC,
     #                   not a model: every row runs to `max_fleet_ships` and
     #                   the run says so out loud.
@@ -6488,7 +6493,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.21.0"
+    pipeline_version: str = "1.21.1"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -7370,6 +7375,45 @@ def asteroid_bulk_value_usd_per_kg(
     return total
 
 
+# ─── THE ONE PHASE STAGE 2 HAS NEVER HEARD OF  (v1.21.1) ─────────────────────
+# `asteroid_phase_table` invents the composition residual, and Stage 2's mineral
+# catalog has no row for it, so `markets.get(name)` missed and it took the
+# infinite default: **priced at the `silicates` quote and bounded by nothing.**
+#
+# That is defect class 1 in market form -- a quantity with a price in one half
+# of the model and no counterpart in the other -- and it hid for the same reason
+# that class always hides.  Under the v1.14.0 demand curve every OTHER commodity
+# in the haul was bounded, so the blended multiplier fell on every row anyway and
+# the hole never showed as a hole.  A wall does not blend: a row whose bounded
+# commodities all sit inside their ceilings feels nothing at all, and one
+# unbounded phase is then the whole of a monotone-in-N objective.
+#
+# The alias is a MAPPING rather than a new market row on purpose.  The residual
+# is not a commodity anybody trades; it is this module's name for "the rest of
+# the rock", so inventing a Stage 2 row for it would put a fiction in the
+# reference data.  Priced as silicates, bounded as silicates, in one place.
+_RESIDUAL_PHASE = "other (bulk silicate)"
+_PHASE_MARKET_ALIAS: Dict[str, str] = {_RESIDUAL_PHASE: "silicates"}
+
+
+def phase_market_kg(markets: Optional[Dict[str, float]], phase: str) -> float:
+    """Annual ceiling in kg/yr for one PHASE of the payload, or inf.
+
+    The single place a phase name is turned into a market ceiling, so the
+    alias above cannot be honoured at one call site and forgotten at another.
+    Infinity is still the answer for a phase with no market and no alias, and
+    that is deliberate: it means "nothing here bounds this", which the run
+    banner reports rather than silently assuming a number.
+    """
+    if not markets:
+        return float("inf")
+    hit = markets.get(phase)
+    if hit is None:
+        alias = _PHASE_MARKET_ALIAS.get(phase)
+        hit = markets.get(alias) if alias is not None else None
+    return float("inf") if hit is None else float(hit)
+
+
 def asteroid_phase_table(
     asteroid_row: Row, mineral_df: pd.DataFrame,
 ) -> List[Tuple[str, float, float]]:
@@ -7407,8 +7451,14 @@ def asteroid_phase_table(
         frac_sum += frac
 
     if 0.0 < frac_sum < 1.0:
+        # Composition fractions sum to 0.76-0.96; the remainder is undifferentiated
+        # rock and is valued at the bulk-silicate floor.  ⚠️  It is priced at the
+        # `silicates` QUOTE, which is why `_PHASE_MARKET_ALIAS` below must give it
+        # the `silicates` CEILING: a phase that declares itself silicates for
+        # price and not for quantity is priced in one half of the model and
+        # unbounded in the other.
         silicate_price = _mineral_price(mineral_df, "silicates") or 0.05
-        phases.append(("other (bulk silicate)", 1.0 - frac_sum, float(silicate_price)))
+        phases.append((_RESIDUAL_PHASE, 1.0 - frac_sum, float(silicate_price)))
 
     if key is not None:
         _composition_entry(entries, key).phases = list(phases)
@@ -7713,8 +7763,9 @@ def optimal_payload_mix(
     capacity on whatever is next, rather than flying the excess unsold.
 
     ⚠️  `caps=None` must stay bit-identical to the pre-v1.21.0 walk, because
-    the `elasticity` market model reproduces every figure measured between
-    v1.14.0 and v1.20.0 and that is its acceptance test.  The guard below adds
+    the `elasticity` market model is the v1.14.0 curve, and it reproduced
+    v1.14.0 to v1.20.0 exactly until v1.21.1's residual-ceiling fix moved the
+    two raw cells.  The guard below adds
     a branch and no arithmetic; when `caps` is None not one float differs.
 
     ⚠️  AND THE SIZING PATH MUST NEVER PASS CAPS.  `_cargo_water_kg` calls this
@@ -12298,7 +12349,8 @@ def _evaluate_combo_at_ratio(
     # v1.21.0.  Two market models reach this block and they share everything
     # above the ladder.  `elasticity` is the v1.14.0 term unchanged, and its
     # gate is the same boolean it always was, which is what lets it reproduce
-    # every figure measured between v1.14.0 and v1.20.0 bit-identically.
+    # the v1.14.0 curve, which reproduced v1.14.0 to v1.20.0 exactly until
+    # v1.21.1's residual ceiling moved the two raw cells.
     # `capacity_cap` holds price flat and clips quantity instead.  The other
     # two models (`single_mission`, `unbounded`) price nothing here at all.
     # v1.21.0.  Resolved by the CALLER on the hot path and derived here only
@@ -12325,7 +12377,7 @@ def _evaluate_combo_at_ratio(
             sold = {n: m_payload * f / frac_sum for n, f, _p in phases} if frac_sum > 0 else {}
         for phase, kg in sold.items():
             price = next((p for n, _f, p in phases if n == phase), 0.0)
-            sale_terms.append((kg, price, markets.get(phase, float("inf"))))
+            sale_terms.append((kg, price, phase_market_kg(markets, phase)))
 
     # ── Mission reliability (v1.8.0) ─────────────────────────────────────────
     # The terms that do not move with programme size, hoisted for the same
@@ -12504,7 +12556,7 @@ def _evaluate_combo_at_ratio(
                     capped = optimal_payload_mix(
                         m_payload, feed_kg, phases,
                         config.beneficiation_recovery,
-                        caps={nm: markets.get(nm, float("inf")) * window
+                        caps={nm: phase_market_kg(markets, nm) * window
                               for nm, _f, _p in phases},
                     )
                     cvalue = float(capped["value_usd"])
