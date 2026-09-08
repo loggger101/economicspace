@@ -160,7 +160,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | 1 | `modules/catalog.py` | 1.2.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.14.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
-| 4 | `modules/calc.py` | 1.20.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.21.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -316,8 +316,14 @@ disagree.
 py run_pipeline.py --preset quick
 py run_pipeline.py --destination cislunar --raw --no-search --rows 5000
 py run_pipeline.py --stages 4 --destination cislunar --preset full --yes
+py run_pipeline.py --market-model elasticity --stages 4 --destination cislunar
 py run_pipeline.py --help
 ```
+
+`--market-model` is applied **after** the preset, so
+`--preset full --market-model single_mission` pins N = 1 whatever the preset
+said about the programme search. Use `--market-model elasticity` to reproduce
+any figure measured before calc v1.21.0.
 
 `--stages` takes digits, so `--stages 4` reuses the CSVs already on disk for
 the other three, the normal working loop, and what saves the 224-second
@@ -509,6 +515,8 @@ that actually move the answer:
 | `.calc.return_structure_frac_of_payload` | `0.15` | Return-vehicle structure as a fraction of the haul, on top of the 500 kg base |
 | `.calc.nre_amortization_missions` | `1` | Programme size N. With the search on it is the FLOOR rather than the answer |
 | `.calc.optimise_programme_scale` | `True` | Search programme size and fleet size per asteroid instead of setting N. **Default since calc v1.17.0.** It changes the question the run answers, so most historical tables are `False`, at N = 1. See [Programme scale](#programme-scale) |
+| `.calc.market_model` | `"capacity_cap"` | What a delivered kilogram sells for and how much of it clears. `"capacity_cap"` holds price constant and clips quantity at Stage 2's `annual_market_kg`; `"single_mission"` pins N = 1; `"elasticity"` is the v1.14.0 demand curve and reproduces every figure measured to v1.20.0; `"unbounded"` is a diagnostic. **Default since calc v1.21.0**, replacing the `model_market_saturation` flag. See [The market model](#what-the-model-charges-for) |
+| `.calc.demand_elasticity` | `0.5` | The e in `(1 + Q/Q_market)^(-1/e)`. Read ONLY when `market_model` is `"elasticity"` |
 | `.calc.max_fleet_ships` | `64` | Where the fleet ladder stops. Rows piling up against it mean their payloads have no finite market, not that bigger is better; the run says so |
 | `.calc.programme_search_steps` | `8` | Rungs in the coarse fleet sweep, before one refinement pass. Same idiom as `concentration_search_steps` |
 | `.calc.model_rig_trip_limit` | `True` | Cap rig life in duty CYCLES as well as calendar years. Inert at N = 1 |
@@ -650,6 +658,7 @@ which runs all six:
 | 4 | mass ledger | a kilogram in the rocket equation with no price in the ledger |
 | 5 | never-worse | a search optimising something other than what it reports |
 | 6 | Stage 2 tables | a judgement-table edit that moved a number, or a commodity falling through a silent default |
+| 7 | market ceilings | a capacity ceiling that pays rather than costs, and the two v1.21.0 columns swapping meanings |
 
 `py verify.py invariants` runs 4, 5 and 6 only and needs no baseline, so it
 works on any tree and is the fast way to check an upstream table edit;
@@ -1742,7 +1751,64 @@ is **excluded**, because it is one shared unit rather than N built, and a curve
 on it double-counts. Exactly 1.0 at `nre_amortization_missions = 1`, so a
 single-mission run is untouched; 0.44 at N = 100.
 
-**Market saturation** (`model_market_saturation`).
+**The market model** (`market_model`, `"capacity_cap"` since calc v1.21.0).
+The only term in Stage 4 that pushes back on programme size: N improves five
+levers at once (NRE/N, autonomy NRE/N, the learning curve, the rig's share and
+reliability growth) and this is the sixth. Without something here,
+`nre_amortization_missions` has no stopping point and the objective is monotone
+in N, so the search reports where the ladder stopped rather than an optimum.
+
+Four models, and the choice is what the run is claiming about prices:
+
+| `market_model` | price behaviour | what bounds a programme |
+|---|---|---|
+| **`capacity_cap`** | constant at any volume | a hard kg/yr ceiling per commodity |
+| `single_mission` | constant | N pinned at 1, no search, no ceiling |
+| `elasticity` | `(1 + Q/Q_market)^(-1/ε)` | the demand curve |
+| `unbounded` | constant | nothing; a **diagnostic**, and the run says so |
+
+**`capacity_cap`** holds the price flat and clips the quantity instead.
+Everything inside a commodity's ceiling sells at the full price Stage 2 quotes
+and everything past it earns nothing, so it is a quantity wall rather than a
+price discount. How much one delivery may sell is how long the destination has
+been accumulating since the last one: `cap × cadence / F` in steady state, and
+`cap × mission_duration` for the first delivery, which arrives at a market that
+has been importing from Earth for the whole outbound-and-back trip. Averaged
+over a programme of N that is
+`cap × [duration + (N−1) × cadence/F] / N`, which is exactly `cap × duration`
+at N = 1 and converges on the steady state as N grows.
+
+The ceilings go **into the payload knapsack**, which is the part that makes the
+model behave: a load that caps out on iron keeps walking down the price order
+and spends the freed hold space on whatever is next, rather than flying the
+excess unsold. Per-item upper bounds turn an unbounded fractional knapsack into
+a bounded one, which greedy still solves exactly, so this is a constraint
+*inside* the optimiser rather than a clamp on top of it. Raw ore cannot be
+reshaped, so there the excess simply does not sell.
+
+That is also what bounds the fleet. A bigger fleet delivers more often, so each
+delivery gets a shorter accumulation window; past the point where the ceilings
+bind, another ship adds its full cost and only part of its revenue, and the
+objective turns over on its own.
+
+Two output columns report it, kept apart because a price multiplier and a
+quantity clip are different claims: `market_clearing_fraction` is the share of
+the assembled load's gross value that cleared the ceilings, and
+`unsold_payload_kg` is payload capacity that earned nothing.
+
+⚠️  **The ceilings bind at the fleet sizes the model actually chooses.**
+Cislunar's whole import budget is 100 t/yr and water's propellant share is
+55 t/yr, against a median raw cadence of 1.384 yr and a median searched fleet
+of 2. They were calibrated as the knee of a smooth curve, which is not the same
+target as a hard wall; they are reused unchanged so that one thing changed at a
+time, and recalibrating them is open work.
+
+⚠️  **`earth_surface` is unbounded whichever model you pick.** Its ceilings are
+terrestrial production, 10¹² to 10¹⁵ kg/yr, so nothing binds and the cell stays
+monotone in N exactly as it was under `elasticity`. A downmass or recovery
+ceiling would fix that and does not exist yet.
+
+**`elasticity`** is the v1.14.0 term, unchanged and still available.
 `P/P0 = (1 + Q/Q_market)^(−1/ε)` against Stage 2's `annual_market_kg`, with
 ε = 0.5 (precious-metal demand is inelastic). Returning 180 t/yr of platinum
 doubles world supply and quarters the price; delivering 6.6 t/yr of water to a
@@ -1751,7 +1817,9 @@ Mars base that can absorb 11 t/yr cuts the price to 0.39. Without it,
 development across a fleet whose output would have destroyed the price
 justifying it.
 
-⚠️  World production is USGS; the in-space absorption ceilings (LEO 500 t/yr,
+⚠️  **Both models read the same ceilings**, and differ only in what they do
+when one is reached: `elasticity` bends the price, `capacity_cap` stops the
+sale. World production is USGS; the in-space absorption ceilings (LEO 500 t/yr,
 cislunar 100 t, lunar surface 50 t, Mars 20 t) are **judgement, not
 measurement**, since no such market exists. They are destination *totals* split
 across commodity classes rather than a figure each commodity gets to itself, so

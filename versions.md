@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [calc v1.21.0](#calc-v1210)
 - [master v1.25.0 - Stage 3 moved to the `spacecost` package](#master-v1250---stage-3-moved-to-the-spacecost-package)
 - [calc v1.20.0](#calc-v1200)
 - [catalog v1.2.0](#catalog-v120)
@@ -71,8 +72,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.2.0** | v1.2.0, orbit quality, a total NEOWISE sort, the element epoch |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments. ⚠️  Owned by [`spacecost`](https://github.com/loggger101/spacecost) since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.20.0** | v1.20.0, both insurance premiums are out of scope, and off |
-| - | `master.py` | **1.25.0** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.21.0** | v1.21.0, constant prices with a capacity ceiling, and the market model is a four-valued choice |
+| - | `master.py` | **1.26.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -151,6 +152,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [calc v1.21.0](#calc-v1210) | 2026-09-07 | **prices are constant and quantity is what binds**: the market term becomes a four-valued `market_model`, and the ceilings go into the payload knapsack |
 | [calc v1.20.0](#calc-v1200) | 2026-09-04 | **both insurance premiums are off**: a transfer priced off an underwriter's book, in a model that prices masses |
 | [catalog v1.2.0](#catalog-v120) | 2026-09-03 | **NEOWISE dedup decided by row order on 27,802 bodies**; the ranking could not see orbit quality; `ma` had no epoch; async TAP |
 | [calc v1.19.2](#calc-v1192) | 2026-09-03 | **`mars_orbit` waited for the wrong planet** |
@@ -183,6 +185,356 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## calc v1.21.0
+
+**Prices are constant at any volume, and what bounds a programme is quantity.**
+The market term stops being a boolean and becomes `market_model`, a four-valued
+selector, defaulting to `capacity_cap`.
+
+| `market_model` | price behaviour | what bounds a programme |
+|---|---|---|
+| **`capacity_cap`** | constant | a hard kg/yr ceiling per commodity |
+| `single_mission` | constant | N pinned at 1, no search, no ceiling |
+| `elasticity` | `(1 + Q/Q_market)^(-1/e)` | the v1.14.0 demand curve |
+| `unbounded` | constant | nothing; a diagnostic, and the run says so |
+
+The ceilings are Stage 2's `annual_market_kg`, **unchanged and not re-run**.
+What changed is what happens when one is reached: `elasticity` bent the price
+for the whole sale, `capacity_cap` sells everything inside the ceiling at full
+price and nothing past it.
+
+### The window, and why the first delivery is different
+
+How much one delivery may sell is how long the destination has been
+accumulating since the last one. In steady state F ships repeating every
+`cadence_yr` put a delivery on the market every `cadence / F` years, which is
+the same constraint as a rate test seen from the other side:
+
+```
+kg <= cap x cadence / F     <=>     kg x F / cadence <= cap
+```
+
+The first delivery arrives at a market that has been importing from Earth for
+the whole outbound-and-back trip, so its window is `mission_duration_yr`. Over
+a programme of N the accumulated total is `duration + (N-1) x cadence / F`, and
+`_delivery_window_yr` returns the per-delivery average of that: exactly
+`duration` at N = 1, converging on `cadence / F` as N grows.
+
+Averaged rather than branched, deliberately. A step between delivery one and
+delivery two hands N = 1 a structural advantage no economics produced, and the
+ladder would then collapse onto N = 1 for a reason that is a rule rather than a
+result.
+
+**The steady-state clock is `campaign_cadence_yr`, not `mission_duration_yr`,
+and that is a change from v1.14.0.** A rig starts its next campaign as soon as
+the feed is out of the ground; the duration exceeds the cadence on essentially
+every body, so the old denominator understated sustained throughput. Under a
+smooth curve that is a bias buried in an exponent. Under a wall it moves the
+feasible fleet directly.
+
+### The ceilings go into the knapsack
+
+`optimal_payload_mix` takes per-phase upper bounds now, which is what makes a
+capped load behave: one that caps out on iron keeps walking down the price
+order and spends the freed hold space on whatever is next, instead of flying
+the excess unsold. Per-item quantity limits turn an unbounded fractional
+knapsack into a **bounded** one, and greedy solves that exactly too, so this is
+a constraint inside the optimiser rather than a clamp on top of it.
+
+Raw ore cannot be reshaped, so there the excess simply does not sell
+(`_capped_sale_value`). The cap therefore acts through two different mechanisms
+across the matrix: mix reshaping in the beneficiated cells, revenue clipping in
+the raw ones. That asymmetry is not a defect, it is what raw means.
+
+⚠️  **THE SIZING PATH MUST NEVER SEE THE CEILINGS.** `_cargo_water_kg` calls
+the knapsack from inside the fixed-point power solve, so a cap reaching it
+would make the whole MASS cascade a function of fleet size, and that asymmetry
+is the only reason the programme ladder is affordable to search. Ceilings bound
+what a load may SELL, not what the rig digs or the hull carries: the ship is
+designed once and the fleet is sized around it. That runs conservative, since
+the plant is sized for a richer mix than a capped delivery carries, and it
+keeps the ledger internally consistent, because the array flown is still
+exactly the array charged.
+
+### Two output columns, not one overloaded one
+
+| column | means | 1.0 unless |
+|---|---|---|
+| `saturation_multiplier` | a PRICE multiplier | `market_model = "elasticity"` |
+| `market_clearing_fraction` | share of the load's gross value that cleared | `capacity_cap` and something bound |
+| `unsold_payload_kg` | payload capacity that earned nothing | as above |
+
+A price multiplier and a quantity clip are different claims, and a column that
+means one thing in one market model and another in the next is the ambiguity
+this project keeps paying for.
+
+### The acceptance test: `elasticity` reproduces v1.20.0
+
+The refactor's whole risk is leaking into the old path, so that is what was
+checked first, using `verify.py`'s own comparator rather than a fresh one:
+
+| cell | hash | v1.20.0 baseline |
+|---|---|---|
+| raw | `7f7cc1eed2628150` | MATCH |
+| raw+search | `8969c36dd236efaf` | MATCH |
+| benef | `84445d43812af21c` | MATCH |
+| benef+search | `72e888e3d83d7de8` | MATCH |
+
+⚠️  Compared on the **v1.20.0 column set**. This release adds two columns, so
+the frame cannot hash to a v1.20.0 baseline by construction; the two new
+columns are dropped and every column that existed at v1.20.0 is identical.
+
+New default cell hashes, for the next release to compare against:
+`11ec818051269759` / `6738be0a0bcaeca3` / `109ce36a07ac6975` /
+`e78b585fb222831e`.
+
+🚨  **AN EARLIER SET OF FOUR WAS WRONG, AND THE WAY IT WAS WRONG IS THE
+TWELFTH ENTRY IN `verify.py`'S TRAP LIST.** `run_cell` resets four config
+fields explicitly and takes everything else from `CELLS`; `market_model` was in
+neither, so a harness that ran the acceptance cells with
+`market_model="elasticity"` left the live config there, and the baseline it
+then took "at the new default" was **entirely elasticity**. It is trap 1 one
+field along, the same shape as v1.15.0's two cells recorded as `cislunar` that
+ran against `earth_surface` prices.
+
+⚠️  **Nothing raised, and the hashes looked plausible.** What caught it was an
+internal contradiction between two checks on one population: check 7 reported
+**66 rows bound by a ceiling** beside a frame whose **minimum** clearing
+fraction was **1.0000**, which cannot both be true. Fixed by resetting
+`market_model` from the dataclass default beside the other four, so the trap is
+closed for every future harness rather than for this one.
+
+✅  The measured cells above are unaffected: they came from a
+`verify.py baseline` in a clean process, which never set the field, and from a
+run that passed all four models explicitly.
+
+### All four models on one cell, which is the argument for the whole release
+
+`raw+search`, 400-row cislunar stride sample, everything else identical:
+
+| `market_model` | best cost/revenue | fleet median / max | rows at `max_fleet_ships` | rows a ceiling bound |
+|---|---|---|---|---|
+| `single_mission` | 24.6804x | 1 / 1 | 0 / 155 | n/a |
+| `elasticity` | 26.5704x | 2 / 64 | 1 / 155 | n/a |
+| **`capacity_cap`** | **18.5707x** | **3 / 64** | **15 / 155** | **66 / 155** |
+| `unbounded` | 7.4600x | **64 / 64** | **155 / 155** | 0 / 155 |
+
+🚨  **`unbounded` puts every row at the ladder's top and reports 7.46x**, which
+is the whole reason this release could not simply be "turn the market term
+off". Constant prices with nothing bounding quantity is not a cheaper answer,
+it is **not an answer**: 155 of 155 rows report where the loop stopped. That
+row is what the capacity ceiling exists to prevent, and it is left in the
+selector, loudly labelled, so the failure mode is reachable on purpose rather
+than by accident.
+
+`capacity_cap` sits where it should, between the single mission and the
+fantasy. It is better than `single_mission` because a programme genuinely does
+amortise, and far worse than `unbounded` because the amortisation stops paying
+once the market fills.
+
+⚠️  `single_mission` at 24.6804x is **exactly** the `capacity_cap` raw N = 1
+figure, to four decimals, which is the arithmetic confirming what the N = 1
+section above claims: no single cislunar mission fills a ceiling, so the two
+models are the same run there.
+
+⚠️  **They are EXPECTED to separate at `geo` and that has not been measured.**
+Its 40 t/yr import budget is the smallest in the table, so a single delivery
+plausibly fills it, but no `geo` cell has ever been run and there is no frozen
+Stage 2 catalog for one; making it means a live Stage 2 run at today's prices,
+which is a methodology decision rather than a spare afternoon. Treat the
+difference between the two models away from cislunar as unmeasured.
+
+### The release introduced a defect class 3 and then closed it
+
+`_market_mode()` validates a config string, and the first cut of this release
+called it from `_evaluate_combo_at_ratio` and again from
+`_programme_ladder_cached`. Both are per CANDIDATE. Counted rather than
+estimated, on a 150-row beneficiated searched cell:
+
+| | calls | per evaluable row |
+|---|---|---|
+| as first written | 21,574 | **332** |
+| after the hoist | 151 | **2** |
+
+332 calls per row is ~216 M over a full catalog, at ~217 ns each: **~47 s of a
+full beneficiated cell** to re-derive one of four answers. That is defect
+class 3 exactly, *a quantity asked at a finer granularity than it has answers*,
+and this release wrote it rather than inherited it.
+
+Fixed the way `markets` already was: resolved once per asteroid in
+`evaluate_asteroid` and threaded down, with the parameter defaulting to None so
+a standalone caller still works. **All eight cell hashes reproduce**, four under
+`elasticity` against v1.20.0 and four under `capacity_cap` against the baseline
+taken before the hoist, so it is a performance change and nothing else.
+
+⚠️  The lesson this file already states applies to the fast path that was tried
+first: an identity test against a frozen set took 217 ns to 168, a 1.3x on a
+call that should not have been happening at all. **Cutting the cost of a call
+is not the same as cutting the call**, and the profile said 47 s either way
+until the count was taken. Count the calls before optimising the callee.
+
+### Is a feasibility gate on the ladder needed?  Measured: no
+
+The design discussion called for rungs that exceed a ceiling to be refused
+outright, with the reshaping knapsack as the main event and a feasibility gate
+on the ladder as a backstop. The gate is **not implemented**, and this is the
+measurement that says it need not be.
+
+Clearing fraction of the rungs the search actually CHOSE:
+
+| cell | min | 5th percentile | median |
+|---|---|---|---|
+| raw + search | 0.8307 | 0.9635 | 1.0000 |
+| beneficiated + search | 0.8858 | 0.9851 | 1.0000 |
+
+The search does pick rungs where a ceiling binds, and it never picks one that
+throws much away: the worst chosen rung still places 83% of its load, and 95%
+of rows place more than 96%. That is the objective doing the work a gate would
+have done, because a rung that cannot sell its cargo has low revenue and loses
+on cost/revenue without anyone forbidding it.
+
+⚠️  **The two answers were in tension and the later one won.** A pure
+feasibility gate says "this rung is not offered"; it cannot say "cap the iron
+and fill the freed space with platinum", which is what the mixture-optimisation
+requirement asks for. Clipping with reshaping is the only formulation that does
+both, and it subsumes the gate: a fully-clipped rung is priced at the revenue
+it can actually earn instead of being removed, which is strictly more
+information.
+
+✅  What DOES hold literally is the price claim. `saturation_multiplier` is
+exactly 1.0 on every row in every mode but `elasticity`, asserted by check 7.
+No price moves; only quantity is bounded.
+
+### verify.py check 7, and the bug it found in itself first
+
+`check_market_cap` asserts the thing this release actually claims, and it is
+the mirror of check 5's argument. Check 5 says widening a search must not make
+the reported answer worse; this says **narrowing one must not make it better**.
+For any fixed programme the capped gross value is at most the uncapped one and
+the cost is identical, so `capacity_cap` can never beat `unbounded` row by row.
+A violation would mean an allowance leaking into the cost side, or a rung
+priced under one set of caps and reported under another.
+
+| | pairs | max | cap beat unbounded | ceiling bound |
+|---|---|---|---|---|
+| raw + search | 155 | 1.000000000 | **0** | 66 rows |
+| beneficiated + search | 158 | 1.000000000 | **0** | 53 rows |
+
+⚠️  **Its first run reported four failures that were not failures**, and they
+are worth recording because they are trap #2 from `verify.py`'s own header
+arriving in a new check. Four beneficiated rows had a
+`market_clearing_fraction` of **1.0000000000000002**: bodies where a ceiling
+binds by a hair, so the reshape branch runs, the bounded knapsack re-walks to
+the same load, and the ratio lands one ULP over 1.0 because the walk took a
+different route to the same answer. Nothing in the model moved. **A comparator
+stricter than the artefact it compares reports failures that do not exist**,
+which is why check 5 has always tested `r > 1 + 1e-12` rather than `r > 1`, and
+the new check now carries the same tolerance.
+
+The other invariants pass unchanged under the new default:
+
+| check | result |
+|---|---|
+| 4, mass ledger | max absolute error `0.000000000 kg` on all four cells |
+| 5, never-worse | 0 exceptions on all three pairings; searched vs N = 1 improves a median **+50.7%** raw, **+53.7%** beneficiated |
+| 6, Stage 2 tables | 31 rows recomputed at cislunar, all identical |
+
+⚠️  Those never-worse medians are **larger** than the `elasticity` era's
++42.4%, which is the search having more room to move once the price stops
+sagging with every extra ship.
+
+### What it did to the numbers
+
+⚠️  **400/150-row cislunar stride samples, not a full catalog.** Under THE
+SAMPLING RULE these are the right shape for a ratio between two settings on
+identical rows and are **not** a prediction of a full-catalog cell.
+
+| cell | `elasticity` | `capacity_cap` | change |
+|---|---|---|---|
+| raw | 48.4982x | **24.6804x** | -49.1% |
+| raw + search | 26.5704x | **18.5707x** | -30.1% |
+| beneficiated | 25.7366x | **20.5353x** | -20.2% |
+| beneficiated + search | 14.8549x | **8.5221x** | -42.6% |
+
+Every cell improves, which is the expected direction and not a result: the
+price haircut that used to apply to every sale is gone, and what replaces it
+binds on some rows and not others. The winner changed propellant in three of
+the four cells (iodine to xenon at raw N = 1, krypton to iodine beneficiated).
+
+**Neither N = 1 cell binds on any row, at cislunar.** At N = 1 the window is
+the whole mission duration, ~3 to 6 years, and no single cislunar mission fills
+a 55 t/yr water or 25 t/yr metals ceiling over that. So at this destination
+`capacity_cap` and `single_mission` are the same run, and every N = 1 cislunar
+figure this project has published is a constant-price figure already.
+
+⚠️  **That is a cislunar result and does not generalise.** The allowance scales
+with the destination's import budget, which runs from `geo`'s 40 t/yr to
+`leo`'s 500 t/yr, so whether a single mission binds is a per-destination
+question and only cislunar has been asked.
+
+### Where the ceiling binds, and where it cannot reach
+
+It binds on **66 of 155** raw searched rows and **17 of 65** beneficiated
+searched rows, and it binds at the top of the ranking, which is what matters:
+the raw searched winner clears **0.8307** of its gross value and answers by
+taking a **smaller** fleet than it did under `elasticity` (F = 2, N = 10
+becomes F = 1, N = 5). The ladder turns over exactly as intended there.
+
+⚠️  **But more rows sit at `max_fleet_ships`, not fewer**, which is the
+opposite of what was predicted:
+
+| cell | | `elasticity` | `capacity_cap` |
+|---|---|---|---|
+| raw + search | fleet median / max | 2 / 64 | **3 / 64** |
+| | rows at `max_fleet_ships` | 1 / 155 | **15 / 155** |
+| beneficiated + search | fleet median / max | 2 / 26 | **7 / 64** |
+| | rows at `max_fleet_ships` | 0 / 65 | **11 / 65** |
+
+**Those rows are the ones a ceiling cannot reach, and they are the worst rows
+in the run.** All 15 raw ones clear at exactly 1.0000 and carry a median
+payload of **632 kg against 16,650 kg for the population**, at cost/revenue
+ratios of **486x to 37,620x** against the winner's 18.6x. A delivery that small
+never fills a per-commodity ceiling: the allowance falls as 1/F while the
+payload per delivery is constant, so a 632 kg load needs a fleet of roughly 300
+to bind, and the ladder stops at 64.
+
+Under `elasticity` even a tiny payload took a small haircut that grew with F,
+so it drifted off the ceiling. **A wall does not blend.** A row whose every
+commodity sits inside its allowance feels nothing at all, and is monotone in N
+again. That is the documented `earth_surface` degeneracy arriving on the
+bottom of the cislunar ranking rather than on the top of it.
+
+✅  It costs nothing today, because those rows lose by three orders of
+magnitude. It is written down because the diagnostic changes meaning: **"rows
+at `max_fleet_ships`" no longer reads as "their payloads have no finite
+market"**, it reads as "their payloads are too small to reach one". Both are
+the ladder running out rather than turning over; only the second is harmless.
+
+### Measured and declined: a ceiling for the composition residual
+
+The first hypothesis for the above was `other (bulk silicate)`, calc's
+composition residual. Composition fractions sum to 0.76-0.96 and the remainder
+is priced at a bulk-silicate floor, but the residual is not a Stage 2 commodity
+so `market_table` has no entry for it and it takes the infinite default. It is
+priced, it is on 100% of rows, and it has no ceiling.
+
+Measured rather than assumed, by mapping it to the `silicates` ceiling it is
+already priced against:
+
+| cell | as shipped | residual mapped to `silicates` |
+|---|---|---|
+| raw + search | 18.5707x, 66/155 bound, 15 at cap | **18.5707x, 66/155, 15** |
+| beneficiated + search | 8.5221x, 17/65 bound, 11 at cap | **8.6861x, 17/65, 11** |
+
+**Raw is bit-identical and beneficiated moves 1.9%**, with the bound count and
+the fleet distribution unchanged in both. So the residual is not what lets a
+programme scale, and the hypothesis was wrong. Declined for now on that
+evidence; it remains the correct mapping on the merits, and it is a one-line
+change whenever the ceilings are next recalibrated.
+
+⚠️  The measurement is the point here rather than the verdict. The mechanism
+was legible, plausible and wrong, and one 400-row A/B was enough to say so.
 
 ## master v1.25.0 - Stage 3 moved to the `spacecost` package
 
@@ -3619,6 +3971,53 @@ destination.
   `Calendar`.
 - **Module 3 is not touched and its two rows are still read.** No Stage 3
   re-run, no CSV schema change, and nothing in `_MODULE3_REQUIRED_OPS` moves.
+
+**`1.21.0`  constant prices, and a capacity ceiling that binds quantity.** Full
+write-up: [calc v1.21.0](#calc-v1210). One config field REPLACED rather than
+added, and **two new output columns**; a default run's ratios, fleet sizes and
+payload mixes all move, at every destination except `earth_surface`.
+
+- `model_market_saturation` (bool) is **gone**, replaced by `market_model`
+  (str), defaulting `"capacity_cap"`. The four legal values are exported as
+  `MARKET_MODELS` so the dashboard's dropdown resolves from the module rather
+  than from a second list; `_market_mode()` validates and **raises** on an
+  unrecognised value rather than defaulting to one.
+  `market_model = "elasticity"` is the old `True`, and reproduces every figure
+  measured from v1.14.0 to v1.20.0.
+- `demand_elasticity` is unchanged and is now read **only** in `"elasticity"`
+  mode.
+- New output columns: `market_clearing_fraction`, `unsold_payload_kg` and
+  `market_model`. The first two sit beside `saturation_multiplier` rather than
+  replacing it, because a PRICE multiplier and a QUANTITY clip are different
+  claims; `saturation_multiplier` stays 1.0 in every mode but `"elasticity"`.
+  **An archived CSV without these three columns is a pre-1.21.0 run**, which is
+  the fastest way to tell one.
+- **`market_model` is stamped into every row**, for the reason
+  `delivery_destination` and `pipeline_version` are: it identifies the run. The
+  same code now gives four answers 20% to 49% apart, so a version stamp alone
+  no longer says what produced a catalog. It is NOT provenance and
+  `verify.py` does not strip it before hashing: `catalog_date` and
+  `pipeline_version` are stripped because they move without the model moving,
+  and this moves only when the model does.
+- `capacity_allowance_kg()` and `_delivery_window_yr()` are new. The window is
+  `[duration + (N-1) x cadence/F] / N`, so `cap x mission_duration` at N = 1
+  and `cap x cadence/F` in the limit.
+- `optimal_payload_mix()` takes an optional `caps` mapping: per-phase upper
+  bounds, which make it a BOUNDED fractional knapsack, still solved exactly by
+  the same greedy walk. `caps=None` is bit-identical to the pre-1.21.0 walk.
+- `_capped_sale_value()` is new and handles the raw cargo, which cannot be
+  reshaped.
+- `programme_options()` returns `[(1, 1, 1)]` in `"single_mission"` mode, and
+  `_programme_ladder_cached`'s memo key gains the market model because of it.
+- The monotone-ladder warning now fires on `market_model = "unbounded"` as well
+  as on `model_rig_service_life = False`. Those are the two ways to leave the
+  objective monotone in N and only one of them was guarded.
+- `market_mode` is resolved once per asteroid in `evaluate_asteroid` and
+  threaded like `markets`, rather than derived per candidate. See below; it is
+  a performance fix for a cost this release introduced, and it is bit-identical
+  (all eight cell hashes, both market models).
+- **Stage 2 is not touched.** No `annual_market_kg` change, no schema change,
+  no re-run: the ceilings the cap reads are the ones already in the catalog.
 
 # Measurement history
 

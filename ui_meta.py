@@ -90,6 +90,7 @@ SECRET_FIELDS = {"metals_api_key"}
 # Fixed value sets. `None` means "resolve at runtime from the loaded module".
 CHOICES: Dict[str, Optional[List[str]]] = {
     "delivery_destination": None,          # from master.DELIVERY_DESTINATIONS
+    "market_model": None,                  # from master.MARKET_MODELS
     "selection_objective": ["cost_revenue_ratio", "profit"],
     # Only consulted when eval_row_cap > 0.  "stride" samples the whole
     # catalog; "head" takes the innermost N bodies, which is what a cap did
@@ -270,6 +271,36 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         ],
     ),
     (
+        "Market model: what a kilogram sells for, and how much of it",
+        "⚠️  THE ONLY THING THAT PUSHES BACK ON PROGRAMME SIZE. N improves five "
+        "levers at once (NRE/N, autonomy NRE/N, the learning curve, the rig's "
+        "share, and reliability growth) and this is the sixth. Remove it and "
+        "the objective is monotone in N, so the search reports where the "
+        "ladder stopped rather than an optimum. "
+        "`capacity_cap` is the v1.21.0 default: prices are CONSTANT at any "
+        "volume and what bounds a programme is a hard kg/yr ceiling per "
+        "commodity, from Stage 2's `annual_market_kg`. Everything inside the "
+        "ceiling sells at full price and everything past it earns nothing, so "
+        "it is a quantity wall rather than a price discount, and the payload "
+        "knapsack sees the ceilings: a load that caps out on iron spends the "
+        "freed hold space on whatever is next most valuable. A bigger fleet "
+        "delivers more often, so each delivery gets a shorter accumulation "
+        "window, and past the point where the ceilings bind another ship adds "
+        "its full cost and only part of its revenue. "
+        "`single_mission` pins N = 1 with no ceiling at all, which is the "
+        "question almost every figure in CLAUDE.md and the README was "
+        "answering. `elasticity` is the v1.14.0 demand curve and reproduces "
+        "every figure measured from v1.14.0 to v1.20.0 bit-identically; "
+        "`demand_elasticity` is read only in that mode. `unbounded` is a "
+        "DIAGNOSTIC and the run says so. ⚠️  At `earth_surface` the ceilings "
+        "are terrestrial production (10¹²-10¹⁵ kg/yr) and never bind, so that "
+        "destination stays monotone in N whichever model is chosen.",
+        [
+            ("calc", "market_model"),
+            ("calc", "demand_elasticity"),
+        ],
+    ),
+    (
         "Architecture availability",
         "Since v1.10.0 these mean *available*, not *mandatory*. The "
         "per-asteroid search decides whether to use them. "
@@ -306,16 +337,19 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         ],
     ),
     (
-        "The sixteen corrections",
+        "The corrections",
         "⚠️  These default ON and each one moved every number. They are "
         "corrections, not options: the flags exist to isolate an effect, not "
         "to be left off. Switching them off makes the model more profitable "
-        "and less true.",
+        "and less true. The list is the list; counting it in this sentence is "
+        "how the heading came to say \"sixteen\" above fifteen rows. "
+        "`model_market_saturation` was here until calc v1.21.0 and is now the "
+        "`market_model` selector in its own group above, because it stopped "
+        "being a flag and became a four-valued choice.",
         [
             ("calc", "model_low_thrust_time"),
             ("calc", "model_launch_windows"),
             ("calc", "model_water_liberation"),
-            ("calc", "model_market_saturation"),
             ("calc", "model_rig_service_life"),
             ("calc", "model_reliability"),
             ("calc", "model_reliability_growth"),
@@ -599,8 +633,20 @@ def _infer_bounds(name: str, default: Any,
     return (0.0, span, max(step, 0.01))
 
 
-def build_field_specs(config_obj: Any, section_key: str) -> List[FieldSpec]:
-    """Introspect one config dataclass into an ordered list of FieldSpecs."""
+def build_field_specs(
+    config_obj: Any, section_key: str,
+    runtime_choices: Optional[Dict[str, List[str]]] = None,
+) -> List[FieldSpec]:
+    """Introspect one config dataclass into an ordered list of FieldSpecs.
+
+    `runtime_choices` fills in the `CHOICES` entries whose legal values are
+    `None` here because they live in the module rather than in this file. The
+    caller supplies them because THIS FILE MUST NOT IMPORT MASTER: it scrapes
+    module sources as text, and `ui.py` is the consumer that already holds the
+    loaded module. Spelling the values out here instead would be a second copy
+    of a list the model already owns, which is the drift this repo keeps
+    paying for -- add a market model in `calc.py` and the dropdown follows.
+    """
     docs = scrape_field_docs(*CONFIG_SOURCES[section_key])
 
     specs: List[FieldSpec] = []
@@ -620,7 +666,8 @@ def build_field_specs(config_obj: Any, section_key: str) -> List[FieldSpec]:
             default=default,
             help=doc.get("help", ""),
             group=doc.get("section", "Other"),
-            choices=CHOICES.get(name),
+            choices=(CHOICES.get(name)
+                     or (runtime_choices or {}).get(name)),
             bounds=_infer_bounds(name, default, kind),
             secret=name in SECRET_FIELDS,
             is_path=name in PATH_FIELDS,
