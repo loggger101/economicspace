@@ -172,7 +172,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.14.0`,
-calc `1.21.0`, master `1.26.0` (the master version is a literal in
+calc `1.21.1`, master `1.26.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.14.0` is now spacecost's data-contract version**, not a
@@ -1856,6 +1856,49 @@ without `regex=False` matches metacharacters. Each cost releases. The tell they
 share: **the dtype is inferred from the data**, so the code works on a small
 test slice and breaks at scale.
 
+### A number is calibrated FOR a term, and swapping the term re-reads it
+
+calc `1.21.1`, and the most reusable thing in it. `IN_SPACE_ANNUAL_DEMAND_KG`
+did not change; what changed was understanding what its numbers had always
+been, and that is worth having written down because the next person to
+"recalibrate" them will start where this started.
+
+**The arithmetic first.** With `eps = 0.5` the curve is `(1 + Q/Qm)^-2`, so
+revenue is `Q x P0 x (1+Q/Qm)^-2`; with `x = Q/Qm` that is `x(1+x)^-2`, whose
+derivative `(1+x)^-3 (1-x)` is zero at **x = 1**. So:
+
+| | |
+|---|---|
+| the MOST a commodity can earn under the curve | `Qm x P0 / 4`, at exactly `Q = Qm` |
+| what a hard wall at W earns | `W x P0` |
+| the wall with the same maximum | **`W = Qm / 4`** |
+| a wall at the SAME Qm, against the curve | **1.2x to 12x more generous** |
+
+**Then the reading.** Every row of that table is anchored on a CONSUMPTION
+rate: `geo` is 550 satellites x 70 kg/yr of station-keeping propellant,
+`mars_surface` is "a base that imports 20 t/yr". Those are absorption budgets,
+which is a wall concept. Feeding one into a curve as its scale parameter means
+the price is already quartered at exactly the quantity the base actually needs,
+which nobody decided; it fell out of the substitution. **The curve was the term
+misusing the number, so `1.21.0`'s 1.2-12x is a correction, not an inflation,
+and the levels stay.**
+
+🚨  **THE TRAP IS THAT THE `Qm/4` VARIANT IS TEMPTING AND MEASURES WELL.** It
+nearly reproduces the `elasticity` levels (27.29x against 26.57x raw searched)
+AND it fixes the ladder, dropping the beneficiated fleet median from 7 to 2 and
+rows at `max_fleet_ships` from 11 to 2. It is still wrong: it asserts a base
+importing 20 t/yr pays full price for 5 t/yr, against the table's own anchor,
+and it is **calibrating a bottom-up cost model to a desired output**. Continuity
+with a term you are replacing is not a calibration criterion. ⚠️  And the
+symptom it appears to fix is not a ceiling problem at all: those rows carry a
+median payload of 632 kg against 16,650 kg and cannot reach ANY ceiling at a
+fleet of 64. **Declined; do not re-take it on the strength of the fleet median.**
+
+✅  **The general rule: when you swap a model term, re-derive what its
+parameters MEAN, not just what they are worth.** The same float can be a
+capacity in one term and a scale parameter in another, and nothing in the code
+says which.
+
 ### Cutting the cost of a call is not the same as cutting the call
 
 calc `1.21.0` introduced a defect class 3 instance and closed it in the same
@@ -1961,6 +2004,7 @@ assume it is bigger than it looks.
 | `viability_only` on `max_return_payload_kg` | 519 ns of a 2,105 ns call, but only 31% of calls in a raw cell | declined at **under 1%** average, against a new branch in the hottest function in the model |
 | the rig block in `_mission_cost_tail` | 3.2% priced alone | **taken in `1.17.5`**, once priced with the neighbour that shares its key. **Price the block, not the line** |
 | Parquet instead of CSV for the catalog | 19.7 s to **2.1 s** | real and free, and not taken: it changes Module 1's output contract and no measured cell would move detectably |
+| **quarter ceilings** (`Qm/4`, the wall matching the curve's maximum revenue) | raw searched 18.57x to **27.29x**, beneficiated fleet median 7 to 2, rows at the fleet cap 11 to 2 | **declined.** It measures well and is wrong: it contradicts the table's own anchors and calibrates to a desired output. See the lesson above |
 | `nickel-iron`'s missing market ceiling | **7.7e−8** relative on one mission, 7.7e−5 at N = 100 | declined; it would break bit-identity on a destination not re-measured since `1.14.0`. Take it in that pass if `earth_surface` is ever re-run |
 
 ⚠️  **Two of those figures went stale while being quoted forward, in opposite
@@ -2325,6 +2369,29 @@ and console text is not in one.
 `mineral_value 1.7.1`, which bumped while bit-identical. Both were *choices*,
 not obligations: the rule is one-directional. If you would rather every source
 change carry a stamp, bump it; just do not read this decision as an oversight.
+
+### A skip is not a pass, in the DOCS harness too
+
+`verify_docs.py` checks 8 and 9 import `master` and `ui_meta`, and both caught
+every exception, printed `SKIPPED` and **returned pass**. The skip is there for
+a machine without the third-party dependencies, which is legitimate; it also
+swallowed a **`SyntaxError` in this repo's own source**.
+
+Found on 2026-09-08 by causing it: a malformed string literal in `ui_meta.py`
+made check 8 report `SKIPPED (SyntaxError...)` and pass, and the run only went
+red because an unrelated version stamp happened to be wrong at the same moment.
+With the stamps clean, `verify_docs.py` would have exited **OK** on a file that
+does not parse.
+
+✅  Fixed by splitting the cases: `SyntaxError` is a FAILURE, everything else
+is still a skip. Verified by breaking a file on purpose and checking the exit
+code went to 1.
+
+⚠️  **This is the same defect CLAUDE.md already records `verify.py` having
+had** -- a `check` with no baseline printing `ALL CHECKS PASSED` -- in the other
+harness, found the same way, two releases apart. **A check that cannot run must
+never say it passed**, and the sentence applies to every harness in this repo,
+not to the one it was first written about.
 
 ## Stage 3 lives in another repository now
 
