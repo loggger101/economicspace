@@ -91,6 +91,25 @@ _force_utf8_stdout()
 # Runtime notes on each preset.  The timings are order-of-magnitude, read off
 # the measured cells in README.md's Results; the row cap is what makes them
 # differ.
+def _market_models():
+    """The legal `market_model` values, from the module that owns them.
+
+    Asserts rather than falling back to a literal, exactly as `_benef_ratio`
+    does: a hand-typed default here would be a second copy of a list this
+    project has already shipped stale once elsewhere.
+    """
+    import master
+    assert getattr(master, "MARKET_MODELS", None), \
+        "master.MARKET_MODELS is missing; the parser cannot be built without it"
+    return master.MARKET_MODELS
+
+
+def _market_default():
+    """`CalcConfig`'s own default, so `--help` cannot drift from the dataclass."""
+    import master
+    return master.CALC_CONFIG.market_model
+
+
 PRESETS = {
     "quick": dict(
         rows=400, raw=True, search=False, asteroids=20_000,
@@ -293,6 +312,17 @@ def build_parser(destinations) -> argparse.ArgumentParser:
     prog.add_argument("--no-search", dest="search", action="store_false",
                       help="price one mission per asteroid (N = 1)")
     p.set_defaults(search=None)
+
+    # calc v1.21.0.  Choices come from master rather than from a list here, for
+    # the reason the dashboard's dropdown does: a fifth model added in calc.py
+    # should not need this file edited to be reachable.
+    p.add_argument("--market-model", choices=list(_market_models()),
+                   help="what a delivered kilogram sells for and how much of "
+                        "it clears. capacity_cap: constant prices, a hard "
+                        "kg/yr ceiling per commodity. single_mission: constant "
+                        "prices, N = 1, no search. elasticity: the v1.14.0 "
+                        "demand curve. unbounded: a diagnostic, nothing bounds "
+                        "programme size (default: %s)" % _market_default())
 
     p.add_argument("--yes", "-y", action="store_true",
                    help="skip the confirmation prompt on a long run")
@@ -596,6 +626,7 @@ def print_banner(args, settings, cfg, stages) -> None:
     d_benef  = declared_default(cfg.calc,    "use_beneficiation")
     d_search = declared_default(cfg.calc,    "optimise_programme_scale")
     d_dest   = declared_default(cfg.mineral, "delivery_destination")
+    d_market = declared_default(cfg.calc,    "market_model")
 
     # The four banner formatters. Each renders ONE setting as the banner shows
     # it, and the first two exist mostly to say what 0 MEANS: it is "no cap" in
@@ -634,6 +665,25 @@ def print_banner(args, settings, cfg, stages) -> None:
         return "fleet x campaigns searched (~%.1fx slower)" % (
             _m.programme_search_cost_ratio(not settings["raw"]))
 
+    def fmt_market(v):
+        """The market model, said in terms of what it does to programme size.
+
+        calc v1.21.0.  This belongs on the banner for the reason the docstring
+        above gives about the ore and programme rows: the same code now gives
+        four answers 20% to 49% apart, so a run that does not say which model
+        priced it invites exactly the confusion the marking exists to prevent.
+
+        The blurbs are descriptive text this module owns, not a second copy of
+        the model list -- `.get(v, v)` means a fifth model added in calc.py
+        still prints, just without a gloss, rather than raising or lying.
+        """
+        return {
+            "capacity_cap":   "constant prices, kg/yr ceiling per commodity",
+            "single_mission": "constant prices, N = 1, no ceiling",
+            "elasticity":     "demand curve (the pre-v1.21.0 answer)",
+            "unbounded":      "constant prices, NOTHING bounds programme size",
+        }.get(v, v)
+
     def mark(current, default, fmt):
         """[default] if it matches the dataclass, else what the default was."""
         if current == default:
@@ -651,6 +701,8 @@ def print_banner(args, settings, cfg, stages) -> None:
          mark(not settings["raw"], d_benef, lambda b: fmt_ore(not b))),
         ("Programme",    fmt_prog(settings["search"]),
          mark(settings["search"], d_search, fmt_prog)),
+        ("Market",       fmt_market(cfg.calc.market_model),
+         mark(cfg.calc.market_model, d_market, fmt_market)),
     ]
 
     print()
@@ -819,6 +871,11 @@ def main() -> int:
     apply_preset(cfg, settings)
     if args.workers is not None:
         cfg.calc.parallel_workers = args.workers
+    # After apply_preset, deliberately: `--market-model single_mission` pins
+    # N = 1 whatever the preset said about the programme search, and a preset
+    # writing over it afterwards would make the flag silently inert.
+    if args.market_model is not None:
+        cfg.calc.market_model = args.market_model
 
     check_defaults_preset(cfg)
 

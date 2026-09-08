@@ -11,6 +11,7 @@ memory each time:
     4. mass ledger     hardware_total_kg == rig + plant + ep, exactly
     5. never-worse     beneficiated <= raw, and searched <= N = 1
     6. stage 2 tables  the judgement tables still produce the numbers on disk
+    7. market ceilings a capacity ceiling may only ever cost you, never pay
 
 Typical use.  The ORDER matters: the baseline must be captured before the first
 edit, exactly as every release note in versions.md says it was.
@@ -98,12 +99,30 @@ conclusions that were written down before being caught:
             cannot see it either -- and a comparator stricter than the artefact
             it compares reports failures that do not exist.
 
+  1.21.0    a baseline labelled "the new default" that was entirely
+            `elasticity`.  `run_cell` resets four config fields explicitly and
+            takes the rest from CELLS, and `market_model` is in neither -- so a
+            harness that ran one cell with market_model="elasticity" left the
+            live config there, and every later run_cell(m, name) in the same
+            process inherited it silently.  This is trap 1 exactly, one field
+            along: a config field nothing resets is whatever the last run left.
+            The tell was internal contradiction, not an error -- check 7
+            reporting 66 rows bound by a ceiling beside a frame whose MINIMUM
+            clearing fraction was 1.0000, which cannot both be true of one
+            population.  Fixed by resetting `market_model` from the DATACLASS
+            default beside the other four.
+
 Traps 9, 10 and 11 are three DIFFERENT causes of one identical symptom: columns
 reported as DIFFER beside a byte-identical hash.  Each had to be found
 separately, because fixing one moved the count and nothing else.  That is the
 argument for the whole file.
 
 Each is defended against below, at the line that would otherwise reproduce it.
+⚠️  AND THE RESET LIST IS PART OF THE CONTRACT, NOT HOUSEKEEPING.  Trap 12
+was a config field that had no reset because nothing had ever varied it.  When
+a release makes a config field something a cell can differ on, it belongs in
+`run_cell`'s explicit resets, or the next harness inherits it.
+
 Add to that list rather than starting a twelfth harness.
 """
 
@@ -111,6 +130,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import dataclasses
 import hashlib
 import io
 import json
@@ -184,6 +204,19 @@ PROVENANCE = ("pipeline_version", "catalog_date")
 DESTINATION = "cislunar"      # what the on-disk Stage 2 catalog is priced for
 
 
+def _declared_default(config, field: str):
+    """The dataclass DEFAULT for `field`, not whatever the instance now holds.
+
+    `run_cell` mutates the live config, so "put it back" has to mean "back to
+    what the class declares", and reading the instance would just return the
+    value the previous cell left there.
+    """
+    for f in dataclasses.fields(type(config)):
+        if f.name == field:
+            return f.default
+    raise AttributeError("no config field named %r" % field)
+
+
 def run_cell(m, name: str, *, workers: int = 1, **override):
     """Build one profitability cell and return the frame.
 
@@ -203,6 +236,20 @@ def run_cell(m, name: str, *, workers: int = 1, **override):
     C.eval_row_sampling       = "stride"
     C.parallel_workers        = workers
     C.prune_infeasible_combos = True
+    # TRAP #13, and it is #1 in this file's header one field along.  `CELLS`
+    # does not name `market_model`, so before calc v1.21.0 there was nothing to
+    # reset and every field a cell cared about was in the spec.  There is now:
+    # a harness that runs one cell with `market_model="elasticity"` and the
+    # next with the plain default leaves the SECOND run in elasticity too,
+    # because nothing here puts it back.  That is not hypothetical -- it
+    # produced a `.verify` baseline labelled "the new default" that was
+    # entirely elasticity, and the tell was a check reporting 66 bound rows
+    # beside a frame whose minimum clearing was 1.0000.
+    #
+    # Read off the dataclass rather than typed, so the reset cannot drift from
+    # the default the way a literal would; `--market-model` in run_pipeline.py
+    # resolves its own default the same way and for the same reason.
+    C.market_model = _declared_default(C, "market_model")
     for k, v in spec.items():
         setattr(C, k, v)
 
@@ -433,6 +480,94 @@ def check_never_worse(m) -> bool:
         print(f"  {label:22s} pairs {len(j):5d} | max {r.max():.6f} | "
               f"worse {worse} | declined {int((r == 1.0).sum()):4d} | "
               f"median +{(1 - r).median() * 100:.1f}%")
+    return ok
+
+
+def check_market_cap(m) -> bool:
+    """calc v1.21.0's invariants: a ceiling may only ever cost you (check 7).
+
+    Two claims, and the first is the one worth having.
+
+    ── CONSTRAINING MUST NEVER IMPROVE THE ANSWER ──────────────────────────
+    `capacity_cap` clips each commodity at an allowance; `unbounded` is the
+    same run with every allowance infinite.  For any FIXED programme the capped
+    gross value is <= the uncapped one and the cost is identical, so the capped
+    best-over-rungs can never beat the uncapped best-over-rungs.  The objective
+    is cost/revenue, so capped >= unbounded, row by row.
+
+    That is the mirror of check 5's argument and it catches the same class of
+    bug.  Check 5 says widening a search must not make the reported answer
+    worse; this says narrowing one must not make it better.  A violation means
+    the ceilings are being applied to something other than what gets reported
+    -- an allowance leaking into the cost side, or a rung priced under one set
+    of caps and reported under another.
+
+    ── AND THE COLUMNS MUST MEAN WHAT THEY SAY ────────────────────────────
+    `saturation_multiplier` is a PRICE multiplier and must be exactly 1.0 in
+    every model but `elasticity`; `market_clearing_fraction` is a share and
+    must land in [0, 1] to within a tolerance the comment below earns;
+    `unsold_payload_kg` cannot be negative or exceed the payload.  Cheap, and it is what stops the two v1.21.0 columns quietly
+    swapping meanings the way one overloaded column would have.
+    """
+    cap = dict(eval_row_cap=NEVER_WORSE_CAP)
+    ok = True
+
+    for name in ("raw+search", "benef+search"):
+        capped = run_cell(m, name, market_model="capacity_cap", **cap)
+        free   = run_cell(m, name, market_model="unbounded", **cap)
+        if capped.empty or free.empty:
+            print(f"  {name:14s} SKIPPED -- a cell came back empty  FAIL")
+            ok = False
+            continue
+        j = (free[["designation"]].assign(r_free=_ratio(free))
+             .merge(capped[["designation"]].assign(r_cap=_ratio(capped)),
+                    on="designation"))
+        if j.empty:
+            print(f"  {name:14s} SKIPPED -- no shared designation  FAIL")
+            ok = False
+            continue
+        # r_cap must be >= r_free: the ceiling can only ever cost you.
+        r = j["r_free"] / j["r_cap"]
+        better = int((r > 1 + 1e-9).sum())
+        ok &= better == 0
+        bound = int((capped["market_clearing_fraction"] < 1.0).sum())
+        print(f"  {name:14s} pairs {len(j):5d} | max {r.max():.9f} | "
+              f"cap beat unbounded on {better} | ceiling bound {bound} rows")
+
+    for name in ("raw", "benef+search"):
+        d = run_cell(m, name, market_model="capacity_cap", **cap)
+        if d.empty:
+            continue
+        sat  = d["saturation_multiplier"]
+        clr  = d["market_clearing_fraction"]
+        uns  = d["unsold_payload_kg"]
+        # The clearing bound carries a TOLERANCE, and the first run of this
+        # check is why.  It reported four rows "outside (0, 1]" whose value was
+        # 1.0000000000000002: bodies where a ceiling binds by a hair, so the
+        # reshape branch runs, the bounded knapsack re-walks to the same load,
+        # and `cvalue / gross_base` lands one ULP over 1.0 because the walk
+        # took a different route to the same answer.  Nothing in the model
+        # moved.  That is trap #2 from this file's own header -- a comparator
+        # stricter than the artefact it compares reports failures that do not
+        # exist -- and it is the reason check 5 tests `r > 1 + 1e-12` rather
+        # than `r > 1`.
+        #
+        # Zero IS admissible: a programme large enough that no commodity can be
+        # placed sells nothing, which is the ceiling working rather than
+        # failing.  It has not been observed at cislunar and would show as an
+        # infinite cost/revenue ratio if it were.
+        bad  = {
+            "saturation_multiplier != 1.0": int((sat != 1.0).sum()),
+            "clearing outside [0, 1]":      int(((clr < 0) | (clr > 1 + 1e-9)).sum()),
+            "unsold negative":              int((uns < 0).sum()),
+            "unsold > payload":             int((uns > d["max_payload_kg"] + 1e-6).sum()),
+        }
+        for label, n in bad.items():
+            if n:
+                print(f"  {name:14s} {label}: {n} rows  FAIL")
+        ok &= not any(bad.values())
+        print(f"  {name:14s} columns OK on {len(d)} rows")
+
     return ok
 
 
@@ -698,7 +833,7 @@ def cmd_check(args) -> int:
 
 
 def cmd_invariants(args) -> int:
-    """Checks 4, 5 and 6 only -- no baseline needed, so this runs on any tree."""
+    """Checks 4 to 7 only -- no baseline needed, so this runs on any tree."""
     m = load_master()
     frames = {name: run_cell(m, name) for name in args.cells}
     print("\n4. MASS LEDGER")
@@ -707,6 +842,8 @@ def cmd_invariants(args) -> int:
     ok &= check_never_worse(m)
     print("\n6. STAGE 2 TABLES")
     ok &= check_stage2(m)
+    print("\n7. MARKET CEILINGS (calc v1.21.0)")
+    ok &= check_market_cap(m)
     print("\n" + ("OK" if ok else "*** FAILURES ABOVE ***"))
     return 0 if ok else 1
 

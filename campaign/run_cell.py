@@ -117,7 +117,19 @@ def extract(path, dest, ore, search):
         "trips_per_ship": b.get("trips_per_ship"),
         "programme_span_yr": round(float(b.get("programme_span_yr", float("nan"))), 4),
         "payload_kg": round(float(b.get("max_payload_kg", float("nan"))), 2),
+        # calc v1.21.0 split the one market column in two, and which of them
+        # carries the information depends on `market_model`: `saturation` is a
+        # PRICE multiplier and is 1.0 in every mode but `elasticity`, while
+        # `clearing` is the share of the load that got under the ceilings and
+        # is 1.0 in every mode but `capacity_cap`. Both are recorded because a
+        # campaign row has to say which model produced it, and `market_model`
+        # below is what says so. An older archived cell has neither of the last
+        # two, which is how you tell it is pre-1.21.0.
         "saturation": round(float(b.get("saturation_multiplier", float("nan"))), 4),
+        "clearing": round(float(b.get("market_clearing_fraction", float("nan"))), 4),
+        "unsold_kg": round(float(b.get("unsold_payload_kg", float("nan"))), 2),
+        "market_model": (str(p["market_model"].iloc[0])
+                         if "market_model" in p.columns else ""),
         "p_mining": round(float(b.get("p_mining", float("nan"))), 4),
         "aerocapture_share": share("aerocapture_return", true_like=True),
         "rtg_share": share("power_source", "rtg"),
