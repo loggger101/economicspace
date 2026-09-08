@@ -628,6 +628,35 @@ def check_stage2(m) -> bool:
           f"{'(would silently take 15% of a depot) ' + str(no_class) if no_class else ''}")
     print(f"  uncapped       {len(no_cap)} take the unlimited terrestrial "
           f"default ({m._UNLIMITED_MARKET_KG:.0e} kg/yr)")
+
+    # v1.21.2.  EVERY PHASE calc can put in a hold must resolve to a ceiling.
+    # This is the defect v1.21.1 fixed, generalised so the next one cannot
+    # happen: `asteroid_phase_table` appends the composition residual under a
+    # name Stage 2 has no row for, `markets.get` missed, and it took the
+    # infinite default -- priced, unbounded, and on 100% of bodies.  A phase
+    # with no market is not a rounding error; under `capacity_cap` it is the
+    # whole of a monotone-in-N objective.
+    #
+    # ⚠️  Tests the PHASE names, not the mineral names.  The block above checks
+    # Stage 2's own rows, and the residual is not one of them -- which is
+    # exactly how it slipped through for a release.
+    markets = m.market_table(d)
+    phase_names = set(m.FRACTION_TO_MINERAL.values()) | {m._RESIDUAL_PHASE}
+    unbounded = sorted(p for p in phase_names
+                       if m.phase_market_kg(markets, p) == float("inf"))
+    ok &= not unbounded
+    print(f"  phase ceilings {len(phase_names) - len(unbounded)}/{len(phase_names)} "
+          f"payload phases resolve to a market"
+          + (f"  *** UNBOUNDED: {unbounded} ***" if unbounded else ""))
+
+    # And every phase's market KEY must name a real market, or the pooling in
+    # `_capped_sale_value` and the knapsack caps would pool onto a key nothing
+    # bounds.  Cheap, and it is the half an alias table can get wrong.
+    stray = sorted(k for k in {m.phase_market_key(markets, p) for p in phase_names}
+                   if markets is not None and k not in markets)
+    ok &= not stray
+    if stray:
+        print(f"  phase ceilings *** alias points at no market: {stray} ***")
     return ok
 
 
@@ -821,6 +850,16 @@ def cmd_check(args) -> int:
 
     print("\n6. STAGE 2 TABLES")
     ok &= check_stage2(m)
+
+    # v1.21.2: check 7 used to run ONLY from `verify.py invariants`, so the
+    # command every release is argued from -- this one -- never ran the market
+    # ceiling invariant at all.  Nothing hid it; it was simply not in the list,
+    # and the one release note that quotes a check 7 result got it by running
+    # the other subcommand by hand.  Same shape as this repo's other
+    # never-ran-at-all checks: the output looked complete because the numbering
+    # stopped where the list did.
+    print("\n7. MARKET CEILINGS")
+    ok &= check_market_cap(m)
 
     if unchecked:
         print("\n*** NOT VERIFIED: check 1 compared nothing for %s."

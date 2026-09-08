@@ -936,7 +936,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.21.1"
+    pipeline_version: str = "1.21.2"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1839,6 +1839,38 @@ _RESIDUAL_PHASE = "other (bulk silicate)"
 _PHASE_MARKET_ALIAS: Dict[str, str] = {_RESIDUAL_PHASE: "silicates"}
 
 
+def phase_market_key(markets: Optional[Dict[str, float]], phase: str) -> str:
+    """The MARKET a phase sells into, which is not always the phase's own name.
+
+    v1.21.2.  `phase_market_kg` answers "how many kg/yr", and two phases can
+    get the same answer for two different reasons: because they are the same
+    market, or because they happen to have equal ceilings.  Only this function
+    can tell those apart, and the difference is a whole allowance.
+
+    ⚠️  IT TAKES `markets` FOR ONE REASON: TO RESOLVE THE ALIAS THE SAME WAY
+    `phase_market_kg` DOES.  That function prefers a phase's OWN row and falls
+    back to the alias, so a keyless version of this one would disagree with it
+    the moment Stage 2 gained a row for an aliased phase -- pooling onto
+    `silicates` while drawing a different ceiling.  Nothing today has both, and
+    that is exactly when to make two functions agree by construction rather
+    than by coincidence.
+
+    🚨  THE ALIAS ABOVE MEANT "ONE SHARED CEILING" AND WAS IMPLEMENTED AS "A
+    SECOND COPY OF IT".  v1.21.1 gave the composition residual the `silicates`
+    ceiling it was already priced against, which was right, and every consumer
+    then asked `phase_market_kg` per PHASE and got the full allowance twice --
+    once for `silicates` and once for `other (bulk silicate)`.  The comment
+    above already said "priced as silicates, bounded as silicates, in one
+    place"; that was the intent, and the code gave each its own place.  The two
+    co-occur on 100% of bodies and are a median 84% of the load, so this was
+    not a corner.
+    """
+    if markets and phase in markets:
+        return phase
+    alias = _PHASE_MARKET_ALIAS.get(phase)
+    return alias if alias is not None else phase
+
+
 def phase_market_kg(markets: Optional[Dict[str, float]], phase: str) -> float:
     """Annual ceiling in kg/yr for one PHASE of the payload, or inf.
 
@@ -1847,6 +1879,11 @@ def phase_market_kg(markets: Optional[Dict[str, float]], phase: str) -> float:
     Infinity is still the answer for a phase with no market and no alias, and
     that is deliberate: it means "nothing here bounds this", which the run
     banner reports rather than silently assuming a number.
+
+    ⚠️  THIS IS A CEILING, NOT AN ENTITLEMENT.  Two phases sharing a market
+    each get the same number back from here, and that is correct; what would
+    be wrong is spending it twice.  Pair every call with `phase_market_key`
+    and pool by that key.  See v1.21.2.
     """
     if not markets:
         return float("inf")
@@ -2072,7 +2109,7 @@ def _delivery_window_yr(
 
 
 def _capped_sale_value(
-    sale_terms: List[Tuple[float, float, float]], window_yr: float,
+    sale_terms: List[Tuple[float, float, float, str]], window_yr: float,
 ) -> Tuple[float, float]:
     """`(value_usd, unsold_kg)` with every commodity clipped at its ceiling.
 
@@ -2090,16 +2127,35 @@ def _capped_sale_value(
     cannot be reshaped.  A beneficiated load goes through `optimal_payload_mix`
     with the same ceilings instead, which spends the freed hold space on the
     next most valuable phase rather than flying the excess unsold.
+
+    🚨  v1.21.2: THE ALLOWANCE IS POOLED PER MARKET, NOT PER PHASE.  Each entry
+    carries the market KEY it sells into, and phases sharing a key draw down
+    one shared allowance.  Before this the `silicates` phase and the
+    composition residual each got the full silicates ceiling, which is one
+    market sold twice, on 100% of bodies.
+
+    ⚠️  Insertion order decides WHICH phase is recorded as unsold when a pooled
+    allowance runs out.  It does not change `value`, because the only pair that
+    shares a key today is priced identically by construction -- the residual is
+    priced at the silicates quote.  If a future alias ever joins two phases at
+    DIFFERENT prices, this loop would need to spend the allowance on the dearer
+    one first, and the order it happens to receive would stop being good
+    enough.
     """
     value  = 0.0
     unsold = 0.0
-    for kg, price, mkt in sale_terms:
-        allowance = mkt * window_yr
+    remaining: Dict[str, float] = {}
+    for kg, price, mkt, key in sale_terms:
+        allowance = remaining.get(key)
+        if allowance is None:
+            allowance = mkt * window_yr
         if kg > allowance:
             value  += allowance * price
             unsold += kg - allowance
+            remaining[key] = 0.0
         else:
             value  += kg * price
+            remaining[key] = allowance - kg
     return value, unsold
 
 
@@ -2130,6 +2186,7 @@ def optimal_payload_mix(
     recovery:   float,
     want_phase: Optional[str] = None,
     caps:       Optional[Dict[str, float]] = None,
+    cap_keys:   Optional[Dict[str, str]]   = None,
 ) -> Union[Dict[str, object], float]:
     """Most valuable payload obtainable from `feed_kg` of this rock (v1.6.0).
 
@@ -2205,6 +2262,20 @@ def optimal_payload_mix(
     out on iron keeps walking down the price order and spends the remaining
     capacity on whatever is next, rather than flying the excess unsold.
 
+    🚨  v1.21.2: `caps` IS KEYED BY MARKET AND IS CONSUMED IN PLACE.  Pass a
+    dict you own; this walk decrements it.  Keying it by phase gave two phases
+    that sell into one market the full allowance each, which is the defect
+    v1.21.2 exists to close, and consuming it is what makes the pool shared
+    rather than merely shared-looking.
+
+    `cap_keys` maps a phase name to the market key its allowance lives under,
+    and a phase missing from it stands alone.  It is a MAP rather than a call
+    to `phase_market_key` here because that function needs the market table to
+    resolve an alias the way `phase_market_kg` does, and handing the knapsack
+    the whole of Stage 2 to look up five strings would be the wrong seam: the
+    caller already knows both, and resolving it there keeps the two lookups
+    agreeing in one place.
+
     ⚠️  `caps=None` must stay bit-identical to the pre-v1.21.0 walk, because
     the `elasticity` market model is the v1.14.0 curve, and it reproduced
     v1.14.0 to v1.20.0 exactly until v1.21.1's residual-ceiling fix moved the
@@ -2244,9 +2315,18 @@ def optimal_payload_mix(
             # v1.21.0.  The bounded-knapsack step.  Clipping `take` and NOT
             # `remaining` is the whole point: the hold space this phase does
             # not get stays available to the next one down the price order.
-            allowance = caps.get(name)
-            if allowance is not None and allowance < take:
-                take = allowance
+            #
+            # v1.21.2: `caps` is keyed by MARKET, not by phase, and is drawn
+            # down as it is spent, so two phases sharing a market share one
+            # allowance.  The walk is in descending price order, so the dearer
+            # phase draws first, which is the right way to spend a scarce
+            # allowance and is why this needs no separate ordering rule.
+            key = cap_keys.get(name, name) if cap_keys else name
+            allowance = caps.get(key)
+            if allowance is not None:
+                if allowance < take:
+                    take = allowance
+                caps[key] = allowance - take
         if take <= 0:
             continue
         if want_phase is not None:
@@ -6809,7 +6889,10 @@ def _evaluate_combo_at_ratio(
                               and phases and markets is not None)
     saturation_applies = bool(market_ready and market_mode == "elasticity")
     capacity_applies   = bool(market_ready and market_mode == "capacity_cap")
-    sale_terms: List[Tuple[float, float, float]] = []
+    # v1.21.2: (kg, price, ceiling_kg_per_yr, market_key).  The key is what
+    # lets every consumer below pool phases that sell into ONE market; see
+    # `phase_market_key`.
+    sale_terms: List[Tuple[float, float, float, str]] = []
     if saturation_applies or capacity_applies:
         # The mix actually sold: chosen by the optimiser when concentrating,
         # otherwise the body's own proportions.
@@ -6820,7 +6903,8 @@ def _evaluate_combo_at_ratio(
             sold = {n: m_payload * f / frac_sum for n, f, _p in phases} if frac_sum > 0 else {}
         for phase, kg in sold.items():
             price = next((p for n, _f, p in phases if n == phase), 0.0)
-            sale_terms.append((kg, price, phase_market_kg(markets, phase)))
+            sale_terms.append((kg, price, phase_market_kg(markets, phase),
+                               phase_market_key(markets, phase)))
 
     # ── Mission reliability (v1.8.0) ─────────────────────────────────────────
     # The terms that do not move with programme size, hoisted for the same
@@ -6944,13 +7028,26 @@ def _evaluate_combo_at_ratio(
             # the phase table must not be sorted at source.
             entry = sat_by_fleet.get(fleet)
             if entry is None:
+                # v1.21.2: the RATE that moves a price is the market's total
+                # throughput, not one phase's share of it.  Two phases selling
+                # into one market depress it together, and asking the curve per
+                # phase asked it twice about half the quantity each time, which
+                # is a smaller haircut than the truth.  Pooled first, then each
+                # phase's revenue is discounted at its MARKET's multiplier.
+                pooled: Dict[str, float] = {}
+                for kg, _price, _mkt, key in sale_terms:
+                    pooled[key] = pooled.get(key, 0.0) + kg
+                mult: Dict[str, float] = {}
                 adj = 0.0
-                for kg, price, mkt in sale_terms:
-                    adj += kg * price * saturation_price_multiplier(
-                        kg * concurrent / mission_duration_yr,
-                        mkt,
-                        config.demand_elasticity,
-                    )
+                for kg, price, mkt, key in sale_terms:
+                    m_key = mult.get(key)
+                    if m_key is None:
+                        m_key = mult[key] = saturation_price_multiplier(
+                            pooled[key] * concurrent / mission_duration_yr,
+                            mkt,
+                            config.demand_elasticity,
+                        )
+                    adj += kg * price * m_key
                 entry = sat_by_fleet[fleet] = (
                     adj,
                     adj / gross_base if gross_base > 0 else sat,
@@ -6982,8 +7079,16 @@ def _evaluate_combo_at_ratio(
                 # and the optimiser would only rediscover `gross_base`.  Same
                 # shape as v1.14.1's pre-filter: prove nothing binds in a few
                 # float comparisons rather than paying to be told.
+                # v1.21.2: pooled, for the same reason the sale is.  Testing
+                # per phase let a load slip through this fast path while the
+                # SHARED silicates allowance was already over, and the fast
+                # path returns `gross_base`, i.e. no ceiling at all.
+                agg: Dict[str, Tuple[float, float]] = {}
+                for kg, _price, mkt, key in sale_terms:
+                    prev = agg.get(key)
+                    agg[key] = (kg + prev[0], mkt) if prev is not None else (kg, mkt)
                 binds = False
-                for kg, _price, mkt in sale_terms:
+                for kg, mkt in agg.values():
                     if kg > mkt * window:
                         binds = True
                         break
@@ -6996,11 +7101,21 @@ def _evaluate_combo_at_ratio(
                     # flying the excess unsold.  The ceilings go INTO the
                     # knapsack, where they are per-item upper bounds and greedy
                     # stays exact; see `optimal_payload_mix`.
+                    # v1.21.2: one entry per MARKET rather than per phase, so
+                    # `silicates` and the composition residual draw on one
+                    # allowance instead of two.  A fresh dict per call because
+                    # the walk consumes it.
+                    caps_by_market: Dict[str, float] = {}
+                    cap_keys: Dict[str, str] = {}
+                    for nm, _f, _p in phases:
+                        k = phase_market_key(markets, nm)
+                        cap_keys[nm] = k
+                        if k not in caps_by_market:
+                            caps_by_market[k] = phase_market_kg(markets, nm) * window
                     capped = optimal_payload_mix(
                         m_payload, feed_kg, phases,
                         config.beneficiation_recovery,
-                        caps={nm: phase_market_kg(markets, nm) * window
-                              for nm, _f, _p in phases},
+                        caps=caps_by_market, cap_keys=cap_keys,
                     )
                     cvalue = float(capped["value_usd"])
                     # Measured against the UNCAPPED load, not against the hold.
