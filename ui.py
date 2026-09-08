@@ -123,8 +123,16 @@ BUILDERS = {
 
 @st.cache_data(show_spinner=False)
 def field_specs() -> Dict[str, List[FieldSpec]]:
-    """Introspect the four configs once; the dataclasses do not change at runtime."""
-    return {key: ui_meta.build_field_specs(obj, key)
+    """Introspect the four configs once; the dataclasses do not change at runtime.
+
+    `market_model`'s legal values come from `master.MARKET_MODELS` rather than
+    from a list in `ui_meta`, which scrapes module sources as text and must not
+    import master. Add a market model in `calc.py` and the dropdown follows;
+    spelling the four values out in the UI would be the second copy this repo
+    keeps finding drifted.
+    """
+    runtime = {"market_model": list(getattr(master, "MARKET_MODELS", ()))}
+    return {key: ui_meta.build_field_specs(obj, key, runtime)
             for key, obj in CONFIG_OBJECTS.items()}
 
 
@@ -1326,7 +1334,15 @@ _MASS_CASCADE = [
 ]
 
 _MODEL_TERMS = [
-    ("saturation_multiplier", "Market saturation multiplier"),
+    # v1.21.0 keeps these three apart on purpose: the first is a PRICE
+    # multiplier and moves only under `market_model = "elasticity"`, the second
+    # is the share of the load that cleared a quantity ceiling under
+    # `capacity_cap`, and the third is the payload capacity that earned
+    # nothing. One column meaning two things by mode is the ambiguity the
+    # model's own comments warn about.
+    ("saturation_multiplier", "Market saturation multiplier (price)"),
+    ("market_clearing_fraction", "Market clearing fraction (quantity)"),
+    ("unsold_payload_kg", "Payload that earned nothing (kg)"),
     ("p_success", "Overall mission reliability"),
     ("p_mining", "Mining reliability (programme mean)"),
     ("learning_curve_factor", "Learning curve factor"),

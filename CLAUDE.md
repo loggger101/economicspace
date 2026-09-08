@@ -172,7 +172,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.14.0`,
-calc `1.20.0`, master `1.25.0` (the master version is a literal in
+calc `1.21.0`, master `1.26.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.14.0` is now spacecost's data-contract version**, not a
@@ -415,6 +415,32 @@ the ranking without reordering it and the winner did not move in any of the
 four. That is a 400/150-row observation, not a full-catalog one; treat a
 *level* here as superseded and a *share* as probably intact until measured.
 See [calc v1.20.0](versions.md#calc-v1200).
+
+🚨  **AND EVERY CELL BELOW IS A `market_model = "elasticity"` FIGURE,
+WHICH IS NO LONGER WHAT A DEFAULT RUN DOES.** calc `1.21.0` replaced the
+`model_market_saturation` flag with a four-valued `market_model` and defaults
+it to `capacity_cap`: prices are **constant at any volume** and what bounds a
+programme is a hard kg/yr ceiling per commodity. Set `market_model` to
+`"elasticity"` to reproduce anything here, and note it reproduces the four
+committed cell hashes **exactly**, which is the release's acceptance test.
+
+⚠️  **This one is not a rescaling, and it is not safe to assume the shares
+survive it.** On the 400/150-row cislunar cells the objective moved **-20% to
+-49%** and the winner changed PROPELLANT in three of four cells. Treat every
+level, share and split below as an `elasticity` measurement.
+
+✅  **The N = 1 cells are the exception, and they are safe.** No single
+cislunar mission fills a ceiling over a 3-6 year window, so no N = 1 row binds
+at all: at N = 1 `capacity_cap`, `single_mission` and constant prices are the
+same run. Every single-mission **cislunar** figure in this file was already a
+constant-price figure and does not move.
+
+⚠️  **Measured at cislunar only.** The allowance scales with the destination's
+import budget, `geo`'s 40 t/yr to `leo`'s 500 t/yr, so whether a single mission
+binds is a per-destination question and the other six are unasked. Do not read
+the N = 1 tables at `leo`, `mars_surface` or `earth_surface` as confirmed
+constant-price figures on this evidence.
+See [calc v1.21.0](versions.md#calc-v1210).
 
 🚨  **THE CAMPAIGN IS FIVE DESTINATIONS AND THE MODEL NOW HAS SEVEN.**
 `mars_orbit` landed in calc `1.18.0` and `geo` in calc `1.19.0`, and **no cell
@@ -1028,6 +1054,23 @@ or more distinctive numbers across two files:
 | why `mars_orbit` takes the BASE utility profile: the crust is 4,100 m/s of ascent away, against the 3,600 m/s of TMI that delivered the cargo | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
 | the base in-space utility profile itself: water 1.00, structural metals 0.70, silicates 0.25, carbon 0.40, and the Mars overrides against it | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
 | the insurance premiums: 2.4-4.3% of total cost against 5.5-9.6% of the answer, and liability alone at 0.03-0.05% | [What the model deliberately does not charge for](README.md#what-the-model-deliberately-does-not-charge-for) | "The corrections the model accumulated" |
+| the median raw cislunar cadence, **1.384 yr**, used to argue the ceilings bind where the results actually sit | [What the model charges for](README.md#what-the-model-charges-for) | "The rig's two bounds, and the cadence, at every destination" |
+| the in-space absorption ceilings: LEO **500 t/yr**, cislunar 100 t, `geo` 40 t/yr | [What the model charges for](README.md#what-the-model-charges-for) | "Model assumptions that are load-bearing" |
+
+✅  **Re-run on 2026-09-07 for calc `1.21.0`, and it found TWO new pairs,
+both created by that release's README section**: the cislunar cadence and the
+ceiling table, added there to argue that the ceilings bind at the fleet sizes
+the model actually chooses. Both are now rows above. Every other number the
+release introduced -- the four cell objectives, the clearing fractions, the
+call counts -- landed in `versions.md` and at most one current-claiming file,
+which is the split working rather than luck.
+
+⚠️  **The hunt itself needs writing ASCII-safe.** The first attempt crashed
+with `UnicodeEncodeError: 'charmap' codec can't encode character '\u2192'`
+printing a CLAUDE.md line to a redirected stdout: the exact failure the
+"console output is ASCII" section exists for, hit by the tool auditing the
+documents rather than by the pipeline. Strip or replace non-ASCII before
+printing a scraped line.
 
 ⚠️  **The last row was added on 2026-09-04 by the change that created it,
 the row above it on 2026-09-03, and the six above that on 2026-09-02, each
@@ -1704,6 +1747,20 @@ line in this cascade is worth roughly twice its face value**, and any
 end-of-mission line is worth its face exactly (`mult_end` is 1.0). Costing one
 by its share of `total_cost_usd` understates it by that factor.
 
+🚨  **AND CALC `1.21.0` IS THE FIRST ENTRY THAT CHANGED SHAPE RATHER THAN
+SIDES.** Market saturation passed the membership test and still does: without
+something here the model sells any quantity at spot, which is the definition of
+getting something for free. What moved is that it stopped being a **flag** and
+became a four-valued **choice**, `market_model`, and three of the four values
+are constant-price. So the correction survives, the boolean does not, and the
+question "is this charge on?" no longer has a yes/no answer, it has a mode.
+
+⚠️  **Do not read `capacity_cap` as the correction being switched off.** It
+is a different statement of the same correction: `elasticity` bends the price
+when a market fills, `capacity_cap` stops the sale. Both refuse the free lunch.
+`unbounded` is the one value that genuinely withdraws it, which is why it is
+labelled a diagnostic and why the run says so out loud.
+
 ⚠️  **Two entries are inert at N = 1**, the rig's duty cycles and programme
 calendar time, because both bound programmes rather than missions. No
 single-mission cell moves for either, so neither can be checked by re-running a
@@ -1798,6 +1855,70 @@ stringifies to `"3.0"`, which is not null and not right, and joins nothing;
 without `regex=False` matches metacharacters. Each cost releases. The tell they
 share: **the dtype is inferred from the data**, so the code works on a small
 test slice and breaks at scale.
+
+### Cutting the cost of a call is not the same as cutting the call
+
+calc `1.21.0` introduced a defect class 3 instance and closed it in the same
+release, which makes it the cleanest example of that class in this file.
+`_market_mode()` validates a four-valued config string, and it was being asked
+once per CANDIDATE from two places: **332 calls per evaluable row, ~216 M over
+a catalog, ~47 s of a full beneficiated cell**, to re-derive one of four
+answers that cannot change during a run.
+
+The first fix was to make the function cheaper, an identity test against a
+frozen set ahead of the normalising path. It bought 217 ns to 168, and the call
+count was untouched. The actual fix was to resolve it once per asteroid in
+`evaluate_asteroid` and thread it like `markets`: **332 calls per row to 2**.
+
+Three things worth keeping:
+
+- **Count the calls before optimising the callee.** A 1.3x on a call that
+  should not be happening is a rounding error on the real number.
+- ⚠️  **The estimate in this file was wrong by a factor of 9 in the cheap
+  direction.** The note on defect class 3 says `_evaluate_combo_at_ratio` runs
+  "~24 million times on a beneficiated catalog"; the counted figure for this
+  call is ~216 M, because the ladder asks a second time per candidate. **Count
+  it; do not multiply the number in this table by hand.**
+- ✅  The threading is bit-identical, **all eight cell hashes**, four per market
+  model. A parameter defaulting to `None` and derived on demand keeps the
+  function usable standalone, which is what makes the change provable rather
+  than merely plausible.
+
+### A wall does not blend, so a diagnostic can change meaning under you
+
+calc `1.21.0`'s finding, and it generalises past its own release. This file has
+long read "every row at the ladder's top means `max_fleet_ships` is BINDING,
+not bounding … a payload whose commodities have no `annual_market_kg` entry
+gets an infinite market". That sentence was written against a smooth demand
+curve, where **every** row took some haircut and the haircut grew with the
+fleet. Under a hard ceiling the same diagnostic counts a second, different
+population:
+
+| rows at `max_fleet_ships` | under `elasticity` | under `capacity_cap` |
+|---|---|---|
+| what it means | their payloads have **no finite market** | that, **or** their payloads are **too small to reach one** |
+
+Measured: 15 of 155 raw searched rows sit at the ceiling, all clearing exactly
+1.0000, at a median payload of **632 kg against 16,650 kg** for the population
+and cost/revenue ratios of **486x to 37,620x** against the winner's 18.6x. The
+per-delivery allowance falls as 1/F while the payload per delivery does not, so
+a 632 kg load needs a fleet of ~300 to bind and the ladder stops at 64.
+
+✅  It costs nothing today, because those rows lose by three orders of
+magnitude, and the winner **is** bound (clearing 0.8307) and answers by taking a
+smaller fleet. The lesson is not about small payloads. It is that **a
+diagnostic inherits the shape of the term it was written against**, and
+swapping a continuous term for a discontinuous one silently re-populates it.
+When you change a model term, re-read every warning that counts rows.
+
+⚠️  **And the first hypothesis was wrong, which is the other half.** The
+obvious culprit was `other (bulk silicate)`, calc's composition residual: it is
+priced, it is on 100% of rows and it has no market ceiling. Mapping it to the
+`silicates` ceiling it is already priced against leaves raw **bit-identical**
+and moves beneficiated **1.9%**, with the bound count and fleet distribution
+unchanged. Legible, plausible, and wrong; one 400-row A/B settled it. **Measure
+the mechanism before writing it down**, which this file has now said three
+times and paid for once more.
 
 ### A change can be numerically negligible and still destroy the evidence
 
@@ -1941,6 +2062,19 @@ reads.
   config edited between runs is still answered correctly.
 - **Do not memoise a warning path.** An unknown destination must still shout on
   every call; that loudness is the point of the warning.
+- **The market ceilings must never reach the SIZING path.** `_cargo_water_kg`
+  calls `optimal_payload_mix` from inside the fixed-point power solve, so a
+  `caps=` argument arriving there would make the whole MASS cascade a function
+  of fleet size, and that asymmetry is the only reason the programme ladder is
+  affordable to search at all. Ceilings bound what a load may SELL, not what
+  the rig digs or the hull carries. `caps` defaults to `None` precisely so the
+  sizing call cannot acquire one by accident; if you add another caller, ask
+  which side of that line it is on.
+- **`optimal_payload_mix(caps=None)` must stay bit-identical to the unbounded
+  walk.** It is what `market_model = "elasticity"` reproduces v1.14.0 through
+  v1.20.0 on. The guard adds a branch and no arithmetic, deliberately; anything
+  that reorders the `min` or folds the cap into it breaks four committed
+  hashes.
 
 ### Where a cache is safe, and where it is not
 
@@ -2009,6 +2143,28 @@ would have condemned a release that had changed nothing:**
 | `1.17.7` | two Series compared directly | **every float column DIFFER while the file hashed MATCH** |
 | `1.17.7` | `read_csv` without `float_precision="round_trip"` | **the same symptom again, from a different cause** |
 | `1.17.7` | `""` compared as different from `NaN` | **and again, from a third** |
+| `1.21.0` | `market_model` not reset in `run_cell` | **a baseline labelled "the new default" that was entirely `elasticity`** |
+
+🚨  **THE `1.21.0` ENTRY IS TRAP 1 ARRIVING A SECOND TIME, AND IT IS THE
+ARGUMENT FOR TREATING `run_cell`'s RESET LIST AS A CONTRACT.** `run_cell` sets
+four fields explicitly and takes the rest from `CELLS`. A field in neither is
+whatever the previous cell left on the live config, so once a harness ran one
+cell with `market_model="elasticity"`, every later plain `run_cell(m, name)` in
+that process silently inherited it. Nothing raised and the hashes looked
+plausible; what caught it was **two checks contradicting each other about one
+population** -- 66 rows reported as bound by a ceiling beside a frame whose
+minimum clearing fraction was 1.0000.
+
+✅  **The general rule: when a release makes a config field something a cell can
+DIFFER on, that field joins the explicit resets.** Before `1.21.0` there was
+nothing to reset, because nothing varied it. Trap 1 was the same sentence about
+`delivery_destination`, and the fix is the same one: set it explicitly, and read
+the default off the dataclass rather than typing it.
+
+⚠️  **And the tell generalises.** Neither check was wrong on its own terms;
+they were wrong TOGETHER, and only an invariant that spans two of them could
+see it. That is an argument for checks whose outputs overlap, which is also why
+this harness prints a hash AND a column diff.
 
 The last five are this release's own, hit while reconstructing the harness, 
 five fresh bugs in one sitting, in a harness that had already been written
@@ -2231,7 +2387,7 @@ number exactly where they are most likely to change one:
 
 | the documented field | the silent one beside it |
 |---|---|
-| `model_market_saturation` | `demand_elasticity`, the ε the block defines |
+| `market_model` (was `model_market_saturation`) | `demand_elasticity`, the ε the block defines |
 | `allow_rtg_power` | `rtg_max_power_w`, the Pu-238 cap the block describes |
 | `mining_hardware_kg` | `return_vehicle_dry_kg`, which the block also explains |
 | `charge_tanker_flights` | `escape_direct_launch`, the flag that gates it |
