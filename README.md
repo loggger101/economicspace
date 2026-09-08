@@ -160,7 +160,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | 1 | `modules/catalog.py` | 1.2.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.14.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
-| 4 | `modules/calc.py` | 1.21.1 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.21.2 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -521,7 +521,7 @@ that actually move the answer:
 | `.calc.return_structure_frac_of_payload` | `0.15` | Return-vehicle structure as a fraction of the haul, on top of the 500 kg base |
 | `.calc.nre_amortization_missions` | `1` | Programme size N. With the search on it is the FLOOR rather than the answer |
 | `.calc.optimise_programme_scale` | `True` | Search programme size and fleet size per asteroid instead of setting N. **Default since calc v1.17.0.** It changes the question the run answers, so most historical tables are `False`, at N = 1. See [Programme scale](#programme-scale) |
-| `.calc.market_model` | `"capacity_cap"` | What a delivered kilogram sells for and how much of it clears. `"capacity_cap"` holds price constant and clips quantity at Stage 2's `annual_market_kg`; `"single_mission"` pins N = 1; `"elasticity"` is the v1.14.0 demand curve (it reproduced v1.14.0 to v1.20.0 exactly until v1.21.1's residual-ceiling fix moved the two raw cells); `"unbounded"` is a diagnostic. **Default since calc v1.21.0**, replacing the `model_market_saturation` flag. See [The market model](#what-the-model-charges-for) |
+| `.calc.market_model` | `"capacity_cap"` | What a delivered kilogram sells for and how much of it clears. `"capacity_cap"` holds price constant and clips quantity at Stage 2's `annual_market_kg`; `"single_mission"` pins N = 1; `"elasticity"` is the v1.14.0 demand curve (it reproduced v1.14.0 to v1.20.0 exactly until v1.21.1's residual-ceiling fix moved the two raw cells, and v1.21.2 moved it again by pooling the two silicate phases onto one ceiling); `"unbounded"` is a diagnostic. **Default since calc v1.21.0**, replacing the `model_market_saturation` flag. See [The market model](#what-the-model-charges-for) |
 | `.calc.demand_elasticity` | `0.5` | The e in `(1 + Q/Q_market)^(-1/e)`. Read ONLY when `market_model` is `"elasticity"` |
 | `.calc.max_fleet_ships` | `64` | Where the fleet ladder stops. Rows piling up against it mean their payloads have no finite market, not that bigger is better; the run says so |
 | `.calc.programme_search_steps` | `8` | Rungs in the coarse fleet sweep, before one refinement pass. Same idiom as `concentration_search_steps` |
@@ -716,6 +716,25 @@ through the package directly, and the five tables match the CSVs spacecost
 commits under `reference/`. The third would still pass if both sides moved
 together, which is what the fourth is for.
 
+🚨  **Check 4 needs a spacecost SOURCE CHECKOUT, and until 2026-09-08 it had
+never once run.** `reference/` sits at spacecost's repo root rather than inside
+the package, so `pip install git+...` copies the package and leaves the
+reference CSVs behind: on every ordinary install the check printed `SKIPPED`
+and passed. The message read as an unusual-install caveat when what it meant
+was that the *content* half of this seam had never been exercised. It now looks
+for a checkout, in `SPACECOST_SOURCE` and then beside this repo, and says
+plainly what it would take to run if it finds none.
+
+⚠️  **And it proves the checkout's revision before trusting it.** A checkout at
+some other commit is the parallel-repo divergence, not a convenience, so the
+tag is read from `requirements.txt` and `reference/` is compared against it
+with git. Matching means the check runs and names the tag; **differing is a
+failure, not a skip**, because a `reference/` that has moved since the pinned
+tag is precisely the drift this file exists to catch. Only `reference/` has to
+match: the checkout beside this repo was two docs-only commits past `v0.1.1`
+when this was written, and refusing over those would have made the check
+unrunnable for nothing.
+
 ⚠️  It builds into a temporary directory and never touches
 `asteroid_pipeline/`, for the reason the next paragraph gives.
 
@@ -751,6 +770,7 @@ py verify_docs.py
 | 9 | runtime | the cislunar wall clock above drifting from `calc.MEASURED_CELL_SECONDS`, which every banner and `--help` string derives its cost ratios from |
 | 10 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
 | 11 | docstrings | a module, class or function in the repo's own Python with no docstring |
+| 12 | pairs | one measurement quoted in BOTH README and CLAUDE.md without a row on CLAUDE.md's register of known copies |
 
 Check 6 is a ratchet rather than a style opinion: 1,342 em-dashes came out of
 the docs and 1,120 out of the module comments, and without a check they drift
@@ -805,9 +825,29 @@ the measurement that retired them. Those ratios now derive from one dict,
 banners and the dashboard estimate at once; check 9 holds the table above to
 the same numbers, so the docs cannot drift from it either.
 
+✅  **Check 12 is the one hunt in this project that was prescribed in prose and
+rebuilt from memory every time it ran.** CLAUDE.md describes it exactly, "
+hunting sentences that share three or more distinctive numbers across two
+files", and carries a table of what it found; the search itself was written
+from that description, run, and thrown away, four separate times. That is the
+shape `verify.py`'s header argues against, and it had the same consequence: the
+run that finally committed it turned up a pair the table had missed since the
+table was written, and it was **the project's four headline numbers**.
+
+The register table is the **allowlist**, not the target. A pair is fine when it
+is written down, because CLAUDE.md's job is the reasoning and this file's is
+the answer, and the reasoning reads badly with the answer removed. What is not
+fine is a pair nobody has recorded, because nobody will move both. So check 12
+goes red on an *unregistered* pair only, and either remedy clears it: cut one
+copy, or add the row. `versions.md` is deliberately outside it, because every
+section there names the release it belongs to, so a superseded figure in it is
+correct rather than stale.
+
 ⚠️  **It checks that a documented *configuration* matches the code; not that a
 documented *measurement* is current.** A stale number passes everything in it.
-That is what the release notes and `verify.py` are for.
+That is what the release notes and `verify.py` are for. ⚠️  Check 12 is the
+nearest thing to an exception and is not one: it can see that two files quote
+one number, never that the number is still true.
 
 ⚠️  **It reads the docs and the module dataclasses, and runs nothing.** No
 stage, no fetch, no baseline, which is why it costs a second and works on any
@@ -1841,6 +1881,16 @@ measurement**, since no such market exists. They are destination *totals* split
 across commodity classes rather than a figure each commodity gets to itself, so
 the Mars water ceiling is 0.55 × 20 t = 11 t/yr, and the ceiling follows the
 **value route**, so anything flown home is bounded by terrestrial production.
+
+🚨  **"Rather than a figure each commodity gets to itself" is the rule, and
+calc v1.21.2 is the release that made the code obey it.** A payload carries
+five phases and two of them, `silicates` and the composition residual, sell
+into one market: the residual is priced at the silicates quote precisely
+because that is what it is. Every consumer looked its ceiling up per PHASE, so
+each drew the full silicates allowance and a load could place twice the market.
+It applied to **100% of bodies** at a **median 84% of the load**. The allowance
+is pooled per market now, and drawn down as it is spent. See
+[calc v1.21.2](versions.md#calc-v1212).
 
 **Rig service life and terminal value** (`model_rig_service_life`). The rig was
 amortised across `nre_amortization_missions` with no upper bound, so a

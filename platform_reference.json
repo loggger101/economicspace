@@ -32,7 +32,7 @@
   "pandas": {
     "bool_with_gap": "object",
     "empty_is_nan": true,
-    "str_dtype": "str"
+    "str_dtype": "object"
   },
   "spawn": {
     "hash": "54cd5625b78510d7",

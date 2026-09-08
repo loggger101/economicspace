@@ -172,7 +172,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.14.0`,
-calc `1.21.1`, master `1.26.0` (the master version is a literal in
+calc `1.21.2`, master `1.26.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.14.0` is now spacecost's data-contract version**, not a
@@ -424,40 +424,74 @@ programme is a hard kg/yr ceiling per commodity. Set `market_model` to
 `"elasticity"` to reproduce anything here.
 
 🚨  **AND `"elasticity"` NO LONGER REPRODUCES THE COMMITTED HASHES EXACTLY.**
-It did at `1.21.0`, which was that release's acceptance test; `1.21.1` then gave
-the composition residual the market ceiling it was already priced against, and
-that defect was in the CURVE as well, so fixing it moved the curve. It moves the
-two RAW cislunar cells (**+2.36%** and **+5.82%**) and neither beneficiated one.
+It did at `1.21.0`, which was that release's acceptance test. Two releases have
+moved it since, both for the same reason -- a ceiling defect is a defect under
+either market model, so fixing one moves the curve too -- and both landed on
+the RAW cislunar cells and neither beneficiated one:
+
+| release | what it fixed | raw | raw + search |
+|---|---|---|---|
+| `1.21.1` | the residual had no ceiling at all | +2.36% | +5.82% |
+| `1.21.2` | the residual and `silicates` each drew the whole one | +12.2% | +8.2% |
+
 `"elasticity"` is the v1.14.0 CURVE, not a bug-for-bug replay of `1.20.0`.
-**To reproduce a pre-`1.21.1` figure exactly you need a pre-`1.21.1` build**,
+**To reproduce a pre-`1.21.2` figure exactly you need a pre-`1.21.2` build**,
 which is what the version stamp is for.
 
 ⚠️  **This one is not a rescaling, and it is not safe to assume the shares
-survive it.** Re-derived on the current build (calc `1.21.1`), against
+survive it.** Re-derived on the current build (calc `1.21.2`), against
 `elasticity` on the same cells:
 
 | cell | `elasticity` | `capacity_cap` | |
 |---|---|---|---|
-| raw | 49.6422x | 24.6804x | **-50.3%** |
-| raw + search | 28.1162x | 18.5707x | -34.0% |
+| raw | 55.6810x | 25.7233x | **-53.8%** |
+| raw + search | 30.4159x | 19.7213x | -35.2% |
 | beneficiated | 25.7366x | 20.5353x | -20.2% |
-| beneficiated + search | 14.8549x | 8.6861x | -41.5% |
+| beneficiated + search | 14.8549x | 8.9005x | -40.1% |
 
-The winner also changes: **iodine to xenon** at raw N = 1 and **krypton to
-iodine** beneficiated, and the raw searched cell changes BODY (2017 MC1 to
-2017 KJ5) while holding its propellant. Treat every level, share and split
-below as an `elasticity` measurement.
+🚨  **THE WINNER'S PROPELLANT CHANGES IN THREE CELLS OF FOUR, AND NOT THE THREE
+THIS FILE USED TO NAME.** On `1.21.2` the two models agree at raw N = 1
+(**2017 KJ5 on iodine, both**) and disagree everywhere else: **krypton to
+iodine** beneficiated, **iodine to krypton** beneficiated searched, and the raw
+searched cell changes BODY **and** propellant (2017 MC1 on iodine becomes
+2017 KJ5 on methalox). The retired version of this sentence said "iodine to
+xenon at raw N = 1 ... and the raw searched cell changes body while HOLDING its
+propellant"; both halves were true of `1.21.1` and neither is true now. Treat
+every level, share and split below as an `elasticity` measurement.
 
 ⚠️  These deltas are against the CURRENT `elasticity`, which is itself no
-longer the v1.20.0 figure; calc `1.21.1` moved the two raw cells. The
-`1.21.0` release note quotes -20% to -49% because that is what it measured
-against v1.20.0, and both are right for the build they name.
+longer the v1.20.0 figure, nor the `1.21.1` one. The `1.21.0` release note
+quotes -20% to -49% and the `1.21.1` table quoted -20.2% to -50.3%; each is
+right for the build it names, which is the whole reason a release note names
+one.
 
-✅  **The N = 1 cells are the exception, and they are safe.** No single
-cislunar mission fills a ceiling over a 3-6 year window, so no N = 1 row binds
-at all: at N = 1 `capacity_cap`, `single_mission` and constant prices are the
-same run. Every single-mission **cislunar** figure in this file was already a
-constant-price figure and does not move.
+🚨  **THE N = 1 CELLS WERE THE EXCEPTION AND ONE OF THEM NO LONGER IS.** This
+file said: "No single cislunar mission fills a ceiling over a 3-6 year window,
+so no N = 1 row binds at all: at N = 1 `capacity_cap`, `single_mission` and
+constant prices are the same run." That was true on `1.21.1`, when the two
+silicate phases drew an allowance each. **Pooling them made one candidate bind
+at N = 1**, and the claim now splits three ways. Measured on `1.21.2` against
+`unbounded`, which is constant prices with every ceiling infinite:
+
+| cell | vs `unbounded` | best | |
+|---|---|---|---|
+| raw, `capacity_cap` | **differs on 1 of 155 rows** | 24.6804x -> **25.7233x** | ❌ |
+| raw, `single_mission` | 0 of 155 | 24.6804x | ✅ |
+| beneficiated, `capacity_cap` | 0 of 65 | 20.5353x | ✅ |
+| beneficiated, `single_mission` | 0 of 65 | 20.5353x | ✅ |
+
+⚠️  **`single_mission` is safe by construction and always will be**: it pins
+N = 1 and applies no ceiling, so it cannot differ from constant prices. What is
+retired is the `capacity_cap` half, and only at raw.
+
+🚨  **AND `market_clearing_fraction` READS 1.0 ON EVERY ROW OF ALL FOUR, THE
+ONE THAT DIFFERS INCLUDED.** The ceiling never binds the mission that wins; it
+binds the missions that lose, and at N = 1 that is enough to change which one
+does. So "no N = 1 row binds at all" is still literally true of the column and
+no longer true of the answer, which is the distinction under
+[A diagnostic describes the WINNER](#a-diagnostic-describes-the-winner-not-the-search-that-produced-it).
+Read a single-mission **cislunar** figure in this file as a constant-price
+figure only where it is beneficiated, or where it predates `1.21.2`.
 
 ⚠️  **Measured at cislunar only.** The allowance scales with the destination's
 import budget, `geo`'s 40 t/yr to `leo`'s 500 t/yr, so whether a single mission
@@ -993,10 +1027,13 @@ it.
 | **21** usable propellants and **17** operational vehicles, the search GRID rather than a table length | a one-word edit to a row's `status` moves both, in README *and* in three `modules/calc.py` comments | check 3 |
 | whether `campaign/` obeys the em-dash ratchet and the structure rules at all | it did not, for the whole 20-cell campaign | checks 5, 6 |
 | whether every module, class and function carries a docstring | 87 carried neither that nor a leading comment, most of them in `ui.py` and `launch_ui.py` | check 11 |
+| whether a measurement is quoted in BOTH this file and README off the register below | the register is maintained by hand, and it had missed the project's four headline numbers since it was written | check 12 |
 
 ⚠️  **It cannot see a stale measurement.** A number that is merely out of date
 passes everything in it, which is why the rest of this section is still a
-manual discipline.
+manual discipline. ⚠️  Check 12 is the nearest thing to an exception and is not
+one: it can see that two current-claiming files quote one number, never that
+the number is still true.
 
 🚨  **AND IT CANNOT SEE THE COPIES THAT LIVE IN CODE.** The docs are not the
 only place a measurement is quoted: **`--help` text, run banners, config
@@ -1080,14 +1117,35 @@ or more distinctive numbers across two files:
 | the insurance premiums: 2.4-4.3% of total cost against 5.5-9.6% of the answer, and liability alone at 0.03-0.05% | [What the model deliberately does not charge for](README.md#what-the-model-deliberately-does-not-charge-for) | "The corrections the model accumulated" |
 | the median raw cislunar cadence, **1.384 yr**, used to argue the ceilings bind where the results actually sit | [What the model charges for](README.md#what-the-model-charges-for) | "The rig's two bounds, and the cadence, at every destination" |
 | the in-space absorption ceilings: LEO **500 t/yr**, cislunar 100 t, `geo` 40 t/yr | [What the model charges for](README.md#what-the-model-charges-for) | "Model assumptions that are load-bearing" |
+| 🚨  **the four cislunar cell objectives, 26.7863 / 15.4272 / 20.5895 / 13.1443** -- the project's headline answer, and the pair this register missed for longest | [Current results](README.md#current-results-the-complete-20-cell-matrix), **and again** under [Programme scale](README.md#programme-scale) | "Reproduction against the committed record" |
 
 ✅  **Re-run on 2026-09-07 for calc `1.21.0`, and it found TWO new pairs,
 both created by that release's README section**: the cislunar cadence and the
 ceiling table, added there to argue that the ceilings bind at the fleet sizes
 the model actually chooses. Both are now rows above. Every other number the
-release introduced -- the four cell objectives, the clearing fractions, the
-call counts -- landed in `versions.md` and at most one current-claiming file,
-which is the split working rather than luck.
+release introduced -- **its own** four cell objectives, the clearing fractions,
+the call counts -- landed in `versions.md` and at most one current-claiming
+file, which is the split working rather than luck.
+
+🚨  **RE-RUN AGAIN ON 2026-09-08, AND IT FOUND THE PAIR THE REGISTER HAD MISSED
+SINCE THE REGISTER WAS WRITTEN: THE PROJECT'S FOUR HEADLINE NUMBERS.**
+`26.7863 / 15.4272 / 20.5895 / 13.1443` sit in README's 20-cell matrix, again
+in README's Programme scale section, and again in this file's reproduction
+table -- **three copies across two files that both claim to be current**, under
+a heading that opens by saying the headline matrix "is not copied here". Every
+other pair in the table above was found by this same hunt; this one survived
+every previous run of it.
+
+⚠️  **The reason it survived is worth more than the row.** The hunt ranks its
+hits and a reader skims for something unfamiliar; these four numbers are the
+most familiar in the project, so the eye reads them as *the answer* rather than
+as a duplicate. **A hunt for copies is defeated by the copy you have
+memorised.** Read its output looking for what you recognise, not for what you
+do not. The README-internal copy under
+[Programme scale](README.md#programme-scale) is a fourth instance, kept
+deliberately because the sentence there is an argument about what the search
+buys and reads as nothing without the figures, but it is on the row now, so it
+moves with the rest.
 
 ⚠️  **The hunt itself needs writing ASCII-safe.** The first attempt crashed
 with `UnicodeEncodeError: 'charmap' codec can't encode character '\u2192'`
@@ -1103,10 +1161,19 @@ table is a snapshot and not a guarantee: it listed four pairs while nine
 existed, the tenth arrived the same day with `mars_orbit`, and the eleventh,
 the utility profile, had been sitting in both files the whole time and was
 found only by running the hunt again over a destination change that had nothing
-to do with it. **Re-run the hunt rather than trusting the table**, and re-run
-it whenever you add a destination or a cost term: a new row in README's
-delivered-cost table, or a new charge, is a new opportunity for this file to
-restate it.
+to do with it, and the twelfth was the project's four headline numbers, which
+had been in both files since the campaign.
+
+✅  **THE HUNT IS `verify_docs.py` CHECK 12 NOW, AND THIS TABLE IS ITS
+ALLOWLIST.** You no longer re-run it by hand: a pair that is not on a row above
+turns the docs check red, names both lines, and says the two ways to clear it.
+That inverts what the table is for. It was a snapshot of what somebody last
+looked for; it is now the list of copies the repo has *agreed to keep*, and
+anything outside it is a finding.
+
+⚠️  **Add the row when you deliberately keep a copy; do not add one to quiet a
+red check you have not read.** The row is a promise to move both, and the whole
+value of the register is that somebody decided each entry.
 
 ⚠️  **`versions.md` now carries far more of these pairs than this file does,
 and that is FINE where this would not be.** The `geo` and `mars_orbit` prices,
@@ -1987,6 +2054,69 @@ unchanged. Legible, plausible, and wrong; one 400-row A/B settled it. **Measure
 the mechanism before writing it down**, which this file has now said three
 times and paid for once more.
 
+### A diagnostic describes the WINNER, not the search that produced it
+
+calc `1.21.2`, and it is the sharpest instance of a class this file already has
+two entries for. The raw cislunar cell moved **+4.23%** on **one row of 155**,
+and that row reports `market_clearing_fraction = 1.0` in both builds, with
+`unsold_payload_kg = 0.0`. Nothing was left unsold, and the answer still
+changed.
+
+The row is the cell's winner. What moved is its **architecture**: New Glenn on
+xenon at 117,406 kg becomes Falcon Heavy on iodine at 97,875 kg. No ceiling
+binds on the mission that won. The ceiling bound the missions that **lost**,
+and tightening it changed which one survived.
+
+🚨  **So counting rows with `clearing < 1.0` UNDERCOUNTS a ceiling's
+influence**, and the raw cell is the clean demonstration: **0 rows bound, 1 row
+changed.** Any column that reports a property of the selected candidate is
+silent about the constraint's effect on the candidates it beat, and a search is
+exactly a machine for discarding those.
+
+⚠️  **The general form, and it is not about ceilings.** `p_mining`, the chosen
+propellant, the payload, the aerocapture flag are all in this category: they
+describe the survivor. A term that changes *which* candidate survives will move
+the answer while every survivor-property column looks untouched, so
+`N rows affected` computed from one of them is a lower bound and should be
+labelled as one.
+
+### The fleet search is coarse-then-refine, so tightening a constraint can improve a row
+
+calc `1.21.2` again, and this one nearly got written up as a defect. Pooling
+the silicate ceiling made **3 of 155** raw searched rows and **1 of 65**
+beneficiated searched rows come out **BETTER**, by up to 3.27%. A tighter
+constraint improving the answer is the signature of a real bug -- an allowance
+leaking into the cost side, or a rung priced under one set of caps and reported
+under another -- which is precisely what check 7 exists to catch.
+
+✅  **It was chased instead of filed, and the revenue model is monotone.**
+Measured: **20,000 randomised fixed-programme comparisons; pooled revenue lower
+on 10,235, equal on 9,765, higher on ZERO.** For any FIXED programme a pooled
+allowance can only ever cost you.
+
+**The non-monotonicity is the ladder.** `_evaluate_combo_at_ratio` walks a
+geometric F ladder crossed with W and then runs **one refinement pass around
+the coarse winner's neighbourhood**. It is not exhaustive. Move the coarse
+winner and the refinement explores a *different* neighbourhood, which can hold
+a point the old walk never visited. The four rows carry that fingerprint
+exactly: identical vehicle and propellant, `programme_options_priced` 44 -> 41,
+and `fleet_ships` dropping 6 -> 4, 10 -> 8, 11 -> 8 onto a programme that is
+both cheaper and marginally better-selling.
+
+🚨  **THIS IS A CAVEAT ON CHECK 7's INVARIANT, AND IT PREDATES `1.21.2`.**
+"Constraining must never improve the answer" is **exact for a fixed programme**
+and only **approximately true for the searched best**, because the best is the
+output of a non-exhaustive walk. So a check 7 violation is evidence about the
+LADDER before it is evidence about the ceiling, and the way to tell them apart
+is the fixed-programme comparison above -- which is cheap, needs no cell run,
+and is the thing to reach for first.
+
+⚠️  **Declined, deliberately.** Making the fleet search exhaustive would buy a
+few tenths of a percent on a handful of rows for a real runtime cost, and the
+honest place for that question is the branch-and-bound item under "The one big
+structural item that is still open", which needs an admissible bound and has
+the same shape. **Do not "fix" the ladder on the strength of four rows.**
+
 ### A change can be numerically negligible and still destroy the evidence
 
 This project's releases are argued from **bit-identity**, so an
@@ -2145,7 +2275,19 @@ reads.
   so if `caps=None` ever stopped being the old walk, every mass cascade in the
   model would move. The guard adds a branch and no arithmetic, deliberately;
   anything that reorders the `min` or folds the cap into it changes the rocket
-  equation.
+  equation. ✅  `1.21.2` rewrote the inside of that branch and re-proved the
+  outside of it: **16,000 randomised comparisons over five phases, on raw IEEE
+  bit patterns, zero differences**, covering `want_phase` as well because the
+  sizing path is what uses it. That is the check to repeat, not to argue.
+- 🚨  **`caps` IS KEYED BY MARKET, NOT BY PHASE, AND THE WALK CONSUMES IT**
+  (`1.21.2`). Two phases can sell into one market -- `silicates` and the
+  composition residual do, on every body -- and a dict keyed by phase hands
+  each of them the whole ceiling. Pass a dict you own; it is decremented as it
+  is spent. Build the keys with `phase_market_key`, never with
+  `_PHASE_MARKET_ALIAS` directly: that function prefers a phase's own Stage 2
+  row and falls back to the alias, which is exactly what `phase_market_kg`
+  does, and the two agreeing is what stops a future aliased phase pooling onto
+  one key while drawing a different ceiling.
 
 ### Where a cache is safe, and where it is not
 
@@ -2458,6 +2600,41 @@ had** -- a `check` with no baseline printing `ALL CHECKS PASSED` -- in the other
 harness, found the same way, two releases apart. **A check that cannot run must
 never say it passed**, and the sentence applies to every harness in this repo,
 not to the one it was first written about.
+
+### A skip that says so, and still hides that it is PERMANENT
+
+🚨  **THE THIRD INSTANCE, AND THE ONLY ONE WHOSE SKIP WAS HONEST.**
+`verify_stage3.py` check 4, the half that pins the reference tables' CONTENT
+rather than the plumbing, printed `SKIPPED, spacecost installed without
+reference/` and returned pass. Its own docstring said "a skip that says so is
+not a pass", and it was telling the truth about what it saw. It was still
+wrong, because **`reference/` sits at spacecost's REPO root, not inside the
+package**, so `pip install git+...` leaves it behind *every time*. The skip was
+not a caveat about an unusual install; it was the normal case, and **the check
+had never run at all.**
+
+✅  Fixed on 2026-09-08 by looking for a source checkout, in `SPACECOST_SOURCE`
+and then beside this repo. It found one, ran for the first time, and all five
+tables matched.
+
+⚠️  **The revision has to be PROVEN, and that is the half that is easy to
+skip.** The checkout beside this repo was **two commits past `v0.1.1`**, the
+tag `requirements.txt` pins. Comparing against it blind would be the
+parallel-repo divergence wearing a green check. So the tag is read from
+`requirements.txt`, `reference/` is diffed against it with git, and the three
+outcomes are kept distinct: **matching** runs the check and names the tag,
+**absent** stays a skip that says what would make it run, and **differing is a
+FAILURE**, because a `reference/` that has moved since the pinned tag is
+exactly the drift this file exists to catch. Only `reference/` must match; the
+two commits in question were docs and tests, and refusing over those would make
+the check unrunnable for no gain.
+
+✅  **The general rule, which the first two instances do not give you: a skip
+is not a pass, AND a skip you have read is not a skip you have measured.** Both
+earlier instances were skips that fired rarely and hid a defect when they did.
+This one fired *always*, and the message was accurate every time. **Ask how
+often a skip fires, not only whether it explains itself** -- a skip that fires
+on 100% of runs is a check that does not exist, however well it is worded.
 
 ## Stage 3 lives in another repository now
 
@@ -2859,42 +3036,62 @@ see the README's "Working copy" section, especially if the folder gets renamed
 again.
 
 🚨  **THE INTERPRETER VERSION IS NOT STATED HERE ANY MORE, AND THAT IS THE
-FIX.** This paragraph has now been wrong in BOTH directions inside three days.
-It said 3.14 while 3.13 was installed, was corrected on 2026-09-03 with a 🚨
+FIX.** This paragraph has now been wrong in **three** directions inside a week.
+It said 3.14 while 3.13 was installed; was corrected on 2026-09-03 with a 🚨
 block insisting "3.14 HAS NEVER BEEN INSTALLED ON THIS MACHINE" and quoting
-`py -0` as proof, and by **2026-09-03** that correction was itself false: `py`
-resolves to **3.14.6**, and 3.13 is no longer installed at all. Two corrections
-in three days is the argument for deleting the number rather than fixing it a
-third time. **Ask the machine:**
+`py -0` as proof; that correction was itself false within the day, because a
+3.14.6 install had appeared and `py` resolved to it; and by **2026-09-08** the
+3.14 install was **gone again** and `py` was back to 3.13. Three corrections in
+six days is the argument for deleting the number rather than fixing it a fourth
+time. **Ask the machine:**
 
 ```bash
 py -VV && py -0
 py platform_check.py     # prints the running versions beside the reference host's
 ```
 
-⚠️  **The libraries moved with it, and further.** The reference host recorded in
-`platform_reference.json` is Python 3.13.9 / numpy 2.2.6 / pandas 2.3.3;
-`requirements-lock.txt` and the `Dockerfile` still pin those. What is installed
-is 3.14.6 / numpy 2.5.2 / **pandas 3.0.5**, a MAJOR pandas version whose
-headline change is that object columns now infer as Arrow-backed `str`.
+⚠️  **The libraries move with the interpreter, so do not type those either.**
+`platform_reference.json` records them, `requirements-lock.txt` and the
+`Dockerfile` pin them, and `platform_check.py` prints the running set beside
+the reference set on every run. The one thing worth knowing without running it
+is *why* pandas is the library that matters here: pandas **3.0** infers a plain
+text column as an Arrow-backed `str` where 2.x gives `object`, and every dtype
+trap this file catalogues lives on that object path.
 
-✅  **Every numeric probe still matches**, which is the thing that actually
-mattered: libm, the numpy kernels, the CRLF pin and the float round trip are
-all identical, so `platform_check.py` reports cell hashes on this host as
-directly comparable with the ones in `versions.md`. The 3.13-era performance
-figures in "Measured and declined" stand; nothing there needs re-measuring on
+✅  **The numeric probes are what govern hash comparability**, and they are
+independent of all of the above: libm, the numpy kernels, the CRLF pin and the
+float round trip. When those match, cell hashes computed here are directly
+comparable with the ones in `versions.md`. The performance figures in "Measured
+and declined" were taken on 3.13 and stand; nothing there needs re-measuring on
 account of an interpreter.
 
-⚠️  **But `platform_check.py` could not see the pandas half until 2026-09-03**,
-because its probes were libm, numpy and the CSV FLOAT path, and every dtype
-trap this file catalogues lives on the OBJECT path: `.astype(bool)` reading
-`NaN` as `True`, the empty string that is not `NaN` "except that in a CSV it
-is", and `_truthy(series, default=...)` existing at all. `probe_pandas_dtypes`
-now covers those three, and the reference records `str_dtype` as **`str`**,
-i.e. recorded on the CURRENT host rather than the 3.13.9 one; on pandas 2.3.3
-it would read `object`. **That one key therefore asserts this host, not the
-documented reference host**, which is a decision worth revisiting the moment
-anybody either re-pins the lockfile to 3.14.6 or restores 3.13.9.
+🚨  **AND `platform_check.py` SPENT FIVE DAYS FAILING ON THE HOST ITS OWN
+REFERENCE FILE NAMES.** `probe_pandas_dtypes` was added on 2026-09-03 to cover
+the object path, and its `str_dtype` key was recorded on the transient 3.14 /
+pandas 3.0 install as **`str`** while every other key in the file, and the
+`host` block declaring **3.13.9 / numpy 2.2.6 / pandas 2.3.3**, had been
+recorded on 3.13. So the reference was written across **two hosts**, and the
+moment 3.14 went away the file contradicted itself: a machine matching the
+declared reference host exactly reported
+
+```
+*** BROKEN: these are defects, not host properties ***
+  pandas.str_dtype     reference str     got object
+```
+
+and exited 1. Fixed on 2026-09-08 by re-recording on one host, which moved
+**exactly that one key** and left all sixteen others byte-identical, which is
+what proves the diagnosis rather than merely suggesting it.
+
+✅  **Two rules come out of it, and the second is the general one.** A
+reference file must be recorded on ONE host in ONE `--record` run; a key
+hand-added later is a key from somewhere else. And **a library version is not
+a defect**: `pandas.*` now has its own bucket in `report()`, so a genuine
+pandas 3.0 host is told its dtype CONTRACT differs, that no edit here changes
+it, that it moves no float so a hash may still MATCH, and that what it moves is
+behaviour. It used to be told it was broken. *A broken checker looks exactly
+like a broken release*, for the fourth time in this file, and this time the
+checker was accusing the reference host of being the wrong host.
 
 ⚠️  The general lesson is the one this file makes about counts, one level up: a
 **version spelled out in prose** is a number waiting to rot. It rotted into a
@@ -3238,25 +3435,34 @@ catalog cannot answer the question rather than rendering nothing, because a
 silent gap reads as a clean bill of health.
 
 🚨  **AND `py` IS NOT NECESSARILY THE INTERPRETER THE DASHBOARD RUNS ON.** This
-machine has two registered Python 3.14 installations: `py` resolves to
-`...\Programs\Python\Python314`, while `_START HERE.vbs` probes `pyw -3` and
-reached `...\Local\Python\pythoncore-3.14-64`, which is where `launch_ui.py`
-then installed Streamlit. So `py -m streamlit run ui.py` fails with
-`ModuleNotFoundError` on a machine whose dashboard works perfectly, and
-`.claude/launch.json` needs the interpreter spelled out rather than `py`.
-**Ask the machine which one answered before concluding a dependency is
-missing:**
+machine has at times carried two registered installations of the same Python
+minor version: `py` resolved to one under `...\Programs\Python\`, while
+`_START HERE.vbs` probes `pyw -3` and reached one under `...\Local\Python\`,
+which is where `launch_ui.py` then installed Streamlit. So
+`py -m streamlit run ui.py` fails with `ModuleNotFoundError` on a machine whose
+dashboard works perfectly. **Ask the machine which one answered before
+concluding a dependency is missing:**
 
 ```bash
 py -0
 py -c "import sys; print(sys.executable)"
+py -c "import streamlit; print(streamlit.__version__)"
 ```
 
-⚠️  It is the interpreter-version lesson one level along: this file already
-refuses to spell the version out because it rotted twice in three days, and the
-same reasoning applies to which install `py` picks. `launch_ui.py` is right to
-use `sys.executable` and `_console_python()` rather than shelling out to `py`;
-do not "simplify" either into a bare interpreter name.
+⚠️  **`.claude/launch.json` therefore spells the interpreter out, and that path
+is a thing that rots.** It was still naming a `pythoncore-3.14-64` install
+after that install was removed, under a user profile (`Loggg`) that has never
+existed on this machine, so the Browser pane could not start the dashboard at
+all. Repointed on 2026-09-08 at whatever `py -c "import sys;
+print(sys.executable)"` answers, which is the command above. It is untracked
+local tooling, so nothing in the repo's own harnesses can see it go stale; the
+tell is the pane failing to launch, not a red check.
+
+⚠️  It is the interpreter-version lesson one level along: this file refuses to
+spell the version out because it rotted three times in six days, and the same
+reasoning applies to which install `py` picks. `launch_ui.py` is right to use
+`sys.executable` and `_console_python()` rather than shelling out to `py`; do
+not "simplify" either into a bare interpreter name.
 
 ### The console output is ASCII, and must stay that way
 
