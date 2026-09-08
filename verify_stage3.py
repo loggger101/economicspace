@@ -39,7 +39,9 @@ row and this repo has not caught up, or the adapter is no longer passing the
 settings through faithfully.  The report says which.
 """
 
+import csv
 import dataclasses
+import datetime as _dt
 import hashlib
 import os
 import sys
@@ -51,7 +53,22 @@ REPO = os.path.dirname(os.path.abspath(__file__))
 # not a model value, and comparing two builds without pinning it is how a
 # release once read as a defect confined to the beneficiation path when the
 # whole difference was that midnight had fallen mid-run.
-PINNED_DATE = "2026-09-07"
+#
+# 🚨  IT IS DERIVED FROM THE CLOCK AND MUST NOT BE A LITERAL. It was
+# `"2026-09-07"` from the day this file was written until 2026-09-08, when the
+# date rolled over mid-session and every one of the six comparisons went red at
+# once: only the PACKAGE side took this value, while the adapter stamps
+# `date.today()` through Stage 3's ordinary path, so the two agreed on exactly
+# one calendar day and disagreed on every other. The file then reported
+# `*** THE ADAPTER CHANGES THE DATA ***`, which is a broken checker wearing the
+# costume of a broken release -- the failure mode `verify.py`'s header exists
+# to catalogue, here in the other Stage 3 harness.
+#
+# ⚠️  The comment above this one used to end "so the environment pins the clock
+# instead". Nothing pinned the clock; there was no such mechanism. That is
+# defect class 4, a prescriptive comment nobody applied, and it is why the
+# literal looked deliberate rather than rotten.
+PINNED_DATE = _dt.date.today().isoformat()
 
 TABLES = ["launch_vehicles.csv", "propellants.csv", "delta_v_segments.csv",
           "operational_costs.csv", "storage_systems.csv"]
@@ -61,6 +78,37 @@ SUMMARY = "transportation_summary.csv"
 def _sha(path: str) -> str:
     with open(path, "rb") as fh:
         return hashlib.sha256(fh.read()).hexdigest()
+
+
+# `catalog_date` is stamped from the wall clock, so any comparison against a
+# COMMITTED artefact has to drop it or it passes on exactly one calendar day.
+# `pipeline_version` is deliberately NOT dropped: it moves only when somebody
+# moves it, so a difference there is a real finding rather than a clock.
+_PROVENANCE = ("catalog_date",)
+
+
+def _content_sha(path: str) -> str:
+    """sha256 of a CSV with the wall-clock provenance columns removed.
+
+    Both sides go through the identical transform, so re-serialising is safe;
+    what matters is that the two are treated the same, not that the text
+    matches the file on disk.
+
+    This exists because check 4 compared raw bytes against a CSV spacecost
+    COMMITTED, which carries the date it was generated on. Every row of every
+    table therefore differed by one field from the day after it was committed,
+    and the check announced `*** CONTENT MOVED ***` -- the most alarming
+    message it has, for a clock. See `PINNED_DATE` above for the same defect
+    in check 3, found the same morning.
+    """
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = list(csv.reader(f))
+    if not rows:
+        return hashlib.sha256(b"").hexdigest()
+    drop = {i for i, c in enumerate(rows[0]) if c in _PROVENANCE}
+    trimmed = [[v for i, v in enumerate(r) if i not in drop] for r in rows]
+    blob = "\n".join("\x1f".join(r) for r in trimmed).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
 
 
 def _load_adapter():
@@ -124,8 +172,10 @@ def check_output(t, tmp) -> bool:
     via_adapter = os.path.join(tmp, "adapter")
     cfg = t.TransportConfig(output_dir=via_adapter, use_yfinance=False)
     # The adapter has no catalog_date argument -- it is Stage 3's public
-    # signature and gains nothing from one -- so the environment pins the
-    # clock instead, and the package side is pinned to the same value.
+    # signature and gains nothing from one -- so it stamps `date.today()` like
+    # any ordinary run, and the package side is handed that SAME day's date.
+    # `PINNED_DATE` is therefore derived from the clock, never typed; see the
+    # note on it above for the day this file spent failing because it was.
     _quiet_build(lambda: t.build_transportation_catalog(cfg))
     a_dir = os.path.join(via_adapter, cfg.subdir)
 
@@ -168,7 +218,9 @@ def check_against_committed_reference(t, tmp) -> bool:
         want = os.path.join(ref, name)
         if not os.path.exists(want):
             continue
-        same = _sha(os.path.join(built, name)) == _sha(want)
+        # Content, not bytes: see `_content_sha`.  The docstring above has
+        # always said this check pins CONTENT; now it does.
+        same = _content_sha(os.path.join(built, name)) == _content_sha(want)
         ok = ok and same
         if not same:
             print("     %-30s *** DIFFERS from spacecost reference/ ***" % name)
