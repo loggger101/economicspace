@@ -907,6 +907,20 @@ def check_help() -> bool:
         with contextlib.redirect_stdout(buf):
             import master as _m
             import ui_meta as _um
+    except SyntaxError as exc:
+        # A SyntaxError is in THIS REPO'S OWN SOURCE, so it is a failure and
+        # never a skip.  The skip below exists for a machine without the
+        # third-party dependencies; it must not also swallow a broken file.
+        #
+        # Found the hard way on 2026-09-08: a malformed string literal in
+        # ui_meta.py made this check report SKIPPED and return PASS, and the
+        # run only went red because an unrelated version stamp was also wrong.
+        # That is the defect CLAUDE.md already records verify.py having had --
+        # "a check that cannot run must never say it passed" -- in the other
+        # harness.
+        print("%s FAILED (%s in this repo's own source: %s)"
+              % ("8. help       ", type(exc).__name__, exc))
+        return False
     except Exception as exc:                       # noqa: BLE001
         print("8. help        SKIPPED (%s: %s)" % (type(exc).__name__, exc))
         return True
@@ -951,6 +965,11 @@ def check_runtime() -> bool:
         sys.path.insert(0, REPO)
         with contextlib.redirect_stdout(io.StringIO()):
             import master as _m
+    except SyntaxError as exc:
+        # See check 8: this repo's own source failing to parse is a failure.
+        print("9. runtime     FAILED (%s in this repo's own source: %s)"
+              % (type(exc).__name__, exc))
+        return False
     except Exception as exc:                       # noqa: BLE001
         print("9. runtime     SKIPPED (%s: %s)" % (type(exc).__name__, exc))
         return True

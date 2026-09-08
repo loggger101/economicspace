@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [calc v1.21.1](#calc-v1211)
 - [calc v1.21.0](#calc-v1210)
 - [master v1.25.0 - Stage 3 moved to the `spacecost` package](#master-v1250---stage-3-moved-to-the-spacecost-package)
 - [calc v1.20.0](#calc-v1200)
@@ -72,7 +73,7 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.2.0** | v1.2.0, orbit quality, a total NEOWISE sort, the element epoch |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments. ⚠️  Owned by [`spacecost`](https://github.com/loggger101/spacecost) since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.21.0** | v1.21.0, constant prices with a capacity ceiling, and the market model is a four-valued choice |
+| 4 | `modules/calc.py` | **1.21.1** | v1.21.1, the ceilings recalibrated: the levels hold and the composition residual gains one |
 | - | `master.py` | **1.26.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
@@ -152,6 +153,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [calc v1.21.1](#calc-v1211) | 2026-09-08 | **the ceilings recalibrated: the levels do not move, and the composition residual gets the ceiling it was already priced against** |
 | [calc v1.21.0](#calc-v1210) | 2026-09-07 | **prices are constant and quantity is what binds**: the market term becomes a four-valued `market_model`, and the ceilings go into the payload knapsack |
 | [calc v1.20.0](#calc-v1200) | 2026-09-04 | **both insurance premiums are off**: a transfer priced off an underwriter's book, in a model that prices masses |
 | [catalog v1.2.0](#catalog-v120) | 2026-09-03 | **NEOWISE dedup decided by row order on 27,802 bodies**; the ranking could not see orbit quality; `ma` had no epoch; async TAP |
@@ -185,6 +187,137 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## calc v1.21.1
+
+**The capacity ceilings recalibrated from curve parameter to hard wall. The
+levels do not move, and the reason they do not is the finding.**
+
+### The two meanings of Qm, and which one the table holds
+
+`P/P0 = (1 + Q/Qm)^(-1/e)` with `e = 0.5` is `(1 + Q/Qm)^-2`, so revenue is
+`Q x P0 x (1 + Q/Qm)^-2`. Writing `x = Q/Qm`, that is `x(1+x)^-2`, whose
+derivative `(1+x)^-3 (1-x)` is zero at **x = 1**. So under the curve:
+
+| x = Q/Qm | price multiplier | curve revenue | wall revenue | wall / curve |
+|---|---|---|---|---|
+| 0.10 | 0.8264 | 0.0826 | 0.1000 | 1.21x |
+| 0.50 | 0.4444 | 0.2222 | 0.5000 | 2.25x |
+| **1.00** | 0.2500 | **0.2500** | 1.0000 | **4.00x** |
+| 2.00 | 0.1111 | 0.2222 | 1.0000 | 4.50x |
+| 10.00 | 0.0083 | 0.0826 | 1.0000 | 12.10x |
+
+**The most a commodity can ever earn under the curve is `Qm x P0 / 4`**, at
+exactly `Q = Qm`. A hard wall at W earns `W x P0`. Equal maxima therefore put
+the equivalent wall at **W = Qm/4**, and a wall at the same Qm is 1.2x to 12x
+more generous depending on how saturated the commodity is. That is the size of
+what v1.21.0 changed, and it had not been quantified.
+
+### Why the levels are nonetheless right, and were never curve parameters
+
+Every row of `IN_SPACE_ANNUAL_DEMAND_KG` is documented as a consumption budget,
+not as the scale of a demand curve:
+
+| row | what the source comment anchors it on |
+|---|---|
+| `geo` 40 t/yr | ~550 active geostationary satellites at ~70 kg/yr of station-keeping propellant |
+| `mars_orbit` 60 t/yr | ~128 t per 2.14-yr synodic period, one crewed mission's in-space propellant |
+| `mars_surface` 20 t/yr | "a base that imports 20 t/yr" |
+| `leo` 500 t/yr | half a Starship-class Mars-departure propellant load, per year |
+
+A kilogram delivered inside a consumption budget **displaces a kilogram
+launched from Earth**, so it earns the full launch-cost-avoided the price model
+already computes; beyond the budget there is no demand at all. That is a hard
+wall exactly, and these are hard-wall numbers.
+
+🚨  **So the curve was the term using the number wrongly, and v1.21.0's 1.2x to
+12x is a CORRECTION rather than an inflation.** Under the curve, supplying a
+depot with precisely the water it consumes paid a quarter of the price, which
+is not a claim anybody made on purpose; it is what falls out of feeding an
+absorption budget into a scale parameter. ⚠️  v1.21.0's own release note called
+these "the knee of a smooth curve". That was wrong and is corrected here and in
+README.
+
+### Measured and declined: quarter ceilings
+
+The equal-maximum-revenue wall, `W = Qm/4`, measured on the same cells:
+
+| variant | raw + search | benef + search | fleet median | at `max_fleet_ships` |
+|---|---|---|---|---|
+| as shipped | 18.5707x | 8.5221x | 7 | 11 / 65 |
+| **all in-space ceilings / 4** | 27.2932x | 10.9931x | **2** | **2 / 65** |
+
+⚠️  **It is tempting, and that is the argument against it.** Quartering the
+ceilings very nearly reproduces the `elasticity` levels (27.29x against 26.57x
+raw searched) and it fixes the ladder: the fleet median falls 7 to 2 and rows at
+`max_fleet_ships` fall 11 to 2. But it buys that by asserting a base which
+imports 20 t/yr only pays full price for 5 t/yr, which contradicts the table's
+own anchors, and it is **calibrating a bottom-up cost model to a desired
+output** -- continuity with a term this release supersedes is not a calibration
+criterion. **Declined.**
+
+✅  And the ladder symptom it "fixes" is not a ceiling problem. v1.21.0 measured
+those rows: a median payload of **632 kg against 16,650 kg** for the population,
+too small to reach ANY ceiling at a fleet of 64. Quartering makes them reachable
+by making the ceilings wrong.
+
+### What did change: one phase had no ceiling at all
+
+`asteroid_phase_table` appends the composition residual, priced at the
+`silicates` quote because that is what it is, and Stage 2's catalog has no row
+for it, so `markets.get(name)` missed and it took the infinite default.
+**Priced as silicates, bounded by nothing.** Defect class 1 in market form: a
+quantity with a price in one half of the model and no counterpart in the other.
+
+`_PHASE_MARKET_ALIAS` maps it to `silicates` and `phase_market_kg()` is the one
+place a phase name becomes a ceiling, so the alias cannot be honoured at one
+call site and forgotten at another. A mapping rather than a new Stage 2 row on
+purpose: the residual is this module's name for "the rest of the rock", not a
+commodity anybody trades, and inventing a reference row for it would put a
+fiction in the data.
+
+**Stage 2 is not touched and not re-run.**
+
+### What it moved
+
+Under `capacity_cap`, **three of the four cells are bit-identical** -- same
+hashes as v1.21.0 -- and only the beneficiated searched cell moves:
+
+| cell | v1.21.0 | v1.21.1 | |
+|---|---|---|---|
+| raw | 24.6804x | 24.6804x | hash unchanged |
+| raw + search | 18.5707x | 18.5707x | hash unchanged |
+| beneficiated | 20.5353x | 20.5353x | hash unchanged |
+| beneficiated + search | 8.5221x | **8.6861x** | +1.92% |
+
+New baseline: `11ec818051269759` / `6738be0a0bcaeca3` / `109ce36a07ac6975` /
+`d3a405d7b281289d`.
+
+🚨  **AND IT MOVES `elasticity`, WHICH COSTS THAT MODE ITS v1.20.0 GUARANTEE.**
+The defect was in the curve too -- an unbounded phase is unbounded under either
+model -- so fixing it correctly moves both. The curve is hit on the RAW cells,
+where the cargo is the body's own composition and the residual is a large mass
+fraction, and not at all on the beneficiated ones, where the knapsack loads the
+cheapest phase last:
+
+| cell | v1.20.0 | now | |
+|---|---|---|---|
+| raw | 48.4982x | 49.6422x | **+2.36%** |
+| raw + search | 26.5704x | 28.1162x | **+5.82%** |
+| beneficiated | 25.7366x | 25.7366x | unchanged |
+| beneficiated + search | 14.8549x | 14.8549x | unchanged |
+
+⚠️  **`elasticity` is therefore the v1.14.0 CURVE, not a bug-for-bug replay of
+v1.20.0**, and every statement of that guarantee has been corrected: the config
+comment, `optimal_payload_mix`'s docstring, the market block's comment, README's
+tuning table and the dashboard's help text. To reproduce a pre-v1.21.1 figure
+exactly you need a pre-v1.21.1 build, which is what the stamp is for.
+
+### Invariants
+
+Mass ledger `0.000000000 kg` on all four cells; never-worse zero exceptions on
+all three pairings; Stage 2 tables identical; check 7 clean, with the ceiling
+binding 66 of 155 raw searched rows and 53 of 158 beneficiated.
 
 ## calc v1.21.0
 
@@ -3982,8 +4115,9 @@ payload mixes all move, at every destination except `earth_surface`.
   `MARKET_MODELS` so the dashboard's dropdown resolves from the module rather
   than from a second list; `_market_mode()` validates and **raises** on an
   unrecognised value rather than defaulting to one.
-  `market_model = "elasticity"` is the old `True`, and reproduces every figure
-  measured from v1.14.0 to v1.20.0.
+  `market_model = "elasticity"` is the old `True`, and reproduced every figure
+  measured from v1.14.0 to v1.20.0 -- until calc `1.21.1` fixed a defect that
+  was in the curve as well; see [calc v1.21.1](#calc-v1211).
 - `demand_elasticity` is unchanged and is now read **only** in `"elasticity"`
   mode.
 - New output columns: `market_clearing_fraction`, `unsold_payload_kg` and
@@ -4018,6 +4152,21 @@ payload mixes all move, at every destination except `earth_surface`.
   (all eight cell hashes, both market models).
 - **Stage 2 is not touched.** No `annual_market_kg` change, no schema change,
   no re-run: the ceilings the cap reads are the ones already in the catalog.
+
+**`1.21.1`  the ceilings recalibrated; the levels do not move.** Full
+write-up: [calc v1.21.1](#calc-v1211). No config field and no output column;
+one cell of four moves under `capacity_cap` and the two raw cells move under
+`elasticity`.
+
+- `_RESIDUAL_PHASE` and `_PHASE_MARKET_ALIAS` are new, mapping
+  `"other (bulk silicate)"` to the `silicates` market it is already priced
+  against. `phase_market_kg()` is the single lookup both the sale terms and the
+  knapsack caps now go through.
+- **No change to `IN_SPACE_ANNUAL_DEMAND_KG`, `_DEMAND_SHARE_BY_CLASS` or
+  `ANNUAL_WORLD_PRODUCTION_KG`**, and no Stage 2 re-run. The recalibration
+  concluded the levels were already hard-wall numbers; see the release note.
+- ⚠️  `market_model = "elasticity"` no longer reproduces v1.20.0 exactly. The
+  defect was in the curve as well.
 
 # Measurement history
 
