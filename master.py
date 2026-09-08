@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.25.0)
+"""Master Asteroid Profitability Pipeline (1.26.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -5906,16 +5906,36 @@ class CalcConfig:
     # first-unit cost by definition.
     learning_curve_rate:       float = 0.85   # 1.0 disables
 
-    # MARKET SATURATION.  Prices were static at the point of sale, so a
-    # mission could return any quantity of platinum at spot and the
-    # "fly more missions" lever had no stopping point.  Constant-elasticity
-    # demand: P/P0 = (1 + Q/Q_market)^(-1/ε).  Precious-metal demand is
-    # inelastic (ε ≈ 0.5), so doubling world supply quarters the price.
-    model_market_saturation:   bool  = True
+    # MARKET MODEL.  How much of a delivered kilogram actually sells, and the
+    # only term in this module that pushes back on programme scale: N improves
+    # five things (NRE/N, autonomy NRE/N, the learning curve, the rig's share,
+    # p_mining) and this is the sixth.  Remove the pushback and the objective
+    # is monotone in N, which is v1.14.0's failure mode returning.
+    #
+    #   capacity_cap    v1.21.0 default.  Prices are CONSTANT at any volume;
+    #                   what bounds a programme is a hard kg/yr ceiling per
+    #                   commodity.  Everything up to the ceiling sells at full
+    #                   price and everything past it earns nothing, so this is
+    #                   a quantity wall rather than a price discount.  The
+    #                   payload knapsack sees the ceilings, so a load that caps
+    #                   out on iron fills the rest of the hold with whatever is
+    #                   next most valuable.  See `capacity_allowance_kg`.
+    #   single_mission  Constant prices, N pinned at 1, no programme search and
+    #                   no ceiling.  The question every figure measured before
+    #                   calc v1.17.0 was answering.
+    #   elasticity      The v1.14.0 demand curve, P/P0 = (1+Q/Qm)^(-1/eps).
+    #                   Reproduces every figure measured between v1.14.0 and
+    #                   v1.20.0 bit-identically; that is its acceptance test.
+    #   unbounded       Constant prices and no ceiling at all.  A DIAGNOSTIC,
+    #                   not a model: every row runs to `max_fleet_ships` and
+    #                   the run says so out loud.
+    market_model:              str   = "capacity_cap"
 
     # The elasticity in P/P0 = (1 + Q/Q_market)^(-1/eps).  0.5 is inelastic,
     # which is right for precious metals: doubling world supply quarters the
     # price.  Raising it makes the market absorb more before the price moves.
+    # Read ONLY when `market_model` is "elasticity"; the other three modes hold
+    # price flat and bound quantity instead.
     demand_elasticity:         float = 0.5
 
     # ─── MODELLING COMPLETENESS, PART 2  (v1.8.0) ────────────────────────────
@@ -6468,7 +6488,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.20.0"
+    pipeline_version: str = "1.21.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -7418,6 +7438,178 @@ def saturation_price_multiplier(
     return (1.0 + ratio) ** (-1.0 / elasticity)
 
 
+# ─── CONSTANT PRICES AND A QUANTITY WALL  (v1.21.0) ──────────────────────────
+# The four models `CalcConfig.market_model` selects between.  Exported as a
+# tuple rather than spelled out again in the dashboard, so the dropdown cannot
+# drift from what this module will accept; `ui_meta` resolves it at runtime the
+# way it already resolves the destination list.
+MARKET_MODELS: Tuple[str, ...] = (
+    "capacity_cap", "single_mission", "elasticity", "unbounded",
+)
+
+
+_MARKET_MODE_SET = frozenset(MARKET_MODELS)
+
+
+def _market_mode(config: CalcConfig) -> str:
+    """`config.market_model`, validated, lowercased.
+
+    An unrecognised value is REFUSED rather than quietly defaulted.  A silent
+    fallback here is the quiet-wrong-answer shape this module keeps finding:
+    a typo would price an entire campaign against a market model nobody chose,
+    and the only symptom would be numbers that look slightly generous.
+
+    ⚠️  THIS IS ON THE HOT PATH, TWICE.  `_evaluate_combo_at_ratio` asks once
+    per (asteroid x vehicle x propellant x architecture x concentration ratio)
+    and `_programme_ladder_cached` asks again for its memo key, so a full
+    beneficiated cell calls it ~48 million times.  The normalising path is
+    ~303 ns of `str()`, `strip()`, `lower()` and a membership test: **~15 s a
+    cell** to re-derive one of four answers, which is defect class 3, a
+    quantity asked at a finer granularity than it has answers.
+
+    The fast path is an identity test against the frozen set and costs ~30 ns.
+    It hits on every run whose config was not hand-typed, and it is not a cache,
+    so there is no staleness to reason about and nothing to bound: a config
+    edited between runs is answered from the value it now holds, which is the
+    rule this module states for memos and which a memo here would have had to
+    honour explicitly.
+
+    `type(raw) is str` rather than `isinstance`: a hair faster, and it is the
+    exact question being asked.  A non-string (someone assigning a list) falls
+    through to the slow path and is refused there rather than raising
+    `TypeError` on an unhashable set lookup.
+    """
+    raw = getattr(config, "market_model", None)
+    if type(raw) is str and raw in _MARKET_MODE_SET:
+        return raw
+    mode = str(raw or "").strip().lower()
+    if mode not in _MARKET_MODE_SET:
+        raise ValueError(
+            "market_model must be one of %s, not %r"
+            % (", ".join(MARKET_MODELS), raw))
+    return mode
+
+
+def capacity_allowance_kg(
+    annual_market_kg: float,
+    n_missions:       int,
+    fleet:            int,
+    duration_yr:      float,
+    cadence_yr:       float,
+) -> float:
+    """Kilograms of ONE commodity that ONE delivery may sell (v1.21.0).
+
+    Under `market_model = "capacity_cap"` the price is flat at any volume and
+    what bounds a programme is how much the destination can absorb while it
+    waits.  So the question is not "what does the 400th tonne fetch" but "how
+    long has the market been accumulating since the last delivery".
+
+    ── The window ───────────────────────────────────────────────────────────
+
+    A programme of F ships repeating every `cadence_yr` puts a delivery on the
+    market every `cadence / F` years, so in steady state one delivery may sell
+    `cap x cadence / F`.  Note that is the same constraint as a RATE test, seen
+    from the other side:
+
+        kg <= cap x cadence / F     <=>     kg x F / cadence <= cap
+
+    The FIRST delivery is different, and it is the one exception this function
+    makes.  Nothing has arrived yet, so the destination has been importing from
+    Earth for the whole outbound-and-back trip: `duration_yr`, which is longer
+    than the cadence, because the cadence is only the dig (or the window),
+    while the duration is the whole mission.  Over a programme of N deliveries
+    the market therefore accumulates for
+
+        duration + (N - 1) x cadence / F
+
+    years in total, and this returns the per-delivery average of that.  At
+    N = 1 it is exactly `cap x duration`; as N grows it converges on the steady
+    state `cap x cadence / F`.
+
+    ⚠️  IT IS AVERAGED RATHER THAN BRANCHED, deliberately.  Giving delivery one
+    the long window and every later delivery the short one is the same model,
+    but as a step it puts a discontinuity between N = 1 and N = 2 that hands
+    N = 1 a structural advantage no economics produced -- and the ladder would
+    then collapse onto N = 1 for a reason that is a rule, not a result.  The
+    average is continuous in N and gives the identical answer at both ends.
+
+    ⚠️  `cadence_yr` and NOT `mission_duration_yr` sets the steady state, which
+    is a change from the v1.14.0 elasticity term.  That term divided by the
+    mission duration, but a rig starts its next campaign as soon as the feed is
+    out of the ground; `campaign_cadence_yr` is the interval that actually
+    repeats.  Since the duration exceeds the cadence on essentially every body,
+    the old denominator UNDERSTATED sustained throughput.  Under a smooth curve
+    that is a bias buried in an exponent; under a wall it moves the feasible
+    fleet directly, so it stops being ignorable.
+
+    An infinite ceiling (a commodity with no `annual_market_kg` entry, which is
+    every bulk commodity and everything sold at `earth_surface`) returns inf
+    and nothing ever binds, which is the documented degenerate case rather than
+    an oversight.
+    """
+    cap = float(annual_market_kg)
+    if cap <= 0.0:
+        return 0.0
+    window = _delivery_window_yr(n_missions, fleet, duration_yr, cadence_yr)
+    if window <= 0.0:
+        return 0.0
+    return cap * window
+
+
+def _delivery_window_yr(
+    n_missions: int, fleet: int, duration_yr: float, cadence_yr: float,
+) -> float:
+    """Years of market accumulation behind ONE delivery of a programme.
+
+    The single statement of the window algebra `capacity_allowance_kg`
+    documents.  Split out because the ladder needs the window ONCE per rung and
+    then multiplies it by each commodity's own ceiling; calling the per-
+    commodity function would re-derive the same five float operations for every
+    phase in the haul, ~60 of them per rung and ~40 rungs per candidate.
+
+    Two readers, one derivation.  Writing the expression out again at the call
+    site is exactly the "two copies of one algebra drifting apart" hazard the
+    mass ledger warns about.
+    """
+    n      = max(1, int(n_missions))
+    f      = max(1, int(fleet))
+    first  = max(0.0, float(duration_yr))
+    steady = max(0.0, float(cadence_yr)) / f
+    return (first + (n - 1) * steady) / n
+
+
+def _capped_sale_value(
+    sale_terms: List[Tuple[float, float, float]], window_yr: float,
+) -> Tuple[float, float]:
+    """`(value_usd, unsold_kg)` with every commodity clipped at its ceiling.
+
+    A quantity wall, not a price discount: each kilogram inside the ceiling
+    fetches the full price the mineral catalog quotes, and each kilogram past
+    it fetches nothing.  That is what "prices remain constant no matter how
+    much is sold" has to mean once something still has to bound the programme.
+
+    ⚠️  Accumulates over `sale_terms` in its own insertion order, exactly as
+    the elasticity branch does, and for the same reason: floating-point
+    addition is not associative and every verification in this project is a
+    bit-identity check.  See the warning in `optimal_payload_mix`.
+
+    Used for the RAW cargo, where the mix is the body's own composition and
+    cannot be reshaped.  A beneficiated load goes through `optimal_payload_mix`
+    with the same ceilings instead, which spends the freed hold space on the
+    next most valuable phase rather than flying the excess unsold.
+    """
+    value  = 0.0
+    unsold = 0.0
+    for kg, price, mkt in sale_terms:
+        allowance = mkt * window_yr
+        if kg > allowance:
+            value  += allowance * price
+            unsold += kg - allowance
+        else:
+            value  += kg * price
+    return value, unsold
+
+
 # Single-slot memo for the knapsack's price ordering (v1.14.2).  The phase table
 # is built once per asteroid and never mutated, but `optimal_payload_mix` is
 # called ~2,100 times per asteroid in a beneficiated run and re-sorted it every
@@ -7444,6 +7636,7 @@ def optimal_payload_mix(
     phases:     List[Tuple[str, float, float]],
     recovery:   float,
     want_phase: Optional[str] = None,
+    caps:       Optional[Dict[str, float]] = None,
 ) -> Union[Dict[str, object], float]:
     """Most valuable payload obtainable from `feed_kg` of this rock (v1.6.0).
 
@@ -7500,6 +7693,40 @@ def optimal_payload_mix(
     `remaining` is decremented in the same order by the same `min`, and the
     take for the requested phase is returned before anything downstream of it
     could perturb it.  Verified anyway; see the release notes.
+
+    ── `caps` (v1.21.0) ─────────────────────────────────────────────────────
+    An optional per-phase UPPER BOUND in kilograms, which is what
+    `market_model = "capacity_cap"` uses to say how much of each commodity the
+    destination can take while it waits.  See `capacity_allowance_kg`.
+
+    ✅  GREEDY IS STILL PROVABLY OPTIMAL.  Per-item quantity limits turn an
+    unbounded fractional knapsack into a BOUNDED one, and the bounded form is
+    solved exactly by the same walk: sort by $/kg descending and take
+    `min(available, allowance, remaining)` of each in turn.  So this is not a
+    clamp bolted onto the outside of an optimiser -- which is the shape this
+    module warns against, because the content and purity bounds are supposed to
+    FALL OUT of the knapsack rather than be re-imposed on it -- it is the
+    correct formulation of the same problem with one more constraint.
+
+    The freed hold space is what the caller actually wanted: a load that caps
+    out on iron keeps walking down the price order and spends the remaining
+    capacity on whatever is next, rather than flying the excess unsold.
+
+    ⚠️  `caps=None` must stay bit-identical to the pre-v1.21.0 walk, because
+    the `elasticity` market model reproduces every figure measured between
+    v1.14.0 and v1.20.0 and that is its acceptance test.  The guard below adds
+    a branch and no arithmetic; when `caps` is None not one float differs.
+
+    ⚠️  AND THE SIZING PATH MUST NEVER PASS CAPS.  `_cargo_water_kg` calls this
+    from inside the fixed-point power solve, so a cap reaching it would make
+    the whole MASS cascade a function of fleet size -- the one asymmetry that
+    makes the programme ladder affordable to search at all.  Ceilings bound
+    what a load may SELL, not what the rig digs or the hull carries; the plant
+    is sized for the load the body can assemble and the ship is designed once
+    for a fleet that is sized around it.  That runs conservative (the array is
+    sized for a richer mix than a capped delivery carries), which is the safe
+    direction, and it keeps the ledger internally consistent: the array flown
+    is still exactly the array charged.
     """
     if payload_kg <= 0 or not phases:
         return 0.0 if want_phase is not None else {
@@ -7519,6 +7746,13 @@ def optimal_payload_mix(
             break
         available = float(feed_kg) * frac * recovery
         take      = min(available, remaining)
+        if caps is not None:
+            # v1.21.0.  The bounded-knapsack step.  Clipping `take` and NOT
+            # `remaining` is the whole point: the hold space this phase does
+            # not get stays available to the next one down the price order.
+            allowance = caps.get(name)
+            if allowance is not None and allowance < take:
+                take = allowance
         if take <= 0:
             continue
         if want_phase is not None:
@@ -10162,6 +10396,7 @@ def fleet_refinement(
 
 def programme_options(
     rig_trips: Optional[Tuple[int, int, Optional[int]]], config: CalcConfig,
+    market_mode: Optional[str] = None,
 ) -> List[Tuple[int, int, int]]:
     """The `(n_missions, fleet_ships, missions_per_ship)` programmes to price.
 
@@ -10275,6 +10510,15 @@ def programme_options(
     With `optimise_programme_scale` off this returns the single configured
     programme, which is the pre-v1.15.0 behaviour exactly.
     """
+    # v1.21.0.  `single_mission` is the explicit "one mission, no programme"
+    # setting: prices constant, no ceiling, N pinned at 1 whatever
+    # `nre_amortization_missions` and `optimise_programme_scale` say.  It is
+    # the question almost every figure measured before calc v1.17.0 was
+    # answering, and it is on the market-model selector rather than left to a
+    # reader to reconstruct from two other flags.
+    if (market_mode or _market_mode(config)) == "single_mission":
+        return [(1, 1, 1)]
+
     n_cfg = max(1, int(config.nre_amortization_missions))
     trips = rig_trips[0] if rig_trips is not None else None
     calendar = config.model_programme_calendar
@@ -11300,6 +11544,7 @@ def _evaluate_combo_at_ratio(
     rendezvous_apsis:  str = "",
     power_mode:        str  = "solar",
     ctx:               Optional[AsteroidContext] = None,
+    market_mode:       Optional[str] = None,
 ) -> Optional[Dict[str, float]]:
     """Evaluate one (vehicle × propellant × architecture) mission for one asteroid.
 
@@ -12049,11 +12294,28 @@ def _evaluate_combo_at_ratio(
     # associative and every verification this project relies on is a
     # bit-identity check, so the ORDER of these terms is load-bearing, the same
     # trap documented at length in `optimal_payload_mix`.
-    saturation_applies = bool(
-        config.model_market_saturation and mission_duration_yr > 0
-        and phases and markets is not None)
+    #
+    # v1.21.0.  Two market models reach this block and they share everything
+    # above the ladder.  `elasticity` is the v1.14.0 term unchanged, and its
+    # gate is the same boolean it always was, which is what lets it reproduce
+    # every figure measured between v1.14.0 and v1.20.0 bit-identically.
+    # `capacity_cap` holds price flat and clips quantity instead.  The other
+    # two models (`single_mission`, `unbounded`) price nothing here at all.
+    # v1.21.0.  Resolved by the CALLER on the hot path and derived here only
+    # when this function is used on its own.  It is a per-RUN config value, and
+    # asking for it per candidate cost ~47 s of a full beneficiated cell: 332
+    # calls per evaluable row, ~216 M over a catalog, to re-derive one of four
+    # answers.  Threaded exactly like `markets`, which is per-run for the same
+    # reason.  Defect class 3, and it was introduced by this release rather
+    # than found in it.
+    if market_mode is None:
+        market_mode = _market_mode(config)
+    market_ready       = bool(mission_duration_yr > 0
+                              and phases and markets is not None)
+    saturation_applies = bool(market_ready and market_mode == "elasticity")
+    capacity_applies   = bool(market_ready and market_mode == "capacity_cap")
     sale_terms: List[Tuple[float, float, float]] = []
-    if saturation_applies:
+    if saturation_applies or capacity_applies:
         # The mix actually sold: chosen by the optimiser when concentrating,
         # otherwise the body's own proportions.
         if beneficiate and payload_mix:
@@ -12103,6 +12365,14 @@ def _evaluate_combo_at_ratio(
     # Per-candidate, because everything the saturation sum reads besides the
     # fleet belongs to this candidate.  See the read of it below.
     sat_by_fleet: Dict[int, Tuple[float, float, float]] = {}
+    # v1.21.0's equivalent for `capacity_cap`, and it is keyed on (N, F) rather
+    # than on F alone, because the accumulation window depends on both: the
+    # fleet sets how often a delivery arrives and N sets how much of the
+    # programme still carries the first delivery's longer wait.  N = F x W over
+    # the ladder, so that is one key per rung and the memo buys nothing on its
+    # own -- what keeps this cheap is the "does anything bind" test inside,
+    # which answers most rungs in a few float comparisons.
+    cap_by_programme: Dict[Tuple[int, int], Tuple[float, float, float, float]] = {}
     # v1.17.5: the same argument one function further in.  The rig shares and
     # the programme-calendar multipliers are a function of the campaigns one
     # rig flies and of the PROLOGUE, and the ladder crosses ~8 fleets with
@@ -12120,9 +12390,13 @@ def _evaluate_combo_at_ratio(
         """Everything downstream of the cascade, for one programme size.
 
         Returns `(cost, total_cost, gross, saturation_mult, concurrent,
-        p_success, p_mining, delivered_per_kg)`.  Nothing here re-enters the
-        rocket equation; it is one pass of straight-line arithmetic over a
-        cascade that is already solved.
+        p_success, p_mining, delivered_per_kg, clearing, unsold_kg)`.  Nothing
+        here re-enters the rocket equation; it is one pass of straight-line
+        arithmetic over a cascade that is already solved.
+
+        The last two are v1.21.0's and are APPENDED rather than inserted:
+        `_objective_key` reads indices 1 and 2 off this tuple positionally on
+        every rung of the ladder.
 
         v1.17.1: `full=False` asks for the total alone and leaves `cost` None.
         The ladder below compares options on `total_cost` and nothing else, so
@@ -12139,6 +12413,8 @@ def _evaluate_combo_at_ratio(
             total_cost, c = c, None
         g         = gross_base
         sat       = 1.0
+        clearing  = 1.0
+        unsold    = 0.0
         delivered = delivered_base
         # ── The rate is the PROGRAMME'S, not one mission's (v1.14.0) ─────────
         # This term's own config comment says it exists because "prices were
@@ -12186,6 +12462,79 @@ def _evaluate_combo_at_ratio(
                     adj / m_payload  if m_payload  > 0 else 0.0,
                 )
             g, sat, delivered = entry
+        elif capacity_applies:
+            # ── v1.21.0.  CONSTANT PRICE, BOUNDED QUANTITY ──────────────────
+            # Every kilogram inside the ceiling fetches exactly what the
+            # mineral catalog quotes and every kilogram past it fetches
+            # nothing, so `saturation_multiplier` stays 1.0 here: no price
+            # moved.  What the programme loses is the mass it cannot place,
+            # reported separately as `market_clearing_fraction` and
+            # `unsold_payload_kg` so neither column has two meanings.
+            #
+            # This is what bounds the ladder.  A bigger fleet delivers more
+            # often, so each delivery gets a shorter accumulation window; past
+            # the point where the ceilings bind, another ship adds its full
+            # cost and only part of its revenue, and the objective turns over
+            # on its own instead of running to `max_fleet_ships`.
+            concurrent = fleet
+            ckey  = (n_missions, fleet)
+            entry = cap_by_programme.get(ckey)
+            if entry is None:
+                window = _delivery_window_yr(
+                    n_missions, fleet, mission_duration_yr, cadence_yr)
+                # The fast path, and it is the common one at small fleets.  If
+                # no commodity reaches its ceiling then the load sells whole
+                # and the optimiser would only rediscover `gross_base`.  Same
+                # shape as v1.14.1's pre-filter: prove nothing binds in a few
+                # float comparisons rather than paying to be told.
+                binds = False
+                for kg, _price, mkt in sale_terms:
+                    if kg > mkt * window:
+                        binds = True
+                        break
+                if not binds:
+                    entry = (gross_base, 1.0, 0.0, delivered_base)
+                elif beneficiate and payload_mix:
+                    # RESHAPE.  Concentrating means the hold's contents are
+                    # chosen, so a load that caps out on one phase re-fills the
+                    # freed space with the next most valuable one instead of
+                    # flying the excess unsold.  The ceilings go INTO the
+                    # knapsack, where they are per-item upper bounds and greedy
+                    # stays exact; see `optimal_payload_mix`.
+                    capped = optimal_payload_mix(
+                        m_payload, feed_kg, phases,
+                        config.beneficiation_recovery,
+                        caps={nm: markets.get(nm, float("inf")) * window
+                              for nm, _f, _p in phases},
+                    )
+                    cvalue = float(capped["value_usd"])
+                    # Measured against the UNCAPPED load, not against the hold.
+                    # `m_payload - loaded` would also count capacity the feed
+                    # could never have filled, which is a poor rock rather than
+                    # a full market, and the fast path above reports 0.0 for
+                    # exactly that case.  One meaning per column: mass lost to
+                    # the CEILINGS.
+                    loaded_free = sum(payload_mix.values())
+                    entry  = (
+                        cvalue,
+                        cvalue / gross_base if gross_base > 0 else 1.0,
+                        max(0.0, loaded_free - float(capped.get("loaded_kg", 0.0))),
+                        cvalue / m_payload if m_payload > 0 else 0.0,
+                    )
+                else:
+                    # RAW ore cannot be reshaped: the cargo is the body's own
+                    # composition, so whatever is past a ceiling simply does not
+                    # sell.  The hold still flies and is still paid for, which
+                    # is why this is the branch that punishes scale hardest.
+                    cvalue, cunsold = _capped_sale_value(sale_terms, window)
+                    entry = (
+                        cvalue,
+                        cvalue / gross_base if gross_base > 0 else 1.0,
+                        cunsold,
+                        cvalue / m_payload if m_payload > 0 else 0.0,
+                    )
+                cap_by_programme[ckey] = entry
+            g, clearing, unsold, delivered = entry
         # Revenue was certain.  It is not: the launch fails, the spacecraft dies
         # on the way, or the mining chain does not work when it arrives.  Costs
         # are charged in FULL, which is correct; you spend the money either
@@ -12204,12 +12553,16 @@ def _evaluate_combo_at_ratio(
                   if config.model_reliability_growth else p_first)
             ps = max(0.0, min(1.0, p_launch * p_cruise * pm))
             g *= ps
-        return c, total_cost, g, sat, concurrent, ps, pm, delivered
+        # v1.21.0 appends rather than inserts: `_objective_key` reads indices
+        # 1 and 2 off this tuple positionally, and the ladder compares on them.
+        return (c, total_cost, g, sat, concurrent, ps, pm, delivered,
+                clearing, unsold)
 
     # v1.17.1: the ladder prices on totals and the winner is rebuilt in full
     # once, below.  `single` is the common case, the search off, one option, 
     # and it skips the rebuild entirely by pricing in full straight away.
-    programmes, fleet_ladder = _programme_ladder_cached(rig_trips, config)
+    programmes, fleet_ladder = _programme_ladder_cached(
+        rig_trips, config, market_mode)
     single       = len(programmes) == 1
     # v1.17.6: the ranking objective is a config field, so it is resolved once
     # here rather than re-read on every rung below.  See `_objective_key`.
@@ -12258,7 +12611,8 @@ def _evaluate_combo_at_ratio(
     # `_total_cost` is the same float as `cost["total_cost"]` on the full path;
     # the expressions below keep reading the dict so nothing downstream moved.
     (cost, _total_cost, gross_value, saturation_mult, concurrent_missions,
-     p_success, p_mining, delivered_value_per_kg) = best_priced
+     p_success, p_mining, delivered_value_per_kg,
+     market_clearing, unsold_payload_kg) = best_priced
 
     profit               = gross_value - cost["total_cost"]
     roi                  = profit / cost["total_cost"] if cost["total_cost"] > 0 else np.nan
@@ -12269,6 +12623,18 @@ def _evaluate_combo_at_ratio(
         "vehicle":              vehicle["name"],
         "propellant":           propellant["name"],
         "delivery_destination": config.delivery_destination,
+        # v1.21.0.  Stamped for exactly the reason `delivery_destination` and
+        # `pipeline_version` are: it identifies the run.  Four market models
+        # give the same code four different answers -- 20% to 49% apart on the
+        # sampled cislunar cells -- so a `pipeline_version` alone no longer
+        # says what produced a catalog, and an archived CSV that cannot say
+        # which model priced it cannot be compared with anything.
+        #
+        # NOT provenance, so `verify.py` does not strip it before hashing:
+        # `catalog_date` and `pipeline_version` are stripped because they move
+        # without the model moving, and this is the opposite -- it moves only
+        # when the model does, and two runs that differ in it SHOULD differ.
+        "market_model":         market_mode,
         "delivery_arch":        arch["label"],
         "returns_to_earth":     arch["returns_to_earth"],
         "flies_tps":            tps_frac > 0.0,
@@ -12326,6 +12692,23 @@ def _evaluate_combo_at_ratio(
         "launch_window_wait_yr":    window_wait_yr,
         "water_liberated_kg":       water_kg,
         "saturation_multiplier":    saturation_mult,
+        # v1.21.0.  Two columns rather than overloading the one above, because
+        # a price multiplier and a quantity clip are different claims and a
+        # column that means one thing in one market model and another thing in
+        # the next is the ambiguity this project keeps paying for.
+        #   saturation_multiplier    a PRICE multiplier; 1.0 unless the market
+        #                            model is `elasticity`
+        #   market_clearing_fraction share of the assembled load's gross value
+        #                            that cleared the ceilings; 1.0 unless the
+        #                            model is `capacity_cap` and one bound
+        #   unsold_payload_kg        payload mass lost to the CEILINGS: ore
+        #                            flown past one when raw, load the knapsack
+        #                            could not place under them when
+        #                            beneficiated.  NOT hold space a poor feed
+        #                            failed to fill, which is 0.0 here and has
+        #                            always been the knapsack's own behaviour
+        "market_clearing_fraction": market_clearing,
+        "unsold_payload_kg":        unsold_payload_kg,
         "p_success":                p_success,
         "p_mining":                 p_mining if config.model_reliability else 1.0,
         "boiloff_factor":           boiloff_factor,
@@ -12606,6 +12989,7 @@ def evaluate_combo(
     rendezvous_apsis:  str = "",
     power_mode:        str  = "solar",
     ctx:               Optional[AsteroidContext] = None,
+    market_mode:       Optional[str] = None,
 ) -> Optional[Dict[str, float]]:
     """Best mission for one (asteroid × vehicle × propellant × architecture),
     optimising over how hard to concentrate.  "Best" is `selection_key`, which
@@ -12635,6 +13019,7 @@ def evaluate_combo(
         dv_out_m_s, dv_ret_m_s, ops_df, config,
         best_phase_value_per_kg=best_phase_value_per_kg,
         phases=phases, target_ratio=r, beneficiate=b, markets=markets,
+        market_mode=market_mode,
         aero=aero, isru=isru, rendezvous_apsis=rendezvous_apsis,
         power_mode=power_mode, ctx=ctx,
     )
@@ -12865,17 +13250,29 @@ _FLEET_REFINEMENT_CACHE: Dict[Tuple[int, Tuple[int, ...]], List[int]] = {}
 
 def _programme_ladder_cached(
     rig_trips: Optional[Tuple[int, int, Optional[int]]], config: CalcConfig,
+    market_mode: Optional[str] = None,
 ) -> Tuple[List[Tuple[int, int, int]], List[int]]:
-    """`(programme_options(...), sorted fleet ladder)`, memoised."""
+    """`(programme_options(...), sorted fleet ladder)`, memoised.
+
+    `market_mode` arrives resolved from `_evaluate_combo_at_ratio`, which has
+    already paid for it; deriving it again here doubled the hot-path cost this
+    release introduced.  None means "derive it", for a standalone caller.
+    """
+    if market_mode is None:
+        market_mode = _market_mode(config)
     key = (rig_trips[0] if rig_trips is not None else None,
            int(config.nre_amortization_missions),
            bool(config.model_programme_calendar),
            bool(config.optimise_programme_scale),
            int(config.max_fleet_ships),
-           int(config.programme_search_steps))
+           int(config.programme_search_steps),
+           # v1.21.0: `single_mission` collapses the ladder to one rung, so the
+           # market model is part of what this memo answers.  A memo keyed on
+           # the config VALUES a function reads, never on `id(config)`.
+           market_mode)
     hit = _PROGRAMME_LADDER_CACHE.get(key)
     if hit is None:
-        programmes = programme_options(rig_trips, config)
+        programmes = programme_options(rig_trips, config, market_mode)
         hit = _PROGRAMME_LADDER_CACHE[key] = (
             programmes, sorted({f for _n, f, _w in programmes}))
     return hit
@@ -12990,9 +13387,13 @@ def evaluate_asteroid(
     # Both depend only on composition and prices, so compute once per asteroid
     # rather than once per (vehicle x propellant) combo.
     # v1.7.0: the phase table is needed even without beneficiation, because
-    # market saturation prices each commodity in the haul separately.
+    # the market model prices each commodity in the haul separately.
     phases  = asteroid_phase_table(asteroid_row, minerals)
     markets = market_table(minerals)
+    # v1.21.0.  A per-RUN config value, resolved beside `markets` and threaded
+    # the same way.  Asked once per CANDIDATE it was 332 calls per evaluable
+    # row and ~47 s of a full beneficiated cell; asked here it is one.
+    market_mode = _market_mode(config)
     best_phase_value = (asteroid_best_phase_usd_per_kg(asteroid_row, minerals)
                         if config.use_beneficiation else bulk_value)
 
@@ -13177,6 +13578,7 @@ def evaluate_asteroid(
                         ops_df, config,
                         best_phase_value_per_kg=best_phase_value,
                         phases=phases, markets=markets,
+                        market_mode=market_mode,
                         aero=dv_aero, isru=isru,
                         rendezvous_apsis=dv_apsis,
                         power_mode=power_mode, ctx=ctx,
@@ -13679,9 +14081,21 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
     if config.optimise_programme_scale and not config.model_rig_service_life:
         print("     WARN   optimise_programme_scale is ON but model_rig_service_life "
               "is OFF, so one rig serves any programme, nothing is ever "
-              "concurrent, and market saturation cannot push back. The search "
+              "concurrent, and the market cannot push back. The search "
               "is refused rather than run - it would report the ladder's top "
               "rung as a result. See programme_options().")
+    # v1.21.0.  The SAME failure by the other route, and until this release it
+    # was unguarded: the branch above tests one of the two ways to leave the
+    # ladder monotone, and `market_model` is the other.  It was never possible
+    # to reach before, because the market term was a flag nothing else keyed
+    # off; it is a four-valued selector now and two of the four values leave
+    # nothing pushing back on N.
+    elif config.optimise_programme_scale and _market_mode(config) == "unbounded":
+        print("     WARN   market_model is 'unbounded' with optimise_programme_scale "
+              "ON, so prices never move, no ceiling binds, and every lever "
+              "improves with N. The objective is monotone and every row will "
+              "run to max_fleet_ships. That is a DIAGNOSTIC, not a result - "
+              "read the fleet column as 'where the loop stopped'.")
     elif config.optimise_programme_scale and "fleet_ships" in df.columns:
         f = df["fleet_ships"]
         at_cap = int((f >= config.max_fleet_ships).sum())
@@ -13699,6 +14113,37 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
                   f"max_fleet_ships = {config.max_fleet_ships}. The ladder is "
                   f"binding, not bounding - check those rows have a finite "
                   f"market before reading their N as an optimum.")
+        # v1.21.0.  The line above has always said "check those rows have a
+        # finite market"; under a quantity WALL the run can answer that itself,
+        # and it has to, because a wall does not blend the way the elasticity
+        # curve did.  A row every ceiling clears is monotone in N again, so the
+        # share of rows nothing bound is the real health check on this term.
+        #
+        # Asked as a QUESTION OF THE POPULATION rather than by naming a
+        # destination.  `earth_surface` is the cell this is expected to fire on
+        # (its ceilings are terrestrial production, 1e12-1e15 kg/yr, so nothing
+        # can bind and it stays monotone in N exactly as it was before this
+        # release), but hard-coding that name is the defect calc v1.19.2 fixed:
+        # a conditional naming one member of a set instead of asking the set.
+        if "market_clearing_fraction" in df.columns:
+            bound = int((df["market_clearing_fraction"] < 1.0).sum())
+            share = bound / len(df) if len(df) else 0.0
+            print(f"       Market ceilings: bound {bound:,} row(s) "
+                  f"({share:.1%})  |  median clearing "
+                  f"{df['market_clearing_fraction'].median():.4f}")
+            if bound == 0:
+                print( "     WARN   NO row was bound by a market ceiling, so "
+                       "nothing pushed back on programme size anywhere in this "
+                       "run. Every N here is the ladder's top rung, not an "
+                       "optimum. Expected at earth_surface, whose ceilings are "
+                       "world production; anywhere else it means the payloads "
+                       "are too small to reach a ceiling, or the destination "
+                       "has no annual_market_kg entries.")
+            elif share < 0.10 and at_cap:
+                print(f"     WARN   only {share:.1%} of rows were bound by a "
+                      f"ceiling while {at_cap:,} sit at max_fleet_ships. The "
+                      f"unbound rows are monotone in N; read their fleet size "
+                      f"as where the loop stopped.")
 
     n_viable = int(df["viable"].sum())
     elapsed  = (datetime.now() - t0).total_seconds()
@@ -13861,6 +14306,22 @@ print(f"      Programme        : "
          "fixed size (set calc.optimise_programme_scale to search it)"))
 if MASTER_CONFIG.calc.use_beneficiation and MASTER_CONFIG.calc.optimise_programme_scale:
     print(f"                         both on: ~{_both_on:.1f}x the raw N = 1 cell")
+# calc v1.21.0.  On the banner for the same reason Beneficiation and Programme
+# are: it changes what the run ANSWERS, not merely how long it takes.  The same
+# code gives four answers 20% to 49% apart on the sampled cislunar cells, so a
+# banner that does not name the market model leaves the reader unable to say
+# what the catalog beneath it means.
+print(f"      Market model     : "
+      + {"capacity_cap":
+         "capacity_cap - constant prices, a kg/yr ceiling per commodity",
+         "single_mission":
+         "single_mission - constant prices, N = 1, no ceiling",
+         "elasticity":
+         "elasticity - the demand curve, i.e. the pre-v1.21.0 answer",
+         "unbounded":
+         "unbounded - DIAGNOSTIC: nothing bounds programme size",
+         }.get(MASTER_CONFIG.calc.market_model,
+               str(MASTER_CONFIG.calc.market_model)))
 print(f"      Contingency      : {MASTER_CONFIG.calc.contingency_fraction:.0%}")
 print("=" * 75)
 
@@ -13884,7 +14345,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.25.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.26.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

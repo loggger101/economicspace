@@ -180,7 +180,7 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # -----------------------------------------------------------------------------
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.25.0)
+"""Master Asteroid Profitability Pipeline (1.26.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -434,6 +434,22 @@ print(f"      Programme        : "
          "fixed size (set calc.optimise_programme_scale to search it)"))
 if MASTER_CONFIG.calc.use_beneficiation and MASTER_CONFIG.calc.optimise_programme_scale:
     print(f"                         both on: ~{_both_on:.1f}x the raw N = 1 cell")
+# calc v1.21.0.  On the banner for the same reason Beneficiation and Programme
+# are: it changes what the run ANSWERS, not merely how long it takes.  The same
+# code gives four answers 20% to 49% apart on the sampled cislunar cells, so a
+# banner that does not name the market model leaves the reader unable to say
+# what the catalog beneath it means.
+print(f"      Market model     : "
+      + {"capacity_cap":
+         "capacity_cap - constant prices, a kg/yr ceiling per commodity",
+         "single_mission":
+         "single_mission - constant prices, N = 1, no ceiling",
+         "elasticity":
+         "elasticity - the demand curve, i.e. the pre-v1.21.0 answer",
+         "unbounded":
+         "unbounded - DIAGNOSTIC: nothing bounds programme size",
+         }.get(MASTER_CONFIG.calc.market_model,
+               str(MASTER_CONFIG.calc.market_model)))
 print(f"      Contingency      : {MASTER_CONFIG.calc.contingency_fraction:.0%}")
 print("=" * 75)
 
@@ -457,7 +473,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.25.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.26.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
