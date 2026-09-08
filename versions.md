@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [calc v1.21.2](#calc-v1212)
 - [calc v1.21.1](#calc-v1211)
 - [calc v1.21.0](#calc-v1210)
 - [master v1.25.0 - Stage 3 moved to the `spacecost` package](#master-v1250---stage-3-moved-to-the-spacecost-package)
@@ -73,7 +74,7 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.2.0** | v1.2.0, orbit quality, a total NEOWISE sort, the element epoch |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments. ⚠️  Owned by [`spacecost`](https://github.com/loggger101/spacecost) since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.21.1** | v1.21.1, the ceilings recalibrated: the levels hold and the composition residual gains one |
+| 4 | `modules/calc.py` | **1.21.2** | v1.21.2, one market was being sold twice: the silicate phases now share one allowance |
 | - | `master.py` | **1.26.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
@@ -153,6 +154,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [calc v1.21.2](#calc-v1212) | 2026-09-08 | **one market, two allowances**: the composition residual and the `silicates` phase each drew the full silicates ceiling, on 100% of bodies |
 | [calc v1.21.1](#calc-v1211) | 2026-09-08 | **the ceilings recalibrated: the levels do not move, and the composition residual gets the ceiling it was already priced against** |
 | [calc v1.21.0](#calc-v1210) | 2026-09-07 | **prices are constant and quantity is what binds**: the market term becomes a four-valued `market_model`, and the ceilings go into the payload knapsack |
 | [calc v1.20.0](#calc-v1200) | 2026-09-04 | **both insurance premiums are off**: a transfer priced off an underwriter's book, in a model that prices masses |
@@ -187,6 +189,197 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## calc v1.21.2
+
+**One market, two allowances. The composition residual and the `silicates`
+phase each drew the full silicates ceiling, on 100% of bodies.**
+
+### What v1.21.1 fixed, and the half it left open
+
+v1.21.1 found that `asteroid_phase_table`'s composition residual was priced at
+the `silicates` quote and bounded by nothing, and mapped it onto the
+`silicates` market with `_PHASE_MARKET_ALIAS`. That was right, and the comment
+it shipped with says exactly what was intended:
+
+> Priced as silicates, bounded as silicates, in one place.
+
+It was bounded as silicates in **two** places. Every consumer asked
+`phase_market_kg` per PHASE, so `silicates` got the full allowance and
+`other (bulk silicate)` got the full allowance again. The alias made the two
+share a ceiling in the sense of reading the same number off the table, and not
+at all in the sense of spending it once.
+
+### Why it is not a corner
+
+| | |
+|---|---|
+| bodies carrying BOTH phases | **3,999 of 4,000** sampled (100.0%) |
+| the two as a share of the load | **median 0.840**, min 0.440, max 0.940 |
+| the cislunar `silicates` ceiling | **15,000 kg/yr**, among the tightest in the table |
+
+So the doubled allowance applied to the dominant mass fraction of essentially
+every asteroid, against one of the ceilings most likely to bind. The
+demonstration, on a synthetic load at that ceiling over a 3-year window:
+
+```
+BENEFICIATED knapsack, silicates ceiling 15,000 kg/yr, window 3 yr
+  before   mix {water: 40,500, silicates: 45,000, other (bulk silicate): 34,500}
+  after    mix {water: 40,500, silicates: 45,000}
+```
+
+79,500 kg of silicate-family material sold into a 45,000 kg market.
+
+### What changed
+
+`phase_market_key()` is new and is the market IDENTITY of a phase, where
+`phase_market_kg()` is its size. Both resolve the alias the same way -- a
+phase's own Stage 2 row wins, the alias is the fallback -- so the two cannot
+disagree about which market a phase is in. Every consumer pools on the key:
+
+| consumer | before | after |
+|---|---|---|
+| `_capped_sale_value` (raw) | allowance per phase | one allowance per market, drawn down |
+| the knapsack `caps` (beneficiated) | keyed by phase | keyed by market, consumed in place |
+| the `binds` fast path | tested per phase | tested on the pooled quantity |
+| `elasticity` | curve asked per phase | curve asked on the market's total throughput |
+
+⚠️  **`elasticity` moves too, and it has to.** Asking the curve per phase asked
+it twice about half the quantity each time, and the curve is convex, so two
+half-loads take a smaller haircut than one whole one. Two phases selling into
+one market depress it together.
+
+⚠️  **`sale_terms` is a 4-tuple now**, `(kg, price, ceiling, market_key)`. It
+has four consumers and all four were updated; the type annotation moved with
+it so the next reader is told.
+
+### What did NOT change, and it is the load-bearing one
+
+✅  **`optimal_payload_mix(caps=None)` is bit-identical**, and so is the
+`want_phase` short circuit. Both matter more than the headline: `_cargo_water_kg`
+calls this from inside the fixed-point power solve, so if `caps=None` ever
+stopped being the old walk, **every mass cascade in the model would move**.
+Verified rather than argued -- **16,000 randomised comparisons over five
+phases, zero differences**, on raw IEEE bit patterns rather than on `==`.
+
+Every new line sits inside `if caps is not None:`. **Stage 2 is not touched and
+not re-run**; no `annual_market_kg`, no schema change, no new reference row.
+
+### What it moved
+
+Every cell that moves gets **worse**, which is the only direction a removed
+revenue overstatement can go.
+
+| cell | v1.21.1 | v1.21.2 | | rows that moved |
+|---|---|---|---|---|
+| raw | 24.6804x | **25.7233x** | +4.23% | **1 of 155** |
+| raw + search | 18.5707x | **19.7213x** | +6.20% | 94 of 155 |
+| beneficiated | 20.5353x | 20.5353x | **hash unchanged** | 0 of 65 |
+| beneficiated + search | 8.6861x | **8.9005x** | +2.47% | 9 of 65 |
+
+New baseline: `eac188f956a9fa36` / `99bf5e6e3fd3a012` / `109ce36a07ac6975` /
+`c681bc9f32684ea0`. The beneficiated hash is v1.21.1's, unchanged.
+
+✅  **The beneficiated N = 1 cell being bit-identical is the corroboration, not
+a let-off.** The knapsack walks in descending price order and the silicate pair
+is the cheapest thing in the hold, so at N = 1 the window is long enough that
+the pair never reaches its ceiling and pooling one allowance with another
+changes nothing. That is the same cell, for the same reason, that v1.21.1's
+release note gives for its own fix landing on the raw cells and "not at all on
+the beneficiated ones". The defect and its correction agree about where they
+live.
+
+🚨  **THE RAW CELL MOVED ON ONE ROW OF 155, AND THAT ROW REPORTS
+`market_clearing_fraction = 1.0` IN BOTH BUILDS.** It is the winner, 2017 KJ5,
+and what changed is its ARCHITECTURE: New Glenn on xenon at 117,406 kg becomes
+Falcon Heavy on iodine at 97,875 kg. No ceiling binds on the mission that won;
+the ceiling bound the missions that LOST, and the tighter allowance changed
+which one survived.
+
+⚠️  **So `market_clearing_fraction` describes the WINNER, not the search.** A
+row can be changed by a ceiling and still report that nothing was left unsold,
+because the column is a property of the surviving candidate and the constraint
+acted on the ones it beat. Counting rows with `clearing < 1.0` therefore
+undercounts the ceiling's influence, and the raw cell is the clean case: **0
+rows bound, 1 row changed.** This is the same shape as v1.21.0's warning that a
+diagnostic inherits the shape of the term it was written against, arriving from
+the other side.
+
+### Three rows got BETTER, and that is the search, not the ceiling
+
+`raw + search` improved on 3 rows of 155 and `benef + search` on 1 of 65, by up
+to 3.27%. A tighter constraint improving the answer is the signature of a real
+defect, so it was chased rather than filed.
+
+✅  **The revenue model is monotone. Measured: 20,000 randomised fixed-programme
+comparisons, pooled revenue LOWER on 10,235, EQUAL on 9,765, HIGHER on ZERO.**
+For any fixed programme, pooling can only ever cost you.
+
+**The fleet search is coarse-then-refine, not exhaustive.** A geometric ladder
+over F crossed with W, then one refinement pass around the coarse winner's
+neighbourhood. Tightening the ceiling moves the coarse winner, so the
+refinement explores a DIFFERENT neighbourhood, and it can contain a point the
+old walk never visited. The three rows show exactly that fingerprint: identical
+vehicle and propellant, `programme_options_priced` 44 -> 41, and `fleet_ships`
+falling 6 -> 4, 10 -> 8, 11 -> 8 onto a programme that is cheaper AND sells
+marginally more.
+
+🚨  **This is a caveat on check 7's stated invariant and it is not new in this
+release.** "Constraining must never improve the answer" is exact for a FIXED
+programme and only approximately true for the SEARCHED best, because the best
+is the outcome of a non-exhaustive walk. A violation there is evidence about
+the ladder, not necessarily about the ceiling, and the way to tell them apart
+is the fixed-programme comparison above. Recorded rather than fixed: making the
+fleet search exhaustive is a real cost for a few tenths of a percent, and the
+branch-and-bound item in CLAUDE.md is the place that question belongs.
+
+### Invariants
+
+- **mass ledger** `0.000000000 kg` on all four cells
+- **never-worse** zero exceptions on all three pairings; `benef <= raw` declined
+  25 -> 24, median improvement +39.8%
+- **Stage 2 tables** identical, 31 rows recomputed at cislunar
+- **`caps=None` and `want_phase`** bit-identical, 16,000 randomised comparisons
+  on raw IEEE bit patterns
+- ceiling bound on `raw + search` 66 -> 57 rows and `benef + search` 17 -> 16;
+  it falls because the ladder now turns over BEFORE the binding region rather
+  than being driven into it
+
+### It retires a standing claim about N = 1
+
+CLAUDE.md has said since v1.21.0 that "at N = 1 `capacity_cap`,
+`single_mission` and constant prices are the same run", on the reasoning that
+no single cislunar mission fills a ceiling over a 3-6 year window. That was
+true while the two silicate phases drew an allowance each. Pooling them makes
+one candidate bind at N = 1. Measured against `unbounded`, which is constant
+prices with every ceiling infinite:
+
+| cell | vs `unbounded` | best | |
+|---|---|---|---|
+| raw, `capacity_cap` | **differs on 1 of 155 rows** | 24.6804x -> **25.7233x** | retired |
+| raw, `single_mission` | 0 of 155 | 24.6804x | holds |
+| beneficiated, `capacity_cap` | 0 of 65 | 20.5353x | holds |
+| beneficiated, `single_mission` | 0 of 65 | 20.5353x | holds |
+
+`single_mission` is safe by construction -- it pins N = 1 and applies no
+ceiling -- so what is retired is the `capacity_cap` half, at raw only.
+`market_clearing_fraction` reads 1.0 on every row of all four, the differing
+one included.
+
+### Two checks that were not running
+
+🚨  **`verify.py check` never ran check 7.** It was wired into
+`verify.py invariants` only, so the command every release is argued from ran
+checks 1 to 6 and stopped, and the output looked complete because the numbering
+stopped where the list did. The one release note that quotes a check 7 result
+got it by running the other subcommand by hand. Now in both.
+
+✅  **check 6 gained phase-ceiling coverage.** Every phase
+`asteroid_phase_table` can put in a hold must resolve to a finite market, and
+every alias must point at a market that exists. That is v1.21.1's defect
+generalised so the next one cannot happen: the residual was priced, unbounded,
+and on 100% of bodies, and the block above it checks Stage 2's own rows, which
+the residual is not one of.
 
 ## calc v1.21.1
 
@@ -262,6 +455,14 @@ too small to reach ANY ceiling at a fleet of 64. Quartering makes them reachable
 by making the ceilings wrong.
 
 ### What did change: one phase had no ceiling at all
+
+⚠️  **RIGHT, AND HALF DONE. See [calc v1.21.2](#calc-v1212).** The alias below
+gave the residual the `silicates` ceiling, and every consumer then read that
+ceiling per PHASE, so `silicates` and the residual drew the full allowance
+each. The comment this release shipped -- "priced as silicates, bounded as
+silicates, in one place" -- states the intent exactly; the code gave each of
+them its own place. The hashes and deltas in this section are correct for this
+release and superseded by the next.
 
 `asteroid_phase_table` appends the composition residual, priced at the
 `silicates` quote because that is what it is, and Stage 2's catalog has no row
@@ -4185,6 +4386,26 @@ one cell of four moves under `capacity_cap` and the two raw cells move under
   concluded the levels were already hard-wall numbers; see the release note.
 - ⚠️  `market_model = "elasticity"` no longer reproduces v1.20.0 exactly. The
   defect was in the curve as well.
+
+**`1.21.2`  one market was being sold twice.** Full write-up:
+[calc v1.21.2](#calc-v1212). No config field and no output column; three of
+the four cells move and the beneficiated N = 1 hash does not.
+
+- `phase_market_key()` is new: the market IDENTITY of a phase, where
+  `phase_market_kg()` is its size. It takes `markets` so it resolves the alias
+  the same way that function does -- a phase's own Stage 2 row wins, the alias
+  is the fallback -- and the two agreeing by construction is the point.
+- **`sale_terms` is a 4-tuple**, `(kg, price, ceiling, market_key)`, up from 3.
+  Four consumers, all updated. This is the one schema-shaped change in the
+  release and it is internal: no CSV column moved.
+- `optimal_payload_mix` takes `cap_keys`, and **`caps` is now keyed by market
+  and consumed in place** rather than keyed by phase and read. `caps=None`
+  and `want_phase` are unchanged and were re-proved bit-identical.
+- **No change to `IN_SPACE_ANNUAL_DEMAND_KG`, `_PHASE_MARKET_ALIAS`'s content,
+  or any Stage 2 table**, and no Stage 2 re-run. The ceilings are the same
+  numbers; what changed is that one of them is now spent once.
+- `verify.py` check 6 gained phase-ceiling coverage, and **check 7 was added to
+  `verify.py check`**, which had never run it.
 
 # Measurement history
 

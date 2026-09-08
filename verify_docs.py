@@ -32,6 +32,8 @@ counts-in-prose failure this file was written to catch:
                      appears somewhere in the docs afterwards
    11. docstrings    every module, class and function in the repo's own Python
                      carries one
+   12. pairs         no measurement is quoted in BOTH README and CLAUDE.md
+                     without a row on CLAUDE.md's register of known copies
 
     py verify_docs.py                       # every check except 10
     py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 10
@@ -70,6 +72,11 @@ to stop.  What they caught, on the run that prompted writing them down:
   87 definitions carried neither a docstring nor a comment, most of them in
   ui.py and launch_ui.py, where the Windows traps that justify the code are
   the whole reason it looks the way it does.                     -> check 11
+  The cross-document pair hunt was PRESCRIBED IN PROSE and rebuilt from that
+  description four separate times, which is the "written from memory and
+  thrown away" shape this file's own argument is about.  Committing it found a
+  pair the hand-maintained register had missed since the register was written,
+  and it was the project's four headline cislunar numbers.       -> check 12
 
 SCOPE.  This reads the docs and the module dataclasses.  It does NOT run the
 pipeline, fetch anything, or check that a documented NUMBER is a correct
@@ -1056,6 +1063,116 @@ def check_docstrings() -> bool:
     return not bad
 
 
+
+
+# ------------------------------------------------------------------- 12. pairs
+# The two documents that both claim to be CURRENT.  `versions.md` is excluded
+# on purpose and is not an oversight: every section there names the release and
+# the catalog it belongs to, so a superseded figure in it is correct rather than
+# stale.  What makes a copy hazardous is two files that both assert TODAY.
+CURRENT_DOCS = ("README.md", "CLAUDE.md")
+
+# The register's own table header, verbatim.  Its rows are the allowlist, so
+# they must not also be counted as one side of a pair; a register entry quotes
+# the numbers it registers by design.
+REGISTER_HEADER = "| the shared measurement | in README under | here under |"
+
+# A dotted version (`1.21.0`, `v1.17.7`) is an identifier, not a measurement,
+# and `[calc v1.12.0](versions.md#calc-v1120--transportation-v1100)` produced
+# three "shared numbers" out of one anchor.  Both are stripped before
+# tokenising rather than filtered after, because the anchor's digits are not
+# separable from a real figure once they are tokens.
+_SEMVER = re.compile(r"v?\d+\.\d+\.\d+")
+_LINK_TARGET = re.compile(r"\]\([^)]*\)")
+_NUMBER = re.compile(r"\d[\d,]*\.\d+|\d[\d,]{3,}")
+_YEAR = re.compile(r"(?:19|20)\d\d")
+
+
+def _figures(line: str) -> set:
+    """The distinctive numbers on one line: decimals and thousands, no noise.
+
+    Distinctive means a number specific enough that two files carrying three of
+    them are quoting one measurement rather than coinciding.  Small integers
+    are excluded for that reason -- a line with `2`, `5` and `64` on it shares
+    those with half the repo.
+    """
+    line = _LINK_TARGET.sub("]()", line)
+    line = _SEMVER.sub(" ", line)
+    return {m.group(0) for m in _NUMBER.finditer(line)
+            if not _YEAR.fullmatch(m.group(0))}
+
+
+def check_pairs() -> bool:
+    """No measurement is quoted in BOTH current-claiming docs off the register.
+
+    CLAUDE.md prescribes this hunt in prose ("hunting sentences that share
+    three or more distinctive numbers across two files") and carries a table of
+    the pairs it found.  Until 2026-09-08 the hunt itself was rebuilt from that
+    description each time somebody ran it, which is the same "written from
+    memory and thrown away" shape that `verify.py`'s header argues against, and
+    it had the same result: the run that finally committed it found a pair the
+    register had missed since the register was written, and it was the
+    project's four headline numbers.
+
+    The register table is the ALLOWLIST rather than the target.  A pair is
+    fine when it is written down, because this file's job is the reasoning and
+    README's is the answer and the reasoning reads badly with the answer
+    removed; what is not fine is a pair nobody knows about, because nobody will
+    move both.  So this fails on an UNREGISTERED pair only, and the fix is
+    either to cut one copy or to add the row.
+    """
+    reg_tokens, lines = set(), {}
+    for doc in CURRENT_DOCS:
+        path = os.path.join(REPO, doc)
+        if not os.path.exists(path):
+            continue
+        rows, in_register = [], False
+        for i, raw in enumerate(read(path).splitlines(), 1):
+            if raw.strip() == REGISTER_HEADER:
+                in_register = True
+                continue
+            if in_register:
+                # The table ends at the first line that is not one of its rows.
+                if raw.startswith("|"):
+                    reg_tokens |= _figures(raw)
+                    continue
+                in_register = False
+            rows.append((i, raw, _figures(raw)))
+        lines[doc] = rows
+
+    a, b = CURRENT_DOCS
+    unregistered, n_pairs = [], 0
+    seen = set()
+    for ia, la, fa in lines.get(a, ()):
+        if len(fa) < 3:
+            continue
+        for ib, lb, fb in lines.get(b, ()):
+            shared = fa & fb
+            if len(shared) < 3:
+                continue
+            n_pairs += 1
+            missing = shared - reg_tokens
+            if not missing:
+                continue
+            key = tuple(sorted(shared))
+            if key in seen:
+                continue
+            seen.add(key)
+            unregistered.append((sorted(missing), a, ia, la, b, ib, lb))
+
+    print("12. pairs      %d cross-doc number pairs, %d not on the register"
+          % (n_pairs, len(unregistered)))
+    for missing, fa, ia, la, fb, ib, lb in unregistered:
+        print("     ! %s and %s quote %s and it is not on the register"
+              % (fa, fb, ", ".join(missing)))
+        print("         %s:%d  %s" % (fa, ia, la.strip()[:110]))
+        print("         %s:%d  %s" % (fb, ib, lb.strip()[:110]))
+    if unregistered:
+        print("       Cut one copy, or add a row to CLAUDE.md's register table")
+        print("       under \"AND CHECK THE OTHER FILE\".")
+    return not unregistered
+
+
 # ---------------------------------------------------------------- 10. transfer
 def check_transfer(before: str, after: List[str]) -> bool:
     """Every distinctive number in `before` must survive somewhere in `after`.
@@ -1108,7 +1225,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                check_manifests,
                check_help,
                check_runtime,
-               check_docstrings):
+               check_docstrings,
+               check_pairs):
         ok = fn() and ok
     if args.before:
         if len(args.before) < 2:

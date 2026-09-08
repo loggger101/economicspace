@@ -196,36 +196,138 @@ def check_output(t, tmp) -> bool:
     return ok
 
 
+def _pinned_tag() -> str:
+    """The `spacecost` tag `requirements.txt` pins, read rather than typed.
+
+    One source: `requirements.txt` says in its own header that it mirrors
+    `_MASTER_REQUIRED`, and `verify_docs.py` check 7 holds the two to each
+    other, so reading it here adds no third copy.  Typing the tag into this
+    file would make it the fourth place a repin has to land, and the release
+    note for the split already lists three.
+    """
+    try:
+        with open(os.path.join(REPO, "requirements.txt"), encoding="utf-8") as f:
+            for line in f:
+                if "spacecost" in line and "@" in line:
+                    return line.rsplit("@", 1)[1].strip()
+    except OSError:
+        pass
+    return ""
+
+
+def _reference_dir():
+    """Find spacecost's committed `reference/`, and prove which revision it is.
+
+    Returns `(path, note)` with `path` None when the check cannot run.
+
+    🚨  A PIP INSTALL CAN NEVER SATISFY THIS CHECK, and the old message implied
+    otherwise.  `reference/` sits at spacecost's REPO root, a sibling of the
+    package directory, so `pip install git+...` copies the package and leaves
+    the reference CSVs behind every time.  The skip therefore fired on every
+    ordinary install, reading as an unusual-install caveat when it was in fact
+    "the content half of this seam has never run here".  What it needs is a
+    source checkout, so this looks for one.
+
+    ⚠️  A CHECKOUT IS ONLY USABLE IF ITS `reference/` MATCHES THE PINNED TAG,
+    and that is not a formality: the checkout beside this repo was two commits
+    PAST `v0.1.1` when this was written.  Those two happened to be docs-only,
+    which is exactly the kind of luck this project has already been burned by;
+    a second working copy at another revision is the parallel-repo divergence,
+    not a convenience.  So the revision is asked of git rather than assumed,
+    and a `reference/` that has moved since the tag is a FINDING, not a skip.
+    """
+    tag = _pinned_tag()
+    candidates = []
+    env = os.environ.get("SPACECOST_SOURCE")
+    if env:
+        candidates.append(("SPACECOST_SOURCE", env))
+    candidates.append(("sibling checkout",
+                       os.path.normpath(os.path.join(REPO, os.pardir, "spacecost"))))
+    try:
+        import spacecost
+        candidates.append(("installed package", os.path.dirname(
+            os.path.dirname(os.path.abspath(spacecost.__file__)))))
+    except Exception:
+        pass
+
+    for label, root in candidates:
+        ref = os.path.join(root, "reference")
+        if not os.path.isdir(ref):
+            continue
+        if not tag:
+            return ref, "%s, pinned tag unreadable" % label
+        state = _reference_matches_tag(root, tag)
+        if state is True:
+            return ref, "%s at %s" % (label, tag)
+        if state is False:
+            return None, ("%s has a reference/ that DIFFERS from %s"
+                          % (label, tag))
+        # Not a git checkout, or the tag is absent: usable but unproven.
+        return ref, "%s, revision unproven (%s)" % (label, state)
+    return None, ""
+
+
+def _reference_matches_tag(root: str, tag: str):
+    """True / False / a string saying why the revision could not be proven."""
+    import subprocess
+    def git(*args):
+        return subprocess.run(("git", "-C", root) + args, capture_output=True,
+                              text=True, timeout=30)
+    try:
+        if git("rev-parse", "--git-dir").returncode != 0:
+            return "not a git checkout"
+        if git("rev-parse", "--verify", "--quiet", tag + "^{commit}").returncode != 0:
+            return "tag %s not in this checkout" % tag
+        # Only `reference/` has to match: the two commits past v0.1.1 on the
+        # checkout beside this repo touched docs and tests, and refusing over
+        # those would make the check unrunnable for no gain.  What must not
+        # differ is the data being compared.
+        return git("diff", "--quiet", tag, "--", "reference").returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return "git unavailable"
+
+
 def check_against_committed_reference(t, tmp) -> bool:
     """The five tables against the CSVs spacecost commits under `reference/`.
 
     This is the half that pins the CONTENT rather than the plumbing: check 3
-    would still pass if both sides moved together. Skipped, with a message,
-    when spacecost is installed from a wheel that carries no `reference/`
-    directory -- a skip that says so is not a pass.
+    would still pass if both sides moved together.  See `_reference_dir` for
+    where the CSVs are found and why the revision is proven before they are
+    trusted.  A skip that says so is not a pass, and this one now says what it
+    would take to make it run.
     """
-    import spacecost
-    pkg_root = os.path.dirname(os.path.dirname(os.path.abspath(spacecost.__file__)))
-    ref = os.path.join(pkg_root, "reference")
-    if not os.path.isdir(ref):
-        print("4. reference   SKIPPED, spacecost installed without reference/ "
-              "(%s)" % pkg_root)
+    ref, note = _reference_dir()
+    if ref is None:
+        if note:
+            print("4. reference   *** NOT VERIFIED *** %s" % note)
+            print("     The pinned tag and the checkout disagree about the data")
+            print("     this check compares. Check out %s, or point"
+                  % (_pinned_tag() or "the pinned tag"))
+            print("     SPACECOST_SOURCE at a checkout that is at it.")
+            return False
+        print("4. reference   SKIPPED, no spacecost source checkout found")
+        print("     A pip install cannot satisfy this: reference/ sits at")
+        print("     spacecost's repo root, not inside the package, so it is")
+        print("     never copied into site-packages. Clone spacecost beside")
+        print("     this repo, or set SPACECOST_SOURCE, to run it.")
         return True
 
     built = os.path.join(tmp, "adapter", "transportation")
-    ok = True
+    ok, n = True, 0
     for name in TABLES:
         want = os.path.join(ref, name)
         if not os.path.exists(want):
             continue
+        n += 1
         # Content, not bytes: see `_content_sha`.  The docstring above has
         # always said this check pins CONTENT; now it does.
         same = _content_sha(os.path.join(built, name)) == _content_sha(want)
         ok = ok and same
         if not same:
             print("     %-30s *** DIFFERS from spacecost reference/ ***" % name)
-    print("4. reference   %s" % ("five tables match spacecost's committed CSVs"
-                                 if ok else "*** CONTENT MOVED ***"))
+    print("4. reference   %s" % (
+        "%d tables match spacecost's committed CSVs (%s)" % (n, note)
+        if ok else "*** CONTENT MOVED *** (%s)" % note))
     return ok
 
 
