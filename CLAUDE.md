@@ -421,13 +421,37 @@ WHICH IS NO LONGER WHAT A DEFAULT RUN DOES.** calc `1.21.0` replaced the
 `model_market_saturation` flag with a four-valued `market_model` and defaults
 it to `capacity_cap`: prices are **constant at any volume** and what bounds a
 programme is a hard kg/yr ceiling per commodity. Set `market_model` to
-`"elasticity"` to reproduce anything here, and note it reproduces the four
-committed cell hashes **exactly**, which is the release's acceptance test.
+`"elasticity"` to reproduce anything here.
+
+🚨  **AND `"elasticity"` NO LONGER REPRODUCES THE COMMITTED HASHES EXACTLY.**
+It did at `1.21.0`, which was that release's acceptance test; `1.21.1` then gave
+the composition residual the market ceiling it was already priced against, and
+that defect was in the CURVE as well, so fixing it moved the curve. It moves the
+two RAW cislunar cells (**+2.36%** and **+5.82%**) and neither beneficiated one.
+`"elasticity"` is the v1.14.0 CURVE, not a bug-for-bug replay of `1.20.0`.
+**To reproduce a pre-`1.21.1` figure exactly you need a pre-`1.21.1` build**,
+which is what the version stamp is for.
 
 ⚠️  **This one is not a rescaling, and it is not safe to assume the shares
-survive it.** On the 400/150-row cislunar cells the objective moved **-20% to
--49%** and the winner changed PROPELLANT in three of four cells. Treat every
-level, share and split below as an `elasticity` measurement.
+survive it.** Re-derived on the current build (calc `1.21.1`), against
+`elasticity` on the same cells:
+
+| cell | `elasticity` | `capacity_cap` | |
+|---|---|---|---|
+| raw | 49.6422x | 24.6804x | **-50.3%** |
+| raw + search | 28.1162x | 18.5707x | -34.0% |
+| beneficiated | 25.7366x | 20.5353x | -20.2% |
+| beneficiated + search | 14.8549x | 8.6861x | -41.5% |
+
+The winner also changes: **iodine to xenon** at raw N = 1 and **krypton to
+iodine** beneficiated, and the raw searched cell changes BODY (2017 MC1 to
+2017 KJ5) while holding its propellant. Treat every level, share and split
+below as an `elasticity` measurement.
+
+⚠️  These deltas are against the CURRENT `elasticity`, which is itself no
+longer the v1.20.0 figure; calc `1.21.1` moved the two raw cells. The
+`1.21.0` release note quotes -20% to -49% because that is what it measured
+against v1.20.0, and both are right for the build they name.
 
 ✅  **The N = 1 cells are the exception, and they are safe.** No single
 cislunar mission fills a ceiling over a 3-6 year window, so no N = 1 row binds
@@ -2115,10 +2139,13 @@ reads.
   sizing call cannot acquire one by accident; if you add another caller, ask
   which side of that line it is on.
 - **`optimal_payload_mix(caps=None)` must stay bit-identical to the unbounded
-  walk.** It is what `market_model = "elasticity"` reproduces v1.14.0 through
-  v1.20.0 on. The guard adds a branch and no arithmetic, deliberately; anything
-  that reorders the `min` or folds the cap into it breaks four committed
-  hashes.
+  walk.** The reason is no longer "so `elasticity` reproduces v1.20.0" -- it
+  stopped doing that at `1.21.1` -- it is that **the SIZING path passes no
+  caps**: `_cargo_water_kg` calls this from inside the fixed-point power solve,
+  so if `caps=None` ever stopped being the old walk, every mass cascade in the
+  model would move. The guard adds a branch and no arithmetic, deliberately;
+  anything that reorders the `min` or folds the cap into it changes the rocket
+  equation.
 
 ### Where a cache is safe, and where it is not
 
@@ -2369,6 +2396,45 @@ and console text is not in one.
 `mineral_value 1.7.1`, which bumped while bit-identical. Both were *choices*,
 not obligations: the rule is one-directional. If you would rather every source
 change carry a stamp, bump it; just do not read this decision as an oversight.
+
+### A checker with a date in it passes on exactly one day
+
+`verify_stage3.py` went red on 2026-09-08 reporting
+`*** THE ADAPTER CHANGES THE DATA ***` and `*** CONTENT MOVED ***`, on all six
+tables at once, having passed that same morning. Nothing in Stage 3 had been
+touched for two releases. **The date had rolled over.**
+
+Two independent instances of one mistake, in one file:
+
+| check | what it compared | why it could only pass on 2026-09-07 |
+|---|---|---|
+| 3, output | adapter build vs package build | `PINNED_DATE = "2026-09-07"` was handed to the PACKAGE side only; the adapter stamps `date.today()` |
+| 4, reference | adapter build vs spacecost's COMMITTED `reference/` CSVs | those carry the `catalog_date` they were generated on, and the comparison was raw bytes |
+
+✅  Fixed by deriving `PINNED_DATE` from the clock, so both sides stamp the same
+day by construction, and by giving check 4 a `_content_sha` that drops
+`catalog_date` before hashing -- which is what its own docstring had always
+claimed it did ("pins the CONTENT rather than the plumbing").
+`pipeline_version` is deliberately NOT dropped: it moves only when somebody
+moves it, so a difference there is a finding rather than a clock.
+
+⚠️  **The comment above the literal said "the environment pins the clock
+instead". Nothing pinned the clock; there was no such mechanism.** That is
+defect class 4 -- a prescriptive comment nobody applied -- and it is why a
+rotting literal looked deliberate. A reader checking whether the date was
+handled would have read that sentence and stopped.
+
+🚨  **And the messages were maximally alarming for a clock.** "THE ADAPTER
+CHANGES THE DATA" and "CONTENT MOVED" are what you would print for a genuine
+drift in the `spacecost` split, which is the one failure this file exists to
+catch. *A broken checker looks exactly like a broken release*, for the third
+time in this file, and the tell was the same as always: **everything failed at
+once**, which is almost never what a real defect does.
+
+⚠️  `verify.py` strips `catalog_date` before hashing and has done since
+`1.17.3`; `verify_docs.py` and `verify_stage3.py` were written later and did
+not inherit the lesson. **When you add a harness, read `PROVENANCE` in
+`verify.py` first.**
 
 ### A skip is not a pass, in the DOCS harness too
 

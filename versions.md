@@ -404,6 +404,11 @@ this project keeps paying for.
 
 ### The acceptance test: `elasticity` reproduces v1.20.0
 
+⚠️  **True of this release and superseded by the next.** calc `1.21.1` gave the
+composition residual the ceiling it was already priced against, a defect that
+was in the curve as well, and the two raw cells moved. See
+[calc v1.21.1](#calc-v1211).
+
 The refactor's whole risk is leaking into the old path, so that is what was
 checked first, using `verify.py`'s own comparator rather than a fresh one:
 
@@ -452,6 +457,11 @@ run that passed all four models explicitly.
 | `elasticity` | 26.5704x | 2 / 64 | 1 / 155 | n/a |
 | **`capacity_cap`** | **18.5707x** | **3 / 64** | **15 / 155** | **66 / 155** |
 | `unbounded` | 7.4600x | **64 / 64** | **155 / 155** | 0 / 155 |
+
+⚠️  **The `elasticity` row is a v1.21.0 figure and moved at v1.21.1**, to
+28.1162x, when the composition residual gained the ceiling it was already
+priced against. The other three rows are unchanged. See
+[calc v1.21.1](#calc-v1211).
 
 🚨  **`unbounded` puts every row at the ladder's top and reports 7.46x**, which
 is the whole reason this release could not simply be "turn the market term
@@ -592,8 +602,16 @@ identical rows and are **not** a prediction of a full-catalog cell.
 
 Every cell improves, which is the expected direction and not a result: the
 price haircut that used to apply to every sale is gone, and what replaces it
-binds on some rows and not others. The winner changed propellant in three of
-the four cells (iodine to xenon at raw N = 1, krypton to iodine beneficiated).
+binds on some rows and not others. The winner changed propellant where the
+ceilings bit hardest: **iodine to xenon** at raw N = 1, and **krypton to
+iodine** beneficiated. It held at iodine in both searched cells, though the raw
+searched cell changed BODY, 2017 MC1 to 2017 KJ5.
+
+⚠️  This sentence said "three of the four cells" until an audit on 2026-09-08
+counted it, above a parenthesis naming two. A count spelled out in prose beside
+the list it is counting is the failure this project names oftenest, and it
+survived here because the parenthesis looked like an example rather than the
+whole set. **Name the list.**
 
 **Neither N = 1 cell binds on any row, at cislunar.** At N = 1 the window is
 the whole mission duration, ~3 to 6 years, and no single cislunar mission fills
