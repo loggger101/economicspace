@@ -160,7 +160,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | 1 | `modules/catalog.py` | 1.2.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.14.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
-| 4 | `modules/calc.py` | 1.21.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.21.1 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -515,7 +515,7 @@ that actually move the answer:
 | `.calc.return_structure_frac_of_payload` | `0.15` | Return-vehicle structure as a fraction of the haul, on top of the 500 kg base |
 | `.calc.nre_amortization_missions` | `1` | Programme size N. With the search on it is the FLOOR rather than the answer |
 | `.calc.optimise_programme_scale` | `True` | Search programme size and fleet size per asteroid instead of setting N. **Default since calc v1.17.0.** It changes the question the run answers, so most historical tables are `False`, at N = 1. See [Programme scale](#programme-scale) |
-| `.calc.market_model` | `"capacity_cap"` | What a delivered kilogram sells for and how much of it clears. `"capacity_cap"` holds price constant and clips quantity at Stage 2's `annual_market_kg`; `"single_mission"` pins N = 1; `"elasticity"` is the v1.14.0 demand curve and reproduces every figure measured to v1.20.0; `"unbounded"` is a diagnostic. **Default since calc v1.21.0**, replacing the `model_market_saturation` flag. See [The market model](#what-the-model-charges-for) |
+| `.calc.market_model` | `"capacity_cap"` | What a delivered kilogram sells for and how much of it clears. `"capacity_cap"` holds price constant and clips quantity at Stage 2's `annual_market_kg`; `"single_mission"` pins N = 1; `"elasticity"` is the v1.14.0 demand curve (it reproduced v1.14.0 to v1.20.0 exactly until v1.21.1's residual-ceiling fix moved the two raw cells); `"unbounded"` is a diagnostic. **Default since calc v1.21.0**, replacing the `model_market_saturation` flag. See [The market model](#what-the-model-charges-for) |
 | `.calc.demand_elasticity` | `0.5` | The e in `(1 + Q/Q_market)^(-1/e)`. Read ONLY when `market_model` is `"elasticity"` |
 | `.calc.max_fleet_ships` | `64` | Where the fleet ladder stops. Rows piling up against it mean their payloads have no finite market, not that bigger is better; the run says so |
 | `.calc.programme_search_steps` | `8` | Rungs in the coarse fleet sweep, before one refinement pass. Same idiom as `concentration_search_steps` |
@@ -1799,9 +1799,19 @@ the assembled load's gross value that cleared the ceilings, and
 ⚠️  **The ceilings bind at the fleet sizes the model actually chooses.**
 Cislunar's whole import budget is 100 t/yr and water's propellant share is
 55 t/yr, against a median raw cadence of 1.384 yr and a median searched fleet
-of 2. They were calibrated as the knee of a smooth curve, which is not the same
-target as a hard wall; they are reused unchanged so that one thing changed at a
-time, and recalibrating them is open work.
+of 2.
+
+✅  **They were recalibrated in calc v1.21.1 and the LEVELS did not move**, on
+the argument that they never were curve parameters: every row in
+`IN_SPACE_ANNUAL_DEMAND_KG` is documented as an absorption budget, `geo` being
+550 geostationary satellites at ~70 kg/yr of station-keeping propellant and
+`mars_surface` being "a base that imports 20 t/yr". A kilogram delivered inside
+a consumption budget genuinely displaces a launched kilogram, so it earns full
+launch-cost-avoided; the curve, which had the price already quartered at exactly
+the quantity the base needs, was the term using the number wrongly. What v1.21.1
+did change is that the composition residual now has a ceiling at all. See
+[calc v1.21.1](versions.md#calc-v1211) for the derivation, and for the
+quarter-ceiling alternative measured and declined.
 
 ⚠️  **`earth_surface` is unbounded whichever model you pick.** Its ceilings are
 terrestrial production, 10¹² to 10¹⁵ kg/yr, so nothing binds and the cell stays
