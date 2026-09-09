@@ -35,6 +35,12 @@ LEDGER = os.path.join(CAMP, "results.csv")
 # time.
 WORKERS = int(os.environ.get("CAMPAIGN_WORKERS", "12"))
 
+# Row cap, 0 meaning the whole catalog, which is the only value a campaign cell
+# is ever measured at.  It exists so the ledger and archive plumbing can be
+# smoke-tested end to end in a minute rather than in hours; a capped row is NOT
+# a campaign measurement and its ledger row must be deleted afterwards.
+ROWS = os.environ.get("CAMPAIGN_ROWS", "0")
+
 # `open(log, "w")` and the gzip archive both assume these exist.  They are
 # committed with content on this machine but `campaign/cells/` is gitignored,
 # so a fresh clone has no `cells/` at all and the first cell dies AFTER paying
@@ -47,11 +53,35 @@ FIELDS = [
     "rows_out", "evaluable", "best_obj", "winner", "winner_name", "spectral",
     "vehicle", "propellant", "conc_ratio", "power_source",
     "programme_missions", "fleet_ships", "missions_per_ship", "trips_per_ship",
-    "programme_span_yr", "payload_kg", "saturation", "p_mining",
+    "programme_span_yr", "payload_kg",
+    # calc v1.21.0 split the one market column in two and added the model that
+    # says which of them carries the information.  These three were returned by
+    # extract() for two releases without being listed here, and DictWriter
+    # raises on an unlisted key, so every cell crashed AFTER paying for the run
+    # and wrote no ledger row at all -- which made the queue re-run it forever.
+    # _EXTRACT_FIELDS below is what stops that recurring: it fails at import.
+    "saturation", "clearing", "unsold_kg", "market_model", "p_mining",
     "aerocapture_share", "rtg_share", "isru_share",
     "prop_shares", "vehicle_shares",
     "calc_version", "catalog_date", "archive",
 ]
+
+# The keys `extract()` returns, held against FIELDS at import.  A two-sided
+# contract deliberately: extract() asserts its own dict matches this set, and
+# this set is asserted to be a subset of the ledger's columns, so a statistic
+# added to one and not the other fails in the first second of a campaign
+# instead of after the first cell's compute.  That is the whole lesson of
+# "a check that cannot run must never say it passed", arriving one file along.
+_EXTRACT_FIELDS = frozenset({
+    "rows_out", "evaluable", "best_obj", "winner", "winner_name", "spectral",
+    "vehicle", "propellant", "conc_ratio", "power_source",
+    "programme_missions", "fleet_ships", "missions_per_ship", "trips_per_ship",
+    "programme_span_yr", "payload_kg", "saturation", "clearing", "unsold_kg",
+    "market_model", "p_mining", "aerocapture_share", "rtg_share", "isru_share",
+    "prop_shares", "vehicle_shares", "calc_version", "catalog_date",
+})
+assert _EXTRACT_FIELDS <= set(FIELDS), (
+    "campaign ledger cannot record: " + ", ".join(sorted(_EXTRACT_FIELDS - set(FIELDS))))
 
 
 def extract(path, dest, ore, search):
@@ -100,7 +130,7 @@ def extract(path, dest, ore, search):
         vc = p[col].value_counts(normalize=True).head(n) * 100
         return "; ".join(f"{k}={v:.2f}%" for k, v in vc.items())
 
-    return {
+    stats = {
         "rows_out": len(p),
         "evaluable": int(ok.shape[0]),
         "best_obj": f"{b['_obj']:.4f}",
@@ -140,6 +170,10 @@ def extract(path, dest, ore, search):
         "calc_version": str(p["pipeline_version"].iloc[0]) if "pipeline_version" in p.columns else "",
         "catalog_date": str(p["catalog_date"].iloc[0]) if "catalog_date" in p.columns else "",
     }
+    assert set(stats) == _EXTRACT_FIELDS, (
+        "extract() no longer matches _EXTRACT_FIELDS: "
+        + ", ".join(sorted(set(stats) ^ _EXTRACT_FIELDS)))
+    return stats
 
 
 def main():
@@ -164,7 +198,7 @@ def main():
 
     cmd = [
         sys.executable, os.path.join(ROOT, "run_pipeline.py"),
-        "--stages", "4", "--destination", dest, "--rows", "0",
+        "--stages", "4", "--destination", dest, "--rows", ROWS,
         "--workers", str(WORKERS), "--yes",
         "--beneficiated" if ore == "benef" else "--raw",
         "--search" if search == "on" else "--no-search",

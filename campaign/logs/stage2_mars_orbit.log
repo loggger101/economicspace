@@ -5,7 +5,7 @@ Importing the pipeline ...
 ==============================================================================
   Preset       : quick -- 400-row stride sample, run-of-mine ore, single mission (minutes once the catalog is cached)
   Stages       : 2 mineral value
-  Destination  : lunar_surface                            [default: earth_surface]
+  Destination  : mars_orbit                               [default: earth_surface]
   Asteroids    : 20,000 per source                        [default: all (1.55 M)]
   Stage 4 rows : 400 (stride sample)                      [default: every row]
   Ore          : run-of-mine                              [default: beneficiated (~4.7x slower)]
@@ -19,11 +19,11 @@ Importing the pipeline ...
 
 ------------------------------------------------------------------------
   STAGE 2 -- mineral value
-  started 00:41:49
+  started 00:41:55
 ------------------------------------------------------------------------
 =================================================================
     MINERAL VALUE PIPELINE - MODULE 2
-      2026-09-09 00:41:49  |  v1.9.0
+      2026-09-09 00:41:55  |  v1.9.0
 =================================================================
 
   yfinance  (Yahoo Finance) - fetching live futures ...
@@ -43,15 +43,14 @@ Importing the pipeline ...
      Reference    :  19 entries
      Unpriced     :   7 entries
 
-   Repricing for delivery to 'lunar_surface' ...
-     Launch cost avoided : $21,210/kg  (launch cost avoided (LEO + 5,920 m/s))
-     Downleg to surface  : $44,939/kg  (capsule + TPS + recovery, per kg delivered)
-     OK  20 sold in space, 11 shipped down (7 worth less than the freight)
+   Repricing for delivery to 'mars_orbit' ...
+     Launch cost avoided : $13,496/kg  (launch cost avoided (LEO + 4,500 m/s))
+     Downleg to surface  : $30,150/kg  (capsule + TPS + recovery, per kg delivered)
+     OK  20 sold in space, 11 shipped down (6 worth less than the freight)
 
   Validating catalog ...
-     WARN  7 rows in price_usd_per_kg outside USD/kg sanity band [0.001, 1e7] - possible unit-conversion bug:
+     WARN  6 rows in price_usd_per_kg outside USD/kg sanity band [0.001, 1e7] - possible unit-conversion bug:
           silver: 0.0
-          palladium: 0.0
           ruthenium: 0.0
           osmium: 0.0
           sperrylite: 0.0
@@ -66,7 +65,7 @@ Importing the pipeline ...
   OK  MINERAL VALUE CATALOG COMPLETE
       Entries  : 31
       Columns  : 24
-      Elapsed  : 0.9s
+      Elapsed  : 0.8s
 =================================================================
 
   Stage 2 done in 0:00:00
