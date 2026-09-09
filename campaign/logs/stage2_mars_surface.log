@@ -8,8 +8,9 @@ Importing the pipeline ...
   Destination  : mars_surface                             [default: earth_surface]
   Asteroids    : 20,000 per source                        [default: all (1.55 M)]
   Stage 4 rows : 400 (stride sample)                      [default: every row]
-  Ore          : run-of-mine                              [default: beneficiated (~7x slower)]
-  Programme    : single mission (N = 1)                   [default: fleet x campaigns searched (~3x slower)]
+  Ore          : run-of-mine                              [default: beneficiated (~4.7x slower)]
+  Programme    : single mission (N = 1)                   [default: fleet x campaigns searched (~1.7x slower)]
+  Market       : constant prices, kg/yr ceiling per commodity [default]
   Output       : C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline
 ------------------------------------------------------------------------------
   [default] marks a pipeline default; the rest are this run's
@@ -18,19 +19,19 @@ Importing the pipeline ...
 
 ------------------------------------------------------------------------
   STAGE 2 -- mineral value
-  started 14:56:45
+  started 00:42:01
 ------------------------------------------------------------------------
 =================================================================
     MINERAL VALUE PIPELINE - MODULE 2
-      2026-08-23 14:56:45  |  v1.7.1
+      2026-09-09 00:42:01  |  v1.9.0
 =================================================================
 
   yfinance  (Yahoo Finance) - fetching live futures ...
-     OK  copper      (HG=F) =       6.59 USD/lb      ->        14.52 USD/kg  [2026-08-21]
-     OK  gold        (GC=F) =   4,680.60 USD/troy_oz ->   150,484.79 USD/kg  [2026-08-21]
-     OK  silver      (SI=F) =      69.53 USD/troy_oz ->     2,235.44 USD/kg  [2026-08-21]
-     OK  platinum    (PL=F) =   1,895.70 USD/troy_oz ->    60,948.17 USD/kg  [2026-08-21]
-     OK  palladium   (PA=F) =   1,350.20 USD/troy_oz ->    43,409.94 USD/kg  [2026-08-21]
+     OK  copper      (HG=F) =       6.75 USD/lb      ->        14.88 USD/kg  [2026-09-09]
+     OK  gold        (GC=F) =   4,422.90 USD/troy_oz ->   142,199.53 USD/kg  [2026-09-09]
+     OK  silver      (SI=F) =      66.86 USD/troy_oz ->     2,149.60 USD/kg  [2026-09-09]
+     OK  platinum    (PL=F) =   1,836.30 USD/troy_oz ->    59,038.42 USD/kg  [2026-09-09]
+     OK  palladium   (PA=F) =   1,360.50 USD/troy_oz ->    43,741.09 USD/kg  [2026-09-09]
 
   metals.dev - skipped (no API key set; edit MINERAL_CONFIG.metals_api_key)
 
@@ -66,7 +67,7 @@ Importing the pipeline ...
   OK  MINERAL VALUE CATALOG COMPLETE
       Entries  : 31
       Columns  : 24
-      Elapsed  : 0.9s
+      Elapsed  : 0.7s
 =================================================================
 
   Stage 2 done in 0:00:00
