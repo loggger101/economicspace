@@ -84,3 +84,39 @@ row is appended to `results.csv`.
 ⚠️  `CAMPAIGN_ROWS` caps rows for smoke-testing the ledger and archive plumbing
 in a minute rather than in hours.  A capped run is NOT a campaign measurement;
 delete its ledger row and its archive afterwards.
+
+## A campaign must outlive the session that starts it
+
+🚨  **The 2026-09-09 start died at cell 4 and nothing ran for two days.**  The
+queue was launched as a child of an agent shell; when that session ended, the
+whole process tree went with it.  `cislunar__benef__search-on` was killed 2.23 h
+in with `rc=1073807364` (`0x40010004`, `STATUS_CONTROL_C_EXIT`), and the ledger
+row recording that failure is kept deliberately rather than tidied away.
+
+⚠️  **It looks exactly like a pipeline crash and is not one.**  The tell is in
+the cell log: no traceback, no `MemoryError`, no exit message, just Stage 4's
+banner and then nothing.  A real failure says something.  System RSS peaked at
+36-40 GB of 68.6 GB across the first three cells, so it was not memory either.
+This is the same shape as every other entry in CLAUDE.md's harness table: *a
+broken checker looks exactly like a broken release*, one level further out --
+here a dead HARNESS looked exactly like a dead cell.
+
+✅  **Launch through Task Scheduler, not through a shell.**  `_run_detached.bat`
+and `_run_memwatch.bat` are registered as `economicspace_campaign` and
+`economicspace_memwatch`, so both are parented to the scheduler service and
+survive any terminal, agent or login session closing:
+
+```
+schtasks /run /tn economicspace_campaign      REM start or resume; it is idempotent
+schtasks /run /tn economicspace_memwatch
+schtasks /query /tn economicspace_campaign    REM is it running
+```
+
+Resuming needs no arguments and no state: `run_queue.py` skips every cell
+already in the ledger with `rc == 0`, so re-running the task after any
+interruption picks up exactly where it stopped.  That property is what made a
+two-day outage cost two days rather than the whole campaign.
+
+⚠️  **A watcher is not the campaign.**  Anything that merely reports progress
+may die with a session; the thing that must not is the queue.  Do not launch
+the queue from a monitor, a notebook, or an agent's background shell.
