@@ -103,3 +103,38 @@ queue: 28 cells | done: 3 | to run: 25
 [2/25] lunar_surface | raw | search-off | elapsed 0.01 h
 ==============================================================================
 ^C
+===== detached (no console) start: memwatch.py =====
+      pid 11112
+
+===== detached (no console) start: run_queue.py =====
+      pid 7640
+queue: 28 cells | done: 3 | to run: 25
+   - cislunar  benef  search-on
+   - lunar_surface  raw  search-off
+   - lunar_surface  raw  search-on
+   - lunar_surface  benef  search-off
+   - lunar_surface  benef  search-on
+   - geo  raw  search-off
+   - geo  raw  search-on
+   - geo  benef  search-off
+   - geo  benef  search-on
+   - mars_orbit  raw  search-off
+   - mars_orbit  raw  search-on
+   - mars_orbit  benef  search-off
+   - mars_orbit  benef  search-on
+   - leo  raw  search-off
+   - leo  raw  search-on
+   - leo  benef  search-off
+   - leo  benef  search-on
+   - mars_surface  raw  search-off
+   - mars_surface  raw  search-on
+   - mars_surface  benef  search-off
+   - mars_surface  benef  search-on
+   - earth_surface  raw  search-off
+   - earth_surface  raw  search-on
+   - earth_surface  benef  search-off
+   - earth_surface  benef  search-on
+
+==============================================================================
+[1/25] cislunar | benef | search-on | elapsed 0.00 h
+==============================================================================

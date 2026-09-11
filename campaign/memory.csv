@@ -717,3 +717,6 @@ ts,cell,n_python,total_rss_gb,max_proc_rss_gb,sys_used_gb
 2026-09-09 05:29:55,,22,6.799,4.655,29.524
 2026-09-11 00:55:34,cislunar__benef__search-on,8,0.633,0.39,20.449
 2026-09-11 00:55:55,cislunar__benef__search-on,10,0.758,0.39,20.486
+2026-09-11 01:01:07,cislunar__benef__search-on,8,0.634,0.39,20.498
+2026-09-11 01:01:28,cislunar__benef__search-on,10,3.497,2.846,23.185
+2026-09-11 01:01:49,cislunar__benef__search-on,22,3.626,1.762,23.005
