@@ -85,38 +85,60 @@ row is appended to `results.csv`.
 in a minute rather than in hours.  A capped run is NOT a campaign measurement;
 delete its ledger row and its archive afterwards.
 
-## A campaign must outlive the session that starts it
+## A campaign must outlive the session that starts it, AND its console
 
-🚨  **The 2026-09-09 start died at cell 4 and nothing ran for two days.**  The
-queue was launched as a child of an agent shell; when that session ended, the
-whole process tree went with it.  `cislunar__benef__search-on` was killed 2.23 h
-in with `rc=1073807364` (`0x40010004`, `STATUS_CONTROL_C_EXIT`), and the ledger
-row recording that failure is kept deliberately rather than tidied away.
+🚨  **This killed the campaign twice, two days apart, and the second time the
+obvious fix was already in place.**
 
-⚠️  **It looks exactly like a pipeline crash and is not one.**  The tell is in
-the cell log: no traceback, no `MemoryError`, no exit message, just Stage 4's
-banner and then nothing.  A real failure says something.  System RSS peaked at
-36-40 GB of 68.6 GB across the first three cells, so it was not memory either.
-This is the same shape as every other entry in CLAUDE.md's harness table: *a
-broken checker looks exactly like a broken release*, one level further out --
-here a dead HARNESS looked exactly like a dead cell.
+| | exit code | what it was | what killed it |
+|---|---|---|---|
+| 2026-09-09 | `0x40010004` DBG_CONTROL_BREAK | a child of an agent background shell | session teardown took the whole process tree |
+| 2026-09-11 | `0xC000013A` STATUS_CONTROL_C_EXIT | a scheduled task running `cmd /c ...` | a Ctrl+C aimed at an unrelated foreground command, four minutes in |
 
-✅  **Launch through Task Scheduler, not through a shell.**  `_run_detached.bat`
-and `_run_memwatch.bat` are registered as `economicspace_campaign` and
-`economicspace_memwatch`, so both are parented to the scheduler service and
-survive any terminal, agent or login session closing:
+⚠️  **The second is the instructive one.**  Task Scheduler re-parented the queue
+to the scheduler service, which is what "detached" is normally taken to mean,
+and the kill still arrived.  **What propagates a console control event is the
+CONSOLE, not the parent**, and the task's `cmd.exe` had attached to the shared
+one.  Re-parenting a process does not move its console.
+
+⚠️  **Both look exactly like a pipeline crash and neither is one.**  The cell
+log carries no traceback, no `MemoryError` and no exit message -- Stage 4's
+banner and then silence, where a real failure says something -- and `memwatch`
+puts system RSS at 36-40 GB of 68.6 GB, so it was not memory.  The tells are a
+literal `^C` written into the queue log, and an exit code that names a console
+event rather than a fault.  Read the exit code before re-running anything: this
+is *a broken checker looks exactly like a broken release*, one level out.
+
+✅  **`_supervisor.py` is the fix, and it is about the console, not the
+parent.**  It spawns the queue with `DETACHED_PROCESS` (no console exists for an
+event to arrive on) plus `CREATE_NEW_PROCESS_GROUP` (out of the group a Ctrl+C
+is broadcast to), then exits immediately -- holding the child would give the
+scheduled task something to wait on, which is the console-owning process the
+whole thing exists to avoid.  Stage 4 already writes to a per-cell file and the
+queue writes to the handle the supervisor opens, so nothing needs a console.
+
+The scheduled tasks invoke `python.exe _supervisor.py <target>` DIRECTLY.  There
+is deliberately no `.bat` and no `cmd /c`: the wrapper was the console owner.
 
 ```
-schtasks /run /tn economicspace_campaign      REM start or resume; it is idempotent
+schtasks /run /tn economicspace_campaign      REM start or resume; idempotent
 schtasks /run /tn economicspace_memwatch
-schtasks /query /tn economicspace_campaign    REM is it running
+schtasks /query /tn economicspace_campaign
 ```
+
+✅  **Verified by reproducing the kill, not by reasoning about it.**  With the
+supervisor in place, a foreground command was deliberately run past its timeout
+so it was moved to the background -- the same transition that killed the
+2026-09-11 start -- and `run_queue`, `run_pipeline` and `memwatch` were all
+still alive afterwards.
 
 Resuming needs no arguments and no state: `run_queue.py` skips every cell
-already in the ledger with `rc == 0`, so re-running the task after any
-interruption picks up exactly where it stopped.  That property is what made a
-two-day outage cost two days rather than the whole campaign.
+already in the ledger with `rc == 0`, so re-running the task picks up exactly
+where it stopped, and the failed row is what triggers the retry -- do not tidy
+it away.  That property is why a two-day outage cost two days rather than the
+campaign.
 
 ⚠️  **A watcher is not the campaign.**  Anything that merely reports progress
-may die with a session; the thing that must not is the queue.  Do not launch
-the queue from a monitor, a notebook, or an agent's background shell.
+may die with a session; the thing that must not is the queue.  Never launch the
+queue from a monitor, a notebook, an agent's background shell, or anything that
+puts a `cmd` between it and the scheduler.
