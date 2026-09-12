@@ -1,0 +1,23 @@
+Importing the pipeline ...
+
+==============================================================================
+  ASTEROID PROFITABILITY PIPELINE
+==============================================================================
+  Preset       : quick -- 400-row stride sample, run-of-mine ore, single mission (minutes once the catalog is cached)
+  Stages       : 4 profitability (the long one)
+  Destination  : mars_orbit                               [default: earth_surface]
+  Asteroids    : 20,000 per source                        [default: all (1.55 M)]
+  Stage 4 rows : every row                                [default]
+  Ore          : run-of-mine                              [default: beneficiated (~4.5x slower)]
+  Programme    : fleet x campaigns searched (~1.7x slower) [default]
+  Market       : constant prices, kg/yr ceiling per commodity [default]
+  Output       : C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline
+------------------------------------------------------------------------------
+  [default] marks a pipeline default; the rest are this run's
+  overrides, with the default they replaced shown alongside.
+==============================================================================
+
+------------------------------------------------------------------------
+  STAGE 4 -- profitability (the long one)
+  started 21:53:40
+------------------------------------------------------------------------
