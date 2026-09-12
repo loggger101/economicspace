@@ -142,3 +142,51 @@ campaign.
 may die with a session; the thing that must not is the queue.  Never launch the
 queue from a monitor, a notebook, an agent's background shell, or anything that
 puts a `cmd` between it and the scheduler.
+
+### The third interruption was the machine, and it is the one worth the trigger
+
+🚨  **2026-09-11 16:33: the HOST went down**, mid-cell, and the campaign sat
+idle five hours because nothing restarts it after a reboot.
+
+⚠️  **The signature is different from the two console kills above, and that is
+how you tell them apart without guessing.**  A console kill writes a literal
+`^C` into the queue log, and `run_queue` survives long enough to print
+`!! cell failed (rc=...)`.  This wrote neither: the queue log stops mid-cell,
+`memory.csv` stops in the same minute, and every process is gone at once.  A
+signature that includes the WATCHER dying is a machine event, not a process
+event.  Confirmed in the event log rather than inferred:
+
+```
+Kernel-Power 41  the system has rebooted without cleanly shutting down first
+6008             the previous system shutdown at 4:16:06 PM was unexpected
+```
+
+⚠️  That 16:16 is Windows' last-flushed liveness stamp, which LAGS the crash;
+the logs put it at 16:33.  Do not read it as the time of death.  There is no
+bugcheck and no dump, so it was a power loss or a hard hang, and nothing
+attributes it to this workload: the 2026-08 campaign ran 26 h on this machine,
+and `memwatch` had RSS at 36-40 GB of 68.6 GB.
+
+✅  **Both tasks carry an `AtLogOn` trigger now**, with a two-minute delay, so a
+reboot resumes the campaign on its own.
+
+⚠️  **Register it user-scoped or it fails with Access denied.**
+`New-ScheduledTaskTrigger -AtLogOn` with no `-User` means *any* user, which
+needs elevation; `-User "$env:USERDOMAIN\$env:USERNAME"` does not.
+
+🚨  **AND THE TRIGGER NEEDS A SINGLE-INSTANCE GUARD, WHICH THE SCHEDULER CANNOT
+PROVIDE.**  It fires on an ordinary log off and on too, and a second queue would
+race the first for one `profitability_catalog.csv` and one ledger: a corrupted
+cell that still reports `rc 0`, which is defect class 5 wearing a scheduler's
+clothes.  `MultipleInstances IgnoreNew` does **not** cover it, because the
+supervisor exits as soon as it has spawned, so the TASK is never running when
+the trigger fires again -- only the detached grandchild is.  `_supervisor.py`
+therefore checks PROCESSES, not the scheduler.
+
+⚠️  **Match the target as the script being RUN, not as a word on a command
+line.**  The supervisor is invoked as `_supervisor.py run_queue.py`, so its own
+cmdline contains the target, and `py` compounds it by spawning `python.exe`
+with identical arguments -- so a naive substring test finds the launcher,
+excluding self is not enough, and the guard refuses to start anything at all.
+Measured, not predicted: the first version reported a different phantom pid on
+each call.
