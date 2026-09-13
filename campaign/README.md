@@ -220,3 +220,41 @@ would; the queue restarts that cell from the beginning.  Everything already in
 paused campaign with a live reboot trigger would restart itself behind you at
 the next logon, which is the whole failure the trigger exists to cause on
 purpose.
+
+### ⚠️  One wall clock in the ledger is not comparable: `leo__benef__search-on`
+
+`results.csv` records **27,817 s** for that cell.  It is a true wall clock and a
+misleading one: the campaign was suspended with `_pause.ps1` while the cell was
+5.7 h in, and `run_cell.py` times with `time.time()` around the subprocess, so
+the frozen period is inside the measurement.
+
+**The pause was 74.7 min**, measured from the gap in `memory.csv` rather than
+estimated -- `memwatch` is suspended by the same call, so its own sampling gap
+IS the pause:
+
+```
+last sample before   2026-09-12 20:13:19
+first sample after   2026-09-12 21:27:59
+```
+
+| | |
+|---|---|
+| recorded `wall_s` | 27,817 s |
+| pause | ~4,482 s |
+| **comparable compute** | **~23,335 s (6.48 h)** |
+| ratio against the 2026-08 cell | **1.52x**, not the 1.82x the raw figure gives |
+
+✅  **The ledger is deliberately NOT edited.**  `wall_s` means wall time and
+that is what it holds; what the pause breaks is *comparability*, not the
+measurement.  Correcting it in place would put a derived number into the file
+that records observations, and would hide that the cell was interrupted at all.
+
+🚨  **Use 23,335 s when quoting this cell beside any other**, and do not put
+27,817 s in a runtime table.  Every other cell in this campaign ran
+uninterrupted.
+
+⚠️  **The general trap: a suspend-based pause silently corrupts any duration
+measured across it.**  Anything timed with a wall clock, here and in
+`run_queue.py`'s `elapsed` column, is inflated by the pause; CPU time and the
+model's own outputs are untouched.  Prefer pausing BETWEEN cells when the
+in-flight cell is cheap enough to lose.
