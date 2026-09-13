@@ -5,11 +5,11 @@ Importing the pipeline ...
 ==============================================================================
   Preset       : quick -- 400-row stride sample, run-of-mine ore, single mission (minutes once the catalog is cached)
   Stages       : 4 profitability (the long one)
-  Destination  : leo                                      [default: earth_surface]
+  Destination  : mars_orbit                               [default: earth_surface]
   Asteroids    : 20,000 per source                        [default: all (1.55 M)]
   Stage 4 rows : every row                                [default]
-  Ore          : run-of-mine                              [default: beneficiated (~4.7x slower)]
-  Programme    : single mission (N = 1)                   [default: fleet x campaigns searched (~1.7x slower)]
+  Ore          : beneficiated (~4.5x slower)              [default]
+  Programme    : fleet x campaigns searched (~1.7x slower) [default]
   Market       : constant prices, kg/yr ceiling per commodity [default]
   Output       : C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline
 ------------------------------------------------------------------------------
@@ -19,11 +19,11 @@ Importing the pipeline ...
 
 ------------------------------------------------------------------------
   STAGE 4 -- profitability (the long one)
-  started 10:56:54
+  started 02:48:54
 ------------------------------------------------------------------------
 ===========================================================================
     PROFITABILITY PIPELINE - MODULE 4
-      2026-09-12 10:56:54  |  v1.21.2
+      2026-09-12 02:48:54  |  v1.21.2
 ===========================================================================
 
   Loading upstream catalogs ...
@@ -43,11 +43,11 @@ Importing the pipeline ...
         -> The columns and rows are all present, so nothing else will complain, but a reference VALUE may be a release out of date.
         -> This may be DELIBERATE. Several releases changed no CSV byte and chose not to re-run their stage; read the release note in versions.md before acting on this.
         -> If you do re-run Stage 1, 2 or 3, it REFETCHES and overwrites the only copy of its CSV, and every verify.py baseline stops reproducing. Copy asteroid_pipeline/*.csv first.
-     OK  Delivery destination 'leo' - berthed at an LEO depot
+     OK  Delivery destination 'mars_orbit' - berthed at a 1-sol Mars-orbit depot
 
   Evaluating 1,555,618 asteroids with positive mass (skipped 49 without)
        357 vehicle x propellant combinations per asteroid
-        Pre-filter keeps 24.0% of candidates (118,653 of 156,060 pruned on a 200-row probe; prune_infeasible_combos)
+        Pre-filter keeps 25.9% of candidates (115,615 of 156,060 pruned on a 200-row probe; prune_infeasible_combos)
        12 worker processes (12 logical CPUs, parallel_workers=12)
      ... 15,616 / 1,555,618 evaluated  (1%)
      ... 31,232 / 1,555,618 evaluated  (2%)
@@ -150,21 +150,25 @@ Importing the pipeline ...
      ... 1,540,096 / 1,555,618 evaluated  (99%)
      ... 1,555,618 / 1,555,618 evaluated  (100%)
 
-       Profitability catalog -> C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\profitability_catalog.csv  (776,755 rows)
-       Architecture chosen: 738,188 aerocapture / 38,567 propulsive  |  14,997 make their own propellant  |  4,572 rendezvous at perihelion
+       Profitability catalog -> C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\profitability_catalog.csv  (956,090 rows)
+       Architecture chosen: 477,597 aerocapture / 478,493 propulsive  |  2,573 make their own propellant  |  2,743 rendezvous at perihelion
+       Programme chosen: fleet median 6 ship(s), max 64  |  N median 20, max 320  |  3,903 single-ship
+       Rig life: 4 trips median (calendar cap 4)  |  cycle bound binds on 25.8% of rows
+     WARN   133,854 row(s) (14.0%) sit AT max_fleet_ships = 64. The ladder is binding, not bounding - check those rows have a finite market before reading their N as an optimum.
+       Market ceilings: bound 332,320 row(s) (34.8%)  |  median clearing 1.0000
 
 ===========================================================================
   OK  PROFITABILITY ANALYSIS COMPLETE
       Evaluated  : 1,555,618 asteroids
       Viable     : 0  (0.0% turn a profit)
       Unviable   : 1,555,618
-      Elapsed    : 1420.6s
+      Elapsed    : 29166.4s
 ===========================================================================
 
-  Stage 4 done in 0:23:44
+  Stage 4 done in 8:06:11
 
 ========================================================================
-  COMPLETE in 0:23:44
+  COMPLETE in 8:06:11
   Zero viable missions is the model's correct answer for
   every setting currently in it, not a failure.
   Output written to: C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline

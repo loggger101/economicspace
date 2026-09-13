@@ -190,3 +190,33 @@ with identical arguments -- so a naive substring test finds the launcher,
 excluding self is not enough, and the guard refuses to start anything at all.
 Measured, not predicted: the first version reported a different phantom pid on
 each call.
+
+### Pausing without losing the in-flight cell
+
+A cell writes NOTHING until it finishes, so killing the queue mid-cell throws
+that whole cell away -- up to 8 h of it.  `_pause.ps1` freezes the process tree
+instead, which frees every core immediately and keeps the work:
+
+```
+powershell -File campaign\_pause.ps1            REM freeze
+powershell -File campaign\_pause.ps1 -Resume    REM thaw and carry on
+```
+
+✅  **Suspending costs almost no memory, which is the opposite of what you would
+expect.**  Windows trims a suspended process's working set, so pausing
+`leo benef+search` 5.7 h in left the 16-process tree holding **0.4 GB** rather
+than the ~25 GB it had resident.  CPU went to zero on all 15 measured
+processes, verified by comparing `TotalProcessorTime` across a 10 s interval
+rather than by watching a CPU graph.
+
+⚠️  **Processes are found by command line, never by a remembered pid** -- a pid
+does not survive the pause it is meant to outlive.
+
+⚠️  **A reboot while suspended loses the in-flight cell**, exactly as killing it
+would; the queue restarts that cell from the beginning.  Everything already in
+`results.csv` with `rc == 0` is safe on disk either way.
+
+⚠️  **The pause disarms the `AtLogOn` trigger and the resume re-arms it.**  A
+paused campaign with a live reboot trigger would restart itself behind you at
+the next logon, which is the whole failure the trigger exists to cause on
+purpose.
