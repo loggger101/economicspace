@@ -89,6 +89,40 @@ def best_cell(rows):
     return min(done, key=lambda r: float(r["best_obj"]))
 
 
+def candidate_sources(catalog_path):
+    """Every finished result on disk, as (objective, kind, name) triples.
+
+    🚨  THE DOCUMENT IS ABOUT ONE MISSION, so this exists to make "which one"
+    a measurement rather than an accident of which file got passed in.  A
+    seven-destination sweep leaves seven catalogs or twenty-eight archived
+    cells behind, and every one of them has a best case; only the best of the
+    best is worth a document, and the others are not runners-up in the same
+    sense -- they are answers to different questions about different places.
+
+    The live catalog is included because the normal case is "I just ran
+    something"; the campaign ledger is included because the normal case for a
+    SWEEP is that it went through the harness.  Both, so neither has to be
+    remembered.
+    """
+    found = []
+    if os.path.exists(catalog_path):
+        try:
+            row = run_winner(catalog_path)
+            found.append((float(row["total_cost_usd"])
+                          / float(row["gross_value_usd"]),
+                          "catalog", catalog_path))
+        except SystemExit:
+            pass
+    if os.path.exists(LEDGER):
+        for r in ledger_rows():
+            if not r.get("best_obj"):
+                continue
+            archive = os.path.join(CAMP, "cells", "%s.csv.gz" % r["cell"])
+            if os.path.exists(archive):
+                found.append((float(r["best_obj"]), "cell", r["cell"]))
+    return sorted(found)
+
+
 def terms_in_force(row, cfg):
     """Which optional cost terms the row being documented actually carries.
 
@@ -462,8 +496,23 @@ def context(body, archived, tables):
     # hauled out and pushed back, ISRU rewrites where the return propellant
     # comes from, a radioisotope plant is sized on a different W/kg, and the
     # chemical case has no electric stage to solve for.
+    # 🚨  THE DESTINATION IS A SHAPE AXIS TOO, AND IT WAS THE ONE NOBODY
+    # NOTICED.  `_legs` hard-codes the cislunar capture -- an NRHO bind that
+    # takes the Oberth benefit at low perigee -- while `context` read the
+    # destination off the LIVE config for the delivery ladder, the delivered
+    # price and the synodic period.  Those disagreed silently: the config said
+    # earth_surface, the geometry was cislunar, and the document printed
+    # earth_surface at the top of a cislunar derivation.  It reproduced the row
+    # only because the row WAS cislunar and the three config reads happen not
+    # to reach any compared column.  The first non-cislunar best case would
+    # have produced a confident, wrong document.
+    dest = (str(archived["delivery_destination"])
+            if "delivery_destination" in archived
+            and not pd.isna(archived["delivery_destination"])
+            else str(master.CALC_CONFIG.delivery_destination))
     unsupported = [
         name for name, ok in (
+            ("delivery to %r" % dest, dest == "cislunar"),
             ("aerocapture return", not shape["aero"]),
             ("ISRU return propellant", not shape["isru"]),
             ("power source %r" % shape["power"], shape["power"] == "solar"),
@@ -480,7 +529,13 @@ def context(body, archived, tables):
                  "this cascade can express."
                  % (", ".join(unsupported), shape))
 
+    # A replaced config rather than a mutated global, the same construction
+    # the programme ladder uses: the three destination reads below have to
+    # agree with the row, and nothing else in the process should change.
     cfg = master.CALC_CONFIG
+    if cfg.delivery_destination != dest:
+        import dataclasses
+        cfg = dataclasses.replace(cfg, delivery_destination=dest)
     benef = shape["beneficiated"]
     rows = set(ops["category"])
 
@@ -543,6 +598,7 @@ def context(body, archived, tables):
         benef_wh=val("Beneficiation / on-site processing energy"),
         water_wh=val("Water liberation energy (bound water)"),
         contain_per_kg=val("Volatile cargo containment"),
+        destination=dest,
         beneficiated=benef,
         # A body property, resolved once: the raw branch of the cargo-water
         # question reads it directly.  Absent or NaN means no ice at all.
@@ -1267,6 +1323,25 @@ def main():
     args = ap.parse_args()
 
     # Where the row comes from, and nothing else, is what `--cell` changes.
+    # With neither flag, every source on disk is compared and the single best
+    # mission wins; see `candidate_sources`.
+    if not args.cell and args.catalog == CATALOG and not args.designation:
+        found = candidate_sources(args.catalog)
+        if not found:
+            sys.exit("nothing to document: no Stage 4 catalog at %s and no "
+                     "completed campaign cell with an archive.\nRun Stage 4, "
+                     "or pass --catalog." % args.catalog)
+        best_obj, kind, name = found[0]
+        if len(found) > 1:
+            print("  compared  %d finished results; best is %s at %.4fx"
+                  % (len(found), name, best_obj))
+            runner = found[1]
+            print("  runner-up %s at %.4fx" % (runner[2], runner[0]))
+        if kind == "cell":
+            args.cell = name
+        else:
+            args.catalog = name
+
     if args.cell:
         if args.designation:
             winner = archived_winner(args.cell, args.designation)

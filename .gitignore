@@ -41,3 +41,10 @@ Thumbs.db
 # taken from them live in campaign/results.csv and campaign/FINDINGS.md, which
 # ARE committed; the archives themselves are regenerable by re-running the cell.
 /campaign/cells/
+
+# The worked-calculation document is GENERATED from the run's best case, the
+# way the catalogs are: it is an output of `campaign/worked_calculation.py`
+# and is rebuilt whenever the run it describes is rebuilt.  Committing it
+# would put a second copy of every measurement in the tree.
+campaign/worked_calculation.html
+campaign/worked_calculation.pdf
