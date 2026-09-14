@@ -469,7 +469,26 @@ one place a future reader is most likely to reach for a hash and diff it.
 
 ### Invariants
 
-`py verify.py invariants`, clean, with this release's column in check 7:
+`py verify.py check --tag 1.22.0`, the FULL set rather than the five-minute
+loop, **ALL CHECKS PASSED**. Two of the seven are worth naming, because this is
+the kind of release that could have broken them:
+
+- **check 2, pre-filter on vs off**: 143/143 identical, hashes matching, all
+  four cells. The pruner and the solver are two statements of one algebra, and
+  a REVENUE change has no business moving a FEASIBILITY test -- ceilings bound
+  what a load may sell, not what the rig digs or the hull carries. This is the
+  evidence that they did not.
+- **check 3, serial vs 8 workers**: hashes match on both searched cells. It
+  matters here because the tiered walk adds per-call MUTABLE state (the tier
+  ledger, and the tier list itself), and mutable state is the shape that
+  diverges across processes.
+
+⚠️  It was run AFTER the release was committed rather than before, which is the
+wrong way round: this file's own instructions say to iterate with
+`--skip prune parallel` and run the full set once before committing. Nothing
+came of it, and that is luck rather than method.
+
+The rest, which `py verify.py invariants` also reports on its own:
 
 - **mass ledger** `0.000000000 kg` on all four cells
 - **never-worse** zero exceptions on all three pairings: `benef <= raw` 155
