@@ -8,8 +8,9 @@ Importing the pipeline ...
   Destination  : lunar_surface                            [default: earth_surface]
   Asteroids    : 20,000 per source                        [default: all (1.55 M)]
   Stage 4 rows : every row                                [default]
-  Ore          : run-of-mine                              [default: beneficiated (~7x slower)]
-  Programme    : single mission (N = 1)                   [default: fleet x campaigns searched (~3x slower)]
+  Ore          : run-of-mine                              [default: beneficiated (~4.7x slower)]
+  Programme    : single mission (N = 1)                   [default: fleet x campaigns searched (~1.7x slower)]
+  Market       : constant prices, kg/yr ceiling per commodity [default]
   Output       : C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline
 ------------------------------------------------------------------------------
   [default] marks a pipeline default; the rest are this run's
@@ -18,11 +19,11 @@ Importing the pipeline ...
 
 ------------------------------------------------------------------------
   STAGE 4 -- profitability (the long one)
-  started 18:08:28
+  started 03:47:05
 ------------------------------------------------------------------------
 ===========================================================================
     PROFITABILITY PIPELINE - MODULE 4
-      2026-08-23 18:08:28  |  v1.17.7
+      2026-09-11 03:47:05  |  v1.21.2
 ===========================================================================
 
   Loading upstream catalogs ...
@@ -30,12 +31,18 @@ Importing the pipeline ...
        Module 2 mineral catalog          31 rows  <-  C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\mineral_value_catalog.csv
        Module 3 launch vehicles          36 rows  <-  C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\transportation\launch_vehicles.csv
        Module 3 propellants              41 rows  <-  C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\transportation\propellants.csv
-       Module 3 Δv segments              26 rows  <-  C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\transportation\delta_v_segments.csv
+       Module 3 Δv segments              33 rows  <-  C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\transportation\delta_v_segments.csv
        Module 3 operational costs        44 rows  <-  C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\transportation\operational_costs.csv
 
   Integrity check - Module 1 <-> Module 2 mineral coverage ...
      OK  All 14 referenced minerals are priced by Module 2
      NOTE   Module 2 prices 17 extra rows not named by Module 1 (expected: elements + ice + bulk categories)
+
+     WARN  1 upstream CSV(s) were written by a different build of the module that owns them:
+          * asteroids.csv stamped 1.1.0 - Stage 1 in this process is 1.2.0
+        -> The columns and rows are all present, so nothing else will complain, but a reference VALUE may be a release out of date.
+        -> This may be DELIBERATE. Several releases changed no CSV byte and chose not to re-run their stage; read the release note in versions.md before acting on this.
+        -> If you do re-run Stage 1, 2 or 3, it REFETCHES and overwrites the only copy of its CSV, and every verify.py baseline stops reproducing. Copy asteroid_pipeline/*.csv first.
      OK  Delivery destination 'lunar_surface' - landed at a lunar surface base
 
   Evaluating 1,555,618 asteroids with positive mass (skipped 49 without)
@@ -144,20 +151,20 @@ Importing the pipeline ...
      ... 1,555,618 / 1,555,618 evaluated  (100%)
 
        Profitability catalog -> C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline\profitability_catalog.csv  (586,054 rows)
-       Architecture chosen: 0 aerocapture / 586,054 propulsive  |  22,047 make their own propellant  |  4,527 rendezvous at perihelion
+       Architecture chosen: 0 aerocapture / 586,054 propulsive  |  22,657 make their own propellant  |  4,527 rendezvous at perihelion
 
 ===========================================================================
   OK  PROFITABILITY ANALYSIS COMPLETE
       Evaluated  : 1,555,618 asteroids
       Viable     : 0  (0.0% turn a profit)
       Unviable   : 1,555,618
-      Elapsed    : 568.1s
+      Elapsed    : 629.4s
 ===========================================================================
 
-  Stage 4 done in 0:09:29
+  Stage 4 done in 0:10:31
 
 ========================================================================
-  COMPLETE in 0:09:29
+  COMPLETE in 0:10:31
   Zero viable missions is the model's correct answer for
   every setting currently in it, not a failure.
   Output written to: C:\Users\Owner\OneDrive\Documents\GitHub\economicspace\asteroid_pipeline
