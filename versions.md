@@ -61,6 +61,7 @@ one that does not say is not to be used.
 - [Stage 3 changelog: `modules/transportation.py`](#stage-3-changelog-modulestransportationpy)
 - [Stage 4 changelog: `modules/calc.py`](#stage-4-changelog-modulescalcpy)
 - [Cost/revenue matrices](#costrevenue-matrices)
+- [The 28-cell campaign, 2026-09](#the-28-cell-campaign-2026-09)
 - [What the v1.17.x line was worth](#what-the-v117x-line-was-worth)
 - [The sampling rule](#the-sampling-rule)
 - [Runtime history](#runtime-history)
@@ -4414,18 +4415,161 @@ relearning about predicting them. **Every table here names the release and the
 catalog it belongs to. If one does not say, do not use it.**
 
 The current answers are in the README:
-[Results](README.md#current-results-the-complete-20-cell-matrix) for the model,
+[Results](README.md#current-results-the-complete-28-cell-matrix) for the model,
 [Beneficiation](README.md#beneficiation) for the wall clock.
 
 ## Cost/revenue matrices
+
+### The 28-cell campaign, 2026-09
+
+Seven destinations × {raw, beneficiated} × {programme search off, on}, every
+cell on the full 1,555,667-row catalog. **28 of 28 cells, 63.2 h of compute,
+zero failed measurements.** calc `1.21.2` / mineral_value `1.9.0` /
+transportation `1.14.0` / catalog `1.2.0` / master `1.26.0`, 12 workers.
+
+Measured at the **current defaults**: `market_model` `capacity_cap`,
+`charge_insurance` False, `use_beneficiation` and `optimise_programme_scale`
+True. The current matrix is
+[README's](README.md#current-results-the-complete-28-cell-matrix); what is here
+is the matrix it replaced and what the difference was worth.
+
+Wall clock per cell, seconds, at 12 workers:
+
+| destination | raw N=1 | raw searched | benef N=1 | benef searched | total |
+|---|---|---|---|---|---|
+| `cislunar` | 947 | 2,888 | 4,967 | 9,878 | 5.19 h |
+| `lunar_surface` | 633 | 1,160 | 3,021 | 7,253 | 3.35 h |
+| `geo` | 1,221 | 2,558 | 7,382 | 19,902 | 8.63 h |
+| `mars_orbit` | 2,065 | 4,399 | 13,135 | 29,174 | 13.55 h |
+| `leo` | 1,426 | 2,583 | 8,558 | 23,335† | 9.97 h |
+| `mars_surface` | 1,799 | 3,982 | 12,113 | 25,270 | 11.99 h |
+| `earth_surface` | 1,747 | 3,386 | 11,000 | 21,860 | 10.55 h |
+
+† 🚨  **The ledger records 27,817 s for that cell and it must not be quoted.**
+The campaign was suspended 5.7 h into it and `run_cell.py` times with a wall
+clock, so the frozen 74.7 min is inside the measurement. The pause was measured
+from the gap in `memory.csv` rather than estimated, `memwatch` being suspended
+by the same call. **`campaign/results.csv` is deliberately not corrected**:
+`wall_s` means wall time and that is what it holds, and editing it would put a
+derived number in the file that records observations while hiding that the cell
+was interrupted. ⚠️  The general trap: a suspend-based pause silently inflates
+anything timed across it. Model outputs and CPU time are untouched.
+
+#### The superseded 20-cell matrix, calc v1.17.7 (2026-08-23/24)
+
+Five destinations, 26.1 h of compute, measured with `market_model` at
+`elasticity` and **insurance charged**:
+
+| destination | raw, N = 1 | raw, searched | benef, N = 1 | benef + searched |
+|---|---|---|---|---|
+| `cislunar` | 26.7863× | 15.4272× | 20.5895× | 13.1443× |
+| `lunar_surface` | 63.3505× | 38.9904× | 35.8051× | 22.5790× |
+| `leo` | 71.1029× | 36.6889× | 48.2714× | 24.4678× |
+| `mars_surface` | 74.6748× | 41.8068× | 55.3403× | 30.6818× |
+| `earth_surface` | 42,953.98× | 12,977.88× | 25,839.48× | 7,869.88× |
+
+🚨  **Nothing in it is comparable cell-for-cell with the 28-cell matrix**, and
+the campaign's own record is under `campaign/archive-2026-08_calc-1.17.7/`.
+**Four things moved between them at once**, so no single delta can be
+attributed:
+
+| what moved | from | to |
+|---|---|---|
+| destinations | five | **seven** (`mars_orbit`, `geo` added) |
+| `market_model` | `elasticity` | **`capacity_cap`** |
+| `charge_insurance` | True | **False** |
+| price epoch | 2026-08-23 | **2026-09-09** |
+
+#### What the winner rows did, and what the population did
+
+🚨  **The two disagree, and that is the most reusable finding of the
+campaign.** Winner rows moved 8-69%; the beneficiation population medians moved
+**0.1 to 2.3 percentage points**:
+
+| destination | benef, winner row | benef population median, 2026-09 | the same, 2026-08 |
+|---|---|---|---|
+| `cislunar` | −8.4% | **+39.4%** | +39.5% |
+| `lunar_surface` | −36.5% | **+66.1%** | +63.8% |
+| `earth_surface` | −6.5% | **+77.7%** | +77.7% |
+
+⚠️  The columns use opposite conventions and are not each other's negation:
+the median is `median(1 − r)` over the evaluable population, the committed
+convention; the winner column is one row against its 2026-08 counterpart.
+
+`capacity_cap` and the insurance removal **reshaped the top of the distribution
+and left the middle where it was**. This is the sharpest instance in the project
+of *a diagnostic describes the winner, not the search that produced it*: a
+headline moving 50% over a median moving 0.1 pp is a statement about one row.
+
+#### The structural change: `W < trips`
+
+| destination | raw searched, 2026-09 | 2026-08 |
+|---|---|---|
+| `mars_orbit` | **35.99%** | never measured |
+| `mars_surface` | 32.73% | 3.71% |
+| `cislunar` | 20.86% | **0.319%** |
+| `lunar_surface` | 16.07% | 0.225% |
+| `leo` | 8.09% | 0.161% |
+| `earth_surface` | 0.270% | 0.234% |
+
+Two orders of magnitude more programmes retire a ship with trip life unspent.
+Under a hard ceiling the extra campaign cannot be **sold**, where a demand curve
+would always have sold it at a worse price. `cislunar`'s fleet median went 2 to
+6 and its N median 10 to 30.
+
+#### Invariants, and what the campaign closed
+
+**70 checks, 0 failures**, from `campaign/analyse.py` over the archived cells:
+never-worse on all 28 pairings, mass ledger exact to `0.000000000 kg` on every
+cell, `N = F × W` on every row of all fourteen searched cells, `W > trips`
+never.
+
+✅  **Two long-standing questions closed, neither needing a re-run:**
+
+- `market_clearing_fraction` and `unsold_payload_kg` are not inconsistent.
+  `geo` raw N=1 reads 0.9807 clearing beside 8,019 kg unsold of a 61,835 kg
+  payload, 1.9% against 13%, because clearing is a share of **gross value** and
+  unsold is **mass**. Split deliberately in v1.21.0 so neither column carries
+  two meanings; low value in high mass is exactly the GEO story.
+- The **650,516** evaluable count quoted for cislunar raw is not a disagreement
+  with either campaign. Both report **650,921**, identically. 650,516 belongs to
+  a calc v1.15.0 run on a **1,554,353-row** catalog snapshot rather than the
+  1,555,667-row one both campaigns used. Different catalog, not different code.
+
+#### How much a price epoch is worth, measured
+
+✅  **The 2026-08 campaign quantified this and the figure is the precedent for
+reading the one below.** Re-running its cells 12-14 days after the committed
+values, the cells moved in exactly the order the pricing mechanism predicts, and
+they are ordered by **how small launch-cost-avoided is, not by distance**:
+
+```
+cislunar 0%  =  lunar_surface 0%  =  mars_surface 0%  <  leo 0.004%  <<  earth_surface 1.75%
+```
+
+`leo` is the **cheapest** in-space destination to reach, so a terrestrial price
+is the largest share of its value and it is the only in-space cell that moves at
+all; `mars_surface` is the furthest and does not move. `earth_surface` is priced
+straight off live terrestrial quotes, so a fortnight of metal prices is worth
+**1.75%** there. ⚠️  **Do not read a small `leo` drift as a regression**, and do
+not expect `earth_surface` to reproduce across days.
+
+⚠️  **What the campaign does not support.** Live prices drifted across the seven
+Stage 2 fetches, gold by **9.0e-5** and copper by **7.4e-5** relative, with
+platinum, palladium and silver identical, because COMEX was trading during the
+sitting. That is **three orders below** the 1.75% a fortnight buys at
+`earth_surface`, and four below nothing at all in-space. **No cross-destination claim finer than 1e-4 rests on this campaign**;
+nothing in the matrix comes within three orders of that. The 2026-08 campaign
+could claim identical prices across its five destinations and this one cannot.
+
 
 The headline number of each release, newest first. Lower is better and 1.0
 would be breakeven; none of them reaches it.
 
 🚨 **Every matrix in this section is superseded** by
-[the 20-cell matrix](README.md#current-results-the-complete-20-cell-matrix),
+[the 28-cell matrix](README.md#current-results-the-complete-28-cell-matrix),
 which measures every destination × ore × programme-search setting on the full
-1,555,667-row catalog on calc v1.17.7. **They are kept for their structure, not
+1,555,667-row catalog on calc v1.21.2. **They are kept for their structure, not
 their numbers**, which destination wins and why, what beneficiation does, which
 effects the model is sensitive to. Two compounding reasons they cannot be
 quoted:
@@ -4475,7 +4619,7 @@ against this cell's 659,847.
 release**: estimated at 10 to 20 hours each on six cores, and not run. ✅  They
 were measured on 2026-08-24 on calc v1.17.7, where they took **2.0-2.5 h each**
 rather than the 10-20 estimated, and the numbers are in
-[the 20-cell matrix](README.md#current-results-the-complete-20-cell-matrix).
+[the 28-cell matrix](README.md#current-results-the-complete-28-cell-matrix).
 Until then the v1.11.0 table below was the last figure they had, three releases
 and a 17× population behind, which is why it must be read for structure and
 never as a number.
@@ -4820,7 +4964,7 @@ workers, one Stage 1/2/3 pass.
 These superseded the cislunar row of the **v1.14.0 destination matrix above**,
 which they also reproduce. ✅  **All four MODEL values then reproduced exactly
 again on calc v1.17.7** and now live in
-[the 20-cell matrix](README.md#current-results-the-complete-20-cell-matrix);
+[the 28-cell matrix](README.md#current-results-the-complete-28-cell-matrix);
 only the runtimes here are superseded.
 
 | | search OFF (N = 1) | search ON |

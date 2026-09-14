@@ -1,0 +1,203 @@
+
+==============================================================================
+  CISLUNAR
+==============================================================================
+
+  best cost/revenue (lower is better, 1.0 = breakeven)
+                     search OFF (N=1)            search ON
+  raw                        15.3937x              9.5435x
+  benef                      14.1071x              6.6622x
+
+  evaluable rows
+  raw                         650,921              650,921
+  benef                       660,253              660,253
+
+  never-worse (a richer option set must never report worse)
+  OK benef <= raw, search OFF         pairs  650,921 | max 1.000000 | worse 0 | declined 108,985 | median +39.4%
+  OK benef <= raw, search ON          pairs  650,921 | max 1.000000 | worse 0 | declined 73,530 | median +42.7%
+  OK search ON <= OFF, raw            pairs  650,921 | max 1.000000 | worse 0 | declined 16 | median +48.3%
+  OK search ON <= OFF, benef          pairs  660,253 | max 0.908160 | worse 0 | declined 0 | median +51.6%
+
+  mass ledger  hardware_total == 2000 + power + ep
+  OK benef, search off                rows  660,253 | max |error| 0.000000000 kg
+  OK benef, search on                 rows  660,253 | max |error| 0.000000000 kg
+  OK raw, search off                  rows  650,921 | max |error| 0.000000000 kg
+  OK raw, search on                   rows  650,921 | max |error| 0.000000000 kg
+
+  programme structure (searched cells)
+  OK raw, search on                   N!=FxW 0 | W>trips 0 | W<trips 135,809 (20.864%) | fleet med 3 max 64 | N med 12
+  OK benef, search on                 N!=FxW 0 | W>trips 0 | W<trips 146,168 (22.138%) | fleet med 6 max 64 | N med 30
+
+==============================================================================
+  LUNAR_SURFACE
+==============================================================================
+
+  best cost/revenue (lower is better, 1.0 = breakeven)
+                     search OFF (N=1)            search ON
+  raw                        33.9418x             21.1384x
+  benef                      21.5387x             11.5920x
+
+  evaluable rows
+  raw                         586,054              586,054
+  benef                       606,304              606,304
+
+  never-worse (a richer option set must never report worse)
+  OK benef <= raw, search OFF         pairs  586,054 | max 1.000000 | worse 0 | declined 22,972 | median +66.1%
+  OK benef <= raw, search ON          pairs  586,054 | max 1.000000 | worse 0 | declined 24,994 | median +71.6%
+  OK search ON <= OFF, raw            pairs  586,054 | max 0.987914 | worse 0 | declined 0 | median +51.3%
+  OK search ON <= OFF, benef          pairs  606,304 | max 0.969011 | worse 0 | declined 0 | median +49.1%
+
+  mass ledger  hardware_total == 2000 + power + ep
+  OK benef, search off                rows  606,304 | max |error| 0.000000000 kg
+  OK benef, search on                 rows  606,304 | max |error| 0.000000000 kg
+  OK raw, search off                  rows  586,054 | max |error| 0.000000000 kg
+  OK raw, search on                   rows  586,054 | max |error| 0.000000000 kg
+
+  programme structure (searched cells)
+  OK raw, search on                   N!=FxW 0 | W>trips 0 | W<trips 94,175 (16.069%) | fleet med 26 max 64 | N med 130
+  OK benef, search on                 N!=FxW 0 | W>trips 0 | W<trips 110,549 (18.233%) | fleet med 6 max 64 | N med 25
+
+==============================================================================
+  GEO
+==============================================================================
+
+  best cost/revenue (lower is better, 1.0 = breakeven)
+                     search OFF (N=1)            search ON
+  raw                        45.6819x             19.2670x
+  benef                      19.0459x              9.6949x
+
+  evaluable rows
+  raw                         705,030              705,030
+  benef                       712,306              712,306
+
+  never-worse (a richer option set must never report worse)
+  OK benef <= raw, search OFF         pairs  705,030 | max 1.000000 | worse 0 | declined 55,171 | median +47.4%
+  OK benef <= raw, search ON          pairs  705,030 | max 1.000000 | worse 0 | declined 58,032 | median +60.2%
+  OK search ON <= OFF, raw            pairs  705,030 | max 1.000000 | worse 0 | declined 456 | median +37.4%
+  OK search ON <= OFF, benef          pairs  712,306 | max 1.000000 | worse 0 | declined 2 | median +49.2%
+
+  mass ledger  hardware_total == 2000 + power + ep
+  OK benef, search off                rows  712,306 | max |error| 0.000000000 kg
+  OK benef, search on                 rows  712,306 | max |error| 0.000000000 kg
+  OK raw, search off                  rows  705,030 | max |error| 0.000000000 kg
+  OK raw, search on                   rows  705,030 | max |error| 0.000000000 kg
+
+  programme structure (searched cells)
+  OK raw, search on                   N!=FxW 0 | W>trips 0 | W<trips 91,457 (12.972%) | fleet med 1 max 64 | N med 5
+  OK benef, search on                 N!=FxW 0 | W>trips 0 | W<trips 129,256 (18.146%) | fleet med 3 max 64 | N med 12
+
+==============================================================================
+  MARS_ORBIT
+==============================================================================
+
+  best cost/revenue (lower is better, 1.0 = breakeven)
+                     search OFF (N=1)            search ON
+  raw                        16.8482x             11.2682x
+  benef                      13.3064x              7.3681x
+
+  evaluable rows
+  raw                         821,078              821,078
+  benef                       956,090              956,090
+
+  never-worse (a richer option set must never report worse)
+  OK benef <= raw, search OFF         pairs  821,078 | max 1.000000 | worse 0 | declined 60,908 | median +33.0%
+  OK benef <= raw, search ON          pairs  821,078 | max 1.000000 | worse 0 | declined 62,985 | median +40.3%
+  OK search ON <= OFF, raw            pairs  821,078 | max 1.000000 | worse 0 | declined 18 | median +41.4%
+  OK search ON <= OFF, benef          pairs  956,090 | max 0.854979 | worse 0 | declined 0 | median +47.6%
+
+  mass ledger  hardware_total == 2000 + power + ep
+  OK benef, search off                rows  956,090 | max |error| 0.000000000 kg
+  OK benef, search on                 rows  956,090 | max |error| 0.000000000 kg
+  OK raw, search off                  rows  821,078 | max |error| 0.000000000 kg
+  OK raw, search on                   rows  821,078 | max |error| 0.000000000 kg
+
+  programme structure (searched cells)
+  OK raw, search on                   N!=FxW 0 | W>trips 0 | W<trips 295,536 (35.994%) | fleet med 2 max 64 | N med 10
+  OK benef, search on                 N!=FxW 0 | W>trips 0 | W<trips 176,307 (18.440%) | fleet med 6 max 64 | N med 20
+
+==============================================================================
+  LEO
+==============================================================================
+
+  best cost/revenue (lower is better, 1.0 = breakeven)
+                     search OFF (N=1)            search ON
+  raw                        58.5181x             24.2815x
+  benef                      42.9440x             13.6875x
+
+  evaluable rows
+  raw                         776,755              776,755
+  benef                       882,429              882,429
+
+  never-worse (a richer option set must never report worse)
+  OK benef <= raw, search OFF         pairs  776,755 | max 1.000000 | worse 0 | declined 86,090 | median +41.2%
+  OK benef <= raw, search ON          pairs  776,755 | max 1.000000 | worse 0 | declined 111,246 | median +48.0%
+  OK search ON <= OFF, raw            pairs  776,755 | max 0.757982 | worse 0 | declined 0 | median +59.6%
+  OK search ON <= OFF, benef          pairs  882,429 | max 0.746400 | worse 0 | declined 0 | median +63.6%
+
+  mass ledger  hardware_total == 2000 + power + ep
+  OK benef, search off                rows  882,429 | max |error| 0.000000000 kg
+  OK benef, search on                 rows  882,429 | max |error| 0.000000000 kg
+  OK raw, search off                  rows  776,755 | max |error| 0.000000000 kg
+  OK raw, search on                   rows  776,755 | max |error| 0.000000000 kg
+
+  programme structure (searched cells)
+  OK raw, search on                   N!=FxW 0 | W>trips 0 | W<trips 62,854 (8.092%) | fleet med 12 max 64 | N med 60
+  OK benef, search on                 N!=FxW 0 | W>trips 0 | W<trips 81,366 (9.221%) | fleet med 34 max 64 | N med 130
+
+==============================================================================
+  MARS_SURFACE
+==============================================================================
+
+  best cost/revenue (lower is better, 1.0 = breakeven)
+                     search OFF (N=1)            search ON
+  raw                        23.9964x             18.6352x
+  benef                      16.9920x             12.6892x
+
+  evaluable rows
+  raw                         731,322              731,322
+  benef                       892,563              892,563
+
+  never-worse (a richer option set must never report worse)
+  OK benef <= raw, search OFF         pairs  731,322 | max 1.000000 | worse 0 | declined 4,219 | median +73.6%
+  OK benef <= raw, search ON          pairs  731,322 | max 1.000000 | worse 0 | declined 3,748 | median +70.7%
+  OK search ON <= OFF, raw            pairs  731,322 | max 1.000000 | worse 0 | declined 54 | median +47.0%
+  OK search ON <= OFF, benef          pairs  892,563 | max 1.000000 | worse 0 | declined 66 | median +34.5%
+
+  mass ledger  hardware_total == 2000 + power + ep
+  OK benef, search off                rows  892,563 | max |error| 0.000000000 kg
+  OK benef, search on                 rows  892,563 | max |error| 0.000000000 kg
+  OK raw, search off                  rows  731,322 | max |error| 0.000000000 kg
+  OK raw, search on                   rows  731,322 | max |error| 0.000000000 kg
+
+  programme structure (searched cells)
+  OK raw, search on                   N!=FxW 0 | W>trips 0 | W<trips 239,357 (32.729%) | fleet med 12 max 64 | N med 60
+  OK benef, search on                 N!=FxW 0 | W>trips 0 | W<trips 210,584 (23.593%) | fleet med 3 max 64 | N med 12
+
+==============================================================================
+  EARTH_SURFACE
+==============================================================================
+
+  best cost/revenue (lower is better, 1.0 = breakeven)
+                     search OFF (N=1)            search ON
+  raw                     40147.9077x          11606.8561x
+  benef                   24169.7195x           7074.1975x
+
+  evaluable rows
+  raw                         784,242              784,242
+  benef                       912,846              912,846
+
+  never-worse (a richer option set must never report worse)
+  OK benef <= raw, search OFF         pairs  784,242 | max 1.000000 | worse 0 | declined 8,500 | median +77.7%
+  OK benef <= raw, search ON          pairs  784,242 | max 1.000000 | worse 0 | declined 7,209 | median +77.6%
+  OK search ON <= OFF, raw            pairs  784,242 | max 0.715832 | worse 0 | declined 0 | median +67.2%
+  OK search ON <= OFF, benef          pairs  912,846 | max 0.719590 | worse 0 | declined 0 | median +66.5%
+
+  mass ledger  hardware_total == 2000 + power + ep
+  OK benef, search off                rows  912,846 | max |error| 0.000000000 kg
+  OK benef, search on                 rows  912,846 | max |error| 0.000000000 kg
+  OK raw, search off                  rows  784,242 | max |error| 0.000000000 kg
+  OK raw, search on                   rows  784,242 | max |error| 0.000000000 kg
+
+  programme structure (searched cells)
+  OK raw, search on                   N!=FxW 0 | W>trips 0 | W<trips 2,117 (0.270%) | fleet med 64 max 64 | N med 320
+  OK benef, search on                 N!=FxW 0 | W>trips 0 | W<trips 3,017 (0.331%) | fleet med 64 max 64 | N med 320

@@ -957,14 +957,21 @@ class CalcConfig:
 # consumer moves with it; `verify_docs.py` check 9 holds README's own table to
 # the same values.
 #
-# ⚠️  These are CISLUNAR, the cheapest destination.  leo, mars_surface and
-# earth_surface cost 2.1-2.7x more per cell.
+# ⚠️  These are CISLUNAR, the cheapest destination.  Every other destination
+# costs more per cell, and the spread is wider than it was: `mars_orbit` and
+# `mars_surface` run 2.3-2.6x these figures on the 2026-09 campaign, and
+# `geo`'s beneficiated searched cell is 2.0x cislunar's on its own.
 MEASURED_CELL_SECONDS: Dict[Tuple[bool, bool], int] = {
     # (use_beneficiation, optimise_programme_scale): seconds
-    (False, False):   733,   # run-of-mine ore, one mission
-    (False, True):  1_253,   # run-of-mine ore, programme searched
-    (True,  False): 3_424,   # concentrate, one mission
-    (True,  True):  5_692,   # concentrate + programme search  <- BOTH DEFAULT ON
+    # Re-measured on the 2026-09 28-cell campaign, calc 1.21.2, 12 workers.
+    # They rose against the 1.17.7 figures (733 / 1,253 / 3,424 / 5,692) because
+    # v1.21.0's capacity ceilings are priced inside the payload knapsack, which
+    # costs most where a programme LADDER exists: 1.29x on raw at N = 1 against
+    # 2.31x on the raw searched cell.
+    (False, False):   947,   # run-of-mine ore, one mission
+    (False, True):  2_888,   # run-of-mine ore, programme searched
+    (True,  False): 4_967,   # concentrate, one mission
+    (True,  True):  9_878,   # concentrate + programme search  <- BOTH DEFAULT ON
 }
 MEASURED_CELL_ROWS = 1_555_667   # catalog the cells above were measured on
 
