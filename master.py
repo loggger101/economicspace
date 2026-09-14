@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.26.0)
+"""Master Asteroid Profitability Pipeline (1.27.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -5869,9 +5869,17 @@ class CalcConfig:
     concentration_search_steps: int  = 7
 
     # ─── MODELLING COMPLETENESS  (v1.7.0) ────────────────────────────────────
-    # Five things the pipeline previously got for free.  All default ON; 
-    # they are corrections, not options, and each one moves numbers.  Set any
-    # to False only to isolate its effect.
+    # Things the pipeline previously got for free.  They are corrections rather
+    # than options, and each one moves numbers; set one to False only to
+    # isolate its effect.  Count the block, do not trust a number here: this
+    # comment said "Five things" for four releases and the fifth of them, the
+    # market term, stopped being a flag at all in v1.21.0.
+    #
+    # ⚠️  "All default ON" was also true until v1.22.0 and is not now.  The
+    # learning curve below defaults OFF, for a reason that is about SCOPE and
+    # not about correctness; it is on the second list, with insurance, the cost
+    # of capital and mission reliability.  See README, "what the model
+    # deliberately does not charge for".
     #
     # LOW-THRUST TRIP TIME.  Electric propulsion paid a Δv penalty but flew
     # its burns instantly on power it did not carry.  With this on, the EP
@@ -5899,12 +5907,30 @@ class CalcConfig:
     # launch-cost-avoided.
     model_water_liberation:    bool  = True
 
-    # LEARNING CURVE on recurring hardware.  Only NRE amortised across a
+    # LEARNING CURVE on recurring hardware.  Only NRE was amortised across a
     # fleet; the rig cost $300k/kg at unit 1 and unit 500 alike.  Wright's
     # law at 85% is standard for aerospace serial production.  Has NO effect
     # at nre_amortization_missions = 1, where the cumulative average is the
     # first-unit cost by definition.
-    learning_curve_rate:       float = 0.85   # 1.0 disables
+    #
+    # ⚠️  DEFAULT FALSE as of v1.22.0, and it is a SCOPE decision rather than a
+    # claim that the curve is wrong, which is the same objection v1.20.0 made
+    # to insurance.  Wright's law is a statement about a factory's learning,
+    # fitted to programmes that built dozens to hundreds of articles; this
+    # pipeline prices the marginal physics of moving a kilogram and its
+    # programme ladder routinely proposes N in the tens.  Charging a serial-
+    # production discount on top of that credits the answer with an industrial
+    # base the run never modelled, and it runs in the generous direction, which
+    # is the direction this module refuses everywhere else.
+    #
+    # Turning it on restores v1.21.2 exactly at any N, and is exactly inert at
+    # N = 1 either way, so every single-mission figure in this project is
+    # unaffected by the flip.
+    model_learning_curve:      bool  = False
+    # Wright's-law rate for the flag above: each doubling of cumulative
+    # production cuts unit cost to this fraction.  Read ONLY when
+    # `model_learning_curve` is True; 1.0 disables the curve on its own.
+    learning_curve_rate:       float = 0.85
 
     # MARKET MODEL.  How much of a delivered kilogram actually sells, and the
     # only term in this module that pushes back on programme scale: N improves
@@ -5943,6 +5969,41 @@ class CalcConfig:
     # price flat and bound quantity instead.
     demand_elasticity:         float = 0.5
 
+    # ─── SURPLUS OVER THE CEILING SELLS, AT A DISCOUNT  (v1.22.0) ────────────
+    # `capacity_cap` as shipped in v1.21.0 was a hard wall: every kilogram past
+    # a commodity's ceiling earned exactly nothing and was reported as
+    # `unsold_payload_kg`.  That is the right shape for a market that refuses
+    # the sale outright, and it is too strong for most of the ones in this
+    # table.  A destination that can absorb 100 t/yr of water at the quoted
+    # price does not become unable to take the 101st tonne; it takes it at a
+    # price that clears, which is the whole content of a supply curve sloping
+    # down.  Abandoning the mass instead models a market with a cliff in it.
+    #
+    # True sells the surplus at `surplus_price_fraction` of the full price.
+    # Ceilings still bind, and they still bound the programme ladder, because
+    # the marginal kilogram past the wall is worth strictly less than the one
+    # before it -- which is what stops the objective running to
+    # `max_fleet_ships`.  What changes is that it is worth something.
+    #
+    # ⚠️  It reshapes the BENEFICIATED knapsack as well as the raw sale, and
+    # that is the half worth understanding.  A concentrated load chooses what
+    # it carries, so the discount puts every phase on the market TWICE: once at
+    # full price up to its ceiling, once at the discounted price above it.  The
+    # greedy walk then interleaves them, and a rich phase's surplus can outrank
+    # a poor phase's full-price allowance, which is the correct answer and is
+    # not what a wall would have chosen.  See `optimal_payload_mix`.
+    #
+    # Set False for the v1.21.0 wall, which is what every cell of the 2026-09
+    # campaign was measured on.
+    sell_surplus_at_discount:  bool  = True
+    # What a kilogram past the ceiling fetches, as a fraction of the full
+    # quoted price.  0.5 is "half price", the deliberately round number this
+    # flag was added for: there is no market study behind it, so it sits here
+    # as one obvious dial rather than being buried as an implicit 0.0.  Read
+    # ONLY when `sell_surplus_at_discount` is True, and only under
+    # `market_model = "capacity_cap"`; 0.0 reproduces the wall exactly.
+    surplus_price_fraction:    float = 0.5
+
     # ─── MODELLING COMPLETENESS, PART 2  (v1.8.0) ────────────────────────────
     # RIG SERVICE LIFE AND TERMINAL VALUE.  The rig was amortised across
     # `nre_amortization_missions` with no upper bound, so a programme could
@@ -5967,14 +6028,33 @@ class CalcConfig:
     # insurance premiums off and this term is unaffected either way: insurance
     # replaced hardware on failure and never revenue, so there was no double
     # count to remove.
-    model_reliability:         bool  = True
+    #
+    # ⚠️  DEFAULT FALSE as of v1.22.0, and read what that does and does not
+    # say.  It does NOT say the risk is not real.  P is a product of three
+    # numbers, and only the first is a measurement: launch reliability is an
+    # observed rate over hundreds of flights, cruise survival is an exponential
+    # on an assumed MTBF, and `p_mining` is a guess about a machine nobody has
+    # ever built.  Multiplying the ANSWER by that guess puts it in every
+    # headline ratio while leaving it as legible as the parameter it came from,
+    # and the effect is not small: at first-of-kind p_mining the term moves the
+    # objective by more than most of the physics in this module.
+    #
+    # So it becomes a question you ask deliberately rather than a discount
+    # baked into the default.  A default run now answers "what does this cost
+    # if it works", which is the same framing that makes the two surface
+    # delivery prices LOWER BOUNDS, and the risk-weighted question is one flag
+    # away.  Set True to restore v1.21.2 and everything measured before it.
+    model_reliability:         bool  = False
     # RELIABILITY GROWTH.  The mining chain learns: a programme's second rig
     # is not as likely to jam as its first.  p_mining becomes the FLEET
     # AVERAGE over nre_amortization_missions under the Duane model, capped at
     # a mature ceiling.  Exactly the first-of-kind figure at N = 1.
     # Launch and cruise reliability deliberately do NOT grow; launch vehicles
     # are already mature, and MTBF is a duration exposure, not a heritage
-    # question.
+    # question.  ⚠️  INERT while `model_reliability` above is False, which is
+    # the default as of v1.22.0: this shapes P, it does not create it.  Left
+    # True so that turning reliability back on restores the whole v1.21.2 term
+    # rather than half of it.
     model_reliability_growth:  bool  = True
 
     # CRYOGENIC BOIL-OFF.  Return propellant sits in the tank from launch
@@ -6070,8 +6150,12 @@ class CalcConfig:
     # usd_per_kg_to_leo and nothing else.  Kept wired for the day it does.
     escape_direct_launch:      bool  = False
 
-    # INSURANCE (v1.20.0).  OFF, and it is the one cost flag here whose default
-    # is OFF because the charge is IRRELEVANT rather than wrong.  Module 3
+    # INSURANCE (v1.20.0).  OFF because the charge is IRRELEVANT rather than
+    # wrong.  ⚠️  It was the ONLY cost flag here defaulting OFF until v1.22.0,
+    # which put the cost of capital, mission reliability and the learning curve
+    # on the same footing for the same reason; that sentence is corrected
+    # rather than deleted because "the one flag that..." is exactly the kind of
+    # claim this repo keeps finding outlived by a later release.  Module 3
     # prices two premiums, a $1.5M third-party liability flat and launch
     # insurance at 10% of (launch + spacecraft book value), and both are real
     # money a real programme pays.  They are not what this pipeline asks.  It
@@ -6080,8 +6164,10 @@ class CalcConfig:
     # surface delivery prices LOWER BOUNDS, and a premium is priced off an
     # underwriter's book rather than off a mass, a Delta-v or a kilowatt.  It
     # is also a second statement of a risk the model already carries
-    # explicitly: `model_reliability` discounts revenue by P and charges every
-    # cost in full.
+    # explicitly: `model_reliability` discounted revenue by P and charged every
+    # cost in full.  ⚠️  That term is OFF by default as of v1.22.0, so the
+    # sentence above no longer describes a default run; the two are now off
+    # together, and turning either on restores it.
     #
     # Set True to restore both lines and to reproduce anything measured on calc
     # 1.19.2 or earlier.  `liability_cost_usd` and `launch_insurance_cost_usd`
@@ -6354,8 +6440,30 @@ class CalcConfig:
     # 0.30 is a mid-range de-duplication; set to 0.0 to restore the
     # pre-v1.4.0 behaviour and book both in full.
     nre_recurring_overlap_fraction: float = 0.30
-    # Time-value of money; compound up-front costs over mission_duration_yr.
-    apply_wacc_compounding:    bool  = True
+    # COST OF CAPITAL.  Time-value of money: compound up-front costs over
+    # mission_duration_yr, bucketed so an end-of-mission line is not inflated
+    # by the whole duration.  The rate is Module 3's "Cost of capital (WACC)"
+    # row (0.10), not a field here.
+    #
+    # ⚠️  DEFAULT FALSE as of v1.22.0, and it is the same scope objection as
+    # insurance and the learning curve: a discount rate is a statement about
+    # whose money this is, and this module does not know.  It prices the
+    # marginal physics and hardware of moving a kilogram; 10% compounded over a
+    # 5-to-12-year mission is a financing assumption layered on top of that,
+    # and it is a LARGE one -- an up-front line is worth roughly twice its face
+    # value under it, which is the multiplier v1.20.0 measured on the insurance
+    # premium and it applies to every up-front line in the cascade.
+    #
+    # Two consequences worth knowing before you flip it back:
+    #   • it also silences `model_programme_calendar`, whose multipliers are
+    #     both exactly 1.0 at wacc = 0 by construction, so the programme's
+    #     calendar charge goes with it.  That term IS the time-value of a
+    #     programme's span; there is nothing left of it at a zero rate.
+    #   • it removes the only term that penalises a long mission for being
+    #     long in MONEY.  Duration still binds through the dig, the windows,
+    #     the rig's life and `max_mission_duration_yr`, all of which are
+    #     physical.
+    apply_wacc_compounding:    bool  = False
 
     # Flat contingency on the whole cost cascade, applied after every other
     # line and before WACC.
@@ -6493,7 +6601,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.21.2"
+    pipeline_version: str = "1.22.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -6578,10 +6686,37 @@ print(f"    Insurance      : "
       + ("third-party liability + launch insurance charged"
          if CALC_CONFIG.charge_insurance else
          "NOT charged - premiums are out of scope for a marginal-cost model"))
+# v1.22.0.  The calendar term is time-value, so it is INERT at a zero rate
+# however this flag is set: `programme_calendar_multipliers` returns (1.0, 1.0)
+# when wacc <= 0, by construction.  A banner that said "charged" while the
+# cost of capital was off would be the most-read stale number in the project,
+# which is the failure this repo has already shipped once.
 print(f"    Calendar       : "
-      + ("programme span charged - amortised NRE and rig compound over "
-         "T + (W-1)xcadence" if CALC_CONFIG.model_programme_calendar else
-         "NOT charged (model_programme_calendar off - reproduces 1.15.0)"))
+      + ("NOT charged (model_programme_calendar off - reproduces 1.15.0)"
+         if not CALC_CONFIG.model_programme_calendar else
+         "programme span charged - amortised NRE and rig compound over "
+         "T + (W-1)xcadence" if CALC_CONFIG.apply_wacc_compounding else
+         "on, but INERT - it is time-value, and the cost of capital is off"))
+print(f"    Cost of capital: "
+      + ("up-front lines compounded over the mission, bucketed by when spent"
+         if CALC_CONFIG.apply_wacc_compounding else
+         "NOT charged - a discount rate is out of scope for a marginal-cost "
+         "model"))
+print(f"    Reliability    : "
+      + ("expected revenue x P(launch) x P(cruise) x P(mining); costs in full"
+         if CALC_CONFIG.model_reliability else
+         "NOT charged - the run answers what it costs IF IT WORKS"))
+print(f"    Learning curve : "
+      + ("Wright's law at %.0f%% on recurring hardware"
+         % (CALC_CONFIG.learning_curve_rate * 100.0)
+         if CALC_CONFIG.model_learning_curve else
+         "NOT applied - no serial-production discount"))
+print(f"    Market         : {CALC_CONFIG.market_model}"
+      + ("" if CALC_CONFIG.market_model != "capacity_cap" else
+         (" - surplus over a ceiling sells at %.0f%% of price"
+          % (CALC_CONFIG.surplus_price_fraction * 100.0)
+          if CALC_CONFIG.sell_surplus_at_discount else
+          " - surplus over a ceiling is abandoned")))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -6743,6 +6878,37 @@ def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
 # ─────────────────────────────────────────────────────────────────────────────
 # CROSS-MODULE INTEGRITY CHECK
 # ─────────────────────────────────────────────────────────────────────────────
+def market_config_check(config: CalcConfig) -> None:
+    """Refuse a `surplus_price_fraction` outside [0, 1] (v1.22.0).
+
+    A surplus is mass sold PAST a market ceiling, so a fraction above 1.0 says
+    a kilogram is worth more for being unsellable, which is not a market model
+    anyone means.  It is refused rather than clamped for the reason
+    `_market_mode` refuses an unrecognised `market_model`: a silent fallback
+    here prices a whole campaign against a model nobody chose, and the only
+    symptom is numbers that look slightly generous.
+
+    🚨  AND IT IS NOT MERELY MEANINGLESS, IT INVERTS AN INVARIANT.  The tiered
+    knapsack identifies a phase's full-price tier as the first time that phase
+    is reached, which is the same question as "the dearer of its two tiers"
+    only while the discount is at most full price.  Above 1.0 the discounted
+    tier sorts first and draws the market allowance, and the capped load comes
+    out worth MORE than the uncapped one -- measured at 1.5 as 945,000 against
+    an uncapped 900,000.  That is exactly what `verify.py` check 7 exists to
+    catch, so it must not be reachable by configuration.
+
+    Negative is refused on the same line and for a duller reason: it would pay
+    the programme to overproduce.
+    """
+    frac = float(getattr(config, "surplus_price_fraction", 0.0))
+    if not 0.0 <= frac <= 1.0:
+        raise ValueError(
+            "surplus_price_fraction must be between 0.0 and 1.0, not %r. "
+            "It is what a kilogram past a market ceiling fetches as a "
+            "fraction of the full price; 0.0 is v1.21.0's hard wall and 1.0 "
+            "removes the ceiling entirely." % (frac,))
+
+
 def destination_check(catalogs: Dict[str, pd.DataFrame], config: CalcConfig) -> None:
     """Verify Module 2 priced the material for the destination Module 4 flies to.
 
@@ -7674,13 +7840,28 @@ def _delivery_window_yr(
 
 def _capped_sale_value(
     sale_terms: List[Tuple[float, float, float, str]], window_yr: float,
-) -> Tuple[float, float]:
-    """`(value_usd, unsold_kg)` with every commodity clipped at its ceiling.
+    surplus_price_frac: float = 0.0,
+) -> Tuple[float, float, float]:
+    """`(value_usd, unsold_kg, surplus_kg)`, commodities clipped at the ceiling.
 
-    A quantity wall, not a price discount: each kilogram inside the ceiling
-    fetches the full price the mineral catalog quotes, and each kilogram past
-    it fetches nothing.  That is what "prices remain constant no matter how
-    much is sold" has to mean once something still has to bound the programme.
+    Each kilogram inside the ceiling fetches the full price the mineral catalog
+    quotes.  What happens to the kilograms past it is v1.22.0's
+    `sell_surplus_at_discount`, and the two answers are reported in different
+    columns because they are different events:
+
+      surplus_price_frac = 0.0   a quantity WALL.  The surplus earns nothing
+                                 and comes back as `unsold_kg`.  v1.21.0's
+                                 model, and what the 2026-09 campaign measured.
+      surplus_price_frac > 0.0   the surplus SELLS, at that fraction of the
+                                 full price, and comes back as `surplus_kg`
+                                 with `unsold_kg` at 0.0.
+
+    ⚠️  ONE MEANING PER COLUMN, and that is why this returns three floats
+    rather than reusing `unsold_kg` for both.  Mass that earned nothing and
+    mass that earned half are not the same measurement, and a harness that
+    counted "unsold" across the flip would have silently changed what it was
+    counting -- which is the diagnostic-changes-meaning-under-you failure this
+    module has now hit twice.
 
     ⚠️  Accumulates over `sale_terms` in its own insertion order, exactly as
     the elasticity branch does, and for the same reason: floating-point
@@ -7690,7 +7871,8 @@ def _capped_sale_value(
     Used for the RAW cargo, where the mix is the body's own composition and
     cannot be reshaped.  A beneficiated load goes through `optimal_payload_mix`
     with the same ceilings instead, which spends the freed hold space on the
-    next most valuable phase rather than flying the excess unsold.
+    next most valuable phase rather than flying the excess unsold -- and, since
+    v1.22.0, weighs that against carrying the surplus at the discount.
 
     🚨  v1.21.2: THE ALLOWANCE IS POOLED PER MARKET, NOT PER PHASE.  Each entry
     carries the market KEY it sells into, and phases sharing a key draw down
@@ -7706,21 +7888,33 @@ def _capped_sale_value(
     one first, and the order it happens to receive would stop being good
     enough.
     """
-    value  = 0.0
-    unsold = 0.0
+    value   = 0.0
+    unsold  = 0.0
+    surplus = 0.0
+    sells   = surplus_price_frac > 0.0
     remaining: Dict[str, float] = {}
     for kg, price, mkt, key in sale_terms:
         allowance = remaining.get(key)
         if allowance is None:
             allowance = mkt * window_yr
         if kg > allowance:
-            value  += allowance * price
-            unsold += kg - allowance
+            over = kg - allowance
+            value += allowance * price
+            if sells:
+                # v1.22.0.  The surplus is carried and sold, at a discount.
+                # Written as a second term rather than folded into one blended
+                # price so the wall's arithmetic is untouched when the flag is
+                # off: at `sells` False not one float below differs from
+                # v1.21.2, which is what lets the campaign's cells reproduce.
+                value   += over * price * surplus_price_frac
+                surplus += over
+            else:
+                unsold  += over
             remaining[key] = 0.0
         else:
-            value  += kg * price
+            value += kg * price
             remaining[key] = allowance - kg
-    return value, unsold
+    return value, unsold, surplus
 
 
 # Single-slot memo for the knapsack's price ordering (v1.14.2).  The phase table
@@ -7751,6 +7945,7 @@ def optimal_payload_mix(
     want_phase: Optional[str] = None,
     caps:       Optional[Dict[str, float]] = None,
     cap_keys:   Optional[Dict[str, str]]   = None,
+    surplus_price_frac: float = 0.0,
 ) -> Union[Dict[str, object], float]:
     """Most valuable payload obtainable from `feed_kg` of this rock (v1.6.0).
 
@@ -7764,9 +7959,10 @@ def optimal_payload_mix(
     Separation recovers `recovery` of each phase present in the feed; whatever
     is not loaded is left at the asteroid.
 
-    Returns value, blended $/kg, the chosen mix in kg, and the mass fraction
-    the best phase makes up, which is the natural read on how well
-    concentrated the load actually is.
+    Returns value, blended $/kg, the chosen mix in kg, the mass fraction the
+    best phase makes up, which is the natural read on how well concentrated
+    the load actually is, and `surplus_kg`, the mass of that load sold past a
+    market ceiling at the discount (v1.22.0; 0.0 on every other path).
 
     ⚠️  **Do not "fix" this by sorting the phase table at source.**  The greedy
     order is needed HERE and nowhere else, and `phases` arrives in its natural
@@ -7840,6 +8036,43 @@ def optimal_payload_mix(
     caller already knows both, and resolving it there keeps the two lookups
     agreeing in one place.
 
+    ── `surplus_price_frac` (v1.22.0) ───────────────────────────────────────
+    What a kilogram past a ceiling fetches, as a fraction of the full price.
+    0.0 is v1.21.0's wall: the allowance is a hard upper bound and anything
+    past it is simply not loaded.  Above 0.0 the surplus becomes cargo the
+    load may CHOOSE to carry, and the knapsack has to decide whether it is
+    worth the hold space.
+
+    ✅  GREEDY IS STILL EXACT, and the formulation is the standard one: a
+    two-step price schedule is two ITEMS, not a clamp.  Each phase enters the
+    walk twice, once at `price` limited by its market allowance and once at
+    `price x surplus_price_frac` limited by what is left of the feed, and the
+    merged list is sorted by unit price like any other fractional knapsack.
+    Every item still has a constant unit value and is divisible, which is the
+    only condition greedy needs.
+
+    🚨  THE INTERLEAVING IS THE POINT, and it is why this cannot be done as a
+    second pass over the leftovers.  A rich phase's HALF-PRICE surplus can be
+    worth more per kilogram than a poor phase's full-price allowance, and when
+    it is, the optimal load carries it instead.  Filling the hold with
+    everything full-price first and topping up with surplus afterwards is a
+    different, strictly worse load; it would also be the "clamp bolted onto
+    the outside of an optimiser" shape this docstring warns against three
+    paragraphs up.
+
+    ⚠️  ONE WALK, not two.  The tiered sequence is built ahead of the loop and
+    the loop below is unchanged for everyone else: `tier_taken` is None on
+    every call that is not tiered, so the default path pays one `is None` test
+    per phase and no arithmetic.  A second copy of this walk is the hazard the
+    `want_phase` note above is about, and it would be a worse one here, because
+    this is the copy that decides what a load is worth.
+
+    ⚠️  Tiers are OFF whenever `want_phase` is set, deliberately.  That short
+    circuit returns the first take of the named phase and stops, which would
+    report the allowance and miss the surplus.  It is not a live combination:
+    `want_phase` belongs to `_cargo_water_kg`, on the SIZING path, and the
+    sizing path must never pass `caps` at all -- see the warning below.
+
     ⚠️  `caps=None` must stay bit-identical to the pre-v1.21.0 walk, because
     the `elasticity` market model is the v1.14.0 curve, and it reproduced
     v1.14.0 to v1.20.0 exactly until v1.21.1's residual-ceiling fix moved the
@@ -7860,22 +8093,69 @@ def optimal_payload_mix(
     if payload_kg <= 0 or not phases:
         return 0.0 if want_phase is not None else {
             "value_usd": 0.0, "usd_per_kg": 0.0, "mix_kg": {},
-            "dominant_phase": None, "dominant_frac": 0.0}
+            "dominant_phase": None, "dominant_frac": 0.0,
+            "surplus_kg": 0.0}
 
     global _PHASE_ORDER_CACHE
     if _PHASE_ORDER_CACHE[0] is not phases:
         _PHASE_ORDER_CACHE = (phases, sorted(phases, key=lambda p: -p[2]))
     by_price = _PHASE_ORDER_CACHE[1]
 
-    remaining = float(payload_kg)
-    total     = 0.0
+    # v1.22.0.  The tiered sequence, built only when a surplus can actually be
+    # sold.  `tier_taken` doubles as the mode flag and as the per-phase ledger
+    # the second tier needs: a phase's discounted tier may only draw on the
+    # feed its full-price tier left behind, and the sort guarantees the
+    # full-price tier is reached first: same phase, strictly higher unit price,
+    # and at `surplus_price_frac == 1.0` the two tie and a stable sort settles
+    # it in insertion order, which is full-price first by construction.
+    #
+    # Not cached: this list depends on the fraction as well as the phase table,
+    # it is built once per (programme rung x candidate) rather than per call
+    # like `by_price`, and the capped branch is already the rare one -- the
+    # ladder's fast path proves nothing binds before ever arriving here.
+    tier_taken: Optional[Dict[str, float]] = None
+    walk = by_price
+    if caps is not None and surplus_price_frac > 0.0 and want_phase is None:
+        # Clamped HERE as well as at the resolver that normally feeds it and
+        # at `market_config_check`, because this is where the ASSUMPTION lives:
+        # above 1.0 the discounted tier would sort ahead of the full-price one,
+        # take the market allowance, and make the capped load worth more than
+        # the uncapped one.  One min() per tiered build, not per item, and the
+        # branch is the rare one.
+        frac = surplus_price_frac if surplus_price_frac < 1.0 else 1.0
+        tiered: List[Tuple[str, float, float]] = []
+        for p_name, p_frac, p_price in by_price:
+            tiered.append((p_name, p_frac, p_price))
+            tiered.append((p_name, p_frac, p_price * frac))
+        tiered.sort(key=lambda p: -p[2])
+        walk       = tiered
+        tier_taken = {}
+
+    remaining  = float(payload_kg)
+    total      = 0.0
+    surplus_kg = 0.0
     mix: Dict[str, float] = {}
-    for name, frac, price in by_price:
+    for name, frac, price in walk:
         if remaining <= 0:
             break
-        available = float(feed_kg) * frac * recovery
+        # `full_tier` is "this phase has not been reached yet", which is the
+        # same question as "this is its full-price tier" by the ordering above.
+        # Only the full-price tier draws on a market allowance; the surplus is
+        # by definition the part no allowance covers.
+        if tier_taken is None:
+            available = float(feed_kg) * frac * recovery
+            full_tier = True
+            had       = 0.0
+        else:
+            had       = tier_taken.get(name, -1.0)
+            full_tier = had < 0.0
+            if full_tier:
+                had       = 0.0
+                available = float(feed_kg) * frac * recovery
+            else:
+                available = float(feed_kg) * frac * recovery - had
         take      = min(available, remaining)
-        if caps is not None:
+        if caps is not None and full_tier:
             # v1.21.0.  The bounded-knapsack step.  Clipping `take` and NOT
             # `remaining` is the whole point: the hold space this phase does
             # not get stays available to the next one down the price order.
@@ -7891,16 +8171,31 @@ def optimal_payload_mix(
                 if allowance < take:
                     take = allowance
                 caps[key] = allowance - take
+        if tier_taken is not None:
+            # Recorded BEFORE the `take <= 0` skip below, and that ordering is
+            # load-bearing: a full-price tier whose allowance was already spent
+            # takes nothing, and if it went unrecorded its own surplus tier
+            # would be read as the full-price one and clipped at the same
+            # exhausted allowance -- so the discount would silently never fire
+            # on exactly the phases it exists for.
+            tier_taken[name] = had + take
         if take <= 0:
             continue
         if want_phase is not None:
-            # The caller wants one number.  Stop as soon as it is known; 
+            # The caller wants one number.  Stop as soon as it is known;
             # nothing after this point in the walk can change it.
             if name == want_phase:
                 return take
             remaining -= take
             continue
-        mix[name]  = take
+        if full_tier:
+            mix[name] = take
+        else:
+            # The same phase, loaded twice at two prices.  `mix_kg` is a mass
+            # ledger and must stay one entry per phase; `surplus_kg` is what
+            # says how much of it sold at the discount.
+            mix[name]   = mix.get(name, 0.0) + take
+            surplus_kg += take
         total     += take * price
         remaining -= take
 
@@ -7916,7 +8211,8 @@ def optimal_payload_mix(
     loaded = float(payload_kg) - remaining
     if loaded <= 0:
         return {"value_usd": 0.0, "usd_per_kg": 0.0, "mix_kg": {},
-                "dominant_phase": None, "dominant_frac": 0.0}
+                "dominant_phase": None, "dominant_frac": 0.0,
+                "surplus_kg": 0.0}
 
     dominant = max(mix.items(), key=lambda kv: kv[1])
     return {
@@ -7924,6 +8220,7 @@ def optimal_payload_mix(
         "usd_per_kg":     total / loaded,
         "loaded_kg":      loaded,
         "mix_kg":         mix,
+        "surplus_kg":     surplus_kg,
         "dominant_phase": dominant[0],
         "dominant_frac":  dominant[1] / loaded,
     }
@@ -11202,7 +11499,14 @@ def _mission_cost_prologue(
         launch_cost, tanker_cost, tanker_flights,
         outbound_prop_cost, return_prop_cost, return_prop_is_ongoing,
         mining_rig_cost_total, rig_trips, life_yr, salvage,
-        config.learning_curve_rate,
+        # v1.22.0: the flag is resolved to a RATE here, once per candidate,
+        # rather than carried as a second field the tail would have to branch
+        # on.  1.0 is what `learning_curve_factor` already documents as "no
+        # curve", so the term goes exactly inert and the memo's key space does
+        # not grow: every run holds one rate either way.  The prologue's field
+        # ORDER is load-bearing (see its docstring); this replaces a value in
+        # place and adds nothing.
+        (config.learning_curve_rate if config.model_learning_curve else 1.0),
         capsule_base, power_base, ep_base, ep_kw, tank_base, tank_mass,
         tps_base, tps_mass,
         ops_cost, recovery_cost, licensing_cost, liability_cost, launch_ins_pct,
@@ -12453,6 +12757,29 @@ def _evaluate_combo_at_ratio(
                               and phases and markets is not None)
     saturation_applies = bool(market_ready and market_mode == "elasticity")
     capacity_applies   = bool(market_ready and market_mode == "capacity_cap")
+    # v1.22.0.  Resolved once per candidate, next to the mode it belongs to and
+    # for the same reason: it is a per-RUN config value, and the ladder below
+    # asks the capacity branch for it ~40 times per candidate.  0.0 is the
+    # v1.21.0 wall, and both the raw sale and the knapsack take it as "no
+    # surplus tier", so the flag is expressed entirely as a number and neither
+    # of them has to branch on a boolean.
+    #
+    # 🚨  CLAMPED TO [0, 1], AND THE UPPER HALF IS LOAD-BEARING RATHER THAN
+    # TIDY.  The tiered walk identifies a phase's full-price tier as "the
+    # first time this phase is reached", which is only the same question as
+    # "the dearer of its two tiers" while the discount is at most full price.
+    # Above 1.0 the sort puts the DISCOUNTED tier first, so it draws the
+    # market allowance and the full-price remainder does not -- and the load
+    # comes out worth more than the uncapped one, which inverts the invariant
+    # check 7 exists to enforce.  Measured before this clamp: at 1.5 a load
+    # worth 900,000 uncapped priced at 945,000 capped.
+    #
+    # `build_profitability_catalog` REFUSES an out-of-range value outright, so
+    # in a normal run this clamp never fires; it is here because a harness can
+    # reach this function without going through that check, and a silently
+    # inverted invariant is the worst failure this module has.
+    surplus_frac = (min(1.0, max(0.0, float(config.surplus_price_fraction)))
+                    if config.sell_surplus_at_discount else 0.0)
     # v1.21.2: (kg, price, ceiling_kg_per_yr, market_key).  The key is what
     # lets every consumer below pool phases that sell into ONE market; see
     # `phase_market_key`.
@@ -12515,7 +12842,8 @@ def _evaluate_combo_at_ratio(
     # the ladder, so that is one key per rung and the memo buys nothing on its
     # own -- what keeps this cheap is the "does anything bind" test inside,
     # which answers most rungs in a few float comparisons.
-    cap_by_programme: Dict[Tuple[int, int], Tuple[float, float, float, float]] = {}
+    cap_by_programme: Dict[Tuple[int, int],
+                          Tuple[float, float, float, float, float]] = {}
     # v1.17.5: the same argument one function further in.  The rig shares and
     # the programme-calendar multipliers are a function of the campaigns one
     # rig flies and of the PROLOGUE, and the ladder crosses ~8 fleets with
@@ -12554,11 +12882,12 @@ def _evaluate_combo_at_ratio(
             total_cost = c["total_cost"]
         else:
             total_cost, c = c, None
-        g         = gross_base
-        sat       = 1.0
-        clearing  = 1.0
-        unsold    = 0.0
-        delivered = delivered_base
+        g          = gross_base
+        sat        = 1.0
+        clearing   = 1.0
+        unsold     = 0.0
+        surplus_kg = 0.0
+        delivered  = delivered_base
         # ── The rate is the PROGRAMME'S, not one mission's (v1.14.0) ─────────
         # This term's own config comment says it exists because "prices were
         # static at the point of sale, so a mission could return any quantity of
@@ -12621,11 +12950,18 @@ def _evaluate_combo_at_ratio(
         elif capacity_applies:
             # ── v1.21.0.  CONSTANT PRICE, BOUNDED QUANTITY ──────────────────
             # Every kilogram inside the ceiling fetches exactly what the
-            # mineral catalog quotes and every kilogram past it fetches
-            # nothing, so `saturation_multiplier` stays 1.0 here: no price
-            # moved.  What the programme loses is the mass it cannot place,
-            # reported separately as `market_clearing_fraction` and
-            # `unsold_payload_kg` so neither column has two meanings.
+            # mineral catalog quotes, so `saturation_multiplier` stays 1.0
+            # here: no price moved for the market's own customers.  What the
+            # programme loses is what it cannot place at that price, reported
+            # separately as `market_clearing_fraction`, `unsold_payload_kg` and
+            # `surplus_payload_kg` so no column has two meanings.
+            #
+            # v1.22.0: what happens past the ceiling is `surplus_frac`.  At 0.0
+            # the surplus fetches nothing and this is v1.21.0's wall; above it
+            # the surplus sells at that fraction of full price, which still
+            # bounds the ladder -- the marginal kilogram past the wall is worth
+            # strictly less than the one before it, so another ship still adds
+            # its whole cost against a falling marginal revenue.
             #
             # This is what bounds the ladder.  A bigger fleet delivers more
             # often, so each delivery gets a shorter accumulation window; past
@@ -12657,7 +12993,7 @@ def _evaluate_combo_at_ratio(
                         binds = True
                         break
                 if not binds:
-                    entry = (gross_base, 1.0, 0.0, delivered_base)
+                    entry = (gross_base, 1.0, 0.0, delivered_base, 0.0)
                 elif beneficiate and payload_mix:
                     # RESHAPE.  Concentrating means the hold's contents are
                     # chosen, so a load that caps out on one phase re-fills the
@@ -12680,6 +13016,7 @@ def _evaluate_combo_at_ratio(
                         m_payload, feed_kg, phases,
                         config.beneficiation_recovery,
                         caps=caps_by_market, cap_keys=cap_keys,
+                        surplus_price_frac=surplus_frac,
                     )
                     cvalue = float(capped["value_usd"])
                     # Measured against the UNCAPPED load, not against the hold.
@@ -12694,21 +13031,24 @@ def _evaluate_combo_at_ratio(
                         cvalue / gross_base if gross_base > 0 else 1.0,
                         max(0.0, loaded_free - float(capped.get("loaded_kg", 0.0))),
                         cvalue / m_payload if m_payload > 0 else 0.0,
+                        float(capped.get("surplus_kg", 0.0)),
                     )
                 else:
                     # RAW ore cannot be reshaped: the cargo is the body's own
                     # composition, so whatever is past a ceiling simply does not
                     # sell.  The hold still flies and is still paid for, which
                     # is why this is the branch that punishes scale hardest.
-                    cvalue, cunsold = _capped_sale_value(sale_terms, window)
+                    cvalue, cunsold, csurplus = _capped_sale_value(
+                        sale_terms, window, surplus_frac)
                     entry = (
                         cvalue,
                         cvalue / gross_base if gross_base > 0 else 1.0,
                         cunsold,
                         cvalue / m_payload if m_payload > 0 else 0.0,
+                        csurplus,
                     )
                 cap_by_programme[ckey] = entry
-            g, clearing, unsold, delivered = entry
+            g, clearing, unsold, delivered, surplus_kg = entry
         # Revenue was certain.  It is not: the launch fails, the spacecraft dies
         # on the way, or the mining chain does not work when it arrives.  Costs
         # are charged in FULL, which is correct; you spend the money either
@@ -12729,8 +13069,9 @@ def _evaluate_combo_at_ratio(
             g *= ps
         # v1.21.0 appends rather than inserts: `_objective_key` reads indices
         # 1 and 2 off this tuple positionally, and the ladder compares on them.
+        # v1.22.0 appends `surplus_kg` for the same reason, at index 10.
         return (c, total_cost, g, sat, concurrent, ps, pm, delivered,
-                clearing, unsold)
+                clearing, unsold, surplus_kg)
 
     # v1.17.1: the ladder prices on totals and the winner is rebuilt in full
     # once, below.  `single` is the common case, the search off, one option, 
@@ -12786,7 +13127,7 @@ def _evaluate_combo_at_ratio(
     # the expressions below keep reading the dict so nothing downstream moved.
     (cost, _total_cost, gross_value, saturation_mult, concurrent_missions,
      p_success, p_mining, delivered_value_per_kg,
-     market_clearing, unsold_payload_kg) = best_priced
+     market_clearing, unsold_payload_kg, surplus_payload_kg) = best_priced
 
     profit               = gross_value - cost["total_cost"]
     roi                  = profit / cost["total_cost"] if cost["total_cost"] > 0 else np.nan
@@ -12875,14 +13216,26 @@ def _evaluate_combo_at_ratio(
         #   market_clearing_fraction share of the assembled load's gross value
         #                            that cleared the ceilings; 1.0 unless the
         #                            model is `capacity_cap` and one bound
-        #   unsold_payload_kg        payload mass lost to the CEILINGS: ore
-        #                            flown past one when raw, load the knapsack
-        #                            could not place under them when
-        #                            beneficiated.  NOT hold space a poor feed
-        #                            failed to fill, which is 0.0 here and has
-        #                            always been the knapsack's own behaviour
+        #   unsold_payload_kg        payload mass that earned NOTHING because
+        #                            a ceiling refused it: ore flown past one
+        #                            when raw, load the knapsack could not
+        #                            place under them when beneficiated.  NOT
+        #                            hold space a poor feed failed to fill,
+        #                            which is 0.0 here and has always been the
+        #                            knapsack's own behaviour
+        #   surplus_payload_kg       v1.22.0.  Payload mass sold PAST a ceiling
+        #                            at `surplus_price_fraction` of full price.
+        #                            Two columns rather than one because they
+        #                            are two events, and a single "mass over
+        #                            the ceiling" column would have changed
+        #                            meaning under `sell_surplus_at_discount`
+        #                            without changing its name.  Under the
+        #                            v1.22.0 default this is where the mass
+        #                            goes and `unsold_payload_kg` is 0.0; set
+        #                            the flag False and they swap over
         "market_clearing_fraction": market_clearing,
         "unsold_payload_kg":        unsold_payload_kg,
+        "surplus_payload_kg":       surplus_payload_kg,
         "p_success":                p_success,
         "p_mining":                 p_mining if config.model_reliability else 1.0,
         "boiloff_factor":           boiloff_factor,
@@ -14062,6 +14415,7 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
     # ── Step 2, Integrity checks ────────────────────────────────────────────
     integrity_check(catalogs)
     destination_check(catalogs, config)
+    market_config_check(config)
 
     # ── Step 3, Iterate asteroids ───────────────────────────────────────────
     asteroids = catalogs["asteroids"]
@@ -14519,7 +14873,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.26.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.27.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
