@@ -1,0 +1,132 @@
+{
+ "aerocapture_pct": 50.54158081352173,
+ "at_ceiling": 0,
+ "at_ceiling_pct": 0.0,
+ "bound_pct": 0.1461159514271669,
+ "cadence_median": 4.496980915468484,
+ "calendar_mult_max": 1.0,
+ "calendar_mult_median": 1.0,
+ "clearing_median": 1.0,
+ "clearing_min": 0.8178079060109739,
+ "cycle_pct": 21.867815791400393,
+ "evaluable": 956090,
+ "fleet_max": 1.0,
+ "fleet_median": 1.0,
+ "isru_pct": 0.17780752857994542,
+ "n_max": 1.0,
+ "n_median": 1.0,
+ "objective": 13.306379986997191,
+ "propellants": [
+  [
+   "Xenon  (Hall / ion)",
+   77.01638967042851
+  ],
+  [
+   "methalox  (LCH4 / LOX)",
+   14.547898210419522
+  ],
+  [
+   "Iodine  (Hall / gridded)",
+   8.09296195964815
+  ],
+  [
+   "hydrolox  (LH2 / LOX)",
+   0.16651152088192533
+  ],
+  [
+   "Krypton  (Hall)",
+   0.13952661360332186
+  ],
+  [
+   "Water  (gridded ion / ECR)",
+   0.021755274085075674
+  ],
+  [
+   "FEEP  (indium field emission)",
+   0.01401541695865452
+  ],
+  [
+   "MMH / NTO  (hypergolic)",
+   0.0009413339748350051
+  ]
+ ],
+ "repl_best": {
+  "designation": "310442",
+  "margin": 2.2925519863130166,
+  "obj": 30.505567869826184,
+  "propellant": "FEEP  (indium field emission)",
+  "rank": 51532
+ },
+ "repl_propellants": [
+  [
+   "FEEP  (indium field emission)",
+   100.0
+  ]
+ ],
+ "repl_rows": 134,
+ "rows": 956090,
+ "sat_max": 1.0,
+ "sat_median": 1.0,
+ "sat_min": 1.0,
+ "span_median": 8.527637140710773,
+ "unsold_rows": 284,
+ "vehicles": [
+  [
+   "Falcon Heavy (reusable side cores)",
+   59.757554205148054
+  ],
+  [
+   "SLS Block 1B (Cargo)",
+   28.479536445313727
+  ],
+  [
+   "New Glenn",
+   11.519313035383698
+  ],
+  [
+   "Vulcan Centaur VC6",
+   0.10647533182022613
+  ],
+  [
+   "H3 (24L)",
+   0.044765660136598016
+  ],
+  [
+   "Long March 5",
+   0.03608446903534186
+  ],
+  [
+   "Long March 7",
+   0.031691577152778504
+  ],
+  [
+   "LVM3 (GSLV Mk III)",
+   0.010982229706408393
+  ],
+  [
+   "Falcon 9 (reusable)",
+   0.0069031158154567035
+  ],
+  [
+   "Soyuz-2.1b",
+   0.004288299218692801
+  ],
+  [
+   "Ariane 6 (A64)",
+   0.0024056312690227907
+  ]
+ ],
+ "w_gt_trips": 0,
+ "w_lt_trips_pct": 99.41543160162746,
+ "window_pct": 34.695373866477006,
+ "winner": {
+  "concentration_ratio": 2.2222222222222223,
+  "designation": "2015 BM510",
+  "fleet_ships": 1.0,
+  "max_payload_kg": 88612.10627296659,
+  "programme_missions": 1.0,
+  "propellant": "Xenon  (Hall / ion)",
+  "spectral_type": "M",
+  "vehicle": "Falcon Heavy (reusable side cores)"
+ }
+}

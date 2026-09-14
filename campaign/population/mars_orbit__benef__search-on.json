@@ -1,0 +1,136 @@
+{
+ "aerocapture_pct": 49.95314248658599,
+ "at_ceiling": 133854,
+ "at_ceiling_pct": 14.000146429729417,
+ "bound_pct": 34.75823405746321,
+ "cadence_median": 3.861054802688864,
+ "calendar_mult_max": 3.1465845871919975,
+ "calendar_mult_median": 1.6880222222635883,
+ "clearing_median": 1.0,
+ "clearing_min": 0.8143574848266859,
+ "cycle_pct": 25.844428871758936,
+ "evaluable": 956090,
+ "fleet_max": 64.0,
+ "fleet_median": 6.0,
+ "isru_pct": 0.2691169241389409,
+ "n_max": 320.0,
+ "n_median": 20.0,
+ "objective": 7.368140915411837,
+ "propellants": [
+  [
+   "Xenon  (Hall / ion)",
+   46.70888723864908
+  ],
+  [
+   "Iodine  (Hall / gridded)",
+   37.81098013785313
+  ],
+  [
+   "methalox  (LCH4 / LOX)",
+   14.480749720214623
+  ],
+  [
+   "Krypton  (Hall)",
+   0.6744134966373458
+  ],
+  [
+   "hydrolox  (LH2 / LOX)",
+   0.2583438797602736
+  ],
+  [
+   "Water  (gridded ion / ECR)",
+   0.027089499942474036
+  ],
+  [
+   "Argon  (Hall / ion)",
+   0.022382830068299008
+  ],
+  [
+   "FEEP  (indium field emission)",
+   0.015479714252842306
+  ],
+  [
+   "MMH / NTO  (hypergolic)",
+   0.001673482621928898
+  ]
+ ],
+ "repl_best": {
+  "designation": "613569",
+  "margin": 1.5997942762390789,
+  "obj": 11.787509662998824,
+  "propellant": "FEEP  (indium field emission)",
+  "rank": 3889
+ },
+ "repl_propellants": [
+  [
+   "FEEP  (indium field emission)",
+   100.0
+  ]
+ ],
+ "repl_rows": 148,
+ "rows": 956090,
+ "sat_max": 1.0,
+ "sat_median": 1.0,
+ "sat_min": 1.0,
+ "span_median": 17.47002323640129,
+ "unsold_rows": 72003,
+ "vehicles": [
+  [
+   "Falcon Heavy (reusable side cores)",
+   53.36662866466546
+  ],
+  [
+   "SLS Block 1B (Cargo)",
+   24.198454120427993
+  ],
+  [
+   "New Glenn",
+   21.620454141346524
+  ],
+  [
+   "Vulcan Centaur VC6",
+   0.48876151826710873
+  ],
+  [
+   "H3 (24L)",
+   0.1699630787896537
+  ],
+  [
+   "Long March 5",
+   0.11578407890470563
+  ],
+  [
+   "LVM3 (GSLV Mk III)",
+   0.012237341672855066
+  ],
+  [
+   "Long March 7",
+   0.009308747084479494
+  ],
+  [
+   "Falcon 9 (reusable)",
+   0.007530671798680041
+  ],
+  [
+   "Ariane 6 (A64)",
+   0.007112301143197816
+  ],
+  [
+   "Soyuz-2.1b",
+   0.0037653358993400203
+  ]
+ ],
+ "w_gt_trips": 0,
+ "w_lt_trips_pct": 18.44041878902614,
+ "window_pct": 53.50238994236945,
+ "winner": {
+  "concentration_ratio": 4.444444444444445,
+  "designation": "2006 YF",
+  "fleet_ships": 5.0,
+  "max_payload_kg": 36058.93754889622,
+  "programme_missions": 15.0,
+  "propellant": "Iodine  (Hall / gridded)",
+  "spectral_type": "D",
+  "vehicle": "New Glenn"
+ }
+}

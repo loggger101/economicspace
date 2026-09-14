@@ -1,0 +1,164 @@
+{
+ "aerocapture_pct": 89.99812898361236,
+ "at_ceiling": 132801,
+ "at_ceiling_pct": 14.878613610467834,
+ "bound_pct": 18.11513585035454,
+ "cadence_median": 3.9570341446193384,
+ "calendar_mult_max": 3.22035612222706,
+ "calendar_mult_median": 1.7899511710326708,
+ "clearing_median": 1.0,
+ "clearing_min": 0.763270004600708,
+ "cycle_pct": 20.149277978137118,
+ "evaluable": 892563,
+ "fleet_max": 64.0,
+ "fleet_median": 3.0,
+ "isru_pct": 0.7774241146003139,
+ "n_max": 320.0,
+ "n_median": 12.0,
+ "objective": 12.689247045650275,
+ "propellants": [
+  [
+   "Xenon  (Hall / ion)",
+   51.205461127113715
+  ],
+  [
+   "Iodine  (Hall / gridded)",
+   22.019846218138103
+  ],
+  [
+   "methalox  (LCH4 / LOX)",
+   15.152319780228398
+  ],
+  [
+   "Argon  (Hall / ion)",
+   5.980866336605931
+  ],
+  [
+   "Water  (gridded ion / ECR)",
+   3.2619546183294625
+  ],
+  [
+   "Krypton  (Hall)",
+   1.4579363025355072
+  ],
+  [
+   "hydrolox  (LH2 / LOX)",
+   0.7770880038719956
+  ],
+  [
+   "FEEP  (indium field emission)",
+   0.08245916534743206
+  ],
+  [
+   "HTP / RP-1  (peroxide bipropellant)",
+   0.023751824801162495
+  ],
+  [
+   "MMH / NTO  (hypergolic)",
+   0.0222953449784497
+  ],
+  [
+   "kerolox  (RP-1 / LOX)",
+   0.014228687498809608
+  ],
+  [
+   "Aerozine-50 / NTO  (hypergolic)",
+   0.0011203690943944573
+  ],
+  [
+   "UDMH / NTO  (hypergolic)",
+   0.0004481476377577829
+  ],
+  [
+   "Hydrazine arcjet",
+   0.00022407381887889146
+  ]
+ ],
+ "repl_best": {
+  "designation": "2015 BM510",
+  "margin": 1.008172189635844,
+  "obj": 12.792945978843402,
+  "propellant": "FEEP  (indium field emission)",
+  "rank": 2
+ },
+ "repl_propellants": [
+  [
+   "FEEP  (indium field emission)",
+   100.0
+  ]
+ ],
+ "repl_rows": 736,
+ "rows": 892563,
+ "sat_max": 1.0,
+ "sat_median": 1.0,
+ "sat_min": 1.0,
+ "span_median": 17.60065413724838,
+ "unsold_rows": 6977,
+ "vehicles": [
+  [
+   "Falcon Heavy (reusable side cores)",
+   46.079660483349635
+  ],
+  [
+   "New Glenn",
+   27.566345456847305
+  ],
+  [
+   "SLS Block 1B (Cargo)",
+   23.274659603859895
+  ],
+  [
+   "Vulcan Centaur VC6",
+   1.5737824668958942
+  ],
+  [
+   "Long March 5",
+   0.6041030156974914
+  ],
+  [
+   "Ariane 6 (A64)",
+   0.35806996256846857
+  ],
+  [
+   "H3 (24L)",
+   0.19752107134174282
+  ],
+  [
+   "Falcon 9 (reusable)",
+   0.1428470595352933
+  ],
+  [
+   "Long March 7",
+   0.09411100392913442
+  ],
+  [
+   "LVM3 (GSLV Mk III)",
+   0.047615686511764434
+  ],
+  [
+   "Soyuz-2.1b",
+   0.03204255609968148
+  ],
+  [
+   "Atlas V 551",
+   0.027673116631543097
+  ],
+  [
+   "Ariane 6 (A62)",
+   0.0015685167321522401
+  ]
+ ],
+ "w_gt_trips": 0,
+ "w_lt_trips_pct": 23.59318053739624,
+ "window_pct": 68.16314366604934,
+ "winner": {
+  "concentration_ratio": 3.703703703703703,
+  "designation": "2003 RS1",
+  "fleet_ships": 1.0,
+  "max_payload_kg": 18797.174438015863,
+  "programme_missions": 5.0,
+  "propellant": "Iodine  (Hall / gridded)",
+  "spectral_type": "X",
+  "vehicle": "New Glenn"
+ }
+}

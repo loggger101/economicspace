@@ -226,11 +226,31 @@ this project runs on: name one authority, or you have two.
 | the superseded 20-cell matrix, the per-cell wall clocks, the price-epoch evidence | [versions.md](../versions.md#the-28-cell-campaign-2026-09) |
 | the invariants, the retired claims, what was NOT re-derived | [CLAUDE.md](../CLAUDE.md#the-complete-28-cell-matrix-is-measured-current-2026-09-1113-calc-1212) |
 
-⚠️  **What was deliberately NOT promoted.** The per-destination propellant,
-vehicle, rig-bound and cadence tables in CLAUDE.md are still 2026-08
-`elasticity` measurements with insurance charged; this campaign extracted the
-winner row and ran the invariants and nothing else. Each of those sections now
-carries a banner saying so rather than being deleted or left looking current.
-**The archived cells under `cells/` carry every column needed to re-derive them
-without re-running anything**, and that is the cheapest open item in the
-project.
+✅  **WHAT WAS NOT PROMOTED HAS NOW BEEN DERIVED: CLOSED 2026-09-14.** The
+per-destination propellant, vehicle, rig-bound, cadence and saturation tables in
+CLAUDE.md were still 2026-08 `elasticity` measurements with insurance charged,
+because this campaign extracted the winner row and ran the invariants and
+nothing else. `population.py` read the archived cells under `cells/` and
+derived all of them in **one pass, about ten minutes, with no stage re-run**.
+Per-cell JSON is under `population/`; the tables are in
+[CLAUDE.md](../CLAUDE.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09)
+and the superseded 2026-08 ones in
+[versions.md](../versions.md#the-population-re-derivation-2026-09-14).
+
+🚨  **It changed four documented CONCLUSIONS, not four levels**, which is the
+argument against ever leaving that kind of gap open: `mars_surface` stopped
+being the exception to the beneficiated dig/window inversion, `saturation_multiplier`
+turned out to be **identically 1.0 on all 28 cells** and therefore dead as a
+diagnostic, "ISRU tracks hydrolox to within 0.03 pp" failed at three
+destinations, and iodine went from winning two beneficiated cells to three.
+
+✅  **The derivation reproduces all 28 objectives in the matrix above exactly**,
+plus every winner body, the `W < trips` values and the fleet-cap percentages,
+which is what makes it a measurement rather than another harness to have to
+trust.
+
+⚠️  **The cheapest open item in the project stayed open for three days anyway.**
+The campaign cost 47 h of queue time and archived 20 GB precisely so questions
+like these would not need a re-run. The data was never missing; the reader was.
+**When a section says "not re-derived", check whether the inputs are already on
+disk before believing the cost.**
