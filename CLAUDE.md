@@ -1437,7 +1437,7 @@ wall clocks, plus `beneficiation_cost_ratio()` and
 | `run_pipeline.py` | `--help` for `--raw` and `--search`, and both `[default: ...]` banner labels |
 | `build_master.py` | the `MASTER CONFIG READY` banner, so `master.py` too |
 | `modules/calc.py` | its own Stage 4 preview banner |
-| `ui.py` | `_SECONDS_PER_ROW`, which was a second copy of the same four numbers |
+| `ui.py` | `_SECONDS_PER_ROW`, which was a second copy of the same four numbers, **and since 2026-09-14 the Stage 4 sidebar blurb as well** |
 
 **Re-measure in one place and every printed ratio moves with it**, and because
 the ratio is computed per configuration the banner says **5.24× at N = 1 and
@@ -1445,6 +1445,27 @@ the ratio is computed per configuration the banner says **5.24× at N = 1 and
 ✅  **Both moved on their own when `MEASURED_CELL_SECONDS` was re-measured for
 the 28-cell campaign**, from 4.67× and 4.54×, and so did the `--search` help
 text (1.71× to 3.05×). That is the mechanism working: nobody edited a banner.
+
+🚨  **AND THE CLAIM ABOVE WAS FALSE WHEN IT WAS WRITTEN, IN THE ROW IT NAMES.**
+`ui.py` derived `_SECONDS_PER_ROW` from the constant and **hand-typed the same
+four wall clocks four hundred lines away**, in the Stage 4 sidebar blurb. When
+the constant was re-measured for the 28-cell campaign the derived half moved
+and the typed half did not, so the dashboard spent the next release telling
+users to **budget 1.6 h for a cell that measures 2.7 h** -- and the blurb
+attributed its figures to calc 1.17.7, which was honest and therefore made the
+staleness invisible. Found 2026-09-14 by converting the blurb to derive; the
+numbers changed under the edit, which is how a silent second copy announces
+itself.
+
+⚠️  **The lesson is narrower than "derive everything" and worth stating
+exactly: a file that derives a number in one place is not a file that derives
+it.** The audit that closed this class went looking for files that typed the
+ratios and found five; it did not go looking for a SECOND copy inside a file
+already on the fixed list, because that file was on the fixed list. **Grep for
+the VALUE, not for the filename.** ⚠️  One typed copy is left on purpose, the
+cislunar-to-dearest factor in `_DEST_FACTOR`, because it is a ratio of two
+numbers that live in a markdown table rather than in code; it is labelled, and
+it too had gone stale (2.1-2.7x against the 28-cell matrix's 2.2-3.0x).
 
 ⚠️  **`run_pipeline.py` deliberately asserts rather than falling back to a
 literal** if master is somehow not loaded when the parser is built. A

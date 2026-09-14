@@ -4766,6 +4766,20 @@ defaults change, and one output column is added.
 - **`campaign/run_cell.py`**: the ledger records `surplus_kg`. `population.py`
   is deliberately NOT updated, because its `usecols` raising on an older
   archive is the behaviour that file wants.
+- **`run_pipeline.py`**: four new flags, `--surplus-sales` /
+  `--no-surplus-sales` with `--surplus-fraction F`, `--reliability`,
+  `--learning-curve` and `--cost-of-capital`, each with a `--no-` partner.
+  Same precedent as v1.21.0's `--market-model`: **a field a cell can differ on
+  needs a way to say so from the command line**, or the headless path cannot
+  express a run the docs instruct the reader to make -- and `campaign/`
+  reaches Stage 4 only by shelling out to this file, so without them no future
+  campaign could reproduce a 2026-09 cell. Defaults in `--help` are read off
+  the dataclass; `--surplus-fraction` is validated by `unit_float` at the flag
+  as well as by `market_config_check` in the model. Verified end to end: the
+  four together return the raw cislunar sample cell to **25.7233x, 2025 SV5**.
+- **`market_config_check(config)`** is new in `calc.py` and is called from
+  `build_profitability_catalog` beside `destination_check`. It refuses a
+  `surplus_price_fraction` outside [0, 1].
 
 - `phase_market_key()` is new: the market IDENTITY of a phase, where
   `phase_market_kg()` is its size. It takes `markets` so it resolves the alias
