@@ -89,7 +89,18 @@ that a modest change could flip it. It flipped the other way: **2014 YN on FEEP
 conventional Hall thrusters on different bodies (krypton on 9992, iodine on
 2003 RS1). Concentrating the ore changes the mass budget enough that 6.7 tonnes
 of thruster stops paying, which is consistent with the gate being a mass
-penalty rather than a threshold. Zero FEEP winners in the other 22 cells.
+penalty rather than a threshold. Zero FEEP winners in the other **26** cells,
+and zero at the other six destinations on any setting.
+
+⚠️  That read "the other 22 cells" until 2026-09-14 and was wrong under every
+reading: 28 cells minus the 2 FEEP wins is 26, and excluding `mars_surface`
+entirely is 24. Counted from `population/`, which gates on the `thrust_scaling`
+column. **A count spelled out in prose is a number waiting to rot**, and this
+one rotted inside the campaign's own findings.
+
+🚨  **And the beneficiated `mars_surface` cells are closer than "does not
+survive" suggests**: the best FEEP mission sits at **rank 2, margin 1.00x and
+1.01x**. It loses by under one percent, not by a factor.
 
 ### The two levers are not interchangeable, and the split is per destination
 
@@ -160,6 +171,7 @@ Population medians and decline counts, this campaign:
 | mars_surface | 32.73% | 3.71% |
 | cislunar | 20.86% | **0.319%** |
 | lunar_surface | 16.07% | 0.225% |
+| geo | 12.97% | never measured |
 | leo | 8.09% | 0.161% |
 | earth_surface | 0.270% | 0.234% |
 
@@ -224,7 +236,8 @@ this project runs on: name one authority, or you have two.
 | the 28-cell cost/revenue matrix, the two new destinations, the ranking, the FEEP win | [README.md, Results](../README.md#current-results-the-complete-28-cell-matrix) |
 | the 28-cell wall clocks | [README.md, Beneficiation](../README.md#beneficiation), pinned to `MEASURED_CELL_SECONDS` by `verify_docs.py` check 9 |
 | the superseded 20-cell matrix, the per-cell wall clocks, the price-epoch evidence | [versions.md](../versions.md#the-28-cell-campaign-2026-09) |
-| the invariants, the retired claims, what was NOT re-derived | [CLAUDE.md](../CLAUDE.md#the-complete-28-cell-matrix-is-measured-current-2026-09-1113-calc-1212) |
+| the invariants and the retired claims | [CLAUDE.md](../CLAUDE.md#the-complete-28-cell-matrix-is-measured-current-2026-09-1113-calc-1212) |
+| the per-destination population tables, derived 2026-09-14 rather than promoted | [CLAUDE.md](../CLAUDE.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09), from `population/` |
 
 ✅  **WHAT WAS NOT PROMOTED HAS NOW BEEN DERIVED: CLOSED 2026-09-14.** The
 per-destination propellant, vehicle, rig-bound, cadence and saturation tables in
