@@ -17,6 +17,22 @@ destinations, `market_model` defaulting to `capacity_cap` instead of
 `elasticity`, `charge_insurance` defaulting False, and a fresh Stage 2 / Stage 3
 price epoch.
 
+🚨  **AND NOTHING HERE IS WHAT A CONFIGURE-NOTHING RUN ANSWERS ANY MORE.** calc
+`1.22.0` (2026-09-14) moved four defaults after this campaign finished: the
+surplus past a market ceiling now SELLS at half price rather than being
+abandoned, and mission reliability, the learning curve and the cost of capital
+are all off. To reproduce a cell below, set `sell_surplus_at_discount` False,
+`model_reliability` True, `model_learning_curve` True and
+`apply_wacc_compounding` True. ⚠️  Do not scale these cells by a single ratio;
+the decomposition is in [calc v1.22.0](../versions.md#calc-v1220), and one of
+the four runs the other way. Every figure here remains a correct measurement of
+the code it names, which is why it is kept.
+
+⚠️  **A v1.22.0 campaign would also carry one more column**,
+`surplus_payload_kg`, which the cells under `cells/` do not have.
+`population.py` reads with `usecols` and will raise on it rather than render a
+blank, which is the behaviour that file wants.
+
 ## The matrix
 
 Cost / revenue, lower is better, 1.0 = breakeven.

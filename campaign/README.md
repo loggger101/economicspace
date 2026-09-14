@@ -13,6 +13,16 @@ the price epoch all moved in between.
 Code under measurement (all stamps verified against `verify_docs.py` before start):
   catalog 1.2.0 | mineral_value 1.9.0 | transportation 1.14.0
   calc 1.21.2   | master 1.26.0
+
+  WARNING: those are the stamps this campaign RAN ON, not the current ones.
+  calc 1.22.0 landed on 2026-09-14, after the campaign finished, and moved four
+  defaults: the surplus past a market ceiling sells at half price instead of
+  being abandoned, and reliability, the learning curve and the cost of capital
+  are off.  A cell here is reproducible only with sell_surplus_at_discount
+  False, model_reliability True, model_learning_curve True and
+  apply_wacc_compounding True.  A NEW campaign run today is a different
+  measurement and should say so in its own header rather than being compared
+  with these cells.
   master.py rebuilt from modules/, `git status` clean afterwards.
   platform_check.py: all 18 probes match the reference host, so cell hashes
   taken here are directly comparable with the ones in versions.md.

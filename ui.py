@@ -207,7 +207,11 @@ STAGES = [
           "so budget for the 1.6 h unless you turn one off. Cislunar is the "
           "CHEAPEST destination: leo, mars_surface and earth_surface run "
           "2.1-2.7x longer per cell, so the default there is 3.4-4.3 h. "
-          "Seconds with eval_row_cap set low."),
+          "Seconds with eval_row_cap set low. WARNING: those are calc "
+          "1.17.7 figures. v1.21.0 priced the capacity ceilings inside "
+          "the payload knapsack and v1.22.0 gave that knapsack a second "
+          "price tier, and neither has been re-measured on a full "
+          "catalog, so treat this as a floor rather than a budget."),
 ]
 
 

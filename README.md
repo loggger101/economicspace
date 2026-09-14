@@ -283,7 +283,11 @@ still runs unattended; the menu asks.
 Since calc v1.17.0 a configure-nothing run is the full 1.55 M-row catalog,
 beneficiated, with the programme search on, at `earth_surface`: **measured at
 13,581 s (3.8 h)** in the 2026-08-24 campaign, against 5,692 s (1.6 h) for the
-same cell at `cislunar`. That is the right default for the model and a hostile
+same cell at `cislunar`. ⚠️  Both are **calc 1.17.7** measurements and neither
+has been re-taken since v1.21.0 priced the capacity ceilings inside the payload
+knapsack or v1.22.0 gave that knapsack a second price tier, so read them as a
+floor. The configuration they describe -- every row, beneficiated, search on --
+is unchanged. That is the right default for the model and a hostile
 one for a double-click, so `quick` and `standard` cap the rows and fly
 run-of-mine ore at N = 1. The row cap is a **stride sample across the whole
 belt**, not the innermost N bodies; see calc v1.13.0.
@@ -934,10 +938,18 @@ propellant × return mode × propellant sourcing × rendezvous apsis ×
 concentration ratio, sorted by `profit_usd` descending. Note that the *file*
 is sorted by profit while the *search* that produced each row optimises
 `selection_objective` (cost/revenue by default); those are different questions
-and the sort order is the less useful of the two. **141 columns**, of which two
-(`pipeline_version`, `catalog_date`) are provenance and must be stripped before
-comparing two runs, which is why the verification blocks compare 139. The ones
-to look at first:
+and the sort order is the less useful of the two.
+
+Two columns, **`pipeline_version` and `catalog_date`**, are provenance and must
+be stripped before comparing two runs; `verify.py`'s `PROVENANCE` is the
+authoritative list and the reason the verification blocks report a smaller
+count than the file has. ⚠️  **The total is deliberately not written here.**
+It read "141 columns" while the file had 144, having gone stale three releases
+earlier, and no check in this repo can see it -- which is the
+count-with-no-checker case CLAUDE.md says to delete rather than correct. Ask
+the file: `len(pd.read_csv(path, nrows=1).columns)`.
+
+The ones to look at first:
 
 | Column | Meaning |
 |--------|---------|
@@ -961,7 +973,10 @@ to look at first:
 | `m_dry_return_kg` | Return-vehicle dry mass actually flown, the 500 kg base plus `return_structure_frac_of_payload` of the haul. Compare it to `max_payload_kg`: a ratio far above ~7:1 means something has gone slack |
 | `ep_system_kg`, `ep_power_w`, `ep_system_cost_usd` | The electric stage. Before v1.10.0 the first two existed and the third did not, which is exactly the bug |
 | `*_cost_usd` (23 columns) | The cost cascade, line by line: launch, outbound and return propellant, hardware, mining rig, power system, EP stage, tankage, tanker flights, capsule, heat shield, ops, recovery, liability, licensing, launch insurance, NRE, autonomy NRE, contingency. Four of the 23 are the time-bucket aggregates in the next row, plus `total_cost_usd`. `liability_cost_usd` and `launch_insurance_cost_usd` are **0.0** unless `charge_insurance` is set; the columns stay so a charged run and an uncharged one have the same schema |
-| `upfront_cost_usd`, `ongoing_cost_usd`, `end_of_mission_cost_usd`, `wacc_multiplier*` | Cost by time bucket, and the WACC factor applied to each |
+| `upfront_cost_usd`, `ongoing_cost_usd`, `end_of_mission_cost_usd`, `wacc_multiplier*` | Cost by time bucket, and the WACC factor applied to each. ⚠️  Every `wacc_multiplier*` is **1.0** unless `apply_wacc_compounding` is set, which is off by default since calc v1.22.0 |
+| `saturation_multiplier`, `market_clearing_fraction`, `unsold_payload_kg`, `surplus_payload_kg` | What the market did to the load. The first is a PRICE multiplier and is 1.0 in every model but `elasticity`; the rest are quantity. `market_clearing_fraction` is the share of the assembled load's gross value that cleared, `surplus_payload_kg` is mass sold past a ceiling at `surplus_price_fraction`, and `unsold_payload_kg` is mass that earned nothing. The last two are exclusive: which one carries the mass is `sell_surplus_at_discount`, and `verify.py` check 7 asserts it |
+| `p_success`, `p_mining`, `learning_curve_factor` | ⚠️  All **1.0** by default since calc v1.22.0. `model_reliability` and `model_learning_curve` are off, so these read as "no discount applied" rather than as a measurement |
+| `programme_missions`, `fleet_ships`, `missions_per_ship`, `trips_per_ship`, `programme_span_yr`, `programme_calendar_multiplier` | The programme the search chose. N = fleet x campaigns-per-ship, and `trips_per_ship` is what the rig's two bounds allow. ⚠️  The calendar multiplier is 1.0 whenever the cost of capital is off, because it is time-value |
 | `pipeline_version`, `catalog_date` | Which version of Stage 4 produced this row, and when |
 
 Running `python modules/calc.py` directly (rather than `master.py`) also
@@ -969,7 +984,9 @@ prints a top-20 table, a breakdown by composition group, the winning
 vehicle × propellant combinations, and a bar chart of where the money goes.
 That last one is the fastest way to see which lever matters: launch-dominated
 means try a cheaper vehicle, NRE-dominated means amortise across missions,
-WACC-dominated means shorten the mission.
+WACC-dominated means shorten the mission. ⚠️  The last of those cannot happen
+under the calc v1.22.0 defaults, where the cost of capital is off and every
+WACC multiplier is exactly 1.0.
 
 Every mineral price column carries a `_usd_per_kg` suffix, prices are
 normalised to USD/kg on the way in, everywhere, so the unit is never in
@@ -2389,10 +2406,15 @@ declared [marginal-transport lower bounds](#what-a-kilogram-is-worth) with no
 NRE-style programme overhead in them, and a premium is exactly that kind of
 overhead.
 
-It is also the model saying one thing twice. `model_reliability` already
-discounts expected revenue by `p_launch x exp(-T/MTBF) x p_mining` while
-charging every cost in full; a premium is what a programme pays to turn that
-same risk into a certain payment.
+It was also, until calc v1.22.0, the model saying one thing twice:
+`model_reliability` discounted expected revenue by
+`p_launch x exp(-T/MTBF) x p_mining` while charging every cost in full, and a
+premium is what a programme pays to turn that same risk into a certain payment.
+⚠️  **That second argument is gone**, because reliability is off by default too
+now, and the two terms are off together. It is left here because it was one of
+v1.20.0's two reasons and the OTHER one -- a premium is priced off an
+underwriter's book rather than off a mass -- is untouched and is sufficient on
+its own. Turn reliability back on and the double count returns with it.
 
 ⚠️  **Turning it off is worth more than the invoice says**, because a
 premium is an *upfront* line and so is multiplied by contingency and then
@@ -2407,9 +2429,17 @@ why the programme search makes insurance matter *more* rather than less, in
 
 ⚠️  **Every measurement committed BEFORE 2026-09 was taken with both premiums
 charged**, the 20-cell campaign included; set `charge_insurance` True to
-reproduce one. ✅  The **28-cell campaign is the first that is not**, so the
-current matrix needs no such flag to reproduce -- it is what a
-configure-nothing run answers.
+reproduce one. ✅  The **28-cell campaign is the first that is not**, so no
+insurance flag is needed to reproduce it.
+
+🚨  **BUT IT IS NO LONGER TRUE THAT THE MATRIX IS WHAT A CONFIGURE-NOTHING RUN
+ANSWERS**, which is what this paragraph said until calc v1.22.0 moved four more
+defaults under it. Reproducing a cell of the 28-cell matrix now takes
+`sell_surplus_at_discount` False, `model_reliability` True,
+`model_learning_curve` True and `apply_wacc_compounding` True -- insurance is
+simply the one flag it does NOT take. The sentence is corrected rather than
+deleted because "the current matrix needs no flag to reproduce" is exactly the
+kind of claim that is true for one release and quietly wrong for the next.
 
 **What is not on this list, and why.** Crew costs are absent because every
 mission here is uncrewed, not because they were declined; Module 3 replaced its

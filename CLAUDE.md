@@ -652,13 +652,35 @@ arriving on schedule, at a destination it was not written about.
 🚨  **RE-DERIVED 2026-09-14, AND `saturation_multiplier` IS IDENTICALLY 1.0 ON
 ALL TWENTY-EIGHT CELLS.** Min, median and max, every destination, every setting.
 The column is not stale here; it is **inert**. `capacity_cap` does not bend a
-price as a market fills, it refuses the sale, so the multiplier that expressed
-`elasticity`'s haircut has nothing left to express and the whole table this
-section used to carry has no information in it under the current default.
+price as a market fills, so the multiplier that expressed `elasticity`'s
+haircut has nothing left to express and the whole table this section used to
+carry has no information in it.
+
+⚠️  **THE REASON CHANGED IN calc `1.22.0` AND THE CONCLUSION DID NOT, WHICH IS
+WORTH READING CAREFULLY.** This paragraph used to say the multiplier is 1.0
+because the ceiling "refuses the sale". It no longer refuses it: the surplus
+past a ceiling SELLS, at `surplus_price_fraction` of full price. The multiplier
+is still identically 1.0 -- `verify.py` check 7 asserts it on every cell -- but
+now it is because the discount is applied **in the sale and in the knapsack**
+rather than through the elasticity multiplier, not because no sale happens. A
+diagnostic that stays constant across a model change for a DIFFERENT reason is
+the subtlest version of this section's own lesson.
 
 ✅  **THE LIVE DIAGNOSTIC IS `market_clearing_fraction`**, which says what
 fraction of an assembled load actually cleared, with `unsold_payload_kg`
 alongside it. Searched cells:
+
+🚨  **AND THE COMPANION COLUMN MOVED IN calc `1.22.0`: IT IS
+`surplus_payload_kg` NOW, AND `unsold_payload_kg` READS 0.0.** Mass past a
+ceiling is sold at a discount rather than abandoned, so it lands in the new
+column and the old one goes quiet. The two are exclusive by construction and
+check 7 asserts it. **The `unsold rows` column in the table below is therefore
+a v1.21.2 measurement**, and a harness that kept counting `unsold_payload_kg`
+across the flip would report zero everywhere and read as "nothing is ever lost
+to a ceiling", which is false -- ceilings still bind on 18 to 96% of rows at
+the six in-space destinations. That is this section's own lesson happening to
+this section: **when you swap a model term, check whether the diagnostics that
+watched it still VARY.**
 
 | cell | rows at fleet cap | clearing min | clearing median | rows bound | unsold rows |
 |---|---|---|---|---|---|
@@ -887,7 +909,10 @@ are measuring is how a clean result becomes a false alarm.
 ✅  **RE-DERIVED 2026-09-14 ON ALL TWENTY-EIGHT CELLS**, by
 `campaign/population.py`, which reads the archived cells rather than re-running
 anything. Every figure below is `capacity_cap` with insurance OFF, and is
-directly comparable with the rest of the 28-cell campaign. The superseded
+directly comparable with the rest of the 28-cell campaign. ⚠️  **And with calc
+`1.21.2`, not with a default run today**: `1.22.0` sells the surplus past a
+ceiling at half price and turns reliability, the learning curve and the cost of
+capital off. See the banner on the 28-cell section. The superseded
 `elasticity` tables are in
 [the 28-cell campaign](versions.md#the-28-cell-campaign-2026-09).
 
@@ -992,7 +1017,9 @@ year of the surface.
 
 ✅  **RE-DERIVED 2026-09-14 BY `campaign/population.py`**, off the archived
 cells, so these are `capacity_cap` with insurance OFF and include the two
-destinations that had never had a share table at all. The superseded 2026-08
+destinations that had never had a share table at all. ⚠️  **calc `1.21.2`, not
+a default run today**; see the banner on the 28-cell section for the four flags
+`1.22.0` moved. The superseded 2026-08
 `elasticity` shares are in
 [the 28-cell campaign](versions.md#the-28-cell-campaign-2026-09).
 
@@ -2442,6 +2469,14 @@ diagnostic inherits the shape of the term it was written against**, and
 swapping a continuous term for a discontinuous one silently re-populates it.
 When you change a model term, re-read every warning that counts rows.
 
+🚨  **AND IT HAPPENED AGAIN IN calc `1.22.0`, IN THE OPPOSITE DIRECTION.** The
+ceiling went from a hard wall back to something partly continuous: the surplus
+past it now sells at half price. `saturation_multiplier` is still identically
+1.0, but for a different reason; `unsold_payload_kg` went to zero and the mass
+it used to carry moved to a new column. **Twice in two releases, the same
+diagnostics changed meaning without changing name.** Read this lesson as a
+standing instruction rather than as an account of one release.
+
 ⚠️  **And the first hypothesis was wrong, which is the other half.** The
 obvious culprit was `other (bulk silicate)`, calc's composition residual: it is
 priced, it is on 100% of rows and it has no market ceiling. Mapping it to the
@@ -2745,6 +2780,22 @@ reads.
   outside of it: **16,000 randomised comparisons over five phases, on raw IEEE
   bit patterns, zero differences**, covering `want_phase` as well because the
   sizing path is what uses it. That is the check to repeat, not to argue.
+- 🚨  **THE TIERED WALK ASSUMES A PHASE'S FULL-PRICE TIER IS REACHED FIRST**
+  (v1.22.0). It identifies that tier as "the first time this phase appears in
+  the walk", which is the same question as "the dearer of its two tiers" only
+  while `surplus_price_fraction <= 1.0`. Above 1.0 the discounted tier sorts
+  first, draws the market allowance, and the capped load comes out worth MORE
+  than the uncapped one -- measured at 1.5 as 945,000 against an uncapped
+  900,000, which inverts the invariant `verify.py` check 7 exists to enforce.
+  Clamped in `optimal_payload_mix`, clamped again where `surplus_frac` is
+  resolved, and REFUSED outright by `market_config_check`. **Do not "simplify"
+  any of the three away**, and if you ever give the two tiers independent
+  prices rather than one fraction, this assumption is the thing that breaks.
+- ⚠️  **The tier ledger is written BEFORE the `take <= 0` skip**, deliberately.
+  A full-price tier whose allowance is already spent takes nothing, and if it
+  went unrecorded its own surplus tier would be read as the full-price one and
+  clipped at the same exhausted allowance -- so the discount would silently
+  never fire on exactly the phases it exists for.
 - 🚨  **`caps` IS KEYED BY MARKET, NOT BY PHASE, AND THE WALK CONSUMES IT**
   (`1.21.2`). Two phases can sell into one market -- `silicates` and the
   composition residual do, on every body -- and a dict keyed by phase hands
