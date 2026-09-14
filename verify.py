@@ -239,6 +239,7 @@ RESET_FIELDS = (
     "model_learning_curve",      # v1.22.0
     "apply_wacc_compounding",    # v1.22.0
     "sell_surplus_at_discount",  # v1.22.0
+    "surplus_price_fraction",    # v1.22.0
 )
 
 

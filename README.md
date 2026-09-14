@@ -990,21 +990,39 @@ half of the mission is solved once per candidate and the whole ladder is priced
 off the result.
 
 **Scale is real, sublinear, and bounded.** Five models pull against each other,
-and the last two are what stop it running away:
+and the last two are what stop it running away. 🚨  **Three of the five are OFF
+or INERT under the calc v1.22.0 defaults**, which is marked per bullet, and
+**both of the two that bound it are still live** -- so the conclusion survives
+the flip, but the argument for it is now carried by fewer terms:
 
 - **NRE amortises** across the programme, and the learning curve (Wright's law,
-  0.85) falls on the per-mission articles.
+  0.85) falls on the per-mission articles. ⚠️  **The curve is OFF by default
+  since v1.22.0** (`model_learning_curve`); the NRE amortisation is not and
+  never was a flag. Turning the curve on is worth 34.3% on the searched
+  cislunar sample cell and exactly nothing at N = 1.
 - **Mining reliability grows** with programme size, Duane/AMSAA, 0.850 at
   N = 1 to 0.943 at N = 100, reported as the fleet average rather than the
-  terminal value.
+  terminal value. ⚠️  **OFF by default since v1.22.0** (`model_reliability`),
+  which takes the growth term with it.
 - **The rig wears out**, on whichever of its two bounds binds first: a 15-year
   calendar life, or five duty cycles. Past that, mission N+1 buys a new rig.
-- **The market saturates**, against the programme's **concurrent** output, 
+  ✅  Live, and one of the two that bound the ladder.
+- **The market saturates**, against the programme's **concurrent** output,
   which is what makes the optimum programme size **interior** rather than "as
-  many as you can pay for".
+  many as you can pay for". ✅  Live, and the other one. Since v1.22.0 the
+  surplus past a ceiling sells at half price rather than being abandoned,
+  which softens the bound without removing it: the marginal kilogram past a
+  ceiling is still worth strictly less than the one before it.
 - **The calendar is charged.** One rig digs one hole at a time, so campaigns on
   a ship are strictly sequential, and the lines bought once at t = 0; bus NRE,
   autonomy NRE, the rig, are carried across decades of programme span.
+  ⚠️  **INERT since v1.22.0.** The flag is still True, but the charge is
+  time-value and `apply_wacc_compounding` is off, so the multipliers are
+  exactly 1.0. Measured: it was worth a median **1.457x** on the amortised
+  lines of the searched cislunar sample cell, and the share of rows choosing
+  **fewer campaigns than the rig can fly fell from 29.2% to 1.5%** with it
+  inert -- this was the only term giving W a reason to be less than the rig's
+  trip life.
 
 Measured on the full catalog at cislunar, the search improves the raw cell
 **15.3937× → 9.5435×** and the beneficiated cell **14.1071× → 6.6622×**, on a

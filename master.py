@@ -6150,8 +6150,12 @@ class CalcConfig:
     # usd_per_kg_to_leo and nothing else.  Kept wired for the day it does.
     escape_direct_launch:      bool  = False
 
-    # INSURANCE (v1.20.0).  OFF, and it is the one cost flag here whose default
-    # is OFF because the charge is IRRELEVANT rather than wrong.  Module 3
+    # INSURANCE (v1.20.0).  OFF because the charge is IRRELEVANT rather than
+    # wrong.  ⚠️  It was the ONLY cost flag here defaulting OFF until v1.22.0,
+    # which put the cost of capital, mission reliability and the learning curve
+    # on the same footing for the same reason; that sentence is corrected
+    # rather than deleted because "the one flag that..." is exactly the kind of
+    # claim this repo keeps finding outlived by a later release.  Module 3
     # prices two premiums, a $1.5M third-party liability flat and launch
     # insurance at 10% of (launch + spacecraft book value), and both are real
     # money a real programme pays.  They are not what this pipeline asks.  It
@@ -6874,6 +6878,37 @@ def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
 # ─────────────────────────────────────────────────────────────────────────────
 # CROSS-MODULE INTEGRITY CHECK
 # ─────────────────────────────────────────────────────────────────────────────
+def market_config_check(config: CalcConfig) -> None:
+    """Refuse a `surplus_price_fraction` outside [0, 1] (v1.22.0).
+
+    A surplus is mass sold PAST a market ceiling, so a fraction above 1.0 says
+    a kilogram is worth more for being unsellable, which is not a market model
+    anyone means.  It is refused rather than clamped for the reason
+    `_market_mode` refuses an unrecognised `market_model`: a silent fallback
+    here prices a whole campaign against a model nobody chose, and the only
+    symptom is numbers that look slightly generous.
+
+    🚨  AND IT IS NOT MERELY MEANINGLESS, IT INVERTS AN INVARIANT.  The tiered
+    knapsack identifies a phase's full-price tier as the first time that phase
+    is reached, which is the same question as "the dearer of its two tiers"
+    only while the discount is at most full price.  Above 1.0 the discounted
+    tier sorts first and draws the market allowance, and the capped load comes
+    out worth MORE than the uncapped one -- measured at 1.5 as 945,000 against
+    an uncapped 900,000.  That is exactly what `verify.py` check 7 exists to
+    catch, so it must not be reachable by configuration.
+
+    Negative is refused on the same line and for a duller reason: it would pay
+    the programme to overproduce.
+    """
+    frac = float(getattr(config, "surplus_price_fraction", 0.0))
+    if not 0.0 <= frac <= 1.0:
+        raise ValueError(
+            "surplus_price_fraction must be between 0.0 and 1.0, not %r. "
+            "It is what a kilogram past a market ceiling fetches as a "
+            "fraction of the full price; 0.0 is v1.21.0's hard wall and 1.0 "
+            "removes the ceiling entirely." % (frac,))
+
+
 def destination_check(catalogs: Dict[str, pd.DataFrame], config: CalcConfig) -> None:
     """Verify Module 2 priced the material for the destination Module 4 flies to.
 
@@ -8081,10 +8116,17 @@ def optimal_payload_mix(
     tier_taken: Optional[Dict[str, float]] = None
     walk = by_price
     if caps is not None and surplus_price_frac > 0.0 and want_phase is None:
+        # Clamped HERE as well as at the resolver that normally feeds it and
+        # at `market_config_check`, because this is where the ASSUMPTION lives:
+        # above 1.0 the discounted tier would sort ahead of the full-price one,
+        # take the market allowance, and make the capped load worth more than
+        # the uncapped one.  One min() per tiered build, not per item, and the
+        # branch is the rare one.
+        frac = surplus_price_frac if surplus_price_frac < 1.0 else 1.0
         tiered: List[Tuple[str, float, float]] = []
         for p_name, p_frac, p_price in by_price:
             tiered.append((p_name, p_frac, p_price))
-            tiered.append((p_name, p_frac, p_price * surplus_price_frac))
+            tiered.append((p_name, p_frac, p_price * frac))
         tiered.sort(key=lambda p: -p[2])
         walk       = tiered
         tier_taken = {}
@@ -12721,7 +12763,22 @@ def _evaluate_combo_at_ratio(
     # v1.21.0 wall, and both the raw sale and the knapsack take it as "no
     # surplus tier", so the flag is expressed entirely as a number and neither
     # of them has to branch on a boolean.
-    surplus_frac = (max(0.0, float(config.surplus_price_fraction))
+    #
+    # 🚨  CLAMPED TO [0, 1], AND THE UPPER HALF IS LOAD-BEARING RATHER THAN
+    # TIDY.  The tiered walk identifies a phase's full-price tier as "the
+    # first time this phase is reached", which is only the same question as
+    # "the dearer of its two tiers" while the discount is at most full price.
+    # Above 1.0 the sort puts the DISCOUNTED tier first, so it draws the
+    # market allowance and the full-price remainder does not -- and the load
+    # comes out worth more than the uncapped one, which inverts the invariant
+    # check 7 exists to enforce.  Measured before this clamp: at 1.5 a load
+    # worth 900,000 uncapped priced at 945,000 capped.
+    #
+    # `build_profitability_catalog` REFUSES an out-of-range value outright, so
+    # in a normal run this clamp never fires; it is here because a harness can
+    # reach this function without going through that check, and a silently
+    # inverted invariant is the worst failure this module has.
+    surplus_frac = (min(1.0, max(0.0, float(config.surplus_price_fraction)))
                     if config.sell_surplus_at_discount else 0.0)
     # v1.21.2: (kg, price, ceiling_kg_per_yr, market_key).  The key is what
     # lets every consumer below pool phases that sell into ONE market; see
@@ -14358,6 +14415,7 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
     # ── Step 2, Integrity checks ────────────────────────────────────────────
     integrity_check(catalogs)
     destination_check(catalogs, config)
+    market_config_check(config)
 
     # ── Step 3, Iterate asteroids ───────────────────────────────────────────
     asteroids = catalogs["asteroids"]
