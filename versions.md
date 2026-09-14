@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [calc v1.22.0](#calc-v1220)
 - [calc v1.21.2](#calc-v1212)
 - [calc v1.21.1](#calc-v1211)
 - [calc v1.21.0](#calc-v1210)
@@ -76,8 +77,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.2.0** | v1.2.0, orbit quality, a total NEOWISE sort, the element epoch |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments. ⚠️  Owned by [`spacecost`](https://github.com/loggger101/spacecost) since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.21.2** | v1.21.2, one market was being sold twice: the silicate phases now share one allowance |
-| - | `master.py` | **1.26.0** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.22.0** | v1.22.0, four defaults moved and the ceiling stopped being a wall |
+| - | `master.py` | **1.27.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -156,6 +157,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [calc v1.22.0](#calc-v1220) | 2026-09-14 | **four defaults moved**: the surplus past a ceiling sells at half price, and reliability, the learning curve and the cost of capital come off |
 | [calc v1.21.2](#calc-v1212) | 2026-09-08 | **one market, two allowances**: the composition residual and the `silicates` phase each drew the full silicates ceiling, on 100% of bodies |
 | [calc v1.21.1](#calc-v1211) | 2026-09-08 | **the ceilings recalibrated: the levels do not move, and the composition residual gets the ceiling it was already priced against** |
 | [calc v1.21.0](#calc-v1210) | 2026-09-07 | **prices are constant and quantity is what binds**: the market term becomes a four-valued `market_model`, and the ceilings go into the payload knapsack |
@@ -191,6 +193,291 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## calc v1.22.0
+
+**Four defaults moved. The surplus past a market ceiling sells at half price
+instead of being abandoned, and reliability, the learning curve and the cost of
+capital come off.**
+
+Three of the four are the same decision, and it is the one v1.20.0 made about
+insurance: a charge that is **real** and is nonetheless not what this pipeline
+asks. The fourth is a model change, and it makes the ceiling a price rather
+than a wall.
+
+### The membership test, and which side each of these is on
+
+[README's corrections list](README.md#what-the-model-charges-for) turns on one
+question, **"was the model getting something for free?"**, and everything on it
+defaults ON. v1.20.0 added a second list for the opposite case, and insurance
+was its only entry. It has three more:
+
+| | the charge is | why the default moved |
+|---|---|---|
+| `apply_wacc_compounding` | **right, and not asked** | a discount rate says whose money this is; the model does not know |
+| `model_reliability` | **right, and not asked** | it multiplies the ANSWER by two judgements and one measurement |
+| `model_learning_curve` | **right, and not asked** | it prices a factory this programme does not have |
+| `charge_tanker_flights` | **wrong here** | v1.11.0's entry, gated rather than declined; unchanged |
+
+⚠️  **None of this says the risk is not real or the money is not spent.** It
+says a default run answers *what it costs to move a kilogram if it works*,
+which is the framing that already makes the two surface delivery prices
+[marginal-transport lower bounds](README.md#what-a-kilogram-is-worth). Every
+one of the four flags turns back on individually.
+
+⚠️  **`apply_wacc_compounding` takes `model_programme_calendar` with it.** The
+calendar charge is time-value, and `programme_calendar_multipliers` returns
+exactly (1.0, 1.0) at a zero rate by construction, so that term is inert until
+a rate comes back. The flag is left ON rather than flipped, because it still
+says the right thing about what the model should charge the moment there is
+something to charge; the run banner reports which of the two states it is in
+rather than leaving a reader to derive it.
+
+### The ceiling stops being a wall
+
+v1.21.0 made `capacity_cap` a quantity wall: everything inside a commodity's
+ceiling sold at the quoted price and everything past it earned **nothing**,
+reported as `unsold_payload_kg`. That is the right shape for a market that
+refuses the sale outright, and it is too strong for most of the ones in
+`IN_SPACE_ANNUAL_DEMAND_KG`. A destination that absorbs 100 t/yr of water at
+the quoted price does not become unable to take the 101st tonne; it takes it at
+a price that clears, which is the whole content of a supply curve sloping down.
+
+`sell_surplus_at_discount` (True) sells it at `surplus_price_fraction` (0.5).
+**0.5 is a deliberately round number with no market study behind it**, which is
+why it is a dial rather than a buried constant; 0.0 reproduces the wall exactly
+and 1.0 would remove the ceiling altogether.
+
+🚨  **THE PROGRAMME IS STILL BOUNDED, AND THAT IS THE OBJECTION TO CHECK
+FIRST.** The ladder turns over because the marginal kilogram past a ceiling is
+worth strictly less than the one before it: a bigger fleet delivers more often,
+each delivery gets a shorter accumulation window, a larger share of every load
+falls into the discounted tier, and another ship adds its whole cost against a
+falling marginal revenue. A wall is the `surplus_price_fraction = 0` end of
+this model rather than a different one.
+
+### In a concentrated load it changes what the ship carries
+
+This is the half that is not a re-pricing. A beneficiated load chooses its
+contents, so the discount puts every phase into the knapsack **twice**: once at
+full price up to its market allowance, once at the discounted price above it.
+The merged list is sorted by unit price like any other fractional knapsack, so
+a rich phase's half-price surplus can outrank a poor phase's full-price
+allowance, and where it does, the optimal load carries it instead.
+
+✅  **Greedy is still exact.** A two-step price schedule is two ITEMS, not a
+clamp: each has a constant unit value and is divisible, which is the only
+condition greedy needs. Checked against an integer DP that shares no code with
+the walk -- 150 random instances, every split of every phase between its two
+tiers enumerated -- plus 400 instances proving `caps=None` is bit-identical to
+the pre-v1.21.0 walk, 400 proving `surplus_price_fraction = 0` is bit-identical
+to v1.21.0's, and 300 proving the value is monotone in the fraction and equal
+to the UNCAPPED load at 1.0.
+
+⚠️  **It cannot be done as a second pass over the leftovers**, which is the
+implementation that suggests itself. That fills the hold full-price-first and
+tops up with surplus afterwards, which is a different and strictly worse load,
+and it is the "clamp bolted onto the outside of an optimiser" shape
+`optimal_payload_mix` already warns against.
+
+⚠️  **One walk, not two.** The tiered sequence is built ahead of the loop and
+the loop is unchanged for every other caller: the tier ledger is `None` on any
+call that is not tiered, so the default path pays one `is None` test per phase
+and no arithmetic. Tiers are off whenever `want_phase` is set, because that
+short circuit returns the first take of the named phase and would miss the
+surplus; it is not a live combination, since `want_phase` belongs to the SIZING
+path and the sizing path must never pass `caps` at all.
+
+### The acceptance test: restoring the four flags reproduces v1.21.2
+
+🚨  **THIS IS THE LOAD-BEARING VERIFICATION AND IT WAS RUN FIRST.** Without it
+no delta below is interpretable: a plumbing change that moved something on its
+own would be indistinguishable from a default that moved it. The four cells at
+`verify.py`'s caps, on the new build with all four flags set back:
+
+| cell | shared columns | hash | |
+|---|---|---|---|
+| raw | **142 / 142** | `69db5aed0bd5063b` | MATCH |
+| raw + search | **142 / 142** | `8b5fef9af02b8da8` | MATCH |
+| benef | **142 / 142** | `bc7bc81c3a57cd1f` | MATCH |
+| benef + search | **142 / 142** | `ae17596e31a8c156` | MATCH |
+
+⚠️  **Over the SHARED columns, deliberately, so these four hashes are not
+comparable with the ones in older sections of this file.** The new build
+carries a column the old one does not, `surplus_payload_kg`, so a hash of the
+whole frame is guaranteed to differ and says nothing at all about the model. A
+comparison reporting DIFFER on that basis is a broken comparator, which is this
+project's most-repeated failure, so the column set is named rather than assumed.
+
+⚠️  **And the first run of that comparator WAS broken, the other way round.**
+It reported 137-139 of 142 columns identical while the hashes MATCHED, on
+`thrust_scaling`, `isru_feed_material`, `name`, `payload_mix` and
+`payload_dominant_phase`. The cause: it tested `dtype == object`, and on
+**pandas 3.0** a text column reads back as an Arrow-backed `StringDtype`, so
+every text column fell through to the numeric path. The hash was right, as it
+has been every previous time the two disagreed.
+
+### What it moved
+
+Cislunar, `verify.py`'s caps (400 raw / 150 beneficiated rows, 155 and 65
+evaluable), `capacity_cap`, against the same cells on v1.21.2:
+
+| cell | v1.21.2 | **v1.22.0** | change | winner |
+|---|---|---|---|---|
+| raw, N = 1 | 25.7233x | **9.7517x** | **-62.1%** | 2025 SV5 -> 701967 |
+| raw, searched | 19.7213x | **7.4656x** | **-62.1%** | 2017 VC38, unchanged |
+| benef, N = 1 | 20.5354x | **7.1104x** | **-65.4%** | 2014 WC23, unchanged |
+| **benef + searched** | 8.9005x | **4.3224x** | **-51.4%** | 735549 -> 2014 WC23 |
+
+⚠️  **These are 155- and 65-row sample cells and are NOT the headline matrix.**
+They are the four cells `verify.py` runs, which is why every release in this
+file is argued on them. The full-catalog 28-cell matrix in README is a v1.21.2
+measurement and stays one until somebody pays the 63 hours to re-run it.
+
+### The two mass columns, on real rows
+
+`unsold_payload_kg` goes to **zero on every cell** and `surplus_payload_kg`
+picks the mass up, which is the exclusivity `verify.py` check 7 now asserts:
+
+| cell | unsold rows, v1.21.2 | surplus rows, v1.22.0 | clearing min |
+|---|---|---|---|
+| raw, N = 1 | 0 | 1 (max 7,890 kg) | 1.0000 -> 0.9741 |
+| raw, searched | **57** | **31** (max 30,275 kg) | 0.9235 -> 0.8806 |
+| benef, N = 1 | 0 | 0 | 1.0000 -> 1.0000 |
+| benef + searched | 3 | 1 (max 252 kg) | 0.9698 -> 0.9493 |
+
+🚨  **57 ROWS PAST A CEILING BECOMES 31, AND THE CLEARING FRACTION GETS WORSE
+RATHER THAN BETTER.** Both look backwards and both are the ladder answering.
+Fewer rows end up past a ceiling because the fleet search picks a different
+programme for many of them; and the rows that do sit past one accept a LOWER
+clearing fraction, because a discounted kilogram is worth half and the
+programme that maximises the objective is now willing to sell more of them.
+**A clearing fraction is a property of the programme the search chose, not a
+measure of how hard the ceiling is biting** -- which is
+[a diagnostic describes the WINNER](CLAUDE.md#a-diagnostic-describes-the-winner-not-the-search-that-produced-it)
+arriving in the column that lesson was first written about.
+
+### Which flag did what
+
+One flag at a time, all on the NEW build so the code is held fixed and only the
+config moves, from the all-four-restored baseline that is proven bit-identical
+to v1.21.2 above:
+
+| | raw, N = 1 | benef + searched |
+|---|---|---|
+| v1.21.2 (all four restored) | 25.7233x | 8.9005x |
+| cost of capital OFF | 14.8654x (**-42.2%**) | 4.2974x (**-51.7%**) |
+| reliability OFF | 17.4914x (**-32.0%**) | 6.4340x (**-27.7%**) |
+| learning curve OFF | 25.7233x (**+0.0%**) | 11.9493x (**+34.3%**) |
+| surplus sells at half | 25.3377x (-1.5%) | 8.7454x (-1.7%) |
+| **v1.22.0 (all four)** | **9.7517x (-62.1%)** | **4.3224x (-51.4%)** |
+
+🚨  **THE COST OF CAPITAL IS THE LARGEST SINGLE TERM IN THE RELEASE, AND IT IS
+LARGER THAN THE MODEL CHANGE BY A FACTOR OF THIRTY.** Removing a 10% discount
+rate is worth 42-52%; selling the surplus at half price instead of abandoning
+it is worth 1.5-1.7%. That ordering is worth internalising before reading any
+of this release's headline numbers as a statement about markets: **three
+quarters of the move is financial framing, not economics of the ceiling.**
+
+🚨  **THE LEARNING CURVE RUNS THE OTHER WAY, AND IS EXACTLY INERT AT N = 1.**
+Turning it off makes the searched cell **34.3% WORSE**, because the curve was a
+discount on recurring hardware, and it moves the N = 1 cell by **0.000%**,
+which is the claim its own config comment makes -- the cumulative average at
+one unit is the first-unit cost by definition. So a flag that is free at N = 1
+is the third-largest term once a programme is being searched, and it is the
+only one of the four that a reader would guess the sign of wrongly.
+
+⚠️  **The four do not compose, and this is the fifth time this project has
+scored the forbidden arithmetic.** Summing the four single-flag deltas on the
+default cell gives -46.8% against a measured **-51.4%**, so compounding
+understates by about a tenth -- the same direction, and about a quarter of the
+magnitude, that the v1.17.x line's compounding error had. **Quote the measured
+combination, not a product of the parts.**
+
+### Runtime: NOT measured, and the reason is worth more than the number
+
+🚨  **A FIRST PASS PUT THE NEW DEFAULTS AT 1.41-2.01x THE RUNTIME OF v1.21.2,
+AND THAT TABLE WAS WRONG.** The decomposition above re-ran the identical
+all-four-restored raw cell later in the same session and measured **68 s
+against the 42 s** the first pass had recorded for it, and the all-four-NEW raw
+cell at **32 s against 49 s**. So the same configuration varied by 1.6x on this
+host while the "measurement" it fed varied by 1.4x, in the same direction as
+the session clock rather than with the build.
+
+**What was actually measured is that this host cannot resolve a 1.4x runtime
+ratio on a 155-row cell**, which is the honest finding and the reason no
+runtime table is published here. There is a real cost in the release -- the
+tiered walk builds and sorts a 2N item list per bound rung, where the wall
+walked N items in the cached order -- and it has not been isolated from the
+noise. ⚠️  Anyone re-measuring it should interleave the two builds inside ONE
+process the way calc v1.17.4 and v1.17.6 did, and should expect the tiered path
+to cost nothing at all on rungs where no ceiling binds, which is most of them.
+
+⚠️  `MEASURED_CELL_SECONDS` is **unchanged** and still holds the v1.17.7
+full-catalog figures, so every banner deriving a cost ratio from it is quoting
+a v1.17.7 measurement of a model two releases old. Re-measuring that is a
+26-hour job and nobody has done it for this release. THE SAMPLING RULE covers
+ratios as well as wall clocks, and now covers one more thing: **a ratio taken
+across a session is a measurement of the session.**
+
+### The cells, for the next release to compare against
+
+`py verify.py baseline --tag 1.22.0`, cislunar, at this release's defaults.
+These are `verify.py`'s own canonical hashes -- the whole frame less
+`pipeline_version` and `catalog_date`, CRLF-pinned -- and unlike the four in
+the acceptance test above they ARE the form every other hash in this file
+takes:
+
+| cell | rows | hash |
+|---|---|---|
+| raw | 155 | `f6c52720c5b886eb` |
+| raw + search | 155 | `39172396cc26cbc7` |
+| benef | 65 | `a90b6bdd12db585e` |
+| benef + search | 65 | `af407f7e2376bb7c` |
+
+⚠️  **They are not comparable with any hash committed before this release**,
+and not because a number moved: the frame carries `surplus_payload_kg` now, so
+it is a column wider. That is the whole content of the warning above, in the
+one place a future reader is most likely to reach for a hash and diff it.
+
+### Invariants
+
+`py verify.py invariants`, clean, with this release's column in check 7:
+
+- **mass ledger** `0.000000000 kg` on all four cells
+- **never-worse** zero exceptions on all three pairings: `benef <= raw` 155
+  pairs, max 1.000000, 10 declined, median **+52.0%**; both search pairings
+  max 0.869940, median +39.8%
+- **Stage 2 tables** identical, 31 rows recomputed at cislunar; **5/5 payload
+  phases resolve to a market**
+- **check 7, the one this release could have broken**: a ceiling still only
+  ever COSTS you. `cap beat unbounded on 0` rows in both searched cells, max
+  ratio **1.000000000**, with the ceiling binding on 31 raw and 13
+  beneficiated rows. Selling the surplus at a discount raises revenue toward
+  the unbounded case and must never pass it, and it does not.
+- **the knapsack** proved separately, off the pipeline: 150 random instances
+  against an integer DP that enumerates every split of every phase between its
+  two tiers and shares no code with the walk; 400 proving `caps=None` is
+  bit-identical to the pre-v1.21.0 walk; 400 proving `surplus_price_fraction`
+  0.0 is bit-identical to v1.21.0's; 300 proving the value is monotone in the
+  fraction and equals the UNCAPPED load at 1.0
+
+🚨  **AND CHECK 7's NEW EXCLUSIVITY TEST FAILED ON ITS FIRST RUN, ON 2 OF 158
+ROWS, AND THE MODEL WAS RIGHT.** The claim is that `unsold_payload_kg` and
+`surplus_payload_kg` are never both positive. Measured, those two rows carry
+**3.638e-12 kg of "unsold" against a 24-tonne payload: 1.5e-16 relative, one
+ULP.** On the beneficiated path `unsold` is a DIFFERENCE OF TWO SUMS -- the
+uncapped load's mass less the capped load's -- and with the surplus tier on
+those two are mathematically equal, because the allowance splits one phase's
+take across two tiers and `(x - a) + a` is not always `x`.
+
+✅  **Fixed in the CHECK, with a milligram floor, not in the cascade.** That is
+the precedent check 7 already set for its clearing bound, which tolerates
+`1.0000000000000002` for the same reason; **a comparator stricter than the
+artefact it compares reports failures that do not exist**, and an epsilon
+inside the cost cascade to silence a checker is not something this project
+does. The floor is six orders of magnitude above the residue and far below any
+mass the model can mean.
 
 ## calc v1.21.2
 
@@ -4392,6 +4679,42 @@ one cell of four moves under `capacity_cap` and the two raw cells move under
 **`1.21.2`  one market was being sold twice.** Full write-up:
 [calc v1.21.2](#calc-v1212). No config field and no output column; three of
 the four cells move and the beneficiated N = 1 hash does not.
+
+**`1.22.0`  four defaults moved; the ceiling stopped being a wall.** Full
+write-up: [calc v1.22.0](#calc-v1220). Three config fields are new, four
+defaults change, and one output column is added.
+
+- **New config: `sell_surplus_at_discount`** (True) and
+  **`surplus_price_fraction`** (0.5). Under `market_model = "capacity_cap"`,
+  mass past a commodity's ceiling now sells at that fraction of full price
+  instead of earning nothing. Read by nothing else; the other three market
+  models have no ceiling to be past.
+- **New config: `model_learning_curve`** (False), gating the existing
+  `learning_curve_rate`, which keeps its 0.85 and is now read only when the
+  flag is on. The flag is resolved to a RATE in the cost prologue rather than
+  carried as a second field, so the prologue tuple's shape and ORDER are
+  unchanged -- see the warning on that tuple in `CLAUDE.md`.
+- **Defaults changed**: `model_reliability` True -> **False**,
+  `apply_wacc_compounding` True -> **False**, and the two new flags above.
+  `model_reliability_growth` stays True and is inert while reliability is off;
+  `model_programme_calendar` stays True and is inert at a zero WACC.
+- **New output column: `surplus_payload_kg`**, mass sold past a ceiling at the
+  discount. It is a SECOND column rather than a reinterpretation of
+  `unsold_payload_kg`, which keeps its meaning of mass that earned nothing; the
+  two are exclusive on any one run and `verify.py` check 7 asserts it. A
+  catalog stamped `calc 1.21.x` has no such column, which is how you tell it is
+  a hard-wall cell.
+- **Internal**: `_capped_sale_value` returns a 3-tuple,
+  `(value, unsold_kg, surplus_kg)`, up from 2. `optimal_payload_mix` takes
+  `surplus_price_frac` and returns `surplus_kg` in its result dict.
+  `_price_programme`'s tuple gains `surplus_kg` at index 10, APPENDED, because
+  `_objective_key` reads indices 1 and 2 off it positionally.
+- **`verify.py`**: `RESET_FIELDS` is new and `run_cell` puts all five back from
+  the dataclass before every cell. Four of the five are this release's, and the
+  rule is v1.21.0's: a field joins that list the moment a cell can differ on it.
+- **`campaign/run_cell.py`**: the ledger records `surplus_kg`. `population.py`
+  is deliberately NOT updated, because its `usecols` raising on an older
+  archive is the behaviour that file wants.
 
 - `phase_market_key()` is new: the market IDENTITY of a phase, where
   `phase_market_kg()` is its size. It takes `markets` so it resolves the alias

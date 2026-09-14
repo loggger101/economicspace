@@ -172,7 +172,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.14.0`,
-calc `1.21.2`, master `1.26.0` (the master version is a literal in
+calc `1.22.0`, master `1.27.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.14.0` is now spacecost's data-contract version**, not a
@@ -392,7 +392,23 @@ wrong: that is what it is for. **The headline numbers themselves are
 here and not there is the per-destination detail, the invariants, and the
 claims each cell retired.
 
-### ✅ THE COMPLETE 28-CELL MATRIX IS MEASURED (CURRENT: 2026-09-11/13, calc `1.21.2`)
+### ✅ THE COMPLETE 28-CELL MATRIX IS MEASURED (calc `1.21.2`, 2026-09-11/13)
+
+🚨  **AND AS OF calc `1.22.0` IT IS NO LONGER WHAT A CONFIGURE-NOTHING RUN
+ANSWERS.** Four defaults moved on 2026-09-14 and every cell below predates
+them: the surplus past a market ceiling was **abandoned** rather than sold at
+half price, and reliability, the learning curve and the cost of capital were
+all **charged**. Set `sell_surplus_at_discount` False, `model_reliability`
+True, `model_learning_curve` True and `apply_wacc_compounding` True to
+reproduce anything in this section.
+
+⚠️  **DO NOT SCALE THESE CELLS BY A SINGLE RATIO.** On the capped cislunar
+sample cells the four together are worth 2.6x on raw ore and 2.1x on the
+default cell, the cost of capital alone is 42-52% of it, and the learning
+curve runs the OTHER way and is exactly inert at N = 1. The decomposition is in
+[calc v1.22.0](versions.md#calc-v1220). What is below is a measurement of the
+model it names, which is why it is kept: it is still the only seven-destination
+measurement the project has.
 
 🚨  **The headline matrix and the result highlights are in
 [README.md](README.md#current-results-the-complete-28-cell-matrix), and are not
@@ -2157,6 +2173,33 @@ charge billed a real cost against a scenario this module does not have, which
 makes it an error rather than a correction. Gated off, not deleted, so the day
 this module gains a direct-injection architecture the charge becomes correct.
 
+🚨  **CALC `1.22.0` PUT THREE MORE ENTRIES ON THE SECOND LIST AT ONCE, AND
+THAT LIST IS NOW THE LONGER OF THE TWO WAYS A DEFAULT CAN MOVE.** The cost of
+capital (`apply_wacc_compounding`), mission reliability (`model_reliability`)
+and the learning curve (`model_learning_curve`) all fail the membership test in
+the same direction insurance does: each is a real charge a real programme pays,
+and each prices something that is not a mass, a Delta-v or a kilowatt. Read
+their sections in [README](README.md#what-the-model-deliberately-does-not-charge-for);
+what belongs here is the three things that will bite an editor:
+
+⚠️  **`apply_wacc_compounding` SILENCES `model_programme_calendar`, which is
+still True.** The calendar multipliers are exactly (1.0, 1.0) at `wacc <= 0` by
+construction, so that whole term charges nothing now. The flag was left ON
+rather than flipped because it still says the right thing about what to charge
+the moment there is a rate; **the run banner reports which of the two states it
+is in**, which is the only reason a reader is not left to derive it. Do not
+"fix" the apparent inconsistency by flipping it.
+
+⚠️  **`model_learning_curve` IS THE ONE WHOSE SIGN YOU WILL GUESS WRONG.**
+Turning it off makes the default cell **34.3% WORSE**, because the curve was a
+discount on recurring hardware. And it is **exactly 0.000% at N = 1**, so it
+cannot be checked by re-running a single-mission headline -- the same shape as
+the two programme-scale entries this file already warns about.
+
+⚠️  **`model_reliability_growth` is still True and is inert**, because it
+shapes P rather than creating it. Left that way so turning reliability back on
+restores the whole v1.21.2 term rather than half of it.
+
 🚨  **AND CALC `1.20.0` IS THE FIRST ENTRY THAT RUNS THE OTHER WAY: A CHARGE
 THAT IS CORRECT AND WAS STILL REMOVED.** Insurance (`charge_insurance`, now
 False) fails the membership test in the direction nothing had failed it before.
@@ -2507,6 +2550,32 @@ honest place for that question is the branch-and-bound item under "The one big
 structural item that is still open", which needs an admissible bound and has
 the same shape. **Do not "fix" the ladder on the strength of four rows.**
 
+### A ratio taken across a session is a measurement of the session
+
+calc `1.22.0`, and it is THE SAMPLING RULE arriving from a direction that rule
+does not cover. That rule is about a sample of ROWS failing to predict a full
+catalog. This is a sample of TIME failing to predict itself.
+
+The release's first runtime table read 1.41-2.01x, measured by running the old
+build's four cells, then the new build's, in one sitting. The decomposition run
+that followed re-ran the **identical** all-four-restored raw cell and measured
+**68 s against the 42 s** the first pass had recorded for it, and the
+all-four-new raw cell at **32 s against 49 s**. So the same work varied by 1.6x
+on this host, in the direction of the session clock rather than of the build,
+and the "1.4x" was of the same order as the noise it was made of.
+
+✅  **The construction that does work is the one `1.17.4` and `1.17.6` used:
+interleave both builds inside ONE process**, which is why those two releases'
+numbers are the only per-release ratios in this project measured that way.
+⚠️  And even that leaves a few percent: `1.17.6` measured the same build twice
+interleaved and got 1.14x and 1.19x.
+
+🚨  **THE DECISION THAT FOLLOWS IS TO PUBLISH NO RUNTIME TABLE, NOT TO PUBLISH
+A HEDGED ONE.** A table with a caveat under it gets quoted without the caveat;
+this file has a dozen entries proving that. What was actually measured is that
+**this host cannot resolve a 1.4x ratio on a 155-row cell**, and that is what
+the release note says.
+
 ### A change can be numerically negligible and still destroy the evidence
 
 This project's releases are argued from **bit-identity**, so an
@@ -2747,6 +2816,27 @@ would have condemned a release that had changed nothing:**
 | `1.17.7` | `read_csv` without `float_precision="round_trip"` | **the same symptom again, from a different cause** |
 | `1.17.7` | `""` compared as different from `NaN` | **and again, from a third** |
 | `1.21.0` | `market_model` not reset in `run_cell` | **a baseline labelled "the new default" that was entirely `elasticity`** |
+| `1.22.0` | `dtype == object` on **pandas 3.0** | **five text columns DIFFER while the hashes MATCH** -- a text column now reads back as an Arrow-backed `StringDtype` |
+| `1.22.0` | a build compared against one with an EXTRA column | every cell DIFFER, on a release that had changed nothing in them |
+
+🚨  **THE FIRST `1.22.0` ENTRY IS THE SAME SYMPTOM FOR A FOURTH CAUSE, AND
+IT IS THE ONE THE ENVIRONMENT CAN REINTRODUCE UNDER YOU.** The three `1.17.7`
+rows are index alignment, a float parser and `""` against `NaN`; this is a
+`dtype` test that was correct when it was written. `pandas` 3.0 infers a plain
+text column as an Arrow-backed `str` where 2.x gives `object`, so
+`col.dtype == object` silently became False for every text column and they all
+fell through to the numeric comparison. **Test `dtype.kind in "OU"` or the
+dtype's name, never `== object`**, and note the tell was the usual one: the
+hash and the column diff disagreed, and the hash was right.
+
+⚠️  **THE SECOND IS THIS RELEASE'S OWN AND IS NOT A DTYPE PROBLEM AT ALL.** A
+release that ADDS an output column cannot be verified by hashing the whole
+frame against the previous build, because the frame is a column wider by
+construction and the hash is guaranteed to differ. The A/B reported
+`*** DIFFER ***` on all four cells of a configuration later proved identical on
+142 of 142 shared columns. **Hash the shared column set and NAME it**, and
+treat "every cell differs at once" as the tell it has always been: a real
+defect almost never does that.
 
 🚨  **THE `1.21.0` ENTRY IS TRAP 1 ARRIVING A SECOND TIME, AND IT IS THE
 ARGUMENT FOR TREATING `run_cell`'s RESET LIST AS A CONTRACT.** `run_cell` sets
@@ -2822,7 +2912,7 @@ something genuinely does move.
 
 Every one of those is now defended against **at the line that would otherwise
 reproduce it**, and `verify.py`'s header carries the list. ⚠️  **Add to that
-list rather than starting a twelfth harness.**
+list rather than starting another harness.**
 
 ✅  **It reproduces the four cell hashes committed for `1.17.4` and `1.17.6`
 exactly**: `f3dbd86ee6d35fc0` / `3c809fb067c8d034` / `9bb6c8bb41852b66` /
@@ -3501,7 +3591,7 @@ because they are traps rather than instructions.
 `os.linesep`, and `cell_hash` is taken over exactly that text, so every hash in
 `versions.md` is a hash of CRLF. Unpin it and a byte-perfect Linux run reports
 DIFFER on all four cells with every float identical: trap #12, and the same
-shape as the eleven in `verify.py`'s header. It reads on Linux like a Windows
+shape as the traps in `verify.py`'s header. It reads on Linux like a Windows
 leftover, which is precisely why it is called out here. On Windows the pin is a
 measured no-op (`5fc52123ed1ecc3a` either way; LF gives `9f6e314f49dc64ef`).
 

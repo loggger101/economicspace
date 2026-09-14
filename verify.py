@@ -52,8 +52,11 @@ verification you will not run is worse than a slow one.
 WHY THIS FILE EXISTS
 --------------------
 Every release so far wrote these checks from scratch and threw them away, and
-CLAUDE.md records what that cost -- eleven harness bugs, three of which produced
-conclusions that were written down before being caught:
+CLAUDE.md records what that cost: a harness bug nearly every time, several of
+which produced conclusions that were written down before being caught.  COUNT
+THE LIST; the number is deliberately not written here, because it was written
+here as "eleven" and went stale the next time one was added, which is the
+counts-in-prose failure this repo catalogues everywhere else.
 
   v1.15.0   two cells recorded as "cislunar" that ran against earth_surface
             prices, because CALC_CONFIG defaults to earth_surface while the
@@ -112,10 +115,33 @@ conclusions that were written down before being caught:
             population.  Fixed by resetting `market_model` from the DATACLASS
             default beside the other four.
 
-Traps 9, 10 and 11 are three DIFFERENT causes of one identical symptom: columns
-reported as DIFFER beside a byte-identical hash.  Each had to be found
-separately, because fixing one moved the count and nothing else.  That is the
-argument for the whole file.
+  1.22.0    `col.dtype == object` on pandas 3.0.  A plain text column now reads
+            back as an Arrow-backed StringDtype, so that test is False and
+            every text column fell through to the numeric comparison: five
+            reported as DIFFER (thrust_scaling, isru_feed_material, name,
+            payload_mix, payload_dominant_phase) beside MATCHING hashes.  A
+            fourth cause of the same symptom, and the first the ENVIRONMENT
+            introduced rather than the author.  Test dtype.kind in "OU", or the
+            dtype's name, never == object.
+  1.22.0    a build compared against one carrying an EXTRA output column.  A
+            release that ADDS a column cannot be verified by hashing the whole
+            frame against the previous build: the frame is a column wider by
+            construction, so the hash is guaranteed to differ and says nothing.
+            All four cells reported DIFFER on a configuration later proved
+            identical on 142 of 142 SHARED columns.  Hash the shared set and
+            NAME it.
+  1.22.0    a runtime ratio measured across a session rather than interleaved.
+            The old build's cells were timed first and the new build's after,
+            and the same all-flags-restored cell later re-measured 68 s against
+            the 42 s that pass had recorded -- 1.6x drift on identical work, in
+            the direction of the session clock.  The 1.4-2.0x "slowdown" it
+            produced was published and retracted.  Interleave both builds in
+            ONE process, as v1.17.4 and v1.17.6 did, or publish nothing.
+
+Traps 9, 10, 11 and the pandas-3 dtype trap are four DIFFERENT causes of one
+identical symptom: columns reported as DIFFER beside a byte-identical hash.
+Each had to be found separately, because fixing one moved the count and nothing
+else.  That is the argument for the whole file.
 
 Each is defended against below, at the line that would otherwise reproduce it.
 ⚠️  AND THE RESET LIST IS PART OF THE CONTRACT, NOT HOUSEKEEPING.  Trap 12
@@ -203,6 +229,18 @@ PROVENANCE = ("pipeline_version", "catalog_date")
 
 DESTINATION = "cislunar"      # what the on-disk Stage 2 catalog is priced for
 
+# Config fields `run_cell` puts back to their declared default before every
+# cell.  `CELLS` names four fields; anything a caller varies through
+# `**override` and this list does not name is inherited by the NEXT cell in the
+# same process.  See the trap note in `run_cell`.
+RESET_FIELDS = (
+    "market_model",              # v1.21.0
+    "model_reliability",         # v1.22.0
+    "model_learning_curve",      # v1.22.0
+    "apply_wacc_compounding",    # v1.22.0
+    "sell_surplus_at_discount",  # v1.22.0
+)
+
 
 def _declared_default(config, field: str):
     """The dataclass DEFAULT for `field`, not whatever the instance now holds.
@@ -249,7 +287,14 @@ def run_cell(m, name: str, *, workers: int = 1, **override):
     # Read off the dataclass rather than typed, so the reset cannot drift from
     # the default the way a literal would; `--market-model` in run_pipeline.py
     # resolves its own default the same way and for the same reason.
-    C.market_model = _declared_default(C, "market_model")
+    #
+    # v1.22.0 adds four more for the same reason, and the rule is the one that
+    # entry states: a field joins this list the moment a cell can DIFFER on
+    # it.  All four are things a harness now A/Bs -- the release that flipped
+    # them was itself verified by running each cell with them restored -- so
+    # leaving them out would leak exactly the way `market_model` did.
+    for _field in RESET_FIELDS:
+        setattr(C, _field, _declared_default(C, _field))
     for k, v in spec.items():
         setattr(C, k, v)
 
@@ -506,8 +551,10 @@ def check_market_cap(m) -> bool:
     `saturation_multiplier` is a PRICE multiplier and must be exactly 1.0 in
     every model but `elasticity`; `market_clearing_fraction` is a share and
     must land in [0, 1] to within a tolerance the comment below earns;
-    `unsold_payload_kg` cannot be negative or exceed the payload.  Cheap, and it is what stops the two v1.21.0 columns quietly
-    swapping meanings the way one overloaded column would have.
+    `unsold_payload_kg` and v1.22.0's `surplus_payload_kg` cannot be negative
+    or exceed the payload, and must never both carry real mass on one row.
+    Cheap, and it is what stops these columns quietly swapping meanings the way
+    one overloaded column would have.
     """
     cap = dict(eval_row_cap=NEVER_WORSE_CAP)
     ok = True
@@ -541,6 +588,7 @@ def check_market_cap(m) -> bool:
         sat  = d["saturation_multiplier"]
         clr  = d["market_clearing_fraction"]
         uns  = d["unsold_payload_kg"]
+        sur  = d["surplus_payload_kg"]
         # The clearing bound carries a TOLERANCE, and the first run of this
         # check is why.  It reported four rows "outside (0, 1]" whose value was
         # 1.0000000000000002: bodies where a ceiling binds by a hair, so the
@@ -556,11 +604,35 @@ def check_market_cap(m) -> bool:
         # placed sells nothing, which is the ceiling working rather than
         # failing.  It has not been observed at cislunar and would show as an
         # infinite cost/revenue ratio if it were.
+        #
+        # v1.22.0's two mass columns are EXCLUSIVE by construction: a kilogram
+        # past a ceiling is either abandoned or discounted, never both, and
+        # which one it is falls out of `sell_surplus_at_discount` for the whole
+        # run.  Asserting it here is what stops the pair quietly collapsing
+        # back into one overloaded column, which is the failure the two of them
+        # exist to prevent.
+        #
+        # ⚠️  AND IT CARRIES A TOLERANCE, FOR THE SAME REASON THE CLEARING
+        # BOUND ABOVE DOES.  On the beneficiated path `unsold` is a DIFFERENCE
+        # OF TWO SUMS, the uncapped load's mass less the capped load's, and
+        # with the surplus tier on those two are mathematically equal: the
+        # allowance splits one phase's take across two tiers, and
+        # `(x - a) + a` is not always `x` in floating point.  The first run of
+        # this check found exactly that, on 2 of 158 rows, at
+        # **3.638e-12 kg against a 24-tonne payload -- 1.5e-16 relative**, one
+        # ULP.  A milligram floor is six orders of magnitude above the residue
+        # and far below any mass this model can mean, and the alternative was
+        # an epsilon inside the cost cascade, which this project does not do to
+        # silence a checker.
+        both = int(((uns > 1e-6) & (sur > 1e-6)).sum())
         bad  = {
             "saturation_multiplier != 1.0": int((sat != 1.0).sum()),
             "clearing outside [0, 1]":      int(((clr < 0) | (clr > 1 + 1e-9)).sum()),
             "unsold negative":              int((uns < 0).sum()),
             "unsold > payload":             int((uns > d["max_payload_kg"] + 1e-6).sum()),
+            "surplus negative":             int((sur < 0).sum()),
+            "surplus > payload":            int((sur > d["max_payload_kg"] + 1e-6).sum()),
+            "unsold and surplus together":  both,
         }
         for label, n in bad.items():
             if n:

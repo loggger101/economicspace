@@ -160,7 +160,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | 1 | `modules/catalog.py` | 1.2.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.14.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
-| 4 | `modules/calc.py` | 1.21.2 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.22.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -523,12 +523,18 @@ that actually move the answer:
 | `.calc.optimise_programme_scale` | `True` | Search programme size and fleet size per asteroid instead of setting N. **Default since calc v1.17.0.** It changes the question the run answers, so most historical tables are `False`, at N = 1. See [Programme scale](#programme-scale) |
 | `.calc.market_model` | `"capacity_cap"` | What a delivered kilogram sells for and how much of it clears. `"capacity_cap"` holds price constant and clips quantity at Stage 2's `annual_market_kg`; `"single_mission"` pins N = 1; `"elasticity"` is the v1.14.0 demand curve (it reproduced v1.14.0 to v1.20.0 exactly until v1.21.1's residual-ceiling fix moved the two raw cells, and v1.21.2 moved it again by pooling the two silicate phases onto one ceiling); `"unbounded"` is a diagnostic. **Default since calc v1.21.0**, replacing the `model_market_saturation` flag. See [The market model](#what-the-model-charges-for) |
 | `.calc.demand_elasticity` | `0.5` | The e in `(1 + Q/Q_market)^(-1/e)`. Read ONLY when `market_model` is `"elasticity"` |
+| `.calc.sell_surplus_at_discount` | `True` | Sell what is past a market ceiling at a discount instead of abandoning it. **Default since calc v1.22.0**; `False` is v1.21.0's hard wall, which is what the 2026-09 campaign measured. Ceilings still bound the programme, because the marginal kilogram past one is worth strictly less than the one before it. See [The market model](#what-the-model-charges-for) |
+| `.calc.surplus_price_fraction` | `0.5` | What a kilogram past a ceiling fetches, as a fraction of the full price. Read ONLY when `sell_surplus_at_discount` is `True`; `0.0` reproduces the wall |
 | `.calc.max_fleet_ships` | `64` | Where the fleet ladder stops. Rows piling up against it mean their payloads have no finite market, not that bigger is better; the run says so |
 | `.calc.programme_search_steps` | `8` | Rungs in the coarse fleet sweep, before one refinement pass. Same idiom as `concentration_search_steps` |
 | `.calc.model_rig_trip_limit` | `True` | Cap rig life in duty CYCLES as well as calendar years. Inert at N = 1 |
 | `.calc.model_programme_calendar` | `True` | Charge the calendar a programme actually spans: the NRE and rig are bought once and carried across every campaign. Inert at N = 1; also what makes the programme search two-dimensional |
 | `.calc.contingency_fraction` | `0.20` | Flat contingency on the cost cascade |
-| `.calc.apply_wacc_compounding` | `True` | Time-value of money, bucketed by when each cost is incurred |
+| `.calc.apply_wacc_compounding` | `False` | Cost of capital: compound up-front costs over the mission, bucketed by when each is incurred, at Module 3's 10% WACC. **Off since calc v1.22.0** because a discount rate is a statement about whose money this is, which is outside a marginal-cost model; it also silences `model_programme_calendar`, whose multipliers are exactly 1.0 at a zero rate. See [What the model deliberately does not charge for](#what-the-model-deliberately-does-not-charge-for) |
+| `.calc.model_reliability` | `False` | Multiply expected revenue by `P(launch) x P(cruise) x P(mining)` while charging every cost in full. **Off since calc v1.22.0**: two of those three are assumptions about a machine nobody has built, and multiplying the answer by them buries them in every headline. A default run now answers what it costs IF IT WORKS |
+| `.calc.model_reliability_growth` | `True` | Let `p_mining` grow across a programme under the Duane model rather than sitting at the first-of-kind figure. Inert while `model_reliability` is off |
+| `.calc.model_learning_curve` | `False` | Apply Wright's law to recurring hardware across a programme. **Off since calc v1.22.0**: it is a statement about a factory's learning, fitted to programmes that built dozens of articles, and this one prices the marginal physics. Exactly inert at N = 1 either way |
+| `.calc.learning_curve_rate` | `0.85` | Wright's-law rate: each doubling of cumulative production cuts unit cost to this. Read ONLY when `model_learning_curve` is `True` |
 | `.mineral.metals_api_key` | `"DEMO"` | Set a real metals.dev key to enable that source; `"DEMO"` silently skips |
 
 ⚠️  **`use_isru_return_propellant` and `use_aerocapture_return` mean
@@ -654,7 +660,11 @@ and hashes under `.verify/` (gitignored). Then make the change, rebuild, and:
 py verify.py check --tag 1.17.7
 ```
 
-which runs all six:
+which runs every check in this table. ⚠️  **Count the rows; the number is
+deliberately not written here.** This sentence read "all six" above seven of
+them from the day check 7 was added, which is the counts-in-prose failure the
+whole [docs harness](#verifying-the-docs) exists to catch, sitting in the
+section about verification.
 
 | # | check | catches |
 |---|---|---|
@@ -664,7 +674,7 @@ which runs all six:
 | 4 | mass ledger | a kilogram in the rocket equation with no price in the ledger |
 | 5 | never-worse | a search optimising something other than what it reports |
 | 6 | Stage 2 tables | a judgement-table edit that moved a number, or a commodity falling through a silent default |
-| 7 | market ceilings | a capacity ceiling that pays rather than costs, and the two v1.21.0 columns swapping meanings |
+| 7 | market ceilings | a capacity ceiling that pays rather than costs, and the three market columns swapping meanings: `saturation_multiplier`, `unsold_payload_kg` and v1.22.0's `surplus_payload_kg` |
 
 `py verify.py invariants` runs 4, 5 and 6 only and needs no baseline, so it
 works on any tree and is the fast way to check an upstream table edit;
@@ -683,16 +693,17 @@ full set once before committing. A verification you will not run is worse than
 a slow one.
 
 **Why it is committed rather than rewritten each time.** Before 2026-08-21
-every release built these checks from scratch and threw them away, and eleven
-harness bugs came out of it; three produced conclusions that were written down
-before being caught. Each trap is now defended against at the line that would
-otherwise reproduce it, `verify.py`'s header lists all eleven, and the four
-hashes it prints reproduce the ones committed for calc v1.17.4 and v1.17.6
-exactly, which is what makes it a replacement for those harnesses rather than
-another one to have to trust. **Add to that list rather than starting a twelfth
-harness.**
+every release built these checks from scratch and threw them away, and a
+harness bug came out of it nearly every time; several produced conclusions that
+were written down before being caught, and calc v1.22.0 added one more to that
+tally by publishing a runtime table it then had to retract. Each trap is
+defended against at the line that would otherwise reproduce it, `verify.py`'s
+header lists them, and the four hashes it prints reproduce the ones committed
+for calc v1.17.4 and v1.17.6 exactly, which is what makes it a replacement for
+those harnesses rather than another one to have to trust. **Add to that list
+rather than starting another harness.**
 
-⚠️  **Read those eleven before writing any comparison of your own**; see
+⚠️  **Read that list before writing any comparison of your own**; see
 [the harness table in CLAUDE.md](CLAUDE.md#the-verification-harness-is-committed-now).
 The short version is that a broken checker looks exactly like a broken release,
 which is why the report prints **both** a hash and a column diff: when the two
@@ -1492,10 +1503,31 @@ all green before the start. Stage 2 priced for all seven destinations in one
 sitting on 2026-09-09, Stage 3 refreshed the same day, Stage 1 frozen at the
 2026-08-11 snapshot for the whole campaign.
 
-Measured on calc `1.21.2` at the **current defaults**: `market_model` is
+Measured on calc `1.21.2` at **that release's defaults**: `market_model` is
 `capacity_cap`, `charge_insurance` is False, `use_beneficiation` and
-`optimise_programme_scale` are True. So the rightmost column is what a
-configure-nothing run answers.
+`optimise_programme_scale` are True.
+
+🚨  **A CONFIGURE-NOTHING RUN NO LONGER ANSWERS THIS MATRIX.** Calc v1.22.0
+moved four defaults, and this campaign is a v1.21.2 measurement: the surplus
+past a market ceiling was abandoned rather than sold at half price, and
+reliability, the learning curve and the cost of capital were all charged. **To
+reproduce a cell below, set those four flags back**:
+
+```python
+CALC_CONFIG.sell_surplus_at_discount = False
+CALC_CONFIG.model_reliability        = True
+CALC_CONFIG.model_learning_curve     = True
+CALC_CONFIG.apply_wacc_compounding   = True
+```
+
+⚠️  That is not a small correction to apply mentally: on a capped cislunar
+sample the four together are worth **2.6x on raw ore and 2.1x on the default
+cell**, they do not act in the same proportion on either, and one of them
+(the learning curve) runs the OTHER way. The measured decomposition is in
+[calc v1.22.0](versions.md#calc-v1220); **do not scale a cell below by a single
+ratio.** Every number in this matrix is still a measurement of the model it
+names, which is why it is kept rather than deleted, and it is the only
+seven-destination measurement the project has.
 
 Best cost/revenue, lower is better, 1.0 is breakeven:
 
@@ -1802,6 +1834,17 @@ concentrate or ore?", "how big a programme?"), not subsidies being withdrawn.
 The test is not "is it on by default"; it is **"was the model getting something
 for free before?"**
 
+🚨  **THREE ITEMS LEFT THIS LIST IN CALC v1.22.0 AND ARE NOT RETRACTIONS.**
+Mission reliability, the learning curve and the cost of capital all still pass
+the membership test -- the model really was getting each of them free -- and
+they are all **off by default now** for the reason
+[insurance](#what-the-model-deliberately-does-not-charge-for) is: they price
+something other than the physics and hardware of moving a kilogram. Their
+sections below are kept in full, because what they charge for is still what
+they charge for; each one now opens by saying it is off. **Set all four flags
+True to reproduce anything measured before v1.22.0**, the 28-cell campaign
+included.
+
 ### Gaps in what the model charged for
 
 Time, rate, wear and the market: things that were happening to a real mission
@@ -1844,11 +1887,19 @@ dehydroxylation plus the enthalpy of dehydration plus vaporisation, and
 matching the 1-3 kWh/kg in the ISRU literature. It had been extracted free and
 sold at full launch-cost-avoided.
 
-**Learning curve** (`learning_curve_rate`, 0.85). Wright's law on the
-per-mission articles, capsule/lander and power system. The amortised mining rig
-is **excluded**, because it is one shared unit rather than N built, and a curve
-on it double-counts. Exactly 1.0 at `nre_amortization_missions = 1`, so a
-single-mission run is untouched; 0.44 at N = 100.
+**Learning curve** (`model_learning_curve`, **off** since calc v1.22.0;
+`learning_curve_rate` 0.85). Wright's law on the per-mission articles,
+capsule/lander and power system. The amortised mining rig is **excluded**,
+because it is one shared unit rather than N built, and a curve on it
+double-counts. Exactly 1.0 at `nre_amortization_missions = 1`, so a
+single-mission run is untouched either way; 0.44 at N = 100.
+
+⚠️  **It is off because it prices a factory, not a mission.** Wright's law is
+fitted to programmes that built dozens to hundreds of articles; the ladder here
+routinely proposes N in the tens, and crediting them with serial-production
+learning assumes an industrial base the run never modelled. It also runs in the
+generous direction, which is the direction this model refuses everywhere else.
+Set `model_learning_curve` True to restore it.
 
 **The market model** (`market_model`, `"capacity_cap"` since calc v1.21.0).
 The only term in Stage 4 that pushes back on programme size: N improves five
@@ -1867,9 +1918,8 @@ Four models, and the choice is what the run is claiming about prices:
 | `unbounded` | constant | nothing; a **diagnostic**, and the run says so |
 
 **`capacity_cap`** holds the price flat and clips the quantity instead.
-Everything inside a commodity's ceiling sells at the full price Stage 2 quotes
-and everything past it earns nothing, so it is a quantity wall rather than a
-price discount. How much one delivery may sell is how long the destination has
+Everything inside a commodity's ceiling sells at the full price Stage 2 quotes.
+How much one delivery may sell is how long the destination has
 been accumulating since the last one: `cap × cadence / F` in steady state, and
 `cap × mission_duration` for the first delivery, which arrives at a market that
 has been importing from Earth for the whole outbound-and-back trip. Averaged
@@ -1882,18 +1932,46 @@ model behave: a load that caps out on iron keeps walking down the price order
 and spends the freed hold space on whatever is next, rather than flying the
 excess unsold. Per-item upper bounds turn an unbounded fractional knapsack into
 a bounded one, which greedy still solves exactly, so this is a constraint
-*inside* the optimiser rather than a clamp on top of it. Raw ore cannot be
-reshaped, so there the excess simply does not sell.
+*inside* the optimiser rather than a clamp on top of it.
 
-That is also what bounds the fleet. A bigger fleet delivers more often, so each
-delivery gets a shorter accumulation window; past the point where the ceilings
-bind, another ship adds its full cost and only part of its revenue, and the
-objective turns over on its own.
+**What happens past a ceiling is `sell_surplus_at_discount`, and since calc
+v1.22.0 the answer is that it SELLS.** A destination that absorbs 100 t/yr of
+water at the quoted price does not become unable to take the 101st tonne; it
+takes it at a price that clears, which is the entire content of a supply curve
+sloping down. The surplus is sold at `surplus_price_fraction` of full price,
+**0.5** by default. Set the flag `False` for v1.21.0's hard wall, where the
+surplus earns nothing and is reported as unsold; that is what the whole 2026-09
+campaign was measured on.
 
-Two output columns report it, kept apart because a price multiplier and a
-quantity clip are different claims: `market_clearing_fraction` is the share of
-the assembled load's gross value that cleared the ceilings, and
-`unsold_payload_kg` is payload capacity that earned nothing.
+⚠️  **This does NOT unbound the programme**, which is the objection to check
+first, and the reason it does not is one sentence: the marginal kilogram past a
+ceiling is worth strictly less than the one before it. A bigger fleet delivers
+more often, so each delivery gets a shorter accumulation window and a larger
+share of the load falls into the discounted tier, so another ship still adds
+its full cost against a falling marginal revenue, and the objective still turns
+over on its own. A wall is the `surplus_price_fraction = 0` end of the same
+model, and `1.0` is the only setting that would genuinely remove the ceiling.
+
+**In a concentrated load the discount changes what the ship carries, not just
+what it is paid.** Each phase now appears in the knapsack twice, at full price
+up to its ceiling and at the discounted price above it, and the greedy walk
+interleaves them; a rich phase's half-price surplus can outrank a poor phase's
+full-price allowance, and where it does, the optimal load carries it instead.
+That is a different load from the one a wall chooses, not merely a differently
+priced one. Raw ore cannot be reshaped at all, so there the surplus is simply
+carried and sold at the discount.
+
+Three output columns report it, kept apart because a price multiplier, a
+discounted sale and a refused one are three different claims:
+`market_clearing_fraction` is the share of the assembled load's gross value
+that cleared, `surplus_payload_kg` is mass sold past a ceiling at the discount,
+and `unsold_payload_kg` is mass that earned nothing. **The last two are
+exclusive** and `verify.py` check 7 asserts it: under the v1.22.0 default the
+mass lands in `surplus_payload_kg` and `unsold_payload_kg` is 0.0, and turning
+the flag off swaps them over. ⚠️  The assertion carries a milligram floor,
+because on the beneficiated path `unsold` is a difference of two sums that are
+mathematically equal, and it can land one ULP off zero -- measured at
+3.6e-12 kg against a 24-tonne payload.
 
 ⚠️  **The ceilings bind at the fleet sizes the model actually chooses.**
 Cislunar's whole import budget is 100 t/yr and water's propellant share is
@@ -1967,9 +2045,20 @@ Life remaining when the programme ends is credited at the salvage fraction
 (0.50), but only when `nre_amortization_missions > 1`: a rig parked at an
 asteroid nobody revisits is stranded, not an asset.
 
-**Mission reliability** (`model_reliability`). Revenue was certain. Expected
-revenue is now `p_launch(0.97) × exp(−T/MTBF)(30 yr) × p_mining(0.85)`, about
-0.70 for a five-year mission. ⚠️  **Costs are still charged in full**, which is
+**Mission reliability** (`model_reliability`, **off** since calc v1.22.0).
+Revenue was certain. With this on, expected revenue is
+`p_launch(0.97) × exp(−T/MTBF)(30 yr) × p_mining(0.85)`, about 0.70 for a
+five-year mission.
+
+⚠️  **Off by default because two of those three numbers are assumptions, not
+measurements.** Launch reliability is an observed rate over hundreds of
+flights; the cruise term is an exponential on an assumed MTBF, and `p_mining`
+is a judgement about a machine nobody has built. Multiplying the ANSWER by them
+puts a ~30% discount into every headline ratio while leaving it exactly as
+solid as the guess it came from. A default run now answers **what this costs if
+it works**, which is the same framing that makes the two surface delivery
+prices lower bounds; set `model_reliability` True for the risk-weighted
+question. ⚠️  **Costs are still charged in full**, which is
 both conservative and correct: you spend the money whether or not it works.
 Insurance never entered this term, it replaced hardware on failure rather than
 revenue, so calc v1.20.0 turning both premiums off changes nothing here.
@@ -1992,7 +2081,9 @@ collections of grams to kilograms, not a rig moving 200 kg/day for years. 0.85
 is the demonstrated **mechanism** rate; sustained-operation exposure is carried
 by the spacecraft MTBF term rather than double-counted here.
 
-**Reliability growth** (`model_reliability_growth`). `p_mining` used to sit at
+**Reliability growth** (`model_reliability_growth`, inert while
+`model_reliability` is off, which is the default since calc v1.22.0).
+`p_mining` used to sit at
 its first-of-kind value however many missions a programme flew, the one place
 the model was *pessimistic*. Duane/AMSAA: failure probability falls as a power
 law in cumulative production, `q(n) = q_first · n^(−α)` with α = 0.30, the
@@ -2209,12 +2300,66 @@ flow later and its cost/revenue ratio does not move.
 would pay a bonus for taking longer to collect it. Both multipliers are exactly
 1.0 at one campaign per ship, which is what makes the term inert at N = 1.
 
+🚨  **AND IT IS INERT AT EVERY N AS OF CALC v1.22.0, BECAUSE IT IS TIME-VALUE
+AND THE COST OF CAPITAL IS NOW OFF.** Both multipliers are exactly 1.0 at
+`wacc = 0` by construction, so this flag charges nothing until
+`apply_wacc_compounding` is turned back on. It is left ON rather than flipped,
+because the flag means "charge the calendar the programme spans" and that is
+still what the model should do the moment there is a rate to charge it at; the
+run banner says which of the two states it is in rather than leaving a reader
+to derive it.
+
 ## What the model deliberately does not charge for
 
 The list above is what the model was getting **free** and now pays for. This is
 the shorter list of the opposite kind: costs that are real, that a real
 programme pays, and that this pipeline does not price because they are not the
 question it is asking.
+
+**The test for this section is that the charge would be RIGHT and is still not
+asked for.** That is what separates it from the withdrawn orbital-refuelling
+charge, which is *wrong* for this module and gated rather than declined, and
+from the corrections above, which the model was getting free.
+
+🚨  **CALC v1.22.0 TRIPLED THE LENGTH OF THIS LIST, and that is the largest
+single change to what a default run means since v1.17.0.** Mission reliability,
+the learning curve and the cost of capital all pass the same test insurance
+does: each is real, each is priced off something that is not a mass, a
+Delta-v or a kilowatt, and each was being applied to the ANSWER rather than to
+the physics. **Every one of them can be turned back on individually**, and the
+four together reproduce v1.21.2.
+
+**The cost of capital** (`apply_wacc_compounding`, default `False` since calc
+v1.22.0). Up-front costs were compounded at Module 3's **10%** WACC over the
+mission duration, bucketed so an end-of-mission line is not inflated by the
+whole span. A discount rate is a statement about *whose money this is* -- an
+agency's, a sovereign fund's, a venture portfolio's -- and the model does not
+know and should not guess. It is not a rounding term either: an up-front line
+compounded over a 5-to-12-year mission is worth roughly **twice** its face
+value, which is the same 2.12-2.38x multiplier measured on the insurance
+premium, applied to every up-front line in the cascade.
+
+⚠️  **It takes the programme calendar charge with it.** `model_programme_calendar`
+is time-value, and `programme_calendar_multipliers` returns exactly (1.0, 1.0)
+at a zero rate, so that term is inert until the rate comes back. Duration still
+binds through the dig, the launch windows, the rig's life and
+`max_mission_duration_yr`, all of which are physical rather than financial.
+
+**Mission reliability** (`model_reliability`, default `False` since calc
+v1.22.0). See [its own section above](#gaps-in-what-the-model-charged-for) for
+what it charges and where the 0.85 comes from. It is here because of what it
+multiplies: `P` is a product of one measurement and two judgements, and
+applying it to expected revenue puts both judgements into every headline ratio
+while leaving the ratio exactly as reliable as they are. A default run answers
+**what this costs if it works**; that is a lower bound in the same sense the two
+surface delivery prices are.
+
+**The learning curve** (`model_learning_curve`, default `False` since calc
+v1.22.0). Wright's law at 85%. It prices a factory, and this pipeline does not
+have one: the curve is fitted to programmes that built dozens to hundreds of
+articles, and crediting a ten-mission programme with that learning assumes an
+industrial base the run never modelled. Exactly inert at N = 1 either way, so
+no single-mission figure in this project moves for it.
 
 **Insurance** (`charge_insurance`, default `False` since calc v1.20.0). Module 3
 prices two premiums, a **$1.5M** third-party liability flat and launch insurance
