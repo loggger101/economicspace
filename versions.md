@@ -62,6 +62,7 @@ one that does not say is not to be used.
 - [Stage 4 changelog: `modules/calc.py`](#stage-4-changelog-modulescalcpy)
 - [Cost/revenue matrices](#costrevenue-matrices)
 - [The 28-cell campaign, 2026-09](#the-28-cell-campaign-2026-09)
+- [The population re-derivation, 2026-09-14](#the-population-re-derivation-2026-09-14)
 - [What the v1.17.x line was worth](#what-the-v117x-line-was-worth)
 - [The sampling rule](#the-sampling-rule)
 - [Runtime history](#runtime-history)
@@ -4579,6 +4580,177 @@ quoted:
   a 17× population change, however sound the model was.
 - **The model then changed repeatedly.** v1.14.0 alone added containment,
   eclipse power, a searched power source and saturation-vs-programme-size.
+
+### The population re-derivation, 2026-09-14
+
+The 28-cell campaign above extracted the winner row and ran the invariants and
+nothing more. Five sections of CLAUDE.md therefore kept carrying **2026-08
+`elasticity` figures with insurance charged**, each under a heading saying so:
+the propellant shares, the vehicle shares, the rig's two bounds, the cadence and
+the saturation diagnostics.
+
+`campaign/population.py` closed that gap without re-running a stage. It reads
+each archived cell once with `usecols`, at about 17 s a cell, and derives every
+per-cell population table at once. **28 cells, ~10 minutes, no fetch, no
+re-run.** The per-cell JSON is committed under `campaign/population/`.
+
+**It reproduces every committed 2026-09 figure it touches**, which is what makes
+it a measurement rather than a new harness to have to trust: the four cislunar
+objectives (15.3937 / 9.5435 / 14.1071 / 6.6622), all 28 winner bodies, all six
+`W < trips` values, the fleet-cap percentages (9.99% raw and 17.77%
+beneficiated at cislunar, 100.000% at `earth_surface`) and the `earth_surface`
+evaluable counts (784,242 / 912,846).
+
+⚠️  **An archived cell holds evaluable rows ONLY.** `run_cell.py` archives what
+`build_profitability_catalog` returns, which is already filtered: cislunar raw
+searched is 650,921 rows and 650,921 evaluable. So the denominator question that
+CLAUDE.md warns about for "bodies declining to concentrate" does not arise for
+any of these tables.
+
+#### What it changed, and it was four conclusions rather than four levels
+
+| claim | status |
+|---|---|
+| `mars_surface` is the exception to the beneficiated dig/window inversion | **retired**; its beneficiated cells are 46.24 / 53.76, and the inversion is universal across all seven |
+| `saturation_multiplier` min/median/max as the saturation diagnostic | **dead**; identically 1.0 on all 28 cells under `capacity_cap` |
+| ISRU tracks hydrolox to within 0.03 pp at every destination | **retired**; fails at `earth_surface` (+0.3668 pp), `leo` (+0.2885), `mars_orbit` (-0.0630) |
+| iodine wins two beneficiated searched cells | **widened to three**; `geo` joins `leo` and `earth_surface` |
+| chemical propulsion reaches 11-15% of three destinations | **four**; `mars_orbit` joins at 14.48-14.55% |
+| the cycle bound retires almost every rig | **wrong three ways**; `mars_orbit` is 78.13% calendar beneficiated and 39.37% raw |
+
+🚨  **`mars_orbit` IS THE SECOND CALENDAR-BOUND DESTINATION AND IT INVERTS ON
+RAW ORE**, where `mars_surface` needs beneficiation to get there: 39.37% of raw
+single-mission rigs are retired by the calendar against 1.20-4.08% at the four
+non-Mars destinations. Its cadence is 3.742 yr raw and 4.497 yr beneficiated.
+
+#### The superseded 2026-08 `elasticity` tables
+
+Kept here because this file is where superseded measurements live, and every
+table in it names the campaign it belongs to. These are **five** destinations,
+`elasticity`, insurance charged, calc `1.17.7`, 2026-08-23/24.
+
+**Which bound retires the rig** (cycle / calendar):
+
+| destination | raw N=1 | raw ON | benef N=1 | benef ON |
+|---|---|---|---|---|
+| `cislunar` | 96.11 / 3.89 | 98.04 / 1.96 | 57.66 / 42.34 | 75.08 / 24.92 |
+| `lunar_surface` | 96.09 / 3.91 | 96.36 / 3.64 | 75.24 / 24.76 | 93.51 / 6.49 |
+| `leo` | 98.70 / 1.30 | 98.89 / 1.11 | 49.54 / 50.46 | 77.89 / 22.11 |
+| `mars_surface` | 80.99 / 19.01 | 85.24 / 14.76 | 19.21 / 80.79 | 21.44 / 78.56 |
+| `earth_surface` | 98.65 / 1.35 | 98.75 / 1.25 | 29.53 / 70.47 | 47.66 / 52.34 |
+
+**What sets the pace** (window / dig), and the median cadence:
+
+| destination | raw N=1 | benef N=1 | cadence raw | cadence benef |
+|---|---|---|---|---|
+| `cislunar` | 92.31 / 7.69 | 34.13 / 65.87 | 1.384 yr | 2.090 yr |
+| `lunar_surface` | 96.21 / 3.79 | 42.73 / 57.27 | 1.384 yr | 1.622 yr |
+| `leo` | 88.67 / 11.33 | 25.37 / 74.63 | 1.369 yr | 2.564 yr |
+| `mars_surface` | 99.95 / 0.05 | 63.18 / 36.82 | 3.798 yr | 3.990 yr |
+| `earth_surface` | 86.48 / 13.52 | 17.03 / 82.97 | 1.369 yr | 3.324 yr |
+
+**`saturation_multiplier` across the searched cells**, the table that is now
+inert:
+
+| cell | min | median | max | fleet median | N median |
+|---|---|---|---|---|---|
+| `cislunar` raw | 0.358439 | 0.812837 | 0.999957 | 2 | 10 |
+| `lunar_surface` raw | 0.536206 | 0.830467 | 0.999726 | 4 | 20 |
+| `leo` raw | 0.704996 | 0.861486 | 1.000000 | 5 | 25 |
+| `mars_surface` raw | 0.354904 | 0.750813 | 0.999996 | 2 | 10 |
+| `earth_surface` raw | 1.000000 | 1.000000 | 1.000000 | 64 | 320 |
+| `earth_surface` benef | 1.000000 | 1.000000 | 1.000000 | 64 | 320 |
+
+At `earth_surface` the multiplier departed from 1.0 by a median of 2.3e-11 and
+at most 2.4e-7, against `cislunar`'s 1.9e-1.
+
+**Programme structure and survivor counts**, the remaining 2026-08 figures that
+CLAUDE.md carried until 2026-09-14:
+
+* **`W < trips`, searched cells**: 0.161% (`leo`), 0.177% (`lunar_surface`),
+  0.210-0.319% (`cislunar`), 0.234-0.268% (`earth_surface`) and
+  **3.705-3.785% at `mars_surface`**. Under `capacity_cap` these are 8.09% to
+  35.99%, two orders of magnitude higher, because the extra campaign cannot be
+  SOLD where a demand curve would always have sold it at a worse price.
+* **`replicated` survivor counts**: zero at `lunar_surface`, 13 raw (0.002%)
+  and 327 beneficiated (0.050%) at `cislunar`, 4,710 (0.607%) at `leo` and
+  5,479 (0.699%) at `earth_surface`, **12,213 rows across the twenty cells**,
+  every one of them FEEP.
+* **`cislunar` window-bound share with the search ON**: 95.77% raw and 37.59%
+  beneficiated, against 98.04 / 75.08% for the cycle bound on the same cells.
+
+⚠️  The survivor counts are kept for the record and prove nothing about the
+gate. CLAUDE.md's "SURVIVAL WAS NEVER THE TEST" is the paragraph that says why:
+the count is a statement about the population, and the test is whether one WINS.
+
+**Best `replicated` mission per cell**, rank and margin:
+
+| destination | raw N = 1 | raw searched | benef N = 1 | benef searched |
+|---|---|---|---|---|
+| `cislunar` | 39 (1.29x) | 283 (1.69x) | 8,602 (2.17x) | 12,020 (2.12x) |
+| `lunar_surface` | none | none | none | none |
+| `leo` | 62 (1.32x) | 1,145 (1.47x) | 1,770 (1.62x) | 19,197 (2.15x) |
+| `mars_surface` | 5 (1.06x) | 1, WINS | 73 (1.11x) | 14 (1.06x) |
+| `earth_surface` | 7 (1.09x) | 5 (1.07x) | 13 (1.20x) | 10 (1.16x) |
+
+**Propellant, % of evaluable rows.** Two destinations per row-block, left and
+right. This is the table CLAUDE.md carried until 2026-09-14; the current one is
+in [CLAUDE.md](CLAUDE.md#propellant-and-vehicle-shares-all-twenty-eight-cells-2026-09).
+
+| | raw N=1 | raw ON | benef N=1 | benef ON | | raw N=1 | raw ON | benef N=1 | benef ON |
+|---|---|---|---|---|---|---|---|---|---|
+| **`cislunar`** | | | | | **`mars_surface`** | | | | |
+| xenon | 42.64 | 40.44 | 59.24 | 48.94 | xenon | 57.81 | 49.09 | 59.92 | 47.87 |
+| iodine | 25.19 | 26.00 | 17.08 | 26.48 | iodine | 19.94 | 28.51 | 14.71 | 23.23 |
+| water ion | 15.58 | 18.44 | 12.54 | 13.80 | krypton | 15.37 | 14.65 | 1.52 | 1.11 |
+| hydrolox | 8.11 | 5.29 | 10.34 | 9.80 | methalox | 1.60 | 1.61 | **15.23** | **15.23** |
+| krypton | 8.01 | 9.29 | 0.47 | 0.38 | argon | 1.81 | 2.67 | 5.60 | 6.96 |
+| **`lunar_surface`** | | | | | **`leo`** | | | | |
+| xenon | 42.26 | 37.93 | 47.32 | 37.26 | xenon | 76.04 | 71.36 | 74.85 | **42.14** |
+| krypton | 22.64 | 26.31 | 6.40 | 8.51 | iodine | 13.56 | 16.19 | 11.61 | **42.74** |
+| water ion | 20.67 | 20.87 | 19.44 | 19.76 | methalox | 1.77 | 1.86 | **11.11** | **11.45** |
+| iodine | 10.29 | 10.89 | 24.42 | 31.86 | krypton | 4.36 | 4.83 | - | - |
+| hydrolox | 3.76 | 3.57 | 2.12 | 2.26 | hydrolox | 1.95 | 2.06 | 1.20 | 1.58 |
+| **`earth_surface`** | | | | | | | | | |
+| xenon | 74.67 | 71.57 | 64.03 | **35.50** | | | | | |
+| iodine | 13.46 | 16.07 | 20.09 | **47.31** | | | | | |
+| methalox | 1.73 | 1.76 | **12.26** | **12.43** | | | | | |
+| krypton | 5.46 | 5.70 | 0.90 | 1.51 | | | | | |
+| hydrolox | 1.92 | 2.01 | - | - | | | | | |
+
+**Launch vehicle, % of evaluable rows:**
+
+| destination | | raw N=1 | raw ON | benef N=1 | benef ON |
+|---|---|---|---|---|---|
+| `cislunar` | Falcon Heavy | 66.42 | 71.48 | 64.86 | 36.41 |
+| | SLS Block 1B | 31.60 | 25.67 | 30.20 | 25.65 |
+| | **New Glenn** | 1.67 | 2.45 | 4.28 | **36.57** |
+| `lunar_surface` | Falcon Heavy | 67.98 | 72.53 | 53.73 | 39.19 |
+| | SLS Block 1B | 30.96 | 26.03 | 33.10 | 24.24 |
+| | **New Glenn** | 0.64 | 1.00 | 10.27 | **28.35** |
+| `leo` | Falcon Heavy | 69.55 | 73.98 | 62.81 | 58.76 |
+| | SLS Block 1B | 21.33 | 16.39 | 26.71 | 20.05 |
+| | New Glenn | 8.80 | 9.28 | 8.57 | 16.81 |
+| `mars_surface` | Falcon Heavy | 79.94 | 80.23 | 43.44 | 40.98 |
+| | SLS Block 1B | 10.72 | 9.96 | 23.31 | 23.09 |
+| | **New Glenn** | 5.70 | 5.52 | 27.68 | **28.63** |
+| `earth_surface` | Falcon Heavy | 66.47 | 71.37 | 37.60 | 46.48 |
+| | SLS Block 1B | 23.35 | 18.34 | 20.62 | 19.00 |
+| | **New Glenn** | 9.86 | 10.07 | 29.88 | 25.55 |
+
+The 2026-08 headline was that iodine overtook xenon at `leo` (42.74 against
+42.14%) and won `earth_surface` outright (47.31 against 35.50%), with `methalox`
+at 11.11-15.23% of `leo`, `mars_surface` and `earth_surface`, and New Glenn
+rising from 1.67% to 36.57% of `cislunar` between raw N=1 and beneficiated
+searched.
+
+⚠️  **These two tables are kept VERBATIM rather than summarised, and that was a
+deliberate decision under check 10.** Summarising them dropped 109 distinctive
+numbers, which the transfer check reported; they are full-catalog population
+measurements of five destinations under a market model the project no longer
+runs, and nothing else in the repo records them. That is the opposite of the
+~210 tokens the release-history split dropped, which were harness ephemera.
+**Read every reported loss and decide it deliberately.**
 
 ### Full catalog, calc v1.14.0 (2026-08-09)
 

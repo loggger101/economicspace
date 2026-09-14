@@ -163,7 +163,8 @@ CAMPAIGN_DOCS = ["campaign/FINDINGS.md", "campaign/README.md",
 # scripts rather than comments-only like modules/: they hold no reference table,
 # so nothing in them is written into a CSV and none of their text is data.
 CAMPAIGN_PY = ["campaign/analyse.py", "campaign/extra_checks.py",
-               "campaign/memwatch.py", "campaign/rig_bounds.py",
+               "campaign/memwatch.py", "campaign/population.py",
+               "campaign/rig_bounds.py",
                "campaign/run_cell.py", "campaign/run_queue.py"]
 
 MODULES = {

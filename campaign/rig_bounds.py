@@ -5,6 +5,14 @@ CLAUDE.md carried this table for cislunar only, where beneficiation swaps the
 two bounds over. This extended it to every destination; the result is now in
 CLAUDE.md under "The rig's two bounds, and the cadence, at every destination",
 where mars_surface inverts both splits.
+
+SUPERSEDED BY population.py, WHICH IS THE AUTHORITY FOR THIS TABLE.  That one
+derives the bound split, the cadence, the shares, the ceiling diagnostic and the
+replicated ranks in ONE pass over the cells instead of a pass each, and it is
+what produced the 2026-09 figures now in CLAUDE.md.  This file is kept only
+because archive-2026-08_calc-1.17.7/FINDINGS.md names it as a script that
+produced the 2026-08 record; do not add to it, and do not quote a figure from it
+as current.
 """
 import glob, gzip, os
 import pandas as pd

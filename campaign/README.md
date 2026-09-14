@@ -77,6 +77,14 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       in 2026-08 it inflated a wall clock by a few percent and put two spurious
       10.7-11.5 GB spikes in the memory record.
   `memwatch.py`    samples python RSS every 20 s into `memory.csv`.
+  `population.py`  every per-cell POPULATION table the docs carry, from ONE
+      pass over `cells/`: the rig's two bounds, the cadence, the propellant and
+      vehicle shares, the market-ceiling diagnostic, the `replicated` ranks and
+      the winners.  `--report` renders them from the JSON under `population/`;
+      re-running a cell is not needed and not wanted.  It is the authority for
+      those tables and supersedes `rig_bounds.py` and `extra_checks.py`, which
+      are kept only because the 2026-08 archive's FINDINGS.md names them.
+      Same caution as `analyse.py`: do not run it while a cell is timing.
 
 Per cell: `profitability_catalog.csv` is archived gzipped to `cells/` and one
 row is appended to `results.csv`.

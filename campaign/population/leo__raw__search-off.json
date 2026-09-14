@@ -1,0 +1,160 @@
+{
+ "aerocapture_pct": 95.03485655064982,
+ "at_ceiling": 0,
+ "at_ceiling_pct": 0.0,
+ "bound_pct": 0.0,
+ "cadence_median": 1.3688903769101661,
+ "calendar_mult_max": 1.0,
+ "calendar_mult_median": 1.0,
+ "clearing_median": 1.0,
+ "clearing_min": 1.0,
+ "cycle_pct": 98.63998300622463,
+ "evaluable": 776755,
+ "fleet_max": 1.0,
+ "fleet_median": 1.0,
+ "isru_pct": 1.930724617157276,
+ "n_max": 1.0,
+ "n_median": 1.0,
+ "objective": 58.51808097151631,
+ "propellants": [
+  [
+   "Xenon  (Hall / ion)",
+   76.27874941262046
+  ],
+  [
+   "Iodine  (Hall / gridded)",
+   13.318485236657633
+  ],
+  [
+   "Krypton  (Hall)",
+   4.359289608692573
+  ],
+  [
+   "hydrolox  (LH2 / LOX)",
+   1.9477183925433375
+  ],
+  [
+   "methalox  (LCH4 / LOX)",
+   1.7633616777490972
+  ],
+  [
+   "Argon  (Hall / ion)",
+   0.9409659416418305
+  ],
+  [
+   "Water  (gridded ion / ECR)",
+   0.6612123513849283
+  ],
+  [
+   "FEEP  (indium field emission)",
+   0.6234913196567773
+  ],
+  [
+   "MMH / NTO  (hypergolic)",
+   0.08381021042671112
+  ],
+  [
+   "Hydrazine arcjet",
+   0.015577627437222805
+  ],
+  [
+   "kerolox  (RP-1 / LOX)",
+   0.003862221678650282
+  ],
+  [
+   "HTP / RP-1  (peroxide bipropellant)",
+   0.0020598515619468173
+  ],
+  [
+   "Aerozine-50 / NTO  (hypergolic)",
+   0.0010299257809734087
+  ],
+  [
+   "UDMH / NTO  (hypergolic)",
+   0.0003862221678650282
+  ]
+ ],
+ "repl_best": {
+  "designation": "2017 DL34",
+  "margin": 1.149231131730014,
+  "obj": 67.25080042156428,
+  "propellant": "FEEP  (indium field emission)",
+  "rank": 8
+ },
+ "repl_propellants": [
+  [
+   "FEEP  (indium field emission)",
+   100.0
+  ]
+ ],
+ "repl_rows": 4843,
+ "rows": 776755,
+ "sat_max": 1.0,
+ "sat_median": 1.0,
+ "sat_min": 1.0,
+ "span_median": 5.3738579339277575,
+ "unsold_rows": 0,
+ "vehicles": [
+  [
+   "Falcon Heavy (reusable side cores)",
+   67.3872714047544
+  ],
+  [
+   "SLS Block 1B (Cargo)",
+   23.54487579738785
+  ],
+  [
+   "New Glenn",
+   8.754755360441838
+  ],
+  [
+   "Vulcan Centaur VC6",
+   0.24203255852875102
+  ],
+  [
+   "H3 (24L)",
+   0.02162844140044158
+  ],
+  [
+   "Long March 5",
+   0.015191405269357777
+  ],
+  [
+   "Long March 7",
+   0.01017051708711241
+  ],
+  [
+   "Ariane 6 (A64)",
+   0.009784294919247382
+  ],
+  [
+   "Atlas V 551",
+   0.005793332517975423
+  ],
+  [
+   "Falcon 9 (reusable)",
+   0.004119703123893635
+  ],
+  [
+   "LVM3 (GSLV Mk III)",
+   0.0027035551750551976
+  ],
+  [
+   "Soyuz-2.1b",
+   0.001673629394081789
+  ]
+ ],
+ "w_gt_trips": 0,
+ "w_lt_trips_pct": 100.0,
+ "window_pct": 86.79609400647566,
+ "winner": {
+  "concentration_ratio": 1.0,
+  "designation": "2018 DT",
+  "fleet_ships": 1.0,
+  "max_payload_kg": 98664.79758643631,
+  "programme_missions": 1.0,
+  "propellant": "Xenon  (Hall / ion)",
+  "spectral_type": "M",
+  "vehicle": "Falcon Heavy (reusable side cores)"
+ }
+}
