@@ -4683,6 +4683,20 @@ CLAUDE.md carried until 2026-09-14:
 gate. CLAUDE.md's "SURVIVAL WAS NEVER THE TEST" is the paragraph that says why:
 the count is a statement about the population, and the test is whether one WINS.
 
+**Aerocapture and ISRU, 2026-08**: aerocapture resolved to 0.00% at `cislunar`
+and `lunar_surface` in all four cells and **82-98% elsewhere**, rising under
+beneficiation at every atmospheric destination. ISRU tracked hydrolox to within
+0.03 pp at all five, the pairs being **8.1097 against 8.1106%** at `cislunar`,
+exact to four decimals at `lunar_surface`, **1.9493 against 1.9292** at `leo`
+and `earth_surface` (hydrolox exceeding ISRU) and **2.0606 against 2.0522** at
+`mars_surface` (ISRU exceeding hydrolox).
+
+⚠️  Both of those are retired on seven destinations: aerocapture runs
+**37.69-98.36%** because `mars_orbit` declines it about half the time and `geo`
+FALLS under beneficiation at N = 1, and the ISRU near-equality fails at
+`earth_surface`, `leo` and `mars_orbit`. The current figures are in
+[CLAUDE.md](CLAUDE.md#winners-and-what-28-cells-did-to-the-claim).
+
 **Best `replicated` mission per cell**, rank and margin:
 
 | destination | raw N = 1 | raw searched | benef N = 1 | benef searched |
