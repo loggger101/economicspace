@@ -328,6 +328,28 @@ py run_pipeline.py --help
 `--preset full --market-model single_mission` pins N = 1 whatever the preset
 said about the programme search. `--market-model elasticity` restores the pre-v1.21.0 demand curve.
 
+**calc v1.22.0 added four more model flags, for the same reason.** Each names a
+default that release moved, each is applied after the preset, and together they
+put a run back on v1.21.2's model:
+
+```bash
+py run_pipeline.py --stages 4 --destination cislunar --raw --no-search \
+    --no-surplus-sales --reliability --learning-curve --cost-of-capital
+```
+
+That command reproduces the committed v1.21.2 sample cell exactly: **25.7233x
+on 155 evaluable rows, 2025 SV5**. Individually, `--no-surplus-sales` restores
+the v1.21.0 hard wall (and `--surplus-fraction F` sets what the surplus fetches
+otherwise, 0.0 to 1.0, refused outside it), `--reliability` puts the
+`P(launch) x P(cruise) x P(mining)` discount back on revenue,
+`--learning-curve` restores Wright's law on recurring hardware, and
+`--cost-of-capital` restores WACC compounding **and with it the programme
+calendar charge**, which is time-value and inert without a rate.
+
+⚠️  **Reproducing the 28-cell matrix takes all four**, not a subset: they do
+not act in the same proportion on every cell and one of them runs the other
+way. See [calc v1.22.0](versions.md#calc-v1220).
+
 ⚠️  It does **not** reproduce pre-v1.21.0 figures exactly. calc v1.21.1 gave the
 composition residual a market ceiling, and that defect was in the curve too, so
 the curve moved with it: the raw cislunar cells by +2.36% and +5.82%, the
