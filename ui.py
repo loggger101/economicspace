@@ -1343,6 +1343,7 @@ _MODEL_TERMS = [
     ("saturation_multiplier", "Market saturation multiplier (price)"),
     ("market_clearing_fraction", "Market clearing fraction (quantity)"),
     ("unsold_payload_kg", "Payload that earned nothing (kg)"),
+    ("surplus_payload_kg", "Payload sold past a ceiling, at a discount (kg)"),
     ("p_success", "Overall mission reliability"),
     ("p_mining", "Mining reliability (programme mean)"),
     ("learning_curve_factor", "Learning curve factor"),

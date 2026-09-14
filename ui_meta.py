@@ -144,6 +144,7 @@ BOUNDS: Dict[str, Tuple[float, float, float]] = {
     "max_mission_duration_yr":           (1.0, 100.0, 1.0),
     "learning_curve_rate":               (0.5, 1.0, 0.01),
     "demand_elasticity":                 (0.05, 5.0, 0.05),
+    "surplus_price_fraction":            (0.0, 1.0, 0.05),
 
     "max_dv_outbound_m_s":               (1_000.0, 60_000.0, 500.0),
     "default_dv_outbound_m_s":           (0.0, 30_000.0, 100.0),
@@ -272,21 +273,30 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
     ),
     (
         "Market model: what a kilogram sells for, and how much of it",
-        "⚠️  THE ONLY THING THAT PUSHES BACK ON PROGRAMME SIZE. N improves five "
-        "levers at once (NRE/N, autonomy NRE/N, the learning curve, the rig's "
-        "share, and reliability growth) and this is the sixth. Remove it and "
+        "⚠️  THE ONLY THING THAT PUSHES BACK ON PROGRAMME SIZE. N improves "
+        "several levers at once (NRE/N, autonomy NRE/N, the rig's share, and "
+        "-- when they are switched on -- the learning curve and reliability "
+        "growth) and this is the one that pushes the other way. Remove it and "
         "the objective is monotone in N, so the search reports where the "
         "ladder stopped rather than an optimum. "
         "`capacity_cap` is the v1.21.0 default: prices are CONSTANT at any "
         "volume and what bounds a programme is a hard kg/yr ceiling per "
         "commodity, from Stage 2's `annual_market_kg`. Everything inside the "
-        "ceiling sells at full price and everything past it earns nothing, so "
-        "it is a quantity wall rather than a price discount, and the payload "
-        "knapsack sees the ceilings: a load that caps out on iron spends the "
-        "freed hold space on whatever is next most valuable. A bigger fleet "
-        "delivers more often, so each delivery gets a shorter accumulation "
-        "window, and past the point where the ceilings bind another ship adds "
-        "its full cost and only part of its revenue. "
+        "ceiling sells at full price, and the payload knapsack sees the "
+        "ceilings: a load that caps out on iron spends the freed hold space "
+        "on whatever is next most valuable. A bigger fleet delivers more "
+        "often, so each delivery gets a shorter accumulation window, and past "
+        "the point where the ceilings bind another ship adds its full cost "
+        "and only part of its revenue. "
+        "⚠️  WHAT HAPPENS PAST A CEILING IS THE TWO DIALS BELOW, and since "
+        "v1.22.0 the answer is that it SELLS, at half price. Set "
+        "`sell_surplus_at_discount` False for v1.21.0's hard wall, which is "
+        "what the whole 2026-09 campaign was measured on. It does not unbound "
+        "the programme: the marginal kilogram past a ceiling is worth "
+        "strictly less than the one before it, which is what makes the "
+        "objective turn over. In a CONCENTRATED load it also changes what the "
+        "ship carries, because every phase enters the knapsack twice, at full "
+        "price up to its ceiling and at the discount above it. "
         "`single_mission` pins N = 1 with no ceiling at all, which is the "
         "question almost every figure in CLAUDE.md and the README was "
         "answering. `elasticity` is the v1.14.0 demand curve. It reproduced "
@@ -300,6 +310,8 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         [
             ("calc", "market_model"),
             ("calc", "demand_elasticity"),
+            ("calc", "sell_surplus_at_discount"),
+            ("calc", "surplus_price_fraction"),
         ],
     ),
     (
@@ -347,22 +359,46 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "how the heading came to say \"sixteen\" above fifteen rows. "
         "`model_market_saturation` was here until calc v1.21.0 and is now the "
         "`market_model` selector in its own group above, because it stopped "
-        "being a flag and became a four-valued choice.",
+        "being a flag and became a four-valued choice. Reliability, the "
+        "learning curve and the cost of capital were here until calc v1.22.0 "
+        "and are now in the group below, which is a different claim: not that "
+        "they were wrong, but that they are charges rather than corrections.",
         [
             ("calc", "model_low_thrust_time"),
             ("calc", "model_launch_windows"),
             ("calc", "model_water_liberation"),
             ("calc", "model_rig_service_life"),
-            ("calc", "model_reliability"),
-            ("calc", "model_reliability_growth"),
             ("calc", "model_propellant_boiloff"),
             ("calc", "model_tank_mass"),
             ("calc", "model_eclipse_power"),
             ("calc", "model_volatile_containment"),
             ("calc", "charge_tanker_flights"),
-            ("calc", "apply_wacc_compounding"),
-            ("calc", "learning_curve_rate"),
             ("calc", "return_structure_frac_of_payload"),
+        ],
+    ),
+    (
+        "Out of scope, default OFF (v1.20.0, v1.22.0)",
+        "⚠️  These are the mirror image of the group above, and the test that "
+        "separates the two is not \"is it on\". A correction is something the "
+        "model was getting FREE; each of these is a real charge that a real "
+        "programme really pays, and is off because it is not what this "
+        "pipeline asks. It prices the marginal physics and hardware of moving "
+        "a kilogram, on the same framing that makes the two surface delivery "
+        "prices LOWER BOUNDS. An insurance premium is priced off an "
+        "underwriter's book, a discount rate off whose money it is, a learning "
+        "curve off a factory that does not exist, and a reliability product "
+        "off a machine nobody has built. Turn any of them on to get the "
+        "invoice rather than the physics; turn all four on to reproduce "
+        "anything measured before calc v1.22.0. ⚠️  `apply_wacc_compounding` "
+        "also silences `model_programme_calendar`, whose multipliers are "
+        "exactly 1.0 at a zero rate.",
+        [
+            ("calc", "charge_insurance"),
+            ("calc", "apply_wacc_compounding"),
+            ("calc", "model_reliability"),
+            ("calc", "model_reliability_growth"),
+            ("calc", "model_learning_curve"),
+            ("calc", "learning_curve_rate"),
         ],
     ),
     (
