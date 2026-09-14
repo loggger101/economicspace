@@ -574,12 +574,22 @@ TRIPS, BY TWO ORDERS OF MAGNITUDE.** `W < trips`, raw searched:
 | `mars_surface` | 32.73% | 3.71% |
 | `cislunar` | 20.86% | **0.319%** |
 | `lunar_surface` | 16.07% | 0.225% |
+| `geo` | 12.97% | never measured |
 | `leo` | 8.09% | 0.161% |
 | `earth_surface` | 0.270% | 0.234% |
 
+⚠️  **`geo`'s row was missing from this table until 2026-09-14**, which is the
+seven-destinations-in-a-six-row-table failure this file warns about everywhere
+else: the table beside it lists all seven, so the two disagreed about the size of
+the campaign. Filled from `campaign/population/`, not re-run.
+
 Under a hard ceiling the extra campaign cannot be **SOLD**, where under a demand
 curve it could always be sold at a worse price. Fleet and programme sizes moved
-with it: `cislunar`'s fleet median went 2 to 6 and its N median 10 to 30.
+with it: `cislunar` **beneficiated searched** went from a fleet median of 2 to 6
+and an N median of 10 to 30. ⚠️  **Name the cell.** The RAW searched medians are
+**3 and 12**, and this sentence sitting in a paragraph about raw searched rows
+is what put "a median searched fleet of 2" into README's ceiling argument, where
+it was both the wrong cell and the wrong campaign.
 
 ⚠️  **So this file's statement that "2,077 bodies decline to use up the rig" is
 an `elasticity` claim**, and under `capacity_cap` it is ~146,000. It is the
@@ -1197,22 +1207,58 @@ hydrolox** at N = 20. That is the argument for searching N *jointly* rather
 than at a pivot; this file has always made it about architecture, and here it
 changes the **target**.
 
-**Aerocapture resolves per destination exactly as the physics requires**:
-**0.00% at `cislunar` and `lunar_surface` in all four cells**; nobody asserts
-it, the airless destinations ignore the flag and the search declines it, and
-82-98% elsewhere, rising under beneficiation at every atmospheric destination.
+**Aerocapture and ISRU, % of evaluable rows**, re-derived 2026-09-14 across all
+seven destinations. Each cell is aerocapture / ISRU:
 
-**ISRU tracks hydrolox to within 0.03 pp at every destination**, which is the
-consistency to expect rather than a coincidence, since hydrolox is the ISRU
-route the search overwhelmingly takes: 8.1097 against 8.1106% at `cislunar`,
-exact to four decimals at `lunar_surface`. ⚠️  **They are near-equal, not equal,
-and the residual runs BOTH ways**: at `leo` and `earth_surface` hydrolox
-slightly exceeds ISRU (1.9493 against 1.9292), so a few missions buy hydrolox
-on Earth rather than make it, while at `mars_surface` ISRU exceeds hydrolox
-(2.0606 against 2.0522), so a few make something else. Neither residual has
-been traced to a propellant, and **the water-ion share is not the place to look
-for it**: `cislunar` runs 15.58% water ion against 8.11% ISRU, so most
-water-propelled missions are carrying their water up from Earth.
+| destination | raw N=1 | raw ON | benef N=1 | benef ON |
+|---|---|---|---|---|
+| `cislunar` | **0.00** / 8.17 | **0.00** / 5.94 | **0.00** / 10.31 | **0.00** / 9.65 |
+| `lunar_surface` | **0.00** / 3.87 | **0.00** / 3.59 | **0.00** / 2.08 | **0.00** / 2.23 |
+| `geo` | 90.70 / 3.18 | 92.57 / 3.39 | **78.66** / 5.13 | 93.64 / 5.63 |
+| **`mars_orbit`** | **40.71** / 1.14 | **37.69** / 1.14 | **50.54** / 0.18 | **49.95** / 0.27 |
+| `leo` | 95.03 / 1.93 | 90.10 / 1.96 | 97.41 / 1.11 | 98.36 / 1.26 |
+| `mars_surface` | 82.24 / 2.06 | 83.14 / 2.07 | 86.14 / 0.68 | 90.00 / 0.78 |
+| `earth_surface` | 95.79 / 1.89 | 91.83 / 1.91 | 96.44 / **0.00** | 97.45 / **0.00** |
+
+✅  **The airless half holds exactly: 0.00% at `cislunar` and `lunar_surface` in
+all four cells.** Nobody asserts it, the airless destinations ignore the flag and
+the search declines it, which is the physics resolving itself per destination
+rather than a switch being set.
+
+🚨  **"82-98% ELSEWHERE" IS RETIRED, AND `mars_orbit` IS WHY.** The real range is
+**37.69 to 98.36%**, because a Mars-orbit depot declines aerocapture about half
+the time: 37.69-50.54% against 78-98% at every other atmospheric destination. It
+is the only destination in the model where the choice is close to even, and that
+is the v1.10.0 design working. Aerocapture is priced per asteroid against the
+propulsive return, and arriving at a **1-sol orbit** rather than a surface means
+the Delta-v saved is small while the heat shield still has to be hauled out and
+pushed back, so on a slow-arriving target it does not pay.
+
+🚨  **"RISING UNDER BENEFICIATION AT EVERY ATMOSPHERIC DESTINATION" IS RETIRED
+TOO, BY ONE CELL.** `geo` **falls** from 90.70% to 78.66% at N = 1, where the
+other four rise. It recovers to 93.64% once the search is on, so the exception is
+specific to the single-mission beneficiated cell, which is exactly the kind of
+qualification a five-destination claim could not carry.
+
+**ISRU still tracks hydrolox closely at four destinations and no longer at
+three.** It holds at `cislunar` (0.0014 to 0.0068 pp), `lunar_surface` (0.0000
+to 0.0015), `geo` (0.0009 to 0.0250) and `mars_surface` (0.0003 to 0.0133), and
+fails at `earth_surface` (**+0.3668 pp**), `leo` (+0.2885) and `mars_orbit`
+(-0.0630). The near-equality was never a law; it is hydrolox being the ISRU route
+the search usually takes, and the residual runs both ways, as this file already
+said.
+
+🚨  **`earth_surface` BENEFICIATED MAKES NO PROPELLANT AT ALL: ISRU IS 0.0005%
+AND 0.0044% OF ROWS**, against a hydrolox share of 0.2012% and 0.3711%. So
+nearly every hydrolox mission delivering concentrate to Earth **buys its
+propellant on Earth rather than making it**, which is the sharpest single
+statement of the residual's mechanism the project has, and it only became
+visible once the shares were kept in full rather than truncated to the
+commonest few.
+
+⚠️  **The water-ion share is still not where to look for the residual**:
+`cislunar` runs 15.53% water ion against 8.17% ISRU, so most water-propelled
+missions are carrying their water up from Earth.
 
 ### Programme structure on the full population (2026-08; see the 28-cell invariants above)
 
@@ -1392,16 +1438,16 @@ or more distinctive numbers across two files:
 
 | the shared measurement | in README under | here under |
 |---|---|---|
-| the winners: 2021 CX5 taking 10 of 20 cells, 2016 PN38 taking `earth_surface`, the three `mars_surface` winners | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "Winners, and one that is new" |
+| the winners: 2021 CX5 taking **8 of 28** cells and 2018 DT 6, 2016 PN38 sweeping `earth_surface` | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "Winners, and what 28 cells did to the claim" |
 | the lunar staging figures: 5,920 m/s, and 10.96 against 4.99 kg in LEO per kg landed | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" (and again in `versions.md`, mineral_value `1.4.0`) |
-| the `replicated` win: 13.4% clear, 6,667 kg of thruster for 96.7 kW | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "RETIRED: a `replicated`-scaling device DOES win" |
-| the Mars cadence: 3.8-4.0 yr against ~1.37 everywhere else | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "The rig's two bounds, and the cadence, at every destination" |
+| the `replicated` win: 13.4% clear, 6,667 kg of thruster for 96.7 kW | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "RETIRED TWICE: a `replicated` device wins TWO cells now" |
+| the Mars cadence, **3.7-4.5 yr** against ~1.37 everywhere else, now covering BOTH Mars destinations | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "The rig's two bounds, and the cadence, at every destination (2026-09)" |
 | everything older than `1.17.7` being high by 1.78-4.32x | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "Runtime, and the three quantities a sample cannot predict" |
 | the four cislunar wall clocks, 733 / 1,253 / 3,424 / 5,692 s | [Beneficiation](README.md#beneficiation) | "Runtime, and the three quantities a sample cannot predict" |
 | why `mars_orbit` takes the BASE utility profile: the crust is 4,100 m/s of ascent away, against the 3,600 m/s of TMI that delivered the cargo | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
 | the base in-space utility profile itself: water 1.00, structural metals 0.70, silicates 0.25, carbon 0.40, and the Mars overrides against it | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
 | the insurance premiums: 2.4-4.3% of total cost against 5.5-9.6% of the answer, and liability alone at 0.03-0.05% | [What the model deliberately does not charge for](README.md#what-the-model-deliberately-does-not-charge-for) | "The corrections the model accumulated" |
-| the median raw cislunar cadence, **1.384 yr**, used to argue the ceilings bind where the results actually sit | [What the model charges for](README.md#what-the-model-charges-for) | "The rig's two bounds, and the cadence, at every destination" |
+| the median raw cislunar cadence, **1.384 yr**, used to argue the ceilings bind where the results actually sit | [What the model charges for](README.md#what-the-model-charges-for) | "The rig's two bounds, and the cadence, at every destination (2026-09)"; the cadence reproduces unchanged, the fleet median beside it did not |
 | the in-space absorption ceilings: LEO **500 t/yr**, cislunar 100 t, `geo` 40 t/yr | [What the model charges for](README.md#what-the-model-charges-for) | "Model assumptions that are load-bearing" |
 | 🚨  **the four cislunar cell objectives, now 15.3937 / 9.5435 / 14.1071 / 6.6622** -- the project's headline answer, and the pair this register missed for longest | [Current results](README.md#current-results-the-complete-28-cell-matrix), **and again** under [Programme scale](README.md#programme-scale) | the 28-cell matrix section |
 | 🚨  **the winner-against-population table: 39.4 / 39.5 / -8.4, 66.1 / 63.8 / -36.5, 77.7 / -6.5** -- the 2026-09 campaign's most reusable finding, and deliberately in both files because README needs the result and this file needs the warning | [The winner moved far more than the population did](README.md#the-winner-moved-far-more-than-the-population-did) | the 28-cell matrix section |
@@ -2052,8 +2098,8 @@ already:
 | retired claim | what is true now |
 |---|---|
 | "`mars_surface` is the best case" | **`cislunar` is**, on all four settings, by a factor of 1.72 on the default cell |
-| "chemical propulsion is extinct in this model" | hydrolox holds 1.9-8.1% everywhere; methalox reaches **11-15%** of three destinations beneficiated |
-| "iodine wins nine of the ten cells" | a **single-mission** claim; iodine overtakes xenon at `leo` and wins `earth_surface` once both defaults are on |
+| "chemical propulsion is extinct in this model" | hydrolox holds 0.2-10.3% everywhere; methalox reaches **11-15% of FOUR destinations** beneficiated |
+| "iodine wins nine of the ten cells" | a **single-mission** claim; on the 28-cell campaign iodine wins **three** beneficiated searched cells (`earth_surface`, `geo`, `leo`) |
 | "zero `replicated`-scaling devices survive" | they survive, and as of 2026-08-24 one **wins**, at `mars_surface` raw with the search on |
 | "a `replicated` device never wins anywhere" | retired by the same measurement; the gate is a mass penalty, not a threshold |
 | "a `replicated` device wins exactly one cell" | it wins **two** as of 2026-09: both raw `mars_surface` cells, N = 1 included |
@@ -2064,6 +2110,8 @@ already:
 | "the optimum N is *provably* a multiple of the rig's trip life" | only *usually*; programme calendar time pushes back inside a band |
 | "the cycle bound retires almost every rig" | **`cislunar` raw** only; the calendar bound does 42% at `cislunar` beneficiated and **80.79%** at `mars_surface` |
 | "a programme's pace is set by orbital mechanics, not mining rate" | true of raw everywhere, and **inverts under beneficiation at ALL SEVEN**, Mars included |
+| "aerocapture runs 82-98% at every atmospheric destination" | **37.69-98.36%**; `mars_orbit` declines it about half the time, and the choice being close to even there is the per-asteroid pricing working |
+| "aerocapture rises under beneficiation at every atmospheric destination" | `geo` **falls**, 90.70% to 78.66%, at N = 1 |
 | "`mars_surface` is the exception that proves the mechanism" (the dig never sets its pace) | its beneficiated cells are **46.24 / 53.76**, so the dig does set the pace; there is no exception left |
 | "ISRU tracks hydrolox to within 0.03 pp at every destination" | fails at `earth_surface` (**+0.3668 pp**), `leo` (+0.2885) and `mars_orbit` (-0.0630); it was a five-destination claim |
 | "iodine overtakes xenon at `leo` and wins `earth_surface`" | it wins **three** beneficiated searched cells now, `geo` too, and is within 2.75 pp at `cislunar` |
