@@ -172,7 +172,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.14.0`,
-calc `1.21.2`, master `1.26.0` (the master version is a literal in
+calc `1.22.0`, master `1.27.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.14.0` is now spacecost's data-contract version**, not a
@@ -392,7 +392,23 @@ wrong: that is what it is for. **The headline numbers themselves are
 here and not there is the per-destination detail, the invariants, and the
 claims each cell retired.
 
-### ✅ THE COMPLETE 28-CELL MATRIX IS MEASURED (CURRENT: 2026-09-11/13, calc `1.21.2`)
+### ✅ THE COMPLETE 28-CELL MATRIX IS MEASURED (calc `1.21.2`, 2026-09-11/13)
+
+🚨  **AND AS OF calc `1.22.0` IT IS NO LONGER WHAT A CONFIGURE-NOTHING RUN
+ANSWERS.** Four defaults moved on 2026-09-14 and every cell below predates
+them: the surplus past a market ceiling was **abandoned** rather than sold at
+half price, and reliability, the learning curve and the cost of capital were
+all **charged**. Set `sell_surplus_at_discount` False, `model_reliability`
+True, `model_learning_curve` True and `apply_wacc_compounding` True to
+reproduce anything in this section.
+
+⚠️  **DO NOT SCALE THESE CELLS BY A SINGLE RATIO.** On the capped cislunar
+sample cells the four together are worth 2.6x on raw ore and 2.1x on the
+default cell, the cost of capital alone is 42-52% of it, and the learning
+curve runs the OTHER way and is exactly inert at N = 1. The decomposition is in
+[calc v1.22.0](versions.md#calc-v1220). What is below is a measurement of the
+model it names, which is why it is kept: it is still the only seven-destination
+measurement the project has.
 
 🚨  **The headline matrix and the result highlights are in
 [README.md](README.md#current-results-the-complete-28-cell-matrix), and are not
@@ -636,13 +652,35 @@ arriving on schedule, at a destination it was not written about.
 🚨  **RE-DERIVED 2026-09-14, AND `saturation_multiplier` IS IDENTICALLY 1.0 ON
 ALL TWENTY-EIGHT CELLS.** Min, median and max, every destination, every setting.
 The column is not stale here; it is **inert**. `capacity_cap` does not bend a
-price as a market fills, it refuses the sale, so the multiplier that expressed
-`elasticity`'s haircut has nothing left to express and the whole table this
-section used to carry has no information in it under the current default.
+price as a market fills, so the multiplier that expressed `elasticity`'s
+haircut has nothing left to express and the whole table this section used to
+carry has no information in it.
+
+⚠️  **THE REASON CHANGED IN calc `1.22.0` AND THE CONCLUSION DID NOT, WHICH IS
+WORTH READING CAREFULLY.** This paragraph used to say the multiplier is 1.0
+because the ceiling "refuses the sale". It no longer refuses it: the surplus
+past a ceiling SELLS, at `surplus_price_fraction` of full price. The multiplier
+is still identically 1.0 -- `verify.py` check 7 asserts it on every cell -- but
+now it is because the discount is applied **in the sale and in the knapsack**
+rather than through the elasticity multiplier, not because no sale happens. A
+diagnostic that stays constant across a model change for a DIFFERENT reason is
+the subtlest version of this section's own lesson.
 
 ✅  **THE LIVE DIAGNOSTIC IS `market_clearing_fraction`**, which says what
 fraction of an assembled load actually cleared, with `unsold_payload_kg`
 alongside it. Searched cells:
+
+🚨  **AND THE COMPANION COLUMN MOVED IN calc `1.22.0`: IT IS
+`surplus_payload_kg` NOW, AND `unsold_payload_kg` READS 0.0.** Mass past a
+ceiling is sold at a discount rather than abandoned, so it lands in the new
+column and the old one goes quiet. The two are exclusive by construction and
+check 7 asserts it. **The `unsold rows` column in the table below is therefore
+a v1.21.2 measurement**, and a harness that kept counting `unsold_payload_kg`
+across the flip would report zero everywhere and read as "nothing is ever lost
+to a ceiling", which is false -- ceilings still bind on 18 to 96% of rows at
+the six in-space destinations. That is this section's own lesson happening to
+this section: **when you swap a model term, check whether the diagnostics that
+watched it still VARY.**
 
 | cell | rows at fleet cap | clearing min | clearing median | rows bound | unsold rows |
 |---|---|---|---|---|---|
@@ -871,7 +909,10 @@ are measuring is how a clean result becomes a false alarm.
 ✅  **RE-DERIVED 2026-09-14 ON ALL TWENTY-EIGHT CELLS**, by
 `campaign/population.py`, which reads the archived cells rather than re-running
 anything. Every figure below is `capacity_cap` with insurance OFF, and is
-directly comparable with the rest of the 28-cell campaign. The superseded
+directly comparable with the rest of the 28-cell campaign. ⚠️  **And with calc
+`1.21.2`, not with a default run today**: `1.22.0` sells the surplus past a
+ceiling at half price and turns reliability, the learning curve and the cost of
+capital off. See the banner on the 28-cell section. The superseded
 `elasticity` tables are in
 [the 28-cell campaign](versions.md#the-28-cell-campaign-2026-09).
 
@@ -976,7 +1017,9 @@ year of the surface.
 
 ✅  **RE-DERIVED 2026-09-14 BY `campaign/population.py`**, off the archived
 cells, so these are `capacity_cap` with insurance OFF and include the two
-destinations that had never had a share table at all. The superseded 2026-08
+destinations that had never had a share table at all. ⚠️  **calc `1.21.2`, not
+a default run today**; see the banner on the 28-cell section for the four flags
+`1.22.0` moved. The superseded 2026-08
 `elasticity` shares are in
 [the 28-cell campaign](versions.md#the-28-cell-campaign-2026-09).
 
@@ -1394,7 +1437,7 @@ wall clocks, plus `beneficiation_cost_ratio()` and
 | `run_pipeline.py` | `--help` for `--raw` and `--search`, and both `[default: ...]` banner labels |
 | `build_master.py` | the `MASTER CONFIG READY` banner, so `master.py` too |
 | `modules/calc.py` | its own Stage 4 preview banner |
-| `ui.py` | `_SECONDS_PER_ROW`, which was a second copy of the same four numbers |
+| `ui.py` | `_SECONDS_PER_ROW`, which was a second copy of the same four numbers, **and since 2026-09-14 the Stage 4 sidebar blurb as well** |
 
 **Re-measure in one place and every printed ratio moves with it**, and because
 the ratio is computed per configuration the banner says **5.24× at N = 1 and
@@ -1402,6 +1445,27 @@ the ratio is computed per configuration the banner says **5.24× at N = 1 and
 ✅  **Both moved on their own when `MEASURED_CELL_SECONDS` was re-measured for
 the 28-cell campaign**, from 4.67× and 4.54×, and so did the `--search` help
 text (1.71× to 3.05×). That is the mechanism working: nobody edited a banner.
+
+🚨  **AND THE CLAIM ABOVE WAS FALSE WHEN IT WAS WRITTEN, IN THE ROW IT NAMES.**
+`ui.py` derived `_SECONDS_PER_ROW` from the constant and **hand-typed the same
+four wall clocks four hundred lines away**, in the Stage 4 sidebar blurb. When
+the constant was re-measured for the 28-cell campaign the derived half moved
+and the typed half did not, so the dashboard spent the next release telling
+users to **budget 1.6 h for a cell that measures 2.7 h** -- and the blurb
+attributed its figures to calc 1.17.7, which was honest and therefore made the
+staleness invisible. Found 2026-09-14 by converting the blurb to derive; the
+numbers changed under the edit, which is how a silent second copy announces
+itself.
+
+⚠️  **The lesson is narrower than "derive everything" and worth stating
+exactly: a file that derives a number in one place is not a file that derives
+it.** The audit that closed this class went looking for files that typed the
+ratios and found five; it did not go looking for a SECOND copy inside a file
+already on the fixed list, because that file was on the fixed list. **Grep for
+the VALUE, not for the filename.** ⚠️  One typed copy is left on purpose, the
+cislunar-to-dearest factor in `_DEST_FACTOR`, because it is a ratio of two
+numbers that live in a markdown table rather than in code; it is labelled, and
+it too had gone stale (2.1-2.7x against the 28-cell matrix's 2.2-3.0x).
 
 ⚠️  **`run_pipeline.py` deliberately asserts rather than falling back to a
 literal** if master is somehow not loaded when the parser is built. A
@@ -2135,11 +2199,18 @@ different population does not even have a reliable **sign**.
 ## The corrections the model accumulated
 
 Every model listed under
-[What the model charges for](README.md#what-the-model-charges-for) defaults ON
-and each moved every number when it landed. They are corrections, not options;
-the flags exist to isolate an effect, not to be left off. **That list lives in
-README because it describes what the model currently does**, and it is not
-repeated here.
+[What the model charges for](README.md#what-the-model-charges-for) moved every
+number when it landed. They are corrections, not options; the flags exist to
+isolate an effect, not to be left off. **That list lives in README because it
+describes what the model currently does**, and it is not repeated here.
+
+⚠️  **"...and each defaults ON" was true until calc `1.22.0` and is not now.**
+Three of the models in that section default OFF: mission reliability, the
+learning curve and the cost of capital. Their prose stayed where it is, because
+what each charges for is still what it charges for, and each section opens by
+saying it is off. So the README section is no longer a list of things a default
+run does, and the membership test below is the only thing that sorts the two
+categories.
 
 What belongs here is the **test for membership**, which is not "is it on by
 default":
@@ -2156,6 +2227,33 @@ two categories, because "it defaults OFF" used to carry half the argument.
 charge billed a real cost against a scenario this module does not have, which
 makes it an error rather than a correction. Gated off, not deleted, so the day
 this module gains a direct-injection architecture the charge becomes correct.
+
+🚨  **CALC `1.22.0` PUT THREE MORE ENTRIES ON THE SECOND LIST AT ONCE, AND
+THAT LIST IS NOW THE LONGER OF THE TWO WAYS A DEFAULT CAN MOVE.** The cost of
+capital (`apply_wacc_compounding`), mission reliability (`model_reliability`)
+and the learning curve (`model_learning_curve`) all fail the membership test in
+the same direction insurance does: each is a real charge a real programme pays,
+and each prices something that is not a mass, a Delta-v or a kilowatt. Read
+their sections in [README](README.md#what-the-model-deliberately-does-not-charge-for);
+what belongs here is the three things that will bite an editor:
+
+⚠️  **`apply_wacc_compounding` SILENCES `model_programme_calendar`, which is
+still True.** The calendar multipliers are exactly (1.0, 1.0) at `wacc <= 0` by
+construction, so that whole term charges nothing now. The flag was left ON
+rather than flipped because it still says the right thing about what to charge
+the moment there is a rate; **the run banner reports which of the two states it
+is in**, which is the only reason a reader is not left to derive it. Do not
+"fix" the apparent inconsistency by flipping it.
+
+⚠️  **`model_learning_curve` IS THE ONE WHOSE SIGN YOU WILL GUESS WRONG.**
+Turning it off makes the default cell **34.3% WORSE**, because the curve was a
+discount on recurring hardware. And it is **exactly 0.000% at N = 1**, so it
+cannot be checked by re-running a single-mission headline -- the same shape as
+the two programme-scale entries this file already warns about.
+
+⚠️  **`model_reliability_growth` is still True and is inert**, because it
+shapes P rather than creating it. Left that way so turning reliability back on
+restores the whole v1.21.2 term rather than half of it.
 
 🚨  **AND CALC `1.20.0` IS THE FIRST ENTRY THAT RUNS THE OTHER WAY: A CHARGE
 THAT IS CORRECT AND WAS STILL REMOVED.** Insurance (`charge_insurance`, now
@@ -2392,6 +2490,14 @@ diagnostic inherits the shape of the term it was written against**, and
 swapping a continuous term for a discontinuous one silently re-populates it.
 When you change a model term, re-read every warning that counts rows.
 
+🚨  **AND IT HAPPENED AGAIN IN calc `1.22.0`, IN THE OPPOSITE DIRECTION.** The
+ceiling went from a hard wall back to something partly continuous: the surplus
+past it now sells at half price. `saturation_multiplier` is still identically
+1.0, but for a different reason; `unsold_payload_kg` went to zero and the mass
+it used to carry moved to a new column. **Twice in two releases, the same
+diagnostics changed meaning without changing name.** Read this lesson as a
+standing instruction rather than as an account of one release.
+
 ⚠️  **And the first hypothesis was wrong, which is the other half.** The
 obvious culprit was `other (bulk silicate)`, calc's composition residual: it is
 priced, it is on 100% of rows and it has no market ceiling. Mapping it to the
@@ -2506,6 +2612,32 @@ few tenths of a percent on a handful of rows for a real runtime cost, and the
 honest place for that question is the branch-and-bound item under "The one big
 structural item that is still open", which needs an admissible bound and has
 the same shape. **Do not "fix" the ladder on the strength of four rows.**
+
+### A ratio taken across a session is a measurement of the session
+
+calc `1.22.0`, and it is THE SAMPLING RULE arriving from a direction that rule
+does not cover. That rule is about a sample of ROWS failing to predict a full
+catalog. This is a sample of TIME failing to predict itself.
+
+The release's first runtime table read 1.41-2.01x, measured by running the old
+build's four cells, then the new build's, in one sitting. The decomposition run
+that followed re-ran the **identical** all-four-restored raw cell and measured
+**68 s against the 42 s** the first pass had recorded for it, and the
+all-four-new raw cell at **32 s against 49 s**. So the same work varied by 1.6x
+on this host, in the direction of the session clock rather than of the build,
+and the "1.4x" was of the same order as the noise it was made of.
+
+✅  **The construction that does work is the one `1.17.4` and `1.17.6` used:
+interleave both builds inside ONE process**, which is why those two releases'
+numbers are the only per-release ratios in this project measured that way.
+⚠️  And even that leaves a few percent: `1.17.6` measured the same build twice
+interleaved and got 1.14x and 1.19x.
+
+🚨  **THE DECISION THAT FOLLOWS IS TO PUBLISH NO RUNTIME TABLE, NOT TO PUBLISH
+A HEDGED ONE.** A table with a caveat under it gets quoted without the caveat;
+this file has a dozen entries proving that. What was actually measured is that
+**this host cannot resolve a 1.4x ratio on a 155-row cell**, and that is what
+the release note says.
 
 ### A change can be numerically negligible and still destroy the evidence
 
@@ -2669,6 +2801,22 @@ reads.
   outside of it: **16,000 randomised comparisons over five phases, on raw IEEE
   bit patterns, zero differences**, covering `want_phase` as well because the
   sizing path is what uses it. That is the check to repeat, not to argue.
+- 🚨  **THE TIERED WALK ASSUMES A PHASE'S FULL-PRICE TIER IS REACHED FIRST**
+  (v1.22.0). It identifies that tier as "the first time this phase appears in
+  the walk", which is the same question as "the dearer of its two tiers" only
+  while `surplus_price_fraction <= 1.0`. Above 1.0 the discounted tier sorts
+  first, draws the market allowance, and the capped load comes out worth MORE
+  than the uncapped one -- measured at 1.5 as 945,000 against an uncapped
+  900,000, which inverts the invariant `verify.py` check 7 exists to enforce.
+  Clamped in `optimal_payload_mix`, clamped again where `surplus_frac` is
+  resolved, and REFUSED outright by `market_config_check`. **Do not "simplify"
+  any of the three away**, and if you ever give the two tiers independent
+  prices rather than one fraction, this assumption is the thing that breaks.
+- ⚠️  **The tier ledger is written BEFORE the `take <= 0` skip**, deliberately.
+  A full-price tier whose allowance is already spent takes nothing, and if it
+  went unrecorded its own surplus tier would be read as the full-price one and
+  clipped at the same exhausted allowance -- so the discount would silently
+  never fire on exactly the phases it exists for.
 - 🚨  **`caps` IS KEYED BY MARKET, NOT BY PHASE, AND THE WALK CONSUMES IT**
   (`1.21.2`). Two phases can sell into one market -- `silicates` and the
   composition residual do, on every body -- and a dict keyed by phase hands
@@ -2747,6 +2895,27 @@ would have condemned a release that had changed nothing:**
 | `1.17.7` | `read_csv` without `float_precision="round_trip"` | **the same symptom again, from a different cause** |
 | `1.17.7` | `""` compared as different from `NaN` | **and again, from a third** |
 | `1.21.0` | `market_model` not reset in `run_cell` | **a baseline labelled "the new default" that was entirely `elasticity`** |
+| `1.22.0` | `dtype == object` on **pandas 3.0** | **five text columns DIFFER while the hashes MATCH** -- a text column now reads back as an Arrow-backed `StringDtype` |
+| `1.22.0` | a build compared against one with an EXTRA column | every cell DIFFER, on a release that had changed nothing in them |
+
+🚨  **THE FIRST `1.22.0` ENTRY IS THE SAME SYMPTOM FOR A FOURTH CAUSE, AND
+IT IS THE ONE THE ENVIRONMENT CAN REINTRODUCE UNDER YOU.** The three `1.17.7`
+rows are index alignment, a float parser and `""` against `NaN`; this is a
+`dtype` test that was correct when it was written. `pandas` 3.0 infers a plain
+text column as an Arrow-backed `str` where 2.x gives `object`, so
+`col.dtype == object` silently became False for every text column and they all
+fell through to the numeric comparison. **Test `dtype.kind in "OU"` or the
+dtype's name, never `== object`**, and note the tell was the usual one: the
+hash and the column diff disagreed, and the hash was right.
+
+⚠️  **THE SECOND IS THIS RELEASE'S OWN AND IS NOT A DTYPE PROBLEM AT ALL.** A
+release that ADDS an output column cannot be verified by hashing the whole
+frame against the previous build, because the frame is a column wider by
+construction and the hash is guaranteed to differ. The A/B reported
+`*** DIFFER ***` on all four cells of a configuration later proved identical on
+142 of 142 shared columns. **Hash the shared column set and NAME it**, and
+treat "every cell differs at once" as the tell it has always been: a real
+defect almost never does that.
 
 🚨  **THE `1.21.0` ENTRY IS TRAP 1 ARRIVING A SECOND TIME, AND IT IS THE
 ARGUMENT FOR TREATING `run_cell`'s RESET LIST AS A CONTRACT.** `run_cell` sets
@@ -2822,7 +2991,7 @@ something genuinely does move.
 
 Every one of those is now defended against **at the line that would otherwise
 reproduce it**, and `verify.py`'s header carries the list. ⚠️  **Add to that
-list rather than starting a twelfth harness.**
+list rather than starting another harness.**
 
 ✅  **It reproduces the four cell hashes committed for `1.17.4` and `1.17.6`
 exactly**: `f3dbd86ee6d35fc0` / `3c809fb067c8d034` / `9bb6c8bb41852b66` /
@@ -3501,7 +3670,7 @@ because they are traps rather than instructions.
 `os.linesep`, and `cell_hash` is taken over exactly that text, so every hash in
 `versions.md` is a hash of CRLF. Unpin it and a byte-perfect Linux run reports
 DIFFER on all four cells with every float identical: trap #12, and the same
-shape as the eleven in `verify.py`'s header. It reads on Linux like a Windows
+shape as the traps in `verify.py`'s header. It reads on Linux like a Windows
 leftover, which is precisely why it is called out here. On Windows the pin is a
 measured no-op (`5fc52123ed1ecc3a` either way; LF gives `9f6e314f49dc64ef`).
 

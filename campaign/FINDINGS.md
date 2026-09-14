@@ -17,6 +17,22 @@ destinations, `market_model` defaulting to `capacity_cap` instead of
 `elasticity`, `charge_insurance` defaulting False, and a fresh Stage 2 / Stage 3
 price epoch.
 
+🚨  **AND NOTHING HERE IS WHAT A CONFIGURE-NOTHING RUN ANSWERS ANY MORE.** calc
+`1.22.0` (2026-09-14) moved four defaults after this campaign finished: the
+surplus past a market ceiling now SELLS at half price rather than being
+abandoned, and mission reliability, the learning curve and the cost of capital
+are all off. To reproduce a cell below, set `sell_surplus_at_discount` False,
+`model_reliability` True, `model_learning_curve` True and
+`apply_wacc_compounding` True. ⚠️  Do not scale these cells by a single ratio;
+the decomposition is in [calc v1.22.0](../versions.md#calc-v1220), and one of
+the four runs the other way. Every figure here remains a correct measurement of
+the code it names, which is why it is kept.
+
+⚠️  **A v1.22.0 campaign would also carry one more column**,
+`surplus_payload_kg`, which the cells under `cells/` do not have.
+`population.py` reads with `usecols` and will raise on it rather than render a
+blank, which is the behaviour that file wants.
+
 ## The matrix
 
 Cost / revenue, lower is better, 1.0 = breakeven.
@@ -236,7 +252,7 @@ this project runs on: name one authority, or you have two.
 | the 28-cell cost/revenue matrix, the two new destinations, the ranking, the FEEP win | [README.md, Results](../README.md#current-results-the-complete-28-cell-matrix) |
 | the 28-cell wall clocks | [README.md, Beneficiation](../README.md#beneficiation), pinned to `MEASURED_CELL_SECONDS` by `verify_docs.py` check 9 |
 | the superseded 20-cell matrix, the per-cell wall clocks, the price-epoch evidence | [versions.md](../versions.md#the-28-cell-campaign-2026-09) |
-| the invariants and the retired claims | [CLAUDE.md](../CLAUDE.md#the-complete-28-cell-matrix-is-measured-current-2026-09-1113-calc-1212) |
+| the invariants and the retired claims | [CLAUDE.md](../CLAUDE.md#the-complete-28-cell-matrix-is-measured-calc-1212-2026-09-1113) |
 | the per-destination population tables, derived 2026-09-14 rather than promoted | [CLAUDE.md](../CLAUDE.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09), from `population/` |
 
 ✅  **WHAT WAS NOT PROMOTED HAS NOW BEEN DERIVED: CLOSED 2026-09-14.** The
