@@ -22,10 +22,13 @@ import pandas as pd
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CELLS = os.path.join(ROOT, "campaign", "cells")
 RIG_KG = 2000.0
-# ⚠️  The five the campaign measured, not every destination the model has;
-# `mars_orbit` and `geo` landed afterwards and have no cells to analyse.  See
-# the note in run_queue.py.
-DESTS = ["cislunar", "lunar_surface", "leo", "mars_surface", "earth_surface"]
+# All seven the model has.  `mars_orbit` and `geo` were added to the model after
+# the 2026-08 campaign and had no cells to analyse until the 2026-09 one
+# measured them; the comment that used to stand here said so, and went stale the
+# moment those cells landed.  Order is cheapest-destination-first, matching
+# run_queue.py.
+DESTS = ["cislunar", "lunar_surface", "geo", "mars_orbit",
+         "leo", "mars_surface", "earth_surface"]
 
 
 def load(dest, ore, search):
