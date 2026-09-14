@@ -227,11 +227,35 @@ one of the four flags turns back on individually.
 
 ⚠️  **`apply_wacc_compounding` takes `model_programme_calendar` with it.** The
 calendar charge is time-value, and `programme_calendar_multipliers` returns
-exactly (1.0, 1.0) at a zero rate by construction, so that term is inert until
+exactly (1.0, 1.0) at a zero rate by construction -- the guard is
+`if w == 1 or wacc <= 0.0 or cadence_yr <= 0.0` -- so that term is inert until
 a rate comes back. The flag is left ON rather than flipped, because it still
 says the right thing about what the model should charge the moment there is
 something to charge; the run banner reports which of the two states it is in
 rather than leaving a reader to derive it.
+
+🚨  **AND THAT IS THE RELEASE'S LARGEST STRUCTURAL CONSEQUENCE, AS OPPOSED TO
+ITS LARGEST NUMERICAL ONE.** Measured on the searched beneficiated sample cell:
+
+| | with the rate on | with it off |
+|---|---|---|
+| `programme_calendar_multiplier` | 1.160 to 1.834, **median 1.457** | **1.0 on 65/65 rows** |
+| `wacc_multiplier` | 1.593 to 3.459, median 1.935 | 1.0 on 65/65 |
+| **`W < trips`** | **29.23%** of rows | **1.54%** |
+| fleet median / N median | 6 / 30 | 4 / 20 |
+
+So v1.16.0's whole contribution -- giving campaigns-per-ship a reason to be
+less than the rig's trip life, and thereby making the programme search
+two-dimensional -- is inert on 98.5% of rows. **The search still PRICES ~40
+programmes per candidate**, so the runtime for that dimension is still being
+paid for an axis that almost never changes the answer.
+
+✅  **It is not v1.14.0's failure mode returning, and the check is specific.**
+Three bounds are untouched: the capacity ceilings still bound the fleet F, the
+rig's duty-cycle life still caps W, and `max_fleet_ships` still stops the
+ladder, so N = F x W is bounded on both factors. The residual 1.54% is the
+ceiling still declining a trip occasionally, which is the tell that the
+objective is NEARLY monotone in W rather than monotone.
 
 ### The ceiling stops being a wall
 
@@ -269,10 +293,13 @@ allowance, and where it does, the optimal load carries it instead.
 clamp: each has a constant unit value and is divisible, which is the only
 condition greedy needs. Checked against an integer DP that shares no code with
 the walk -- 150 random instances, every split of every phase between its two
-tiers enumerated -- plus 400 instances proving `caps=None` is bit-identical to
-the pre-v1.21.0 walk, 400 proving `surplus_price_fraction = 0` is bit-identical
-to v1.21.0's, and 300 proving the value is monotone in the fraction and equal
-to the UNCAPPED load at 1.0.
+tiers enumerated -- plus 400 instances proving `caps=None` reproduces an
+independently written greedy bit for bit, 400 proving `surplus_price_fraction`
+0.0 reproduces an independently written bounded greedy bit for bit, and 300
+proving the value is monotone in the fraction and equal to the UNCAPPED load at
+1.0. ⚠️  Those last two compare against a REFERENCE implementation, not against
+the v1.21.2 code; what proves bit-identity with the code is the acceptance test
+below, which exercises both paths on real cells.
 
 ⚠️  **It cannot be done as a second pass over the leftovers**, which is the
 implementation that suggests itself. That fills the hold full-price-first and
@@ -457,10 +484,15 @@ one place a future reader is most likely to reach for a hash and diff it.
   the unbounded case and must never pass it, and it does not.
 - **the knapsack** proved separately, off the pipeline: 150 random instances
   against an integer DP that enumerates every split of every phase between its
-  two tiers and shares no code with the walk; 400 proving `caps=None` is
-  bit-identical to the pre-v1.21.0 walk; 400 proving `surplus_price_fraction`
-  0.0 is bit-identical to v1.21.0's; 300 proving the value is monotone in the
-  fraction and equals the UNCAPPED load at 1.0
+  two tiers and shares no code with the walk; 400 proving `caps=None` and 400
+  proving `surplus_price_fraction = 0.0` each reproduce an independently
+  written greedy bit for bit; 300 proving the value is monotone in the fraction
+  and equals the UNCAPPED load at 1.0
+- **the out-of-range guard**: `surplus_price_fraction` above 1.0 would make the
+  ceiling PAY rather than cost, because the discounted tier would sort ahead of
+  the full-price one and draw the allowance. Measured at 1.5: a load worth
+  900,000 uncapped priced at 945,000 capped. Refused at run level and clamped
+  in the resolver
 
 🚨  **AND CHECK 7's NEW EXCLUSIVITY TEST FAILED ON ITS FIRST RUN, ON 2 OF 158
 ROWS, AND THE MODEL WAS RIGHT.** The claim is that `unsold_payload_kg` and

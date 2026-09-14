@@ -2151,11 +2151,18 @@ different population does not even have a reliable **sign**.
 ## The corrections the model accumulated
 
 Every model listed under
-[What the model charges for](README.md#what-the-model-charges-for) defaults ON
-and each moved every number when it landed. They are corrections, not options;
-the flags exist to isolate an effect, not to be left off. **That list lives in
-README because it describes what the model currently does**, and it is not
-repeated here.
+[What the model charges for](README.md#what-the-model-charges-for) moved every
+number when it landed. They are corrections, not options; the flags exist to
+isolate an effect, not to be left off. **That list lives in README because it
+describes what the model currently does**, and it is not repeated here.
+
+⚠️  **"...and each defaults ON" was true until calc `1.22.0` and is not now.**
+Three of the models in that section default OFF: mission reliability, the
+learning curve and the cost of capital. Their prose stayed where it is, because
+what each charges for is still what it charges for, and each section opens by
+saying it is off. So the README section is no longer a list of things a default
+run does, and the membership test below is the only thing that sorts the two
+categories.
 
 What belongs here is the **test for membership**, which is not "is it on by
 default":
