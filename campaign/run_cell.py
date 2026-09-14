@@ -60,7 +60,8 @@ FIELDS = [
     # raises on an unlisted key, so every cell crashed AFTER paying for the run
     # and wrote no ledger row at all -- which made the queue re-run it forever.
     # _EXTRACT_FIELDS below is what stops that recurring: it fails at import.
-    "saturation", "clearing", "unsold_kg", "market_model", "p_mining",
+    "saturation", "clearing", "unsold_kg", "surplus_kg", "market_model",
+    "p_mining",
     "aerocapture_share", "rtg_share", "isru_share",
     "prop_shares", "vehicle_shares",
     "calc_version", "catalog_date", "archive",
@@ -77,7 +78,8 @@ _EXTRACT_FIELDS = frozenset({
     "vehicle", "propellant", "conc_ratio", "power_source",
     "programme_missions", "fleet_ships", "missions_per_ship", "trips_per_ship",
     "programme_span_yr", "payload_kg", "saturation", "clearing", "unsold_kg",
-    "market_model", "p_mining", "aerocapture_share", "rtg_share", "isru_share",
+    "surplus_kg", "market_model", "p_mining",
+    "aerocapture_share", "rtg_share", "isru_share",
     "prop_shares", "vehicle_shares", "calc_version", "catalog_date",
 })
 assert _EXTRACT_FIELDS <= set(FIELDS), (
@@ -158,6 +160,12 @@ def extract(path, dest, ore, search):
         "saturation": round(float(b.get("saturation_multiplier", float("nan"))), 4),
         "clearing": round(float(b.get("market_clearing_fraction", float("nan"))), 4),
         "unsold_kg": round(float(b.get("unsold_payload_kg", float("nan"))), 2),
+        # calc v1.22.0.  Mass sold PAST a ceiling at a discount, against
+        # `unsold_kg`'s mass that earned nothing.  The two are exclusive on any
+        # one run, and which one carries the mass is `sell_surplus_at_discount`;
+        # a cell archived before v1.22.0 has no such column at all, which is how
+        # you tell it is a hard-wall cell.
+        "surplus_kg": round(float(b.get("surplus_payload_kg", float("nan"))), 2),
         "market_model": (str(p["market_model"].iloc[0])
                          if "market_model" in p.columns else ""),
         "p_mining": round(float(b.get("p_mining", float("nan"))), 4),

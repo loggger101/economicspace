@@ -185,6 +185,34 @@ class Stage:
         return time.time() - newest, sum(os.path.getsize(p) for p in paths) / 1e6
 
 
+def _cell_time(beneficiated, searched):
+    """One measured cislunar cell as "12 min" or "1.6 h".
+
+    ⚠️  DERIVED, NOT TYPED.  These four numbers were hand-written into five
+    files at once and went stale together, and `MEASURED_CELL_SECONDS` in
+    calc.py is the single place they live now.  `_SECONDS_PER_ROW` further down
+    this file already reads them; this blurb did not, which made ui.py the one
+    file that both derived them and restated them.  Re-measure there and the
+    sidebar moves with it.
+    """
+    seconds = master.MEASURED_CELL_SECONDS[(beneficiated, searched)]
+    if seconds < 3600:
+        return "%d min" % round(seconds / 60.0)
+    return "%.1f h" % (seconds / 3600.0)
+
+
+# The per-cell factor between cislunar and the dearest destination, on the
+# DEFAULT cell, from the 28-cell matrix in README's Beneficiation section:
+# cislunar 9,878 s against earth_surface 21,860 s (2.2x) and mars_orbit
+# 29,174 s (3.0x).  A range rather than a number because it is a range.
+#
+# ⚠️  This one is still typed, and it read 2.1-2.7 until 2026-09-14 because it
+# was the 20-cell matrix's figure left standing under a 28-cell base.  It is a
+# ratio of two numbers that live in a markdown table rather than in code, which
+# is why it is not derived; if that table is ever machine-read, derive it.
+_DEST_FACTOR = (2.2, 3.0)
+
+
 STAGES = [
     Stage("catalog",   1, "Asteroid catalog",
           "JPL SBDB + MP3C + SsODNet + NEOWISE. Downloads ~500 MB; slowest to "
@@ -201,13 +229,20 @@ STAGES = [
     Stage("calc",      4, "Profitability",
           "The headline output, and the only stage whose runtime you choose. "
           "Measured on the full 1.55 M-row catalog at cislunar, 12 workers, "
-          "calc 1.17.7: 12 min raw at N = 1, 21 min with "
-          "optimise_programme_scale, 57 min with use_beneficiation, and 1.6 h "
-          "with both, and both of those flags DEFAULT ON as of calc v1.17.0, "
-          "so budget for the 1.6 h unless you turn one off. Cislunar is the "
-          "CHEAPEST destination: leo, mars_surface and earth_surface run "
-          "2.1-2.7x longer per cell, so the default there is 3.4-4.3 h. "
-          "Seconds with eval_row_cap set low."),
+          "calc 1.21.2, in the 2026-09 28-cell campaign: %s raw at N = 1, "
+          "%s with optimise_programme_scale, %s with use_beneficiation, and "
+          "%s with both, and both of those flags DEFAULT ON as of calc "
+          "v1.17.0, so budget for the %s unless you turn one off. Cislunar is "
+          "the CHEAPEST destination: the others run %.1f-%.1fx longer on that "
+          "cell, so the default there is %.1f-%.1f h. Seconds with "
+          "eval_row_cap set low. WARNING: calc v1.22.0 gave the payload "
+          "knapsack a second price tier and has not been re-measured on a "
+          "full catalog, so treat these as a floor rather than a budget."
+          % (_cell_time(False, False), _cell_time(False, True),
+             _cell_time(True, False), _cell_time(True, True),
+             _cell_time(True, True), _DEST_FACTOR[0], _DEST_FACTOR[1],
+             master.MEASURED_CELL_SECONDS[(True, True)] * _DEST_FACTOR[0] / 3600.0,
+             master.MEASURED_CELL_SECONDS[(True, True)] * _DEST_FACTOR[1] / 3600.0)),
 ]
 
 
@@ -1343,6 +1378,7 @@ _MODEL_TERMS = [
     ("saturation_multiplier", "Market saturation multiplier (price)"),
     ("market_clearing_fraction", "Market clearing fraction (quantity)"),
     ("unsold_payload_kg", "Payload that earned nothing (kg)"),
+    ("surplus_payload_kg", "Payload sold past a ceiling, at a discount (kg)"),
     ("p_success", "Overall mission reliability"),
     ("p_mining", "Mining reliability (programme mean)"),
     ("learning_curve_factor", "Learning curve factor"),

@@ -110,6 +110,12 @@ def _market_default():
     return master.CALC_CONFIG.market_model
 
 
+def _surplus_default():
+    """`surplus_price_fraction`'s own default, for the same reason (v1.22.0)."""
+    import master
+    return master.CALC_CONFIG.surplus_price_fraction
+
+
 PRESETS = {
     "quick": dict(
         rows=400, raw=True, search=False, asteroids=20_000,
@@ -175,6 +181,28 @@ def human(seconds: float) -> str:
     in hours, and a fractional part is noise at both ends.
     """
     return str(timedelta(seconds=int(seconds)))
+
+
+def unit_float(text):
+    """A float in [0, 1], for `--surplus-fraction` (v1.22.0).
+
+    Refused at the flag rather than downstream, the same argument `nonneg_int`
+    makes one function along. Above 1.0 is not merely meaningless -- it says a
+    kilogram is worth more for being unsellable, and it inverts the invariant
+    `verify.py` check 7 exists to enforce, because the tiered knapsack would
+    sort a phase's discounted tier ahead of its full-price one. `calc` refuses
+    it too, in `market_config_check`; this catches it a second earlier and with
+    a better message.
+    """
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError("%r is not a number" % text)
+    if not 0.0 <= value <= 1.0:
+        raise argparse.ArgumentTypeError(
+            "%r is outside 0.0 to 1.0; it is what a kilogram past a market "
+            "ceiling fetches as a fraction of full price" % text)
+    return value
 
 
 def nonneg_int(text):
@@ -323,6 +351,54 @@ def build_parser(destinations) -> argparse.ArgumentParser:
                         "prices, N = 1, no search. elasticity: the v1.14.0 "
                         "demand curve. unbounded: a diagnostic, nothing bounds "
                         "programme size (default: %s)" % _market_default())
+
+    # calc v1.22.0.  Four defaults moved, so four things a run can now differ
+    # on that it could not before, and `--market-model` above is the precedent:
+    # a field a cell can differ on needs a way to say so from the command line,
+    # or the headless path cannot express a run the docs tell people to make.
+    # Every default below is read off the dataclass rather than typed, for the
+    # reason the reset list in verify.py is: a literal here is a second copy of
+    # a default, right until somebody moves the first one.
+    surp = p.add_mutually_exclusive_group()
+    surp.add_argument("--surplus-sales", dest="surplus", action="store_true",
+                      help="sell material past a market ceiling at "
+                           "--surplus-fraction of full price")
+    surp.add_argument("--no-surplus-sales", dest="surplus",
+                      action="store_false",
+                      help="abandon material past a market ceiling "
+                           "(the calc v1.21.0 hard wall)")
+    p.set_defaults(surplus=None)
+    p.add_argument("--surplus-fraction", type=unit_float, metavar="F",
+                   help="what a kilogram past a ceiling fetches, as a "
+                        "fraction of full price, 0.0 to 1.0 (default: %s)"
+                        % _surplus_default())
+
+    rel = p.add_mutually_exclusive_group()
+    rel.add_argument("--reliability", dest="reliability", action="store_true",
+                     help="discount expected revenue by P(launch) x P(cruise) "
+                          "x P(mining), charging every cost in full")
+    rel.add_argument("--no-reliability", dest="reliability",
+                     action="store_false",
+                     help="price the mission as if it works (the default)")
+    p.set_defaults(reliability=None)
+
+    lc = p.add_mutually_exclusive_group()
+    lc.add_argument("--learning-curve", dest="learning", action="store_true",
+                    help="apply Wright's law to recurring hardware across a "
+                         "programme (inert at N = 1)")
+    lc.add_argument("--no-learning-curve", dest="learning",
+                    action="store_false",
+                    help="charge recurring hardware at list price (the default)")
+    p.set_defaults(learning=None)
+
+    coc = p.add_mutually_exclusive_group()
+    coc.add_argument("--cost-of-capital", dest="wacc", action="store_true",
+                     help="compound up-front costs at Module 3's WACC; also "
+                          "re-arms the programme calendar charge, which is "
+                          "time-value and inert without it")
+    coc.add_argument("--no-cost-of-capital", dest="wacc", action="store_false",
+                     help="charge no discount rate (the default)")
+    p.set_defaults(wacc=None)
 
     p.add_argument("--yes", "-y", action="store_true",
                    help="skip the confirmation prompt on a long run")
@@ -876,6 +952,18 @@ def main() -> int:
     # writing over it afterwards would make the flag silently inert.
     if args.market_model is not None:
         cfg.calc.market_model = args.market_model
+    # calc v1.22.0, after the preset for the same reason: a preset writing over
+    # one of these afterwards would make the flag silently inert.
+    if args.surplus is not None:
+        cfg.calc.sell_surplus_at_discount = args.surplus
+    if args.surplus_fraction is not None:
+        cfg.calc.surplus_price_fraction = args.surplus_fraction
+    if args.reliability is not None:
+        cfg.calc.model_reliability = args.reliability
+    if args.learning is not None:
+        cfg.calc.model_learning_curve = args.learning
+    if args.wacc is not None:
+        cfg.calc.apply_wacc_compounding = args.wacc
 
     check_defaults_preset(cfg)
 
