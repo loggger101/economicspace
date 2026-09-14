@@ -59,8 +59,10 @@ sys.path.insert(0, ROOT)
 
 # The cell the prose describes.  See the module docstring for why this is
 # pinned rather than followed.
-PINNED_CELL = "cislunar__benef__search-on"
-PINNED_BODY = "2021 CX5"
+# The live catalog a Stage 4 run leaves behind.  This is the DEFAULT source:
+# "the best case of the run you just did" is the question this script answers,
+# and the campaign archives are the special case rather than the normal one.
+CATALOG = os.path.join(ROOT, "asteroid_pipeline", "profitability_catalog.csv")
 
 # Physics the model fixes at import; restated here rather than imported so the
 # derivation owns its own constants.
@@ -85,6 +87,95 @@ def best_cell(rows):
     if not done:
         sys.exit("no completed cells in %s" % LEDGER)
     return min(done, key=lambda r: float(r["best_obj"]))
+
+
+def terms_in_force(row, cfg):
+    """Which optional cost terms the row being documented actually carries.
+
+    🚨  READ OFF THE ROW, NOT OFF THE LIVE CONFIG, and that is the whole point.
+    This script derives a document ABOUT one row, and that row was produced by
+    whatever config was in force when it was written -- which is not
+    necessarily what `CALC_CONFIG` holds now.  An archived calc 1.21.2 cell
+    charges reliability, the learning curve and the cost of capital; a calc
+    1.22.0 run charges none of them and sells the surplus past a ceiling.
+    Deriving one against the other produces a document that disagrees with its
+    own subject, and the check at the end would report it as a DIFFER on
+    fifteen columns rather than as what it is.
+
+    Each term has a diagnostic column that is exactly 1.0 (or absent) when the
+    term is off, which is what makes this inferable at all:
+
+      wacc         `wacc_multiplier_upfront` is 1.0 at a zero rate
+      reliability  `p_success` is 1.0 when revenue is not discounted
+      learning     `learning_curve_factor` is 1.0 when no curve is applied
+      surplus      `surplus_payload_kg` does not exist before calc 1.22.0
+
+    ⚠️  `learning_curve_factor` is ALSO 1.0 at N = 1 with the curve on, because
+    the cumulative average of one unit is the first unit.  Reading that as
+    "off" is harmless precisely because it is inert there: both readings
+    produce the same arithmetic, which is why this infers rather than refuses.
+
+    ⚠️  The surplus FRACTION is not recoverable from a row whose surplus is
+    zero, so it comes from the config when the column exists.  That is safe for
+    the same reason: a row that sold nothing past a ceiling loads the same hold
+    either way, because no second-tier take happened.
+    """
+    def col(name):
+        """The row's value for `name`, or None when it has no such column."""
+        if name not in row:
+            return None
+        value = row[name]
+        return None if pd.isna(value) else float(value)
+
+    wacc_mult = col("wacc_multiplier_upfront")
+    p_succ = col("p_success")
+    lc = col("learning_curve_factor")
+    has_surplus_col = "surplus_payload_kg" in row
+
+    return {
+        "wacc": True if wacc_mult is None else wacc_mult != 1.0,
+        "reliability": True if p_succ is None else p_succ != 1.0,
+        "learning": True if lc is None else lc != 1.0,
+        # Pre-1.22.0 rows have no such column and are therefore hard-wall rows.
+        "surplus_frac": (
+            max(0.0, min(1.0, float(cfg.surplus_price_fraction)))
+            if has_surplus_col and getattr(cfg, "sell_surplus_at_discount", False)
+            else 0.0),
+        # Whether the run SEARCHED the programme, which the row records
+        # directly: `programme_options_priced` is how many rungs were costed,
+        # and 1 means the ladder never ran.  Without this the derivation
+        # searches a ladder the run did not, picks an N the run did not fly,
+        # and then disagrees with the row about eleven columns for a reason
+        # that has nothing to do with arithmetic.
+        "searched": (col("programme_options_priced") or 1.0) > 1.0,
+        "n_fixed": int(col("programme_missions") or 1),
+        "f_fixed": int(col("fleet_ships") or 1),
+        "w_fixed": int(col("missions_per_ship") or 1),
+        "inferred_from_row": wacc_mult is not None,
+        "stamp": (str(row["pipeline_version"])
+                  if "pipeline_version" in row else "unknown"),
+    }
+
+
+def run_winner(path):
+    """The best row of a Stage 4 output catalog, by the project's objective.
+
+    ⚠️  NOT the first row.  The file is sorted by `profit_usd` descending and
+    the project ranks on `total_cost_usd / gross_value_usd`; those are
+    different questions, and README says so where it documents the column
+    order.  The best CASE is the lowest ratio.
+    """
+    if not os.path.exists(path):
+        sys.exit("no catalog at %s\nRun Stage 4 first, or pass --cell to "
+                 "document an archived campaign cell instead." % path)
+    frame = pd.read_csv(path, low_memory=False, float_precision="round_trip")
+    if not len(frame):
+        sys.exit("%s has no rows" % path)
+    usable = frame[frame["gross_value_usd"] > 0]
+    if not len(usable):
+        sys.exit("%s has no row with positive gross value" % path)
+    ratio = usable["total_cost_usd"] / usable["gross_value_usd"]
+    return usable.loc[ratio.idxmin()]
 
 
 def archived_winner(cell, designation):
@@ -212,7 +303,8 @@ def market_ceilings(minerals):
     return caps, dict(master._PHASE_MARKET_ALIAS)
 
 
-def knapsack(payload_kg, feed_kg, phases, recovery, caps=None, keys=None):
+def knapsack(payload_kg, feed_kg, phases, recovery, caps=None, keys=None,
+             surplus_frac=0.0):
     """The most valuable hold assemblable from this feed.
 
     A greedy fractional knapsack in descending price order, which is exact here
@@ -225,26 +317,114 @@ def knapsack(payload_kg, feed_kg, phases, recovery, caps=None, keys=None):
     selling into one market share one allowance.  Clipping the take and not the
     remaining hold is the whole point of the bounded form: the space a capped
     phase does not get stays available to the next one down.
+
+    `surplus_frac` is calc 1.22.0's second price tier: what a kilogram past a
+    ceiling fetches, as a fraction of the full price.  At 0.0 this is the
+    v1.21.0 wall and not one float below differs from it.  Above 0.0 every
+    phase enters the walk TWICE, once at full price bounded by its allowance
+    and once at the discount bounded by what the feed has left, and the merged
+    list is sorted by unit price like any other fractional knapsack.  Greedy
+    stays exact because a two-step price schedule is two items rather than a
+    clamp, and the interleaving is the point: a rich phase's discounted surplus
+    can outrank a poor phase's full-price allowance, and where it does the
+    optimal hold carries it instead.
     """
-    remaining, total, mix = float(payload_kg), 0.0, {}
+    tiers = []
     for name, frac, price in sorted(phases, key=lambda p: -p[2]):
+        tiers.append((name, frac, price, True))
+        if caps is not None and surplus_frac > 0.0:
+            tiers.append((name, frac, price * min(1.0, surplus_frac), False))
+    # Stable, so a phase's full-price tier still precedes its discounted one
+    # when the fraction is exactly 1.0 and the two prices tie.
+    tiers.sort(key=lambda t: -t[2])
+
+    remaining, total, mix = float(payload_kg), 0.0, {}
+    surplus, taken = 0.0, {}
+    for name, frac, price, full in tiers:
         if remaining <= 0:
             break
-        take = min(float(feed_kg) * frac * recovery, remaining)
-        if caps is not None:
+        take = min(float(feed_kg) * frac * recovery - taken.get(name, 0.0),
+                   remaining)
+        if full and caps is not None:
             key = (keys or {}).get(name, name)
             allowance = caps.get(key)
             if allowance is not None:
                 take = min(take, allowance)
                 caps[key] = allowance - take
+        # Recorded before the skip: a full tier whose allowance is spent takes
+        # nothing, and if that went unrecorded its own surplus tier would be
+        # read as the full one and clipped at the same exhausted allowance.
+        taken[name] = taken.get(name, 0.0) + take
         if take <= 0:
             continue
-        mix[name] = take
+        mix[name] = mix.get(name, 0.0) + take
+        if not full:
+            surplus += take
         total += take * price
         remaining -= take
     loaded = float(payload_kg) - remaining
-    return {"mix": mix, "value": total, "loaded": loaded,
+    return {"mix": mix, "value": total, "loaded": loaded, "surplus": surplus,
             "usd_per_kg": total / loaded if loaded > 0 else 0.0}
+
+
+def raw_hold(payload_kg, phases):
+    """The hold of a run-of-mine mission: the body's own proportions.
+
+    Nothing is chosen here, which is the whole difference from the
+    beneficiated case.  A raw mission digs what it flies and flies what it
+    digs, so the mix is the composition scaled to the payload, and the phase
+    fractions are normalised because they sum to 0.76-0.96 rather than to 1:
+    the residual is bulk silicate that the phase table prices separately.
+
+    No `recovery` term appears, and that is not an omission.  Separation
+    recovery is the fraction of a phase that reports to CONCENTRATE, and a
+    mission that does not concentrate never pays it.
+    """
+    frac_sum = sum(f for _n, f, _p in phases)
+    if frac_sum <= 0:
+        return {"mix": {}, "value": 0.0, "loaded": 0.0, "surplus": 0.0,
+                "usd_per_kg": 0.0}
+    mix = {n: payload_kg * f / frac_sum for n, f, _p in phases}
+    value = sum(mix[n] * p for n, _f, p in phases)
+    return {"mix": mix, "value": value, "loaded": float(payload_kg),
+            "surplus": 0.0,
+            "usd_per_kg": value / payload_kg if payload_kg > 0 else 0.0}
+
+
+def raw_sale(load, phases, caps, keys, surplus_frac):
+    """What a run-of-mine hold actually sells, clipped per market.
+
+    The hold is fixed, so unlike the beneficiated case there is nothing to
+    optimise: each phase sells what it can inside its market's allowance, and
+    what is past it either earns nothing or earns the discount, exactly as in
+    the sale the model runs for raw cargo.
+
+    Accumulated in the phase table's own order rather than by price, because
+    that is the order the model's `_capped_sale_value` walks and floating-point
+    addition is not associative.  The two have to agree to the last bit for the
+    check at the end to mean anything.
+    """
+    price = {n: p for n, _f, p in phases}
+    remaining = dict(caps)
+    value = unsold = surplus = 0.0
+    for name, kg in load["mix"].items():
+        key = keys.get(name, name)
+        allowance = remaining.get(key, float("inf"))
+        if kg > allowance:
+            over = kg - allowance
+            value += allowance * price[name]
+            if surplus_frac > 0.0:
+                value += over * price[name] * surplus_frac
+                surplus += over
+            else:
+                unsold += over
+            remaining[key] = 0.0
+        else:
+            value += kg * price[name]
+            remaining[key] = allowance - kg
+    return {"mix": dict(load["mix"]), "value": value, "loaded": load["loaded"],
+            "surplus": surplus, "unsold": unsold,
+            "usd_per_kg": value / load["loaded"] if load["loaded"] else 0.0}
 
 
 # ------------------------------------------------------------------ context
@@ -270,15 +450,38 @@ def context(body, archived, tables):
                  power=str(archived["power_source"]),
                  apsis=str(archived["rendezvous_apsis"]),
                  electric=float(archived["dv_penalty_factor"]) > 1.0)
-    expected = dict(beneficiated=True, aero=False, isru=False, power="solar",
-                    apsis="aphelion", electric=True)
-    if shape != expected:
-        sys.exit("this derivation covers one mission shape and the archived row "
-                 "is a different one.\n  expected %s\n  archived %s\n"
-                 "Extend the cascade before pointing the document at it."
-                 % (expected, shape))
+    # PER AXIS, not one monolithic comparison.  The old guard tested the whole
+    # shape tuple against a single supported shape, so a raw mission -- which
+    # is what the quick and standard presets fly, and therefore the commonest
+    # run anybody makes -- was refused with a message that named five axes as
+    # wrong when only one of them was.  Each axis now says for itself whether
+    # this cascade covers it, and the refusal names only the ones that do not.
+    #
+    # `beneficiated` takes both values as of 2026-09-14.  The other four are
+    # genuinely not implemented here: aerocapture adds a TPS mass that is
+    # hauled out and pushed back, ISRU rewrites where the return propellant
+    # comes from, a radioisotope plant is sized on a different W/kg, and the
+    # chemical case has no electric stage to solve for.
+    unsupported = [
+        name for name, ok in (
+            ("aerocapture return", not shape["aero"]),
+            ("ISRU return propellant", not shape["isru"]),
+            ("power source %r" % shape["power"], shape["power"] == "solar"),
+            ("rendezvous apsis %r" % shape["apsis"],
+             shape["apsis"] in ("aphelion", "perihelion")),
+            ("chemical propulsion", shape["electric"]),
+        ) if not ok
+    ]
+    if unsupported:
+        sys.exit("this derivation does not cover: %s\n"
+                 "  row shape %r\n"
+                 "Extend the cascade before pointing the document at it, or "
+                 "pass --designation to document a body whose winning mission "
+                 "this cascade can express."
+                 % (", ".join(unsupported), shape))
 
     cfg = master.CALC_CONFIG
+    benef = shape["beneficiated"]
     rows = set(ops["category"])
 
     def val(item):
@@ -340,6 +543,12 @@ def context(body, archived, tables):
         benef_wh=val("Beneficiation / on-site processing energy"),
         water_wh=val("Water liberation energy (bound water)"),
         contain_per_kg=val("Volatile cargo containment"),
+        beneficiated=benef,
+        # A body property, resolved once: the raw branch of the cargo-water
+        # question reads it directly.  Absent or NaN means no ice at all.
+        ice_frac=(0.0 if body.get("comp_ice_fraction") is None
+                  or pd.isna(body.get("comp_ice_fraction"))
+                  else float(body["comp_ice_fraction"])),
         recovery=cfg.beneficiation_recovery,
         rate_kg_yr=cfg.mining_hardware_kg
         * cfg.mining_rate_kg_per_day_per_kg_rig * 365.25,
@@ -479,11 +688,32 @@ def mass_and_clock(C, B, DV, ratio):
         trial_pay = min(cas["m_pay"], B["mineable"], throughput)
         if trial_pay <= 0:
             return None
-        trial_feed = min(trial_pay * ratio, throughput, B["mineable"])
+        # A raw mission digs exactly what it flies: there is no feed above
+        # the payload, so no ratio, and the hold is the body's own mix.
+        trial_feed = (min(trial_pay * ratio, throughput, B["mineable"])
+                      if C["beneficiated"] else min(trial_pay, throughput,
+                                                    B["mineable"]))
         trial_dig = max(trial_feed / C["rate_kg_yr"], cfg.station_keeping_floor_yr)
-        water = knapsack(trial_pay, trial_feed, phases,
-                         C["recovery"])["mix"].get("water", 0.0)
-        draw = ((C["dig_wh"] * trial_feed + C["benef_wh"] * trial_pay
+        # 🚨  RAW WATER IS THE BODY'S ICE FRACTION, NOT THE HOLD'S WATER PHASE.
+        # Concentrating lets the knapsack decide how much water to carry, and
+        # it will leave water behind for a denser-value phase; not
+        # concentrating means the cargo IS the body's composition, so the ice
+        # fraction applies directly.  Deriving it from the phase mix instead
+        # gave this body a water cargo the model does not fly, and therefore a
+        # 194 kg solar plant the model does not launch -- which moved the
+        # payload by 0.7% and every cost downstream of it.
+        water = (knapsack(trial_pay, trial_feed, phases,
+                          C["recovery"])["mix"].get("water", 0.0)
+                 if C["beneficiated"] else trial_pay * C["ice_frac"])
+        # 🚨  A RAW MISSION SIZES NO PLANT FOR ITS DIG.  The model calls
+        # `processing_power_w` only when beneficiating or making propellant, so
+        # for run-of-mine ore the ONLY thing that can create a draw is water
+        # liberation -- and a body with no ice therefore flies no power system
+        # at all.  Charging the dig here gave this mission a 194 kg plant the
+        # model never launches.  The dig still costs TIME, which is what bounds
+        # the payload; it just does not cost watts.
+        draw = ((((C["dig_wh"] * trial_feed + C["benef_wh"] * trial_pay)
+                  if C["beneficiated"] else 0.0)
                  + C["water_wh"] * water) / (trial_dig * HOURS_PER_YR))
         new_plant = draw / C["w_plant"]
         new_frac = C["contain_per_kg"] * min(1.0, water / trial_pay)
@@ -504,13 +734,18 @@ def mass_and_clock(C, B, DV, ratio):
     # plant and the seal re-settled on it and the stack rebuilt underneath.
     vol_cap = 0.25 * C["fairing_m3"] * 1000.0 * C["rho"]
     m_pay = min(min(cas["m_pay"], B["mineable"]), vol_cap)
-    feed = max(min(m_pay * ratio, throughput, B["mineable"]), m_pay)
-    load = knapsack(m_pay, feed, phases, C["recovery"])
-    water = load["mix"].get("water", 0.0)
+    feed = (max(min(m_pay * ratio, throughput, B["mineable"]), m_pay)
+            if C["beneficiated"] else min(m_pay, throughput, B["mineable"]))
+    load = (knapsack(m_pay, feed, phases, C["recovery"])
+            if C["beneficiated"] else raw_hold(m_pay, phases))
+    water = (load["mix"].get("water", 0.0) if C["beneficiated"]
+             else m_pay * C["ice_frac"])
     c_frac = C["contain_per_kg"] * min(1.0, water / m_pay)
     f_eff = cfg.return_structure_frac_of_payload + c_frac
     dig_yr = feed / C["rate_kg_yr"]
-    draw = ((C["dig_wh"] * feed + C["benef_wh"] * m_pay + C["water_wh"] * water)
+    draw = ((((C["dig_wh"] * feed + C["benef_wh"] * m_pay)
+              if C["beneficiated"] else 0.0)
+             + C["water_wh"] * water)
             / (dig_yr * HOURS_PER_YR))
     plant_kg = draw / C["w_plant"]
     hw = cfg.mining_hardware_kg + plant_kg + ep["mass"]
@@ -595,13 +830,29 @@ def revenue(C, M, n_missions, fleet):
         key = C["market_keys"].get(name, name)
         keys[name] = key
         caps.setdefault(key, C["market_kg"].get(key, float("inf")) * window)
-    capped = knapsack(M["m_pay"], M["feed"], C["phases"], C["recovery"],
-                      caps=dict(caps), keys=keys)
+    frac = C["terms"]["surplus_frac"]
+    if C["beneficiated"]:
+        capped = knapsack(M["m_pay"], M["feed"], C["phases"], C["recovery"],
+                          caps=dict(caps), keys=keys, surplus_frac=frac)
+    else:
+        # Raw ore cannot be reshaped: the cargo is the body's own composition,
+        # so a ceiling clips the sale rather than steering the hold.  That is
+        # why this branch is a sale and the one above is a knapsack.
+        capped = raw_sale(M["load"], C["phases"], caps, keys, frac)
     free = M["load"]
+    # Two mass columns, and they are exclusive: mass past a ceiling is either
+    # abandoned or discounted, never both.  Which one carries it is the run's
+    # `sell_surplus_at_discount`, so the derivation reports whichever the row
+    # it is documenting would have reported.
+    # The beneficiated case measures loss as hold space the ceilings kept
+    # empty; the raw case cannot, because the hold is unchanged and the loss is
+    # in the SALE.  Each branch reports the one its own mechanism produces.
+    lost = (capped["unsold"] if "unsold" in capped
+            else max(0.0, free["loaded"] - capped["loaded"]))
     return {"window": window, "allow": caps, "capped": capped,
-            "gross_base": free["value"],
+            "gross_base": free["value"], "surplus_frac": frac,
             "clearing": capped["value"] / free["value"] if free["value"] else 1.0,
-            "unsold": max(0.0, free["loaded"] - capped["loaded"]),
+            "unsold": lost, "surplus": capped.get("surplus", 0.0),
             "delivered": capped["value"] / M["m_pay"] if M["m_pay"] else 0.0}
 
 
@@ -613,6 +864,13 @@ def reliability(C, M, n_missions):
     neither of those learns.
     """
     val = C["val"]
+    if not C["terms"]["reliability"]:
+        # calc 1.22.0 default.  Revenue is not discounted, and the document
+        # says which question that makes the answer to: what it costs IF IT
+        # WORKS.  Every term is reported as 1.0 rather than omitted, so the
+        # document's table has the same shape either way.
+        return {"p_launch": 1.0, "p_cruise": 1.0, "mtbf": float("inf"),
+                "p_mining": 1.0, "terms": [], "p_succ": 1.0, "off": True}
     p_launch = val("Launch vehicle reliability")
     mtbf = val("Spacecraft mean time between failures")
     q1 = 1.0 - val("Mining system first-of-kind success probability")
@@ -623,7 +881,7 @@ def reliability(C, M, n_missions):
              for k in range(1, n_missions + 1)]
     p_mining = sum(terms) / n_missions
     return {"p_launch": p_launch, "p_cruise": p_cruise, "mtbf": mtbf,
-            "p_mining": p_mining, "terms": terms,
+            "p_mining": p_mining, "terms": terms, "off": False,
             "p_succ": max(0.0, min(1.0, p_launch * p_cruise * p_mining))}
 
 
@@ -642,8 +900,13 @@ def cost(C, M, n_missions, per_ship):
     keeps a W = 1 run bit-identical to the release before the term existed.
     """
     cfg, val = C["cfg"], C["val"]
-    lc = sum(k ** math.log(cfg.learning_curve_rate, 2)
-             for k in range(1, n_missions + 1)) / n_missions
+    terms = C["terms"]
+    # Wright's law, or exactly 1.0 when the run did not apply it.  1.0 is what
+    # the model's own `learning_curve_factor` reports in that case, so the
+    # check below compares like with like rather than skipping the column.
+    lc = (sum(k ** math.log(cfg.learning_curve_rate, 2)
+              for k in range(1, n_missions + 1)) / n_missions
+          if terms["learning"] else 1.0)
     rig_total = cfg.mining_hardware_kg * val("Mining payload recurring cost")
     share = max(1, min(per_ship, M["trips"]))
     used = min(1.0, max(share * M["stay"] / val("Mining rig service life"),
@@ -678,7 +941,12 @@ def cost(C, M, n_missions, per_ship):
     upfront_lines = (lines["launch"] + lines["oprop"] + hardware + 0.0
                      + licensing + 0.0 + 0.0 + nre + autonomy + lines["rprop"])
     cont = 1.0 + cfg.contingency_fraction
-    wacc = val("Cost of capital (WACC)")
+    # A zero rate is not a special case anywhere below: the multipliers come
+    # out at exactly 1.0, and the programme calendar block is already guarded
+    # on `y > 1.0`, so it goes inert on its own.  That is the same structure
+    # the model has, and it is why calc 1.22.0 could turn the cost of capital
+    # off without touching the calendar term.
+    wacc = val("Cost of capital (WACC)") if terms["wacc"] else 0.0
     mult_up = (1.0 + wacc) ** M["duration"]
     mult_on = (1.0 + wacc) ** (M["duration"] / 2.0)
     upfront = upfront_lines * cont
@@ -737,11 +1005,32 @@ def programme_ladder(C, M):
     dimension small enough to enumerate should be enumerated rather than
     argued about.
     """
+    import dataclasses
     import master
     rig = (M["trips"], M["calendar_cap"],
            int(C["val"]("Mining rig maximum trips")) or None)
+    # 🚨  THE LADDER FOLLOWS THE ROW, NOT THE LIVE CONFIG.  `_programme_ladder_cached`
+    # reads `optimise_programme_scale` and `nre_amortization_missions`, and the
+    # run being documented may have set either differently from whatever the
+    # module holds now -- a `quick` preset run is N = 1 with no search, while
+    # the module default searches.  Derived against the live config instead,
+    # the ladder proposes programmes the run never priced, picks one, and then
+    # disagrees with the row about eleven columns for a reason that is not
+    # arithmetic.  A REPLACED config rather than a mutated one: the cache is
+    # keyed on the values these functions read, so a copy is answered correctly
+    # and the global is left alone.
+    terms = C["terms"]
+    cfg = C["cfg"]
+    if (cfg.optimise_programme_scale != terms["searched"]
+            or (not terms["searched"]
+                and cfg.nre_amortization_missions != terms["n_fixed"])):
+        cfg = dataclasses.replace(
+            cfg, optimise_programme_scale=terms["searched"],
+            nre_amortization_missions=(terms["n_fixed"]
+                                       if not terms["searched"]
+                                       else cfg.nre_amortization_missions))
     programmes, fleets = master._programme_ladder_cached(
-        rig, C["cfg"], master._market_mode(C["cfg"]))
+        rig, cfg, master._market_mode(cfg))
     coarse = [price_programme(C, M, n, f, w) for n, f, w in programmes]
     best = min(coarse, key=lambda p: p["obj"])
     refine = []
@@ -853,6 +1142,7 @@ def comparable(C, B, DV, M, P):
         "programme_span_yr": cst["span"],
         "market_clearing_fraction": rev["clearing"],
         "unsold_payload_kg": rev["unsold"],
+        "surplus_payload_kg": rev["surplus"],
         "delivered_value_usd_per_kg": rev["delivered"],
         "saturation_multiplier": 1.0,
         "p_mining": rel["p_mining"], "p_success": rel["p_succ"],
@@ -879,7 +1169,14 @@ def comparable(C, B, DV, M, P):
         "programme_calendar_multiplier": cst["cal_cost"],
         "total_cost_usd": cst["total"],
         "bulk_value_usd_per_kg": C["bulk"],
-        "best_phase_usd_per_kg": max(p[2] for p in C["phases"]),
+        # The PURITY BOUND, and only a concentrating mission has one: the
+        # richest hold obtainable is 100% of the best phase present.  A raw
+        # mission cannot be concentrated past its own composition, so the model
+        # leaves this at the bulk value rather than quoting a bound that does
+        # not bind -- which is why this reads 4,917 and not 7,305 on a body
+        # whose best phase is nickel-iron.
+        "best_phase_usd_per_kg": (max(p[2] for p in C["phases"])
+                                  if C["beneficiated"] else C["bulk"]),
     }
 
 
@@ -892,12 +1189,21 @@ CHROME = [
 ]
 
 
-def build(cell, designation):
-    """Derive one cell end to end, and check it against its archived row."""
-    archived = archived_winner(cell, designation)
+def build(archived, label):
+    """Derive one winner end to end, and check it against its own row.
+
+    `archived` is the row being documented, from wherever it came: a live
+    Stage 4 catalog or a gzipped campaign archive.  The derivation does not
+    care which, and deliberately: "the best case of this run" and "the best
+    cell of that campaign" are the same question asked of different artefacts.
+    """
+    designation = str(archived["designation"])
     body = catalog_body(designation)
     tables = reference_tables()
     C = context(body, archived, tables)
+    # Before anything is derived: what the ROW charges decides what the
+    # derivation charges.  See `terms_in_force`.
+    C["terms"] = terms_in_force(archived, C["cfg"])
     phases, alloy, yields = phase_table(body, tables["minerals"])
     caps, alias = market_ceilings(tables["minerals"])
     C["phases"] = phases
@@ -917,7 +1223,8 @@ def build(cell, designation):
     result = check(comparable(C, B, DV, M, P), archived)
     return {"C": C, "B": B, "DV": DV, "M": M, "P": P, "ladder": ladder,
             "sweep": sweep, "ratio": ratio, "archived": archived,
-            "check": result, "cell": cell, "designation": designation}
+            "check": result, "cell": label, "designation": designation,
+            "terms": C["terms"]}
 
 
 def render_pdf(html_path, pdf_path):
@@ -933,10 +1240,25 @@ def render_pdf(html_path, pdf_path):
     return os.path.exists(pdf_path)
 
 
+def describe_terms(terms):
+    """One line naming the optional terms the documented row carries."""
+    on = [name for name, live in (("reliability", terms["reliability"]),
+                                  ("learning curve", terms["learning"]),
+                                  ("cost of capital", terms["wacc"])) if live]
+    if terms["surplus_frac"] > 0:
+        on.append("surplus at %.0f%%" % (terms["surplus_frac"] * 100.0))
+    return ", ".join(on) if on else "none (physics only)"
+
+
 def main():
-    """Find the best cell, derive it, check it, and write the document."""
+    """Derive the best case of a run, check it, and write the document."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--cell", help="a named cell instead of the ledger's best")
+    ap.add_argument("--catalog", default=CATALOG,
+                    help="a Stage 4 output catalog (default: the last run's)")
+    ap.add_argument("--cell",
+                    help="a campaign cell archive instead of a live catalog")
+    ap.add_argument("--designation",
+                    help="document this body instead of the run's best case")
     ap.add_argument("--pdf", action="store_true", help="also render the PDF")
     ap.add_argument("--verify", action="store_true",
                     help="derive and check only; write nothing")
@@ -944,40 +1266,48 @@ def main():
                     help="output path without an extension")
     args = ap.parse_args()
 
-    rows = ledger_rows()
-    top = best_cell(rows)
-    cell = args.cell or top["cell"]
-    if args.cell is None and cell != PINNED_CELL:
-        sys.exit(
-            "THE BEST CELL HAS MOVED AND THE PROSE HAS NOT.\n"
-            "  ledger best : %s  (%s at %sx)\n"
-            "  pinned here : %s  (%s)\n"
-            "The arithmetic below would follow the new cell; the sentences "
-            "would not.\nRead the new winner, rewrite the prose in "
-            "worked_calculation_doc.py, repoint\nPINNED_CELL and PINNED_BODY, "
-            "and run again.  Use --cell to derive it meanwhile."
-            % (top["cell"], top["winner"], top["best_obj"],
-               PINNED_CELL, PINNED_BODY))
-    row = next((r for r in rows if r["cell"] == cell), None)
-    if row is None:
-        sys.exit("no completed ledger row for cell %r" % cell)
+    # Where the row comes from, and nothing else, is what `--cell` changes.
+    if args.cell:
+        if args.designation:
+            winner = archived_winner(args.cell, args.designation)
+        else:
+            row = next((r for r in ledger_rows() if r["cell"] == args.cell),
+                       None)
+            if row is None:
+                sys.exit("no completed ledger row for cell %r; pass "
+                         "--designation to name the body yourself" % args.cell)
+            winner = archived_winner(args.cell, row["winner"])
+        label = args.cell
+    else:
+        winner = run_winner(args.catalog)
+        if args.designation:
+            frame = pd.read_csv(args.catalog, low_memory=False,
+                                float_precision="round_trip")
+            hit = frame[frame["designation"] == args.designation]
+            if not len(hit):
+                sys.exit("%s is not in %s" % (args.designation, args.catalog))
+            winner = hit.iloc[0]
+        label = os.path.basename(args.catalog)
 
-    print("  cell      %s" % cell)
-    print("  winner    %s (%s) at %sx" % (row["winner"], row["spectral"],
-                                          row["best_obj"]))
-    out = build(cell, row["winner"])
+    out = build(winner, label)
+    terms = out["terms"]
+    obj = float(winner["total_cost_usd"]) / float(winner["gross_value_usd"])
+    print("  source    %s" % label)
+    print("  best case %s at %.4fx  (calc %s)"
+          % (out["designation"], obj, terms["stamp"]))
+    print("  charging  %s" % describe_terms(terms))
     c = out["check"]
     print("  derived   %d quantities: %d bit-exact, %d within 1e-12, %d DIFFER"
           % (c["n"], c["exact"], c["close"], len(c["bad"])))
     print("  worst     %.3e relative  (%s)" % (c["worst"], c["worst_name"]))
     for name, ours, theirs, rel in c["bad"]:
-        print("     ! %-32s derived %r  archived %r  rel %.3e"
+        print("     ! %-32s derived %r  row %r  rel %.3e"
               % (name, ours, theirs, rel))
     if c["bad"]:
         print("\n*** THE DERIVATION AND THE MODEL DISAGREE ***")
         return 1
     if args.verify:
-        print("  OK  derivation reproduces the archived row")
+        print("  OK  derivation reproduces the row")
         return 0
 
     import worked_calculation_doc
