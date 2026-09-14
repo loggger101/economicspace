@@ -1898,7 +1898,12 @@ the assembled load's gross value that cleared the ceilings, and
 ⚠️  **The ceilings bind at the fleet sizes the model actually chooses.**
 Cislunar's whole import budget is 100 t/yr and water's propellant share is
 55 t/yr, against a median raw cadence of 1.384 yr and a median searched fleet
-of 2.
+of **3**.
+
+⚠️  That fleet median said **2** until 2026-09-14, which was the 2026-08
+`elasticity` figure standing in a `capacity_cap` argument. The raw searched
+cislunar median is 3 and the beneficiated one is 6; both are quoted elsewhere,
+so the cell has to be named. Re-derived by `campaign/population.py`.
 
 ✅  **They were recalibrated in calc v1.21.1 and the LEVELS did not move**, on
 the argument that they never were curve parameters: every row in

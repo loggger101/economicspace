@@ -1,0 +1,176 @@
+{
+ "aerocapture_pct": 97.45477331335188,
+ "at_ceiling": 912846,
+ "at_ceiling_pct": 100.0,
+ "bound_pct": 0.0,
+ "cadence_median": 2.5491986418449204,
+ "calendar_mult_max": 2.514801073743548,
+ "calendar_mult_median": 1.677012089224947,
+ "clearing_median": 1.0,
+ "clearing_min": 1.0,
+ "cycle_pct": 48.00985051147729,
+ "evaluable": 912846,
+ "fleet_max": 64.0,
+ "fleet_median": 64.0,
+ "isru_pct": 0.004381900123350488,
+ "n_max": 320.0,
+ "n_median": 320.0,
+ "objective": 7074.197467665305,
+ "propellants": [
+  [
+   "Iodine  (Hall / gridded)",
+   48.3349875006299
+  ],
+  [
+   "Xenon  (Hall / ion)",
+   34.428808364170955
+  ],
+  [
+   "methalox  (LCH4 / LOX)",
+   12.455551100623763
+  ],
+  [
+   "Water  (gridded ion / ECR)",
+   1.5835091570757829
+  ],
+  [
+   "Krypton  (Hall)",
+   1.3555408031584737
+  ],
+  [
+   "FEEP  (indium field emission)",
+   0.44016186739055657
+  ],
+  [
+   "hydrolox  (LH2 / LOX)",
+   0.3711469404477864
+  ],
+  [
+   "Argon  (Hall / ion)",
+   0.34452689719843216
+  ],
+  [
+   "MMH / NTO  (hypergolic)",
+   0.2458245969199624
+  ],
+  [
+   "UDMH / NTO  (hypergolic)",
+   0.16673129969348607
+  ],
+  [
+   "HTP / RP-1  (peroxide bipropellant)",
+   0.11644899577803923
+  ],
+  [
+   "kerolox  (RP-1 / LOX)",
+   0.10341284291107153
+  ],
+  [
+   "Aerozine-50 / NTO  (hypergolic)",
+   0.033083345931296186
+  ],
+  [
+   "Green monoprop  (ASCENT / AF-M315E)",
+   0.014788912916307899
+  ],
+  [
+   "Hydrazine  (monoprop)",
+   0.005148732644936824
+  ],
+  [
+   "Hydrazine arcjet",
+   0.00021909500616752443
+  ],
+  [
+   "HTP  (98% peroxide monoprop)",
+   0.00010954750308376222
+  ]
+ ],
+ "repl_best": {
+  "designation": "523631",
+  "margin": 1.1606198675750083,
+  "obj": 8210.454128121166,
+  "propellant": "FEEP  (indium field emission)",
+  "rank": 10
+ },
+ "repl_propellants": [
+  [
+   "FEEP  (indium field emission)",
+   100.0
+  ]
+ ],
+ "repl_rows": 4018,
+ "rows": 912846,
+ "sat_max": 1.0,
+ "sat_median": 1.0,
+ "sat_min": 1.0,
+ "span_median": 16.521215139767463,
+ "unsold_rows": 0,
+ "vehicles": [
+  [
+   "Falcon Heavy (reusable side cores)",
+   46.59855002924918
+  ],
+  [
+   "New Glenn",
+   25.803476161367854
+  ],
+  [
+   "SLS Block 1B (Cargo)",
+   18.977023506703212
+  ],
+  [
+   "Vulcan Centaur VC6",
+   1.9336229769314868
+  ],
+  [
+   "H3 (24L)",
+   1.8984582284415992
+  ],
+  [
+   "Ariane 6 (A64)",
+   1.5908488397823948
+  ],
+  [
+   "Falcon 9 (reusable)",
+   1.3667146484730173
+  ],
+  [
+   "Long March 5",
+   0.9182271708480949
+  ],
+  [
+   "Long March 7",
+   0.47324521332185276
+  ],
+  [
+   "Atlas V 551",
+   0.41507548918437503
+  ],
+  [
+   "LVM3 (GSLV Mk III)",
+   0.013036152866967703
+  ],
+  [
+   "Soyuz-2.1b",
+   0.010735655302208698
+  ],
+  [
+   "Ariane 6 (A62)",
+   0.0009859275277538599
+  ]
+ ],
+ "w_gt_trips": 0,
+ "w_lt_trips_pct": 0.3305048168037106,
+ "window_pct": 19.16884118460288,
+ "winner": {
+  "concentration_ratio": 2.2222222222222223,
+  "designation": "2016 PN38",
+  "fleet_ships": 64.0,
+  "max_payload_kg": 58807.55292631377,
+  "programme_missions": 320.0,
+  "propellant": "Iodine  (Hall / gridded)",
+  "spectral_type": "M",
+  "vehicle": "Falcon Heavy (reusable side cores)"
+ }
+}

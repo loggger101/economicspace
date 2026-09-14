@@ -8,6 +8,14 @@
 2. `replicated`-scaling thrusters (FEEP / PPT / electrospray).  The test is NOT
    "do any survive" -- thruster_kg_per_n is a mass penalty, not a threshold --
    it is "does one ever WIN".
+
+SUPERSEDED BY population.py, WHICH IS THE AUTHORITY FOR BOTH CHECKS.  That one
+runs them in the same pass as the bound split and the share tables, and it gates
+on the `thrust_scaling` column rather than matching propellant NAMES, so it
+cannot miss a replicated technology nobody thought to list in REPL below.  This
+file is kept only because archive-2026-08_calc-1.17.7/FINDINGS.md names it as a
+script that produced the 2026-08 record; do not quote a figure from it as
+current.
 """
 import glob
 import gzip

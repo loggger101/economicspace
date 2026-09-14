@@ -1,0 +1,145 @@
+{
+ "aerocapture_pct": 0.0,
+ "at_ceiling": 64397,
+ "at_ceiling_pct": 10.988236578881809,
+ "bound_pct": 70.17629774730656,
+ "cadence_median": 1.3838620669613881,
+ "calendar_mult_max": 3.1836564922593125,
+ "calendar_mult_median": 1.321740839963773,
+ "clearing_median": 0.8339299558032713,
+ "clearing_min": 0.49106285198297583,
+ "cycle_pct": 96.35716162674429,
+ "evaluable": 586054,
+ "fleet_max": 64.0,
+ "fleet_median": 26.0,
+ "isru_pct": 3.587894630870193,
+ "n_max": 320.0,
+ "n_median": 130.0,
+ "objective": 21.138430314919745,
+ "propellants": [
+  [
+   "Xenon  (Hall / ion)",
+   37.64363010917083
+  ],
+  [
+   "Krypton  (Hall)",
+   26.3076440055012
+  ],
+  [
+   "Water  (gridded ion / ECR)",
+   20.862411996164177
+  ],
+  [
+   "Iodine  (Hall / gridded)",
+   11.158528053728837
+  ],
+  [
+   "hydrolox  (LH2 / LOX)",
+   3.587894630870193
+  ],
+  [
+   "Argon  (Hall / ion)",
+   0.2122671289676378
+  ],
+  [
+   "Hydrazine arcjet",
+   0.162613001532282
+  ],
+  [
+   "methalox  (LCH4 / LOX)",
+   0.06279284844058738
+  ],
+  [
+   "MMH / NTO  (hypergolic)",
+   0.0011944291822937817
+  ],
+  [
+   "Aerozine-50 / NTO  (hypergolic)",
+   0.0006825309613107325
+  ],
+  [
+   "UDMH / NTO  (hypergolic)",
+   0.00017063274032768312
+  ],
+  [
+   "kerolox  (RP-1 / LOX)",
+   0.00017063274032768312
+  ]
+ ],
+ "repl_best": null,
+ "repl_propellants": [],
+ "repl_rows": 0,
+ "rows": 586054,
+ "sat_max": 1.0,
+ "sat_median": 1.0,
+ "sat_min": 1.0,
+ "span_median": 12.2883984271938,
+ "unsold_rows": 411271,
+ "vehicles": [
+  [
+   "Falcon Heavy (reusable side cores)",
+   71.64800513263283
+  ],
+  [
+   "SLS Block 1B (Cargo)",
+   26.022346063673314
+  ],
+  [
+   "New Glenn",
+   1.9274674347415084
+  ],
+  [
+   "Vulcan Centaur VC6",
+   0.19110866916700509
+  ],
+  [
+   "H3 (24L)",
+   0.08275687905892631
+  ],
+  [
+   "Long March 5",
+   0.041805021380282366
+  ],
+  [
+   "Falcon 9 (reusable)",
+   0.03020199503799991
+  ],
+  [
+   "LVM3 (GSLV Mk III)",
+   0.02030529609899429
+  ],
+  [
+   "Soyuz-2.1b",
+   0.016892641292440627
+  ],
+  [
+   "Long March 7",
+   0.01040859715998867
+  ],
+  [
+   "Ariane 6 (A64)",
+   0.007166575093762691
+  ],
+  [
+   "Atlas V 551",
+   0.0010237964419660987
+  ],
+  [
+   "Ariane 6 (A62)",
+   0.0005118982209830493
+  ]
+ ],
+ "w_gt_trips": 0,
+ "w_lt_trips_pct": 16.06933832035956,
+ "window_pct": 96.3991372808649,
+ "winner": {
+  "concentration_ratio": 1.0,
+  "designation": "2014 WE121",
+  "fleet_ships": 2.0,
+  "max_payload_kg": 37499.65207817278,
+  "programme_missions": 10.0,
+  "propellant": "Iodine  (Hall / gridded)",
+  "spectral_type": "M",
+  "vehicle": "New Glenn"
+ }
+}
