@@ -1,0 +1,164 @@
+{
+ "aerocapture_pct": 93.63868899040581,
+ "at_ceiling": 28961,
+ "at_ceiling_pct": 4.065808795658046,
+ "bound_pct": 27.066878560618612,
+ "cadence_median": 1.9809866254504183,
+ "calendar_mult_max": 2.5139659342102196,
+ "calendar_mult_median": 1.4706642906982013,
+ "clearing_median": 1.0,
+ "clearing_min": 0.7309854767480114,
+ "cycle_pct": 84.15035111314519,
+ "evaluable": 712306,
+ "fleet_max": 64.0,
+ "fleet_median": 3.0,
+ "isru_pct": 5.626654836544968,
+ "n_max": 320.0,
+ "n_median": 12.0,
+ "objective": 9.694896866368476,
+ "propellants": [
+  [
+   "Iodine  (Hall / gridded)",
+   47.79434681162309
+  ],
+  [
+   "Xenon  (Hall / ion)",
+   40.46154321316962
+  ],
+  [
+   "hydrolox  (LH2 / LOX)",
+   5.651644096778631
+  ],
+  [
+   "Water  (gridded ion / ECR)",
+   4.318649569145845
+  ],
+  [
+   "methalox  (LCH4 / LOX)",
+   1.2411800546394387
+  ],
+  [
+   "Krypton  (Hall)",
+   0.27024902218990154
+  ],
+  [
+   "FEEP  (indium field emission)",
+   0.12312124283664605
+  ],
+  [
+   "Argon  (Hall / ion)",
+   0.06710599096455737
+  ],
+  [
+   "MMH / NTO  (hypergolic)",
+   0.053488248028235055
+  ],
+  [
+   "kerolox  (RP-1 / LOX)",
+   0.007159844224251937
+  ],
+  [
+   "HTP / RP-1  (peroxide bipropellant)",
+   0.005194396790143562
+  ],
+  [
+   "Aerozine-50 / NTO  (hypergolic)",
+   0.0028077820487262496
+  ],
+  [
+   "UDMH / NTO  (hypergolic)",
+   0.002386614741417312
+  ],
+  [
+   "Hydrazine arcjet",
+   0.0011231128194904999
+  ]
+ ],
+ "repl_best": {
+  "designation": "2021 CH2",
+  "margin": 2.7659989000015703,
+  "obj": 26.816074068003875,
+  "propellant": "FEEP  (indium field emission)",
+  "rank": 38047
+ },
+ "repl_propellants": [
+  [
+   "FEEP  (indium field emission)",
+   100.0
+  ]
+ ],
+ "repl_rows": 877,
+ "rows": 712306,
+ "sat_max": 1.0,
+ "sat_median": 1.0,
+ "sat_min": 1.0,
+ "span_median": 14.099641436041654,
+ "unsold_rows": 67293,
+ "vehicles": [
+  [
+   "Falcon Heavy (reusable side cores)",
+   67.43520340977052
+  ],
+  [
+   "SLS Block 1B (Cargo)",
+   19.47323200983847
+  ],
+  [
+   "New Glenn",
+   10.655111707608809
+  ],
+  [
+   "Vulcan Centaur VC6",
+   1.1740740636748812
+  ],
+  [
+   "Long March 5",
+   0.45823003035212395
+  ],
+  [
+   "H3 (24L)",
+   0.4342234938355145
+  ],
+  [
+   "Ariane 6 (A64)",
+   0.1711343158698649
+  ],
+  [
+   "Falcon 9 (reusable)",
+   0.13112342167551586
+  ],
+  [
+   "Long March 7",
+   0.033272217277406056
+  ],
+  [
+   "LVM3 (GSLV Mk III)",
+   0.01628513588261225
+  ],
+  [
+   "Atlas V 551",
+   0.013336964731449685
+  ],
+  [
+   "Soyuz-2.1b",
+   0.0044924512779619995
+  ],
+  [
+   "Ariane 6 (A62)",
+   0.00028077820487262497
+  ]
+ ],
+ "w_gt_trips": 0,
+ "w_lt_trips_pct": 18.146133824508006,
+ "window_pct": 21.1350178153771,
+ "winner": {
+  "concentration_ratio": 4.444444444444445,
+  "designation": "2021 CX5",
+  "fleet_ships": 3.0,
+  "max_payload_kg": 36310.23479354129,
+  "programme_missions": 9.0,
+  "propellant": "Iodine  (Hall / gridded)",
+  "spectral_type": "D",
+  "vehicle": "New Glenn"
+ }
+}

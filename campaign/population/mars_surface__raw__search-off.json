@@ -1,0 +1,160 @@
+{
+ "aerocapture_pct": 82.24133828874285,
+ "at_ceiling": 0,
+ "at_ceiling_pct": 0.0,
+ "bound_pct": 31.126507885719285,
+ "cadence_median": 3.79793237935782,
+ "calendar_mult_max": 1.0,
+ "calendar_mult_median": 1.0,
+ "clearing_median": 1.0,
+ "clearing_min": 0.7067243376960548,
+ "cycle_pct": 80.3650102143789,
+ "evaluable": 731322,
+ "fleet_max": 1.0,
+ "fleet_median": 1.0,
+ "isru_pct": 2.0625661473331856,
+ "n_max": 1.0,
+ "n_median": 1.0,
+ "objective": 23.996435488309647,
+ "propellants": [
+  [
+   "Xenon  (Hall / ion)",
+   61.02961486185292
+  ],
+  [
+   "Iodine  (Hall / gridded)",
+   16.775920866595015
+  ],
+  [
+   "Krypton  (Hall)",
+   15.432053185874349
+  ],
+  [
+   "hydrolox  (LH2 / LOX)",
+   2.0549087816310734
+  ],
+  [
+   "Argon  (Hall / ion)",
+   1.6972004124038385
+  ],
+  [
+   "methalox  (LCH4 / LOX)",
+   1.6013466024541858
+  ],
+  [
+   "Water  (gridded ion / ECR)",
+   0.8316446107186711
+  ],
+  [
+   "MMH / NTO  (hypergolic)",
+   0.44029852787144375
+  ],
+  [
+   "FEEP  (indium field emission)",
+   0.11855242970948501
+  ],
+  [
+   "Hydrazine arcjet",
+   0.007247149682356062
+  ],
+  [
+   "kerolox  (RP-1 / LOX)",
+   0.006289978969592054
+  ],
+  [
+   "HTP / RP-1  (peroxide bipropellant)",
+   0.0025980347917880222
+  ],
+  [
+   "Aerozine-50 / NTO  (hypergolic)",
+   0.002187818772032019
+  ],
+  [
+   "UDMH / NTO  (hypergolic)",
+   0.00013673867325200118
+  ]
+ ],
+ "repl_best": {
+  "designation": "2014 YN",
+  "margin": 1.0,
+  "obj": 23.996435488309647,
+  "propellant": "FEEP  (indium field emission)",
+  "rank": 1
+ },
+ "repl_propellants": [
+  [
+   "FEEP  (indium field emission)",
+   100.0
+  ]
+ ],
+ "repl_rows": 867,
+ "rows": 731322,
+ "sat_max": 1.0,
+ "sat_median": 1.0,
+ "sat_min": 1.0,
+ "span_median": 6.25547005750885,
+ "unsold_rows": 227635,
+ "vehicles": [
+  [
+   "Falcon Heavy (reusable side cores)",
+   77.51660691186646
+  ],
+  [
+   "SLS Block 1B (Cargo)",
+   14.625295013687541
+  ],
+  [
+   "New Glenn",
+   5.115257027684112
+  ],
+  [
+   "Vulcan Centaur VC6",
+   1.7726801600389432
+  ],
+  [
+   "Ariane 6 (A64)",
+   0.40543016619218347
+  ],
+  [
+   "Long March 5",
+   0.32434413295374676
+  ],
+  [
+   "Atlas V 551",
+   0.09270882046485679
+  ],
+  [
+   "H3 (24L)",
+   0.05237091185551645
+  ],
+  [
+   "Falcon 9 (reusable)",
+   0.03842356718381233
+  ],
+  [
+   "Long March 7",
+   0.03842356718381233
+  ],
+  [
+   "LVM3 (GSLV Mk III)",
+   0.011212571206664097
+  ],
+  [
+   "Soyuz-2.1b",
+   0.007247149682356062
+  ]
+ ],
+ "w_gt_trips": 0,
+ "w_lt_trips_pct": 100.0,
+ "window_pct": 99.93067349266124,
+ "winner": {
+  "concentration_ratio": 1.0,
+  "designation": "2014 YN",
+  "fleet_ships": 1.0,
+  "max_payload_kg": 40343.27959381512,
+  "programme_missions": 1.0,
+  "propellant": "FEEP  (indium field emission)",
+  "spectral_type": "M",
+  "vehicle": "New Glenn"
+ }
+}

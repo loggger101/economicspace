@@ -1,0 +1,152 @@
+{
+ "aerocapture_pct": 78.66113720788537,
+ "at_ceiling": 0,
+ "at_ceiling_pct": 0.0,
+ "bound_pct": 0.22195517095181003,
+ "cadence_median": 2.277462596183536,
+ "calendar_mult_max": 1.0,
+ "calendar_mult_median": 1.0,
+ "clearing_median": 1.0,
+ "clearing_min": 0.631872291293367,
+ "cycle_pct": 63.03948022338714,
+ "evaluable": 712306,
+ "fleet_max": 1.0,
+ "fleet_median": 1.0,
+ "isru_pct": 5.132204417764275,
+ "n_max": 1.0,
+ "n_median": 1.0,
+ "objective": 19.04587860068304,
+ "propellants": [
+  [
+   "Xenon  (Hall / ion)",
+   67.57475017759221
+  ],
+  [
+   "Iodine  (Hall / gridded)",
+   21.34433796710964
+  ],
+  [
+   "hydrolox  (LH2 / LOX)",
+   5.133467919686202
+  ],
+  [
+   "Water  (gridded ion / ECR)",
+   4.453844274792013
+  ],
+  [
+   "methalox  (LCH4 / LOX)",
+   1.1135663605248307
+  ],
+  [
+   "Krypton  (Hall)",
+   0.23346707735158767
+  ],
+  [
+   "FEEP  (indium field emission)",
+   0.137019763977841
+  ],
+  [
+   "Argon  (Hall / ion)",
+   0.0057559531998888115
+  ],
+  [
+   "MMH / NTO  (hypergolic)",
+   0.003228949356035187
+  ],
+  [
+   "Hydrazine arcjet",
+   0.0004211673073089374
+  ],
+  [
+   "HTP / RP-1  (peroxide bipropellant)",
+   0.00014038910243631248
+  ]
+ ],
+ "repl_best": {
+  "designation": "2004 XK14",
+  "margin": 1.8281784127924576,
+  "obj": 34.81926411043455,
+  "propellant": "FEEP  (indium field emission)",
+  "rank": 1687
+ },
+ "repl_propellants": [
+  [
+   "FEEP  (indium field emission)",
+   100.0
+  ]
+ ],
+ "repl_rows": 976,
+ "rows": 712306,
+ "sat_max": 1.0,
+ "sat_median": 1.0,
+ "sat_min": 1.0,
+ "span_median": 7.17905387531461,
+ "unsold_rows": 1406,
+ "vehicles": [
+  [
+   "Falcon Heavy (reusable side cores)",
+   71.43587166189812
+  ],
+  [
+   "SLS Block 1B (Cargo)",
+   22.6791575530741
+  ],
+  [
+   "New Glenn",
+   4.969774226245462
+  ],
+  [
+   "Vulcan Centaur VC6",
+   0.6403146962120212
+  ],
+  [
+   "Long March 5",
+   0.13982754602656725
+  ],
+  [
+   "H3 (24L)",
+   0.06724638006699368
+  ],
+  [
+   "Long March 7",
+   0.03523766471151443
+  ],
+  [
+   "Falcon 9 (reusable)",
+   0.008704124351051374
+  ],
+  [
+   "Ariane 6 (A64)",
+   0.008282957043742437
+  ],
+  [
+   "LVM3 (GSLV Mk III)",
+   0.008142567941306125
+  ],
+  [
+   "Soyuz-2.1b",
+   0.0044924512779619995
+  ],
+  [
+   "Ariane 6 (A62)",
+   0.0022462256389809998
+  ],
+  [
+   "Atlas V 551",
+   0.0007019455121815624
+  ]
+ ],
+ "w_gt_trips": 0,
+ "w_lt_trips_pct": 99.73269914896126,
+ "window_pct": 16.97795610313545,
+ "winner": {
+  "concentration_ratio": 4.444444444444445,
+  "designation": "2021 CX5",
+  "fleet_ships": 1.0,
+  "max_payload_kg": 43500.0,
+  "programme_missions": 1.0,
+  "propellant": "Iodine  (Hall / gridded)",
+  "spectral_type": "D",
+  "vehicle": "Falcon Heavy (reusable side cores)"
+ }
+}

@@ -1,0 +1,144 @@
+{
+ "aerocapture_pct": 90.70053756577734,
+ "at_ceiling": 0,
+ "at_ceiling_pct": 0.0,
+ "bound_pct": 2.908954228898061,
+ "cadence_median": 1.3753374657908126,
+ "calendar_mult_max": 1.0,
+ "calendar_mult_median": 1.0,
+ "clearing_median": 1.0,
+ "clearing_min": 0.5910611667817972,
+ "cycle_pct": 98.80146944101669,
+ "evaluable": 705030,
+ "fleet_max": 1.0,
+ "fleet_median": 1.0,
+ "isru_pct": 3.176035062337773,
+ "n_max": 1.0,
+ "n_median": 1.0,
+ "objective": 45.68187480417856,
+ "propellants": [
+  [
+   "Xenon  (Hall / ion)",
+   72.87675701743188
+  ],
+  [
+   "Iodine  (Hall / gridded)",
+   14.897096577450604
+  ],
+  [
+   "Water  (gridded ion / ECR)",
+   6.669219749514205
+  ],
+  [
+   "hydrolox  (LH2 / LOX)",
+   3.175184034721927
+  ],
+  [
+   "Krypton  (Hall)",
+   1.6987929591648583
+  ],
+  [
+   "methalox  (LCH4 / LOX)",
+   0.44707317419116915
+  ],
+  [
+   "FEEP  (indium field emission)",
+   0.1043927208771258
+  ],
+  [
+   "Argon  (Hall / ion)",
+   0.06694750577989589
+  ],
+  [
+   "Hydrazine arcjet",
+   0.06042296072507553
+  ],
+  [
+   "MMH / NTO  (hypergolic)",
+   0.0035459483993588925
+  ],
+  [
+   "kerolox  (RP-1 / LOX)",
+   0.0005673517438974228
+  ]
+ ],
+ "repl_best": {
+  "designation": "2014 MF18",
+  "margin": 1.6961944271787404,
+  "obj": 77.48534146592459,
+  "propellant": "FEEP  (indium field emission)",
+  "rank": 91
+ },
+ "repl_propellants": [
+  [
+   "FEEP  (indium field emission)",
+   100.0
+  ]
+ ],
+ "repl_rows": 736,
+ "rows": 705030,
+ "sat_max": 1.0,
+ "sat_median": 1.0,
+ "sat_min": 1.0,
+ "span_median": 5.766418672399739,
+ "unsold_rows": 20509,
+ "vehicles": [
+  [
+   "Falcon Heavy (reusable side cores)",
+   78.79778165468136
+  ],
+  [
+   "SLS Block 1B (Cargo)",
+   18.018240358566302
+  ],
+  [
+   "New Glenn",
+   2.963278158376239
+  ],
+  [
+   "Vulcan Centaur VC6",
+   0.06737301958781895
+  ],
+  [
+   "H3 (24L)",
+   0.060564798661049885
+  ],
+  [
+   "Long March 5",
+   0.035459483993588926
+  ],
+  [
+   "Long March 7",
+   0.032055373530204385
+  ],
+  [
+   "Ariane 6 (A64)",
+   0.007801086478589563
+  ],
+  [
+   "Falcon 9 (reusable)",
+   0.007233734734692141
+  ],
+  [
+   "LVM3 (GSLV Mk III)",
+   0.0062408691828716506
+  ],
+  [
+   "Soyuz-2.1b",
+   0.003971462207281959
+  ]
+ ],
+ "w_gt_trips": 0,
+ "w_lt_trips_pct": 100.0,
+ "window_pct": 98.06632341886161,
+ "winner": {
+  "concentration_ratio": 1.0,
+  "designation": "2016 GS2",
+  "fleet_ships": 1.0,
+  "max_payload_kg": 61835.16177740441,
+  "programme_missions": 1.0,
+  "propellant": "Xenon  (Hall / ion)",
+  "spectral_type": "D",
+  "vehicle": "New Glenn"
+ }
+}
