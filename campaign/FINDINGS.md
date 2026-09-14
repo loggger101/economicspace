@@ -213,10 +213,24 @@ used. Different catalog, not different code.
   suspension** and must never go into a runtime table; the comparable figure is
   **~23,335 s**. See the pause section in `README.md`.
 
-## Where these findings have NOT gone yet
+## Where these findings went
 
-⚠️  `README.md` and `CLAUDE.md` still present the **2026-08 20-cell** campaign as
-the current answer. Until that is reconciled, this file is the authority for the
-28-cell matrix and those two are the authority for nothing about it -- which is
-exactly the two-copies hazard CLAUDE.md warns about, and it is open on purpose
-rather than by oversight.
+✅  **Promoted into the three main documents on 2026-09-13, so this file is the
+campaign's own record and not a second copy of the results.** That is the split
+this project runs on: name one authority, or you have two.
+
+| finding | now lives in |
+|---|---|
+| the 28-cell cost/revenue matrix, the two new destinations, the ranking, the FEEP win | [README.md, Results](../README.md#current-results-the-complete-28-cell-matrix) |
+| the 28-cell wall clocks | [README.md, Beneficiation](../README.md#beneficiation), pinned to `MEASURED_CELL_SECONDS` by `verify_docs.py` check 9 |
+| the superseded 20-cell matrix, the per-cell wall clocks, the price-epoch evidence | [versions.md](../versions.md#the-28-cell-campaign-2026-09) |
+| the invariants, the retired claims, what was NOT re-derived | [CLAUDE.md](../CLAUDE.md#the-complete-28-cell-matrix-is-measured-current-2026-09-1113-calc-1212) |
+
+⚠️  **What was deliberately NOT promoted.** The per-destination propellant,
+vehicle, rig-bound and cadence tables in CLAUDE.md are still 2026-08
+`elasticity` measurements with insurance charged; this campaign extracted the
+winner row and ran the invariants and nothing else. Each of those sections now
+carries a banner saying so rather than being deleted or left looking current.
+**The archived cells under `cells/` carry every column needed to re-derive them
+without re-running anything**, and that is the cheapest open item in the
+project.
