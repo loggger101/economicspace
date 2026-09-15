@@ -710,6 +710,12 @@ def check_structure() -> bool:
 EM, EN = "—", "–"
 ROOT_PY = ["ui.py", "ui_meta.py", "run_pipeline.py", "verify.py",
            "build_master.py", "launch_ui.py", "platform_check.py",
+           # verify_stage3.py was outside BOTH ratchets until 2026-09-15, which
+           # is the "a file nothing checks is clean until it is not" state this
+           # check exists to prevent, in the one harness that guards the
+           # spacecost split.  It was clean on dashes and carried three
+           # definitions with no docstring, `main` among them.
+           "verify_stage3.py",
            # Not Python, but prose a reader sees, and it was outside the
            # ratchet long enough to collect two em-dashes.  The hook's header
            # is the only account of the Drive stat-cache bug there is.
@@ -866,6 +872,36 @@ def check_manifests() -> bool:
             bad.append("README documents 'run.bat %s', dispatcher rejects it"
                        % extra)
 
+    # The PINNED REF, which the name comparison above deliberately throws
+    # away. `spacecost` is not on PyPI, so it installs from a tagged git URL,
+    # and that URL is typed in TWO places: `requirements.txt`, which
+    # `pip install -r` reads, and `_MASTER_PIP_SPEC` in build_master.py, which
+    # is written into master.py and auto-installs at import for the Colab
+    # paste. Nothing compared them until 2026-09-15.
+    #
+    # 🚨  A ONE-LINE REPIN OF EITHER ALONE IS THE PARALLEL-REPO DIVERGENCE.
+    # The two paths would install different revisions of the reference tables,
+    # both would report a `spacecost` that imports cleanly, and every stamp in
+    # this repo would still read `transportation 1.14.0`, because that stamp
+    # identifies the DATA CONTRACT and not the commit. `1.0.6`, `1.1.4` and
+    # `1.3.6` each shipped as two different things the last time this project
+    # ran two sources of one truth; see versions.md.
+    if os.path.exists(req_p) and os.path.exists(bm_p):
+        req_ref = re.search(r"^spacecost\s*@\s*(\S+)", read(req_p), re.M)
+        spec_ref = re.search(r'"spacecost"\s*:\s*"([^"]+)"', read(bm_p))
+        n += 1
+        if req_ref is None or spec_ref is None:
+            # Not a skip. Both are supposed to be there, and one of them going
+            # missing is the drift rather than a reason to pass quietly.
+            bad.append("the pinned spacecost ref could not be read from %s"
+                       % ("requirements.txt" if req_ref is None
+                          else "build_master.py's _MASTER_PIP_SPEC"))
+        elif req_ref.group(1) != spec_ref.group(1):
+            bad.append("pinned spacecost ref differs: requirements.txt has %s, "
+                       "_MASTER_PIP_SPEC has %s -- `pip install -r` and a Colab "
+                       "paste would install different Stage 3 tables"
+                       % (req_ref.group(1), spec_ref.group(1)))
+
     # README's `./run.sh` block <-> the words run.sh's dispatcher accepts.
     # Same check as the one above and for the same reason: `run.bat help`
     # shipped accepted-but-undocumented for several releases, and run.sh is the
@@ -1014,7 +1050,8 @@ def check_runtime() -> bool:
 # contents are the four modules, which are checked here at source, and
 # build_master.py strips their module docstrings by design.
 FIRST_PARTY_PY = (["build_master.py", "run_pipeline.py", "ui.py", "ui_meta.py",
-                   "verify.py", "launch_ui.py", "platform_check.py",
+                   "verify.py", "verify_stage3.py", "launch_ui.py",
+                   "platform_check.py",
                    os.path.basename(__file__)]
                   + list(MODULES.values()) + CAMPAIGN_PY)
 

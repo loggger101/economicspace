@@ -161,7 +161,24 @@ cmd_setup() {
     # reading of what the pinned set is for: a locally compiled extension is
     # not the artefact the numbers were measured against, so if the wheel is
     # not there, the pin has already failed and the loose set is the answer.
-    if ! "$vpy" -m pip install --only-binary=:all: -r requirements-lock.txt; then
+    # spacecost is NOT in the lock file and cannot be: it is a tagged git
+    # URL, which --only-binary refuses by construction. So the lock install
+    # alone produces a venv where `import transportation` fails, and the only
+    # reason that has never been seen is that master.py auto-installs whatever
+    # is missing at import -- a git fetch, at run time, inside the environment
+    # whose whole purpose is to be the one the numbers were measured on. It is
+    # installed here instead, from the line requirements.txt already carries,
+    # so the tag is still pinned in exactly one place.
+    if "$vpy" -m pip install --only-binary=:all: -r requirements-lock.txt; then
+      spec=$(grep -E '^spacecost[[:space:]]*@' requirements.txt || true)
+      if [ -n "$spec" ]; then
+        "$vpy" -m pip install "$spec" || {
+          echo "  spacecost did not install; Stage 3 will not run." >&2; exit 1; }
+      else
+        echo "  WARNING: no spacecost line in requirements.txt." >&2
+      fi
+    else
+      echo
       echo
       echo "  The pinned install failed, most likely a wheel that does not" >&2
       echo "  exist for this architecture and could not be built.  Falling" >&2
