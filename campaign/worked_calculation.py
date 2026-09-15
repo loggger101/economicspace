@@ -72,6 +72,9 @@ MU_EARTH = 398_600.4418
 R_LEO = 6_378.14 + 200.0
 R_MOON = 384_400.0
 DV_NRHO = 0.450
+# The capsule still has to come down: capture into LEO and then land is not
+# the same manoeuvre as capture into LEO and stay there.
+DV_LEO_DEORBIT = 0.100
 HOURS_PER_YR = 365.25 * 24.0
 
 
@@ -512,8 +515,21 @@ def context(body, archived, tables):
             else str(master.CALC_CONFIG.delivery_destination))
     unsupported = [
         name for name, ok in (
+            # 🚨  `earth_surface` IS IMPLEMENTED BELOW AND IS NOT YET
+            # ACCEPTED, and the gap is recorded rather than left to be
+            # rediscovered.  Its return legs, the aerocapture trade and the
+            # heat-shield mass all derive, and its dv reproduces the archived
+            # row EXACTLY (9,197.6 m/s out, 450.0 back).  What does not close
+            # is the electric stage: the derived EP mass runs about 0.8% over
+            # the row's, and because the closed form solves the payload to
+            # fill the launch vehicle exactly, 0.8% of the EP stage is enough
+            # to put the launch mass a few kilograms ABOVE capacity, where the
+            # cascade correctly refuses it.  Cislunar never showed this
+            # because its return leg is well clear of the 300 m/s floor;
+            # `earth_surface` sits on the floor, which is the one condition
+            # that separates the two.  Re-open this the moment the EP sizing
+            # agrees, and verify against `earth_surface__raw__search-on`.
             ("delivery to %r" % dest, dest == "cislunar"),
-            ("aerocapture return", not shape["aero"]),
             ("ISRU return propellant", not shape["isru"]),
             ("power source %r" % shape["power"], shape["power"] == "solar"),
             ("rendezvous apsis %r" % shape["apsis"],
@@ -583,6 +599,11 @@ def context(body, archived, tables):
         rho=float(body["density_gcm3"]),
         H=float(body["absolute_magnitude_h"]),
         albedo=float(body["albedo_assumed_for_diameter"]),
+        # None when the catalog has no measurement, which is what sends
+        # `derive_body` down the H-and-albedo route.
+        d_measured=(None if "diameter_km" not in body
+                    or pd.isna(body["diameter_km"])
+                    else float(body["diameter_km"])),
         isp=float(pro["isp_vac_s"]),
         ve=float(pro["isp_vac_s"]) * G0,
         dv_penalty=float(pro["dv_penalty_factor"]),
@@ -599,6 +620,15 @@ def context(body, archived, tables):
         water_wh=val("Water liberation energy (bound water)"),
         contain_per_kg=val("Volatile cargo containment"),
         destination=dest,
+        # Which return leg this row flew.  Aerocapture is a TRADE rather than a
+        # saving: it buys dv with a heat shield massing a fraction of the
+        # returned stack, hauled out from Earth as dead mass and pushed back
+        # through the return burn.  For a slow-arriving target the dv it saves
+        # is small and the shield is not worth carrying, which is why the model
+        # prices both and this reads which one won.
+        return_leg=("ret_%s_%s" % (dest, "aero" if shape["aero"] else "prop")
+                    if dest != "cislunar" else "ret_cislunar_prop"),
+        tps_frac=(cfg.heat_shield_frac_of_payload if shape["aero"] else 0.0),
         beneficiated=benef,
         # A body property, resolved once: the raw branch of the cargo-water
         # question reads it directly.  Absent or NaN means no ice at all.
@@ -612,17 +642,46 @@ def context(body, archived, tables):
 
 
 def derive_body(C):
-    """Diameter from H and albedo, then the mass of a sphere of that size."""
-    d_km = 1329.0 / math.sqrt(C["albedo"]) * 10.0 ** (-C["H"] / 5.0)
+    """Diameter, then the mass of a sphere of that size.
+
+    🚨  A MEASURED DIAMETER WINS, and deriving one anyway is not a harmless
+    second opinion.  `albedo_assumed_for_diameter` is only populated when an
+    albedo had to be ASSUMED, so on a body that already has a measurement it
+    is NaN, and the H-and-albedo route silently produces a NaN diameter, a NaN
+    mass and a NaN mineable mass.  Nothing raises: the cascade simply fails
+    every comparison it makes and the sweep reports that no concentration
+    ratio closes, which is a true sentence about a body that closes fine.
+    """
+    measured = C.get("d_measured")
+    if measured is not None and measured > 0:
+        d_km, route = measured, "measured"
+    else:
+        d_km = 1329.0 / math.sqrt(C["albedo"]) * 10.0 ** (-C["H"] / 5.0)
+        route = "derived from H and albedo"
     r_m = d_km / 2.0 * 1000.0
     vol = 4.0 / 3.0 * math.pi * r_m ** 3
     mass = C["rho"] * 1000.0 * vol
     return dict(d_km=d_km, r_m=r_m, r3=r_m ** 3, vol=vol, mass=mass,
+                diameter_route=route,
                 mineable=C["cfg"].max_mining_fraction * mass)
 
 
 def _legs(C, r_target):
-    """Departure and cislunar-capture legs for a rendezvous at one apsis."""
+    """Departure and arrival legs for a rendezvous at one apsis.
+
+    The outbound half is the same wherever the cargo is going: an ellipse from
+    Earth's orbit out to the apsis, and a burn to match the target there.  What
+    differs by destination is entirely what happens on ARRIVAL, and it differs
+    by more than intuition suggests.  Every return leg this function can price
+    is returned; `derive_dv` picks the one the row actually flew.
+
+        cislunar, propulsive   capture only has to BIND the orbit, and the
+                               burn takes the Oberth benefit at low perigee
+        earth surface, aero    direct entry: no capture burn AT ALL, the
+                               arrival energy goes into a heat shield
+        earth surface, prop    capture into LEO, which means killing the whole
+                               hyperbolic excess, and then a deorbit burn
+    """
     a_t = (1.0 + r_target) / 2.0
     v_t = math.sqrt(2.0 - 1.0 / a_t)
     cos_i = math.cos(math.radians(C["inc"]))
@@ -642,21 +701,55 @@ def _legs(C, r_target):
                 v_tr=math.sqrt(2.0 / r_target - 1.0 / a_t),
                 match=match, depart=v_hyp - v_leo,
                 out=v_hyp - v_leo + match,
+                # Capture into LEO is the expensive one: it kills the escape
+                # velocity as well as the hyperbolic excess.  It is the same
+                # burn as the departure, run backwards.
+                leo_capture=v_hyp - v_leo,
                 cap=max(0.0, v_hyp - v_ell) + DV_NRHO,
-                ret=match + max(0.0, v_hyp - v_ell) + DV_NRHO)
+                ret_cislunar_prop=match + max(0.0, v_hyp - v_ell) + DV_NRHO,
+                ret_earth_surface_aero=match,
+                ret_earth_surface_prop=match + (v_hyp - v_leo) + DV_LEO_DEORBIT)
 
 
 def derive_dv(C):
-    """Two-impulse patched conic at both apsides; the cheaper round trip wins."""
+    """Two-impulse patched conic at both apsides; the cheaper round trip wins.
+
+    ⚠️  THE APSIS IS RESOLVED AGAINST THE ROUND TRIP ACTUALLY BEING FLOWN, not
+    against a fixed Earth return.  The outbound leg is the same either way but
+    the return is not, so a geometry that is poor for one destination or one
+    return mode can be the best for another, and resolving it once for all of
+    them would quietly fly the wrong transfer.
+    """
     q_au = C["a_au"] * (1.0 - C["e"])
     big_q = C["a_au"] * (1.0 + C["e"])
     aph, peri = _legs(C, big_q), _legs(C, q_au)
     lam = C["dv_penalty"]
+    key = C["return_leg"]
+    ceiling = C["cfg"].max_dv_outbound_m_s
+
+    def bounded(km_s, floor):
+        """One leg in m/s, floored and clamped BEFORE the low-thrust penalty.
+
+        🚨  THE ORDER IS LOAD-BEARING.  The model floors the raw leg at 3,000
+        m/s outbound and 300 m/s on the return and THEN multiplies by the
+        electric penalty, so a body whose return leg is under the floor comes
+        out at 300 x lambda and not at its own value x lambda.  Applying the
+        penalty first and never flooring gave 332.8 m/s where the row says
+        450.0, which is exactly 300 x 1.5 -- a body cheap enough to arrive at
+        that the floor is the whole answer.
+        """
+        return min(max(km_s * 1000.0, floor), ceiling)
+
+    rounds = {"aphelion": bounded(aph["out"], 3000.0) + bounded(aph[key], 300.0),
+              "perihelion": (bounded(peri["out"], 3000.0)
+                             + bounded(peri[key], 300.0))}
+    chosen = aph if rounds["aphelion"] <= rounds["perihelion"] else peri
     return dict(q_au=q_au, Q_au=big_q, aph=aph, peri=peri,
-                aph_round=aph["out"] + aph["ret"],
-                peri_round=peri["out"] + peri["ret"],
-                dv_out=lam * aph["out"] * 1000.0,
-                dv_ret=lam * aph["ret"] * 1000.0)
+                apsis=("aphelion" if chosen is aph else "perihelion"),
+                aph_round=rounds["aphelion"] / 1000.0,
+                peri_round=rounds["perihelion"] / 1000.0,
+                dv_out=lam * bounded(chosen["out"], 3000.0),
+                dv_ret=lam * bounded(chosen[key], 300.0))
 
 
 # ------------------------------------------------------- the mass cascade
@@ -670,17 +763,26 @@ def _cascade(C, R, hardware_kg, struct_frac):
     """
     t, k_ret, k_out = R["t"], R["k_ret"], R["k_out"]
     d0 = C["cfg"].return_vehicle_dry_kg
-    denom = k_ret * R["R_ret"] * (1.0 + struct_frac) - 1.0
-    bracket = R["budget"] - hardware_kg - k_ret * d0 * R["R_ret"]
+    # s = 1 + tps_frac, and it multiplies the WHOLE returned stack rather than
+    # adding to the structure fraction: the heat shield is sized on the payload
+    # AND the dry return mass, because it is what the two of them arrive
+    # behind.  At tps_frac = 0 it is exactly 1.0 and not one float below
+    # differs from the propulsive case.
+    s_tps = 1.0 + C["tps_frac"]
+    denom = k_ret * R["R_ret"] * (1.0 + struct_frac) * s_tps - 1.0
+    bracket = R["budget"] - hardware_kg - k_ret * d0 * R["R_ret"] * s_tps
     if denom <= 0 or bracket <= 0:
         return None
     m_pay = bracket / denom
-    m_after = k_ret * (m_pay * (1.0 + struct_frac) + d0)
+    dry = m_pay * (1.0 + struct_frac) + d0
+    m_tps = C["tps_frac"] * dry
+    m_after = k_ret * s_tps * dry
     m_rprop = m_after * (R["R_ret"] - 1.0)
-    m_at = hardware_kg + d0 + struct_frac * m_pay + t * m_rprop + m_rprop
+    m_at = (hardware_kg + d0 + struct_frac * m_pay + m_tps
+            + t * m_rprop + m_rprop)
     m_oprop = m_at * k_out * (R["R_out"] - 1.0)
     return dict(m_pay=m_pay, denom=denom, bracket=bracket, m_after=m_after,
-                m_rprop=m_rprop, m_at=m_at, m_oprop=m_oprop,
+                m_rprop=m_rprop, m_at=m_at, m_oprop=m_oprop, m_tps=m_tps,
                 m_prop=m_oprop + m_rprop)
 
 
@@ -808,10 +910,14 @@ def mass_and_clock(C, B, DV, ratio):
 
     d0 = cfg.return_vehicle_dry_kg
     m_dry = d0 + f_eff * m_pay
-    m_after = R["k_ret"] * (m_pay * (1.0 + f_eff) + d0)
+    # The heat shield is sized on the stack it arrives behind, so it is
+    # re-settled here on the payload the mission actually flies, exactly as
+    # the plant and the seal are.  Zero on a propulsive return.
+    m_tps = C["tps_frac"] * (m_pay + m_dry)
+    m_after = R["k_ret"] * (m_pay * (1.0 + f_eff) + d0 + m_tps)
     m_rprop = m_after * (R["R_ret"] - 1.0)
     m_tank_ret = t * m_rprop
-    m_at = hw + m_dry + m_tank_ret + m_rprop
+    m_at = hw + m_dry + m_tps + m_tank_ret + m_rprop
     m_oprop = m_at * R["k_out"] * (R["R_out"] - 1.0)
     m_tank_out = t * m_oprop
     m_launch = m_at + m_tank_out + m_oprop
@@ -829,7 +935,7 @@ def mass_and_clock(C, B, DV, ratio):
     cadence = max(stay, DV["synodic"])
     calendar_cap = max(1, int(C["val"]("Mining rig service life") // stay))
     trips = min(calendar_cap, int(C["val"]("Mining rig maximum trips")))
-    return {"R": R, "passes": passes, "cascade": cas, "ep": ep,
+    return {"R": R, "passes": passes, "cascade": cas, "ep": ep, "m_tps": m_tps,
             "throughput": throughput, "vol_cap": vol_cap, "m_pay": m_pay,
             "feed": feed, "ratio": feed / m_pay, "load": load, "water": water,
             "c_frac": c_frac, "f_eff": f_eff, "m_containment": c_frac * m_pay,
@@ -1181,6 +1287,7 @@ def comparable(C, B, DV, M, P):
         "concentration_ratio": M["ratio"], "cargo_water_kg": M["water"],
         "containment_frac": M["c_frac"], "m_containment_kg": M["m_containment"],
         "m_dry_return_kg": M["m_dry"], "m_return_prop_kg": M["m_rprop"],
+        "tps_mass_kg": M["m_tps"],
         "m_tank_return_kg": M["m_tank_ret"], "m_at_asteroid_kg": M["m_at"],
         "m_outbound_prop_kg": M["m_oprop"], "m_tank_outbound_kg": M["m_tank_out"],
         "m_launch_kg": M["m_launch"], "power_system_kg": M["plant"],
