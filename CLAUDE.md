@@ -3800,12 +3800,24 @@ quoting was verified separately, on the throwaway `.bat` and `.vbs` pair
 described above, because that line is where a quoting bug would live and it is
 not exercised by double-clicking the file.
 
-⚠️  **`campaign/` holds a fourth way in, and it is not in that table because it
-does not import master at all.** `campaign/run_cell.py` shells out to
-`run_pipeline.py` as a SUBPROCESS, one per cell, which is why it inherits
-`preflight()` and cannot hit the destination trap; the other campaign scripts
-read archived CSVs and never build a stage. If you add a Stage-4-only entry
-point that does not go through `run_pipeline.py`, call `preflight()` from it.
+⚠️  **`campaign/` holds two more ways in, and they reach the model
+differently.** `campaign/run_cell.py` shells out to `run_pipeline.py` as a
+SUBPROCESS, one per cell, which is why it inherits `preflight()` and cannot
+hit the destination trap; `analyse.py` and `population.py` read archived CSVs
+and never build a stage. If you add a Stage-4-only entry point that does not
+go through `run_pipeline.py`, call `preflight()` from it.
+
+🚨  **`campaign/worked_calculation.py` IS THE ONE CAMPAIGN SCRIPT THAT
+IMPORTS MASTER, and it answers the destination trap in a way `preflight()`
+cannot.** It re-derives every figure behind one finished mission and checks the
+derivation against that mission's own archived row, so the destination it must
+agree with is the row's and not the config's. It therefore reads
+`delivery_destination` off the ROW and replaces the config to match, which is
+strictly stronger than refusing a mismatch: there is nothing to refuse, because
+the run being documented already chose. ⚠️  **Do not "fix" it by adding
+`preflight()`**; that would make it refuse exactly the archived cells it exists
+to read. It builds no stage and fetches nothing, so it cannot destroy a
+baseline.
 `run.bat` is a launcher only; it adds no default the pipeline does not already
 have, except that its `quick` / `standard` presets cap rows and fly raw ore at
 N = 1 rather than starting the tens-of-hours default cell on a double-click.

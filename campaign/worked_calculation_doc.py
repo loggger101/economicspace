@@ -200,26 +200,47 @@ def s_header(out):
 
 
 def s_body(out):
-    """Section 1: the rock."""
+    """Section 1: the rock.
+
+    ⚠️  WHICH DIAMETER THIS BODY HAS DECIDES WHICH EQUATION BELONGS ON THE
+    PAGE, AND IT ALSO DECIDES WHICH ALBEDO COLUMN IS POPULATED.  Stage 1 fills
+    `diameter_km` on every row, deriving it from H and albedo where no
+    measurement exists, so the model always reads a diameter and the
+    provenance lives in `diameter_source` instead.  Where that says
+    `measured`, `albedo_assumed_for_diameter` is NaN -- and the page used to
+    print "nan" beside an H-and-albedo equation the body never went through.
+    """
     B, C = out["B"], out["C"]
+    source = str(B.get("diameter_source") or "unknown")
+    from_h = source != "measured"
+    # The assumed albedo is the one the derivation would have used; the
+    # measured one is the only one a measured body has.  Neither is invented
+    # here: both are catalog columns, and exactly one of them is populated.
+    albedo = C["albedo"] if from_h else C.get("albedo_measured")
     pairs = [
         ("absolute magnitude H", fmt(C["H"], 3)),
-        ("geometric albedo", fmt(C["albedo"], 4)),
+        ("geometric albedo%s" % ("" if from_h else " (measured)"),
+         fmt(albedo, 4)),
         ("diameter", fmt(B["d_km"], 6, "km")),
+        ("diameter provenance", esc(source)),
         ("bulk density", fmt(C["rho"], 3, "g/cm3")),
         ("volume", fmt(B["vol"], 1, "m3")),
         ("mass", fmt(B["mass"], 0, "kg")),
         ("mineable at %s of mass" % pct(C["cfg"].max_mining_fraction, 0),
          fmt(B["mineable"], 0, "kg")),
     ]
+    lead = ("This body has no measured diameter, so Stage 1 sized it from its "
+            "absolute magnitude and an albedo, and that is the figure below."
+            if from_h else
+            "This body has a measured diameter, so no sizing from H is done "
+            "and none is shown: the catalog figure is used as it stands.")
     return "".join([
         h(2, "1. The body", "body"),
-        para("Diameter comes from the catalog where a measurement exists and "
-             "from H and albedo where it does not. Mass follows from the "
-             "diameter and the bulk density, and only a fraction of it is "
-             "ever available: one mission cannot strip-mine an asteroid."),
-        eq("D = 1329 / sqrt(p_v) * 10^(-H/5) km &nbsp;&nbsp; "
-           "m = rho * (4/3) * pi * r^3"),
+        para(lead + " Mass follows from the diameter and the bulk density, "
+             "and only a fraction of it is ever available: one mission cannot "
+             "strip-mine an asteroid."),
+        eq(("D = 1329 / sqrt(p_v) * 10^(-H/5) km &nbsp;&nbsp; " if from_h
+            else "") + "m = rho * (4/3) * pi * r^3"),
         kv(pairs),
     ])
 
@@ -365,7 +386,11 @@ def s_cascade(out):
              "cascade at the settled hardware mass:" % len(M["passes"])),
         kv([("bracket", fmt(cas["bracket"], 3)),
             ("denominator", fmt(cas["denom"], 6)),
-            ("mass ratio outbound", fmt(M["R"], 6))]),
+            ("tank fraction t", fmt(M["R"]["t"], 6)),
+            ("mass ratio outbound R_out", fmt(M["R"]["R_out"], 6)),
+            ("mass ratio return R_ret", fmt(M["R"]["R_ret"], 6)),
+            ("tankage closure k_out", fmt(M["R"]["k_out"], 6)),
+            ("tankage closure k_ret", fmt(M["R"]["k_ret"], 6))]),
         h(3, "The hardware ledger"),
         para("Every kilogram in the cascade has a price in the cost model and "
              "every kilogram the cost model pays for is flown. That identity "
@@ -391,11 +416,19 @@ def s_cascade(out):
             "impulsive burns, pays no dv penalty and carries no electric "
             "power system."))
     if M["vol_cap"] and M["ret_vol"] > 0:
+        # ⚠️  THE ALLOWANCE IS A QUARTER OF THE FAIRING, NOT THE FAIRING.  The
+        # model returns cargo in 25% of the fairing volume, so quoting the
+        # whole of it overstates the headroom fourfold AND puts the binding
+        # test four times too high: a payload sitting exactly on the volume
+        # cap was reported as bounded by the mass budget, which is the one
+        # sentence this paragraph exists to get right.  The cap is a mass in
+        # the cascade, so the test is against the mass it produced.
         html_out.append(para(
-            "The returned cargo occupies %s m3 against a %s m3 fairing "
-            "allowance, so the %s bound the payload."
-            % (fmt(M["ret_vol"], 2), fmt(C["fairing_m3"], 1),
-               "volume cap" if M["ret_vol"] >= C["fairing_m3"] * 0.999
+            "The returned cargo occupies %s m3 against a %s m3 allowance, a "
+            "quarter of the %s m3 fairing, so the %s bound the payload."
+            % (fmt(M["ret_vol"], 2), fmt(0.25 * C["fairing_m3"], 1),
+               fmt(C["fairing_m3"], 1),
+               "volume cap" if M["m_pay"] >= M["vol_cap"] * 0.999999
                else "mass budget rather than the volume cap")))
     return "".join(html_out)
 
@@ -458,6 +491,13 @@ def s_clock(out):
         ("outbound transfer", fmt(M["t_out"], 4, "yr")),
         ("return transfer", fmt(M["t_back"], 4, "yr")),
         ("window wait", fmt(DV["window_wait"], 4, "yr")),
+        # Both candidate durations, because the answer is the larger of them
+        # and a page that shows only the winner cannot be checked against
+        # itself: out + stay + back does not add up to the duration whenever
+        # the electric floor is what binds, which on an EP mission is usual.
+        ("chemical fit: out + stay + back", fmt(M["chem_fit"], 4, "yr")),
+        ("electric floor: thrust time + stay",
+         fmt(M["electric_floor"], 4, "yr")),
         ("<strong>mission duration</strong>",
          "<strong>%s</strong>" % fmt(M["duration"], 4, "yr")),
         ("campaign cadence", fmt(M["cadence"], 4, "yr")),
@@ -472,7 +512,9 @@ def s_clock(out):
         para("Extraction is rate-limited: the payload is capped by what the "
              "rig can dig inside the stay, and the dig time flows into "
              "operations cost, into the mission duration and into how often "
-             "the campaign can repeat."),
+             "the campaign can repeat. The duration is the longer of two "
+             "clocks: the transfers plus the stay, and the thrust time an "
+             "electric stage needs plus the stay."),
         kv(pairs),
         para("The rig is retired by <strong>%s</strong>. It wears out on duty "
              "cycles as well as on a calendar, and the model takes whichever "
@@ -776,6 +818,17 @@ def s_footer(out):
              "relative difference %s on <code>%s</code>."
              % (status, c["n"], c["exact"], c["close"], len(c["bad"]),
                 "%.3e" % c["worst"], esc(c["worst_name"]))),
+        # A count on its own cannot be read: 71 against 72 is the difference
+        # between an archived cell and a current one, and saying so is the
+        # whole reason the check returns the names.
+        para("A further %d derived quantit%s no column in this row and could "
+             "not be compared: %s. An archived cell predates the columns a "
+             "later release added, which is why this is reported rather than "
+             "refused." % (len(c["skipped"]),
+                           "y has" if len(c["skipped"]) == 1 else "ies have",
+                           ", ".join("<code>%s</code>" % esc(n)
+                                     for n in c["skipped"])))
+        if c.get("skipped") else "",
         para('<span class="small">Generated %s from source <code>%s</code>, '
              'calc %s.</span>'
              % (datetime.date.today().isoformat(), esc(out["cell"]),

@@ -95,6 +95,28 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       those tables and supersedes `rig_bounds.py` and `extra_checks.py`, which
       are kept only because the 2026-08 archive's FINDINGS.md names them.
       Same caution as `analyse.py`: do not run it while a cell is timing.
+  `worked_calculation.py`  the 20-page worked derivation of ONE mission: the
+      best case of whatever finished results are on disk, compared across the
+      live Stage 4 catalog and every archived cell, so "which one" is a
+      measurement rather than whichever file got passed in.  Every figure is
+      re-derived from the equations and then checked column by column against
+      that mission's own row; `--verify` runs the check and writes nothing,
+      `--pdf` renders with headless Chrome, `--cell` and `--designation`
+      override the choice.  It is the only script here that imports `master`,
+      and the only campaign output that is gitignored rather than committed,
+      because it is generated from the run it describes.
+  `worked_calculation_doc.py`  the renderer that script writes through.  It
+      decides what to say and in what order and computes no model quantity of
+      its own; the prose branches on the derived shape, so a raw
+      single-mission document and a beneficiated searched one are different
+      documents rather than one with blanks in it.
+
+  ⚠️  The derivation does not cover every architecture the model can fly.
+  Aerocapture, ISRU, radioisotope power, chemical propulsion and the six
+  non-cislunar destinations are refused by a per-axis guard that names only
+  the axes it cannot express.  A refusal is the correct outcome, not a bug:
+  a document that quietly describes the wrong mission is the failure the
+  guard exists to prevent.
 
 Per cell: `profitability_catalog.csv` is archived gzipped to `cells/` and one
 row is appended to `results.csv`.
