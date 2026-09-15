@@ -69,6 +69,7 @@ run_pipeline.py        Headless CLI the launcher drives (presets + flags)
 build_master.py        Build tool: assembles modules/ into master.py
 verify.py              Release verification: the checks every change runs
 verify_stage3.py       Stage 3 verification: this repo and spacecost agree
+verify_stage1.py       Stage 1 verification: the derivation chain, no fetching
 verify_docs.py         Docs verification: the docs still describe the code
 platform_check.py      Can THIS host reproduce the committed numbers? ~10 s
 .github/workflows/     CI: the checks that need no catalog, run on every push
@@ -864,6 +865,59 @@ which SPARK_SETUP.md asks and nothing had recorded.
 it by calling `verify_stage3._pinned_tag()`, which parses `requirements.txt`,
 so a repin still lands in exactly the two places the split's release note names
 and CI does not become a third.
+
+### Verifying Stage 1
+
+`verify.py` covers Stage 4 and `verify_stage3.py` the Stage 3 seam. Stage 1 was
+the last stage with no harness at all, which mattered more than it sounds:
+CLAUDE.md's [correctness invariants](CLAUDE.md#correctness-invariants-that-were-expensive-to-find)
+are almost entirely a Stage 1 list, and every one of them was a rule written in
+prose that nothing executed.
+
+```bash
+py verify_stage1.py
+```
+
+🚨  **It never fetches, and that is the design constraint rather than a
+nicety.** Stage 1 pulls from JPL, which adds bodies daily, so re-running Stage 1
+to test Stage 1 produces a catalog of a different length that is comparable with
+nothing already measured, and Stage 1's output is the ~868 MB input every other
+stage reads. So the checks split in two:
+
+| # | check | what it executes |
+|---|---|---|
+| 1 | designations | the surface-form table in `_extract_canonical_designation`'s own docstring, plus the float64 id that cost NEOWISE four releases |
+| 2 | taxonomy | every class has a residual; `Unknown` is the all-`None` sentinel; M-type has not been restored to a bare metal core |
+| 3 | pgm | the enrichment fallback: exact type, then root letter, then chondritic |
+| 4 | by_distinct | catalog 1.1.1's per-distinct-value optimisation still equals the per-row `.apply` it replaced, NaN keys included |
+| 5 | lookup | regex metacharacters do not cross-match or raise, and an `int64` designation column still resolves |
+| 6 | literature | Ceres, Vesta, Pallas, Psyche and Eros against their published values, and all five `measured` |
+| 7 | rederive | every composition column recomputed from the taxonomy each row ended up with, over the whole catalog |
+| 8 | provenance | the two `*_source` domains are closed, and the census reproduces |
+
+Checks 1 to 5 need no catalog, no network and no baseline, so they run anywhere
+including CI. Checks 6 to 8 read the catalog already on disk and say what would
+make them run when it is absent.
+
+✅  **Check 7 is Stage 1's analogue of a cell hash**: the committed catalog's
+derived columns, recomputed row for row. It reproduces exactly across a
+**version gap** (the file on disk is written by whichever catalog release last
+ran, which is older than the module), and reproducing across one is a stronger
+result than reproducing within one.
+
+⚠️  **It compares only the columns that are a pure lookup on the final
+taxonomy**, and the reason is worth knowing before you extend it. The catalog's
+`spectral_type` is *post-fill*: `enrich_composition` fills a missing type from
+Tholen, then from albedo, then from the albedo assumed when the diameter was
+derived. Feeding the filled column back makes all three fallbacks dead code and
+`spectral_type_source` then disagrees with the file everywhere it had been
+filled, which is an artefact of the fixture rather than a defect. The fallback
+chain is covered by check 8's census instead.
+
+⚠️  **Check 8's counts are pinned to the catalog identity they came from**, not
+asserted outright. They are properties of one build; re-running Stage 1 is a
+legitimate act that necessarily moves every one of them, so a different build is
+reported rather than failed.
 
 ### Verifying the docs
 

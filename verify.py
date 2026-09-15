@@ -35,12 +35,15 @@ live prices, either of which moves the inputs underneath the comparison.  Check
 6 works around that by recomputing the pure table functions against the values
 already stored in the on-disk Stage 2 catalog, which needs no network.
 
-What is still NOT covered: Stage 3's validate(), and Stage 1's derivation chain.
-A change there can pass everything here and still be wrong -- transportation
-1.12.1's propellant-flag fix lives in Stage 3's validate(), which Stage 4 never
-calls, and had to be checked by running that function under
-`-W error::FutureWarning` instead.  If you change those, this file is not your
-evidence.
+Both of those now have harnesses of their own, and this file is still not
+their evidence.  Stage 3's validate() is `verify_stage3.py` check 5;
+transportation 1.12.1's propellant-flag fix lives there, and had been checked
+once by hand under `-W error::FutureWarning`.  Stage 1's derivation chain is
+`verify_stage1.py`, which never fetches: it runs the pure functions against
+synthetic frames and the rest against the catalog already on disk, because
+re-running Stage 1 to test Stage 1 would fetch a catalog of a different length
+that is comparable with nothing already measured.  If you change Stage 1 or
+Stage 3, run those.
 
 BUDGET.  A full `check` builds ~20 cells and takes roughly HALF AN HOUR on the
 reference machine.  Most of that is check 2, because turning the pre-filter off
