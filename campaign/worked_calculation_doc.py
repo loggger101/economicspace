@@ -110,11 +110,20 @@ def architecture(out):
         "isru": bool(row["isru_return"]),
         "power": str(row["power_source"]),
         "apsis": str(row["rendezvous_apsis"]),
-        "electric": float(row["dv_penalty_factor"]) > 1.0,
+        # Two questions, not one: the penalty is a property of the propellant
+        # and is always charged, while the STAGE exists only if the model was
+        # asked to size one.  See the shape guard in `context`.
+        "electric": bool(C["electric"]),
+        "penalised": float(row["dv_penalty_factor"]) > 1.0,
         "vehicle": str(row["vehicle"]),
         "propellant": str(row["propellant"]),
         "searched": bool(out["terms"]["searched"]),
         "ep_kg": float(M["ep"]["mass"]),
+        "dest": str(C["destination"]),
+        "lander": bool(C["arch"].get("needs_lander")),
+        "to_earth": bool(C["arch"]["returns_to_earth"]),
+        "boiloff": float(M["boiloff_factor"]) > 1.0,
+        "tps_kg": float(M["m_tps"]),
     }
 
 
@@ -124,7 +133,8 @@ def shape_sentence(a):
     Assembled from the shape rather than written down, because which of these
     clauses is true is exactly what the search decides per body.
     """
-    bits = ["a %s mission" % ("beneficiated" if a["beneficiated"] else "raw")]
+    bits = ["a %s mission to %s" % ("beneficiated" if a["beneficiated"]
+                                    else "raw", esc(a["dest"]))]
     bits.append("flown on a %s" % esc(a["vehicle"]))
     bits.append("burning %s" % esc(a["propellant"]))
     bits.append("returning %s"
@@ -143,12 +153,13 @@ def terms_sentence(terms):
     on, off = [], []
     for name, live in (("mission reliability", terms["reliability"]),
                        ("the learning curve", terms["learning"]),
-                       ("the cost of capital", terms["wacc"])):
+                       ("the cost of capital", terms["wacc"]),
+                       ("insurance premiums", terms["insurance"])):
         (on if live else off).append(name)
     if terms["surplus_frac"] > 0:
         on.append("a surplus sale at %s of full price"
                   % pct(terms["surplus_frac"], 0))
-    else:
+    elif terms["market"] == "capacity_cap":
         off.append("any sale past a market ceiling")
     parts = []
     if on:
@@ -156,6 +167,26 @@ def terms_sentence(terms):
     if off:
         parts.append("It did not charge " + english(off) + ".")
     return " ".join(parts)
+
+
+# The model's leg keys are identifiers, and an identifier in a sentence is a
+# reader's problem rather than a precision.  The key is still shown, in code
+# font beside the phrase, because it is what to grep for in `_legs`.
+LEG_LABEL = {
+    "ret_cislunar_prop": "a propulsive capture into a cislunar NRHO depot",
+    "ret_lunar_surface_prop": "a cislunar capture and then a propulsive "
+                              "descent to the lunar surface",
+    "ret_leo_prop": "a propulsive capture into LEO",
+    "ret_leo_aero": "aerocapture and aerobraking into LEO",
+    "ret_geo_prop": "a propulsive capture into GEO",
+    "ret_geo_aero": "aerocapture into a GEO-apogee ellipse",
+    "ret_earth_surface_aero": "direct entry at Earth",
+    "ret_earth_surface_prop": "a propulsive capture into LEO and a deorbit burn",
+    "ret_mars_surface_aero": "aeroentry and retropropulsion to the Mars surface",
+    "ret_mars_surface_prop": "a propulsive capture and powered descent at Mars",
+    "ret_mars_orbit_prop": "a propulsive capture into a 1-sol Mars orbit",
+    "ret_mars_orbit_aero": "aerocapture into a 1-sol Mars orbit",
+}
 
 
 def english(items):
@@ -183,6 +214,7 @@ def s_header(out):
         ("cost / revenue", "<strong>%s x</strong>" % sig(P["obj"], 4)),
         ("programme", "N = %d, %d ship(s) x %d campaign(s)"
          % (P["n"], P["f"], P["w"])),
+        ("market model", esc(out["terms"]["market"])),
         ("calc version", esc(out["terms"]["stamp"])),
         ("built", datetime.date.today().isoformat()),
     ]
@@ -265,6 +297,124 @@ def s_composition(out):
              "row rather than discarded, which is why the table totals one."),
         table(["phase", "mass fraction", "$/kg", "contribution"], rows),
     ]
+    # 🚨  WHERE THOSE PRICES COME FROM, because every one of them is a
+    # DELIVERED price at this destination rather than a terrestrial quote, and
+    # the page had been printing them with no way to reproduce any of them.
+    # At an in-space destination a kilogram is worth its terrestrial price PLUS
+    # the launch cost it avoids -- the plus is the point; replacing the
+    # terrestrial price instead is a defect Stage 2 shipped once and it quietly
+    # threw the material itself away.  The utility factors behind the "avoided"
+    # half are engineering judgements and are the softest assumption in the
+    # whole pipeline, which is the strongest reason to show the chain rather
+    # than the answer.
+    if C["legs"]:
+        leg_rows = []
+        for leg in C["legs"]:
+            if leg[0] == "burn":
+                leg_rows.append(["propulsive burn", fmt(leg[1], 0, "m/s"),
+                                 "Isp %s s, %s dry" % (fmt(leg[2], 0),
+                                                       pct(leg[3], 0))])
+            elif leg[0] == "edl":
+                leg_rows.append(["entry, descent and landing", "-",
+                                 "%s of the arriving mass survives"
+                                 % pct(leg[1], 1)])
+            else:
+                leg_rows.append([esc(leg[0]), "-", ""])
+        out_html.append(h(3, "Why a kilogram is worth that much HERE"))
+        out_html.append(para(
+            "None of the prices above is a terrestrial quote. At an in-space "
+            "destination a kilogram is worth what it fetches on Earth "
+            "<strong>plus</strong> the launch cost it saves, and that saving "
+            "is the cost of putting a kilogram there from Earth instead. The "
+            "chain is walked backwards from the payload, stage by stage, "
+            "because collapsing it into one burn throws away staging and "
+            "overstates the destination."))
+        out_html.append(table(["leg", "delta-v", "terms"], leg_rows))
+        out_html.append(kv([
+            ("cost of a kilogram to LEO",
+             usd(C["leo_usd_per_kg"], 2) + " /kg"),
+            ("<strong>cost of a kilogram delivered to %s</strong>"
+             % esc(C["destination"]),
+             "<strong>%s /kg</strong>" % usd(C["p_l"], 2)),
+            ("that is, kilograms in LEO per kilogram delivered",
+             fmt(C["p_l"] / C["leo_usd_per_kg"], 2)
+             if C["leo_usd_per_kg"] else "n/a"),
+        ]))
+        # ⚠️  THE LOWER-BOUND CAVEAT BELONGS TO THE TWO SURFACES, NOT TO
+        # EVERY DESTINATION, and attaching it to a depot would be borrowing a
+        # warning that is not about this mission.  What IS true everywhere is
+        # the utility factors, so that half is unconditional.
+        surface = C["arch"].get("needs_lander")
+        out_html.append(note(
+            "warn",
+            ("This is a <strong>marginal-transport lower bound</strong>: no "
+             "programme overhead, no development cost, and an industrial "
+             "launch cadence that does not exist yet. Real lunar delivery "
+             "today runs orders of magnitude above it. " if surface else "")
+            + "The utility factors that decide how much of this saving each "
+              "commodity captures are engineering judgements rather than "
+              "measurements, and they are the softest assumption in the "
+              "pipeline. Treat them as a dial."))
+    else:
+        out_html.append(h(3, "Why a kilogram is worth that much HERE"))
+        out_html.append(para(
+            "The cargo comes home, so there is no launch cost avoided and no "
+            "delivery ladder: a kilogram is worth its terrestrial price, less "
+            "what it costs to bring it down through the atmosphere. That "
+            "downleg is why the cheaper platinum-group metals can arrive worth "
+            "nothing at all."))
+    if C["yields"]:
+        # 🚨  EVERY OTHER PRICE IN THIS TABLE IS A ROW LOOKUP.  `nickel-iron`
+        # is an ALLOY, so its price is the yield-weighted sum of the elements
+        # in it, with this body's own platinum-group enrichment applied to the
+        # rare metals -- which is why two bodies with identical metal fractions
+        # need not carry the same value of metal.
+        yield_rows = []
+        for element, frac in sorted(C["yields"].items(),
+                                    key=lambda kv2: -float(kv2[1])):
+            price = C["element_price"].get(element)
+            if price is None:
+                continue
+            rare = element in C["rare_metals"]
+            share = float(frac) * (C["kappa"] if rare else 1.0)
+            yield_rows.append([esc(element), fmt(float(frac) * 1e6, 1),
+                               ("x " + fmt(C["kappa"], 2)) if rare else "-",
+                               usd(float(price), 2),
+                               usd(share * float(price), 2)])
+        yield_rows.append(["<strong>nickel-iron, blended</strong>", "", "", "",
+                           "<strong>%s</strong>" % usd(C["alloy"], 2)])
+        out_html.append(h(3, "What the metal is worth, element by element"))
+        out_html.append(para(
+            "Every other price above is a row in the mineral catalog. "
+            "<strong>Nickel-iron is not.</strong> It is an alloy, so its price "
+            "is the yield-weighted sum of its elements, with this body's "
+            "platinum-group enrichment of %s applied to the rare metals. That "
+            "enrichment follows the taxonomy, which is why two bodies with the "
+            "same metal fraction need not carry metal of the same value."
+            % fmt(C["kappa"], 2)))
+        out_html.append(table(["element", "yield (ppm of alloy)", "enrichment",
+                               "$/kg", "contribution $/kg"], yield_rows))
+        # 🚨  A ZERO HERE IS A RESULT, NOT A MISSING NUMBER, and it is worth
+        # saying so on the page: a reader who takes it for a data error will
+        # go looking for a bug that is not there.  An element with no in-space
+        # market is worth its terrestrial price MINUS the cost of flying it
+        # down, and for the cheaper platinum-group metals that difference is
+        # negative, so the delivered price floors at zero.  The same downleg
+        # leaves rhodium and iridium worth six figures.
+        dead = [n for n, p2 in C["element_price"].items()
+                if n in C["yields"] and float(p2 or 0.0) <= 0.0]
+        if dead:
+            out_html.append(note(
+                "warn",
+                "%s %s at <strong>exactly zero</strong> here, and that is a "
+                "result rather than a gap in the data: an element with no "
+                "in-space market is worth its terrestrial price less the cost "
+                "of flying it down, and for the cheaper platinum-group metals "
+                "that difference is negative, so the delivered price floors "
+                "at zero. The same downleg leaves rhodium and iridium worth "
+                "six figures a kilogram."
+                % (english([esc(n) for n in sorted(dead)]).capitalize(),
+                   "prices" if len(dead) == 1 else "price")))
     if C["beneficiated"]:
         out_html.append(para(
             "The best phase present is worth %s per kilogram, and that is the "
@@ -298,9 +448,9 @@ def s_transfer(out):
         ("departure burn", fmt(chosen["depart"], 4, "km/s")),
         ("plane change term", fmt(chosen.get("cos_i", 0.0), 6)),
         ("rendezvous match burn", fmt(chosen["match"], 4, "km/s")),
-        ("capture at the destination", fmt(chosen["cap"], 4, "km/s")),
-        ("outbound dv", fmt(DV["dv_out"], 1, "m/s")),
-        ("return dv", fmt(DV["dv_ret"], 1, "m/s")),
+        ("outbound dv, floored and penalised",
+         fmt(DV["dv_out"], 1, "m/s")),
+        ("return dv, floored and penalised", fmt(DV["dv_ret"], 1, "m/s")),
         ("synodic period", fmt(DV["synodic"], 4, "yr")),
         ("expected window wait", fmt(DV["window_wait"], 4, "yr")),
     ]
@@ -319,6 +469,28 @@ def s_transfer(out):
              % (esc(a["apsis"]), fmt(chosen_r, 3), fmt(other_r, 3),
                 "perihelion" if a["apsis"] == "aphelion" else "aphelion")),
         kv(rows),
+        h(3, "The return, burn by burn"),
+        # 🚨  WHAT HAPPENS ON ARRIVAL IS THE WHOLE DIFFERENCE BETWEEN
+        # DESTINATIONS, and it used to be one row here reading the cislunar
+        # capture whatever the row had flown.  The breakdown comes out of the
+        # leg set beside the physics that produced it; assembling it here would
+        # be a second opinion about the arithmetic.
+        para("The outbound half is the same wherever the cargo is going. What "
+             "differs is entirely the arrival, and it differs by more than "
+             "intuition suggests. This mission flies %s (<code>%s</code>)."
+             % (LEG_LABEL.get(C["return_leg"], "the leg below"),
+                esc(C["return_leg"]))),
+        table(["burn", "km/s"],
+              [[esc(label), fmt(value, 4)]
+               for label, value in chosen["arrival"][C["return_leg"]]]
+              + [["<strong>total, before the floor and the penalty</strong>",
+                  "<strong>%s</strong>" % fmt(chosen[C["return_leg"]], 4)]]),
+        note("key",
+             "<strong>The floors come before the low-thrust penalty.</strong> "
+             "The model floors the raw legs at 3,000 m/s outbound and 300 m/s "
+             "on the return and only then multiplies by the electric penalty, "
+             "so a body cheap enough to arrive at pays the floor times the "
+             "penalty rather than its own value times the penalty."),
     ]
     if a["aero"]:
         html_out.append(note(
@@ -362,7 +534,9 @@ def s_cascade(out):
         ("payload returned", fmt(M["m_pay"], 1, "kg")),
         ("return vehicle dry", fmt(M["m_dry"], 1, "kg")),
         ("volatile containment", fmt(M["m_containment"], 1, "kg")),
-        ("return propellant", fmt(M["m_rprop"], 1, "kg")),
+        ("heat shield", fmt(M["m_tps"], 1, "kg")),
+        ("return propellant%s" % (" (made on site)" if a["isru"] else ""),
+         fmt(M["m_rprop"], 1, "kg")),
         ("return tankage", fmt(M["m_tank_ret"], 1, "kg")),
         ("mass at the asteroid", fmt(M["m_at"], 1, "kg")),
         ("outbound propellant", fmt(M["m_oprop"], 1, "kg")),
@@ -378,8 +552,15 @@ def s_cascade(out):
              "solve is a fixed point because the payload sets the feed, the "
              "feed sets the dig time and the power draw, the draw sets the "
              "array mass, and the array comes out of the payload budget."),
-        eq("m_pay_max = (M_LEO / R_out - m_hw - m_dry * s * R_ret) "
-           "/ (s * R_ret - 1)"),
+        # 🚨  TWO FORMS, AND THE DIFFERENCE IS ONE FACTOR OF R_ret.  Carrying
+        # the return propellant up from Earth means it is pushed through the
+        # outbound burn as dead mass; making it at the asteroid means it never
+        # rides the outbound leg at all.  Showing the wrong one would be a
+        # worked calculation of a mission this is not.
+        eq("m_pay_max = (M_LEO / (k_out * R_out) - m_hw - k * s * d0) "
+           "/ (k * s * (1 + f) - 1)" if a["isru"] else
+           "m_pay_max = (M_LEO / (k_out * R_out) - m_hw - k * s * d0 * R_ret) "
+           "/ (k * s * R_ret * (1 + f) - 1)"),
         table(["pass", "hardware in (kg)", "structure frac", "payload (kg)",
                "EP (kg)", "plant (kg)", "feed (kg)", "dig (yr)"], pass_rows),
         para("The loop converges in %d passes. The closed form then solves the "
@@ -410,11 +591,73 @@ def s_cascade(out):
             % (fmt(C["dv_penalty"], 2), fmt(ep["power"] / 1000.0, 1),
                fmt(ep["thruster"], 1), fmt(ep["ppu"], 1),
                fmt(ep["thrust"], 3))))
+        # ⚠️  THREE MASSES ON TWO DIFFERENT QUANTITIES, and none of them can be
+        # checked from the page without these rates.  Array and PPU scale with
+        # POWER; the thruster scales with THRUST, which owes nothing to
+        # efficiency.  The array figure is also NOT the plant's: an EP array is
+        # in permanent sunlight and takes the bare 1/r2 specific power, while
+        # the plant standing on the body takes the night-side derating.
+        html_out.append(kv([
+            ("exhaust velocity (Isp %s s x g0)" % fmt(C["isp"], 1),
+             fmt(C["ve"], 1, "m/s")),
+            ("thrust time the stage is sized for",
+             fmt(C["cfg"].ep_target_thrust_yr, 2, "yr")),
+            ("thruster efficiency", pct(C["thruster_eff"], 1)),
+            ("thruster specific mass", fmt(C["thruster_kg_per_n"], 1, "kg/N")),
+            ("PPU specific mass", fmt(C["ppu_kg_per_kw"], 2, "kg/kW")),
+            ("EP array specific power, permanent sunlight",
+             fmt(C["w_bare"], 3, "W/kg")),
+        ]))
+    elif a["penalised"]:
+        # ⚠️  NOT "chemical".  The propellant is electric and the legs are
+        # penalised for it; what is switched off is the sizing of a stage to
+        # fly them, which is `model_low_thrust_time`.  Calling this chemical
+        # would contradict the delta-v table three sections up.
+        html_out.append(note(
+            "warn",
+            "This run does <strong>not size an electric stage</strong>, "
+            "although the propellant is one: the legs still carry the %s "
+            "low-thrust penalty shown above, and no array, PPU or thruster is "
+            "flown or paid for, and the duration has no thrust-time floor. "
+            "That is <code>model_low_thrust_time</code> off, and it is a "
+            "diagnostic rather than a mission."
+            % fmt(C["dv_penalty"], 2)))
     else:
         html_out.append(note(
             "key", "The stage is <strong>chemical</strong>: it flies "
             "impulsive burns, pays no dv penalty and carries no electric "
             "power system."))
+    if a["isru"]:
+        html_out.append(note(
+            "key",
+            "The return propellant is <strong>made at the asteroid</strong>, "
+            "so it never rides the outbound leg: %s kg of it appears in the "
+            "returning stack and none of it in the launch mass. What does NOT "
+            "drop out is the empty return <strong>tank</strong> -- you can "
+            "make propellant out there, not a pressure vessel -- so %s kg of "
+            "tankage is still launched from Earth. The saving is paid for in "
+            "rock: %s kg of extra feed the same rig has to dig before any ore, "
+            "which is the cost a flat dollar-per-kilogram charge left out."
+            % (fmt(M["m_rprop"], 1), fmt(M["m_tank_ret"], 1),
+               fmt(M["isru_feed"], 0))))
+    if a["aero"]:
+        html_out.append(note(
+            "key",
+            "The heat shield is <strong>%s kg</strong>, and it is dead mass "
+            "twice over: hauled out from Earth and then pushed back through "
+            "the return burn, even though it ablates on entry. It is sized on "
+            "the payload AND the dry return vehicle, because that is what it "
+            "arrives behind." % fmt(M["m_tps"], 1)))
+    if a["boiloff"]:
+        html_out.append(note(
+            "warn",
+            "This propellant <strong>boils off</strong>. It sits in the tank "
+            "from launch until the return burn, and over that hold the "
+            "quantity needed is inflated by a factor of %s. The model folds "
+            "that into an effective return delta-v rather than bolting a term "
+            "onto the cascade, because the return propellant scales with "
+            "(R - 1) and inflating that term is exactly the same arithmetic."
+            % fmt(M["boiloff_factor"], 4)))
     if M["vol_cap"] and M["ret_vol"] > 0:
         # ⚠️  THE ALLOWANCE IS A QUARTER OF THE FAIRING, NOT THE FAIRING.  The
         # model returns cargo in 25% of the fairing volume, so quoting the
@@ -447,10 +690,21 @@ def s_power(out):
                  "still costs time, which is what bounds the payload; it just "
                  "does not cost watts."),
         ])
+    # ⚠️  A DRAW WITH NO RATES BEHIND IT CANNOT BE CHECKED.  Excavation is
+    # charged per kilogram MOVED, beneficiation per kilogram of product OUT,
+    # and liberation per kilogram of water baked out of the rock; the three go
+    # over the dig time to give watts.  All three are Module 3 rows that the
+    # page consumed silently.
     pairs = [
-        ("processing draw", fmt(M["draw"], 1, "W")),
-        ("plant specific power", fmt(C["w_plant"], 3, "W/kg")),
-        ("plant mass", fmt(M["plant"], 1, "kg")),
+        ("excavation energy", fmt(C["dig_wh"], 1, "Wh/kg dug")),
+        ("beneficiation energy", fmt(C["benef_wh"], 1, "Wh/kg of product")),
+        ("water liberation energy", fmt(C["water_wh"], 1, "Wh/kg of water")),
+        ("water liberated", fmt(M["liberated"], 1, "kg")),
+        ("<strong>processing draw</strong>",
+         "<strong>%s</strong>" % fmt(M["draw"], 1, "W")),
+        ("plant specific power", fmt(C["plant_w_per_kg"], 3, "W/kg")),
+        ("<strong>plant mass</strong>",
+         "<strong>%s</strong>" % fmt(M["plant"], 1, "kg")),
     ]
     html_out = [
         h(2, "5. Power", "power"),
@@ -463,11 +717,14 @@ def s_power(out):
         html_out.append(note(
             "key",
             "The plant is a <strong>radioisotope source</strong>, flat at "
-            "about 5 W/kg wherever it is. Solar falls as 1/r2 and the two "
-            "cross near 3.46 AU, so a distant body is better served by "
-            "nuclear heat. It is not free: a radioisotope watt costs several "
-            "hundred times a solar one, and the binding constraint is Pu-238 "
-            "supply rather than money."))
+            "%s W/kg wherever it is. Solar falls as 1/r2 and the two cross "
+            "near 3.46 AU, so a distant body is better served by nuclear "
+            "heat. It is not free: this plant is priced at %s per watt "
+            "against a solar array's, and the binding constraint is not money "
+            "but Pu-238 supply -- DOE produces about 1.5 kg a year, roughly "
+            "one flagship RTG for the entire world, which is why a draw over "
+            "the ceiling makes a mission infeasible rather than expensive."
+            % (fmt(C["plant_w_per_kg"], 2), usd(C["plant_usd_per_w"]))))
     else:
         html_out.append(note(
             "key",
@@ -483,9 +740,22 @@ def s_power(out):
 
 def s_clock(out):
     """Section 6: how long the mission takes, and how often it repeats."""
-    M, DV = out["M"], out["DV"]
-    pairs = [
-        ("feed processed", fmt(M["feed"], 0, "kg")),
+    M, DV, C = out["M"], out["DV"], out["C"]
+    pairs = [("feed processed", fmt(M["feed"], 0, "kg"))]
+    if M["isru_feed"] > 0:
+        # ⚠️  WITHOUT THIS ROW THE TABLE DOES NOT ADD UP.  The dig time is on
+        # every kilogram the rig moves, and under ISRU that is the ore plus the
+        # rock the propellant is made from, which can be half as much again.
+        pairs += [("regolith dug for return propellant",
+                   fmt(M["isru_feed"], 0, "kg")),
+                  ("<strong>total rock moved</strong>",
+                   "<strong>%s</strong>" % fmt(M["feed"] + M["isru_feed"],
+                                               0, "kg"))]
+    pairs += [
+        # Without the rate the dig time is an assertion.  It is the rig's mass
+        # times its throughput per kilogram of rig, which is why a bigger rig
+        # is a faster one and why the rig mass appears in two cascades.
+        ("rig throughput", fmt(C["rate_kg_yr"], 0, "kg/yr")),
         ("dig time", fmt(M["dig_yr"], 4, "yr")),
         ("stay at the asteroid", fmt(M["stay"], 4, "yr")),
         ("outbound transfer", fmt(M["t_out"], 4, "yr")),
@@ -495,9 +765,12 @@ def s_clock(out):
         # and a page that shows only the winner cannot be checked against
         # itself: out + stay + back does not add up to the duration whenever
         # the electric floor is what binds, which on an EP mission is usual.
-        ("chemical fit: out + stay + back", fmt(M["chem_fit"], 4, "yr")),
-        ("electric floor: thrust time + stay",
-         fmt(M["electric_floor"], 4, "yr")),
+        ("transfer fit: out + stay + back", fmt(M["chem_fit"], 4, "yr")),
+    ]
+    if M["electric_floor"] > 0:
+        pairs.append(("electric floor: thrust time + stay",
+                      fmt(M["electric_floor"], 4, "yr")))
+    pairs += [
         ("<strong>mission duration</strong>",
          "<strong>%s</strong>" % fmt(M["duration"], 4, "yr")),
         ("campaign cadence", fmt(M["cadence"], 4, "yr")),
@@ -512,9 +785,14 @@ def s_clock(out):
         para("Extraction is rate-limited: the payload is capped by what the "
              "rig can dig inside the stay, and the dig time flows into "
              "operations cost, into the mission duration and into how often "
-             "the campaign can repeat. The duration is the longer of two "
-             "clocks: the transfers plus the stay, and the thrust time an "
-             "electric stage needs plus the stay."),
+             "the campaign can repeat."
+             + (" The duration is the longer of two clocks: the transfers "
+                "plus the stay, and the thrust time an electric stage needs "
+                "plus the stay."
+                if M["electric_floor"] > 0 else
+                " No electric stage is sized on this run, so there is no "
+                "thrust-time floor: the duration is the transfers plus the "
+                "stay.")),
         kv(pairs),
         para("The rig is retired by <strong>%s</strong>. It wears out on duty "
              "cycles as well as on a calendar, and the model takes whichever "
@@ -562,26 +840,101 @@ def s_hold(out):
     html_out.append(kv([
         ("blended value", usd(load["usd_per_kg"], 2) + " /kg"),
         ("cargo water", fmt(M["water"], 1, "kg")),
-        ("containment fraction", fmt(M["c_frac"], 5)),
+        # The sealed, shaded hold is charged on the VOLATILE fraction of the
+        # cargo, so it is payload-proportional exactly like the ore restraint
+        # it sits on top of, which is what lets it fold into f and leave the
+        # closed-form solver's algebra untouched.
+        ("containment rate", fmt(C["contain_per_kg"], 4, "kg per kg of water")),
+        ("containment fraction of payload", fmt(M["c_frac"], 5)),
+        ("containment mass", fmt(M["m_containment"], 1, "kg")),
     ]))
     return "".join(html_out)
 
 
+MARKET_PROSE = {
+    "capacity_cap":
+        "Prices are constant at any volume and what bounds a programme is how "
+        "much the destination can absorb while it waits. A bigger fleet "
+        "delivers more often, so each delivery gets a shorter slice of the "
+        "market's annual capacity.",
+    "elasticity":
+        "Prices BEND as a market fills rather than holding and refusing the "
+        "sale. Demand for precious metals is inelastic, so at the elasticity "
+        "this model uses, doubling world supply quarters the price, which is "
+        "why returning a tonne of platinum was never the business a "
+        "spot-price spreadsheet makes it look. Everything clears; it clears "
+        "for less.",
+    "unbounded":
+        "<strong>Nothing bounds the sale on this run.</strong> Any quantity "
+        "clears at the catalog price, which is a diagnostic rather than a "
+        "market: it is the free lunch every other model here exists to "
+        "refuse, and the programme search has no reason to stop growing.",
+    "single_mission":
+        "Prices are constant and the programme is pinned at one mission, so "
+        "there is no quantity for a market to notice and nothing to bound.",
+}
+
+
 def s_market(out):
-    """Section 8: what the load actually sells for."""
+    """Section 8: what the load actually sells for.
+
+    🚨  FOUR MODELS, AND THEY ARE NOT DEGREES OF ONE THING.  A demand curve
+    moves the PRICE and sells everything; a capacity ceiling holds the price
+    and clips the QUANTITY; the other two bound nothing at all.  The
+    diagnostics cross over with them, which is the part that misleads: under
+    `elasticity` the haircut is in `saturation_multiplier` and the clearing
+    fraction is 1.0, and under `capacity_cap` it is exactly the other way
+    round.  A section that showed one table whatever the mode would read as a
+    clean result rather than a wrong one.
+    """
     P, C = out["P"], out["C"]
     rev = P["rev"]
+    mode = rev.get("mode", "capacity_cap")
     frac = rev["surplus_frac"]
+    if mode in ("unbounded", "single_mission"):
+        return "".join([
+            h(2, "8. The market", "market"),
+            note("warn" if mode == "unbounded" else "ok",
+                 MARKET_PROSE[mode]),
+            kv([("gross value of the load", musd(rev["gross_base"])),
+                ("delivered value", usd(rev["delivered"], 2) + " /kg")]),
+        ])
+    if mode == "elasticity":
+        rows = [[esc(key), fmt(kg, 1),
+                 fmt(C["market_kg"].get(key, float("inf")), 0),
+                 sig(rev["multipliers"].get(key, 1.0), 6)]
+                for key, kg in sorted(rev["pooled"].items())]
+        return "".join([
+            h(2, "8. The market", "market"),
+            para(MARKET_PROSE[mode]),
+            eq("P / P0 = (1 + Q / Qm) ^ (-1 / eps)"),
+            note("key",
+                 "<strong>The rate that moves a price is the MARKET's, not "
+                 "one phase's share of it.</strong> Two phases selling into "
+                 "one market depress it together, so the quantities are "
+                 "pooled per market and each phase is then discounted at its "
+                 "market's multiplier. Asking the curve per phase asks it "
+                 "twice about half the quantity each time, which is a "
+                 "strictly smaller haircut than the truth. And the quantity "
+                 "is the PROGRAMME's: what is on the market at once is the "
+                 "fleet, because one rig serves its campaigns back to back "
+                 "while %s in flight concurrently."
+                 % ("a single rig puts one payload" if P["f"] == 1 else
+                    "%d rigs put %d payloads" % (P["f"], P["f"]))),
+            table(["market", "this programme delivers (kg)",
+                   "annual market (kg)", "price multiplier"], rows),
+            kv([("gross value at spot", musd(rev["gross_base"])),
+                ("value after the curve", musd(rev["capped"]["value"])),
+                ("saturation multiplier", sig(rev["sat"], 6)),
+                ("delivered value", usd(rev["delivered"], 2) + " /kg")]),
+        ])
     rows = []
     for key, allowance in sorted(rev["allow"].items()):
         rows.append([esc(key), fmt(C["market_kg"].get(key, float("inf")), 0),
                      fmt(allowance, 1)])
     html_out = [
         h(2, "8. The market", "market"),
-        para("Prices are constant at any volume and what bounds a programme "
-             "is how much the destination can absorb while it waits. A bigger "
-             "fleet delivers more often, so each delivery gets a shorter "
-             "slice of the market's annual capacity."),
+        para(MARKET_PROSE["capacity_cap"]),
         eq("allowance = ceiling_kg_per_yr * "
            "[duration + (N - 1) * cadence / F] / N"),
         kv([("accumulation window", fmt(rev["window"], 4, "yr")),
@@ -657,7 +1010,11 @@ def s_searches(out):
             ["N", "ships", "campaigns/ship", "cost", "expected revenue",
              "cost / revenue"], rows))
         html_out.append(para(
-            "%d programmes were priced; the best is N = %d."
+            "%d programmes were priced and the best twelve are shown; "
+            "the winner is N = %d. The ladder is geometric in the fleet and "
+            "exhaustive in campaigns-per-ship, then refined once around the "
+            "coarse winner, so it is not an exhaustive search and the rungs "
+            "above are the ones that survived it."
             % (len(ladder["coarse"]) + len(ladder["refine"]), out["P"]["n"])))
     else:
         html_out.append(h(3, "The programme"))
@@ -704,20 +1061,54 @@ def s_reliability(out):
 
 
 def s_cost(out):
-    """Section 11: the cost cascade, line by line."""
-    P = out["P"]
+    """Section 11: the cost cascade, line by line.
+
+    🚨  THREE OF THESE LINES ARE CHOSEN BY THE DESTINATION AND NOT BY THE
+    MISSION, so they are LABELLED by it too.  The vehicle that meets the cargo
+    is a lander at a surface base, a guided re-entry capsule if it comes home
+    and a passive berthing adapter at a depot, and those differ by more than
+    threefold per kilogram.  An Earth return also pays a recovery campaign and
+    the full launch-and-re-entry licence where an in-space delivery pays depot
+    handover and the launch-only one.  A page that called every one of them
+    "return capsule" would hide the largest single difference between two
+    destinations behind a constant label.
+    """
+    P, a = out["P"], architecture(out)
     cst = P["cost"]
     lines = cst["lines"]
+    vehicle_line = ("surface lander" if a["lander"]
+                    else "re-entry capsule" if a["to_earth"]
+                    else "berthing adapter")
     order = [("launch", "launch"), ("outbound propellant", "oprop"),
-             ("return propellant", "rprop"), ("mining rig share", "rig"),
-             ("return capsule", "capsule"), ("power system", "plant"),
-             ("electric stage", "ep"), ("tankage", "tank")]
-    rows = [[name, musd(lines[key])] for name, key in order if key in lines]
-    rows += [["operations", musd(cst["ops"])],
+             ("return propellant, made on site" if a["isru"]
+              else "return propellant", "rprop"),
+             ("mining rig share", "rig"), (vehicle_line, "capsule"),
+             ("power system", "plant"), ("electric stage", "ep"),
+             ("tankage", "tank"), ("heat shield", "tps")]
+    rows = [[name, musd(lines[key])] for name, key in order
+            if key in lines and lines[key]]
+    # ⚠️  THE SUBTOTAL, NOT JUST THE LINES.  `hardware_cost_usd` is the figure
+    # the mass ledger is checked against -- every kilogram in the cascade has a
+    # price in it and every kilogram it pays for is flown -- and the page
+    # printed its five components without ever printing the sum a reader would
+    # need to run that check.
+    rows += [["<strong>hardware subtotal</strong>",
+              "<strong>%s</strong>" % musd(cst["hardware"])],
+             ["operations", musd(cst["ops"])],
              ["spacecraft NRE / N", musd(cst["nre"])],
-             ["autonomy NRE / N", musd(cst["autonomy"])],
-             ["licensing", musd(cst["licensing"])],
-             ["berthing and handover", musd(cst["handover"])]]
+             ["autonomy NRE / N", musd(cst["autonomy"])]]
+    if cst["liability"] or cst["launch_ins"]:
+        # 🚨  A PREMIUM IS AN UPFRONT LINE, so it carries contingency and the
+        # full up-front compounding and is worth about twice its face value in
+        # the answer.  Costing it by its share of the total understates it by
+        # that factor, which is why it is listed rather than folded in.
+        rows += [["third-party liability", musd(cst["liability"])],
+                 ["launch insurance", musd(cst["launch_ins"])]]
+    rows += [
+             ["licensing: %s" % ("launch and re-entry" if a["to_earth"]
+                                 else "launch only"), musd(cst["licensing"])],
+             ["recovery campaign" if a["to_earth"] else "berthing and handover",
+              musd(cst["handover"])]]
     if cst["terminal"]:
         rows.append(["rig terminal value",
                      "-" + musd(cst["rig_credit_share"])])
@@ -763,6 +1154,17 @@ def s_cost(out):
             "every bucket is taken at face value and the programme calendar "
             "charge is inert with it: that term is time-value, and there is "
             "no rate for it to work on."))
+    if a["isru"]:
+        html_out.append(note(
+            "ok",
+            "The return propellant is billed at the ISRU processing rate "
+            "rather than at a launch-price-per-kilogram, and it is an "
+            "<strong>ongoing</strong> line rather than an up-front one: it is "
+            "manufactured at the asteroid over the mining duration, not "
+            "bought on Earth at year zero. That is worth more than the rate "
+            "itself when a cost of capital is charged, because an ongoing "
+            "line compounds over half the mission and an up-front one over "
+            "all of it."))
     if cst["lc"] != 1.0:
         html_out.append(para(
             "Recurring hardware is discounted by a learning curve to a "
@@ -783,8 +1185,20 @@ def s_answer(out):
         kv([("gross value of the load", musd(rev["capped"]["value"])),
             ("expected revenue", musd(P["expected"])),
             ("total cost", musd(P["cost"]["total"])),
+            ("profit", musd(P["expected"] - P["cost"]["total"])),
+            ("cost per kilogram returned",
+             usd(P["cost"]["total"] / out["M"]["m_pay"], 2) + " /kg"),
             ("<strong>cost / revenue</strong>",
              "<strong>%s x</strong>" % sig(P["obj"], 6))]),
+        # ⚠️  THE FILE IS SORTED ON PROFIT AND THE PROJECT RANKS ON THE RATIO,
+        # which are different questions and pick different rows.  Showing both
+        # is what stops a reader treating the first row of a catalog as its
+        # best case.
+        note("warn" if P["expected"] < P["cost"]["total"] else "ok",
+             "Profit and the ratio are <strong>different questions</strong>: "
+             "the output catalog is sorted by profit, and this project ranks "
+             "on cost over revenue. The best case is the lowest ratio, which "
+             "is not in general the first row of the file."),
         para("Lower is better and 1.0 is breakeven. This is the best case in "
              "the run that produced it, which is a statement about one body "
              "and one architecture rather than about asteroid mining."),
