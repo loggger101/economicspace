@@ -83,6 +83,13 @@ jobs:
       - name: Documentation checks
         run: python verify_docs.py
 
+      # Checks 1 to 5 are pure: the documented Stage 1 traps executed against
+      # synthetic frames, with no catalog, no network and no baseline. Checks
+      # 6 to 8 need the 868 MB catalog, which is gitignored, so they skip here
+      # and say so. That split is why this is worth gating on at all.
+      - name: Stage 1 derivation chain
+        run: python verify_stage1.py
+
       - name: Stage 3 seam
         env:
           SPACECOST_SOURCE: ${{ github.workspace }}/_spacecost
