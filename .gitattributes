@@ -24,6 +24,11 @@
 # platform probe's reference, read on both platforms.
 Dockerfile   text eol=lf
 *.json       text eol=lf
+# CI workflows are read by bash on a Linux runner. A CRLF here reaches
+# the shell as a trailing carriage return on every command, so this is
+# the same pin the rest of this file makes, for a file type that had none.
+*.yml        text eol=lf
+*.yaml       text eol=lf
 
 # Batch files are CRLF by convention, and this one is all labels, goto and
 # call -- which is exactly where an LF-only .bat is known to misbehave.

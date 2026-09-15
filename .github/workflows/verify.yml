@@ -1,0 +1,97 @@
+# The checks this repo can run WITHOUT the pipeline's inputs.
+#
+# WHAT IS HERE AND WHAT IS NOT.  `asteroid_pipeline/` is gitignored in full, so
+# a fresh clone has the code and none of the ~868 MB Stage 4 reads.  That rules
+# out `verify.py`, whose checks 1-5 all build cells; it stays a local
+# pre-commit harness run against a `.verify` baseline.  What CI can prove is
+# everything that needs no catalog: that `master.py` still matches the modules
+# it is generated from, that the docs still describe the code, and that the
+# Stage 3 split has not drifted.  Those are exactly the three that were
+# hand-run until 2026-09-15 and therefore run only when somebody remembered.
+#
+# platform_check.py is deliberately NOT a gate.  A GitHub runner is glibc on
+# x86-64 and the reference host is the Windows UCRT, so a libm probe DIFFERING
+# here is the expected answer rather than a finding -- CLAUDE.md's rule is "do
+# not file the deltas as regressions".  A gate that is red by construction is
+# the cry-wolf failure this repo already records twice, so it runs for the
+# report and cannot fail the job.
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out economicspace
+        uses: actions/checkout@v4
+
+      # 3.13 is what the Dockerfile and requirements-lock.txt pin, and what
+      # platform_reference.json was recorded on.  Not spelled more precisely
+      # than the minor: CLAUDE.md deletes the interpreter version from prose
+      # for the reason it rotted three times in six days, and the patch level
+      # is the runner's to choose.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # The lock pins the versions every committed number was measured on; it
+      # does NOT carry spacecost, which is a tagged git URL and lives in the
+      # loose list.  Installing both in ONE resolve means the `==` pins win and
+      # spacecost arrives at its pinned tag, with no version typed here.
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip
+          && python -m pip install -r requirements-lock.txt -r requirements.txt
+
+      # Read rather than typed.  verify_stage3.py already parses this out of
+      # requirements.txt, and reusing its parser is what stops CI becoming the
+      # fourth place a repin has to land.
+      - name: Resolve the pinned spacecost tag
+        id: spacecost
+        run: echo "tag=$(python -c 'import verify_stage3;
+          print(verify_stage3._pinned_tag())')" >> "$GITHUB_OUTPUT"
+
+      # `reference/` sits at spacecost's REPO root, so a pip install leaves it
+      # behind and verify_stage3.py check 4 skips.  A skip that fires on 100%
+      # of runs is a check that does not exist; checking the source out at the
+      # pinned tag is what makes that check actually run here.
+      - name: Check out spacecost at the pinned tag
+        uses: actions/checkout@v4
+        with:
+          repository: loggger101/spacecost
+          ref: ${{ steps.spacecost.outputs.tag }}
+          path: _spacecost
+          fetch-depth: 0
+
+      # CLAUDE.md names this as the sync check and nothing automated it:
+      # "git status immediately after a build is the sync check: clean means
+      # master.py matches the modules".  An edit made in master.py directly, or
+      # a module edit committed without a rebuild, is invisible until a run
+      # behaves differently.
+      - name: master.py is in sync with modules/
+        run: python build_master.py && git diff --exit-code -- master.py
+
+      - name: Documentation checks
+        run: python verify_docs.py
+
+      - name: Stage 3 seam
+        env:
+          SPACECOST_SOURCE: ${{ github.workspace }}/_spacecost
+        run: python verify_stage3.py
+
+      # Informational only: see the header.  What it is worth here is the
+      # answer to "how far does a Linux x86-64 runner diverge from the
+      # reference host", which is a question SPARK_SETUP.md asks and nothing
+      # had ever recorded.
+      - name: Numeric platform probes (report only, never a gate)
+        continue-on-error: true
+        run: python platform_check.py

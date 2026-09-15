@@ -795,6 +795,117 @@ def check_parallel(m, names: List[str], workers: int = 8) -> bool:
 # -----------------------------------------------------------------------------
 # BASELINE
 # -----------------------------------------------------------------------------
+# The paths whose content decides what a cell comes out as.  A baseline
+# captured while any of these was modified may already contain the change it
+# is supposed to predate, which is how check 1 comes to verify a change against
+# itself and report MATCH.  Docs, harnesses and campaign scripts are NOT here:
+# they cannot move a number, and failing on them would be the cry-wolf shape
+# this repo records twice.
+MODEL_PATHS = ("modules", "build_master.py", "master.py")
+
+
+def _git(*args: str):
+    """One git command in this repo, captured; None if git cannot answer.
+
+    Never raises.  A tree with no git at all is a legitimate place to run this
+    harness -- a Colab paste, an unpacked archive -- and the answer there is
+    "no provenance", which the caller records honestly rather than failing on.
+    """
+    import subprocess
+    try:
+        r = subprocess.run(("git", "-C", REPO) + args, capture_output=True,
+                           text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def _dirty_model_paths() -> Optional[List[str]]:
+    """Files under MODEL_PATHS that differ from HEAD; None if git cannot say.
+
+    🚨  `git diff`, NEVER `git status`, and on this working copy that is not a
+    style preference.  CLAUDE.md's "Google Drive makes the tree look dirty"
+    section documents Drive File Stream reporting a placeholder size of 16384
+    bytes when git stats a file just after checkout: `status` then calls it
+    modified WITHOUT READING IT, while `diff` compares content and shows
+    nothing.  A provenance check built on `status` would therefore condemn
+    every baseline taken on the reference machine, which is the one machine
+    that takes them.
+    """
+    out = _git("diff", "--name-only", "HEAD", "--", *MODEL_PATHS)
+    if out is None:
+        return None
+    return [line for line in out.splitlines() if line.strip()]
+
+
+def _provenance() -> Dict[str, Any]:
+    """What tree this baseline was taken on, recorded at capture time.
+
+    `cmd_baseline` cannot fail and says so, but it can WRITE DOWN enough for
+    `cmd_check` to fail later, which is the only point at which the question
+    matters.  Nothing is derived at check time: a baseline is compared against
+    the tree it was taken on, not the tree reading it.
+    """
+    dirty = _dirty_model_paths()
+    return {
+        "sha": _git("rev-parse", "HEAD"),
+        "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+        # None means git could not answer, and [] means it answered "clean".
+        # They are different facts and are kept apart on purpose: reading a
+        # missing answer as a clean one is how an unverifiable baseline would
+        # come to look like a good one.
+        "dirty_model": dirty,
+    }
+
+
+def report_provenance(index: Dict[str, Any], allow_dirty: bool) -> bool:
+    """Print where a baseline came from; False when it cannot support check 1.
+
+    THE FAILURE THIS CATCHES.  `cmd_baseline`'s own docstring says to run it on
+    a clean tree BEFORE the first edit, because "a baseline captured afterwards
+    verifies a change against itself".  That was a documented discipline with
+    nothing behind it, and its failure is silent in the worst way: check 1
+    prints MATCH on all four cells and the release note then argues from a
+    hash that compared the change to itself.
+
+    Three outcomes, kept distinct for the reason `verify_stage3.py` keeps its
+    three apart.  A baseline written before this field existed has no
+    provenance and is reported as such rather than assumed good; a clean one is
+    named; a baseline taken over a modified model path FAILS, and `--allow-
+    dirty-baseline` is the escape for the case where the edit was unrelated.
+    """
+    meta = index.get("_meta", {})
+    if "provenance" not in meta:
+        print("  provenance   not recorded (baseline predates this field)")
+        return True
+    prov = meta["provenance"] or {}
+    sha, branch = prov.get("sha"), prov.get("branch")
+    where = "%s (%s)" % (sha[:12], branch) if sha else "unknown commit"
+    dirty = prov.get("dirty_model")
+    if dirty is None:
+        print("  provenance   %s, tree state unknown (git could not answer)"
+              % where)
+        return True
+    if not dirty:
+        print("  provenance   %s, model paths clean" % where)
+        return True
+    print("  provenance   %s, and %d MODEL PATH(S) WERE MODIFIED when it was "
+          "taken:" % (where, len(dirty)))
+    for f in dirty[:8]:
+        print("                 %s" % f)
+    if len(dirty) > 8:
+        print("                 ... and %d more" % (len(dirty) - 8))
+    if allow_dirty:
+        print("  provenance   --allow-dirty-baseline given; continuing")
+        return True
+    print("  *** THIS BASELINE MAY ALREADY CONTAIN THE CHANGE IT PREDATES.")
+    print("      Check 1 would be comparing the change against itself, and it")
+    print("      would print MATCH. Re-take it on a clean tree:")
+    print("          %s verify.py baseline --tag <tag>" % _PY)
+    print("      or pass --allow-dirty-baseline if the edit above is unrelated.")
+    return False
+
+
 def baseline_dir(tag: str) -> str:
     """Directory holding one tagged baseline, under .verify/.
 
@@ -841,11 +952,19 @@ def cmd_baseline(args) -> int:
         print(f"  {name:13s} {len(df):4d} rows | {h} | "
               f"{time.perf_counter() - t0:5.1f}s")
     index["_meta"] = {"destination": DESTINATION,
-                      "calc_version": m.CALC_CONFIG.pipeline_version}
+                      "calc_version": m.CALC_CONFIG.pipeline_version,
+                      # Recorded HERE rather than derived at check time: the
+                      # question is what tree this was taken on, and by the
+                      # time anything reads it that tree is gone.
+                      "provenance": _provenance()}
     with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as f:
         json.dump(index, f, indent=2)
     print(f"\nWrote {len(args.cells)} cells at calc "
           f"{index['_meta']['calc_version']}")
+    # Said at capture as well as at check.  A baseline taken over a modified
+    # model path is recoverable in the ten seconds after it is written and
+    # expensive an hour later, when four cells have already printed MATCH.
+    report_provenance(index, allow_dirty=True)
     return 0
 
 
@@ -886,6 +1005,12 @@ def cmd_check(args) -> int:
     was = index.get("_meta", {}).get("calc_version", "?")
     print(f"\n1. BIT-IDENTITY vs baseline "
           f"(calc {was} -> {m.CALC_CONFIG.pipeline_version})")
+    # Tracked separately from `ok` and reported beside `unchecked` below,
+    # because it is the same kind of finding: not "a number moved" but "check 1
+    # could not answer the question it appears to have answered".
+    trustworthy = True
+    if index:
+        trustworthy = report_provenance(index, args.allow_dirty_baseline)
     for name in args.cells:
         df = run_cell(m, name)
         frames[name] = df
@@ -940,6 +1065,10 @@ def cmd_check(args) -> int:
         print("    Build a baseline on a CLEAN tree BEFORE editing:")
         print("        %s verify.py baseline --tag %s" % (_PY, args.tag))
         return 1
+    if not trustworthy:
+        print("\n*** NOT VERIFIED: the baseline was taken over a modified "
+              "model path, so check 1 cannot mean what it says. See above.")
+        return 1
     print("\n" + ("ALL CHECKS PASSED" if ok else "*** FAILURES ABOVE ***"))
     return 0 if ok else 1
 
@@ -977,6 +1106,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                    help="subset of: " + ", ".join(CELLS))
     p.add_argument("--skip", nargs="*", default=[], choices=("prune", "parallel"),
                    help="checks to skip while iterating")
+    # The escape, and it is deliberately not a `--skip` value: those turn off a
+    # check that would otherwise run, where this asserts something about the
+    # baseline that the harness cannot see for itself -- that the model paths
+    # modified when it was taken are unrelated to the change being verified.
+    # Only the person who made the edit knows that, so it has to be said out
+    # loud rather than defaulted.
+    p.add_argument("--allow-dirty-baseline", action="store_true",
+                   help="proceed even though the baseline was captured over a "
+                        "modified modules/ or build_master.py (say so only if "
+                        "that edit is unrelated to what you are verifying)")
     args = p.parse_args(argv)
     return {"baseline": cmd_baseline,
             "check": cmd_check,

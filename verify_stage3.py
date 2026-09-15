@@ -20,11 +20,21 @@ rather than merely unlikely:
                        `_check_config_surface()` in the adapter, which raises
                        rather than warns
     the OUTPUT         checked here, byte for byte
+    the BEHAVIOUR      `validate`'s sanity bands, against the one defect they
+                       are known to have had (check 5)
 
 ⚠️  `verify.py` DOES NOT COVER THIS.  Its own header says so: checks 1-5 cover
 Stage 4 and check 6 covers Stage 2's judgement tables, and "if you change Stage
 1, 2 or 3, this file is not your evidence".  That gap is exactly what this file
 fills, and it is why it is a separate script rather than a seventh check.
+
+✅  CHECK 5 CLOSES THE NAMED HALF OF THAT GAP.  `verify.py`'s header does not
+merely say Stage 3 is uncovered, it names the item: transportation 1.12.1's
+propellant-flag fix, which "had to be checked by running that function under
+`-W error::FutureWarning` instead".  That was a one-off run by hand, and the
+code it checks has since moved into `spacecost`, so nothing in either repo was
+holding it.  It is a check now.  What is still uncovered is Stage 1's
+derivation chain, which has no harness anywhere.
 
 ⚠️  IT NEVER TOUCHES THE REAL PIPELINE DIRECTORY.  Everything is built into a
 temporary directory.  Running Stage 3 against `asteroid_pipeline/` would
@@ -39,13 +49,16 @@ row and this repo has not caught up, or the adapter is no longer passing the
 settings through faithfully.  The report says which.
 """
 
+import contextlib
 import csv
 import dataclasses
 import datetime as _dt
 import hashlib
+import io
 import os
 import sys
 import tempfile
+import warnings
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 
@@ -76,6 +89,16 @@ SUMMARY = "transportation_summary.csv"
 
 
 def _sha(path: str) -> str:
+    """Hash of a file's RAW bytes, provenance columns included.
+
+    The counterpart to `_content_sha`, and the difference between them is the
+    whole of check 3 against check 4.  Check 3 compares two files this run
+    built moments apart, so every column including `catalog_date` must agree
+    and a raw hash is the strictest thing to compare.  Check 4 compares against
+    a file COMMITTED on some other day, where the stamp is guaranteed to differ
+    and says nothing, so it drops it first.  Using this one there is how that
+    check spent a day reporting `*** CONTENT MOVED ***` at a clock.
+    """
     with open(path, "rb") as fh:
         return hashlib.sha256(fh.read()).hexdigest()
 
@@ -271,6 +294,14 @@ def _reference_matches_tag(root: str, tag: str):
     """True / False / a string saying why the revision could not be proven."""
     import subprocess
     def git(*args):
+        """One git command inside `root`, captured rather than printed.
+
+        `-C root` rather than a `cwd` change: this runs inside a checkout that
+        is NOT this repo, and leaving the process directory where it was means
+        a caller added later cannot inherit a surprise.  Never raises on a
+        non-zero exit; every caller reads `.returncode` itself, because "the
+        tag is not here" is an ANSWER this check reports rather than an error.
+        """
         return subprocess.run(("git", "-C", root) + args, capture_output=True,
                               text=True, timeout=30)
     try:
@@ -339,7 +370,275 @@ def _quiet_build(fn):
         return fn()
 
 
+# A name no real propellant can collide with. It is searched for in the report
+# text rather than counted against a row total, so a table that grows a row
+# cannot move the answer.
+PROBE_NAME = "__verify_stage3_missing_flag_probe__"
+
+
+def _probe_row(columns, flagless: bool) -> dict:
+    """One synthetic propellant: implausible Isp, flag present or absent.
+
+    Isp 5 s is below `validate`'s 40 s floor, so a row that REACHES the band is
+    warned about and a row excluded from it is silent. That is the observable
+    this check turns the flag question into: `has_mass_ratio` is a local inside
+    `validate` and cannot be read from here, but whether the band still covers
+    the row can be.
+    """
+    import numpy as np
+    row = {c: np.nan for c in columns}
+    row.update(name=PROBE_NAME, type="chemical", status="concept", trl=1,
+               isp_vac_s=5.0, cost_usd_per_kg=1.0,
+               density_kg_per_L=1.0, tank_kg_per_L=0.05)
+    if not flagless:
+        row["propellantless"] = False
+    return row
+
+
+def _validate_report(spacecost, launch, prop, dv, ops) -> str:
+    """`validate`'s printed output, with FutureWarning promoted to an error.
+
+    The promotion is half the check. transportation 1.12.1 rejected
+    `.fillna(False).astype(bool)` because pandas raises `FutureWarning:
+    Downcasting object dtype arrays on .fillna is deprecated` on an object
+    column -- that is, the rejected fix would warn EXACTLY when it fired, on a
+    row like this probe. An edit that reaches for it again passes a silent run
+    and fails here.
+    """
+    buf = io.StringIO()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)
+        with contextlib.redirect_stdout(buf):
+            spacecost.validate_tables(launch, prop, dv, ops)
+    return buf.getvalue()
+
+
+def _probe_still_discriminates(prop) -> bool:
+    """True when the two spellings of `has_mass_ratio` disagree on the probe.
+
+    THE PROBE HAS TO BE ABLE TO FAIL. It detects the 1.12.1 regression only
+    while `~col.astype(bool)` and `col.ne(True)` actually differ on a missing
+    flag: the first reads NaN as True and drops the row, the second reads it as
+    "has a mass ratio" and keeps it. A pandas release that changed
+    `astype(bool)` on a NaN would make the two agree, and this check would then
+    pass forever while testing nothing -- the dead-diagnostic shape CLAUDE.md
+    records under "A diagnostic can go CONSTANT, and a constant reads exactly
+    like a clean result". So it is asserted rather than assumed.
+
+    An old expression that RAISES still discriminates: a crash is not the
+    silent drop this guards against.
+    """
+    try:
+        old = bool((~prop["propellantless"].astype(bool)).iloc[-1])
+    except Exception:                                      # noqa: BLE001
+        return True
+    new = bool(prop["propellantless"].ne(True).iloc[-1])
+    return old != new
+
+
+def check_validate_missing_flag(t) -> bool:
+    """Stage 3's sanity bands still cover a propellant row that omits the flag.
+
+    THE GAP THIS CLOSES. `verify.py`'s header says in as many words that
+    "Stage 3's validate()" is not covered by it, and names this exact item:
+    transportation 1.12.1's propellant-flag fix "lives in Stage 3's validate(),
+    which Stage 4 never calls, and had to be checked by running that function
+    under `-W error::FutureWarning` instead". That was done once, by hand,
+    which is the written-from-memory-and-thrown-away shape both harnesses argue
+    against, and the code it checks has since moved to another repository.
+
+    THE DEFECT. `~propellant_df["propellantless"].astype(bool)` is correct only
+    while every row states the flag, because pandas then infers dtype `bool`.
+    Add one row that omits it, the column comes back `object` with a NaN in it,
+    and `.astype(bool)` reads NaN as **True** -- so a propellant that forgot to
+    say it has a mass ratio is silently classed as a SAIL and dropped from the
+    Isp band and the price band at once. The checks would quietly stop covering
+    the row most likely to be new and wrong, which is the "wrong behaviour is
+    the quiet one" class exactly.
+
+    Three assertions, and the third keeps the other two honest: the probe warns
+    when the flag is present (so it is built correctly), it still warns when
+    the flag is missing (the invariant), and the two spellings genuinely
+    disagree on it (so the check can still fail).
+    """
+    import pandas as pd
+    import spacecost
+    from spacecost.prices import merge_propellant_prices
+
+    # Priced, because that is the frame `validate` is actually called with:
+    # `build` folds the fuel quotes in BEFORE validating, so `cost_usd_per_kg`
+    # exists by then and the raw loader's frame raises KeyError. An empty live
+    # frame is the `use_yfinance=False` path, so this needs no network.
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        launch = spacecost.load_launch_vehicles()
+        dv = spacecost.load_delta_v()
+        ops = spacecost.load_operational_costs()
+        prop = merge_propellant_prices(spacecost.load_propellants(),
+                                       pd.DataFrame())
+    spacecost.set_verbose(True)
+
+    def named(df) -> int:
+        """How many of `validate`'s report lines name the probe row."""
+        report = _validate_report(spacecost, launch, df, dv, ops)
+        return sum(PROBE_NAME in line for line in report.splitlines())
+
+    def with_probe(flagless):
+        """The reference table plus one probe row."""
+        extra = pd.DataFrame([_probe_row(prop.columns, flagless)])
+        return pd.concat([prop, extra], ignore_index=True)
+
+    try:
+        clean = named(prop)
+        with_flag = named(with_probe(False))
+        flagless_df = with_probe(True)
+        no_flag = named(flagless_df)
+        live = _probe_still_discriminates(flagless_df)
+    except Exception as exc:                               # noqa: BLE001
+        # Never a skip. This calls four public functions of a PINNED package;
+        # if one has changed shape, that is the drift this file exists to
+        # report, not a reason to pass quietly.
+        print("5. validate    *** COULD NOT RUN *** (%s: %s)"
+              % (type(exc).__name__, exc))
+        return False
+
+    ok = clean == 0 and with_flag == 1 and no_flag == 1 and live
+    print("5. validate    a propellant row with NO propellantless flag is %s"
+          % ("still covered by the sanity bands" if ok
+             else "*** DROPPED FROM THE SANITY BANDS ***"))
+    print("     probe named on %d line(s) clean / %d with the flag / %d without"
+          % (clean, with_flag, no_flag))
+    if not live:
+        print("     *** THE PROBE NO LONGER DISCRIMINATES: astype(bool) and "
+              "ne(True) agree on a missing flag on this pandas, so this check "
+              "tests nothing. Re-derive it before trusting a pass.")
+    if not ok and no_flag == 0:
+        print("     the flagless row was read as PROPELLANTLESS, which IS the "
+              "transportation 1.12.1 regression; see .ne(True) in "
+              "spacecost/validate.py")
+    return ok
+
+
+def _installed_revision():
+    """What revision pip actually installed, from the wheel's own metadata.
+
+    `direct_url.json` is written by pip for anything installed from a URL
+    (PEP 610) and records both the revision ASKED FOR and the commit it
+    RESOLVED TO. Returns `(requested, commit)`, either of which may be None, or
+    None entirely when the distribution was not installed from a direct URL --
+    an editable checkout, a local path, or one day PyPI.
+    """
+    import json
+    try:
+        import importlib.metadata as md
+        raw = md.distribution("spacecost").read_text("direct_url.json")
+    except Exception:                                      # noqa: BLE001
+        return None
+    if not raw:
+        return None
+    try:
+        info = json.loads(raw).get("vcs_info") or {}
+    except ValueError:
+        return None
+    return info.get("requested_revision"), info.get("commit_id")
+
+
+def check_installed_revision(t) -> bool:
+    """The package being driven is the one `requirements.txt` pins.
+
+    THE GAP THIS CLOSES, and it is the precondition for every check above.
+    Checks 1 to 5 all describe whatever `import spacecost` happens to reach.
+    Nothing asked whether that is the revision this repo pins, and the answer
+    is not inferable from anything they compare: `__version__` moves only on a
+    release, `DATA_VERSION` identifies the data CONTRACT rather than the
+    commit, and `reference/` is compared against a SOURCE CHECKOUT rather than
+    against the installed package. So `pip install -e ../spacecost` at a
+    checkout two commits past the tag passes all five while the pipeline runs
+    code this repo does not pin.
+
+    🚨  THAT IS THE PARALLEL-REPO DIVERGENCE WITH A PACKAGE MANAGER IN FRONT OF
+    IT. `1.0.6`, `1.1.4` and `1.3.6` each shipped as two different things the
+    last time this project had two sources of one truth, and what made it
+    expensive was that nothing checked.
+
+    Three outcomes, kept apart the way `_reference_dir`'s are. Installed from
+    the pinned tag is a pass and names the commit. Installed from a DIFFERENT
+    revision is a failure. Installed from something with no VCS metadata at all
+    -- editable, a local path, a future PyPI release -- is also a failure while
+    `requirements.txt` pins a git ref, because a git-pinned requirement that
+    produced a non-git install means something other than that pin put it
+    there.
+    """
+    tag = _pinned_tag()
+    rev = _installed_revision()
+
+    if not tag:
+        print("6. revision    *** the pinned ref could not be read from "
+              "requirements.txt ***")
+        return False
+
+    if rev is None:
+        print("6. revision    *** NOT INSTALLED FROM THE PINNED REF *** "
+              "(no VCS metadata)")
+        print("     requirements.txt pins %s, and the installed spacecost "
+              "carries no" % tag)
+        print("     direct_url.json, so it came from an editable checkout, a "
+              "local path or")
+        print("     a release. Whatever is being driven, it is not this pin.")
+        # `py` is the Windows launcher and exists nowhere else, so naming it
+        # unconditionally is wrong advice on the host most likely to need it.
+        # Not shared with verify.py: that is one expression, not a manifest.
+        launcher = "py" if os.name == "nt" else os.path.basename(sys.executable)
+        print("     Reinstall:  %s -m pip install -r requirements.txt" % launcher)
+        return False
+
+    requested, commit = rev
+    if requested != tag:
+        print("6. revision    *** INSTALLED REVISION IS NOT THE PINNED ONE ***")
+        print("     requirements.txt pins %s, pip installed %s (%s)"
+              % (tag, requested, (commit or "unknown commit")[:12]))
+        return False
+
+    # The tag RESOLVING to a different commit than the one installed means the
+    # tag itself has been moved, which a version string cannot show and which
+    # no other check here can see.
+    note = ""
+    root = os.environ.get("SPACECOST_SOURCE") or os.path.normpath(
+        os.path.join(REPO, os.pardir, "spacecost"))
+    if commit and os.path.isdir(os.path.join(root, ".git")):
+        state = _reference_matches_tag(root, tag)
+        if isinstance(state, str):
+            note = ", tag not resolvable here (%s)" % state
+        else:
+            import subprocess
+            try:
+                r = subprocess.run(
+                    ("git", "-C", root, "rev-parse", tag + "^{commit}"),
+                    capture_output=True, text=True, timeout=30)
+                at_tag = r.stdout.strip() if r.returncode == 0 else ""
+            except (OSError, subprocess.SubprocessError):
+                at_tag = ""
+            if at_tag and at_tag != commit:
+                print("6. revision    *** THE TAG HAS MOVED ***")
+                print("     installed %s, but %s now points at %s"
+                      % (commit[:12], tag, at_tag[:12]))
+                return False
+            if at_tag:
+                note = ", and %s still points there" % tag
+
+    print("6. revision    installed from %s at %s%s"
+          % (tag, (commit or "unknown")[:12], note))
+    return True
+
+
 def main() -> int:
+    """Run every check and return the process exit code.
+
+    Every check runs even after one fails.  The report is the point: a run that
+    stopped at the first mismatch could not tell "the package moved a row" from
+    "the adapter stopped passing the settings through", which is the one
+    distinction this file exists to make.
+    """
     print("=" * 70)
     print("  STAGE 3 VERIFICATION  -  economicspace adapter vs spacecost")
     print("=" * 70)
@@ -355,6 +654,8 @@ def main() -> int:
         check_data_contract(t),
         check_output(t, tmp),
         check_against_committed_reference(t, tmp),
+        check_validate_missing_flag(t),
+        check_installed_revision(t),
     ]
     print("-" * 70)
     if all(results):
