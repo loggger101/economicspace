@@ -604,6 +604,23 @@ def context(body, archived, tables):
         d_measured=(None if "diameter_km" not in body
                     or pd.isna(body["diameter_km"])
                     else float(body["diameter_km"])),
+        # ⚠️  WHERE THE DIAMETER CAME FROM IS A STAGE 1 QUESTION, AND THE
+        # COLUMN THAT ANSWERS IT IS NOT `diameter_km`.  Stage 1 writes its own
+        # H-and-albedo derivation back INTO `diameter_km`, so that column is
+        # populated on every row and `derive_body` takes the measured branch
+        # on every body -- which is correct arithmetic and a useless answer to
+        # "was this measured".  `diameter_source` is the one that knows.  It is
+        # carried for the document alone; nothing derived reads it.
+        d_source=(str(body["diameter_source"])
+                  if "diameter_source" in body
+                  and not pd.isna(body["diameter_source"]) else "unknown"),
+        # The albedo a reader should be shown, which is NOT the one the
+        # fallback derivation reads: `albedo_assumed_for_diameter` is
+        # populated only where an albedo had to be assumed, so on a body with
+        # a real measurement it is NaN and the page printed "nan".
+        albedo_measured=(None if "albedo" not in body
+                         or pd.isna(body["albedo"])
+                         else float(body["albedo"])),
         isp=float(pro["isp_vac_s"]),
         ve=float(pro["isp_vac_s"]) * G0,
         dv_penalty=float(pro["dv_penalty_factor"]),
@@ -662,7 +679,7 @@ def derive_body(C):
     vol = 4.0 / 3.0 * math.pi * r_m ** 3
     mass = C["rho"] * 1000.0 * vol
     return dict(d_km=d_km, r_m=r_m, r3=r_m ** 3, vol=vol, mass=mass,
-                diameter_route=route,
+                diameter_route=route, diameter_source=C.get("d_source"),
                 mineable=C["cfg"].max_mining_fraction * mass)
 
 
@@ -1256,11 +1273,21 @@ def check(derived, archived):
     build rather than copied forward.  A pure float comparison is the right
     test here and a tolerance is the wrong one: these are two statements of the
     same arithmetic, so anything past the last bit or two is a finding.
+
+    🚨  A QUANTITY THE ROW HAS NO COLUMN FOR IS SKIPPED, AND THE SKIP IS
+    REPORTED RATHER THAN SWALLOWED.  Skipping is right -- a calc 1.21.2 archive
+    has no `surplus_payload_kg`, and refusing over it would make every archived
+    cell unverifiable -- but a silent skip is this repo's most-catalogued
+    harness defect, and it is worse here than usual: the compared COUNT is the
+    only thing the footer prints, so a column renamed upstream would quietly
+    shrink the check while it still announced that everything agreed.  The
+    names come back with the result and the caller prints them.
     """
     exact = close = 0
-    worst, worst_name, bad = 0.0, "", []
+    worst, worst_name, bad, skipped = 0.0, "", [], []
     for name, ours in sorted(derived.items()):
         if name not in archived:
+            skipped.append(name)
             continue
         theirs = float(archived[name])
         if ours == theirs:
@@ -1274,7 +1301,8 @@ def check(derived, archived):
         else:
             bad.append((name, ours, theirs, rel))
     return {"n": exact + close + len(bad), "exact": exact, "close": close,
-            "bad": bad, "worst": worst, "worst_name": worst_name}
+            "bad": bad, "worst": worst, "worst_name": worst_name,
+            "skipped": skipped}
 
 
 def comparable(C, B, DV, M, P):
@@ -1482,6 +1510,9 @@ def main():
     print("  derived   %d quantities: %d bit-exact, %d within 1e-12, %d DIFFER"
           % (c["n"], c["exact"], c["close"], len(c["bad"])))
     print("  worst     %.3e relative  (%s)" % (c["worst"], c["worst_name"]))
+    if c["skipped"]:
+        print("  skipped   %d quantity(s) the row has no column for: %s"
+              % (len(c["skipped"]), ", ".join(c["skipped"])))
     for name, ours, theirs, rel in c["bad"]:
         print("     ! %-32s derived %r  row %r  rel %.3e"
               % (name, ours, theirs, rel))
