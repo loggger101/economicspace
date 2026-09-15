@@ -49,9 +49,17 @@ WORKDIR /work
 # Requirements copied on their own first so a source edit does not invalidate
 # the pip layer; the install is the slow half on aarch64, where a wheel that is
 # missing has to be built rather than downloaded.
-COPY requirements-lock.txt ./
+# requirements.txt comes along because spacecost is NOT in the lock file and
+# cannot be: it is a tagged git URL rather than a wheel pin. Installing only
+# the lock leaves an image with no Stage 3, and the failure is invisible on a
+# networked host because master.py pip-installs what is missing at import --
+# which means a git fetch at run time, inside the image that exists to BE the
+# reproducible environment. Both are resolved together so the `==` pins win
+# and spacecost still arrives at the tag requirements.txt names.
+COPY requirements-lock.txt requirements.txt ./
 RUN python -m pip install --no-cache-dir --upgrade pip \
- && python -m pip install --no-cache-dir -r requirements-lock.txt
+ && python -m pip install --no-cache-dir -r requirements-lock.txt \
+                                         -r requirements.txt
 
 COPY . .
 

@@ -298,7 +298,8 @@ _MASTER_REQUIRED = [
 # so it installs from a TAGGED git ref rather than by name.  The tag is pinned
 # rather than tracking main, because an untagged URL would silently change what
 # a Colab paste installs.
-# IF SPACECOST IS EVER PUBLISHED: put "spacecost==0.1.0" in requirements.txt
+# IF SPACECOST IS EVER PUBLISHED: put a pinned "spacecost==<version>" in
+# requirements.txt
 # and delete this dict; nothing else here changes.
 _MASTER_PIP_SPEC = {
     "spacecost": "git+https://github.com/loggger101/spacecost@v0.1.1",
