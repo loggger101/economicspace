@@ -434,8 +434,9 @@ def s_transfer(out):
     """Section 3: the patched-conic transfer and the launch window."""
     DV, C = out["DV"], out["C"]
     a = architecture(out)
+    # Only the CHOSEN apsis's legs are needed; the other one contributes just
+    # its round-trip total, for the sentence that says why it lost.
     chosen = DV["aph"] if a["apsis"] == "aphelion" else DV["peri"]
-    other = DV["peri"] if a["apsis"] == "aphelion" else DV["aph"]
     chosen_r = DV["aph_round"] if a["apsis"] == "aphelion" else DV["peri_round"]
     other_r = DV["peri_round"] if a["apsis"] == "aphelion" else DV["aph_round"]
     rows = [
