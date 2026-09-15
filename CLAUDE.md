@@ -51,6 +51,11 @@ through. Skim for the section that names what you are about to change.
 - [Model assumptions that are load-bearing](#model-assumptions-that-are-load-bearing)
 - [The older matrices, and the claims they retired](#the-older-matrices-and-the-claims-they-retired)
 - [The corrections the model accumulated](#the-corrections-the-model-accumulated)
+- [A check that the numbers are right is not a check that the page is complete](#a-check-that-the-numbers-are-right-is-not-a-check-that-the-page-is-complete)
+- [A flipped default breaks every reader that infers a run from the config](#a-flipped-default-breaks-every-reader-that-infers-a-run-from-the-config)
+- [A fixed point that carries its last pass makes the STOPPING TEST an answer](#a-fixed-point-that-carries-its-last-pass-makes-the-stopping-test-an-answer)
+- [`y * 365.25 * 24.0` is not `y * 8766.0`](#y--36525--240-is-not-y--87660)
+- [A Stage 2 catalog is priced for ONE destination](#a-stage-2-catalog-is-priced-for-one-destination-and-so-are-its-ceilings)
 - [Durable lessons from the release history](#durable-lessons-from-the-release-history)
 - [The verification harness is committed now](#the-verification-harness-is-committed-now)
 - [Stage 3 lives in another repository now](#stage-3-lives-in-another-repository-now)
@@ -2392,6 +2397,157 @@ without `regex=False` matches metacharacters. Each cost releases. The tell they
 share: **the dtype is inferred from the data**, so the code works on a small
 test slice and breaks at scale.
 
+### A CHECK THAT THE NUMBERS ARE RIGHT IS NOT A CHECK THAT THE PAGE IS COMPLETE
+
+`campaign/worked_calculation.py` compares every quantity it derives against the
+row the run produced, and a clean run of it says the document is CORRECT. It
+says nothing whatever about whether the document is complete, because a
+quantity that is never displayed is never compared either, and the two failures
+look identical from inside: zero differing, every time.
+
+✅  **The measurement is cheap and worth copying.** Render the page, pull every
+number out of the rendered text, and ask of each numeric column in the row
+whether any rendered number matches it at any precision the page might round
+to. A column with no match is a quantity the pipeline computed and the page
+does not show. On four mission shapes it came back with two:
+
+| what was missing | why it mattered |
+|---|---|
+| `hardware_cost_usd` | the page printed all five of its components and never their sum, which is the figure the mass ledger is checked against |
+| `profit_usd` | the output CSV is SORTED by it while the project ranks on the ratio, so a page showing only the ratio cannot explain its own file's order |
+
+⚠️  **Zero-valued columns match trivially and are not evidence.** Report how
+many columns were actually non-zero, or the audit will congratulate itself on a
+raw mission where a third of the ISRU and heat-shield columns are 0.0 and the
+page happens to print a 0 somewhere.
+
+🚨  **AND THE HARDER HALF IS THE ONE A COLUMN AUDIT CANNOT SEE: THE RATES.**
+Every output quantity was on the page and the page still could not be checked,
+because the reference-table constants that PRODUCE those quantities were being
+consumed silently -- a dig time with no rig throughput beside it, a power draw
+with none of its three energy rates, an electric stage with no per-newton or
+per-kilowatt figure, an alloy price with none of its element yields. Each is an
+input rather than an output, so no column names it and no comparison misses it.
+**Ask of every displayed number: could a reader reproduce this from what is
+also on the page?** Where the answer is no, the page is asking to be trusted,
+which is the one thing a worked calculation must never do.
+
+### A FLIPPED DEFAULT BREAKS EVERY READER THAT INFERS A RUN FROM THE CONFIG
+
+This file already records the harness side of this: when calc `1.21.0` made
+`market_model` something a cell could DIFFER on, `run_cell`'s reset list had to
+grow, and the entry there says *a field joins the explicit resets the moment a
+cell can differ on it*. **The reader side is the mirror image and is worse,
+because there is no list to grow.**
+
+`campaign/worked_calculation.py` derives a document ABOUT one archived row, so
+it has to know which optional terms that row carried. Most of them it reads off
+the row. The surplus tier it read off the **live config**, and for one release
+that was invisibly fine: `sell_surplus_at_discount` defaulted False, so config
+and row agreed by luck on every run anybody made.
+
+🚨  **calc `1.22.0` FLIPPED IT, AND EVERY HARD-WALL ROW STARTED BEING READ
+BACKWARDS.** That is not a corner: it is the whole 2026-09 campaign and any
+`--no-surplus-sales` run. Measured on a 400-row hard-wall cell before the fix,
+**five columns DIFFER**, including `gross_value_usd` by 0.93%, because the
+derivation priced a discounted second tier the run never had.
+
+✅  **The flag was recoverable from the row all along, and the docstring that
+said otherwise was answering a different question.** It said the surplus
+FRACTION is not recoverable from a row whose surplus is zero, which is true; a
+mass does not carry the price it fetched. But `unsold_payload_kg` and
+`surplus_payload_kg` are exclusive by construction, so mass landing in the
+first is positive proof the run abandoned it. **Check whether the FLAG is
+recoverable separately from whether its PARAMETER is.**
+
+⚠️  **What made this survivable is a property of the checker, not of the
+reader**: every remaining config dial has a column in the compared set, so a
+disagreement fails loudly rather than producing a confident wrong document.
+That list is written out at `terms_in_force`, beside the inference it protects.
+**Delete a column from `comparable()` and you silently delete a guard.**
+
+✅  The general rule: **a release that flips a default has to be chased into
+everything that READS a result, not only into everything that produces one.**
+The producers are checked; a reader is usually one `getattr` and nobody's list.
+
+### A fixed point that carries its last pass makes the STOPPING TEST an answer
+
+From generalising `campaign/worked_calculation.py` past cislunar, and it is the
+sharpest instance in this project of a defect that lives in a loop's exit
+rather than in its body.
+
+`_evaluate_combo_at_ratio`'s sizing loop does **not** re-solve the cascade once
+it converges: the payload carried forward is the last one solved INSIDE the
+loop, at the previous pass's hardware. This file already records that as a
+thing not to "fix". What it did not record is the consequence, which is that
+**the convergence test decides which pass you keep**, so a test that stops one
+pass early keeps a different mission.
+
+The derivation had three of the model's five conditions. The two it was missing
+are the ISRU feed, which is identically zero on most rows, and **the stay**,
+which feeds nothing else at all unless the propellant boils off. A term that
+changes no value and only decides when to stop reads exactly like a term that
+cannot matter.
+
+| | |
+|---|---|
+| what it moved at `cislunar` | nothing; the loop happened to stop on the same pass |
+| what it moved at `earth_surface` | every mass by ~0.1%, which put the launch stack 0.06% OVER the vehicle |
+| what that looked like | `no concentration ratio closes a mission on this body`, about a body that closes fine |
+
+⚠️  **And the misdiagnosis is the part to learn from.** The symptom was read as
+"the derived EP stage runs about 0.8% over", because the EP stage is what the
+eye lands on when an electric mission is a few kilograms too heavy. The EP
+stage was **0.008%** off. Everything was 0.1% off, uniformly, which is the
+signature of an upstream scalar rather than of a term. **When every mass in a
+cascade is out by the same fraction, look for what set the payload, not for the
+biggest number downstream of it.**
+
+✅  **The general rule: an iterative solver's exit condition is part of its
+output whenever it does not re-solve at the fixed point.** Reproduce the test
+term for term, including the terms that are inert in the case you are looking
+at; they are the ones that will not be inert somewhere else.
+
+### `y * 365.25 * 24.0` is not `y * 8766.0`
+
+The same pass, and it is small, exact and worth knowing. Float multiplication
+does not associate. `processing_power_w` divides by `duration_yr * 365.25 *
+24.0`, which rounds twice; a pre-multiplied hours-per-year constant rounds
+once. **They disagree in the last bit on about 28% of the durations this model
+produces**, which is enough to move a power draw, an array mass and every cost
+downstream of it off bit-exact and into "agrees to 1e-16".
+
+That is still agreement, and it is not the standard this project argues its
+releases from. One rounding is not more accurate than two here; it is a
+different number, and the one that matters is the model's. Matching the
+association moved seven quantities per cell from "close" to exact.
+
+⚠️  **The same rule is already written down for sums** (three sums stay written
+out term by term because pre-adding would re-associate). It applies to products
+in exactly the same way, and a named constant is the easiest way to break it,
+because a constant looks like a tidying and not like arithmetic.
+
+### A Stage 2 catalog is priced for ONE destination, and so are its ceilings
+
+The destination trap arriving from the reference-data side. `preflight()`
+refuses a Stage 4 run whose prices disagree with its architecture; nothing
+refuses a **reader** that loads the live `mineral_value_catalog.csv` to
+interpret an archived cell from somewhere else.
+
+Both halves of that file are destination-specific and only one of them is
+obvious: `delivered_value_usd_per_kg` is what a kilogram fetches THERE, and
+`annual_market_kg` is **routed**, so a commodity flown home is bounded by world
+production while the same commodity sold at a depot is bounded by that depot's
+import budget. Reading the live catalog for an archived `geo` cell prices the
+ore at cislunar rates and bounds it against cislunar ceilings, and nothing
+raises: every column exists and every number is plausible.
+
+✅  The fix is to key the prices off the ROW like everything else, and the
+campaign's frozen `campaign/stage2/mineral_value_catalog.<dest>.csv` is what
+makes that possible without a Stage 2 run. **If you write anything that reads a
+catalog to interpret a result, ask which destination the result was for before
+you ask anything else.**
+
 ### A number is calibrated FOR a term, and swapping the term re-reads it
 
 calc `1.21.1`, and the most reusable thing in it. `IN_SPACE_ANNUAL_DEMAND_KG`
@@ -3291,6 +3447,17 @@ Undoing any of these silently corrupts the output:
   is `int64` and works, and the same code silently breaks the moment one
   unnumbered row appears. Anything that tests clean at a small row cap and is
   only ever run at a large one is a candidate for this. See the v1.1.0 entry.
+- **Read `designation` as a string, explicitly, wherever a slice of a catalog
+  is parsed.** A numbered asteroid's designation looks like an integer, so a
+  `read_csv` over a handful of streamed lines infers `int64` whenever every
+  line in that slice happens to be a numbered body, and `frame["designation"]
+  == "69260"` then matches nothing. The failure is "expected one row, found 0"
+  about a body that is right there in the file. It is the same
+  dtype-inferred-from-the-data shape as the two entries below and above it,
+  and it has the same tell: it works on a slice containing one provisional
+  designation and fails on a slice that does not, so it survives every small
+  test. `dtype={"designation": str}` at the read is the fix; `.astype(str)`
+  after the fact is NOT, because a float64 column renders as `"69260.0"`.
 - **`str.contains` needs `regex=False`** in every lookup helper. Designations
   and mineral names carry regex metacharacters, so `"(1) Ceres"` matched
   `"1 Ceres"` and unbalanced brackets raised `re.PatternError`.
@@ -3800,12 +3967,33 @@ quoting was verified separately, on the throwaway `.bat` and `.vbs` pair
 described above, because that line is where a quoting bug would live and it is
 not exercised by double-clicking the file.
 
-⚠️  **`campaign/` holds a fourth way in, and it is not in that table because it
-does not import master at all.** `campaign/run_cell.py` shells out to
-`run_pipeline.py` as a SUBPROCESS, one per cell, which is why it inherits
-`preflight()` and cannot hit the destination trap; the other campaign scripts
-read archived CSVs and never build a stage. If you add a Stage-4-only entry
-point that does not go through `run_pipeline.py`, call `preflight()` from it.
+⚠️  **`campaign/` holds two more ways in, and they reach the model
+differently.** `campaign/run_cell.py` shells out to `run_pipeline.py` as a
+SUBPROCESS, one per cell, which is why it inherits `preflight()` and cannot
+hit the destination trap; `analyse.py` and `population.py` read archived CSVs
+and never build a stage. If you add a Stage-4-only entry point that does not
+go through `run_pipeline.py`, call `preflight()` from it.
+
+🚨  **`campaign/worked_calculation.py` IS THE ONE CAMPAIGN SCRIPT THAT
+IMPORTS MASTER, and it answers the destination trap in a way `preflight()`
+cannot.** It re-derives every figure behind one finished mission and checks the
+derivation against that mission's own archived row, so the destination it must
+agree with is the row's and not the config's. It therefore reads
+`delivery_destination` off the ROW and replaces the config to match, which is
+strictly stronger than refusing a mismatch: there is nothing to refuse, because
+the run being documented already chose. ⚠️  **Do not "fix" it by adding
+`preflight()`**; that would make it refuse exactly the archived cells it exists
+to read. It builds no stage and fetches nothing, so it cannot destroy a
+baseline.
+
+⚠️  **It picks the Stage 2 PRICES off the row for the same reason**, from
+the live catalog when that catalog says it is the right one and from
+`campaign/stage2/` otherwise. See
+[a Stage 2 catalog is priced for ONE destination](#a-stage-2-catalog-is-priced-for-one-destination-and-so-are-its-ceilings);
+the ceilings are routed per destination as well as the prices, so the live
+catalog is wrong for an archived cell from anywhere else and nothing about it
+looks wrong.
+
 `run.bat` is a launcher only; it adds no default the pipeline does not already
 have, except that its `quick` / `standard` presets cap rows and fly raw ore at
 N = 1 rather than starting the tens-of-hours default cell on a double-click.

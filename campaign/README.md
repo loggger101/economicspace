@@ -95,6 +95,73 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       those tables and supersedes `rig_bounds.py` and `extra_checks.py`, which
       are kept only because the 2026-08 archive's FINDINGS.md names them.
       Same caution as `analyse.py`: do not run it while a cell is timing.
+  `worked_calculation.py`  the 20-page worked derivation of ONE mission: the
+      best case of whatever finished results are on disk, compared across the
+      live Stage 4 catalog and every archived cell, so "which one" is a
+      measurement rather than whichever file got passed in.  Every figure is
+      re-derived from the equations and then checked column by column against
+      that mission's own row; `--verify` runs the check and writes nothing,
+      `--pdf` renders with headless Chrome, `--cell` and `--designation`
+      override the choice.  It is the only script here that imports `master`,
+      and the only campaign output that is gitignored rather than committed,
+      because it is generated from the run it describes.
+  `worked_calculation_doc.py`  the renderer that script writes through.  It
+      decides what to say and in what order and computes no model quantity of
+      its own; the prose branches on the derived shape, so a raw
+      single-mission document and a beneficiated searched one are different
+      documents rather than one with blanks in it.
+
+  ✅  It covers every destination and every architecture the search can
+  choose: seven destinations, both ore states, both programme settings,
+  aerocapture and the heat shield, ISRU return propellant, chemical as well as
+  electric propulsion, radioisotope power, cryogenic boil-off, all four market
+  models and insurance.
+
+  🚨  EVERY CONFIG DIAL WAS THEN AUDITED BY FLIPPING IT, because "which
+  switches could make this document wrong" is a question to measure rather
+  than reason about.  One 300-row cell per switch, each documented, and the
+  dials sort into three groups that are worth telling apart:
+
+    FOLLOWED   read off the ROW, so the live config cannot disagree: the
+               destination, the market model, insurance, reliability, the
+               learning curve, the cost of capital, the surplus flag, the
+               programme search and its N, `model_tank_mass` (via
+               `tank_mass_frac`), `model_eclipse_power` (via
+               `array_oversize_factor`), `model_low_thrust_time` (via
+               `ep_thrust_yr`) and `model_launch_windows` (via
+               `launch_window_wait_yr`).
+    REFUSED    named by the guard rather than approximated: an unknown
+               destination, a power source that is neither solar nor RTG, the
+               fallback delta-v pair, and `model_rig_service_life` off, which
+               stops being a dial and becomes a different programme.
+    CAUGHT     still read from the live config, every one with a compared
+               column that fails loudly if it disagrees: `max_fleet_ships` and
+               `programme_search_steps` (`programme_options_priced`),
+               `concentration_search_steps` (`concentration_ratio`),
+               `demand_elasticity` (`saturation_multiplier`),
+               `surplus_price_fraction`, `model_rig_trip_limit`
+               (`rig_terminal_value_usd`), and every physical scalar.
+
+  ⚠️  `model_rig_trip_limit` is the ONE dial a row cannot settle, and the
+  reason is worth knowing rather than looking for a column that would: wherever
+  the calendar bound binds first, `trips_per_ship` comes out the same either
+  way and `rig_trip_limit_binds` reads False in both.  The two readings differ
+  only in the salvage credit.  Do not "fix" it by trying both and keeping
+  whichever matches.
+
+  A refusal or a red check is the correct outcome in every case above.  A
+  document that quietly describes the wrong mission is the failure all of this
+  exists to prevent.
+
+  ✅  COMPLETENESS WAS THEN MEASURED SEPARATELY, because a clean check says
+  the page is CORRECT and says nothing about whether it is whole: a quantity
+  that is never displayed is never compared either.  Rendering the page,
+  pulling every number out of it and matching each against the row's columns
+  finds nothing missing on four mission shapes, over 97 to 109 non-zero
+  columns each.  The rates behind those quantities are on the page too -- the
+  rig's throughput, the three processing energies, the electric stage's
+  per-newton and per-kilowatt figures, the alloy's element yields -- so every
+  displayed number can be reproduced from the page rather than taken on trust.
 
 Per cell: `profitability_catalog.csv` is archived gzipped to `cells/` and one
 row is appended to `results.csv`.
