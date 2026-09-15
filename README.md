@@ -338,7 +338,7 @@ py run_pipeline.py --stages 4 --destination cislunar --raw --no-search \
 ```
 
 That command reproduces the committed v1.21.2 sample cell exactly: **25.7233x
-on 155 evaluable rows, 2025 SV5**. Individually, `--no-surplus-sales` restores
+on 155 evaluable rows, 2017 KJ5**. Individually, `--no-surplus-sales` restores
 the v1.21.0 hard wall (and `--surplus-fraction F` sets what the surplus fetches
 otherwise, 0.0 to 1.0, refused outside it), `--reliability` puts the
 `P(launch) x P(cruise) x P(mining)` discount back on revenue,
