@@ -2881,7 +2881,7 @@ optimistic is real work.
 
 🚨  **Do not approximate it.** A bound that is occasionally too tight silently
 drops winners, and it drops them **without changing the row count**, which is
-the one failure mode none of `verify.py`'s six checks would catch.
+the one failure mode none of `verify.py`'s checks would catch.
 
 ⚠️  Neither `1.17.4`'s pre-filter nor `1.17.7`'s cache bound is a precedent for
 it. The first prunes on **feasibility**, which is monotone in two masses and
@@ -3005,8 +3005,11 @@ quantity THE SAMPLING RULE turns out to cover.
 
 ## The verification harness is committed now
 
-`verify.py`, at the repo root. It is the six checks every release in
-`versions.md` argues from, written down once. **What they are and how to run
+`verify.py`, at the repo root. It is the checks every release in
+`versions.md` argues from, written down once. ⚠️  **Count them in its own
+header rather than quoting a number here**; both documents said "six" of seven
+from the day check 7 landed, in five places between them, which is this file's
+own counts-in-prose failure committed in the section about verification. **What they are and how to run
 them is in [README.md](README.md#verifying-a-change)**; what is here is why it
 exists and how it fails.
 
@@ -3370,6 +3373,33 @@ so that drift cannot be committed:
 | the **data** | one copy, in spacecost; this repo holds none | nothing can drift |
 | the **dials** | ten fields, mirrored, compared at import time | `_check_config_surface()` raises, so the import fails, not the run |
 | the **output** | six CSVs, byte for byte, both paths | `verify_stage3.py`, which names the file and the side |
+| the **behaviour** | `validate()`'s sanity bands, driven against the one defect they are known to have had | `verify_stage3.py` check 5 |
+| the **revision** | pip's `direct_url.json` against the pinned tag | `verify_stage3.py` check 6 |
+| the **pin itself** | its two typed copies, held to each other | `verify_docs.py` check 7 |
+
+🚨  **THE PIN WAS TYPED TWICE AND COMPARED NOWHERE, UNTIL 2026-09-15.** The
+tagged git URL lives in `requirements.txt`, which `pip install -r` reads, and
+in `_MASTER_PIP_SPEC` in `build_master.py`, which is written into `master.py`
+and auto-installs at import for the Colab paste. Check 7 reduced every
+requirement line to its **distribution name** before comparing, so the tag was
+thrown away and the second copy was compared with nothing. **A one-line repin
+of either alone is the parallel-repo divergence**: the two paths install
+different revisions of the reference tables, both import cleanly, and every
+stamp in this repo still reads `transportation 1.14.0`, because that stamp
+identifies the data CONTRACT and not the commit. The two are held to each other
+now, and the check was verified by repinning one and watching it go red.
+
+⚠️  **AND THE PINNED ENVIRONMENT DID NOT CONTAIN STAGE 3 AT ALL.**
+`requirements-lock.txt` holds eleven `==` pins and no spacecost, because a
+tagged git URL is not a wheel pin and `--only-binary` refuses it by
+construction. Both consumers of that file, `./run.sh setup` and the
+`Dockerfile`, therefore built an environment where `import transportation`
+cannot work. Nobody noticed because `master.py` pip-installs whatever is
+missing at import, so a NETWORKED host self-heals on first run -- which means a
+git fetch at run time, inside the environment whose entire purpose is to be the
+one the numbers were measured on, and an outright failure on an offline one.
+Both now install the spacecost line out of `requirements.txt` alongside the
+lock, so the tag is still pinned in one place and the environment is complete.
 
 ⚠️  **The dials are the mirrored surface, and they are mirrored on purpose.**
 Two of the ten defaults are this project's rather than a library's:
@@ -3511,6 +3541,12 @@ Undoing any of these silently corrupts the output:
   missing *figure* was invisible to a column test, and `_MODULE3_REQUIRED_OPS`
   now names each row Stage 4 needs alongside the model term its absence
   silently reverts. That closed the missing-row half.
+
+  ✅  **THE REPIN HALF OF THIS IS CHECKED NOW.** `verify_docs.py` check 7
+  holds the tag in `requirements.txt` to the one in `_MASTER_PIP_SPEC`, and
+  `verify_stage3.py` check 6 holds the INSTALLED revision to both. What is
+  still on you is cutting the release: neither check can tell "the tag has not
+  been repinned" from "the edit was never released".
 
   🚨  **A MODULE 3 TABLE IS NOW A `spacecost` EDIT, AND THAT IS FOUR STEPS, NOT
   ONE.** Change the row there, bump its `pipeline_version` if the number moves,
@@ -3883,8 +3919,9 @@ first three import master".
 |---|---|---|
 | `run_pipeline.py` | yes | headless CLI: `--preset`, `--stages`, `--destination`, row caps |
 | `ui.py` | yes | Streamlit dashboard |
-| `verify.py` | yes | the six release checks |
-| `verify_stage3.py` | no | the Stage 3 seam: this repo's adapter against the `spacecost` package it drives. Builds into a temp dir, needs no baseline and no network |
+| `verify.py` | yes | the release checks; count them in its own header rather than quoting a number here |
+| `verify_stage3.py` | no | the Stage 3 seam: this repo's adapter against the `spacecost` package it drives. Builds into a temp dir, needs no baseline and no network. Its last check drives `validate()` rather than comparing bytes, and is the only coverage Stage 3's behaviour has |
+| `.github/workflows/verify.yml` | no | CI: the build-sync check, the docs checks, the Stage 3 seam, and `platform_check.py` as a report. **Not `verify.py`**, which needs inputs no clone has |
 | `verify_docs.py` | no | the **docs** checks; it imports master and the four configs for checks 8 and 9, but never builds a stage. Count them in its own docstring rather than quoting a number here |
 | `run.bat` | no | Windows launcher: a terminal menu over `run_pipeline.py`, `verify.py`, `build_master.py` and the dashboard. No model behaviour of its own |
 | `_START HERE.vbs` | no | double-click entry point, starts the dashboard with no console, ever |

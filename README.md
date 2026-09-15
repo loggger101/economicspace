@@ -67,10 +67,11 @@ run.bat                Windows launcher: a terminal menu over everything below
 run.sh                 Linux / macOS launcher: the same options, POSIX
 run_pipeline.py        Headless CLI the launcher drives (presets + flags)
 build_master.py        Build tool: assembles modules/ into master.py
-verify.py              Release verification: the six checks every change runs
+verify.py              Release verification: the checks every change runs
 verify_stage3.py       Stage 3 verification: this repo and spacecost agree
 verify_docs.py         Docs verification: the docs still describe the code
 platform_check.py      Can THIS host reproduce the committed numbers? ~10 s
+.github/workflows/     CI: the checks that need no catalog, run on every push
 platform_reference.json  What it compares against, recorded on the ref host
 requirements-lock.txt  The exact versions every committed number was measured on
 Dockerfile             Container image for a second host. No CUDA layer, on purpose
@@ -598,7 +599,7 @@ reads the reference tables and writes nothing, so since calc **v1.10.1** it
 does that across a process pool instead of on one core.
 
 **No number changes.** Serial and parallel output is byte-identical, and that
-is one of the six checks `verify.py` runs on every release. Chunks are consumed
+is one of the checks `verify.py` runs on every release. Chunks are consumed
 in submission order specifically so that the row order, and therefore the
 ordering of `profit_usd` ties under a non-stable sort, is unchanged.
 
@@ -706,6 +707,26 @@ section about verification.
 works on any tree and is the fast way to check an upstream table edit;
 `--cells` takes a subset.
 
+🚨  **"On a clean tree, before editing" is enforced now, not merely asked
+for.** It was a documented discipline with nothing behind it, and its failure
+is silent in the worst way: baseline a tree that already carries the change and
+check 1 compares the change against itself and prints **MATCH** on all four
+cells, which is then what the release note argues from. `baseline` records the
+commit it was taken on and whether `modules/`, `build_master.py` or `master.py`
+differed from HEAD at the time; `check` reads that back and **refuses** a
+baseline taken over a modified model path, the same way it refuses one that is
+missing. Pass `--allow-dirty-baseline` when the edit really was unrelated,
+which only the person who made it can know.
+
+⚠️  Docs, harnesses and campaign scripts are deliberately **not** model paths:
+they cannot move a number, and failing on them would be the cry-wolf shape this
+repo records twice. ⚠️  And the dirtiness test is `git diff`, never
+`git status`, because on a Google Drive working copy `status` reports files as
+modified without reading them; see
+[the Drive stat-cache trap](CLAUDE.md#google-drive-makes-the-tree-look-dirty-run-the-hooks).
+A baseline written before this field existed reports `not recorded` and is
+allowed through, since nothing can be inferred about a tree that is gone.
+
 ⚠️  A full `check` builds about twenty cells and takes **roughly half an hour**.
 Most of that is check 2; turning the pre-filter off is exactly what v1.14.1 and
 v1.17.4 exist to avoid, so an unpruned cell runs the entire search. Iterate with
@@ -746,12 +767,28 @@ it needs no baseline and no network, and it takes a few seconds:
 py verify_stage3.py
 ```
 
-It asserts four things: the ten config dials match the package's field for
+It asserts six things: the ten config dials match the package's field for
 field, the `pipeline_version` this repo stamps is the package's data-contract
 version, the six CSVs are byte identical whether built through the adapter or
-through the package directly, and the five tables match the CSVs spacecost
-commits under `reference/`. The third would still pass if both sides moved
-together, which is what the fourth is for.
+through the package directly, the five tables match the CSVs spacecost commits
+under `reference/`, Stage 3's `validate()` still covers a propellant row that
+omits its `propellantless` flag, and the spacecost that is actually INSTALLED
+is the revision `requirements.txt` pins. The third would still pass if both
+sides moved together, which is what the fourth is for; the fifth is the only
+one that checks BEHAVIOUR rather than bytes; and the sixth is the precondition
+for all of them.
+
+🚨  **Check 6 is the precondition, and it was missing until 2026-09-15.** Every
+other check here describes whatever `import spacecost` happens to reach, and
+none of them can tell you whether that is the pinned revision: `__version__`
+moves only on a release, `DATA_VERSION` identifies the data *contract* rather
+than the commit, and `reference/` is compared against a source checkout rather
+than against the installed package. So `pip install -e ../spacecost` at a
+checkout past the tag passed all five while the pipeline ran code this repo
+does not pin. It now reads pip's own `direct_url.json` (PEP 610), which records
+both the revision asked for and the commit it resolved to, and fails on a
+different revision, on an install with no VCS metadata at all, and on a tag
+that has been **moved** since the install.
 
 🚨  **Check 4 needs a spacecost SOURCE CHECKOUT, and until 2026-09-08 it had
 never once run.** `reference/` sits at spacecost's repo root rather than inside
@@ -784,6 +821,49 @@ every check here and still be wrong**: v1.12.1's propellant-flag fix lives in
 Stage 3's `validate()`, which Stage 4 never calls, and had to be checked by
 running that function under `-W error::FutureWarning` instead. If you change
 Stage 1, 2 or 3, this file is not your evidence.
+
+✅  **That named item is a check now**, `verify_stage3.py`'s fifth. It adds one
+synthetic propellant with an implausible Isp and no `propellantless` flag and
+asserts the sanity bands still warn about it, under `-W error::FutureWarning`
+so that the `.fillna(False).astype(bool)` spelling v1.12.1 rejected fails here
+rather than passing quietly. It also asserts the probe still
+**discriminates**: the regression is only detectable while `~col.astype(bool)`
+and `col.ne(True)` disagree about a missing flag, and a pandas release that
+made them agree would leave the check passing forever while testing nothing.
+⚠️  **Stage 1's derivation chain still has no harness anywhere.**
+
+### What runs automatically
+
+Everything above is a command somebody has to remember. Since 2026-09-15 the
+subset that needs no catalog runs on every push and pull request, in
+`.github/workflows/verify.yml`:
+
+| step | why it can run there |
+|---|---|
+| `master.py` is in sync with `modules/` | rebuild, then `git diff --exit-code`. CLAUDE.md has always named this as the sync check and nothing automated it |
+| `verify_docs.py` | reads the docs and the dataclasses; builds no stage |
+| `verify_stage3.py` | builds into a temp dir, needs no network, and CI checks out `spacecost` at the pinned tag so its reference check RUNS rather than skipping |
+| `platform_check.py` | **report only, never a gate** |
+
+🚨  **`verify.py` is NOT in CI and cannot be.** `asteroid_pipeline/` is
+gitignored in full, so a fresh clone has the code and none of the ~868 MB Stage
+4 reads, and `.verify/` is gitignored too, so there is no baseline to compare
+against either. Bit-identity stays a local pre-commit discipline. **CI going
+green says the docs and the seams are intact; it says nothing whatever about a
+number.**
+
+⚠️  **platform_check.py is informational on purpose.** A GitHub runner is glibc
+on x86-64 and the reference host is the Windows UCRT, so a libm probe
+*differing* there is the expected answer rather than a finding, and CLAUDE.md's
+rule is not to file the deltas as regressions. A gate that is red by
+construction is the cry-wolf failure this repo already records twice. What it
+is worth in CI is the answer to "how far does a Linux x86-64 runner diverge",
+which SPARK_SETUP.md asks and nothing had recorded.
+
+⚠️  **The pinned `spacecost` tag is read, never typed.** The workflow resolves
+it by calling `verify_stage3._pinned_tag()`, which parses `requirements.txt`,
+so a repin still lands in exactly the two places the split's release note names
+and CI does not become a third.
 
 ### Verifying the docs
 
@@ -1470,7 +1550,7 @@ concentrates 3.5× at N = 1 and 3.9× as a programme. Median improvement from
 beneficiating runs from +39.5% at `cislunar` to **+77.7%** at `earth_surface`.
 
 **"Can never make a mission worse" is checked, not assumed**, and it is one of
-the six checks in `verify.py`: join the raw and beneficiated catalogs on
+the checks in `verify.py`: join the raw and beneficiated catalogs on
 `designation` and assert the beneficiated cost/revenue is never higher, row by
 row. On the full catalog it holds across **all twenty-eight cells with zero
 exceptions**, and the worst case is exactly 1.000000, which is beneficiation
