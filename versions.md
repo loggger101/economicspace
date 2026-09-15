@@ -1231,7 +1231,7 @@ the ladder running out rather than turning over; only the second is harmless.
 ### Measured and declined: a ceiling for the composition residual
 
 The first hypothesis for the above was `other (bulk silicate)`, calc's
-composition residual. Composition fractions sum to 0.76-0.96 and the remainder
+composition residual. Composition fractions sum to 0.73-0.96 and the remainder
 is priced at a bulk-silicate floor, but the residual is not a Stage 2 commodity
 so `market_table` has no entry for it and it takes the infinite default. It is
 priced, it is on 100% of rows, and it has no ceiling.
@@ -4008,8 +4008,8 @@ that there is no crew cost, no life support and no human in the loop past LEO.
   end `× 1.0`, where all three had been compounded to the end.
 
 **`1.3.3`  silent under-counting in `asteroid_bulk_value_usd_per_kg`.** Stage
-1's four composition fractions sum to 0.76-0.96 depending on taxonomy class, and
-the residual (4-24%) was silently zero-valued; it is now treated as a bulk
+1's four composition fractions sum to 0.73-0.96 depending on taxonomy class, and
+the residual (4-27%) was silently zero-valued; it is now treated as a bulk
 silicate floor at ~$0.05/kg, which adds 0.2-1.2% to gross value. Pairs with
 mineral_value v1.1.2's price and yield calibration: refined-iron Fe $0.50/kg,
 where it had been iron-ore **$0.12**; Au $150k, Pt $45k, Pd $48k, Rh $320k;

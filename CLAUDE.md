@@ -3498,8 +3498,27 @@ Undoing any of these silently corrupts the output:
 - **The return-capsule volume cap must bind**, not merely be reported. It is
   the only constraint keeping the mission physical when ISRU is on and
   aerocapture is off.
-- **Composition fractions sum to 0.76-0.96**, not 1.0. The residual is valued
+- **Composition fractions sum to 0.73-0.96**, not 1.0. The residual is valued
   at a bulk-silicate floor rather than zero.
+
+  🚨  **THIS SAID 0.76-0.96 UNTIL 2026-09-15, AND THE TABLE HAS ALWAYS SAID
+  0.73.** `Cgh` sums to 0.73 and `Cg`, `G` and `Ch` to 0.74-0.75, in **every
+  revision of `modules/catalog.py` that has ever existed**; `C` itself is
+  exactly 0.76, which is where the number came from, somebody reading the C row
+  and generalising it to the complex. It was quoted forward into three places.
+  This is not a stale measurement, which is the failure mode this file is
+  written around: it was **wrong at birth and nothing ever executed it**, which
+  is defect class 4, a prescriptive comment nobody applied. It was caught by
+  the first check that ever looked, on the day Stage 1 got a harness.
+
+  ⚠️  **`verify_stage1.py` check 2 asserts the PROPERTY, not the interval**,
+  and that distinction is the reusable part. What is load-bearing is that every
+  real class sums to strictly less than 1, so there IS a residual for calc to
+  floor at bulk silicate. An interval would go red the day somebody
+  re-measures a taxonomy row, which is a legitimate act; the property would
+  not. **Check the invariant, not the figure that happened to satisfy it.**
+  `Unknown` is the deliberate exception, all four fractions `None`, so the
+  residual is the whole body.
 - Do not globally suppress warnings in `catalog.py`, real `RuntimeWarning`s
   (divide-by-zero in the derived physical columns) need to stay visible.
 - **Never use `.astype(bool)` on a flag that arrives through a CSV.** It reads
@@ -3920,6 +3939,7 @@ first three import master".
 | `run_pipeline.py` | yes | headless CLI: `--preset`, `--stages`, `--destination`, row caps |
 | `ui.py` | yes | Streamlit dashboard |
 | `verify.py` | yes | the release checks; count them in its own header rather than quoting a number here |
+| `verify_stage1.py` | no | **Stage 1's derivation chain**, and the only harness the stage has ever had. Never fetches: the pure checks run against synthetic frames and the rest against the catalog on disk, because re-running Stage 1 fetches a catalog of a different length |
 | `verify_stage3.py` | no | the Stage 3 seam: this repo's adapter against the `spacecost` package it drives. Builds into a temp dir, needs no baseline and no network. Its last check drives `validate()` rather than comparing bytes, and is the only coverage Stage 3's behaviour has |
 | `.github/workflows/verify.yml` | no | CI: the build-sync check, the docs checks, the Stage 3 seam, and `platform_check.py` as a report. **Not `verify.py`**, which needs inputs no clone has |
 | `verify_docs.py` | no | the **docs** checks; it imports master and the four configs for checks 8 and 9, but never builds a stage. Count them in its own docstring rather than quoting a number here |

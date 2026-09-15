@@ -715,7 +715,7 @@ ROOT_PY = ["ui.py", "ui_meta.py", "run_pipeline.py", "verify.py",
            # check exists to prevent, in the one harness that guards the
            # spacecost split.  It was clean on dashes and carried three
            # definitions with no docstring, `main` among them.
-           "verify_stage3.py",
+           "verify_stage3.py", "verify_stage1.py",
            # Not Python, but prose a reader sees, and it was outside the
            # ratchet long enough to collect two em-dashes.  The hook's header
            # is the only account of the Drive stat-cache bug there is.
@@ -1050,8 +1050,8 @@ def check_runtime() -> bool:
 # contents are the four modules, which are checked here at source, and
 # build_master.py strips their module docstrings by design.
 FIRST_PARTY_PY = (["build_master.py", "run_pipeline.py", "ui.py", "ui_meta.py",
-                   "verify.py", "verify_stage3.py", "launch_ui.py",
-                   "platform_check.py",
+                   "verify.py", "verify_stage3.py", "verify_stage1.py",
+                   "launch_ui.py", "platform_check.py",
                    os.path.basename(__file__)]
                   + list(MODULES.values()) + CAMPAIGN_PY)
 
