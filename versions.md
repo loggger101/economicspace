@@ -351,10 +351,35 @@ evaluable), `capacity_cap`, against the same cells on v1.21.2:
 
 | cell | v1.21.2 | **v1.22.0** | change | winner |
 |---|---|---|---|---|
-| raw, N = 1 | 25.7233x | **9.7517x** | **-62.1%** | 2025 SV5 -> 701967 |
-| raw, searched | 19.7213x | **7.4656x** | **-62.1%** | 2017 VC38, unchanged |
-| benef, N = 1 | 20.5354x | **7.1104x** | **-65.4%** | 2014 WC23, unchanged |
-| **benef + searched** | 8.9005x | **4.3224x** | **-51.4%** | 735549 -> 2014 WC23 |
+| raw, N = 1 | 25.7233x | **9.7517x** | **-62.1%** | 2017 KJ5, unchanged |
+| raw, searched | 19.7213x | **7.4656x** | **-62.1%** | 2017 KJ5, unchanged |
+| benef, N = 1 | 20.5353x | **7.1104x** | **-65.4%** | 2010 FG81, unchanged |
+| **benef + searched** | 8.9005x | **4.3224x** | **-51.4%** | 2010 FG81, unchanged |
+
+🚨  **THE WINNER COLUMN WAS WRONG IN ALL FOUR ROWS UNTIL 2026-09-14, AND IT WAS
+WRONG THE SAME WAY EACH TIME: IT NAMED `df.iloc[0]`.** The output frame is
+SORTED BY `profit_usd` and the project ranks on `total_cost_usd /
+gross_value_usd`, so the first row of the file is the cheapest-to-fly mission
+and not the objective winner. It reported `2025 SV5 -> 701967`, `2017 VC38`,
+`2014 WC23` and `735549 -> 2014 WC23`, which are exactly the profit-sorted
+first rows of the eight archived cells. Re-extracted from
+`.verify/baseline-1.21.2/` and `.verify/baseline-1.22.0/` with
+`run_cell.py`'s own filter (`_obj > 0`, `nsmallest(1, "_obj")`): the ratios
+were right and every designation was not.
+
+✅  **The correction changes what the table SAYS, not only what it prints: the
+winner does not move in any of the four cells.** The four defaults are worth
+51-65% of the objective and re-rank nothing at the top, which is
+[the winner moved and the population did not](CLAUDE.md#what-the-model-currently-says-and-what-that-retired)
+arriving inverted -- the level moved and the winner did not. A table whose
+winner column was read off the wrong row could not have said so.
+
+⚠️  **`campaign/run_cell.py` is not affected and neither is any campaign
+table.** It has always used `ok.nsmallest(1, "_obj").iloc[0]`; this was a
+hand-extraction written for one release note, which is precisely the kind of
+one-off reader this file keeps catching. `20.5354x` above was a rounding slip
+in the same table for the same cell v1.21.2's own note records as `20.5353x`;
+the archived value is `20.535349`.
 
 ⚠️  **These are 155- and 65-row sample cells and are NOT the headline matrix.**
 They are the four cells `verify.py` runs, which is why every release in this
@@ -4776,7 +4801,7 @@ defaults change, and one output column is added.
   campaign could reproduce a 2026-09 cell. Defaults in `--help` are read off
   the dataclass; `--surplus-fraction` is validated by `unit_float` at the flag
   as well as by `market_config_check` in the model. Verified end to end: the
-  four together return the raw cislunar sample cell to **25.7233x, 2025 SV5**.
+  four together return the raw cislunar sample cell to **25.7233x, 2017 KJ5**.
 - **`market_config_check(config)`** is new in `calc.py` and is called from
   `build_profitability_catalog` beside `destination_check`. It refuses a
   `surplus_price_fraction` outside [0, 1].
