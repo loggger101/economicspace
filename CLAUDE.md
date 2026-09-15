@@ -1837,6 +1837,7 @@ statement of all three; this is the prose one:
 | quantity | it is | it is NOT |
 |---|---|---|
 | the objective ranked on | `total_cost_usd / gross_value_usd` | any column; **there is no `cost_revenue_ratio`** |
+| a cell's **winner** | the row MINIMISING that objective | **`df.iloc[0]`**, which is the frame's `profit_usd`-sorted first row |
 | `r`, in every never-worse table | the *lower* setting's ratio over the *higher*'s, e.g. `benef / raw` | the reciprocal |
 | "median improvement +42.5%" | `median(1 − r)`, the fractional **reduction** in the ratio | `median(1/r − 1)`, which reads **74.0%** for the same result |
 
@@ -1844,7 +1845,7 @@ The last two describe one identical result and differ by a factor of 1.7, so a
 harness that picks the wrong one reports a number that is not wrong so much as
 *not the one on record*, and every committed figure here uses `median(1 − r)`.
 
-⚠️  **A fourth, and it is a DENOMINATOR rather than a definition.** "Bodies
+⚠️  **And one more, which is a DENOMINATOR rather than a definition.** "Bodies
 declining to concentrate" has two right answers: over the **joined** raw and
 beneficiated pairs it is 15.8%, and over the beneficiated run's own
 `concentration_ratio <= 1.0` column it is **15.61%**, because the bodies that
