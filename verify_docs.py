@@ -103,6 +103,12 @@ import sys
 import tokenize
 from typing import Dict, List, Optional, Tuple
 
+# Local: the working-tree guard every harness here runs first.  It is a
+# sibling file rather than a copied function because four harnesses need
+# it and a second copy of a check is the defect this repo catalogues
+# oftenest.
+import tree_check
+
 
 
 def _force_utf8_stdout() -> None:
@@ -749,7 +755,7 @@ ROOT_PY = ["ui.py", "ui_meta.py", "run_pipeline.py", "verify.py",
            # check exists to prevent, in the one harness that guards the
            # spacecost split.  It was clean on dashes and carried three
            # definitions with no docstring, `main` among them.
-           "verify_stage3.py", "verify_stage1.py",
+           "verify_stage3.py", "verify_stage1.py", "tree_check.py",
            # Not Python, but prose a reader sees, and it was outside the
            # ratchet long enough to collect two em-dashes.  The hook's header
            # is the only account of the Drive stat-cache bug there is.
@@ -1178,6 +1184,7 @@ def check_runtime() -> bool:
 # build_master.py strips their module docstrings by design.
 FIRST_PARTY_PY = (["build_master.py", "run_pipeline.py", "ui.py", "ui_meta.py",
                    "verify.py", "verify_stage3.py", "verify_stage1.py",
+                   "tree_check.py",
                    "launch_ui.py", "platform_check.py",
                    os.path.basename(__file__)]
                   + list(MODULES.values()) + CAMPAIGN_PY)
@@ -1389,8 +1396,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                         "adds check 10")
     args = p.parse_args(argv)
 
+    # The tree check runs FIRST and gates everything under it: every check
+    # below reads files off this disk, so if the disk is not serving what git
+    # holds, their verdicts are about bytes nobody committed.  It also reads
+    # every tracked file, which is the materialisation the Drive mount needs
+    # anyway, so running it here makes the checks below safer as well as
+    # checked.  See tree_check.py.
+    ok = tree_check.assert_tree()
     mods = load_modules()
-    ok = True
     for fn in (lambda: check_defaults(mods),
                lambda: check_versions(mods),
                lambda: check_row_counts(mods),

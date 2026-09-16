@@ -71,6 +71,7 @@ verify.py              Release verification: the checks every change runs
 verify_stage3.py       Stage 3 verification: this repo and spacecost agree
 verify_stage1.py       Stage 1 verification: the derivation chain, no fetching
 verify_docs.py         Docs verification: the docs still describe the code
+tree_check.py          Does the disk hold what git says it holds? ~0.4 s
 platform_check.py      Can THIS host reproduce the committed numbers? ~10 s
 .github/workflows/     CI: the checks that need no catalog, run on every push
 platform_reference.json  What it compares against, recorded on the ref host
@@ -761,6 +762,36 @@ The short version is that a broken checker looks exactly like a broken release,
 which is why the report prints **both** a hash and a column diff: when the two
 disagree, the hash is the one that is right, and the disagreement is itself the
 signal that the comparator is at fault.
+
+### Verifying the working tree
+
+Every harness below runs this first and refuses on a finding, so you rarely
+invoke it yourself; it is also standalone:
+
+```bash
+py tree_check.py
+```
+
+It hashes every tracked file through `git hash-object` and compares against the
+index, using `git status` to tell an edit from something worse. A file you are
+editing is skipped, which is why the count it prints is tracked files **minus**
+the ones you have open.
+
+The failure it exists for was observed on 2026-09-15: `verify_stage3.py` ran an
+**older copy of itself** off the Google Drive mount, printed four checks instead
+of six, and said `OK` -- with `git status` clean and its bytes hashing equal to
+`HEAD` afterwards. A tracked file reading as **absent** is the same fault in its
+other direction.
+
+That `git status` is clean throughout is what makes the check possible rather
+than pointless: git's stat cache trusts size and mtime and never re-reads
+content, so git's opinion and the file's content are two independent readings,
+and this failure is the case where they disagree. Reproduce it by changing one
+byte of a tracked file without changing its length and restoring its mtime;
+`git status --short` returns empty and the content hash moves.
+
+It is a Drive File Stream fault, so on a plain clone it can only pass. That is
+why CI runs it: as the control that the check still works.
 
 ### Verifying Stage 3
 

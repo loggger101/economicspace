@@ -3463,9 +3463,12 @@ missing from git.
 ⚠️  **The same mount served a STALE verify_stage3.py in the same session**, and
 that is the worse half: its first run printed **four** checks and every later
 run printed **six**, on a file whose bytes match HEAD exactly. So a harness here
-can run an older version of itself and say `OK`. **When a harness's check COUNT
-changes and the file did not, suspect the mount before the code** -- see
-[Google Drive makes the tree look dirty](#google-drive-makes-the-tree-look-dirty-run-the-hooks).
+can run an older version of itself and say `OK`. ✅  **That half is checked now
+too, by `tree_check.py`, which every harness runs before doing any work**: git's
+stat cache and the file's content are two independent readings of one tree, and
+this failure is the case where they disagree. See
+[Google Drive makes the tree look dirty](#google-drive-makes-the-tree-look-dirty-run-the-hooks),
+which carries the reproduction and the one gap it does not close.
 
 ✅  **Closed by `absent()`**, one helper the six enumerating checks call: a name
 on a first-party list with no file behind it is a finding and fails the run,
@@ -3896,27 +3899,63 @@ version of itself and printed `OK`.** Nothing in git was wrong and nothing in
 the code was wrong; the mount served the old bytes once and the current bytes
 afterwards.
 
-✅  **Two defences, and only the first is automatic.** `verify_docs.py`'s
-`absent()` now fails the run rather than quietly reading one file fewer, which
-closes the *absent* half; see
-[a skip with no message at all](#a-skip-with-no-message-at-all-the-file-that-is-simply-not-there).
-The *stale* half has no check, so the habit is the defence: **when a harness's
-check COUNT or file COUNT changes and the file did not, suspect the mount before
-the code**, and confirm with a hash against HEAD rather than by reading the
-file, because reading it is what fixes it:
+✅  **BOTH HALVES ARE CHECKED NOW, AND THE SECOND ONE IS `tree_check.py`.**
+This paragraph said for one day that the stale half had no check and that the
+habit was the only defence. That was wrong, and the reason it was wrong is the
+useful part.
+
+🚨  **THE CHECK LOOKS IMPOSSIBLE BECAUSE `git status` IS CLEAN THROUGHOUT, AND
+THAT IS EXACTLY WHAT MAKES IT POSSIBLE.** git is clean because its stat cache
+trusts SIZE and MTIME and never re-reads content -- the same cache whose other
+direction is the phantom-dirty tree `.githooks/drive-restat.sh` repairs. So
+git's opinion and the file's CONTENT are two INDEPENDENT readings of one tree,
+and the failure is the case where they disagree:
+
+| content vs index | git status says | reading |
+|---|---|---|
+| equal | clean | fine |
+| differs | modified | somebody edited it; not this |
+| differs | **clean** | **nobody edited it and it changed anyway** |
+| missing | **clean** | **a tracked file is not there** |
+
+The bottom two are the finding. **Reproduced before it was trusted**: change one
+byte of a tracked file without changing its length, restore its mtime, and
+`git status --short` returns EMPTY while the content hash moves.
+
+⚠️  **HASH THROUGH `git hash-object`, NEVER `sha256` OF THE RAW BYTES**, which
+is what the three commands this paragraph used to recommend did. `.gitattributes`
+pins `*.py` to LF and `*.bat` to CRLF and the index stores the NORMALISED form,
+so raw bytes disagree with the index for every CRLF file by construction.
+Measured: `run.bat` matches its index blob through `hash-object` and does not
+through `--no-filters`.
+
+✅  **It reads the WHOLE tree, not a curated list**, which is the lesson from
+[the cheapest-destination claim](#the-cheapest-destination-claim-survived-because-one-row-of-seven-was-pinned)
+applied one day later: a hand-maintained file list is *a check that reads one row
+of a table* wearing different clothes. All 147 tracked files, three git
+invocations, **0.43 s**.
+
+✅  **And reading is also the cure, so the check subsumes the prophylactic that
+used to be a manual step here.** Materialisation is what a read does anyway, so
+running it first either catches the stale bytes or forces the mount to produce
+the current ones before the harness reads them itself.
+
+**Every harness calls it before doing any work**, and a finding is a refusal
+rather than a warning, because a result computed off bytes the repository does
+not hold is not worth the minutes it costs:
 
 ```bash
-git status --short <file>
-py -c "import io,hashlib;print(hashlib.sha256(io.open('<file>','rb').read()).hexdigest()[:16])"
-git show HEAD:<file> | py -c "import sys,hashlib;print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:16])"
+py tree_check.py     # standalone; the same check every harness runs first
 ```
 
-⚠️  **Touching every file once is the cheap prophylactic** before a measurement
-session, because materialisation is what a read does anyway:
-
-```bash
-git ls-files -z | xargs -0 -n 50 cat > /dev/null
-```
+🚨  **THE ONE GAP, AND IT IS NOT CLOSED: A HARNESS'S OWN SOURCE IS COMPILED
+BEFORE ANY OF ITS CODE RUNS.** A stale import is already loaded by the time the
+check executes. It is caught **in practice** because the mount served stale
+bytes for a whole PROCESS rather than for a single read, so the later re-read
+still sees them and the hash still moves; it is **not caught in principle**,
+because a materialisation landing between the import and the call would hide it.
+Every file a harness reads AFTER that point is fully covered. Do not read the
+green line as proof the harness itself is current.
 
 ⚠️  **More than one working copy of this repo is the documented divergence
 hazard, not a convenience.** The project was once developed in two places at
@@ -4105,6 +4144,7 @@ first three import master".
 | `run_pipeline.py` | yes | headless CLI: `--preset`, `--stages`, `--destination`, row caps |
 | `ui.py` | yes | Streamlit dashboard |
 | `verify.py` | yes | the release checks; count them in its own header rather than quoting a number here |
+| `tree_check.py` | no | **does the disk hold what git says it holds**: every tracked file hashed through `git hash-object` against the index, with `git status` used to tell an edit from a Drive stale or absent read. Every harness below calls it FIRST and refuses on a finding; also runnable alone. No network, no baseline, 0.43 s |
 | `verify_stage1.py` | no | **Stage 1's derivation chain**, and the only harness the stage has ever had. Never fetches: the pure checks run against synthetic frames and the rest against the catalog on disk, because re-running Stage 1 fetches a catalog of a different length |
 | `verify_stage3.py` | no | the Stage 3 seam: this repo's adapter against the `spacecost` package it drives. Builds into a temp dir, needs no baseline and no network. Its last check drives `validate()` rather than comparing bytes, and is the only coverage Stage 3's behaviour has |
 | `.github/workflows/verify.yml` | no | CI: the build-sync check, the docs checks, the Stage 3 seam, and `platform_check.py` as a report. **Not `verify.py`**, which needs inputs no clone has |

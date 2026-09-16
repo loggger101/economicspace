@@ -168,6 +168,12 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+# Local: the working-tree guard every harness here runs first.  It is a
+# sibling file rather than a copied function because four harnesses need
+# it and a second copy of a check is the defect this repo catalogues
+# oftenest.
+import tree_check
+
 REPO = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -972,7 +978,12 @@ def cmd_baseline(args) -> int:
 
 
 def cmd_check(args) -> int:
-    """All six checks against a baseline, most-important first.
+    """Every check against a baseline, most-important first.
+
+    The count is deliberately not spelled out: this docstring said SIX from
+    the day check 7 landed, while `cmd_invariants` ten lines below said "4 to
+    7" correctly, so one file disagreed with itself about its own size. Read
+    the numbered sections the run prints.
 
     Check 1 is the one with a prerequisite, and its failure mode is the reason
     this function tracks `unchecked` rather than just `ok`: a cell absent from
@@ -982,8 +993,12 @@ def cmd_check(args) -> int:
     that cannot run must never say it passed.**
 
     Checks 2 and 3 are the slow half and are what `--skip prune parallel`
-    turns off for the ~5 minute loop; 4, 5 and 6 need no baseline and are also
+    turns off for the ~5 minute loop; 4 to 7 need no baseline and are also
     available on their own as `invariants`.
+
+    The working-tree guard in `main()` runs before any of them and is not
+    numbered, because it is a precondition rather than a check on the model:
+    it asks whether this disk is serving what git holds. See tree_check.py.
     """
     import pandas as pd
 
@@ -1120,6 +1135,18 @@ def main(argv: Optional[List[str]] = None) -> int:
                         "modified modules/ or build_master.py (say so only if "
                         "that edit is unrelated to what you are verifying)")
     args = p.parse_args(argv)
+
+    # Before any of the three, and it gates ALL of them including `baseline`:
+    # a baseline captured off a tree that is not serving what git holds is a
+    # poisoned reference that every later `check` is measured against, which is
+    # the most expensive version of this failure rather than the cheapest.
+    # It costs about half a second for the whole tree.  See tree_check.py.
+    if not tree_check.assert_tree():
+        print("")
+        print("*** NOT VERIFIED *** - the working tree is not what "
+              "git holds")
+        return 1
+
     return {"baseline": cmd_baseline,
             "check": cmd_check,
             "invariants": cmd_invariants}[args.command](args)
