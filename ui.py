@@ -201,16 +201,21 @@ def _cell_time(beneficiated, searched):
     return "%.1f h" % (seconds / 3600.0)
 
 
-# The per-cell factor between cislunar and the dearest destination, on the
-# DEFAULT cell, from the 28-cell matrix in README's Beneficiation section:
-# cislunar 9,878 s against earth_surface 21,860 s (2.2x) and mars_orbit
-# 29,174 s (3.0x).  A range rather than a number because it is a range.
+# The per-cell span between cislunar and the OTHER destinations, on the default
+# cell, derived from `MEASURED_DEST_SECONDS` in calc.py.
 #
-# ⚠️  This one is still typed, and it read 2.1-2.7 until 2026-09-14 because it
-# was the 20-cell matrix's figure left standing under a 28-cell base.  It is a
-# ratio of two numbers that live in a markdown table rather than in code, which
-# is why it is not derived; if that table is ever machine-read, derive it.
-_DEST_FACTOR = (2.2, 3.0)
+# 🚨  THIS WAS THE LAST HAND-TYPED RATIO IN THE PROJECT AND IT WAS ALSO WRONG.
+# It read `(2.2, 3.0)` -- earth_surface and mars_orbit against cislunar -- under
+# a sentence calling cislunar "the CHEAPEST destination" and the span a range
+# "the others run longer".  `lunar_surface` runs the default cell in 7,253 s
+# against cislunar's 9,878, so the low end of the real span is **0.73x**: the
+# others do not all run longer, and one of the seven runs faster on all four
+# cells.  The comment here used to say "if that table is ever machine-read,
+# derive it"; it is machine-read now, so this derives.
+# Read from master, like `_cell_time` and `_SECONDS_PER_ROW` above it: one
+# definition with several readers is the whole point, and a private copy of the
+# span here would be the second copy of exactly the table this replaced.
+_DEST_LO, _DEST_HI = master.dest_cost_span(True, True)   # the default cell
 
 
 STAGES = [
@@ -232,17 +237,19 @@ STAGES = [
           "calc 1.21.2, in the 2026-09 28-cell campaign: %s raw at N = 1, "
           "%s with optimise_programme_scale, %s with use_beneficiation, and "
           "%s with both, and both of those flags DEFAULT ON as of calc "
-          "v1.17.0, so budget for the %s unless you turn one off. Cislunar is "
-          "the CHEAPEST destination: the others run %.1f-%.1fx longer on that "
-          "cell, so the default there is %.1f-%.1f h. Seconds with "
-          "eval_row_cap set low. WARNING: calc v1.22.0 gave the payload "
-          "knapsack a second price tier and has not been re-measured on a "
-          "full catalog, so treat these as a floor rather than a budget."
+          "v1.17.0, so budget for the %s unless you turn one off. Destination "
+          "changes that: the other six span %.2f-%.2fx cislunar on that cell "
+          "(%s is FASTER, %s dearest), so the default elsewhere runs %.1f-%.1f "
+          "h. Seconds with eval_row_cap set low. WARNING: calc v1.22.0 gave "
+          "the payload knapsack a second price tier and has not been "
+          "re-measured on a full catalog, so treat these as a floor rather "
+          "than a budget."
           % (_cell_time(False, False), _cell_time(False, True),
              _cell_time(True, False), _cell_time(True, True),
-             _cell_time(True, True), _DEST_FACTOR[0], _DEST_FACTOR[1],
-             master.MEASURED_CELL_SECONDS[(True, True)] * _DEST_FACTOR[0] / 3600.0,
-             master.MEASURED_CELL_SECONDS[(True, True)] * _DEST_FACTOR[1] / 3600.0)),
+             _cell_time(True, True),
+             _DEST_LO[0], _DEST_HI[0], _DEST_LO[1], _DEST_HI[1],
+             master.MEASURED_CELL_SECONDS[(True, True)] * _DEST_LO[0] / 3600.0,
+             master.MEASURED_CELL_SECONDS[(True, True)] * _DEST_HI[0] / 3600.0)),
 ]
 
 
@@ -611,16 +618,20 @@ def _stage_minutes(key: str) -> float:
     search = st.session_state.get("cfg::calc::optimise_programme_scale",
                                   MASTER.calc.optimise_programme_scale)
 
-    # Seconds per row, read straight off the committed full-catalog 2x2 --
-    # README.md, "Beneficiation", which carries the wall clock for all twenty
-    # cells; calc 1.17.7, 12 workers, over master.MEASURED_CELL_ROWS (the
-    # 1,555,667-row catalog those cells were measured on; 1,555,618 of them
-    # carry positive mass, a 0.003% difference that does not matter to an
-    # estimate the stage bar replaces within a minute):
+    # Seconds per row, read straight off `master.MEASURED_CELL_SECONDS` --
+    # README.md, "Beneficiation", carries the same wall clock for all
+    # twenty-eight cells; calc 1.21.2, 12 workers, over
+    # master.MEASURED_CELL_ROWS (the 1,555,667-row catalog those cells were
+    # measured on; 1,555,618 of them carry positive mass, a 0.003% difference
+    # that does not matter to an estimate the stage bar replaces within a
+    # minute).
     #
-    #                 search OFF     search ON
-    #     raw              733 s       1,253 s
-    #     beneficiated   3,424 s       5,692 s
+    # ⚠️  THIS COMMENT USED TO TABULATE THE FOUR SECONDS ITSELF, at the calc
+    # 1.17.7 values (733 / 1,253 / 3,424 / 5,692), and went on doing so after
+    # the constant it documents moved to 947 / 2,888 / 4,967 / 9,878.  A
+    # comment that restates the values of the dict on the next line is a copy
+    # like any other; the current figures are in `MEASURED_DEST_SECONDS` and
+    # are deliberately not repeated here.
     #
     # The old pair of rates carried a beneficiated:raw ratio of 3.12x, taken
     # from a stride sample. versions.md retires that figure by name -- and
@@ -638,13 +649,14 @@ def _stage_minutes(key: str) -> float:
     _CELL_ROWS = master.MEASURED_CELL_ROWS
     _SECONDS_PER_ROW = {k: v / _CELL_ROWS
                         for k, v in master.MEASURED_CELL_SECONDS.items()}
-    # Measured at CISLUNAR, which is the CHEAPEST destination. leo, mars_surface
-    # and earth_surface run 2.1-2.7x slower per cell (20-cell matrix); this does
-    # not try to model that, because it is a prior, and the stage bar replaces
-    # it with measured progress within the first minute. So it now reads LOW
-    # away from cislunar rather than high everywhere -- the trade taken
-    # deliberately, since the four cislunar cells are the ones measured on the
-    # current code.
+    # Measured at CISLUNAR, which is the second-cheapest destination to RUN and
+    # not the cheapest: on the 28-cell campaign `lunar_surface` takes 0.40-0.73x
+    # these figures and every other destination 0.89-2.95x, so this prior reads
+    # HIGH at lunar_surface and LOW at the other five rather than low
+    # everywhere.  It does not try to model that, because it is a prior and the
+    # stage bar replaces it with measured progress within the first minute; the
+    # span itself is derived by `master.dest_cost_span` for the sidebar blurb,
+    # where a user actually budgets.
     return rows * _SECONDS_PER_ROW[(bool(benef), bool(search))] / 60.0
 
 

@@ -191,6 +191,35 @@ def read(path: str) -> str:
         return fh.read()
 
 
+def absent(names) -> List[str]:
+    """First-party paths this repo NAMES that are not on disk.
+
+    🚨  A SKIP IS NOT A PASS, AND THIS FILE HAD SEVEN OF THEM.  Every list in
+    here -- `DOCS`, `ROOT_PY`, `FIRST_PARTY_PY`, `MODULES`, `CURRENT_DOCS` --
+    names files the repo OWNS, so a name with no file behind it is a finding,
+    never a reason to read one file fewer and still print OK.
+
+    ⚠️  PROVED RATHER THAN ARGUED, 2026-09-15.  Renaming `verify_stage1.py`
+    away took check 11 from 486 definitions to 469 and check 6 from 35 files to
+    34, and the run still exited **0**.  A whole first-party harness could
+    leave this repo and every docs check would call the result clean.
+
+    🚨  AND IT IS REACHABLE WITHOUT DELETING ANYTHING.  The working copy is on
+    a Drive File Stream mount, where a file that has not materialised can read
+    as absent -- the same mount whose placeholder sizes already have a section
+    in CLAUDE.md.  Both stage harnesses were invisible to the first run of this
+    session and visible to the next, with no commit in between: check 6 read
+    **33** files and then 35.  That is this check's own failure mode arriving
+    through the filesystem rather than through a deletion.
+
+    This is the same defect `verify.py` had (a `check` with no baseline
+    printing ALL CHECKS PASSED), `verify_docs.py` checks 8 and 9 had (a
+    `SyntaxError` swallowed as a skip) and `verify_stage3.py` check 4 had (a
+    skip that fired on 100% of runs).  Fourth instance, same sentence.
+    """
+    return [n for n in names if not os.path.exists(os.path.join(REPO, n))]
+
+
 def load_modules() -> Dict[str, object]:
     """Import each stage for its CONFIG.  Their import banners go to /dev/null;
     they print on import by design and this is not a run."""
@@ -548,6 +577,8 @@ def check_row_counts(mods) -> bool:
         ("modules/calc.py", r"%s vehicles now share one" % NUM,
          "operational vehicles"),
     ]
+    for gone in absent([r for r, _, _ in DERIVED_CLAIMS]):
+        bad.append("%s carries a derived count and is not on disk" % gone)
     for rel, pat, key in DERIVED_CLAIMS:
         path = os.path.join(REPO, rel)
         if not os.path.exists(path):
@@ -613,10 +644,12 @@ def check_links() -> bool:
     written works only while every doc does. External links are skipped; this
     checks what the repo controls.
     """
+    missing_linked = ["%s is on the linked-document list and is not on disk"
+                      % g for g in absent(LINKED_DOCS)]
     files = [d for d in LINKED_DOCS if os.path.exists(os.path.join(REPO, d))]
     anchors = {os.path.normpath(os.path.join(REPO, d)):
                slugs(os.path.join(REPO, d)) for d in files}
-    bad, n = [], 0
+    bad, n = list(missing_linked), 0
     for d in files:
         src = os.path.normpath(os.path.join(REPO, d))
         base = os.path.dirname(src)
@@ -652,7 +685,8 @@ def check_structure() -> bool:
     each carry their own "### Verification (date)". Ambiguous LINK targets are
     check 4's job, and it resolves GitHub's `-1` suffixes.
     """
-    bad = []
+    bad = ["%s is a tracked document and is not on disk" % g
+           for g in absent(DOCS + CAMPAIGN_DOCS)]
     for d in DOCS + CAMPAIGN_DOCS:
         p = os.path.join(REPO, d)
         if not os.path.exists(p):
@@ -749,7 +783,9 @@ def check_dashes() -> bool:
     at a time.  The orphan comma is the same conversion's leftover, and it is
     checked here for that reason.
     """
-    bad, files = [], 0
+    gone = absent(DOCS + CAMPAIGN_DOCS + ROOT_PY + list(MODULES.values()))
+    bad = []
+    files = 0
 
     for name in DOCS + CAMPAIGN_DOCS + ROOT_PY:
         p = os.path.join(REPO, name)
@@ -800,13 +836,16 @@ def check_dashes() -> bool:
                            % (rel, i, line.strip()[:60]))
 
     print("6. dashes      %d files checked, %d bad lines "
-          "(em/en dash, or a line opening with a bare comma)"
-          % (files, len(bad)))
+          "(em/en dash, or a line opening with a bare comma)%s"
+          % (files, len(bad),
+             ", %d NOT ON DISK" % len(gone) if gone else ""))
+    for g in gone:
+        print("     ! %s is on the dash ratchet and is not on disk" % g)
     for b in bad[:20]:
         print("     ! " + b)
     if len(bad) > 20:
         print("     ! ... and %d more" % (len(bad) - 20))
-    return not bad
+    return not bad and not gone
 
 
 # ---------------------------------------------------------------- 7. manifests
@@ -988,22 +1027,52 @@ def check_help() -> bool:
 
 
 # ------------------------------------------------------------------ 9. runtime
-CISLUNAR_ROW = re.compile(
-    r"^\|\s*`cislunar`\s*\|\s*\*{0,2}([\d,]+)\s*s\*{0,2}\s*"
-    r"\|\s*\*{0,2}([\d,]+)\s*s\*{0,2}\s*"
-    r"\|\s*\*{0,2}([\d,]+)\s*s\*{0,2}\s*"
-    r"\|\s*\*{0,2}([\d,]+)\s*s\*{0,2}\s*\|", re.M)
+# One row per destination of README's 28-cell wall-clock table.  `[^|]*` after
+# each figure is what lets `leo`'s dagger and the bold markers through; the
+# pattern was tested against all three documents and matches the seven rows of
+# the current table and nothing else, superseded tables included, because those
+# carry two columns or no `s` suffix.
+DEST_ROW = re.compile(
+    r"^\|\s*`([a-z_]+)`\s*\|"
+    r"\s*\*{0,2}([\d,]+)\s*s\*{0,2}[^|]*\|"
+    r"\s*\*{0,2}([\d,]+)\s*s\*{0,2}[^|]*\|"
+    r"\s*\*{0,2}([\d,]+)\s*s\*{0,2}[^|]*\|"
+    r"\s*\*{0,2}([\d,]+)\s*s\*{0,2}[^|]*\|", re.M)
+
+# CLAUDE.md's copy lives in the cross-document pairs register, which is by
+# definition the list of copies the repo has agreed to keep CURRENT, so it is
+# the one line in that file safe to pin.  Anchored on the row's own text rather
+# than on a bare four-number pattern, deliberately: CLAUDE.md quotes the
+# superseded 1.17.7 figures (733 / 1,253 / 3,424 / 5,692) in the same file on
+# purpose, and a check that flagged those would be crying wolf at the history
+# this project keeps on purpose.
+CLAUDE_REGISTER = re.compile(r"^\|.*28-cell wall clocks.*\|$", re.M)
+
+# `run.bat` and `run.sh` quote the default cell in HOURS before starting a
+# multi-hour run, and shell cannot import `master` to derive it.  So it is
+# typed, and therefore checked: every "N h at <destination>" in either launcher
+# must round-trip through MEASURED_DEST_SECONDS.  Both read 1.6 h at cislunar
+# and 3.8 h at earth_surface until 2026-09-15 -- calc 1.17.7 figures under a
+# 1.21.2 base, in the one string a user reads before committing an afternoon.
+LAUNCHER_HOURS = re.compile(r"([\d.]+) h at ([a-z_]+)")
 
 
 def check_runtime() -> bool:
-    """README's cislunar wall clock, against `calc.MEASURED_CELL_SECONDS`.
+    """README's whole 28-cell wall-clock table, against `MEASURED_DEST_SECONDS`.
 
     Every user-facing quote of the beneficiation and programme-search cost
-    ratios now DERIVES from that dict, so the banners cannot go stale on their
-    own.  What can still drift is the docs: README tabulates the same four
+    ratios DERIVES from that dict, so the banners cannot go stale on their own.
+    What can still drift is the docs: README tabulates the same twenty-eight
     numbers in prose, and prose is what this repo gets wrong.  Pinning the two
-    together means a re-measurement has exactly one place to start and one
-    check that says whether it finished.
+    together means a re-measurement has exactly one place to start and one check
+    that says whether it finished.
+
+    ⚠️  THIS CHECKED ONE ROW OF SEVEN UNTIL 2026-09-15, and the six it did not
+    read are where the rot was: `lunar_surface` runs the default cell FASTER
+    than cislunar, and five files said "cislunar is the cheapest destination"
+    anyway, because the only row anybody had pinned was cislunar's own.  A
+    check that reads one row of a table is a check on that row, not on the
+    table.
     """
     try:
         sys.path.insert(0, REPO)
@@ -1018,26 +1087,84 @@ def check_runtime() -> bool:
         print("9. runtime     SKIPPED (%s: %s)" % (type(exc).__name__, exc))
         return True
 
+    dests = getattr(_m, "MEASURED_DEST_SECONDS", None)
     cells = getattr(_m, "MEASURED_CELL_SECONDS", None)
-    if not cells:
-        print("9. runtime     SKIPPED (no MEASURED_CELL_SECONDS in master)")
+    if not dests or not cells:
+        print("9. runtime     SKIPPED (no MEASURED_DEST_SECONDS in master)")
         return True
 
-    m = CISLUNAR_ROW.search(read(os.path.join(REPO, "README.md")))
-    bad, n = [], 0
-    if m is None:
-        bad.append("README has no `cislunar` wall-clock row to check")
-    else:
-        # column order in README: raw N=1, raw searched, benef N=1, benef+search
-        want = [cells[(False, False)], cells[(False, True)],
-                cells[(True, False)], cells[(True, True)]]
-        labels = ["raw N=1", "raw searched", "benef N=1", "benef+searched"]
-        for got_s, exp, lab in zip(m.groups(), want, labels):
+    bad: List[str] = []
+    n = 0
+    labels = ["raw N=1", "raw searched", "benef N=1", "benef+searched"]
+
+    # -- the cislunar row of the dict must BE MEASURED_CELL_SECONDS ------------
+    # These are one measurement with two readers, and the derivation is what
+    # makes that true; assert it rather than trusting it, because a hand-edit
+    # that re-typed the cislunar row would reintroduce the second copy the
+    # whole block exists to prevent.
+    want_cis = (cells[(False, False)], cells[(False, True)],
+                cells[(True, False)], cells[(True, True)])
+    if tuple(dests.get("cislunar", ())) != want_cis:
+        bad.append("MEASURED_CELL_SECONDS %s is not the cislunar row of "
+                   "MEASURED_DEST_SECONDS %s"
+                   % (list(want_cis), list(dests.get("cislunar", ()))))
+
+    # -- README's table, every row --------------------------------------------
+    readme = read(os.path.join(REPO, "README.md"))
+    rows = {m.group(1): m.groups()[1:] for m in DEST_ROW.finditer(readme)}
+    missing = set(dests) - set(rows)
+    if missing:
+        bad.append("README's wall-clock table has no row for %s"
+                   % ", ".join(sorted(missing)))
+    for dest, got in sorted(rows.items()):
+        if dest not in dests:
+            bad.append("README's wall-clock table has a row for %r, which is "
+                       "not in MEASURED_DEST_SECONDS" % dest)
+            continue
+        for got_s, exp, lab in zip(got, dests[dest], labels):
             n += 1
-            got = int(got_s.replace(",", ""))
-            if got != exp:
-                bad.append("README cislunar %-15s says %s s, "
-                           "MEASURED_CELL_SECONDS says %d s" % (lab, got_s, exp))
+            if int(got_s.replace(",", "")) != exp:
+                bad.append("README %-14s %-15s says %s s, "
+                           "MEASURED_DEST_SECONDS says %d s"
+                           % (dest, lab, got_s, exp))
+
+    # -- CLAUDE.md's register row ---------------------------------------------
+    claude = read(os.path.join(REPO, "CLAUDE.md"))
+    reg = CLAUDE_REGISTER.search(claude)
+    if reg is None:
+        bad.append("CLAUDE.md's pairs register has no 28-cell wall-clock row")
+    else:
+        got = re.findall(r"[\d,]+(?=\s*(?:/|s\b))", reg.group(0))
+        if len(got) != 4:
+            bad.append("CLAUDE.md's wall-clock register row does not quote "
+                       "four figures: %s" % reg.group(0).strip()[:70])
+        else:
+            for got_s, exp, lab in zip(got, dests["cislunar"], labels):
+                n += 1
+                if int(got_s.replace(",", "")) != exp:
+                    bad.append("CLAUDE.md register %-15s says %s s, "
+                               "MEASURED_DEST_SECONDS says %d s"
+                               % (lab, got_s, exp))
+
+    # -- the launchers and README's copy of their menus ---------------------
+    # README tabulates both launchers' option lists, hours included, so the
+    # same figure is typed in three files.  All three are held here rather than
+    # two, because the README copy is the one a reader meets first.
+    for fn in ("run.bat", "run.sh", "README.md"):
+        path = os.path.join(REPO, fn)
+        if not os.path.exists(path):
+            bad.append("%s quotes a launcher runtime and is not on disk" % fn)
+            continue
+        for got_s, dest in LAUNCHER_HOURS.findall(read(path)):
+            if dest not in dests:
+                bad.append("%s quotes a runtime for %r, which is not a "
+                           "destination" % (fn, dest))
+                continue
+            n += 1
+            want = round(dests[dest][3] / 3600.0, 1)
+            if abs(float(got_s) - want) > 0.05:
+                bad.append("%s says %s h at %s, MEASURED_DEST_SECONDS says "
+                           "%.1f h" % (fn, got_s, dest, want))
 
     print("9. runtime     %d cells checked, %d mismatched" % (n, len(bad)))
     for b in bad:
@@ -1071,7 +1198,9 @@ def check_docstrings() -> bool:
     `_truthy` is the `.astype(bool)` trap -- and exempting them by size would
     exempt exactly the ones worth reading.
     """
-    bad, n = [], 0
+    gone = absent(FIRST_PARTY_PY)
+    bad = []
+    n = 0
     for rel in FIRST_PARTY_PY:
         path = os.path.join(REPO, rel)
         if not os.path.exists(path):
@@ -1093,12 +1222,16 @@ def check_docstrings() -> bool:
                 bad.append("%s:%d  %s has no docstring"
                            % (rel, node.lineno, node.name))
 
-    print("11. docstrings %d definitions checked, %d without one" % (n, len(bad)))
+    print("11. docstrings %d definitions checked, %d without one%s"
+          % (n, len(bad),
+             ", %d FILES NOT ON DISK" % len(gone) if gone else ""))
+    for g in gone:
+        print("     ! %s is first-party Python and is not on disk" % g)
     for b in bad[:20]:
         print("     ! " + b)
     if len(bad) > 20:
         print("     ! ... and %d more" % (len(bad) - 20))
-    return not bad
+    return not bad and not gone
 
 
 
@@ -1159,6 +1292,8 @@ def check_pairs() -> bool:
     move both.  So this fails on an UNREGISTERED pair only, and the fix is
     either to cut one copy or to add the row.
     """
+    missing_current = ["%s claims to be current and is not on disk" % g
+                       for g in absent(CURRENT_DOCS)]
     reg_tokens, lines = set(), {}
     for doc in CURRENT_DOCS:
         path = os.path.join(REPO, doc)
@@ -1198,6 +1333,8 @@ def check_pairs() -> bool:
             seen.add(key)
             unregistered.append((sorted(missing), a, ia, la, b, ib, lb))
 
+    for gone in missing_current:
+        print("     ! " + gone)
     print("12. pairs      %d cross-doc number pairs, %d not on the register"
           % (n_pairs, len(unregistered)))
     for missing, fa, ia, la, fb, ib, lb in unregistered:
@@ -1208,7 +1345,7 @@ def check_pairs() -> bool:
     if unregistered:
         print("       Cut one copy, or add a row to CLAUDE.md's register table")
         print("       under \"AND CHECK THE OTHER FILE\".")
-    return not unregistered
+    return not unregistered and not missing_current
 
 
 # ---------------------------------------------------------------- 10. transfer

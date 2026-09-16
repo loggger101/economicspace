@@ -305,9 +305,9 @@ case "$ACTION" in
     echo "  THE PIPELINE DEFAULTS: every one of 1.55 million rows,"
     echo "  beneficiated, with the programme search on.  This preset overrides"
     echo "  nothing; it is what a configure-nothing run does.  Measured"
-    echo "  2026-08-24 on the reference host: Stage 4 alone is 1.6 h at"
-    echo "  cislunar and 3.8 h at earth_surface.  Ctrl-C is safe, each stage"
-    echo "  writes its CSV before the next one starts."
+    echo "  2026-09 on the reference host: Stage 4 alone is"
+    echo "  2.7 h at cislunar and 6.1 h at earth_surface.  Ctrl-C is safe;"
+    echo "  each stage writes its CSV before the next one starts."
     echo
     exec "$PY" run_pipeline.py --preset full --destination "$DEST" $YES
     ;;

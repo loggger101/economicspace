@@ -943,14 +943,16 @@ class CalcConfig:
     # preview, not something a full pipeline run should discover it inherited.
     #
     # ⚠️  Budget before setting this to 0 on a big catalog.  MEASURED
-    # 2026-08-24 at cislunar, six physical cores / 12 workers, calc 1.17.7, on
-    # the full 1,555,667-row catalog:
-    #     raw, N = 1            733 s     650,921 evaluable rows
-    #     raw, searched       1,253 s
-    #     beneficiated, N = 1 3,424 s     660,253 evaluable rows
-    #     beneficiated+search 5,692 s     <- BOTH DEFAULT ON since v1.17.0
-    # cislunar is the CHEAPEST destination; leo, mars_surface and earth_surface
-    # cost 2.1-2.7x more per cell.  All twenty are in README.md.
+    # 2026-09-11/13 at cislunar, six physical cores / 12 workers, calc 1.21.2,
+    # on the full 1,555,667-row catalog:
+    #     raw, N = 1            947 s     650,921 evaluable rows
+    #     raw, searched       2,888 s
+    #     beneficiated, N = 1 4,967 s     660,253 evaluable rows
+    #     beneficiated+search 9,878 s     <- BOTH DEFAULT ON since v1.17.0
+    # ⚠️  Do NOT read cislunar as the cheapest destination to run: it is the
+    # second cheapest.  `lunar_surface` takes 0.40-0.73x these figures and the
+    # other five 0.89-2.95x.  All twenty-eight cells are in MEASURED_DEST_SECONDS
+    # below and in README.md; the figures above are that table's cislunar row.
     #
     # ⚠️  DO NOT BUDGET BY SCALING A SMALL RUN.  Scaling a 20,000-row sample
     # predicted 2.2 h for a raw run that took 42 minutes -- a 3.1x
@@ -1051,38 +1053,89 @@ class CalcConfig:
 # ═════════════════════════════════════════════════════════════════════════════
 #  MEASURED RUNTIME: the ONE place these numbers live
 # ═════════════════════════════════════════════════════════════════════════════
-# Wall clock for the four cislunar cells, full 1,555,667-row catalog, six
-# physical cores / 12 workers, calc 1.17.7, measured 2026-08-24.  All twenty
-# cells are tabulated in README.md under "Beneficiation".
+# Wall clock for all twenty-eight cells of the 2026-09 campaign, full
+# 1,555,667-row catalog, six physical cores / 12 workers, calc 1.21.2, measured
+# 2026-09-11/13.  The same table is in README.md under "Beneficiation", and
+# `verify_docs.py` check 9 holds every cell of it to this dict.
 #
-# 🚨  EVERY user-facing quote of these ratios DERIVES from this dict: the
-# --help text and run banner in run_pipeline.py, the MASTER CONFIG READY banner
+# 🚨  EVERY user-facing quote of these ratios DERIVES from here: the --help text
+# and run banner in run_pipeline.py, the MASTER CONFIG READY banner
 # build_master.py writes into master.py, and the sidebar estimate in ui.py.
 # They used to be five hand-copied literals, and they went stale together: the
 # superseded 1.16.0 figures ("~7x" beneficiation, "~3x" the programme search)
 # were still being PRINTED TO THE USER ON EVERY RUN three releases after the
 # measurement that retired them.  A banner is the most-read copy of a number in
 # this project and was the least checked.  Re-measure, edit here, and every
-# consumer moves with it; `verify_docs.py` check 9 holds README's own table to
-# the same values.
+# consumer moves with it.
 #
-# ⚠️  These are CISLUNAR, the cheapest destination.  Every other destination
-# costs more per cell, and the spread is wider than it was: `mars_orbit` and
-# `mars_surface` run 2.3-2.6x these figures on the 2026-09 campaign, and
-# `geo`'s beneficiated searched cell is 2.0x cislunar's on its own.
+# 🚨  CISLUNAR IS NOT THE CHEAPEST DESTINATION TO RUN, AND THIS COMMENT SAID IT
+# WAS UNTIL 2026-09-15.  `lunar_surface` is cheaper on ALL FOUR cells -- 0.40x
+# to 0.73x -- and on the raw searched cell `geo` (0.89x) and `leo` (0.89x) are
+# cheaper too.  The claim was a 20-cell summary nobody re-derived, it was
+# carried into this file, ui.py, run_pipeline.py, run.bat, run.sh, README and
+# CLAUDE.md, and the 28-cell campaign that retired it is the one these very
+# figures come from -- as did the 20-cell one before it, which already had
+# lunar_surface at 0.69-0.79x.  The span away from cislunar is 0.73x to 2.95x
+# on the default cell, so a destination factor is a RANGE THAT STRADDLES ONE,
+# not a penalty.  Derive it from this table (see `dest_cost_span`) rather than
+# typing it again.
+MEASURED_DEST_SECONDS: Dict[str, Tuple[int, int, int, int]] = {
+    # destination: (raw N=1, raw searched, benef N=1, benef + searched)
+    # Ordered cheapest-default-cell first, which is NOT the delivery-cost order.
+    "lunar_surface": (  633,  1_160,  3_021,  7_253),
+    "cislunar":      (  947,  2_888,  4_967,  9_878),
+    "geo":           (1_221,  2_558,  7_382, 19_902),
+    "earth_surface": (1_747,  3_386, 11_000, 21_860),
+    # leo's default cell is the campaign ledger's 27,817 s MINUS a 74.7 min
+    # suspension that a wall clock cannot see: `campaign/results.csv` is
+    # deliberately left uncorrected, and 23,335 s is the comparable figure.
+    # README carries the same number behind a dagger.
+    "leo":           (1_426,  2_583,  8_558, 23_335),
+    "mars_surface":  (1_799,  3_982, 12_113, 25_270),
+    "mars_orbit":    (2_065,  4_399, 13_135, 29_174),
+}
+
+# The four cislunar cells, by (use_beneficiation, optimise_programme_scale).
+# DERIVED from the row above, not restated: two copies of one measurement is the
+# defect this whole block exists to prevent, and a cislunar row written out
+# twice would be exactly that.  The name and shape are kept because
+# run_pipeline.py, ui.py, build_master.py and check 9 all read them.
+# They rose against the 1.17.7 figures (733 / 1,253 / 3,424 / 5,692) because
+# v1.21.0's capacity ceilings are priced inside the payload knapsack, which
+# costs most where a programme LADDER exists: 1.29x on raw at N = 1 against
+# 2.31x on the raw searched cell.
 MEASURED_CELL_SECONDS: Dict[Tuple[bool, bool], int] = {
-    # (use_beneficiation, optimise_programme_scale): seconds
-    # Re-measured on the 2026-09 28-cell campaign, calc 1.21.2, 12 workers.
-    # They rose against the 1.17.7 figures (733 / 1,253 / 3,424 / 5,692) because
-    # v1.21.0's capacity ceilings are priced inside the payload knapsack, which
-    # costs most where a programme LADDER exists: 1.29x on raw at N = 1 against
-    # 2.31x on the raw searched cell.
-    (False, False):   947,   # run-of-mine ore, one mission
-    (False, True):  2_888,   # run-of-mine ore, programme searched
-    (True,  False): 4_967,   # concentrate, one mission
-    (True,  True):  9_878,   # concentrate + programme search  <- BOTH DEFAULT ON
+    (False, False): MEASURED_DEST_SECONDS["cislunar"][0],  # ore, one mission
+    (False, True):  MEASURED_DEST_SECONDS["cislunar"][1],  # ore, searched
+    (True,  False): MEASURED_DEST_SECONDS["cislunar"][2],  # concentrate, N = 1
+    (True,  True):  MEASURED_DEST_SECONDS["cislunar"][3],  # both <- DEFAULT ON
 }
 MEASURED_CELL_ROWS = 1_555_667   # catalog the cells above were measured on
+
+
+def dest_cost_span(beneficiated: bool = True, search: bool = True,
+                   base: str = "cislunar"):
+    """What a cell costs at the other destinations, relative to `base`.
+
+    Returns `((ratio, name), (ratio, name))` -- cheapest and dearest of every
+    destination except `base`, on the cell named by the two flags.  On the
+    default cell that is `((0.73, "lunar_surface"), (2.95, "mars_orbit"))`.
+
+    ⚠️  THE LOW END IS BELOW ONE, and that is the whole reason this exists.
+    The hand-typed `_DEST_FACTOR = (2.2, 3.0)` it replaced was introduced as
+    "how much longer the others run", which assumes a penalty; `lunar_surface`
+    is FASTER than cislunar on all four cells.  Callers that print this must
+    say "span", not "slower".
+
+    The NAMES come back with the ratios so a caller never has to re-derive
+    which destination is which, which is how a second copy of this table would
+    get started.
+    """
+    i = (2 if beneficiated else 0) + (1 if search else 0)
+    ref = float(MEASURED_DEST_SECONDS[base][i])
+    other = sorted((v[i] / ref, d)
+                   for d, v in MEASURED_DEST_SECONDS.items() if d != base)
+    return other[0], other[-1]
 
 
 def beneficiation_cost_ratio(search: bool = False) -> float:
