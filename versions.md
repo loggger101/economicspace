@@ -64,6 +64,8 @@ one that does not say is not to be used.
 - [Cost/revenue matrices](#costrevenue-matrices)
 - [The 28-cell campaign, 2026-09](#the-28-cell-campaign-2026-09)
 - [The population re-derivation, 2026-09-14](#the-population-re-derivation-2026-09-14)
+- [The destination runtime table, 2026-09-15](#the-destination-runtime-table-2026-09-15)
+- [The docs harness stopped passing on files it never read, 2026-09-15](#the-docs-harness-stopped-passing-on-files-it-never-read-2026-09-15)
 - [What the v1.17.x line was worth](#what-the-v117x-line-was-worth)
 - [The sampling rule](#the-sampling-rule)
 - [Runtime history](#runtime-history)
@@ -5178,6 +5180,125 @@ measurements of five destinations under a market model the project no longer
 runs, and nothing else in the repo records them. That is the opposite of the
 ~210 tokens the release-history split dropped, which were harness ephemera.
 **Read every reported loss and decide it deliberately.**
+
+### The destination runtime table, 2026-09-15
+
+No `pipeline_version` moved. Nothing a run writes changed: `MEASURED_CELL_SECONDS`
+holds the same four integers it held before, and the only reason it is worth a
+section is that **the claim built on top of it was false.**
+
+The 28-cell campaign above measured every destination's wall clock and nobody
+sorted the column. `modules/calc.py`, `ui.py`, `run_pipeline.py`, `run.bat`,
+`run.sh`, README and CLAUDE.md all said **"cislunar is the CHEAPEST
+destination"**;
+the campaign's own ledger says otherwise, and had done since the cells landed:
+
+| destination | raw N=1 | raw searched | benef N=1 | default cell | default vs cislunar |
+|---|---|---|---|---|---|
+| `lunar_surface` | 633 s | 1,160 s | 3,021 s | 7,253 s | **0.73x** |
+| `cislunar` | 947 s | 2,888 s | 4,967 s | 9,878 s | 1.00x |
+| `geo` | 1,221 s | 2,558 s | 7,382 s | 19,902 s | 2.02x |
+| `earth_surface` | 1,747 s | 3,386 s | 11,000 s | 21,860 s | 2.21x |
+| `leo` | 1,426 s | 2,583 s | 8,558 s | 23,335 s | 2.36x |
+| `mars_surface` | 1,799 s | 3,982 s | 12,113 s | 25,270 s | 2.56x |
+| `mars_orbit` | 2,065 s | 4,399 s | 13,135 s | 29,174 s | **2.95x** |
+
+**`lunar_surface` is cheaper on all four cells**, 0.40x to 0.73x, and on the raw
+searched cell `geo` (0.89x) and `leo` (0.89x) are cheaper too. Cislunar is the
+second-cheapest destination to run, not the cheapest.
+
+🚨  **AND IT WAS NEVER THE CHEAPEST.** The 20-cell campaign's own ledger,
+`campaign/archive-2026-08_calc-1.17.7/results.csv`, has `lunar_surface` at
+**0.78 / 0.69 / 0.78 / 0.79x** cislunar on calc `1.17.7` in 2026-08. So no new
+data arrived and nothing changed under the claim; the column had never been
+sorted, in either campaign.
+
+⚠️  **Derived from `campaign/results.csv` with `rc == 0`, which matters.** The
+ledger carries **29 rows for 28 cells**: the first `cislunar__benef__search-on`
+attempt exited `rc = 1073807364` (`0x40010004`, a Windows Ctrl-C) at 8,011.7 s
+and was re-run to completion at 9,877.9 s. Averaging the two, which is what an
+unfiltered `pivot_table` does, gives **8,944.8 s** and quietly disagrees with
+README by 9%. Filter on the return code before reading that file.
+
+⚠️  **`leo`'s default cell is the one judgement call.** The ledger's 27,817 s
+includes a 74.7 min suspension a wall clock cannot see; `campaign/results.csv`
+is deliberately left uncorrected and **23,335 s** is the comparable figure.
+Summing the corrected table reproduces README's **63.2 h** exactly, which is
+what says the correction was applied once and not twice.
+
+**What changed in the code.** `MEASURED_DEST_SECONDS` in `modules/calc.py` now
+holds all twenty-eight cells, and `MEASURED_CELL_SECONDS` is **derived** from
+its `cislunar` row rather than restated, so the two cannot disagree; the derived
+dict reproduces the previous four literals exactly, which is why no banner, no
+`--help` string and no output byte moves. `dest_cost_span()` computes the span.
+
+✅  **`_DEST_FACTOR` in `ui.py` is gone, and it was the last hand-typed ratio in
+the project.** It read `(2.2, 3.0)` -- `earth_surface` and `mars_orbit` against
+cislunar -- presented as the range "the others run longer". The real span is
+**0.73x to 2.95x** and straddles one. Its own comment had said "if that table is
+ever machine-read, derive it"; it is, so it does.
+
+⚠️  **The user-visible half is what this cost.** The dashboard's Stage 4 blurb
+told you to budget 2.2-3.0x for a non-cislunar destination, so a
+`lunar_surface` campaign was over-budgeted by a factor of three.
+
+✅  **`verify_docs.py` check 9 now reads the table rather than one row of it**:
+all seven README rows, CLAUDE.md's pairs-register row, and the identity between
+the two dicts -- **32 cells against 4**. Proved to fail in three directions
+before being trusted: a changed dict value, a changed README figure, and a
+deleted README row. That is the finding underneath the finding, and it is in
+CLAUDE.md as
+[the cheapest-destination claim](CLAUDE.md#the-cheapest-destination-claim-survived-because-one-row-of-seven-was-pinned):
+**a check that reads one row of a table is a check on that row.**
+
+### The docs harness stopped passing on files it never read, 2026-09-15
+
+No `pipeline_version` moved; `verify_docs.py` builds no stage.
+
+Every check in that file enumerates first-party paths from a static list and
+each loop opened `if not os.path.exists(path): continue`. **Seven sites, across
+checks 3, 4, 5, 6, 11 and 12**, plus four paired guards in check 7.
+
+Measured rather than argued -- rename `verify_stage1.py` away and run it:
+
+| | present | absent |
+|---|---|---|
+| check 6 | 35 files checked | **34** |
+| check 11 | 486 definitions | **469** |
+| exit code | 0 | **0** |
+
+A first-party harness could leave the repo and every docs check would call the
+result clean. Nothing printed a skip message, because nothing knew it had been
+asked to read a file: the list names a path and the disk says nothing back.
+
+🚨  **Reachable on this working copy WITHOUT deleting anything.** The tree is on
+a Drive File Stream mount where an unmaterialised file can read as absent, and
+that is how it was found: the first `verify_docs.py` run of the day read **33**
+files and the next read **35**, no commit in between, the two invisible files
+being `verify_stage1.py` and `verify_stage3.py`. The same session also caught
+the mount serving a **stale** `verify_stage3.py` -- four checks on its first run
+and six on every later one, on bytes that hash equal to HEAD.
+
+✅  **Closed by `absent()`**, one helper the enumerating checks call. A named
+first-party path with no file behind it is a finding and fails the run, on its
+own counter: checks 6 and 11 print `N NOT ON DISK` rather than folding it into
+"bad lines" or "without one", because a missing file is not a dash error and a
+count that quietly shrinks is the most readable-looking failure there is.
+
+Verified in both directions before being trusted: two files hidden gives exit
+**1** naming both, restored gives exit **0** and `0 bad lines`.
+
+⚠️  **Check 7 had already met this class and fixed the inner half.** Its own
+comment reads *"Not a skip. Both are supposed to be there, and one of them going
+missing is the drift rather than a reason to pass quietly"* -- inside an
+`if os.path.exists(a) and os.path.exists(b)` that went on skipping silently.
+Somebody had the right thought one line too deep.
+
+**Fourth instance of the same sentence in this repo**, after `verify.py`'s
+baseline-less `ALL CHECKS PASSED`, `verify_docs.py`'s `SyntaxError`-as-skip, and
+`verify_stage3.py` check 4's skip that fired on 100% of runs. This is the first
+with no skip message at all. See
+[a skip with no message at all](CLAUDE.md#a-skip-with-no-message-at-all-the-file-that-is-simply-not-there).
 
 ### Full catalog, calc v1.14.0 (2026-08-09)
 

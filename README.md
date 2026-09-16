@@ -219,7 +219,7 @@ semantics, so `./run.sh quick leo` does what `run.bat quick leo` does:
 ./run.sh quick     400-row sample, all four stages
 ./run.sh rerun     Stage 4 only, against the catalogs already on disk
 ./run.sh standard  20,000-row sample, Stage 4 only
-./run.sh full      THE PIPELINE DEFAULTS (1.6 h cislunar, 3.8 h default dest.)
+./run.sh full      THE PIPELINE DEFAULTS (2.7 h at cislunar, 6.1 h at earth_surface)
 ./run.sh verify    verify_stage3.py, then verify.py against the newest baseline
 ./run.sh campaign  the resumable measurement queue
 ./run.sh ui        the dashboard, in the foreground, reachable over the network
@@ -260,7 +260,7 @@ run.bat ui         open the dashboard (hands off to _START HERE.vbs, then
 run.bat quick      400-row sample, all four stages
 run.bat rerun      Stage 4 only, against the catalogs already on disk
 run.bat standard   20,000-row sample, Stage 4 only
-run.bat full       THE PIPELINE DEFAULTS (1.6 h cislunar, 3.8 h default dest.)
+run.bat full       THE PIPELINE DEFAULTS (2.7 h at cislunar, 6.1 h at earth_surface)
 run.bat verify     verify_stage3.py, then verify.py against the baseline
 run.bat build      rebuild master.py from modules/
 run.bat help       run_pipeline.py --help
@@ -284,12 +284,14 @@ still runs unattended; the menu asks.
 ⚠️  **The presets exist because the pipeline's own defaults are a long run.**
 Since calc v1.17.0 a configure-nothing run is the full 1.55 M-row catalog,
 beneficiated, with the programme search on, at `earth_surface`: **measured at
-13,581 s (3.8 h)** in the 2026-08-24 campaign, against 5,692 s (1.6 h) for the
-same cell at `cislunar`. ⚠️  Both are **calc 1.17.7** measurements and neither
-has been re-taken since v1.21.0 priced the capacity ceilings inside the payload
-knapsack or v1.22.0 gave that knapsack a second price tier, so read them as a
-floor. The configuration they describe -- every row, beneficiated, search on --
-is unchanged. That is the right default for the model and a hostile
+21,860 s (6.1 h)** in the 2026-09 28-cell campaign, against 9,878 s (2.7 h) for
+the same cell at `cislunar`. ⚠️  Both are **calc 1.21.2** measurements and
+neither has been re-taken since v1.22.0 gave the payload knapsack a second
+price tier, so read them as a floor. ⚠️  This paragraph read 13,581 s / 5,692 s
+until 2026-09-15 and said they had "not been re-taken since v1.21.0", which the
+28-cell campaign above had already done: **a caveat naming the release that
+would retire it does not expire on its own.** The configuration they describe
+-- every row, beneficiated, search on -- is unchanged. That is the right default for the model and a hostile
 one for a double-click, so `quick` and `standard` cap the rows and fly
 run-of-mine ore at N = 1. The row cap is a **stride sample across the whole
 belt**, not the innermost N bodies; see calc v1.13.0.
@@ -483,12 +485,14 @@ full `master.py` at least once, or run stages 1-3 individually first.
   co-located.
 - **Stage 4 is the long pole by far**, because `eval_row_cap` defaults to `0`
   (evaluate everything), "everything" is 1.55 M rows, and both beneficiation
-  and the programme search are on by default. Measured at cislunar on six
-  physical cores / 12 workers, calc v1.17.7: **733 s** raw at N = 1 and
-  **5,692 s** (1.6 h) for the default cell. Other destinations cost 2.1-2.7×
-  more. Set `eval_row_cap` for anything interactive, as of calc v1.13.0 a
-  capped run is an evenly-spaced sample of the whole belt rather than the
-  innermost N bodies, so it is actually representative.
+  and the programme search are on by default. The twenty-eight measured cells
+  are tabulated under [Beneficiation](#beneficiation) and are not restated
+  here: at cislunar the default cell is **2.7 h**, and the other six
+  destinations span **0.73-2.95×** that, `lunar_surface` being the one that
+  runs FASTER rather than slower. Set `eval_row_cap` for anything
+  interactive: as of calc v1.13.0 a capped run is an evenly-spaced sample of
+  the whole belt rather than the innermost N bodies, so it is actually
+  representative.
 - **The two big dials, if a full run is more than you want:**
   `catalog.jpl_limit` bounds how many asteroids exist, and
   `catalog.derive_diameter_from_h = False` drops the catalog from ~1.55 M to
@@ -938,10 +942,17 @@ py verify_docs.py
 | 6 | dashes | an em- or en-dash creeping back into prose a reader sees, or a line left opening with a bare comma by the pass that removed them: the docs, the root scripts, the campaign scripts, and comments in `modules/` |
 | 7 | manifests | a list documented in one place drifting from the list defined in another: `requirements.txt` against `_MASTER_REQUIRED`, and the `run.bat` block above against run.bat's own dispatcher |
 | 8 | help | a config dial the dashboard renders with no help text, because the UI scrapes its help from the field's own comment |
-| 9 | runtime | the cislunar wall clock above drifting from `calc.MEASURED_CELL_SECONDS`, which every banner and `--help` string derives its cost ratios from |
+| 9 | runtime | the **whole twenty-eight-cell** wall-clock table above drifting from `calc.MEASURED_DEST_SECONDS`, which every banner and `--help` string derives its cost ratios from; also CLAUDE.md's copy of the cislunar row, the identity between the two dicts, and every "N h at &lt;destination&gt;" in `run.bat`, `run.sh` and this file, which are typed because shell cannot import `master` |
 | 10 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
 | 11 | docstrings | a module, class or function in the repo's own Python with no docstring |
 | 12 | pairs | one measurement quoted in BOTH README and CLAUDE.md without a row on CLAUDE.md's register of known copies |
+
+⚠️  **Every one of these fails if a file it is supposed to read is not on
+disk.** That was not true until 2026-09-15: each check enumerated first-party
+files from a static list and skipped any that was absent, so renaming
+`verify_stage1.py` away dropped check 11 from 486 definitions to 469 and the
+run still exited **0**. A missing file now fails on its own counter, reported
+separately from the finding the check is actually about.
 
 Check 6 is a ratchet rather than a style opinion: 1,342 em-dashes came out of
 the docs and 1,120 out of the module comments, and without a check they drift

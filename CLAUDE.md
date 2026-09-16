@@ -1467,10 +1467,16 @@ exactly: a file that derives a number in one place is not a file that derives
 it.** The audit that closed this class went looking for files that typed the
 ratios and found five; it did not go looking for a SECOND copy inside a file
 already on the fixed list, because that file was on the fixed list. **Grep for
-the VALUE, not for the filename.** ⚠️  One typed copy is left on purpose, the
-cislunar-to-dearest factor in `_DEST_FACTOR`, because it is a ratio of two
-numbers that live in a markdown table rather than in code; it is labelled, and
-it too had gone stale (2.1-2.7x against the 28-cell matrix's 2.2-3.0x).
+the VALUE, not for the filename.** ✅  **The last typed copy is gone as of
+2026-09-15.** It was `_DEST_FACTOR` in `ui.py`, the cislunar-to-dearest factor,
+kept typed because it was a ratio of two numbers living in a markdown table
+rather than in code, and its own comment said "if that table is ever
+machine-read, derive it". The table is in code now, as `MEASURED_DEST_SECONDS`,
+so it derives. 🚨  **It had gone stale twice and was WRONG the second
+time**: 2.1-2.7x under a 28-cell base, then 2.2-3.0x, which is the
+`earth_surface` and `mars_orbit` pair quoted as the span of "the others" when
+the real span is **0.73-2.95x** and straddles one. See
+[the cheapest-destination claim](#the-cheapest-destination-claim-survived-because-one-row-of-seven-was-pinned).
 
 ⚠️  **`run_pipeline.py` deliberately asserts rather than falling back to a
 literal** if master is somehow not loaded when the parser is built. A
@@ -1520,7 +1526,7 @@ or more distinctive numbers across two files:
 | the in-space absorption ceilings: LEO **500 t/yr**, cislunar 100 t, `geo` 40 t/yr | [What the model charges for](README.md#what-the-model-charges-for) | "Model assumptions that are load-bearing" |
 | 🚨  **the four cislunar cell objectives, now 15.3937 / 9.5435 / 14.1071 / 6.6622** -- the project's headline answer, and the pair this register missed for longest | [Current results](README.md#current-results-the-complete-28-cell-matrix), **and again** under [Programme scale](README.md#programme-scale) | the 28-cell matrix section |
 | 🚨  **the winner-against-population table: 39.4 / 39.5 / -8.4, 66.1 / 63.8 / -36.5, 77.7 / -6.5** -- the 2026-09 campaign's most reusable finding, and deliberately in both files because README needs the result and this file needs the warning | [The winner moved far more than the population did](README.md#the-winner-moved-far-more-than-the-population-did) | the 28-cell matrix section |
-| the 28-cell wall clocks, 947 / 2,888 / 4,967 / 9,878 s at cislunar | [Beneficiation](README.md#beneficiation) | pinned to `MEASURED_CELL_SECONDS` by check 9, not quoted here |
+| the 28-cell wall clocks, 947 / 2,888 / 4,967 / 9,878 s at cislunar | [Beneficiation](README.md#beneficiation) | **this row itself**, which said "not quoted here" while quoting all four until 2026-09-15; check 9 now pins README's whole seven-row table AND this row to `MEASURED_DEST_SECONDS` |
 
 ✅  **Re-run on 2026-09-07 for calc `1.21.0`, and it found TWO new pairs,
 both created by that release's README section**: the cislunar cadence and the
@@ -2733,6 +2739,69 @@ up to **0.3668 pp** at `earth_surface` beneficiated. Both failures are the same
 shape: **a statement about a quantity that stopped being interesting was left
 standing because nothing it was compared against had moved either.**
 
+### The cheapest-destination claim survived because one row of seven was pinned
+
+2026-09-15, and it is the sharpest instance in this file of a check being read
+as covering a table when it covered a **row**.
+
+`verify_docs.py` check 9 existed precisely to stop a runtime figure rotting in
+prose, and it worked: README's `cislunar` row has never disagreed with
+`MEASURED_CELL_SECONDS`. The 28-cell table has **seven** rows, check 9 read one,
+and the six it did not read are where the rot was.
+
+| | |
+|---|---|
+| what the docs and the code said | "cislunar is the CHEAPEST destination", in `modules/calc.py`, `ui.py`, `run_pipeline.py`, `run.bat`, `run.sh`, README and this file |
+| what the campaign measured | `lunar_surface` at **0.40-0.73x** cislunar, on **all four** cells |
+| how long it stood | the campaign that disproved it is the one the figures come from |
+
+🚨  **IT WAS NEVER TRUE, AND THE 20-CELL LEDGER SAYS SO.** This was not new
+data arriving; nobody had sorted the column. On calc `1.17.7` in 2026-08,
+`lunar_surface` was already the cheapest destination to run, on all four cells:
+
+| cell | cislunar | `lunar_surface` | ratio |
+|---|---|---|---|
+| raw N = 1 | 733 s | 572 s | **0.78x** |
+| raw searched | 1,253 s | 867 s | **0.69x** |
+| benef N = 1 | 3,424 s | 2,660 s | **0.78x** |
+| default | 5,692 s | 4,508 s | **0.79x** |
+
+Derived from `campaign/archive-2026-08_calc-1.17.7/results.csv`, which has sat
+in the repo since the campaign. **The sentence was a summary written once,
+carried into `modules/calc.py` twice, `ui.py` twice, `run_pipeline.py`,
+`run.bat`, `run.sh`, README and this file, and every copy was still standing
+when the table that refutes it was pasted in above it.**
+
+⚠️  **The user-visible half is the one that cost something.** The dashboard's
+Stage 4 blurb told you to budget **2.2-3.0x** for a non-cislunar destination.
+The real span on the default cell is **0.73x to 2.95x**, so a `lunar_surface`
+campaign was over-budgeted by a factor of three, and the low end of a range that
+straddles one had been rounded away into a penalty.
+
+✅  **Fixed by deriving rather than by correcting.** `MEASURED_DEST_SECONDS` in
+`modules/calc.py` now holds all twenty-eight cells and `MEASURED_CELL_SECONDS`
+is its cislunar row, so the two cannot disagree; `dest_cost_span()` computes the
+span; `ui.py`'s `_DEST_FACTOR = (2.2, 3.0)`, **the last hand-typed ratio in the
+project**, is gone, and `run_pipeline.py`'s `full` preset derives its hours too.
+Check 9 went from **4 cells to 42**: all seven README rows, CLAUDE.md's register
+row, the identity between the two dicts, and every `N h at <destination>` in
+`run.bat`, `run.sh` and README, which are typed because shell cannot import
+`master` and are therefore checked.
+
+⚠️  **The `leo` row is the one judgement call in that table.** Its default cell
+is the ledger's 27,817 s minus a 74.7 min suspension a wall clock cannot see;
+`campaign/results.csv` is deliberately left uncorrected, and **23,335 s** is the
+comparable figure, which is what README and the dict both carry. Summing the
+dict reproduces README's **63.2 h** exactly, which is what says the correction
+was applied once and not twice.
+
+🚨  **The general rule, and it is not about wall clocks: a check that reads one
+row of a table is a check on that row.** This repo's harnesses are written
+against the place somebody was last burned -- check 2's own comment says so, in
+those words, about the third copy of a version table nobody had checked. Ask of
+every check not "does it pass" but **"what is the largest thing it could be
+mistaken for covering"**, and pin the table.
+
 ### The fleet search is coarse-then-refine, so tightening a constraint can improve a row
 
 calc `1.21.2` again, and this one nearly got written up as a defect. Pooling
@@ -3355,6 +3424,66 @@ This one fired *always*, and the message was accurate every time. **Ask how
 often a skip fires, not only whether it explains itself** -- a skip that fires
 on 100% of runs is a check that does not exist, however well it is worded.
 
+### A skip with no message at all: the file that is simply not there
+
+🚨  **FOURTH INSTANCE, AND THE FIRST WITH NO SKIP MESSAGE TO READ.** The three
+above all printed something. This one printed a **count**, and a count that is
+quietly smaller is the most readable-looking failure in the repo.
+
+`verify_docs.py` enumerates first-party files from static lists -- `DOCS`,
+`ROOT_PY`, `FIRST_PARTY_PY`, `MODULES`, `CURRENT_DOCS`, `LINKED_DOCS` -- and
+every loop over them opened with:
+
+```python
+if not os.path.exists(path):
+    continue
+```
+
+**Proved rather than argued on 2026-09-15.** Rename `verify_stage1.py` away and
+run it:
+
+| | with the file | without it |
+|---|---|---|
+| check 6 | 35 files checked | **34** |
+| check 11 | 486 definitions | **469** |
+| verdict | `OK`, exit 0 | **`OK`, exit 0** |
+
+**A whole first-party harness can leave this repo and every docs check calls
+the result clean.** Nothing is skipped loudly, because nothing knows it was
+meant to read the file: the list says a name and the disk says nothing back.
+
+🚨  **AND IT IS REACHABLE WITHOUT DELETING ANYTHING, ON THIS WORKING COPY.**
+The tree is on a Drive File Stream mount, and a file that has not materialised
+can read as absent. It happened during the very session that found this: the
+first `verify_docs.py` run of the day read **33** files and the next read
+**35**, with no commit in between, the two invisible files being
+`verify_stage1.py` and `verify_stage3.py`. Both are harnesses. Neither was
+missing from git.
+
+⚠️  **The same mount served a STALE verify_stage3.py in the same session**, and
+that is the worse half: its first run printed **four** checks and every later
+run printed **six**, on a file whose bytes match HEAD exactly. So a harness here
+can run an older version of itself and say `OK`. **When a harness's check COUNT
+changes and the file did not, suspect the mount before the code** -- see
+[Google Drive makes the tree look dirty](#google-drive-makes-the-tree-look-dirty-run-the-hooks).
+
+✅  **Closed by `absent()`**, one helper the six enumerating checks call: a name
+on a first-party list with no file behind it is a finding and fails the run,
+reported on its own counter rather than folded into "bad lines" or "without a
+docstring", because a missing file is not a dash error. Checks 6 and 11 print
+`N NOT ON DISK` and return false. Verified both ways, which is the whole point
+of the section: two files hidden gives exit **1** and names both; restored gives
+exit **0** and `0 bad lines`.
+
+⚠️  **The tell that this class was still open was in the code, in a comment.**
+Check 7 had already met it on one pair of files and fixed the INNER test --
+*"Not a skip. Both are supposed to be there, and one of them going missing is
+the drift rather than a reason to pass quietly"* -- while the `if
+os.path.exists(a) and os.path.exists(b)` wrapped around that very sentence went
+on skipping silently. **Somebody had the right thought one line too deep.**
+That is this file's "fixing one half of a defect class" rule, written by the
+person who fixed the other half.
+
 ## Stage 3 lives in another repository now
 
 `modules/transportation.py` is an adapter. Every reference row, all 141 of
@@ -3750,6 +3879,43 @@ and the two are trivial to tell apart:
 ```bash
 ls -d .git && cat .git 2>/dev/null   # "gitdir: ..." means the Drive setup
 git rev-parse --show-toplevel
+```
+
+🚨  **AND IT DOES MORE THAN MAKE THE TREE LOOK DIRTY: A FILE CAN READ AS ABSENT
+OR AS STALE.** The stat-cache bug below is about `git status` lying. These two
+are about PYTHON reading the wrong thing, both observed on 2026-09-15 in one
+session, with no commit in between and `git status` clean throughout:
+
+| what | observed |
+|---|---|
+| **absent** | `verify_stage1.py` and `verify_stage3.py` were invisible to the first `verify_docs.py` run of the day and visible to the next: check 6 read **33** files, then **35** |
+| **stale** | `verify_stage3.py`'s first run printed **four** checks; every later run printed **six**, on a file whose bytes match HEAD exactly |
+
+⚠️  **The stale case is the dangerous one, because a harness ran an older
+version of itself and printed `OK`.** Nothing in git was wrong and nothing in
+the code was wrong; the mount served the old bytes once and the current bytes
+afterwards.
+
+✅  **Two defences, and only the first is automatic.** `verify_docs.py`'s
+`absent()` now fails the run rather than quietly reading one file fewer, which
+closes the *absent* half; see
+[a skip with no message at all](#a-skip-with-no-message-at-all-the-file-that-is-simply-not-there).
+The *stale* half has no check, so the habit is the defence: **when a harness's
+check COUNT or file COUNT changes and the file did not, suspect the mount before
+the code**, and confirm with a hash against HEAD rather than by reading the
+file, because reading it is what fixes it:
+
+```bash
+git status --short <file>
+py -c "import io,hashlib;print(hashlib.sha256(io.open('<file>','rb').read()).hexdigest()[:16])"
+git show HEAD:<file> | py -c "import sys,hashlib;print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:16])"
+```
+
+⚠️  **Touching every file once is the cheap prophylactic** before a measurement
+session, because materialisation is what a read does anyway:
+
+```bash
+git ls-files -z | xargs -0 -n 50 cat > /dev/null
 ```
 
 ⚠️  **More than one working copy of this repo is the documented divergence
@@ -4159,10 +4325,15 @@ the 20-cell campaign supplied one, and they were worth 1.78×: 4.32×, so the
 default estimate was reading **4.3× high, not slightly**. The sidebar prose
 moved with it (6.8 h → 1.6 h), a number and the sentence beside it, changed
 in the same commit, which is what this file's "grep the prose too" rule asks
-for. ⚠️  It is a **cislunar** prior and cislunar is the CHEAPEST destination,
-so it now reads LOW at `leo`, `mars_surface` and `earth_surface` (2.1-2.7×
-slower per cell) rather than high everywhere. That trade is deliberate: those
-four cells are the ones measured on the current code.
+for. ⚠️  It is a **cislunar** prior, and cislunar is the SECOND-cheapest
+destination to run rather than the cheapest: on the 28-cell campaign
+`lunar_surface` takes **0.40-0.73×** these figures and the other five
+**0.89-2.95×**, so the prior reads HIGH at `lunar_surface` and LOW at the
+rest. That trade is deliberate: the four cislunar cells are the ones every
+consumer derives from. 🚨  **"cislunar is the CHEAPEST destination" was
+written here, in `ui.py` twice and in `modules/calc.py` twice, and it was
+retired on 2026-09-15 by the campaign that had already disproved it**; see
+[the cheapest-destination claim](#the-cheapest-destination-claim-survived-because-one-row-of-seven-was-pinned).
 
 🚨  **And the destination selector seeds from the CATALOG ON DISK, not from
 the config default.** `CALC_CONFIG.delivery_destination` is `earth_surface`
