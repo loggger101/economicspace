@@ -28,13 +28,26 @@ accessors, never a solver: the config, `_ops_value`, `RARE_METAL_ELEMENTS`,
 That is what makes the check at the end worth running: two statements of one
 model, compared column by column.  `--verify` runs it and prints nothing else.
 
-THE SHAPE IS PINNED AND THE PROSE IS PINNED, DELIBERATELY.  The document
-explains a beneficiated, propulsively-returned, solar-powered, electric mission
-to a body whose value is mostly water, and its sentences say so.  The numbers
-would follow any cell; the prose would not.  So `main()` refuses when the
-ledger's best cell is not the pinned one, names both, and says what to do.  A
-document that quietly describes the wrong body is the failure this file exists
-to prevent, and a silent success is worse than a red check.
+THE SHAPE IS NO LONGER PINNED, AND THE PROSE IS DERIVED WITH IT.  This
+paragraph used to say the opposite, and said it for a release after it stopped
+being true: there was a `PINNED` cell constant, `main()` refused any other, and
+the document's sentences were written for one beneficiated, propulsively
+returned, solar-powered mission to a water-rich body.  Every destination and
+every architecture the search can choose derives now -- aerocapture and its
+heat shield, ISRU, chemical and electric propulsion, RTG power, raw ore as well
+as concentrate -- and the opening sentence NAMES the vehicle, propellant,
+return mode, propellant sourcing, power source and rendezvous apsis it found on
+the row.  The constant is gone and so is the refusal.
+
+WHAT THE GUARD REFUSES NOW is coverage rather than identity, and it is per
+axis rather than one shape tuple, so a refusal names only the axes that
+actually fail: an unknown destination, `model_rig_service_life` off (which
+stops being a dial and becomes a different programme), a power source that is
+neither solar nor RTG, and a fallback delta-v pair, which is not a geometry and
+so has no transfer to write out.  A document that quietly describes the wrong
+body is still the failure this file exists to prevent; what stops it is now the
+derivation reading its terms off the ROW, every one of them with a compared
+column behind it, rather than a constant somebody has to remember to move.
 
     py campaign/worked_calculation.py            # derive, check, write the HTML
     py campaign/worked_calculation.py --pdf      # and render it with Chrome
@@ -57,8 +70,6 @@ CAMP = os.path.join(ROOT, "campaign")
 LEDGER = os.path.join(CAMP, "results.csv")
 sys.path.insert(0, ROOT)
 
-# The cell the prose describes.  See the module docstring for why this is
-# pinned rather than followed.
 # The live catalog a Stage 4 run leaves behind.  This is the DEFAULT source:
 # "the best case of the run you just did" is the question this script answers,
 # and the campaign archives are the special case rather than the normal one.
@@ -531,7 +542,7 @@ def phase_table(body, minerals):
     """[(phase, mass fraction, $/kg)] for one body, derived from Module 2.
 
     The four taxonomy fractions priced separately rather than blended, plus the
-    residual.  Module 1's fractions sum to 0.76-0.96 and the remainder is
+    residual.  Module 1's fractions sum to 0.73-0.96 and the remainder is
     undifferentiated rock, valued at the silicate quote and drawing the silicate
     ceiling; pricing it as silicates and bounding it as something else is the
     defect calc v1.21.2 closed.
@@ -650,7 +661,7 @@ def raw_hold(payload_kg, phases):
     Nothing is chosen here, which is the whole difference from the
     beneficiated case.  A raw mission digs what it flies and flies what it
     digs, so the mix is the composition scaled to the payload, and the phase
-    fractions are normalised because they sum to 0.76-0.96 rather than to 1:
+    fractions are normalised because they sum to 0.73-0.96 rather than to 1:
     the residual is bulk silicate that the phase table prices separately.
 
     No `recovery` term appears, and that is not an omission.  Separation
