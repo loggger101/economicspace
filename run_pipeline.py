@@ -32,7 +32,8 @@ THREE THINGS IT HAS TO GET RIGHT, all of them traps this repo has already hit:
 
 ON THE PRESETS.  The pipeline's own defaults are the full 1.55 M-row catalog,
 beneficiated, with the programme search on, at earth_surface -- measured at
-13,581 s (3.8 h) in the 2026-08-24 campaign; see README.md's Results.
+21,860 s (6.1 h) in the 2026-09 28-cell campaign; see README.md's Results.
+(It read 13,581 s / 3.8 h until 2026-09-15, which was the 2026-08-24 figure.)
 That is the right default for the model and a hostile default for someone who
 has just double-clicked something, so `--preset` names three runs by what they
 cost, and `--preset full` is the one that reproduces the pipeline's own
@@ -130,8 +131,7 @@ PRESETS = {
     "full": dict(
         rows=0, raw=False, search=True, asteroids=0,
         blurb="THE PIPELINE DEFAULTS -- every row, beneficiated, programme "
-              "search on (1.6 h at cislunar to 3.8 h at earth_surface, "
-              "measured 2026-08-24)",
+              "search on",
     ),
 }
 
@@ -288,6 +288,30 @@ def _search_ratio() -> float:
     return _loaded_master().programme_search_cost_ratio(False)
 
 
+def preset_blurb(name: str) -> str:
+    """A preset's blurb, with the `full` preset's measured cost derived onto it.
+
+    ⚠️  THE TWO HOURS IN THIS STRING WERE TYPED UNTIL 2026-09-15 and had been
+    stale since the 28-cell campaign: "1.6 h at cislunar to 3.8 h at
+    earth_surface" are calc 1.17.7 figures against a current 2.7 h and 6.1 h.
+    That made it the sixth copy of a number the note above `_loaded_master`
+    says must never be typed here, and it was in the one string a user reads
+    before deciding to start a multi-hour run.
+
+    Named off `MEASURED_DEST_SECONDS` rather than hard-coding `cislunar` and
+    `earth_surface`, because neither is the extreme: `lunar_surface` is the
+    cheapest destination to run and `mars_orbit` the dearest.
+    """
+    blurb = PRESETS[name]["blurb"]
+    if name != "full":
+        return blurb
+    tbl = _loaded_master().MEASURED_DEST_SECONDS
+    cheap = min(tbl, key=lambda d: tbl[d][3])
+    dear = max(tbl, key=lambda d: tbl[d][3])
+    return "%s (%.1f h at %s to %.1f h at %s)" % (
+        blurb, tbl[cheap][3] / 3600.0, cheap, tbl[dear][3] / 3600.0, dear)
+
+
 def build_parser(destinations) -> argparse.ArgumentParser:
     """The whole CLI surface, built AFTER `load_master()` and not before.
 
@@ -303,7 +327,7 @@ def build_parser(destinations) -> argparse.ArgumentParser:
         description="Run the asteroid mining profitability pipeline.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="presets:\n" + "\n".join(
-            "  %-9s %s" % (k, v["blurb"]) for k, v in PRESETS.items()
+            "  %-9s %s" % (k, preset_blurb(k)) for k in PRESETS
         ),
     )
     p.add_argument("--preset", choices=sorted(PRESETS), default="quick",
@@ -785,7 +809,7 @@ def print_banner(args, settings, cfg, stages) -> None:
     print("=" * 78)
     print("  ASTEROID PROFITABILITY PIPELINE")
     print("=" * 78)
-    print("  Preset       : %s -- %s" % (args.preset, PRESETS[args.preset]["blurb"]))
+    print("  Preset       : %s -- %s" % (args.preset, preset_blurb(args.preset)))
     print("  Stages       : %s" % ", ".join("%d %s" % (s, STAGE_NAMES[s])
                                             for s in stages))
     for label, value, note in lines:
