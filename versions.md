@@ -451,6 +451,11 @@ combination, not a product of the parts.**
 
 ### Runtime: NOT measured, and the reason is worth more than the number
 
+ℹ️  **One full-catalog cell has been run since, on 2026-09-16, and it is a wall clock rather than a ratio**; see
+[the first full-catalog cell at these defaults](#the-first-full-catalog-cell-at-these-defaults-2026-09-16).
+Nothing below is superseded by it: the objection is to the RATIO, and one cell measured
+five days after another in a separate session cannot supply one.
+
 🚨  **A FIRST PASS PUT THE NEW DEFAULTS AT 1.41-2.01x THE RUNTIME OF v1.21.2,
 AND THAT TABLE WAS WRONG.** The decomposition above re-ran the identical
 all-four-restored raw cell later in the same session and measured **68 s
@@ -557,6 +562,183 @@ artefact it compares reports failures that do not exist**, and an epsilon
 inside the cost cascade to silence a checker is not something this project
 does. The floor is six orders of magnitude above the residue and far below any
 mass the model can mean.
+
+### The first full-catalog cell at these defaults (2026-09-16)
+
+The subsection above says no runtime table is published for this release and
+that `MEASURED_CELL_SECONDS` still holds v1.17.7 figures. This is the cell that
+closes the first half of that gap and deliberately does not close the second.
+
+**cislunar, beneficiated, programme search on, every row of the 1,555,667-row
+catalog, 12 workers, calc `1.22.0` at its own defaults.** Stages 1-3 were not
+run; the live Stage 2 catalog was verified byte-identical to
+`campaign/stage2/mineral_value_catalog.cislunar.csv` before launch, so the
+2026-09-09 price epoch is the one the 28-cell campaign used.
+
+| | v1.21.2 (the campaign) | **v1.22.0 (this run)** |
+|---|---|---|
+| cost / revenue | 6.6622x | **3.1822x** |
+| winner | 2021 CX5 (D) | 2021 CX5 (D) |
+| vehicle / propellant | New Glenn / argon | New Glenn / **iodine** |
+| payload | 34,573 kg | **62,283 kg** |
+| programme | N = 35 | **N = 18**, 6 ships x 3 campaigns |
+| evaluable rows | 660,253 | **660,253** |
+| wall clock | 9,878 s | **11,676 s** |
+
+⚠️  **The archive is `cislunar__benef__search-on__calc-1.22.0.csv.gz`,
+NOT the campaign's own name.** `campaign/run_cell.py` would have written
+`cislunar__benef__search-on.csv.gz`, which is the v1.21.2 artifact that
+`population.py`, `analyse.py` and `worked_calculation.py` all read, is 377 MB,
+is gitignored and has no backup. A calc-suffixed name is invisible to both
+readers because each builds an exact filename rather than globbing, which is
+what makes a second measurement of one cell safe to keep on disk at all.
+
+#### The evaluable set did not move, and that is the invariant
+
+**660,253 rows in both builds**, identical. Which rows are evaluable falls out
+of the mass cascade, and no price, flag or N enters it. This release put a
+second price tier inside the payload knapsack, so the one thing it could have
+broken is the `caps=None` guard that keeps ceilings out of the SIZING path; an
+evaluable count that moved by a single row would have been that. It did not.
+
+#### The capped-sample decomposition scored, and it was right
+
+The release note above puts the four flags at **2.1x on the default cell**,
+measured on a capped cislunar sample. On the full catalog the winner moves
+6.6622x to 3.1822x, a factor of **2.094x**.
+
+✅  **That is a data point ON THE SAMPLING RULE rather than against it, and
+the distinction is the one the rule already draws.** What has failed four times
+is extrapolating a stride sample's WALL CLOCK or cost RATIO to a full catalog.
+What held here is a sample's estimate of a MODEL ratio over identical rows,
+which is the narrow kind, the same kind that put calc v1.15.0's beneficiated
+cell inside its projected band. **Do not read it as permission to project a
+runtime from a sample.**
+
+#### 251 rows got worse, and they are all at the ladder's top rung
+
+The four flips are not uniformly an improvement. Paired row by row against the
+archived v1.21.2 cell, **660,002 rows improve, 251 (0.04%) regress**, worst
+**1.2606x**, and the population median improvement is **57.54%** on the
+committed `median(1 - r)` convention.
+
+🚨  **Every one of the 251 sits at N = 320 in BOTH builds, and NONE of them
+was ceiling-bound**, against 30.27% of the population in v1.21.2. N = 320 is
+`max_fleet_ships` 64 times a five-trip rig, i.e. the ladder's top rung. So the
+gain that carries this release, selling the surplus, is worth exactly zero to
+them, while withdrawing the learning curve takes away the largest Wright's-law
+discount on the ladder. They are the rows where one flip bites and the other
+three cannot.
+
+⚠️  It costs nothing: their cost/revenue ratios run **678x to 1,418x**,
+three orders of magnitude off the winner, which is the same population this
+file already describes as sitting at the ladder's top because no finite market
+bounds them. **It is still worth knowing that a release argued as a 2x
+improvement makes a named set of rows worse**, and that the set is identifiable
+from one column.
+
+#### What moved structurally
+
+| | v1.21.2 | v1.22.0 |
+|---|---|---|
+| rows a ceiling binds | 30.27% | **6.53%** |
+| minimum clearing fraction | 0.679429 | 0.839715 |
+| `W < trips` | 22.14% | **3.51%** |
+| `W > trips` | 0 | 0 |
+| fleet median | 6 | 4 |
+| N median | 30 | 20 |
+| programme span median | 13.82 yr | 15.18 yr |
+| concentration ratio median | 7.4074 | 7.4074 |
+
+🚨  **PROGRAMMES TAKE THE RIG'S LAST TRIPS BACK.** calc v1.21.0's signature
+population finding was that programmes decline the rig's final campaigns once a
+hard wall refuses the sale, and at this cell it ran 22.14%. Selling that
+campaign's load at half price is enough to make it worth flying again:
+**3.51%**. The mechanism is not new and the direction is the whole point: a
+wall that refuses a sale and a wall that discounts it are different walls.
+
+⚠️  **The propellant and vehicle shares move with it, and one reverses a
+documented lead.** Xenon goes 38.99% to **55.30%** of rows and iodine 36.24% to
+**20.70%**, so iodine's near-lead at cislunar is not merely lost but inverted,
+by 34.6 points. New Glenn falls 32.53% to **16.05%** and Falcon Heavy rises
+40.02% to **54.08%**. Both follow the same cause: iodine's advantage and New
+Glenn's are effects of programme SCALE and of a ceiling that punishes volume,
+and N fell from 30 to 20 while the ceiling stopped refusing anything.
+
+#### The exclusivity test, on 660,253 rows instead of 158
+
+The invariants section above records check 7's new exclusivity test failing on
+**2 of 158 rows** at 3.638e-12 kg, and being fixed with a milligram floor. The
+full population is the stronger statement of the same thing:
+
+| at check 7's threshold, 660,253 rows | |
+|---|---|
+| `unsold` and `surplus` both above 1e-6 kg | **0** |
+| `unsold` above 1e-6 kg anywhere | **0** |
+| `saturation_multiplier` not equal to 1.0 | **0** |
+| clearing outside [0, 1] | **0** |
+| either column negative, or over the payload | **0** |
+
+⚠️  **A bare positive test instead of the floor reports 1,769
+violations**, at a maximum of **1.455e-11 kg against payloads in the tens of
+tonnes, 1.8e-16 relative.** That is one ULP and it is the same residue, three
+orders of magnitude more often because there are four thousand times as many
+rows. The floor is not a convenience; without it this cell reports a
+four-figure failure count for a model that is exactly right.
+
+#### The winner is bound by a ceiling and sells no surplus at all
+
+`market_clearing_fraction` 0.983516, `surplus_payload_kg` **0.0**,
+`unsold_payload_kg` 0.0. Those look inconsistent and are not, and the generated
+document derives the reason: gross value **$582.66M unbounded against $573.05M
+after the ceilings**, with 0.0 kg discounted.
+
+The tiered walk records surplus only when a phase's DISCOUNTED tier is actually
+drawn. A ceiling can clip the dearest phase's full-price tier, the hold then
+refills with cheaper material at full price, and the walk never reaches the
+discounted tier before the hold is full. Value falls below 1.0; no mass is sold
+at a discount. **10,757 rows are bound with zero surplus, 25.0% of all bound
+rows**, so this is a quarter of the bound population rather than a quirk of one
+body. Across the cell the discounted tier does fire: **32,349 rows (4.90%)
+carry surplus, 23.0 kt of it.**
+
+✅  **This is the reason the two columns exist rather than one.** A single
+"mass over the ceiling" column would read 0.0 here and be taken to mean no
+ceiling bound the winner, which is false.
+
+#### Runtime: a number, and not a ratio
+
+**11,676.4 s (3.24 h)**, 12 workers, against the 9,878 s this cell measured on
+v1.21.2 on 2026-09-11.
+
+🚨  **DO NOT QUOTE 1.18x.** The two runs are five days apart in separate
+sessions, and the subsection above is this release's own finding that **a ratio
+taken across a session is a measurement of the session**: the same host moved
+1.6x on an identical configuration while the release's first runtime table was
+reading 1.4x off it. The wall clock is a fact about this run. The ratio is not
+a measurement, and isolating the tiered walk's real cost still needs the
+interleaved construction calc v1.17.4 and v1.17.6 used.
+
+⚠️  `MEASURED_CELL_SECONDS` is therefore **still unchanged**, and
+deliberately: it holds four cells measured as a set, and replacing one of them
+with a figure from a different release would make the dict internally
+incomparable, which is exactly what it was rebuilt to prevent.
+
+#### What this does NOT settle
+
+⚠️  **One cell of four.** The raw and N = 1 cislunar cells have not been
+run at these defaults, so nothing here checks the never-worse pairings, and the
+`benef <= raw` relation at v1.22.0 rests on the 155-row verification cells
+rather than on a population. The other six destinations are untouched, so the
+28-cell matrix stands as the only seven-destination measurement and every claim
+it carries is still a v1.21.2 claim.
+
+✅  **The worked calculation was regenerated against this row** and
+reproduces it: **88 derived quantities, 87 bit-exact, 1 within 1e-12, 0
+differing**, worst 6.795e-16 relative on `diameter_km`. It reads all four of
+this release's flags off the row rather than the live config, which is the
+reader-side fix this release's own notes describe, exercised here for the first
+time on a full-catalog winner.
 
 ## calc v1.21.2
 

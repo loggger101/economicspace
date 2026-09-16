@@ -2002,7 +2002,7 @@ def asteroid_bulk_value_usd_per_kg(
     in nickel-iron, base metals (Fe, Ni, Co) and non-metal categories
     (silicates, carbon, water) are unaffected.
 
-    v1.3.3, "Other" residual mass (Module 1 fractions sum to 0.76-0.96
+    v1.3.3, "Other" residual mass (Module 1 fractions sum to 0.73-0.96
     across types) was silently zero-valued; now treated as bulk silicate
     at $0.05/kg floor.
     """
@@ -2128,7 +2128,7 @@ def asteroid_phase_table(
 
     The same four taxonomy fractions `asteroid_bulk_value_usd_per_kg` blends,
     but kept SEPARATE so a mission can choose what to load rather than being
-    handed the mean.  The residual (Module 1's fractions sum to 0.76-0.96) is
+    handed the mean.  The residual (Module 1's fractions sum to 0.73-0.96) is
     included as bulk silicate, matching the bulk function's floor treatment.
 
     Phases with zero fraction are dropped; you cannot select what is not
@@ -2158,7 +2158,7 @@ def asteroid_phase_table(
         frac_sum += frac
 
     if 0.0 < frac_sum < 1.0:
-        # Composition fractions sum to 0.76-0.96; the remainder is undifferentiated
+        # Composition fractions sum to 0.73-0.96; the remainder is undifferentiated
         # rock and is valued at the bulk-silicate floor.  ⚠️  It is priced at the
         # `silicates` QUOTE, which is why `_PHASE_MARKET_ALIAS` below must give it
         # the `silicates` CEILING: a phase that declares itself silicates for
