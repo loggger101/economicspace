@@ -58,6 +58,12 @@ import io
 import os
 import sys
 
+# Local: the working-tree guard every harness here runs first.  It is a
+# sibling file rather than a copied function because four harnesses need
+# it and a second copy of a check is the defect this repo catalogues
+# oftenest.
+import tree_check
+
 REPO = os.path.dirname(os.path.abspath(__file__))
 
 # The catalog every Stage 4 run reads.  Not regenerated here under any
@@ -608,11 +614,12 @@ def main() -> int:
     print("=" * 70)
     print("  STAGE 1 VERIFICATION  -  the derivation chain, without fetching")
     print("=" * 70)
+    tree_ok = tree_check.assert_tree()
     c = load_stage1()
     print("  catalog module pipeline_version %s" % c.CONFIG.pipeline_version)
     print("-" * 70)
 
-    results = [check_designations(c), check_taxonomy(c), check_pgm(c),
+    results = [tree_ok, check_designations(c), check_taxonomy(c), check_pgm(c),
                check_by_distinct(c), check_lookup(c)]
 
     df, missing = read_catalog()
