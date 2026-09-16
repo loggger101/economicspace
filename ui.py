@@ -1825,7 +1825,7 @@ def _render_drilldown(ranked: pd.DataFrame) -> None:
                             "comp_carbon_fraction", "comp_ice_fraction",
                             "comp_pgm_enrichment")],
             ("fraction", "value"), "%.4g")
-        st.caption("Composition fractions sum to 0.76 to 0.96, not 1.0. The "
+        st.caption("Composition fractions sum to 0.73 to 0.96, not 1.0. The "
                    "residual is valued at a bulk-silicate floor, not zero.")
 
     with right:

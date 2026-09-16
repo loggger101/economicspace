@@ -292,7 +292,7 @@ def s_composition(out):
         h(2, "2. Composition, and what a kilogram is worth", "composition"),
         para("The taxonomy fractions are priced separately rather than "
              "blended, because a concentrating mission chooses between them. "
-             "Module 1's fractions sum to between 0.76 and 0.96, and the "
+             "Module 1's fractions sum to between 0.73 and 0.96, and the "
              "remainder is carried as the bulk-silicate residual in the last "
              "row rather than discarded, which is why the table totals one."),
         table(["phase", "mass fraction", "$/kg", "contribution"], rows),
