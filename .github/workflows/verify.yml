@@ -72,6 +72,14 @@ jobs:
           path: _spacecost
           fetch-depth: 0
 
+      # The control case for tree_check.py. On a plain clone this can only
+      # pass, which is the point: it proves the check itself still works and
+      # that its skip path is NOT what CI is exercising. The failure it guards
+      # is a Drive File Stream mount serving stale or absent bytes, which no
+      # runner has, so this is the only place its clean answer is ever seen.
+      - name: Working tree matches the index
+        run: python tree_check.py
+
       # CLAUDE.md names this as the sync check and nothing automated it:
       # "git status immediately after a build is the sync check: clean means
       # master.py matches the modules".  An edit made in master.py directly, or

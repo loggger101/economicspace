@@ -66,6 +66,7 @@ one that does not say is not to be used.
 - [The population re-derivation, 2026-09-14](#the-population-re-derivation-2026-09-14)
 - [The destination runtime table, 2026-09-15](#the-destination-runtime-table-2026-09-15)
 - [The docs harness stopped passing on files it never read, 2026-09-15](#the-docs-harness-stopped-passing-on-files-it-never-read-2026-09-15)
+- [The stale working tree became checkable, 2026-09-15](#the-stale-working-tree-became-checkable-2026-09-15)
 - [What the v1.17.x line was worth](#what-the-v117x-line-was-worth)
 - [The sampling rule](#the-sampling-rule)
 - [Runtime history](#runtime-history)
@@ -5299,6 +5300,88 @@ baseline-less `ALL CHECKS PASSED`, `verify_docs.py`'s `SyntaxError`-as-skip, and
 `verify_stage3.py` check 4's skip that fired on 100% of runs. This is the first
 with no skip message at all. See
 [a skip with no message at all](CLAUDE.md#a-skip-with-no-message-at-all-the-file-that-is-simply-not-there).
+
+### The stale working tree became checkable, 2026-09-15
+
+No `pipeline_version` moved; `tree_check.py` builds no stage and fetches nothing.
+
+The day before, this repo recorded a failure and called it unresolved: the Drive
+File Stream mount served `verify_stage3.py`'s **first run of the day** an older
+copy of itself, which printed **four** checks instead of six and exited `OK`,
+with `git status` clean and the file's bytes hashing equal to `HEAD` afterwards.
+The sibling fault, same session, is a tracked file reading as **absent**: two
+harnesses were invisible to one `verify_docs.py` run and visible to the next.
+The note said the habit was the only defence.
+
+**That was wrong, and the reason is the finding.** `git status` is clean
+throughout because git's stat cache trusts SIZE and MTIME and never re-reads
+content -- the same cache whose other direction is the phantom-dirty tree
+`.githooks/drive-restat.sh` repairs. So git's opinion and the file's CONTENT are
+two INDEPENDENT readings of one tree, and the failure is exactly where they
+disagree:
+
+| content vs index | git status says | reading |
+|---|---|---|
+| equal | clean | fine |
+| differs | modified | somebody edited it; not this |
+| differs | **clean** | **nobody edited it and it changed anyway** |
+| missing | **clean** | **a tracked file is not there** |
+
+**Reproduced before it was trusted.** Change one byte of a tracked file without
+changing its length, restore its mtime, and `git status --short` returns EMPTY
+while the content hash moves:
+
+```
+git status --short : ''
+index blob         : cbc38e60eac6
+working-tree hash  : c2651c97a14e
+```
+
+⚠️  **Hash through `git hash-object`, never `sha256` of the raw bytes**, which is
+what the three commands CLAUDE.md used to recommend did. `.gitattributes` pins
+`*.py` to LF and `*.bat` to CRLF and the index stores the normalised form, so
+raw bytes disagree with the index for every CRLF file by construction. Measured:
+`run.bat` matches its index blob through `hash-object` and does **not** through
+`--no-filters`, which is what proves the filter is load-bearing.
+
+✅  **It reads the whole tree rather than a curated list**, which is the previous
+day's lesson applied at once: a hand-maintained file list is *a check that reads
+one row of a table* wearing different clothes. **147 tracked files, three git
+invocations, 0.43 s.**
+
+✅  **And reading is also the cure**, so the check subsumes the manual
+prophylactic CLAUDE.md used to prescribe: materialisation is what a read does
+anyway, so running it first either catches the stale bytes or forces the mount to
+produce the current ones before the harness reads them itself.
+
+**Every harness calls it first and refuses on a finding** -- `verify.py` (all
+three subcommands, `baseline` included, because a baseline captured off a stale
+tree is a poisoned reference every later `check` is measured against),
+`verify_docs.py`, `verify_stage1.py`, `verify_stage3.py` -- and CI runs it
+standalone as the control case, where a plain clone can only pass.
+
+**Verified in both directions before it was wired in**, which is the whole point
+of the section it is filed under:
+
+| case | result |
+|---|---|
+| baseline, nothing touched | 147 verified, 0 findings |
+| stale read (same size, same mtime) | **1 finding**, names the file and both hashes |
+| a normal edit git can see | 0 findings, **no false alarm** |
+| a staged edit | 0 findings, **no false alarm** |
+| stale file, each of the four harnesses | **exit 1**, all four, each naming the file |
+
+`verify.py check` refuses in seconds rather than after its usual run, because the
+gate is before the work rather than after it.
+
+🚨  **THE ONE GAP, AND IT IS NOT CLOSED.** A harness's OWN source is compiled by
+Python before any of its code runs, so a stale import is already loaded by the
+time the check executes. It is caught **in practice** because the mount served
+stale bytes for a whole PROCESS rather than for a single read, so the later
+re-read still sees them; it is **not caught in principle**, because a
+materialisation landing between the import and the call would hide it. Every file
+a harness reads after that point is fully covered. The green line is not proof
+that the harness printing it is current.
 
 ### Full catalog, calc v1.14.0 (2026-08-09)
 

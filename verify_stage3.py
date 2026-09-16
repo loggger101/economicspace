@@ -60,6 +60,12 @@ import sys
 import tempfile
 import warnings
 
+# Local: the working-tree guard every harness here runs first.  It is a
+# sibling file rather than a copied function because four harnesses need
+# it and a second copy of a check is the defect this repo catalogues
+# oftenest.
+import tree_check
+
 REPO = os.path.dirname(os.path.abspath(__file__))
 
 # The stamp both sides are pinned to. `catalog_date` is a PROVENANCE column,
@@ -642,6 +648,11 @@ def main() -> int:
     print("=" * 70)
     print("  STAGE 3 VERIFICATION  -  economicspace adapter vs spacecost")
     print("=" * 70)
+    # FIRST, and this file is the reason the check exists: on 2026-09-15 this
+    # harness ran an OLDER COPY OF ITSELF off the Drive mount and printed four
+    # checks instead of six, with `git status` clean and its bytes hashing equal
+    # to HEAD afterwards.  See tree_check.py.
+    tree_ok = tree_check.assert_tree()
     t, tmp = _load_adapter()
     import spacecost
     print("  spacecost %s, data contract %s" % (spacecost.__version__,
@@ -650,6 +661,7 @@ def main() -> int:
     print("-" * 70)
 
     results = [
+        tree_ok,
         check_config_surface(t),
         check_data_contract(t),
         check_output(t, tmp),

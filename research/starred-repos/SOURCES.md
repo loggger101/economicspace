@@ -113,7 +113,7 @@ speaks to the hard half of it.
 > "Branch-and-bound on the objective ... needs an **admissible** upper bound on
 > `selection_key` ... a bound that is occasionally too tight silently drops
 > winners, and it drops them **without changing the row count**, which is the
-> one failure mode none of `verify.py`'s six checks would catch."
+> one failure mode none of `verify.py`'s checks would catch."
 
 Z3's `nlsat` is a complete decision procedure for polynomial real arithmetic,
 so a candidate bound can be **proved** admissible over a bounded domain rather
