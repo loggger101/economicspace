@@ -415,6 +415,20 @@ curve runs the OTHER way and is exactly inert at N = 1. The decomposition is in
 model it names, which is why it is kept: it is still the only seven-destination
 measurement the project has.
 
+✅  **ONE CELL HAS NOW BEEN MEASURED AT THOSE DEFAULTS AND THE 2.1x HELD.**
+The default cislunar cell was re-run over the full catalog on 2026-09-16 and
+reads **3.1822x**. The same body wins it on a different propellant, and the
+evaluable count is identical to this section's, which is the invariant saying
+no ceiling reached the SIZING path. The population detail is in
+[the first full-catalog cell at these defaults](versions.md#the-first-full-catalog-cell-at-these-defaults-2026-09-16).
+
+⚠️  **It is one cell of twenty-eight, and the projection that held was the
+NARROW kind.** Every other statement in this section is still a `1.21.2`
+statement; the never-worse pairings are unchecked at `1.22.0` on any
+population, and no destination but `cislunar` has been re-run at all. A capped
+sample predicting a MODEL ratio over identical rows is not the same act as
+predicting a wall clock, which is what THE SAMPLING RULE is about.
+
 🚨  **The headline matrix and the result highlights are in
 [README.md](README.md#current-results-the-complete-28-cell-matrix), and are not
 copied here**, for the reason this file gives everywhere else: name one
@@ -1102,6 +1116,15 @@ and argon is 0.12% of that cell's rows. This is
 arriving in the share tables: a headline architecture can sit in the tail of
 every distribution the same run reports, so **a share table is not a sanity
 check on a winner and must never be read as one.**
+
+⚠️  **AT calc `1.22.0` THE SAME BODY WINS THE SAME CELL ON IODINE, WHICH
+20.70% OF THAT POPULATION FLIES**, so the instance above is a `1.21.2` fact
+rather than a standing one. **The lesson is not weakened by that, it is the
+argument for it**: one body, one cell, two releases, and the winner's
+propellant sat in the tail of the distribution in the first and near the mode
+in the second. A share table did not check the winner in either case, and a
+reader who had used it as a sanity check would have been reassured by the
+wrong one.
 
 ⚠️  **Chemical propulsion holds 11-15% of FOUR destinations now, not three.**
 `methalox` goes 1.6-1.8% raw to **11.07-15.22%** beneficiated at `mars_orbit`,
@@ -3312,6 +3335,43 @@ question would wave through. Skipped by `--yes`, which `run.bat` passes on
 every *scripted* invocation; typing `run.bat quick` is not incidental, and
 the file's own header promises that path can be scheduled.
 
+### RE-RUNNING A CAMPAIGN CELL DESTROYS ITS ARCHIVE, AND NOTHING WARNS YOU
+
+The section above is about an INPUT that cannot be got back. This is the same
+shape on the output side, and it was one command away on 2026-09-16.
+
+`campaign/run_cell.py <dest> <ore> <search>` archives to
+`campaign/cells/<dest>__<ore>__search-<search>.csv.gz`, a name derived from the
+cell rather than from the release. Run it for a cell the campaign already
+measured and it **overwrites that campaign's archived cell**, which is 300-570
+MB, is gitignored, exists in exactly one copy, and is what `analyse.py`,
+`population.py` and `worked_calculation.py` all read. The ledger row is
+appended rather than replaced, so `campaign/results.csv` would then carry two
+rows for one cell name under two releases, and the archive behind both would be
+the newer one.
+
+⚠️  **Nothing in the harness refuses this**, and the reasoning that makes
+`preflight()` safe does not reach it: `preflight()` guards INPUTS, and re-running
+a cell with correct inputs is exactly what a resumed campaign does. The
+resume logic is in fact why the shape is dangerous -- `run_queue.py` skips
+cells with `rc == 0`, so the archive is treated as the record of a finished
+cell while nothing treats it as precious.
+
+✅  **Archive a re-measurement under a name that carries the RELEASE**, as
+`cislunar__benef__search-on__calc-1.22.0.csv.gz` does. Both readers build an
+exact filename rather than globbing `campaign/cells/`, so a suffixed archive is
+invisible to them and cannot be mistaken for the campaign's own cell. That
+property is worth checking before you rely on it: it is true today because
+`analyse.py` and `population.py` each compose the path from the cell tuple, and
+a future reader that globs the directory would silently pick up every
+re-measurement as though it were a destination.
+
+⚠️  **The ledger is a single-release artifact and worth keeping that
+way.** `campaign/results.csv` is the 2026-09 campaign; a row measured at a
+different release belongs beside its archive, not in it. What makes that
+affordable is that the archive and the log carry everything the ledger row
+would have.
+
 ### Console text is not output, and did not move a stamp
 
 The 2026-08-23 ASCII conversion rewrote **243 `print(...)` calls** across the
@@ -3642,6 +3702,17 @@ Undoing any of these silently corrupts the output:
   written around: it was **wrong at birth and nothing ever executed it**, which
   is defect class 4, a prescriptive comment nobody applied. It was caught by
   the first check that ever looked, on the day Stage 1 got a harness.
+
+  🚨  **AND THAT FIX REACHED THE DOCS AND LEFT SEVEN COPIES STANDING IN
+  CODE, FOUND 2026-09-16.** `modules/calc.py` carried three, the two worked
+  calculation scripts three between them, and `ui.py` one; the last two are the
+  ones that matter, because `worked_calculation_doc.py` RENDERS its copy into
+  the generated document and `ui.py` prints its own as a dashboard caption. So
+  a figure corrected in this file went on being shown to a reader for a day, in
+  a document whose whole claim is that nothing in it is typed. **This file
+  already names the pattern: fixing one half of a defect class and not looking
+  for the other half.** The grep that finds it is the one this file prescribes
+  everywhere, run WITHOUT the `--include='*.md'` that hides it.
 
   ⚠️  **`verify_stage1.py` check 2 asserts the PROPERTY, not the interval**,
   and that distinction is the reusable part. What is load-bearing is that every

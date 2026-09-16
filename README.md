@@ -1762,6 +1762,11 @@ ratio.** Every number in this matrix is still a measurement of the model it
 names, which is why it is kept rather than deleted, and it is the only
 seven-destination measurement the project has.
 
+✅  **One cell HAS been re-run at the current defaults**, and it is the one a
+configure-nothing run answers: cislunar, beneficiated, searched, every row.
+It is **3.1822x**. See
+[the default cell at the v1.22.0 defaults](#the-default-cell-at-the-v1220-defaults).
+
 Best cost/revenue, lower is better, 1.0 is breakeven:
 
 | destination | raw, N = 1 | raw, searched | benef, N = 1 | **benef + searched** (default) |
@@ -1793,6 +1798,48 @@ REPLACES.** Four things moved at once: two new destinations, `market_model` from
 `elasticity` to `capacity_cap`, `charge_insurance` from True to False, and a
 fresh price epoch. The superseded matrix is in
 [the 28-cell campaign](versions.md#the-28-cell-campaign-2026-09).
+
+#### The default cell at the v1.22.0 defaults
+
+**A configure-nothing run today answers 3.1822x**, measured on 2026-09-16 over
+every row of the 1,555,667-row catalog at cislunar, beneficiated, programme
+search on, 12 workers, in 11,676 s. It is the only cell measured at the current
+defaults; the matrix above is v1.21.2 and the other twenty-seven cells stand.
+
+| | v1.21.2 | **v1.22.0** |
+|---|---|---|
+| cost / revenue | 6.6622x | **3.1822x** |
+| winner | 2021 CX5 (D) | 2021 CX5 (D) |
+| architecture | New Glenn, argon, 34,573 kg, N = 35 | New Glenn, **iodine**, 62,283 kg, **N = 18** |
+| evaluable | 660,253 | 660,253 |
+
+**Still zero viable missions.** The best case in the model is a factor of 3.2
+from breakeven rather than 6.7, and the project's headline is unchanged: a
+default run returns no profitable mission, and that is the correct answer
+rather than a regression.
+
+✅  **The evaluable set did not move by a single row.** That is the invariant
+worth reading: this release put a second price tier inside the payload
+knapsack, and which rows are evaluable falls out of the mass cascade, where no
+price may reach. 660,253 in both builds is the evidence it did not.
+
+⚠️  **The four flags are worth 2.094x here, close to the 2.1x the release
+note projected from a capped sample, and that is NOT permission to project.**
+What held is a sample's estimate of a model ratio over identical rows, which is
+the narrow kind of projection this project has seen hold before. Extrapolating
+a stride sample's WALL CLOCK or cost ratio to a full catalog is the kind that
+has failed four times.
+
+⚠️  **Do not read the wall clock as a ratio against the 9,878 s the same
+cell took on v1.21.2.** The two runs are five days apart in separate sessions,
+and this release's own finding is that a ratio taken across a session is a
+measurement of the session. `MEASURED_CELL_SECONDS` is unchanged and still
+holds the v1.17.7 set, so every derived runtime banner still quotes that
+release.
+
+The population detail, the 251 rows that got worse and why, the structural
+moves and the full-population invariant results are in
+[the first full-catalog cell at these defaults](versions.md#the-first-full-catalog-cell-at-these-defaults-2026-09-16).
 
 #### `mars_orbit` and `geo`: the two destinations nothing had ever measured
 
