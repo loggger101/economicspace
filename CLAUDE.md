@@ -415,19 +415,25 @@ curve runs the OTHER way and is exactly inert at N = 1. The decomposition is in
 model it names, which is why it is kept: it is still the only seven-destination
 measurement the project has.
 
-✅  **ONE CELL HAS NOW BEEN MEASURED AT THOSE DEFAULTS AND THE 2.1x HELD.**
-The default cislunar cell was re-run over the full catalog on 2026-09-16 and
-reads **3.1822x**. The same body wins it on a different propellant, and the
-evaluable count is identical to this section's, which is the invariant saying
-no ceiling reached the SIZING path. The population detail is in
-[the first full-catalog cell at these defaults](versions.md#the-first-full-catalog-cell-at-these-defaults-2026-09-16).
+✅  **THE WHOLE CISLUNAR 2x2 HAS NOW BEEN MEASURED AT THOSE DEFAULTS.** All
+four cells were re-run over the full catalog on 2026-09-16: **5.3483x /
+3.9218x / 4.5298x / 3.1822x**, which is 2.09x to 3.11x better than this
+section's cislunar row. Both evaluable counts reproduce exactly, and the
+never-worse pairings hold on roughly 650,000 paired rows each with zero
+exceptions. The population detail is in
+[the full-catalog cislunar 2x2 at these defaults](versions.md#the-full-catalog-cislunar-2x2-at-these-defaults-2026-09-16).
 
-⚠️  **It is one cell of twenty-eight, and the projection that held was the
-NARROW kind.** Every other statement in this section is still a `1.21.2`
-statement; the never-worse pairings are unchecked at `1.22.0` on any
-population, and no destination but `cislunar` has been re-run at all. A capped
-sample predicting a MODEL ratio over identical rows is not the same act as
-predicting a wall clock, which is what THE SAMPLING RULE is about.
+🚨  **DO NOT RESCALE THIS SECTION BY ANY OF THOSE FOUR FACTORS.** They are
+`cislunar` factors, they span 2.09x to 3.11x ACROSS the square, and the six
+other destinations have not been re-run at all. The capped-sample projection
+that the paragraph above quotes landed within 0.3% on the default cell and
+**10.7% low on raw ore**, so even the release's own decomposition is not a
+single number. Every other statement in this section is still a `1.21.2`
+statement.
+
+⚠️  **And the projection that held was the NARROW kind.** A capped sample
+predicting a MODEL ratio over identical rows is not the same act as predicting
+a wall clock, which is what THE SAMPLING RULE is about.
 
 🚨  **The headline matrix and the result highlights are in
 [README.md](README.md#current-results-the-complete-28-cell-matrix), and are not
@@ -3371,6 +3377,30 @@ way.** `campaign/results.csv` is the 2026-09 campaign; a row measured at a
 different release belongs beside its archive, not in it. What makes that
 affordable is that the archive and the log carry everything the ledger row
 would have.
+
+🚨  **AND THE SUFFIX THAT MAKES THE ARCHIVE SAFE MAKES IT INVISIBLE TO THE
+DOCUMENT.** `worked_calculation.py`'s `candidate_sources` considers exactly two
+things: the LIVE catalog, and cells listed in the LEDGER that have an archive.
+A calc-suffixed archive is in neither, so the script cannot see it -- and the
+live catalog is whatever cell ran LAST, which after a 2x2 is not the best one.
+Measured on 2026-09-16: with the square finished, the live catalog held the
+beneficiated N = 1 cell at **4.5298x** while the best result on disk was
+**3.1822x** in an archive, so a no-flag run would have documented a cell that
+is not the best and said nothing about it.
+
+✅  **Pin the source, and note that `--catalog` takes a `.csv.gz` directly:**
+
+```bash
+py campaign/worked_calculation.py --pdf --catalog campaign/cells/<cell>__calc-<ver>.csv.gz
+```
+
+⚠️  **This is the cost of keeping the re-measurement out of the ledger,
+and it is the right trade, but it has to be paid deliberately.** The
+alternatives are worse: putting the row in the ledger mixes releases in a
+single-release artifact, and making `candidate_sources` GLOB `campaign/cells/`
+would undo the property that makes a suffixed archive safe in the first place,
+since every re-measurement would then compete with the campaign's own cells for
+the document.
 
 ### Console text is not output, and did not move a stamp
 

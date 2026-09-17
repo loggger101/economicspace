@@ -1762,10 +1762,11 @@ ratio.** Every number in this matrix is still a measurement of the model it
 names, which is why it is kept rather than deleted, and it is the only
 seven-destination measurement the project has.
 
-✅  **One cell HAS been re-run at the current defaults**, and it is the one a
-configure-nothing run answers: cislunar, beneficiated, searched, every row.
-It is **3.1822x**. See
-[the default cell at the v1.22.0 defaults](#the-default-cell-at-the-v1220-defaults).
+✅  **THE WHOLE CISLUNAR 2x2 HAS BEEN RE-RUN AT THE CURRENT DEFAULTS.** A
+configure-nothing run answers **3.1822x**, and the four cells are 2.09x to
+3.11x better than the ones below. See
+[the cislunar 2x2 at the v1.22.0 defaults](#the-cislunar-2x2-at-the-v1220-defaults).
+The other six destinations have NOT been re-run.
 
 Best cost/revenue, lower is better, 1.0 is breakeven:
 
@@ -1799,24 +1800,51 @@ REPLACES.** Four things moved at once: two new destinations, `market_model` from
 fresh price epoch. The superseded matrix is in
 [the 28-cell campaign](versions.md#the-28-cell-campaign-2026-09).
 
-#### The default cell at the v1.22.0 defaults
+#### The cislunar 2x2 at the v1.22.0 defaults
 
-**A configure-nothing run today answers 3.1822x**, measured on 2026-09-16 over
-every row of the 1,555,667-row catalog at cislunar, beneficiated, programme
-search on, 12 workers, in 11,676 s. It is the only cell measured at the current
-defaults; the matrix above is v1.21.2 and the other twenty-seven cells stand.
+**A configure-nothing run today answers 3.1822x.** All four cislunar cells were
+re-measured on 2026-09-16 over every row of the 1,555,667-row catalog, 12
+workers, 18,586 s in total. The matrix above is v1.21.2, and the other six
+destinations have not been re-run.
 
-| | v1.21.2 | **v1.22.0** |
-|---|---|---|
-| cost / revenue | 6.6622x | **3.1822x** |
-| winner | 2021 CX5 (D) | 2021 CX5 (D) |
-| architecture | New Glenn, argon, 34,573 kg, N = 35 | New Glenn, **iodine**, 62,283 kg, **N = 18** |
-| evaluable | 660,253 | 660,253 |
+| cell | v1.21.2 | **v1.22.0** | factor |
+|---|---|---|---|
+| raw, N = 1 | 15.3937x | **5.3483x** | 2.878x |
+| raw, searched | 9.5435x | **3.9218x** | 2.433x |
+| benef, N = 1 | 14.1071x | **4.5298x** | 3.114x |
+| **benef + searched** (default) | 6.6622x | **3.1822x** | 2.094x |
+
+The default cell's winner is the same body on a different propellant: 2021 CX5
+(D), New Glenn, **iodine**, 62,283 kg at N = 18, against argon at 34,573 kg and
+N = 35. All four v1.22.0 winners fly iodine.
 
 **Still zero viable missions.** The best case in the model is a factor of 3.2
 from breakeven rather than 6.7, and the project's headline is unchanged: a
 default run returns no profitable mission, and that is the correct answer
 rather than a regression.
+
+✅  **Both evaluable counts reproduce exactly**, 650,921 raw and 660,253
+beneficiated, on all four cells. That is the invariant worth reading: this
+release put a second price tier inside the payload knapsack, and which rows are
+evaluable falls out of the mass cascade, where no price may reach.
+
+✅  **The never-worse invariants hold on the full population**, which this
+release had only ever had on 155-row cells: four pairings, roughly 650,000
+paired rows each, **zero exceptions**. Selling surplus at a discount raises
+revenue toward the unbounded case and must never pass it; this is the
+population-scale evidence that it does not.
+
+⚠️  **The four flags are worth 2.09x to 3.11x depending on the cell, so
+one ratio will not rescale the matrix above.** The release note projected 2.6x
+on raw ore and 2.1x on the default cell from a capped sample; measured, the
+default cell lands within 0.3% and the raw figure is 10.7% low.
+
+⚠️  **Do not read the wall clocks as ratios against v1.21.2.** Three of the
+four are FASTER than their campaign counterparts and one is slower, but the
+campaign cells were measured across four days in separate sessions, and this
+release's own finding is that a ratio taken across a session is a measurement
+of the session. `MEASURED_CELL_SECONDS` is unchanged and still holds the
+v1.17.7 set, so every derived runtime banner still quotes that release.
 
 ✅  **The evaluable set did not move by a single row.** That is the invariant
 worth reading: this release put a second price tier inside the payload
@@ -1837,9 +1865,9 @@ measurement of the session. `MEASURED_CELL_SECONDS` is unchanged and still
 holds the v1.17.7 set, so every derived runtime banner still quotes that
 release.
 
-The population detail, the 251 rows that got worse and why, the structural
-moves and the full-population invariant results are in
-[the first full-catalog cell at these defaults](versions.md#the-first-full-catalog-cell-at-these-defaults-2026-09-16).
+The population detail, the rows that got worse and why, the structural moves
+and the full invariant results are in
+[the full-catalog cislunar 2x2 at these defaults](versions.md#the-full-catalog-cislunar-2x2-at-these-defaults-2026-09-16).
 
 #### `mars_orbit` and `geo`: the two destinations nothing had ever measured
 
