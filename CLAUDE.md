@@ -708,20 +708,40 @@ the six in-space destinations. That is this section's own lesson happening to
 this section: **when you swap a model term, check whether the diagnostics that
 watched it still VARY.**
 
+🚨  **AND THE `unsold rows` COLUMN WAS COUNTED WITH A BARE `> 0` UNTIL
+2026-09-16, WHICH IS WRONG ON EVERY BENEFICIATED CELL.** calc forms that column
+on the beneficiated path as `sum(payload_mix.values())` minus the knapsack's
+`loaded_kg`, and `loaded_kg` is an accumulated `payload_kg - remaining`: two
+associations of one quantity, so a hold the ceilings did not shrink leaves one
+ULP rather than zero. Six of the seven beneficiated figures below were
+therefore high, by 1% at `cislunar` and **12% at `mars_surface`** (6,977
+against 6,136). Corrected off `campaign/population.py`, which takes the same
+milligram floor `verify.py` check 7 already took. ⚠️  **The raw column is
+untouched and always was right**: the raw path accumulates `unsold` directly
+rather than subtracting two sums, so there is no residue to mistake.
+
+⚠️  **The same bare test would have been a real defect on a v1.22.0 cell, not
+a 1% one.** It reports **1,891** unsold rows against a true **0**, and
+**1,769 of those 1,891 carry a genuine surplus**, so anything inferring "this
+run hard-walled" from a positive `unsold_payload_kg` reads those rows exactly
+backwards. `campaign/worked_calculation.py` did, in the one line that decides
+which market tier a whole document is derived against. **A threshold on a
+column the model builds by subtraction is a threshold on float residue.**
+
 | cell | rows at fleet cap | clearing min | clearing median | rows bound | unsold rows |
 |---|---|---|---|---|---|
 | `cislunar` raw | 65,037 (9.99%) | 0.578190 | 1.000000 | 30.07% | 195,723 |
-| `cislunar` benef | 117,314 (17.77%) | 0.679429 | 1.000000 | 30.27% | 65,373 |
+| `cislunar` benef | 117,314 (17.77%) | 0.679429 | 1.000000 | 30.27% | 64,759 |
 | `lunar_surface` raw | 64,397 (10.99%) | 0.491063 | **0.833930** | **70.18%** | 411,271 |
-| `lunar_surface` benef | 37,532 (6.19%) | 0.637028 | 1.000000 | 38.80% | 25,803 |
+| `lunar_surface` benef | 37,532 (6.19%) | 0.637028 | 1.000000 | 38.80% | 25,546 |
 | `geo` raw | 7,673 (1.09%) | 0.465097 | 0.965855 | **73.47%** | 518,014 |
-| `geo` benef | 28,961 (4.07%) | 0.730985 | 1.000000 | 27.07% | 67,293 |
+| `geo` benef | 28,961 (4.07%) | 0.730985 | 1.000000 | 27.07% | 66,605 |
 | `mars_orbit` raw | 22,962 (2.80%) | 0.560660 | 0.996629 | 54.48% | 447,323 |
-| `mars_orbit` benef | 133,854 (14.00%) | 0.814357 | 1.000000 | 34.76% | 72,003 |
+| `mars_orbit` benef | 133,854 (14.00%) | 0.814357 | 1.000000 | 34.76% | 69,432 |
 | `leo` raw | 33,826 (4.35%) | 0.888516 | 1.000000 | 23.33% | 181,238 |
-| `leo` benef | 275,537 (31.22%) | 0.834402 | 1.000000 | 20.05% | 34,996 |
+| `leo` benef | 275,537 (31.22%) | 0.834402 | 1.000000 | 20.05% | 33,642 |
 | `mars_surface` raw | 25,687 (3.51%) | 0.590189 | **0.848755** | **96.25%** | 703,876 |
-| `mars_surface` benef | 132,801 (14.88%) | 0.763270 | 1.000000 | 18.12% | 6,977 |
+| `mars_surface` benef | 132,801 (14.88%) | 0.763270 | 1.000000 | 18.12% | 6,136 |
 | **`earth_surface` raw** | **784,242 (100.00%)** | **1.000000** | **1.000000** | **0.00%** | **0** |
 | **`earth_surface` benef** | **912,846 (100.00%)** | **1.000000** | **1.000000** | **0.00%** | **0** |
 
@@ -833,6 +853,14 @@ searched on raw ore. Everywhere else the programme search pushes FEEP *down* the
 ranking, by a factor of 7 at `cislunar` and 175 at `geo`, because a ladder that
 buys more, smaller missions cannot amortise 4 to 17 tonnes of thruster.
 
+⚠️  **THE DIRECTION SURVIVES A RELEASE AND THE FACTOR DOES NOT.** At the calc
+`1.22.0` defaults the cislunar figure is rank 11 to rank 18, a factor of
+**1.6** rather than 7, and the worst margin across the four cells narrows from
+1.92x to 1.53x while still never winning there. **A factor quoted without its
+release reads as a property of the model**, which is the rule this file applies
+to wall clocks and applies here too. See
+[the population at these defaults](versions.md#the-population-at-these-defaults-re-derived-2026-09-16).
+
 ✅  **EVERY SURVIVOR IN EVERY CELL IS STILL FEEP.** Across all 28 cells and
 every `replicated` row in them, the only technology that appears is **FEEP
 (indium field emission)**: not one PPT and not one electrospray row survives
@@ -941,6 +969,14 @@ ceiling at half price and turns reliability, the learning curve and the cost of
 capital off. See the banner on the 28-cell section. The superseded
 `elasticity` tables are in
 [the 28-cell campaign](versions.md#the-28-cell-campaign-2026-09).
+
+✅  **ONE DESTINATION HAS BEEN RE-DERIVED AT THE `1.22.0` DEFAULTS**, cislunar,
+from its four archived cells:
+[the population at these defaults](versions.md#the-population-at-these-defaults-re-derived-2026-09-16).
+Three rows of the tables below move enough to matter there -- the calendar bound
+takes the MAJORITY of beneficiated rigs, the dig-bound share rises to 73.84%,
+and `W < trips` falls to single figures -- and the other six destinations have
+not been re-run. ⚠️  **It is not a scale factor for them.**
 
 ⚠️  **The denominator is not a choice here, and this file's own warning about
 two right answers does not reach these tables.** An archived cell holds

@@ -94,6 +94,13 @@ DV_AEROBRAKE_TRIM = 0.100
 DV_NRHO_TO_LUNAR_SURFACE = 0.730 + 1.870
 
 
+# Mass below this is float residue rather than a measurement: see `walled` in
+# `terms_in_force`, which is the one inference in this file that turns on it.
+# Far above the ~1e-11 kg a cleared load leaves behind, far below any mass the
+# model can mean.
+UNSOLD_FLOOR_KG = 1e-6
+
+
 def hours(years):
     """Hours in `years`, associated the way the model associates it.
 
@@ -327,7 +334,26 @@ def terms_in_force(row, cfg):
     liability = col("liability_cost_usd") or 0.0
     launch_ins = col("launch_insurance_cost_usd") or 0.0
     # Positive proof the run refused the sale rather than discounting it.
-    walled = (col("unsold_payload_kg") or 0.0) > 0.0
+    #
+    # 🚨  A MILLIGRAM FLOOR, AND A BARE `> 0.0` HERE IS A DEFECT WITH A
+    # MEASURED BLAST RADIUS.  The knapsack subtracts what it sold from what it
+    # loaded, so a load that cleared leaves one ULP rather than an exact zero:
+    # up to 1.455e-11 kg on 1,891 rows of the cislunar beneficiated searched
+    # cell.  The tempting reading is that this is harmless because a row with
+    # residue sold no surplus.  It is not: **1,769 of those 1,891 rows carry a
+    # REAL surplus above a milligram**, and all 1,891 are ceiling-bound.  So a
+    # bare test declares those rows hard-walled, `surplus_frac` comes back 0.0,
+    # and the derivation prices a load that actually sold a discounted tier as
+    # though it had been abandoned -- which is this file's own
+    # flipped-default failure arriving from the other side, and it was measured
+    # there at five columns differing and `gross_value_usd` by 0.93%.
+    #
+    # ⚠️  The check at the end WOULD catch it, loudly, which is the argument
+    # for the compared column set and not an argument for leaving this.  A
+    # document nobody can build is better than a wrong one and worse than a
+    # right one.  `verify.py` check 7 takes the same floor, for the same
+    # residue, on the same two columns.
+    walled = (col("unsold_payload_kg") or 0.0) > UNSOLD_FLOOR_KG
     p_succ = col("p_success")
     lc = col("learning_curve_factor")
     has_surplus_col = "surplus_payload_kg" in row
@@ -1739,8 +1765,24 @@ def revenue(C, M, n_missions, fleet):
     # The beneficiated case measures loss as hold space the ceilings kept
     # empty; the raw case cannot, because the hold is unchanged and the loss is
     # in the SALE.  Each branch reports the one its own mechanism produces.
+    #
+    # 🚨  `sum(mix)` ON THE FREE SIDE AND `loaded` ON THE CAPPED SIDE, WHICH
+    # LOOKS LIKE AN INCONSISTENCY AND IS THE MODEL'S OWN ARITHMETIC.  calc
+    # subtracts `sum(payload_mix.values())` from the knapsack's `loaded_kg`,
+    # and `loaded_kg` is `payload_kg - remaining`, an accumulated subtraction.
+    # Those are two associations of one quantity, so when the ceilings keep no
+    # hold space at all the difference is not 0.0 but one ULP: 1.455e-11 kg on
+    # 1,891 rows of the cislunar beneficiated searched cell.
+    #
+    # Taking `free["loaded"]` on both sides is tidier, cancels exactly, and is
+    # WRONG here for the reason this repo already wrote down about
+    # `y * 365.25 * 24.0`: one rounding is not more accurate than two, it is a
+    # different number, and the one that matters is the model's.  Matching the
+    # association moves this column from "differs by 100%" -- 0.0 against a
+    # residue is a relative error of 1.0 however small the residue -- to
+    # bit-exact.
     lost = (capped["unsold"] if "unsold" in capped
-            else max(0.0, free["loaded"] - capped["loaded"]))
+            else max(0.0, sum(free["mix"].values()) - capped["loaded"]))
     return {"window": window, "allow": caps, "capped": capped, "mode": mode,
             "gross_base": free["value"], "surplus_frac": frac,
             "clearing": capped["value"] / free["value"] if free["value"] else 1.0,

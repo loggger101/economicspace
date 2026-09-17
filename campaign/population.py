@@ -36,6 +36,16 @@ not.
     py campaign/population.py            # derive; skips cells already done
     py campaign/population.py --report   # render the tables from the JSON
     py campaign/population.py --force    # re-derive everything
+    py campaign/population.py --tag calc-1.22.0           # a re-measurement
+    py campaign/population.py --report --tag calc-1.22.0  # and its tables
+
+A `--tag` reads cells archived under a suffix, which is how a cell re-run at a
+later release is kept on disk without being mistaken for the campaign's own.
+The filter runs both ways: a tagged run sees only tagged cells and an untagged
+run only untagged ones, so a re-measurement can never contribute a row to the
+campaign's tables.  See `cell_paths`, which composes an exact filename rather
+than searching the directory, and `UNSOLD_FLOOR_KG`, which is the one
+threshold in this file that turns on float residue.
 """
 import argparse
 import glob
@@ -72,6 +82,27 @@ COLS = ["designation", "spectral_type", "total_cost_usd", "gross_value_usd",
 # The fleet ceiling `max_fleet_ships` stops the ladder at.  A row here is the
 # ladder's top rung, which is where the loop STOPPED rather than an optimum.
 FLEET_CEILING = 64
+
+# 🚨  A MILLIGRAM, AND A BARE `> 0` IS WRONG HERE BY THREE ORDERS OF MAGNITUDE.
+# The payload knapsack subtracts what it sold from what it loaded, so a load
+# that cleared completely leaves one ULP behind rather than an exact zero:
+# measured at 1.455e-11 kg, 1.9e-16 of the payload, on the cislunar
+# beneficiated searched cell.  `verify.py` check 7 already learned this and
+# took a floor; this file was written afterwards and took the naive test, which
+# is this repo's standing failure of fixing one half of a defect class.
+#
+# What it cost: the calc 1.22.0 cell reports **1,891 unsold rows on a bare test
+# and 0 on this one**, and zero is the truth -- v1.22.0 sells the surplus past
+# a ceiling rather than abandoning it, so the column is retired by
+# construction.  A table saying 1,891 would have contradicted check 7 about the
+# same population, which is exactly the two-checks-disagreeing tell this repo
+# looks for.  The committed 1.21.2 figure was wrong more quietly: 65,373
+# against a true 64,759, because 614 of those rows are residue and the rest are
+# real abandonment.
+#
+# Far above any float residue and far below any mass the model can mean: the
+# smallest real unsold load in the 1.21.2 cells is many kilograms.
+UNSOLD_FLOOR_KG = 1e-6
 
 # Shares below this are stored but not PRINTED.  The JSON keeps every
 # distinct value because a claim can turn on a 0.01 pp difference; a table
@@ -194,7 +225,7 @@ def derive(path):
         "clearing_min": float(d["market_clearing_fraction"].min()),
         "clearing_median": float(d["market_clearing_fraction"].median()),
         "bound_pct": pct(d["market_clearing_fraction"] < 1.0),
-        "unsold_rows": int((d["unsold_payload_kg"] > 0).sum()),
+        "unsold_rows": int((d["unsold_payload_kg"] > UNSOLD_FLOOR_KG).sum()),
         "propellants": shares(d["propellant"]),
         "vehicles": shares(d["vehicle"]),
         "aerocapture_pct": pct(truthy(d["aerocapture_return"])),
@@ -211,28 +242,47 @@ def derive(path):
     }
 
 
-def cell_paths():
+def cell_paths(tag=None):
     """Every archived cell, destination order first and raw before beneficiated.
 
     Sorting by the filename would put `earth_surface` first and interleave the
     four settings of each destination alphabetically, which is neither the order
     the docs tables are read in nor the order the campaign ran them in.
+
+    🚨  `tag` READS A RE-MEASUREMENT, AND IT IS A SUFFIX RATHER THAN A GLOB ON
+    PURPOSE.  A cell re-run at a later release is archived as
+    `<cell>__calc-<ver>.csv.gz` precisely so it cannot be mistaken for the
+    campaign's own cell, and this function composing an EXACT filename is what
+    makes that true.  Globbing `campaign/cells/` would be shorter and would
+    undo it: every re-measurement would then be picked up as though it were a
+    destination of the campaign.  So a tag still builds one name per cell, and
+    a tag with nothing behind it yields nothing rather than falling back to the
+    untagged cell, which would silently derive the wrong release.
     """
     out = []
+    suffix = f"__{tag}" if tag else ""
     for dest in DESTS:
         for ore in ("raw", "benef"):
             for search in ("off", "on"):
-                p = os.path.join(CELLS, f"{dest}__{ore}__search-{search}.csv.gz")
+                name = f"{dest}__{ore}__search-{search}{suffix}"
+                p = os.path.join(CELLS, name + ".csv.gz")
                 if os.path.exists(p):
-                    out.append((f"{dest}__{ore}__search-{search}", p))
+                    out.append((name, p))
     return out
 
 
-def run(force):
+def run(force, tag=None):
     """Derive every cell that has no JSON yet, printing one line each."""
     os.makedirs(OUT, exist_ok=True)
-    todo = cell_paths()
-    print(f"{len(todo)} cells under campaign/cells")
+    todo = cell_paths(tag)
+    if tag and not todo:
+        # Not a skip.  A tag naming no cell is a typo or a missing archive, and
+        # deriving the campaign's cells instead would answer a question nobody
+        # asked, in a file named after the one they did.
+        print(f"no archived cell carries the tag {tag!r} under campaign/cells")
+        return 1
+    where = f"campaign/cells tagged {tag}" if tag else "campaign/cells"
+    print(f"{len(todo)} cells under {where}")
     for name, path in todo:
         dest = os.path.join(OUT, name + ".json")
         if os.path.exists(dest) and not force:
@@ -256,12 +306,32 @@ def run(force):
     return 0
 
 
-def load_all():
-    """Every derived cell, keyed by name, or an empty dict if none are derived."""
+def load_all(tag=None):
+    """Every derived cell, keyed by name, or an empty dict if none are derived.
+
+    ⚠️  THE TAG IS STRIPPED FROM THE KEY, AND THAT IS WHAT KEEPS `report`
+    UNTOUCHED.  It composes fourteen cell keys of the form
+    `<dest>__<ore>__search-<s>`, and threading a suffix through every one of
+    them is fourteen chances to thread it through thirteen.  Selecting the JSON
+    here instead means the tables are rendered by the same code whichever
+    release produced the cells, which is also what makes the two comparable.
+
+    The filter runs BOTH ways: a tagged run loads only tagged cells and an
+    untagged run loads only untagged ones, so a re-measurement sitting in the
+    output directory can never contribute a row to the campaign's own tables.
+    """
     got = {}
+    suffix = f"__{tag}" if tag else None
     for p in sorted(glob.glob(os.path.join(OUT, "*.json"))):
+        name = os.path.basename(p)[:-5]
+        if suffix:
+            if not name.endswith(suffix):
+                continue
+            name = name[:-len(suffix)]
+        elif "__calc-" in name:
+            continue
         with open(p, encoding="utf-8") as fh:
-            got[os.path.basename(p)[:-5]] = json.load(fh)
+            got[name] = json.load(fh)
     return got
 
 
@@ -270,17 +340,28 @@ def _label(ore, search):
     return f"{'raw' if ore == 'raw' else 'benef'} {'ON' if search == 'on' else 'N=1'}"
 
 
-def report():
+def report(tag=None):
     """Render every table, in the shape the docs carry them in.
 
     Printed rather than written: a table that is going into a document should be
     read before it is pasted, and this repo's standing failure is prose that no
     longer agrees with the table beneath it.
+
+    With a `tag` the tables cover that re-measurement alone, which normally
+    means one destination of the seven; the rest of every table reads "-", and
+    that is the honest rendering rather than a gap to be filled from the
+    campaign.
     """
-    got = load_all()
+    got = load_all(tag)
     if not got:
+        if tag:
+            print(f"nothing derived for tag {tag!r}; "
+                  f"run --tag {tag} without --report first")
+            return 1
         print("nothing derived yet; run without --report first")
         return 1
+    if tag:
+        print(f"== cells tagged {tag}; every other destination reads '-' ==")
     settings = [("raw", "off"), ("raw", "on"), ("benef", "off"), ("benef", "on")]
 
     print("\n== THE RIG'S TWO BOUNDS: cycle / calendar, % of evaluable rows ==")
@@ -420,8 +501,10 @@ def main():
                     help="render the tables from the JSON already derived")
     ap.add_argument("--force", action="store_true",
                     help="re-derive cells that already have a JSON")
+    ap.add_argument("--tag", default=None,
+                    help="read cells archived under a suffix, e.g. calc-1.22.0")
     a = ap.parse_args()
-    return report() if a.report else run(a.force)
+    return report(a.tag) if a.report else run(a.force, a.tag)
 
 
 if __name__ == "__main__":

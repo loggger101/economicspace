@@ -880,6 +880,217 @@ this release's flags off the row rather than the live config, which is the
 reader-side fix this release's own notes describe, exercised here for the first
 time on a full-catalog winner.
 
+### The population at these defaults, re-derived (2026-09-16)
+
+The 2x2 above reported the winner, the invariants and a handful of structural
+moves. This is the rest: every per-cell table the docs carry, re-derived at
+cislunar from the four archived cells by `campaign/population.py --tag
+calc-1.22.0`. **One read, no re-run** -- which is the lesson CLAUDE.md already
+teaches about re-reading a cell, taken on the day rather than three days later.
+
+⚠️  **It reaches ONE destination of seven.** Every table in CLAUDE.md that
+these rows appear in stays a `1.21.2` seven-destination measurement, and a
+cislunar column measured at a later release is not a scale factor for the six
+beside it.
+
+#### What the tooling needed, and what it deliberately still refuses
+
+`population.py` and `analyse.py` both compose an exact cell filename, which is
+what makes a calc-suffixed archive invisible to them and therefore safe to keep
+on disk. Reading one needed an option, and the option is a `--tag` SUFFIX
+rather than a glob, so the property survives: a tag still builds one name per
+cell, and a tag with no archive behind it yields nothing rather than falling
+back to the campaign's cell and answering a question nobody asked.
+
+#### The programme calendar charge is inert on 650,000 rows
+
+`calendar_mult_median` **1.3190 to 1.0000** on the raw searched cell and
+**1.4026 to 1.0000** on the beneficiated one.
+
+✅  **That is a documented PREDICTION confirmed on a full population rather
+than a new finding.** `apply_wacc_compounding` is off since v1.22.0, and
+`model_programme_calendar` is left True with a note saying its multipliers are
+exactly 1.0 at a zero rate, so the term still says the right thing the moment
+there is a rate. It had never been checked on more than the winner. It is now,
+on every searched row of both cells, and **the median is exactly 1.0**.
+
+#### The calendar bound takes the majority of beneficiated rigs
+
+Which bound retires the rig, cycle / calendar, cislunar:
+
+| cell | v1.21.2 | v1.22.0 |
+|---|---|---|
+| raw, N = 1 | 95.97 / 4.03 | 95.69 / 4.31 |
+| raw, searched | 97.51 / 2.49 | 98.17 / 1.83 |
+| **beneficiated, N = 1** | 57.51 / 42.49 | **47.84 / 52.16** |
+| beneficiated, searched | 75.98 / 24.02 | **58.45 / 41.55** |
+
+🚨  **THE BENEFICIATED N = 1 CELL CROSSES 50%**, so at these defaults the
+CALENDAR retires the majority of cislunar rigs on that cell where the cycle
+bound did before. CLAUDE.md records "the cycle bound retires almost every rig"
+as already wrong three ways; this is a fourth, at the project's best-case
+destination, and it takes no change to the rig model -- the cadence lengthens
+(2.100 to **2.617 yr** beneficiated at N = 1) and a longer stay is what spends
+a service life.
+
+#### The beneficiated inversion gets stronger
+
+What sets the pace, window / dig: beneficiated N = 1 goes **34.34 / 65.66** to
+**26.16 / 73.84**, so the dig sets the pace on three rows in four. Raw is
+unmoved at 91.70 / 8.30. The inversion CLAUDE.md records as universal across
+all seven destinations is not merely intact here, it is wider.
+
+#### Programmes take the rig's last trips back, on the raw cell too
+
+| | v1.21.2 | v1.22.0 |
+|---|---|---|
+| `W < trips`, raw searched | 20.86% | **8.13%** |
+| `W < trips`, beneficiated searched | 22.14% | **3.51%** |
+| fleet median, raw / benef searched | 3 / 6 | **2 / 4** |
+| N median, raw / benef searched | 12 / 30 | **10 / 20** |
+| programme span median, benef searched | 13.82 yr | **15.18 yr** |
+
+The beneficiated figure was already in the section above; the raw one is new
+and moves the same way for the same reason. **Smaller programmes, run longer.**
+
+#### Every ceiling diagnostic loosens, and one column retires by construction
+
+| | v1.21.2 | v1.22.0 |
+|---|---|---|
+| rows a ceiling binds, raw searched | 30.07% | **15.68%** |
+| rows a ceiling binds, benef searched | 30.27% | **6.53%** |
+| minimum clearing, raw searched | 0.578190 | **0.772791** |
+| minimum clearing, benef searched | 0.679429 | **0.839715** |
+| unsold rows, all four cells | 1,458 / 195,723 / 273 / 64,759 | **0 / 0 / 0 / 0** |
+
+⚠️  **Those four zeros are the honest count and a bare `> 0` test reports
+1,891 on the beneficiated searched cell.** See below; the column is residue,
+not mass.
+
+#### FEEP climbs a long way and still does not win
+
+Best `replicated`-scaling mission per cell, rank and margin against the winner:
+
+| cell | v1.21.2 | v1.22.0 |
+|---|---|---|
+| raw, N = 1 | 54 (1.43x) | **11 (1.36x)** |
+| raw, searched | 365 (1.95x) | **18 (1.40x)** |
+| beneficiated, N = 1 | 147 (1.52x) | **33 (1.37x)** |
+| beneficiated, searched | 2,202 (1.92x) | **321 (1.53x)** |
+
+**Zero wins at cislunar on any setting**, and every survivor is still FEEP, so
+the standing claim holds. What moves is how close it comes: **2014 UV210 takes
+three of the four cells** where v1.21.2 had four different bodies, and the
+worst margin narrows from 1.92x to 1.53x.
+
+🚨  **AND ONE MAGNITUDE IN CLAUDE.md IS RELEASE-SPECIFIC.** It records that the
+programme search pushes FEEP down the ranking "by a factor of 7 at `cislunar`".
+At these defaults it is 11 to 18, a factor of **1.6**. The DIRECTION survives;
+the factor was a `1.21.2` number and reads as a property of the model.
+
+⚠️  **The survivor COUNT moves both ways and still proves nothing**: 93 to 104
+raw at N = 1, and 76 to **10** raw searched. CLAUDE.md's rule that survival was
+never the test is the reason this is a footnote rather than a finding.
+
+#### Far fewer bodies decline to concentrate
+
+`campaign/analyse.py --tag=calc-1.22.0 cislunar` runs the committed invariants
+over the same four cells, and every one holds: **never-worse on all four
+pairings with zero exceptions**, the mass ledger at `max |error| 0.000000000
+kg` on 2.6 million rows, and `N = F x W` on every row of both searched cells
+with `W > trips` never. Its `W < trips` figures are **8.131% and 3.509%**,
+which reproduce `population.py`'s to three decimals from a separate read --
+two tools over one population, which is the overlap this repo builds checks
+for.
+
+🚨  **WHAT IS NEW IS THE DECLINE COUNT, AND IT NEARLY HALVES.** Bodies refusing
+to concentrate, i.e. falling back on the `beneficiate=False` baseline:
+
+| | v1.21.2 | v1.22.0 |
+|---|---|---|
+| search OFF | 102,765 (15.79%) | **56,707 (8.71%)** |
+| search ON | 102,427 (15.74%) | **80,528 (12.37%)** |
+
+⚠️  **CLAUDE.md records the decline counts as the thing the market model barely
+touches** -- "22,972 against 22,781" at `lunar_surface` across the whole
+`elasticity` to `capacity_cap` change. Four flags at once move it by a factor
+of nearly two at cislunar, so that stability was a property of the market term
+rather than of the population.
+
+⚠️  **It is also the one place the two axes disagree.** At v1.21.2 the two
+settings were within 0.05 pp of each other; here they are 8.71% against
+12.37%, so the programme search now makes a body MORE likely to decline to
+concentrate. That is consistent with the rest of this section -- the chosen
+programmes are smaller and the ceilings bind on a quarter as many rows -- but
+it is a population claim nobody has checked at another destination.
+
+#### Two invariants reproduce exactly
+
+✅  **Aerocapture is 0.00% on all four cells.** Cislunar is airless, nobody
+asserts it, and the search declines it.
+
+✅  **ISRU still tracks hydrolox, and more tightly than before**: the gap is
+**+0.000461 / +0.000461 / -0.000151 / +0.000606 pp** across the four cells,
+against 0.0014 to 0.0068 pp at v1.21.2. The residual still runs both ways.
+
+#### The unsold column was counted with a bare positive test
+
+🚨  **`campaign/population.py` COUNTED `unsold_payload_kg > 0` AND THE
+BENEFICIATED PATH LEAVES FLOAT RESIDUE THERE.** calc forms that column as
+`sum(payload_mix.values())` minus the knapsack's `loaded_kg`, where `loaded_kg`
+is an accumulated `payload_kg - remaining`: two associations of one quantity,
+so a hold the ceilings did not shrink comes out as **1.455e-11 kg** rather than
+zero.
+
+Six committed figures in CLAUDE.md's ceiling table were high as a result, and
+`verify.py` check 7 had already met this residue and taken a milligram floor
+for it -- so this is the repo's standing failure of fixing one half of a defect
+class:
+
+| beneficiated searched cell | was | is |
+|---|---|---|
+| `mars_surface` | 6,977 | **6,136** (-12.1%) |
+| `leo` | 34,996 | **33,642** (-3.9%) |
+| `mars_orbit` | 72,003 | **69,432** (-3.6%) |
+| `geo` | 67,293 | **66,605** (-1.0%) |
+| `lunar_surface` | 25,803 | **25,546** (-1.0%) |
+| `cislunar` | 65,373 | **64,759** (-0.9%) |
+
+✅  **The raw column was always right**, because the raw path accumulates
+`unsold` directly rather than subtracting two sums. Re-deriving all 28 cells
+with the floor moved `unsold_rows` and **nothing else**: 9 values across 28
+JSON files, every other statistic bit-identical, which is what says the fix is
+confined to what it should touch.
+
+#### The same bare test was a real defect in the document generator
+
+🚨  **`campaign/worked_calculation.py` INFERRED "THIS RUN HARD-WALLED" FROM
+`unsold_payload_kg > 0.0`**, which is the one line deciding whether a whole
+derivation prices the surplus as abandoned or sold at a discount.
+
+The tempting reading is that residue is harmless because a row with residue
+sold no surplus. **Measured, it is the opposite: 1,769 of the 1,891 residue
+rows carry a genuine surplus above a milligram**, and all 1,891 are
+ceiling-bound. So those rows were read exactly backwards, and this is the
+flipped-default failure that file already documents arriving from the other
+side.
+
+⚠️  **The check at the end catches it, which is an argument for the compared
+column set rather than for leaving it.** Proved on `2021 VW5`, one of the
+1,769: before the fix the derivation reports that it disagrees with the model;
+after it, **88 quantities, 86 bit-exact, 2 within 1e-12, 0 DIFFER**.
+
+✅  **And the residue column itself is bit-exact now, by matching the model's
+association rather than by tolerating a difference.** The derivation subtracted
+two quantities it had both computed as `payload - remaining`, which cancels to
+exactly 0.0; calc subtracts a `sum()` from an accumulator. Taking the sum on
+the free side is the `y * 365.25 * 24.0` lesson again: one rounding is not more
+accurate than two, it is a different number, and the one that matters is the
+model's. ⚠️  Note what a relative comparator does with the difference -- 0.0
+against 1.455e-11 is a relative error of **1.0**, a 100% disagreement over one
+ULP -- which is why this had to be fixed at the arithmetic rather than with a
+tolerance.
+
 ### The runtime constant follows the release now (2026-09-16)
 
 The section above measured all four cislunar cells at v1.22.0 and deliberately
