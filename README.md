@@ -709,9 +709,12 @@ section about verification.
 | 6 | Stage 2 tables | a judgement-table edit that moved a number, or a commodity falling through a silent default |
 | 7 | market ceilings | a capacity ceiling that pays rather than costs, and the three market columns swapping meanings: `saturation_multiplier`, `unsold_payload_kg` and v1.22.0's `surplus_payload_kg` |
 
-`py verify.py invariants` runs 4, 5 and 6 only and needs no baseline, so it
-works on any tree and is the fast way to check an upstream table edit;
-`--cells` takes a subset.
+`py verify.py invariants` runs 4 to 7 and needs no baseline, so it works on any
+tree and is the fast way to check an upstream table edit; `--cells` takes a
+subset. ⚠️  **It said "4, 5 and 6" until 2026-09-16**, as did two lines of
+`verify.py`'s own header, all three omitting the market-ceiling check that had
+landed a release earlier; check 13 holds every one of these to what the code
+actually runs.
 
 🚨  **"On a clean tree, before editing" is enforced now, not merely asked
 for.** It was a documented discipline with nothing behind it, and its failure
@@ -977,6 +980,7 @@ py verify_docs.py
 | 10 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
 | 11 | docstrings | a module, class or function in the repo's own Python with no docstring |
 | 12 | pairs | one measurement quoted in BOTH README and CLAUDE.md without a row on CLAUDE.md's register of known copies |
+| 13 | scope | a document disagreeing with `verify.py` about which checks it runs: its own docstring list, the check table above, and the four sentences in either file that say what `invariants` or `--skip prune parallel` covers. All four omitted check 7 for a release, in the file CLAUDE.md names as the authority for counting them |
 
 ⚠️  **Every one of these fails if a file it is supposed to read is not on
 disk.** That was not true until 2026-09-15: each check enumerated first-party

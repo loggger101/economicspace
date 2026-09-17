@@ -54,6 +54,7 @@ through. Skim for the section that names what you are about to change.
 - [A check that the numbers are right is not a check that the page is complete](#a-check-that-the-numbers-are-right-is-not-a-check-that-the-page-is-complete)
 - [A flipped default breaks every reader that infers a run from the config](#a-flipped-default-breaks-every-reader-that-infers-a-run-from-the-config)
 - [A fixed point that carries its last pass makes the STOPPING TEST an answer](#a-fixed-point-that-carries-its-last-pass-makes-the-stopping-test-an-answer)
+- ["Count them in the header" is advice, and advice rots like a count](#count-them-in-the-header-is-advice-and-advice-rots-like-a-count)
 - [One definition with two readers imposes the stricter reader on both](#one-definition-with-two-readers-imposes-the-stricter-reader-on-both)
 - [`y * 365.25 * 24.0` is not `y * 8766.0`](#y--36525--240-is-not-y--87660)
 - [A Stage 2 catalog is priced for ONE destination](#a-stage-2-catalog-is-priced-for-one-destination-and-so-are-its-ceilings)
@@ -1473,6 +1474,7 @@ it.
 | whether `campaign/` obeys the em-dash ratchet and the structure rules at all | it did not, for the whole 20-cell campaign | checks 5, 6 |
 | whether every module, class and function carries a docstring | 87 carried neither that nor a leading comment, most of them in `ui.py` and `launch_ui.py` | check 11 |
 | whether a measurement is quoted in BOTH this file and README off the register below | the register is maintained by hand, and it had missed the project's four headline numbers since it was written | check 12 |
+| which checks `verify.py` runs, against every sentence in either file that says so | "count them in its own header" is the advice BOTH files give, and that header was wrong in three places at once while README was wrong in a fourth, all omitting check 7 | check 13 |
 
 ⚠️  **It cannot see a stale measurement.** A number that is merely out of date
 passes everything in it, which is why the rest of this section is still a
@@ -2901,6 +2903,61 @@ against the place somebody was last burned -- check 2's own comment says so, in
 those words, about the third copy of a version table nobody had checked. Ask of
 every check not "does it pass" but **"what is the largest thing it could be
 mistaken for covering"**, and pin the table.
+
+### "Count them in the header" is advice, and advice rots like a count
+
+2026-09-16, and it is this file's own counts-in-prose rule failing in the
+remedy it prescribes.
+
+The rule is: **a count nothing checks is a number waiting to rot, and the fix
+is a checker or a deletion, never a correction.** Deletion was chosen for
+`verify.py`'s check count. This file and README both stopped stating it and
+both say, in those words, to **count them in `verify.py`'s own header**.
+
+🚨  **THE HEADER WAS WRONG IN THREE PLACES AND README IN A FOURTH, ALL FOUR
+OMITTING CHECK 7.** Not the numbered list, which was right; the sentences
+around it, which say what each subcommand covers:
+
+| where | said | runs |
+|---|---|---|
+| `verify.py` usage, `--skip prune parallel` | "bit-identity + 4 + 5" | 1 and 4 to 7 |
+| `verify.py` usage, `invariants` | "4, 5, 6 only" | 4 to 7 |
+| `verify.py` SCOPE paragraph | "Checks 1-5 cover STAGE 4" | 1-5 **and 7** |
+| README | "runs 4, 5 and 6 only" | 4 to 7 |
+
+⚠️  **AND THE FILE ALREADY RECORDED THIS ROT HAPPENING ONCE.** `cmd_check`'s
+docstring says, of the same defect: *"this docstring said SIX from the day
+check 7 landed, while `cmd_invariants` ten lines below said 4 to 7 correctly,
+so one file disagreed with itself about its own size."* Somebody found it,
+fixed the docstring they were standing in, and did not look ten lines up at the
+module header carrying it twice more. **Fixing one half of a defect class**,
+again, by the person writing the note about it.
+
+✅  **The lesson is not "count harder".** Deleting a count works when the thing
+it counts is a list a reader can see. It does not work when the count describes
+**what code does**, because then the replacement is still prose about code, and
+prose about code is the thing this whole file is written against. `verify.py`'s
+numbered list is fine; the sentences are prose about behaviour, and they went
+stale exactly the way a number would have.
+
+The remedy is `verify_docs.py` check 13, which reads the sections `verify.py`
+actually PRINTS -- what a run emits, not what any list claims -- and holds all
+four sentences, the docstring list and README's table to them. **When you find
+yourself writing "see the code" instead of a number, ask whether a checker can
+read the code for you; if it can, the sentence is not exempt just because it
+avoided a digit.**
+
+⚠️  **Check 13 refuses to be reworded out of its own reach.** A scope sentence
+that no pattern matches is a FINDING rather than a silent pass, because a
+harness that quietly checks three sentences out of four is the
+never-ran-at-all class this file has six entries for. Proved by rewording one:
+it reports `only 3 of the 4 known scope sentences matched`.
+
+⚠️  **It also caught itself.** Its first draft read README's table with a
+pattern keyed on a lower-case check name, and check 6 is "Stage 2 tables", so
+it silently measured six checks of seven -- the exact defect it exists to
+prevent, inside the check, on its first run. It reads the table structurally
+now, from the header to the first line that is not a row.
 
 ### One definition with two readers imposes the stricter reader on both
 

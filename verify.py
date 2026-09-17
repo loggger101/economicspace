@@ -23,12 +23,13 @@ edit, exactly as every release note in versions.md says it was.
 
 Other entry points:
 
-    py verify.py check --skip prune parallel  # ~5 min: bit-identity + 4 + 5
+    py verify.py check --skip prune parallel  # ~5 min: 1 and 4 to 7
     py verify.py check --cells raw benef      # a subset
-    py verify.py invariants                   # 4, 5, 6 only; needs no baseline
+    py verify.py invariants                   # 4 to 7 only; needs no baseline
     py verify.py baseline --tag 1.17.6        # keep several around
 
-SCOPE.  Checks 1-5 cover STAGE 4; check 6 covers STAGE 2's judgement TABLES.
+SCOPE.  Checks 1-5 and 7 cover STAGE 4; check 6 covers STAGE 2's judgement
+TABLES.
 Nothing here ever re-runs Stages 1-3 -- deliberately, because a Stage 1 run
 fetches a different catalog (JPL adds bodies daily) and a Stage 3 run re-fetches
 live prices, either of which moves the inputs underneath the comparison.  Check
@@ -49,7 +50,8 @@ BUDGET.  A full `check` builds ~20 cells and takes roughly HALF AN HOUR on the
 reference machine.  Most of that is check 2, because turning the pre-filter off
 is what v1.14.1 and v1.17.4 exist to avoid -- an unpruned cell runs the whole
 search.  Iterate with `--skip prune parallel` (~5 min, and it still catches any
-change to any number), then run the full set once before committing.  A
+change to any number: it turns off 2 and 3 and leaves 1 and 4 to 7 running),
+then run the full set once before committing.  A
 verification you will not run is worse than a slow one.
 
 WHY THIS FILE EXISTS
