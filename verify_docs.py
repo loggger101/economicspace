@@ -175,7 +175,15 @@ CAMPAIGN_DOCS = ["campaign/FINDINGS.md", "campaign/README.md",
 CAMPAIGN_PY = ["campaign/analyse.py", "campaign/extra_checks.py",
                "campaign/memwatch.py", "campaign/population.py",
                "campaign/rig_bounds.py",
-               "campaign/run_cell.py", "campaign/run_queue.py"]
+               "campaign/run_cell.py", "campaign/run_queue.py",
+               # The two largest campaign scripts, and the pair that spent the
+               # longest outside every check in here: together they are more
+               # source than the other seven combined, and one of them RENDERS
+               # prose into a document a reader is meant to trust.  A file
+               # nothing checks is clean until it is not, which is the whole
+               # argument this list is built on.
+               "campaign/worked_calculation.py",
+               "campaign/worked_calculation_doc.py"]
 
 MODULES = {
     "catalog":   "modules/catalog.py",
