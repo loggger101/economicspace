@@ -182,7 +182,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.14.0`,
-calc `1.22.0`, master `1.27.0` (the master version is a literal in
+calc `1.23.0`, master `1.28.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.14.0` is now spacecost's data-contract version**, not a
@@ -411,6 +411,12 @@ half price, and reliability, the learning curve and the cost of capital were
 all **charged**. Set `sell_surplus_at_discount` False, `model_reliability`
 True, `model_learning_curve` True and `apply_wacc_compounding` True to
 reproduce anything in this section.
+
+⚠️  **AND calc `1.23.0` ADDS A FIFTH: `max_mining_fraction` is 1.0
+now, not 0.05.** Set it back to reproduce this section. It is the mildest of
+the five and the easiest to forget, because it is bit-identical on both
+BENEFICIATED cislunar cells and moves the raw N = 1 cell 5.11%; a reproduction
+that checks a beneficiated cell and stops will pass without it.
 
 ⚠️  **DO NOT SCALE THESE CELLS BY A SINGLE RATIO.** On the capped cislunar
 sample cells the four together are worth 2.6x on raw ore and 2.1x on the
@@ -3203,6 +3209,46 @@ few tenths of a percent on a handful of rows for a real runtime cost, and the
 honest place for that question is the branch-and-bound item under "The one big
 structural item that is still open", which needs an admissible bound and has
 the same shape. **Do not "fix" the ladder on the strength of four rows.**
+
+### A constraint that rarely binds can still be SIZING your answer
+
+calc `1.23.0`, and it is the entry above arriving from the opposite end: that
+one is about a non-exhaustive SEARCH making a tightened constraint look good,
+this one is about a quantity that is not searched at all.
+
+`max_mining_fraction` was 0.05, a stated conservatism about depleting a body,
+never derived from anything. On the 400-row raw cislunar cell it bound on **3
+of 155 bodies** and on **zero** rows of either beneficiated cell, which is the
+profile of a dial nobody need think about. It was also choosing the mission on
+the cell's WINNER.
+
+🚨  **THE HAUL IS DERIVED FROM WHICHEVER CONSTRAINT BINDS, NOT
+SEARCHED.** There is no candidate axis for "take less". So any cap that binds
+is picking a payload, and the architecture search then answers a question that
+cap asked. Swept on 2017 KJ5: 27.39x at 0.01, 16.10x at 0.02, **9.75x at
+0.05**, then a flat **10.25x from 0.08 up**, the plateau being where the cap
+stops binding. 0.05 landed on a haul that prices 5.11% better than the one the
+mass budget picks unclamped, and the number went into `versions.md` as the
+release's raw cell.
+
+⚠️  **So relaxing it made the headline WORSE, and that is not a check
+7 violation.** Both entries here end in the same trap -- a constraint whose
+tightening improves the answer -- and the mechanisms are different, so the
+diagnosis has to be too:
+
+| | what is non-monotone | how to tell |
+|---|---|---|
+| the fleet ladder | the SEARCH, which is coarse-then-refine | the fixed-programme comparison; revenue is monotone |
+| a binding cap | the PAYLOAD, which nothing searches | sweep the cap and look for the plateau |
+
+✅  **The test is the sweep, and it is cheap.** One body, eight values of
+the dial, `evaluate_asteroid` directly. A dial that shows a **plateau** is one
+that has stopped binding; anything to the left of the plateau is the dial
+sizing the mission. **Ask that of any bound in the cascade before quoting a
+cell it binds on**, and note the corollary for the population: *how often a cap
+binds says nothing about whether it is setting your headline*, which is the
+same sentence this file already writes about the RTG branch and about survivor
+counts.
 
 ### A ratio taken across a session is a measurement of the session
 

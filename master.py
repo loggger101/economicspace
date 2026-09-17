@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.27.0)
+"""Master Asteroid Profitability Pipeline (1.28.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -5784,10 +5784,28 @@ class CalcConfig:
     return_structure_frac_of_payload: float = 0.15
 
     # ─── MINING MODEL ────────────────────────────────────────────────────────
-    # Single mission can never strip-mine the whole asteroid.  Cap at this
-    # fraction of total mass.  5% is conservative for a first mission to a
-    # hundreds-of-kilometre body.
-    max_mining_fraction:       float = 0.05
+    # The share of a body one mission may remove.  1.0 means the whole thing
+    # is on the table; the mission is then bounded by what the rig can dig in
+    # the time (`mining_rate_kg_per_day_per_kg_rig` x
+    # `max_mining_duration_yr`), by the return capsule's volume cap, and by
+    # the rocket equation, which is where the real limits live.
+    #
+    # v1.23.0 raised this from 0.05.  The 5% was a stated conservatism about a
+    # first mission to a large body and was never derived from anything; what
+    # it did on a real population was act as an accidental PAYLOAD SIZING
+    # LEVER, because the haul is DERIVED from whichever constraint binds
+    # rather than searched.  On the 400-row raw cislunar cell it bound on 3 of
+    # 155 bodies, and on the cell winner (2017 KJ5) it clamped the haul to
+    # 117,406 kg, which prices better than the 97,875 kg the mass budget
+    # chooses unclamped -- so the cap was improving the headline by forcing a
+    # smaller mission, for no physical reason.  Swept on that body: 27.39x at
+    # 0.01, 16.10x at 0.02, 9.75x at 0.05, then a flat 10.25x from 0.08 up,
+    # the plateau being where the cap stops binding at all.
+    #
+    # Set it below 1.0 to restore a depletion limit.  A value low enough to
+    # bind is a value that SIZES the mission, which is the thing this default
+    # stops it doing silently.
+    max_mining_fraction:       float = 1.0
 
     # ─── MINING THROUGHPUT  (v1.4.0) ─────────────────────────────────────────
     # Before v1.4.0 the rig could extract any mass instantly: mission duration
@@ -6606,7 +6624,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.22.0"
+    pipeline_version: str = "1.23.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -15008,7 +15026,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.27.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.28.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
