@@ -988,6 +988,7 @@ py verify_docs.py
 | 11 | docstrings | a module, class or function in the repo's own Python with no docstring |
 | 12 | pairs | one measurement quoted in BOTH README and CLAUDE.md without a row on CLAUDE.md's register of known copies |
 | 13 | scope | a document disagreeing with `verify.py` about which checks it runs: its own docstring list, the check table above, and the four sentences in either file that say what `invariants` or `--skip prune parallel` covers. All four omitted check 7 for a release, in the file CLAUDE.md names as the authority for counting them |
+| 14 | prose | a number typed into a sentence the worked calculation renders, where every figure beside it is derived and compared against the model. It shipped two: Module 1's taxonomy fractions "sum to between 0.73 and 0.96" and the solar/RTG crossover "near 3.46 AU", both correct when written and neither ever executed. Both derive now, and a survivor needs a row on the register in `campaign/worked_calculation.py` saying why it cannot rot. It reads the renderer's source, so it needs no run and no inputs, which is what lets it live here rather than in that script's own `--audit` |
 
 ⚠️  **Every one of these fails if a file it is supposed to read is not on
 disk.** That was not true until 2026-09-15: each check enumerated first-party

@@ -37,6 +37,9 @@ counts-in-prose failure this file was written to catch:
    13. scope         which checks `verify.py` runs, against every sentence in
                      either file that says -- its own docstring list, README's
                      table, and the four claims about what a subcommand covers
+   14. prose         no number typed into a sentence the worked calculation
+                     renders, against the register beside the derivation that
+                     would otherwise have had to produce it
 
     py verify_docs.py                       # every check except 10
     py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 10
@@ -1660,6 +1663,79 @@ def check_harness_scope() -> bool:
     return not bad
 
 
+# ------------------------------------------------------------------ 14. prose
+def check_prose_numbers() -> bool:
+    """No number typed into a sentence the worked calculation renders.
+
+    🚨  THE ONE DOCUMENT IN THIS REPO THAT CANNOT GO STALE HAD SHIPPED TWO
+    STALE NUMBERS.  `campaign/worked_calculation.py` derives every figure it
+    prints and then compares all of them against the row the run produced,
+    which is why the page can claim what it claims; but the PROSE around those
+    figures is ordinary writing, and two sentences in it asserted values
+    nothing derived.  One said Module 1's taxonomy fractions "sum to between
+    0.73 and 0.96" and the other that solar and a radioisotope source "cross
+    near 3.46 AU".  Both were correct when written, neither was ever executed,
+    and the first pair had already been WRONG at birth elsewhere in this repo
+    -- 0.76 rather than 0.73, because somebody read the `C` row and
+    generalised it to the complex, and the correction then reached the docs
+    and left seven copies standing in code, of which this document was the one
+    that RENDERED its copy to a reader.
+
+    Both are derivations now.  This is the checker that stops the third one,
+    and it is here rather than in `--audit` because it is the half that needs
+    no model, no catalog and no run: it reads the renderer's source.  A check
+    that can only run after a three-minute build against 868 MB of inputs is a
+    check CI cannot have.
+
+    ⚠️  PROSE, NOT ARITHMETIC.  A substitution block exists to show
+    `365.25 * 24 * 3600`, and an equation exists to show its own constants; a
+    check that flagged those would be asking the page to stop being a
+    derivation.  The distinction is what the number is DOING -- a substitution
+    displays a constant the reader is meant to CHECK, a sentence asserts one
+    they are meant to BELIEVE -- and it is why this reads only the calls that
+    write sentences.
+
+    The register of survivors lives in `worked_calculation.py` beside the
+    function, not here, because it is a statement about that document rather
+    than about this harness.
+    """
+    path = os.path.join(REPO, "campaign", "worked_calculation.py")
+    if absent(["campaign/worked_calculation.py"]):
+        print("14. prose      ! campaign/worked_calculation.py is not on disk")
+        return False
+    # Imported by source rather than by `import`, because importing that
+    # module pulls in `master` and 868 MB of catalogs, and this check exists
+    # precisely to be runnable without them.
+    namespace: dict = {"os": os, "re": re,
+                       "CAMP": os.path.join(REPO, "campaign")}
+    tree = ast.parse(read(path))
+    wanted = ("prose_numbers", "PROSE_CALLS", "TYPED_OK")
+    body = [n for n in tree.body
+            if (isinstance(n, ast.FunctionDef) and n.name in wanted)
+            or (isinstance(n, ast.Assign)
+                and any(getattr(t, "id", "") in wanted for t in n.targets))]
+    missing = set(wanted) - {getattr(n, "name", None) or
+                             getattr(n.targets[0], "id", None) for n in body}
+    if missing:
+        print("14. prose      ! worked_calculation.py no longer defines %s"
+              % ", ".join(sorted(missing)))
+        return False
+    exec(compile(ast.Module(body=body, type_ignores=[]), path, "exec"),
+         namespace)
+    typed = namespace["prose_numbers"](
+        os.path.join(REPO, "campaign", "worked_calculation_doc.py"))
+    print("14. prose      %d number(s) typed into the worked calculation's "
+          "prose, %d on its register"
+          % (len(typed), len(namespace["TYPED_OK"])))
+    for line, word, context in typed:
+        where = "line %d" % line if line else "register"
+        print("     ! %-10s %-12s %s" % (word, where, context[:88]))
+    if typed:
+        print("       Derive it, or add a row to TYPED_OK in "
+              "campaign/worked_calculation.py saying why it cannot rot.")
+    return not typed
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run every check except 10, plus 10 if `--before` names a snapshot.
 
@@ -1694,7 +1770,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                check_runtime,
                check_docstrings,
                check_pairs,
-               check_harness_scope):
+               check_harness_scope,
+               check_prose_numbers):
         ok = fn() and ok
     if args.before:
         if len(args.before) < 2:

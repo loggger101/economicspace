@@ -118,6 +118,21 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       single-mission document and a beneficiated searched one are different
       documents rather than one with blanks in it.
 
+      🚨  `SECTION_ORDER` IS THE ONE PLACE A SECTION'S NUMBER, TITLE AND
+      ANCHOR LIVE, and it is worth knowing why it had to become one.  All
+      three used to be typed into the `h(2, ...)` call inside the section,
+      again into the contents list under a different wording, and again into
+      every sentence elsewhere saying "see section 6"; three sections have
+      early-return branches that repeated their own heading, so one section
+      carried up to FOUR copies of its own identity with nothing holding them
+      to each other.  Inserting a section renumbered the headings and left
+      every cross-reference pointing one short, silently.  The number is the
+      POSITION now, `sec()` writes the heading, `ref()` writes a
+      cross-reference as a real link, and `document()` asserts that every
+      section emitted its own anchor exactly once -- which is what catches a
+      branch that forgot its heading, or kept a stale one and rendered under
+      the wrong number.
+
   ✅  It covers every destination and every architecture the search can
   choose: seven destinations, both ore states, both programme settings,
   aerocapture and the heat shield, ISRU return propellant, chemical as well as
@@ -176,6 +191,31 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
   to look for would be a second copy of what the derivation reads; instead
   every reference-table read is logged as it happens, so a rate added to the
   cascade joins the audit with no edit here.
+
+  🚨  AND THE THIRD QUESTION IS ABOUT THE PROSE, WHICH NEITHER OF THE OTHER
+  TWO CAN SEE.  Every FIGURE on the page is derived and compared; the
+  sentences around them are ordinary writing, and two of them asserted values
+  nothing derived -- that Module 1's taxonomy fractions "sum to between 0.73
+  and 0.96", and that solar and a radioisotope source "cross near 3.46 AU".
+  Both were correct when written, neither was ever executed, and the first
+  pair had already been WRONG at birth elsewhere in this repo.  A column audit
+  cannot see either, because no column is missing: the page is complete and
+  one of its sentences is simply untrue.
+
+  Both derive now, off `taxonomy_fraction_span()` and `crossover_au()`, and
+  what stops the third one is a register: any digit reaching `para` or `note`
+  has to be on `TYPED_OK` with a reason it cannot rot, and a register row
+  nothing matches is a finding too, because an allowlist nobody reads has
+  stopped being a decision.  ⚠️  It reads the RENDERER'S SOURCE rather than
+  the page, because a derived number and a typed one render identically --
+  which is the whole difficulty -- and it covers prose rather than arithmetic,
+  since a substitution exists to show `365.25 * 24 * 3600` and flagging that
+  would be asking the page to stop being a derivation.
+
+  ✅  SO IT RUNS IN `verify_docs.py` AS CHECK 14 AS WELL, in about a second
+  and with no catalog, no `master` and no run.  A check that can only fire
+  after a three-minute build against 868 MB of inputs is a check CI cannot
+  have, and this is the one half of the audit that does not need any of it.
 
   🚨  AND THE AUDIT MEASURES ITSELF ON EVERY RUN, which is not decoration.
   Its first version tested only that a page number was consistent with a

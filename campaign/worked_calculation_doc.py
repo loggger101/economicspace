@@ -105,10 +105,18 @@ def esc(text):
 
 # ─────────────────────────────────────────────────────────────────── layout
 def h(level, text, anchor=None):
-    """A heading, optionally anchored so the contents list can reach it."""
+    """A heading, optionally anchored so the contents list can reach it.
+
+    An anchored heading also carries a self-link, which is hidden until the
+    heading is hovered and hidden again in print.  A sixty-page derivation
+    whose sections cannot be linked to is a document nobody quotes from.
+    """
     tag = "h%d" % level
-    ident = ' id="%s"' % anchor if anchor else ""
-    return "<%s%s>%s</%s>" % (tag, ident, text, tag)
+    if not anchor:
+        return "<%s>%s</%s>" % (tag, text, tag)
+    return ('<%s id="%s">%s<a class="anchor" href="#%s" '
+            'aria-label="link to this section">&#182;</a></%s>'
+            % (tag, anchor, text, anchor, tag))
 
 
 def para(text):
@@ -122,14 +130,22 @@ def note(kind, text):
 
 
 def table(headers, rows, cls=""):
-    """A table from a header list and a list of cell lists."""
-    out = ['<table%s>' % (' class="%s"' % cls if cls else "")]
+    """A table from a header list and a list of cell lists.
+
+    ⚠️  WRAPPED, BECAUSE A TABLE CANNOT SHRINK BELOW ITS OWN CONTENT.  The
+    nomenclature table measures about 414px at its narrowest and a phone is
+    375px, so an unwrapped one does not overflow itself -- it widens the
+    BODY, and every paragraph on the page then sits in a column the reader
+    has to scroll sideways to finish.  The wrapper takes the overflow
+    instead, and print turns it off again because paper has no scrollbar.
+    """
+    out = ['<div class="tw"><table%s>' % (' class="%s"' % cls if cls else "")]
     out.append("<thead><tr>%s</tr></thead>"
                % "".join("<th>%s</th>" % c for c in headers))
     out.append("<tbody>")
     for r in rows:
         out.append("<tr>%s</tr>" % "".join("<td>%s</td>" % c for c in r))
-    out.append("</tbody></table>")
+    out.append("</tbody></table></div>")
     return "".join(out)
 
 
@@ -178,6 +194,58 @@ def outputs(pairs):
                       '<td class="dnote">%s</td></tr>'
                       % (k, v, row[2] if len(row) > 2 else "")
                       for row in pairs for k, v in [(row[0], row[1])]))
+
+
+# ──────────────────────────────────────────────────────── the section list
+# 🚨  ONE PLACE A SECTION'S NUMBER, TITLE AND ANCHOR LIVE.  Every one of them
+# used to be typed into the `h(2, ...)` call inside the section, AGAIN into
+# the contents list at the bottom of this file under a different wording, and
+# AGAIN into every sentence elsewhere that says "see section 6" -- and three
+# sections have early-return branches that repeated their own heading a second
+# and a third time, so one section carried up to four copies of its own
+# identity with nothing holding them to each other.  Inserting a section
+# renumbered the headings and left every cross-reference in the prose pointing
+# one section short, silently, which is this repo's standing failure mode
+# wearing a table of contents.
+#
+# The number is the POSITION, so it cannot disagree with the order; `sec()`
+# writes the heading, `ref()` writes a cross-reference, and `contents()` reads
+# the same list.  `document()` asserts that every section emitted its own
+# anchor exactly once, which is what stops a section quietly rendering under
+# somebody else's heading.
+SECTION_ORDER = [
+    ("nomenclature", "Nomenclature and input values"),
+    ("body",         "The body"),
+    ("composition",  "Composition, and what a kilogram is worth"),
+    ("transfer",     "Getting there and back"),
+    ("cascade",      "The mass cascade"),
+    ("power",        "Power"),
+    ("clock",        "The clock"),
+    ("hold",         "The hold"),
+    ("market",       "The market"),
+    ("searches",     "The searches"),
+    ("reliability",  "Reliability"),
+    ("cost",         "The cost cascade"),
+    ("answer",       "The answer"),
+]
+SECTION_NO = dict((anchor, n) for n, (anchor, _t) in enumerate(SECTION_ORDER))
+SECTION_TITLE = dict(SECTION_ORDER)
+
+
+def sec(anchor):
+    """The numbered, anchored heading for a section, from the list above."""
+    return h(2, "%d. %s" % (SECTION_NO[anchor], SECTION_TITLE[anchor]), anchor)
+
+
+def ref(anchor, word="section"):
+    """A cross-reference to a section, as a link carrying its real number.
+
+    ⚠️  IT IS A LINK RATHER THAN A PHRASE, which is the half a typed "section
+    6" could never be: the number is right because it is the position, and the
+    reader can reach it because the anchor is the same string the heading was
+    written from.
+    """
+    return '<a href="#%s">%s %d</a>' % (anchor, word, SECTION_NO[anchor])
 
 
 # ───────────────────────────────────────────────────────────── the sentences
@@ -269,6 +337,18 @@ LEG_LABEL = {
 }
 
 
+def crossover_au(C):
+    """Where a solar array and a radioisotope source deliver the same W/kg.
+
+    Solar is rated at 1 AU and falls as 1/r2; an RTG is flat.  So
+    `w_1au / r^2 = w_rtg` at `r = sqrt(w_1au / w_rtg)`, and the page can show
+    the square root rather than assert its answer.  It asserted "3.46 AU" for
+    four releases, three of them after the rates it is made of were already
+    being printed a paragraph above it.
+    """
+    return math.sqrt(C["w_1au"] / C["rtg_w_per_kg"])
+
+
 def english(items):
     """`a`, `a and b`, or `a, b and c`."""
     items = list(items)
@@ -336,10 +416,40 @@ def s_header(out):
     if C.get("population"):
         rows.insert(2, ("best of", "%s evaluable bodies in this cell"
                         % fmt(C["population"], 0)))
+    # 🚨  THE STRIP IS DERIVED LIKE EVERYTHING ELSE.  It is the one part of
+    # the page a reader sees without scrolling, which makes it the worst
+    # possible place for a figure somebody typed -- so every tile reads the
+    # same dicts the sections below it derive from, and the objective tile is
+    # literally `P["obj"]`, the number section 12 ends on.
+    M, cost = out["M"], P["cost"]
+    figures = [
+        ("cost / revenue", sig(P["obj"], 4), "x", True),
+        ("payload returned", fmt(M["m_pay"], 0), "kg", False),
+        # ⚠️  N = 1 IS THE COMMON CASE AND "1 missions" READS AS A BUG.
+        # Every other tile carries a unit that does not inflect; this one
+        # does, and a single-mission cell is exactly the cell somebody looks
+        # at first.
+        ("programme", "%d" % P["n"],
+         "mission" if P["n"] == 1 else "missions", False),
+        ("expected revenue", musd(P["expected"]), "", False),
+        ("total cost", musd(cost["total"]), "", False),
+    ]
+    strip = ('<div class="figs">%s</div>'
+             % "".join('<div class="fig%s"><span class="k">%s</span>'
+                       '<span class="v">%s%s</span></div>'
+                       % (" lead" if lead else "", esc(key), value,
+                          ('<span class="u"> %s</span>' % esc(unit))
+                          if unit else "")
+                       for key, value, unit, lead in figures))
     return "".join([
-        h(1, "Worked calculation: %s" % body),
-        para("<strong>%s</strong>" % shape_sentence(a)),
-        para(terms_sentence(out["terms"])),
+        '<header class="masthead"><div>',
+        '<p class="eyebrow">Worked calculation &#183; %s &#183; calc %s</p>'
+        % (esc(C["destination"]), esc(out["terms"]["stamp"])),
+        h(1, body),
+        '<p class="standfirst"><strong>%s</strong></p>' % shape_sentence(a),
+        '<p class="terms">%s</p>' % terms_sentence(out["terms"]),
+        strip,
+        '</div></header>',
         kv(rows),
         note("key",
              "Every figure below is derived from the reference tables and the "
@@ -495,7 +605,8 @@ def s_nomenclature(out):
         # 9.1 turns; what the rig manages against it is `feed / payload` and
         # can be smaller, because the throughput ceiling clips the feed.  They
         # are different quantities and section 7 reports the other.
-        value_rows.append(["r", "concentration ratio (searched, section 9)",
+        value_rows.append(["r", "concentration ratio (searched, %s)"
+                           % ref("searches"),
                            prec(out["ratio"], 10), "-", "D"])
     value_rows += [
         ["c_LEO", "reusable launch price to LEO",
@@ -516,7 +627,8 @@ def s_nomenclature(out):
         ["W_max", "rig maximum campaigns",
          prec(val("Mining rig maximum trips"), 4), "-", "A"],
         ["N, F, W", "units, fleet, campaigns per ship%s"
-         % (" (searched, section 9)" if a["searched"] else " (pinned)"),
+         % ((" (searched, %s)" % ref("searches")) if a["searched"]
+            else " (pinned)"),
          "%d, %d, %d" % (P["n"], P["f"], P["w"]), "-",
          "D" if a["searched"] else "A"],
         ["c_rig", "mining rig recurring cost",
@@ -576,7 +688,7 @@ def s_nomenclature(out):
         "<strong>%s</strong> %s, %s" % (code, word, gloss)
         for code, word, gloss in CLASSES)
     return "".join([
-        h(2, "0. Nomenclature and input values", "nomenclature"),
+        sec("nomenclature"),
         para("Everything below is an input. Every other number in this "
              "document is derived from these, on a page that shows the "
              "substitution, so a reader who disagrees with the answer can "
@@ -671,7 +783,7 @@ def s_body(out):
         ]
     dug = out["M"]["feed"] + out["M"]["isru_feed"]
     return "".join([
-        h(2, "1. The body", "body"),
+        sec("body"),
         outputs([("m", prec(B["mass"], 12, "kg"), "mass of the body"),
                  ("m_min", prec(B["mineable"], 12, "kg"),
                   "what one mission may take")]),
@@ -680,10 +792,10 @@ def s_body(out):
              "strip-mine an asteroid."),
         deriv(steps),
         kv(pairs),
-        para("The rig moves %s kg of rock on this mission (section 6), which "
+        para("The rig moves %s kg of rock on this mission (%s), which "
              "is %s of what the body would allow, so the rock is not what "
              "bounds this target."
-             % (fmt(dug, 0), pct(dug / B["mineable"], 4))
+             % (fmt(dug, 0), ref("clock"), pct(dug / B["mineable"], 4))
              if B["mineable"] > 0 else ""),
         h(3, "What the mass rests on") if sensitivity else "",
         deriv(sensitivity) if sensitivity else "",
@@ -691,13 +803,14 @@ def s_body(out):
              "measurements. Neither reaches the answer here: the mass sets "
              "only the mineable bound, which does not bind, and the density "
              "reaches the return-capsule volume cap, which does not bind "
-             "either (section 4).") if sensitivity else "",
+             "either (%s)." % ref("cascade")) if sensitivity else "",
     ])
 
 
 def s_composition(out):
     """Section 2: what it is made of and what that is worth."""
     C = out["C"]
+    span = C["frac_span"]
     rows = []
     for name, frac, price in sorted(C["phases"], key=lambda p: -p[2]):
         rows.append([esc(name), pct(frac, 3), usd(price, 2),
@@ -707,12 +820,17 @@ def s_composition(out):
                  "", "<strong>%s</strong>" % usd(C["bulk"], 2)])
     best = max(p[2] for p in C["phases"])
     out_html = [
-        h(2, "2. Composition, and what a kilogram is worth", "composition"),
+        sec("composition"),
         para("The taxonomy fractions are priced separately rather than "
              "blended, because a concentrating mission chooses between them. "
-             "Module 1's fractions sum to between 0.73 and 0.96, and the "
-             "remainder is carried as the bulk-silicate residual in the last "
-             "row rather than discarded, which is why the table totals one."),
+             "Across the %d classes Module 1 gives fractions for they sum to "
+             "between %s (%s) and %s (%s), never to one, and the remainder is "
+             "carried as the bulk-silicate residual in the last row rather "
+             "than discarded, which is why the table totals one."
+             % (span["classes"], fmt(span["low"], 2),
+                english([esc(n) for n in span["at_low"]]),
+                fmt(span["high"], 2),
+                english([esc(n) for n in span["at_high"]]))),
         table(["phase", "mass fraction", "$/kg", "contribution"], rows),
     ]
     # 🚨  WHERE THOSE PRICES COME FROM, because every one of them is a
@@ -1034,7 +1152,7 @@ def s_transfer(out):
          % prec(chosen["out"], 12), "before the floor and the penalty"),
     ]
     html_out = [
-        h(2, "3. Getting there and back", "transfer"),
+        sec("transfer"),
         outputs([("dv_out", prec(DV["dv_out"], 12, "m/s"),
                   "outbound, floored and penalised"),
                  ("dv_ret", prec(DV["dv_ret"], 12, "m/s"),
@@ -1242,8 +1360,8 @@ def s_cascade(out):
         ]
     feed_terms += [
         ("water", "= %s kg" % prec(M["water"], 15),
-         "%s of the hold; see section 7" % pct(
-             M["water"] / M["m_pay"] if M["m_pay"] else 0.0, 4)),
+         "%s of the hold; see %s" % (pct(
+             M["water"] / M["m_pay"] if M["m_pay"] else 0.0, 4), ref("hold"))),
         ("c_frac", "= c_seal * min(1, water / m_pay) = %s * %s = %s"
          % (prec(C["contain_per_kg"], 4),
             prec(min(1.0, M["water"] / M["m_pay"]) if M["m_pay"] else 0.0, 12),
@@ -1304,7 +1422,7 @@ def s_cascade(out):
          "the other; the seal is settled on the flown payload"),
     ]
     html_out = [
-        h(2, "4. The mass cascade", "cascade"),
+        sec("cascade"),
         outputs([("m_pay", prec(M["m_pay"], 12, "kg"), "returned payload"),
                  ("m_feed", prec(M["feed"], 12, "kg"), "dug and processed"),
                  ("m_launch", prec(M["m_launch"], 12, "kg"),
@@ -1562,7 +1680,7 @@ def s_power(out):
              "what a plant on this body would cost per watt, had one been "
              "needed"))
         return "".join([
-            h(2, "5. Power", "power"),
+            sec("power"),
             note("ok",
                  "<strong>This mission flies no power system.</strong> The "
                  "plant exists to run separation and water liberation, and a "
@@ -1681,7 +1799,7 @@ def s_power(out):
          % (prec(M["draw"], 12), prec(C["plant_w_per_kg"], 12),
             prec(M["plant"], 15))))
     html_out = [
-        h(2, "5. Power", "power"),
+        sec("power"),
         outputs([("P", prec(M["draw"], 12, "W"), "processing draw"),
                  ("m_plant", prec(M["plant"], 12, "kg"), "plant mass")]),
         para("Processing energy over the stay gives a draw, the draw gives an "
@@ -1697,14 +1815,18 @@ def s_power(out):
         html_out.append(note(
             "key",
             "The plant is a <strong>radioisotope source</strong>, flat at "
-            "%s W/kg wherever it is. Solar falls as 1/r2 and the two cross "
-            "near 3.46 AU, so a distant body is better served by nuclear "
-            "heat. It is not free: this plant is priced at %s per watt "
-            "against a solar array's, and the binding constraint is not money "
-            "but Pu-238 supply -- DOE produces about 1.5 kg a year, roughly "
-            "one flagship RTG for the entire world, which is why a draw over "
-            "the ceiling makes a mission infeasible rather than expensive."
-            % (fmt(C["plant_w_per_kg"], 2), usd(C["plant_usd_per_w"]))))
+            "%s W/kg wherever it is, against a solar array's %s W/kg at 1 AU. "
+            "Solar falls as 1/r2 and a radioisotope source does not, so the "
+            "two cross at sqrt(%s / %s) = <strong>%s AU</strong> and a body "
+            "further out than that is better served by nuclear heat. It is "
+            "not free: this plant is priced at %s per watt, and the binding "
+            "constraint is not money but Pu-238 supply -- DOE produces about "
+            "1.5 kg a year, roughly one flagship RTG for the entire world, "
+            "which is why a draw over the ceiling makes a mission infeasible "
+            "rather than expensive."
+            % (fmt(C["rtg_w_per_kg"], 2), fmt(C["w_1au"], 2),
+               fmt(C["w_1au"], 2), fmt(C["rtg_w_per_kg"], 2),
+               fmt(crossover_au(C), 2), usd(C["plant_usd_per_w"]))))
     else:
         html_out.append(note(
             "key",
@@ -1713,8 +1835,13 @@ def s_power(out):
             "night side: a rig on a rotating body is in shadow about half the "
             "time, and the sunlit hours have to run the load and recharge the "
             "store. The dark period used for storage is this body's own "
-            "rotation, %s h."
-            % (fmt(C["oversize"], 3), fmt(C["dark_h"], 2))))
+            "rotation, %s h. Solar was the cheaper source here because this "
+            "body sits inside the crossover: %s W/kg at 1 AU against a "
+            "radioisotope source's flat %s W/kg puts the two level at %s AU, "
+            "and this body orbits at %s AU."
+            % (fmt(C["oversize"], 3), fmt(C["dark_h"], 2),
+               fmt(C["w_1au"], 2), fmt(C["rtg_w_per_kg"], 2),
+               fmt(crossover_au(C), 2), fmt(C["a_au"], 3))))
     return "".join(html_out)
 
 
@@ -1825,7 +1952,7 @@ def s_clock(out):
          "the whole programme, on one rig"),
     ]
     return "".join([
-        h(2, "6. The clock", "clock"),
+        sec("clock"),
         outputs([("T_miss", prec(M["duration"], 12, "yr"), "mission duration"),
                  ("T_cad", prec(M["cadence"], 12, "yr"), "campaign cadence"),
                  ("trips", "%d" % M["trips"], "campaigns one rig serves")]),
@@ -1867,7 +1994,7 @@ def s_hold(out):
     rows.append(["<strong>total</strong>",
                  "<strong>%s</strong>" % fmt(load["loaded"], 1), "", "",
                  "<strong>%s</strong>" % musd(load["value"])])
-    html_out = [h(2, "7. The hold", "hold")]
+    html_out = [sec("hold")]
     if a["beneficiated"]:
         html_out.append(para(
             "The mission is not sent for a named mineral; it is sent to bring "
@@ -1988,7 +2115,7 @@ def s_market(out):
     frac = rev["surplus_frac"]
     if mode in ("unbounded", "single_mission"):
         return "".join([
-            h(2, "8. The market", "market"),
+            sec("market"),
             note("warn" if mode == "unbounded" else "ok",
                  MARKET_PROSE[mode]),
             kv([("gross value of the load", musd(rev["gross_base"])),
@@ -2000,7 +2127,7 @@ def s_market(out):
                  sig(rev["multipliers"].get(key, 1.0), 6)]
                 for key, kg in sorted(rev["pooled"].items())]
         return "".join([
-            h(2, "8. The market", "market"),
+            sec("market"),
             para(MARKET_PROSE[mode]),
             eq("P / P0 = (1 + Q / Qm) ^ (-1 / eps)"),
             note("key",
@@ -2074,7 +2201,7 @@ def s_market(out):
                 fmt(step["over"], 1)])
         sale = sale_rows
     html_out = [
-        h(2, "8. The market", "market"),
+        sec("market"),
         outputs([("Rev", musd(rev["capped"]["value"]), "what one delivery sells"),
                  ("clearing", prec(rev["clearing"], 12),
                   "of the unbounded hold's value")]),
@@ -2140,7 +2267,7 @@ def s_searches(out):
     """Section 9: the two searches that chose the mission."""
     sweep, ladder = out["sweep"], out["ladder"]
     a = architecture(out)
-    html_out = [h(2, "9. The searches", "searches")]
+    html_out = [sec("searches")]
     C = out["C"]
     if a["beneficiated"]:
         rows = []
@@ -2302,7 +2429,7 @@ def s_reliability(out):
     rel = out["P"]["rel"]
     if rel.get("off"):
         return "".join([
-            h(2, "10. Reliability", "reliability"),
+            sec("reliability"),
             eq("P = p_launch * exp(-T / MTBF) * p_mining"),
             para("That is the discount the model applies when it is asked "
                  "to. On this run all three factors are exactly 1.0, so "
@@ -2318,7 +2445,7 @@ def s_reliability(out):
                  "to whoever needs it."),
         ])
     return "".join([
-        h(2, "10. Reliability", "reliability"),
+        sec("reliability"),
         para("Revenue is not certain: the launch can fail, the spacecraft can "
              "die in transit, and the mining chain has never been "
              "demonstrated. Expected revenue is multiplied by the product "
@@ -2519,7 +2646,7 @@ def s_cost(out):
          "charged across all three"),
     ]
     html_out = [
-        h(2, "11. The cost cascade", "cost"),
+        sec("cost"),
         outputs([("C_tot", musd(cst["total"]), "total cost of one mission "
                   "of %d" % P["n"])]),
         para("Every line comes from the reference tables; none is invented "
@@ -2654,7 +2781,7 @@ def s_answer(out):
                 prec(cst["total"] / face, 12)),
              "what the cost of capital and the calendar charge cost in total"))
     return "".join([
-        h(2, "12. The answer", "answer"),
+        sec("answer"),
         outputs([("obj", "%s x" % sig(P["obj"], 6), "cost over revenue; "
                   "lower is better and 1.0 is breakeven")]),
         deriv(restated),
@@ -2704,10 +2831,10 @@ def s_footer(out):
              "from the model is reference data and table accessors."),
         para("The two are then compared column by column against the row the "
              "run actually produced, and %s: <strong>%d quantities, %d "
-             "bit-exact, %d within 1e-12, %d differing</strong>, worst "
+             "bit-exact, %d within %s, %d differing</strong>, worst "
              "relative difference %s on <code>%s</code>."
-             % (status, c["n"], c["exact"], c["close"], len(c["bad"]),
-                "%.3e" % c["worst"], esc(c["worst_name"]))),
+             % (status, c["n"], c["exact"], c["close"], "%g" % c["tol"],
+                len(c["bad"]), "%.3e" % c["worst"], esc(c["worst_name"]))),
         # A count on its own cannot be read: 71 against 72 is the difference
         # between an archived cell and a current one, and saying so is the
         # whole reason the check returns the names.
@@ -2722,98 +2849,310 @@ def s_footer(out):
         para("The quantities compared, in the order the check walks them: "
              '<span class="small"><code>%s</code></span>.'
              % esc(", ".join(c["names"]))) if c.get("names") else "",
-        para('<span class="small">Generated %s from source <code>%s</code>, '
-             'calc %s.</span>'
-             % (datetime.date.today().isoformat(), esc(out["cell"]),
-                esc(out["terms"]["stamp"]))),
+        '<p class="colophon small">Generated %s by '
+        '<code>campaign/worked_calculation.py</code> from source '
+        '<code>%s</code>, calc %s. Re-run it and every figure above moves '
+        'with the model.</p>'
+        % (datetime.date.today().isoformat(), esc(out["cell"]),
+           esc(out["terms"]["stamp"])),
     ])
 
 
 # ────────────────────────────────────────────────────────────────── the page
 CSS = """
-:root { color-scheme: light; }
-body { font: 15px/1.55 Georgia, 'Times New Roman', serif; color: #1a1a1a;
-       max-width: 52em; margin: 0 auto; padding: 3em 2em 6em; background: #fff; }
-h1 { font-size: 2em; margin: 0 0 .2em; letter-spacing: -.01em; }
-h2 { font-size: 1.3em; margin: 2.2em 0 .6em; padding-bottom: .25em;
-     border-bottom: 2px solid #1a1a1a; }
-h3 { font-size: 1.05em; margin: 1.6em 0 .4em; color: #333; }
-p { margin: .7em 0; }
-table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: .93em;
-        font-family: 'Segoe UI', Helvetica, Arial, sans-serif; }
-th, td { text-align: left; padding: .38em .7em; border-bottom: 1px solid #ddd;
-         vertical-align: top; }
-th { background: #f4f4f2; font-weight: 600; border-bottom: 1.5px solid #bbb; }
+/* Every colour is a token, and every token is redefined once for dark mode.
+   🚨  PRINT IS PINNED LIGHT.  The PDF is rendered by headless Chrome, which
+   honours `prefers-color-scheme` from the HOST, so a dark-themed machine was
+   one media query away from printing white-on-black over sixty pages.  The
+   print block restates the light values rather than trusting the cascade. */
+:root {
+  color-scheme: light dark;
+  --ink:        #16181d;   /* body text */
+  --ink-soft:   #5b6270;   /* captions, notes, secondary cells */
+  --ink-faint:  #8a90a0;   /* rules that should not be read as content */
+  --paper:      #ffffff;
+  --paper-sunk: #f6f7f9;   /* equations, substitutions, the contents rail */
+  --line:       #e3e6ec;
+  --line-firm:  #c3c8d2;
+  --rule:       #16181d;   /* the heavy rule under a section heading */
+  --accent:     #1f5fa8;   /* outputs, links, the key note */
+  --accent-bg:  #eef4fb;
+  --warn:       #9a5b08;
+  --warn-bg:    #fdf5e9;
+  --ok:         #2a6b31;
+  --ok-bg:      #f0f7f0;
+  --serif: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  --sans:  'Segoe UI', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --mono:  'Cascadia Mono', 'JetBrains Mono', Consolas, 'Liberation Mono',
+           monospace;
+  --measure: 46rem;        /* the text column */
+  --rail: 15rem;           /* the contents rail beside it */
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e4e7ee; --ink-soft: #a2a9b8; --ink-faint: #6d7486;
+    --paper: #14161a; --paper-sunk: #1c1f26;
+    --line: #2b2f38; --line-firm: #3c424e; --rule: #8b93a4;
+    --accent: #7fb2f0; --accent-bg: #172431;
+    --warn: #d99b3c; --warn-bg: #2a2014;
+    --ok: #86c98d; --ok-bg: #15251a;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font: 16px/1.62 var(--serif);
+  color: var(--ink); background: var(--paper);
+  margin: 0; padding: 0 1.25rem;
+  /* The rail and the column, side by side, centred as a pair.  Below the
+     breakpoint the rail becomes an ordinary block at the top of the flow, so
+     the same markup reads on a phone and prints as a contents page. */
+  display: grid;
+  grid-template-columns: 1fr minmax(0, var(--measure)) 1fr;
+  column-gap: 2.5rem;
+}
+body > * { grid-column: 2; }
+
+/* the title block */
+.masthead { grid-column: 1 / -1; padding: 3.25rem 0 0;
+            border-bottom: 1px solid var(--line); margin-bottom: 2.25rem; }
+.masthead > div { max-width: calc(var(--measure) + var(--rail) + 2.5rem);
+                  margin: 0 auto; padding-bottom: 2rem; }
+.eyebrow { font: 600 .72rem/1.4 var(--sans); letter-spacing: .14em;
+           text-transform: uppercase; color: var(--ink-soft);
+           margin: 0 0 .5rem; }
+h1 { font: 700 2.55rem/1.1 var(--serif); margin: 0 0 .65rem;
+     letter-spacing: -.02em; }
+.standfirst { font: 1.06rem/1.5 var(--serif); color: var(--ink);
+              margin: 0 0 .5rem; max-width: 42rem; }
+.standfirst strong { font-weight: 600; }
+.terms { font: .9rem/1.5 var(--sans); color: var(--ink-soft);
+         margin: 0; max-width: 42rem; }
+
+/* The key figures, derived like everything else and set apart so the page
+   answers its own question before the reader has scrolled once. */
+.figs { display: grid; gap: .7rem; margin: 1.75rem 0 0;
+        grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); }
+.fig { border: 1px solid var(--line); border-radius: 6px;
+       padding: .7rem .85rem; background: var(--paper-sunk); }
+.fig .k { font: 600 .67rem/1.3 var(--sans); letter-spacing: .09em;
+          text-transform: uppercase; color: var(--ink-soft);
+          display: block; margin-bottom: .3rem; }
+.fig .v { font: 600 1.3rem/1.15 var(--sans); font-variant-numeric: tabular-nums;
+          letter-spacing: -.01em; display: block; }
+.fig .u { font-size: .66em; font-weight: 400; color: var(--ink-soft); }
+.fig.lead { border-color: var(--accent); background: var(--accent-bg); }
+.fig.lead .v { color: var(--accent); }
+
+/* the contents rail */
+.toc { font: .88rem/1.45 var(--sans); background: var(--paper-sunk);
+       border: 1px solid var(--line); border-radius: 6px;
+       padding: 1rem 1.1rem; margin: 0 0 2.5rem; }
+.toch { font: 600 .7rem/1 var(--sans); letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ink-soft);
+        margin: 0 0 .7rem; padding: 0; border: none; }
+.toc ol { margin: 0; padding: 0; list-style: none; }
+.toc li { margin: 0; }
+.toc a { display: flex; gap: .55rem; padding: .22rem 0;
+         color: var(--ink); text-decoration: none; }
+.toc a:hover { color: var(--accent); }
+.tocn { color: var(--ink-faint); font-variant-numeric: tabular-nums;
+        min-width: 1.1rem; text-align: right; }
+.toc a.here { color: var(--accent); font-weight: 600; }
+.toc a.here .tocn { color: var(--accent); }
+
+@media (min-width: 62rem) {
+  body { grid-template-columns:
+           1fr var(--rail) minmax(0, var(--measure)) 1fr; }
+  body > * { grid-column: 3; }
+  .masthead { grid-column: 1 / -1; }
+  .toc { grid-column: 2; grid-row: 2 / 500;
+         position: sticky; top: 1.5rem; align-self: start;
+         max-height: calc(100vh - 3rem); overflow-y: auto;
+         background: none; border: none; padding: 0; margin: 0; }
+}
+
+/* headings */
+h2 { font: 600 1.45rem/1.25 var(--serif); margin: 3rem 0 .9rem;
+     padding-bottom: .3rem; border-bottom: 2px solid var(--rule);
+     letter-spacing: -.01em; scroll-margin-top: 1.5rem; }
+h3 { font: 600 1.01rem/1.35 var(--sans); margin: 2rem 0 .5rem;
+     color: var(--ink); letter-spacing: -.005em; scroll-margin-top: 1.5rem; }
+h2 a.anchor, h3 a.anchor { color: var(--ink-faint); text-decoration: none;
+     opacity: 0; padding-left: .4rem; font-weight: 400; }
+h2:hover a.anchor, h3:hover a.anchor { opacity: 1; }
+p { margin: .85rem 0; }
+a { color: var(--accent); }
+
+/* tables */
+.tw { overflow-x: auto; margin: 1.1rem 0; }
+table { border-collapse: collapse; width: 100%; margin: 0;
+        font: .89rem/1.45 var(--sans); }
+th, td { text-align: left; padding: .4rem .7rem;
+         border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: .77rem; letter-spacing: .05em;
+     text-transform: uppercase; color: var(--ink-soft);
+     border-bottom: 1px solid var(--line-firm); }
 td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--paper-sunk); }
 table.kv td:first-child { width: 58%; }
 table.sym td:not(:first-child) { text-align: left; }
 table.sym td:first-child, table.sym td:nth-child(3), table.sym td:nth-child(4),
-table.sym td:last-child { font-family: 'Cascadia Mono', Consolas, monospace; }
-table.sym td:last-child { text-align: center; }
-tr:last-child td { border-bottom: none; }
-.eq { font-family: 'Cascadia Mono', Consolas, monospace; background: #f7f7f5;
-      border-left: 3px solid #999; padding: .7em 1em; margin: 1em 0;
-      font-size: .9em; overflow-x: auto; }
-.deriv { background: #f7f7f5; border-left: 3px solid #999; padding: .55em .4em;
-         margin: 1em 0; overflow-x: auto; }
-.deriv table, .out table { width: 100%; margin: 0; font-size: .87em;
-        font-family: 'Cascadia Mono', Consolas, monospace; }
-.deriv td, .out td { border: none; padding: .09em .6em; vertical-align: baseline;
-        white-space: nowrap; }
+table.sym td:last-child { font-family: var(--mono); font-size: .93em; }
+table.sym td:last-child { text-align: center; color: var(--ink-soft); }
+
+/* equations and substitutions */
+.eq { font: .86rem/1.5 var(--mono); background: var(--paper-sunk);
+      border-left: 3px solid var(--line-firm); border-radius: 0 4px 4px 0;
+      padding: .75rem 1rem; margin: 1.1rem 0; overflow-x: auto; }
+.deriv { background: var(--paper-sunk); border-left: 3px solid var(--line-firm);
+         border-radius: 0 4px 4px 0; padding: .55rem .35rem;
+         margin: 1.1rem 0; overflow-x: auto; }
+.deriv table, .out table { width: 100%; margin: 0;
+        font: .82rem/1.5 var(--mono); }
+.deriv td, .out td { border: none; padding: .1rem .6rem;
+        vertical-align: baseline; white-space: nowrap; }
+.deriv tbody tr:hover, .out tbody tr:hover { background: none; }
 .deriv td:not(:first-child), .out td:not(:first-child) { text-align: left; }
-.deriv .dsym, .out .dsym { width: 1%; color: #444; }
+.deriv .dsym, .out .dsym { width: 1%; color: var(--ink-soft); }
 .deriv .dexp, .out .dexp { width: 1%; }
-.deriv .dnote, .out .dnote { color: #666; white-space: normal;
-        font-family: 'Segoe UI', Helvetica, Arial, sans-serif; font-size: .95em; }
-.out { background: #eff5fc; border-left: 4px solid #1565c0; padding: .55em .4em;
-       margin: 1em 0 1.4em; }
-.out .dsym { font-weight: 600; }
-.note { border-left: 4px solid #999; padding: .6em 1em; margin: 1.1em 0;
-        background: #fafafa; }
-.note.warn { border-color: #b4690e; background: #fdf6ec; }
-.note.ok   { border-color: #2e7d32; background: #f1f8f1; }
-.note.key  { border-color: #1565c0; background: #eff5fc; }
-code { font-family: 'Cascadia Mono', Consolas, monospace; font-size: .92em; }
-.small { color: #666; font-size: .85em; }
-.toc { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; font-size: .92em;
-       background: #f7f7f5; padding: 1em 1.4em; margin: 1.5em 0; }
-.toc ol { margin: .3em 0; padding-left: 1.4em; }
+.deriv .dnote, .out .dnote { color: var(--ink-soft); white-space: normal;
+        font-family: var(--sans); font-size: .95em; }
+/* What a section PRODUCES, boxed at its head so the page can be skimmed. */
+.out { background: var(--accent-bg); border-left: 4px solid var(--accent);
+       border-radius: 0 4px 4px 0; padding: .55rem .35rem;
+       margin: 1.1rem 0 1.5rem; }
+.out .dsym { font-weight: 700; color: var(--accent); }
+
+/* called-out paragraphs */
+.note { border-left: 4px solid var(--line-firm); border-radius: 0 4px 4px 0;
+        padding: .7rem 1rem; margin: 1.2rem 0; background: var(--paper-sunk);
+        font-size: .96rem; }
+.note.warn { border-color: var(--warn); background: var(--warn-bg); }
+.note.ok   { border-color: var(--ok);   background: var(--ok-bg); }
+.note.key  { border-color: var(--accent); background: var(--accent-bg); }
+code { font-family: var(--mono); font-size: .9em; }
+.small { color: var(--ink-soft); font-size: .85em; }
+.colophon { border-top: 1px solid var(--line); margin-top: 3rem;
+            padding: 1.25rem 0 4rem; }
+
+/* print and PDF */
 @media print {
-  body { max-width: none; padding: 0; font-size: 10.5pt; }
-  h2 { page-break-after: avoid; } table { page-break-inside: avoid; }
-  .note { page-break-inside: avoid; } .deriv, .out { page-break-inside: avoid; }
+  /* The light palette, restated: see the note at the top of this sheet. */
+  :root {
+    color-scheme: light;
+    --ink: #16181d; --ink-soft: #555b66; --ink-faint: #8a90a0;
+    --paper: #ffffff; --paper-sunk: #f4f5f7;
+    --line: #dcdfe5; --line-firm: #b9bec8; --rule: #16181d;
+    --accent: #14508f; --accent-bg: #eef3f9;
+    --warn: #8a5207; --warn-bg: #fbf4e8;
+    --ok: #235c29; --ok-bg: #eff5ef;
+  }
+  @page { margin: 16mm 14mm; }
+  body { display: block; font-size: 10.2pt; line-height: 1.5; padding: 0; }
+  .masthead { padding: 0; margin-bottom: 1.2rem; }
+  .masthead > div { max-width: none; padding-bottom: 1rem; }
+  h1 { font-size: 22pt; }
+  /* The rail is a contents PAGE in print, and the sticky positioning that
+     makes it a rail on screen would otherwise pin it to every page. */
+  .toc { position: static; max-height: none; break-after: page;
+         background: none; border: none; padding: 0; }
+  .figs { grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+          gap: .5rem; }
+  .fig { break-inside: avoid; }
+  h2 { break-after: avoid; font-size: 14pt; margin-top: 1.6rem; }
+  h3 { break-after: avoid; }
+  .tw { overflow-x: visible; margin: .9rem 0; }
+  table, .note, .deriv, .out, .eq, .tw { break-inside: avoid; }
+  tbody tr:hover { background: none; }
+  h2 a.anchor, h3 a.anchor { display: none; }
   /* A substitution must not be clipped at the page edge, and print has no
      horizontal scroll to fall back on.  The longest line in this document is
      about 95 characters, which at this size clears an A4 text column. */
-  .deriv table, .out table { font-size: .76em; }
-  .deriv td, .out td { padding: .06em .45em; }
+  .deriv table, .out table { font-size: 7.4pt; }
+  .deriv td, .out td { padding: .06rem .45rem; }
+  a { color: inherit; text-decoration: none; }
 }
 """
 
-SECTIONS = [
-    ("0. Nomenclature and inputs", "nomenclature", s_nomenclature),
-    ("1. The body", "body", s_body),
-    ("2. Composition", "composition", s_composition),
-    ("3. Getting there and back", "transfer", s_transfer),
-    ("4. The mass cascade", "cascade", s_cascade),
-    ("5. Power", "power", s_power),
-    ("6. The clock", "clock", s_clock),
-    ("7. The hold", "hold", s_hold),
-    ("8. The market", "market", s_market),
-    ("9. The searches", "searches", s_searches),
-    ("10. Reliability", "reliability", s_reliability),
-    ("11. The cost cascade", "cost", s_cost),
-    ("12. The answer", "answer", s_answer),
-]
+# Which function renders which section.  The NUMBER and the TITLE are not
+# here: `SECTION_ORDER` at the top of this file owns those, and this dict owns
+# only the binding, so the two cannot disagree about either.  The assertion
+# below is what holds them together.
+SECTION_FN = {
+    "nomenclature": s_nomenclature,
+    "body":         s_body,
+    "composition":  s_composition,
+    "transfer":     s_transfer,
+    "cascade":      s_cascade,
+    "power":        s_power,
+    "clock":        s_clock,
+    "hold":         s_hold,
+    "market":       s_market,
+    "searches":     s_searches,
+    "reliability":  s_reliability,
+    "cost":         s_cost,
+    "answer":       s_answer,
+}
+assert set(SECTION_FN) == set(SECTION_NO), (
+    "SECTION_ORDER and SECTION_FN disagree about which sections exist: %s"
+    % sorted(set(SECTION_FN) ^ set(SECTION_NO)))
 
 
 def contents():
-    """The table of contents, built from the section list rather than typed."""
-    items = "".join('<li><a href="#%s">%s</a></li>' % (anchor, title)
-                    for title, anchor, _fn in SECTIONS)
-    return ('<div class="toc"><strong>Contents</strong><ol>%s'
-            '<li><a href="#verification">Verification</a></li></ol></div>'
-            % items)
+    """The contents list, numbered from the section list rather than typed."""
+    items = "".join('<li><a href="#%s"><span class="tocn">%d</span>%s</a></li>'
+                    % (anchor, SECTION_NO[anchor], esc(title))
+                    for anchor, title in SECTION_ORDER)
+    return ('<nav class="toc" aria-label="Contents"><h2 class="toch">'
+            'Contents</h2><ol>%s'
+            '<li><a href="#verification"><span class="tocn">&#183;</span>'
+            'Verification</a></li></ol></nav>' % items)
+
+
+# The only script on the page, and it is presentational: it marks which
+# section the reader is in so a thirteen-section rail is navigable.  Nothing
+# here computes, formats or moves a number, which is the line this document
+# cannot cross -- a figure that arrived after the page was written could not
+# be compared against the model or seen by the completeness audit, and the
+# audit strips <script> before it reads anything.
+#
+# ⚠️  IT MUST DEGRADE TO NOTHING.  With JavaScript off, or in a PDF, the rail
+# is a plain list of links and every section is still reachable; the only
+# thing lost is the highlight.  That is why the `here` class is added here
+# rather than baked into the markup.
+SPY = """<script>
+(function () {
+  var links = {}, order = [];
+  Array.prototype.forEach.call(
+    document.querySelectorAll('.toc a[href^="#"]'), function (a) {
+      var id = a.getAttribute('href').slice(1);
+      if (document.getElementById(id)) { links[id] = a; order.push(id); }
+    });
+  if (!order.length) { return; }
+  var current = null, queued = false;
+  function mark() {
+    queued = false;
+    var found = order[0];
+    for (var i = 0; i < order.length; i++) {
+      if (document.getElementById(order[i]).getBoundingClientRect().top
+          <= 140) { found = order[i]; }
+    }
+    if (found === current) { return; }
+    if (current) { links[current].classList.remove('here'); }
+    links[found].classList.add('here');
+    current = found;
+  }
+  function schedule() {
+    if (!queued) { queued = true; requestAnimationFrame(mark); }
+  }
+  addEventListener('scroll', schedule, { passive: true });
+  addEventListener('resize', schedule, { passive: true });
+  mark();
+})();
+</script>"""
 
 
 def document(out):
@@ -2824,12 +3163,26 @@ def document(out):
     depends on a number that appears later.
     """
     body = [s_header(out), contents()]
-    for _title, _anchor, fn in SECTIONS:
-        body.append(fn(out))
+    for anchor, _title in SECTION_ORDER:
+        html_out = SECTION_FN[anchor](out)
+        # 🚨  A SECTION MUST EMIT ITS OWN HEADING, EXACTLY ONCE.  Three of
+        # these have early-return branches, and before the heading came out of
+        # `sec()` each branch carried its own typed copy; a branch that forgot
+        # one rendered under the heading above it and a branch that kept a
+        # stale one rendered under the wrong number.  Both read as a
+        # perfectly ordinary page.
+        count = html_out.count('id="%s"' % anchor)
+        assert count == 1, (
+            "section %r emitted its anchor %d times, not once" % (anchor, count))
+        body.append(html_out)
     body.append(s_footer(out))
     return (
-        "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-        "<title>Worked calculation: %s</title><style>%s</style></head><body>"
-        "%s</body></html>\n" % (esc(out["designation"]), CSS, "".join(body))
+        '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<meta name="generator" content="campaign/worked_calculation.py">'
+        '<meta name="description" content="%s">'
+        '<title>Worked calculation: %s</title><style>%s</style></head><body>'
+        '%s%s</body></html>\n'
+        % (esc(shape_sentence(architecture(out))), esc(out["designation"]),
+           CSS, "".join(body), SPY)
     )
