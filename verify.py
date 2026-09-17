@@ -240,6 +240,11 @@ PROVENANCE = ("pipeline_version", "catalog_date")
 
 DESTINATION = "cislunar"      # what the on-disk Stage 2 catalog is priced for
 
+# Where a harness-built cell is allowed to land.  See `run_cell`: the model
+# WRITES its catalog as a side effect, and the live one is somebody's
+# finished run rather than scratch space.
+_SCRATCH = os.path.join(REPO, ".verify", "scratch")
+
 # Config fields `run_cell` puts back to their declared default before every
 # cell.  `CELLS` names four fields; anything a caller varies through
 # `**override` and this list does not name is inherited by the NEXT cell in the
@@ -282,6 +287,26 @@ def run_cell(m, name: str, *, workers: int = 1, **override):
     spec.update(override)
 
     C = m.CALC_CONFIG
+    # 🚨  AND THE CELL IS WRITTEN SOMEWHERE THE PIPELINE DOES NOT KEEP ITS
+    # ANSWER.  `build_profitability_catalog` does not only RETURN a frame, it
+    # writes `<output_dir>/profitability_catalog.csv` as a side effect -- so a
+    # harness that leaves `output_dir` alone replaces the live Stage 4 catalog
+    # with whatever capped cell it just built, every time it runs one.  This
+    # file builds about twenty of them per `check`.
+    #
+    # What that costs is not the file, which regenerates, but the RUN behind
+    # it: the catalog on disk after a campaign is a full-catalog cell that took
+    # hours, and `campaign/worked_calculation.py` with no `--catalog`, the
+    # dashboard, and `preflight()`'s destination test all read exactly that
+    # file.  Overwriting it with a 400-row stride sample leaves every one of
+    # them answering about the sample, and nothing says so.
+    #
+    # ⚠️  `input_dir` is a SEPARATE field and is deliberately not touched:
+    # Stage 4 reads its ~868 MB of inputs through that one, and redirecting it
+    # would make every cell here fail to load rather than fail to save.  This
+    # is the narrowest possible redirection -- one field, one side effect.
+    C.output_dir = _SCRATCH
+    os.makedirs(_SCRATCH, exist_ok=True)
     C.delivery_destination    = DESTINATION
     C.eval_row_sampling       = "stride"
     C.parallel_workers        = workers

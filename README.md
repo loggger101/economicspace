@@ -736,6 +736,13 @@ modified without reading them; see
 A baseline written before this field existed reports `not recorded` and is
 allowed through, since nothing can be inferred about a tree that is gone.
 
+✅  **It no longer overwrites the catalog on disk.** Building a cell WRITES
+`profitability_catalog.csv` as a side effect, and the harness used to hand the
+model the live config, so one `run_cell` turned a 1,102,426,761-byte
+full-catalog result into a 245,817-byte stride sample. Cells land in
+`.verify/scratch/` now; `input_dir` is untouched, so Stage 4 still reads the
+real inputs.
+
 ⚠️  A full `check` builds about twenty cells and takes **roughly half an hour**.
 Most of that is check 2; turning the pre-filter off is exactly what v1.14.1 and
 v1.17.4 exist to avoid, so an unpruned cell runs the entire search. Iterate with
