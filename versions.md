@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [calc v1.23.0](#calc-v1230)
 - [calc v1.22.0](#calc-v1220)
 - [calc v1.21.2](#calc-v1212)
 - [calc v1.21.1](#calc-v1211)
@@ -80,8 +81,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.2.0** | v1.2.0, orbit quality, a total NEOWISE sort, the element epoch |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments. ⚠️  Owned by [`spacecost`](https://github.com/loggger101/spacecost) since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.22.0** | v1.22.0, four defaults moved and the ceiling stopped being a wall |
-| - | `master.py` | **1.27.0** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.23.0** | v1.23.0, the 5% depletion cap comes off: a mission may take the whole body |
+| - | `master.py` | **1.28.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -160,6 +161,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [calc v1.23.0](#calc-v1230) | 2026-09-17 | **the depletion cap comes off**: `max_mining_fraction` 0.05 -> 1.0, and a constraint that bound on 2% of bodies was sizing the mission on them |
 | [calc v1.22.0](#calc-v1220) | 2026-09-14 | **four defaults moved**: the surplus past a ceiling sells at half price, and reliability, the learning curve and the cost of capital come off |
 | [calc v1.21.2](#calc-v1212) | 2026-09-08 | **one market, two allowances**: the composition residual and the `silicates` phase each drew the full silicates ceiling, on 100% of bodies |
 | [calc v1.21.1](#calc-v1211) | 2026-09-08 | **the ceilings recalibrated: the levels do not move, and the composition residual gets the ceiling it was already priced against** |
@@ -196,6 +198,107 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## calc v1.23.0
+
+🚨  **A MISSION MAY NOW TAKE THE WHOLE BODY.** `max_mining_fraction`
+goes **0.05 -> 1.0**. The 5% was a stated conservatism -- *"single mission can
+never strip-mine the whole asteroid ... 5% is conservative for a first mission
+to a hundreds-of-kilometre body"* -- and it was never derived from anything.
+Requested directly: the haul should be bounded by what the mission can actually
+do, not by a round number.
+
+⚠️  **The three real bounds are unchanged and they are the ones that
+bind.** What the rig can dig in the time
+(`mining_rate_kg_per_day_per_kg_rig` x `max_mining_duration_yr` = 219,200 kg at
+the defaults), the return capsule's volume cap, and the rocket equation. The
+depletion cap sat on top of those, and past about 8% of a typical body it is
+not the binding one at all.
+
+### What it was worth
+
+The 400/150-row stride cells at cislunar, both settings run in ONE process,
+same build, only the field differing:
+
+| cell | phi = 0.05 | **phi = 1.0** | change | rows moved | worse |
+|---|---|---|---|---|---|
+| `raw` | 9.7517x | **10.2503x** | +5.11% | 3 of 155 | 2 |
+| `raw+search` | 7.4656x | **7.4656x** | none | 2 of 155 | 1 |
+| `benef` | 7.1104x | **7.1104x** | **bit-identical** | 0 of 65 | 0 |
+| `benef+search` | 4.3224x | **4.3224x** | **bit-identical** | 0 of 65 | 0 |
+
+Cell hashes, `phi = 0.05` then `phi = 1.0`:
+
+```
+raw           f6c52720c5b886eb -> a3333bc04f08e6f9
+raw+search    39172396cc26cbc7 -> 1640c4fe82e521d4
+benef         a90b6bdd12db585e -> a90b6bdd12db585e     MATCH
+benef+search  af407f7e2376bb7c -> af407f7e2376bb7c     MATCH
+```
+
+✅  **BOTH BENEFICIATED CELLS ARE BIT-IDENTICAL**, which is the cleanest
+statement of how little this bound was doing: concentrating raises the FEED the
+rig digs, so if the cap were anywhere near binding it would bind hardest there.
+It binds on no beneficiated row in the sample at all. The winner is unchanged
+in all four cells.
+
+🚨  **AND THE RAW HEADLINE GOT 5.11% WORSE, WHICH IS THE FINDING
+RATHER THAN A COST.** Relaxing a constraint cannot make a fixed mission worse;
+it made the reported answer worse because **the haul is DERIVED from whichever
+constraint binds rather than searched**. Payload is not a search axis. Swept on
+2017 KJ5, the raw cell's winner, holding everything else fixed:
+
+| `max_mining_fraction` | haul | best ratio | architecture |
+|---|---|---|---|
+| 0.01 | 23,481 kg | 27.3943x | H3 (24L) / iodine |
+| 0.02 | 46,962 kg | 16.1025x | Falcon Heavy / water ion |
+| **0.05** | **117,406 kg** | **9.7517x** | **New Glenn / xenon** |
+| 0.08 | 97,875 kg | 10.2503x | Falcon Heavy / iodine |
+| 0.10 | 97,875 kg | 10.2503x | Falcon Heavy / iodine |
+| 0.20 | 97,875 kg | 10.2503x | Falcon Heavy / iodine |
+| 0.50 | 97,875 kg | 10.2503x | Falcon Heavy / iodine |
+| **1.00** | **97,875 kg** | **10.2503x** | Falcon Heavy / iodine |
+
+**The plateau from 0.08 up is the cap ceasing to bind.** Everything below it is
+the cap choosing the mission's size, and 0.05 happened to land on a haul that
+prices better than the one the mass budget picks unclamped. The old default was
+improving the headline by forcing a smaller mission, on a body where nothing
+physical asked for one.
+
+⚠️  **So 9.7517x was a better number and a worse measurement**, and
+it is the figure [calc v1.22.0](#calc-v1220) reports as its raw cell. That
+section is unchanged and stays correct for the release it names.
+
+✅  **The programme search absorbs it entirely**: `raw+search` reports the
+identical 7.4656x on a differing hash, because a ladder that chooses a fleet
+can answer a bigger per-mission haul by flying fewer of them. A model change
+visible at N = 1 and invisible under the search is worth knowing about before
+quoting either cell as the effect.
+
+### Invariants
+
+`py verify.py check --skip prune parallel --tag 1.23.0`, cislunar, at this
+release's defaults:
+
+- **mass ledger**: `max |error| 0.000000000 kg` on all four cells
+- **never-worse**: 3 pairings, `worse 0` on every one, max <= 1.000000
+- **market ceilings**: `cap beat unbounded on 0`, both searched cells
+- **Stage 2 tables**: 31 rows recomputed at cislunar, all identical
+
+⚠️  **Check 1 reports `NOT VERIFIED` on purpose**: the baseline was
+taken on a tree carrying this change, so it would be comparing the change with
+itself. The evidence for what moved is the one-process A/B above, which is the
+construction this project requires for a ratio anyway.
+
+### What did not change
+
+No model term, no coefficient, no reference-table row, and no output column.
+`mineable_kg` is still computed, still carried on `AsteroidContext`, still
+subtracted from by the ISRU feed, and still bounds the haul -- on a body small
+enough for the whole of it to be less than what the rig could dig, which is the
+case the bound is now reserved for. Set `max_mining_fraction` below 1.0 to
+restore a depletion limit; a 1.22.0 catalog is reproduced exactly by setting it
+to 0.05.
 
 ## calc v1.22.0
 
@@ -5438,6 +5541,22 @@ defaults change, and one output column is added.
 - **`verify.py`**: `RESET_FIELDS` is new and `run_cell` puts all five back from
   the dataclass before every cell. Four of the five are this release's, and the
   rule is v1.21.0's: a field joins that list the moment a cell can differ on it.
+
+**`1.23.0`  the depletion cap comes off.** Full write-up:
+[calc v1.23.0](#calc-v1230). No config field is added and no output column; one
+default changes.
+
+- **Default changed**: `max_mining_fraction` 0.05 -> **1.0**. A mission may
+  remove the whole body, and the haul is bounded by the dig rate, the capsule
+  volume and the rocket equation instead.
+- **No schema change.** `mineable_kg` is still on `AsteroidContext` and
+  `max_mining_fraction` is still a config field with the same name, range and
+  meaning, so a catalog stamped `calc 1.22.0` and one stamped `1.23.0` carry
+  identical columns. **The stamp is the only thing that distinguishes them**,
+  which makes this the release where reading the stamp matters most.
+- ⚠️  **Both beneficiated cells are bit-identical to 1.22.0**, so a
+  hash alone does not tell those two releases apart on either of them. The raw
+  cells differ.
 - **`campaign/run_cell.py`**: the ledger records `surplus_kg`. `population.py`
   is deliberately NOT updated, because its `usecols` raising on an older
   archive is the behaviour that file wants.

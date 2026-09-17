@@ -163,7 +163,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | 1 | `modules/catalog.py` | 1.2.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.14.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
-| 4 | `modules/calc.py` | 1.22.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.23.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -541,7 +541,7 @@ that actually move the answer:
 | `.calc.eval_row_cap` | `0` | Stage-4 evaluation cap; `0` evaluates every row. Was `5_000`, which discarded 99.7% of a v1.1.0 catalog |
 | `.calc.eval_row_sampling` | `"stride"` | How a cap picks rows. `"stride"` samples the whole belt evenly; `"head"` is the pre-v1.13.0 innermost-N behaviour |
 | `.calc.parallel_workers` | `0` | Stage-4 worker processes. `0` picks a count from the CPU count and the amount of work; `1` forces the single-core path. See [Parallel evaluation](#parallel-evaluation) |
-| `.calc.max_mining_fraction` | `0.05` | Share of asteroid mass one mission may remove |
+| `.calc.max_mining_fraction` | `1.0` | Share of asteroid mass one mission may remove. `1.0` puts the whole body on the table and leaves the dig rate, the capsule volume and the rocket equation to bound the haul. Was `0.05`, which bound rarely and, where it bound, sized the mission by accident |
 | `.calc.use_aerocapture_return` | `True` | Makes aerocapture *available*. Trades return Δv for a TPS mass penalty (15% of payload); Stage 4 prices both and flies whichever pays, per asteroid |
 | `.calc.use_isru_return_propellant` | `True` | Makes ISRU *available* at bodies whose composition supplies the propellant, with the extra rock dug, timed and charged |
 | `.calc.operational_propellants_only` | `True` | Restrict the search to propellants that have flown. `False` admits Stage 3's development and concept rows: nuclear thermal, VASIMR, fusion, Orion pulse |
@@ -1837,6 +1837,15 @@ N = 35. All four v1.22.0 winners fly iodine.
 from breakeven rather than 6.7, and the project's headline is unchanged: a
 default run returns no profitable mission, and that is the correct answer
 rather than a regression.
+
+⚠️  **This table is a v1.22.0 measurement and calc v1.23.0 moved a
+default under it**: `max_mining_fraction` is 1.0 rather than 0.05, so a mission
+may take the whole body. **The full catalog has not been re-run.** On the
+400/150-row stride cells both BENEFICIATED cells, including the default one,
+come out **bit-identical**, and the raw N = 1 cell moves **+5.11%**; that is a
+sample, and [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) is about exactly
+this kind of extrapolation. Set `max_mining_fraction` to 0.05 to reproduce the
+four figures above. See [calc v1.23.0](versions.md#calc-v1230).
 
 ✅  **Both evaluable counts reproduce exactly**, 650,921 raw and 660,253
 beneficiated, on all four cells. That is the invariant worth reading: this
