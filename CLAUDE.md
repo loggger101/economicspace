@@ -60,6 +60,7 @@ through. Skim for the section that names what you are about to change.
 - [A Stage 2 catalog is priced for ONE destination](#a-stage-2-catalog-is-priced-for-one-destination-and-so-are-its-ceilings)
 - [Durable lessons from the release history](#durable-lessons-from-the-release-history)
 - [The verification harness is committed now](#the-verification-harness-is-committed-now)
+- [Running `verify.py` used to overwrite the live Stage 4 catalog](#running-verifypy-used-to-overwrite-the-live-stage-4-catalog)
 - [Stage 3 lives in another repository now](#stage-3-lives-in-another-repository-now)
 - [Config discipline](#config-discipline)
 - [Correctness invariants that were expensive to find](#correctness-invariants-that-were-expensive-to-find)
@@ -3581,6 +3582,53 @@ single-release artifact, and making `candidate_sources` GLOB `campaign/cells/`
 would undo the property that makes a suffixed archive safe in the first place,
 since every re-measurement would then compete with the campaign's own cells for
 the document.
+
+### RUNNING `verify.py` USED TO OVERWRITE THE LIVE STAGE 4 CATALOG
+
+The third member of a family this file already has two entries for. The first
+is about an INPUT that cannot be got back (Stage 2 or 3 re-fetching); the
+second about an OUTPUT archive (re-running a campaign cell). This one is the
+release harness quietly replacing the pipeline's own answer.
+
+`build_profitability_catalog` does not only RETURN a frame. It writes
+`<output_dir>/profitability_catalog.csv` as a side effect, and `verify.py`
+handed it the live `CALC_CONFIG`, so every cell it built landed on the real
+catalog. A full `check` builds about twenty.
+
+🚨  **MEASURED, NOT ARGUED: 1,102,426,761 BYTES BECAME 245,817.** One
+`run_cell(m, "raw")` replaced a full-catalog cell with a 155-row stride sample.
+Nothing warned, nothing failed, and the harness reported normally.
+
+⚠️  **What that costs is the RUN, not the file.** The catalog regenerates; the
+hours behind it do not, and after a campaign it is a full-catalog cell that
+took one to three of them. Three readers take that exact file as their subject:
+`campaign/worked_calculation.py` with no `--catalog`, the dashboard, and
+`preflight()`'s destination test. Each of them silently starts answering about
+a 155-row sample.
+
+✅  **Fixed by redirecting ONE field.** `run_cell` points `output_dir` at
+`.verify/scratch/`, which is gitignored with the rest of `.verify`.
+⚠️  **`input_dir` is a separate field and is deliberately untouched**: Stage 4
+reads its ~868 MB of inputs through that one, so redirecting it would make
+every cell fail to LOAD rather than fail to save. Proved both ways -- before,
+the live catalog is destroyed; after, `live unchanged: True` and the cell lands
+in scratch.
+
+🚨  **AND THE PROOF DESTROYED THE CATALOG FOR REAL, WHICH IS THE PART TO
+LEARN.** The first attempt to apply this fix asserted its second anchor AFTER
+editing the text but BEFORE writing the file, so the assertion failed, nothing
+was written, and the test ran against an unpatched `verify.py`. It then
+reported exactly what the bug does. **A patch script that validates after it
+edits and before it saves reports "failed" while having changed nothing, which
+is indistinguishable from "failed and changed half".** Validate every anchor
+first, then edit, then write.
+
+✅  **Recovery was possible only because the campaign archives it.**
+`campaign/run_cell.py` gzips the output byte for byte, so
+`cislunar__benef__search-off__calc-1.22.0.csv.gz` decompressed back to
+1,102,426,761 bytes and the same winner at 4.5298x. **A live catalog with no
+archive behind it is not recoverable at all**, which is the case on any machine
+that has run a cell without going through `campaign/run_cell.py`.
 
 ### Console text is not output, and did not move a stamp
 
