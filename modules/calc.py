@@ -287,12 +287,14 @@ class CalcConfig:
     # 102,765 bodies (15.79%) declining to concentrate at exactly 1.0, the
     # documented signature, never worse and equal wherever it declines.
     #
-    # What it costs is TIME, and that is the only reason it was ever off: a
-    # full beneficiated cislunar pass measured 9,300 s against raw's 1,307 s
-    # on calc 1.16.0, a ratio of 7.1x.  Six performance-only releases later it
-    # is 3,424 s against 733 s, a ratio of 4.67x (2026-08-24, full catalog).
-    # Both figures come from MEASURED_CELL_SECONDS below; re-measure there
-    # and every banner that quotes them moves with it.
+    # What it costs is TIME, and that is the only reason it was ever off.  The
+    # ratio is NOT typed here, and this comment quoted a stale one for two
+    # releases while claiming it came from the dict: it read 4.67x (calc
+    # 1.17.7) against a banner deriving 3.42x and then 8.11x.  The current
+    # figure is whatever MEASURED_CELL_SECONDS below divides to, the run
+    # banner prints it per configuration, and it has ranged from 7.1x (calc
+    # 1.16.0) through 4.67x to the cells measured now.  Re-measure there and
+    # every banner that quotes it moves with it.
     # Set False for the raw cell (26.7863x), which is what most of the older
     # tables in versions.md were measured at.
     use_beneficiation:         bool  = True
@@ -1095,22 +1097,96 @@ MEASURED_DEST_SECONDS: Dict[str, Tuple[int, int, int, int]] = {
     "mars_orbit":    (2_065,  4_399, 13_135, 29_174),
 }
 
-# The four cislunar cells, by (use_beneficiation, optimise_programme_scale).
-# DERIVED from the row above, not restated: two copies of one measurement is the
-# defect this whole block exists to prevent, and a cislunar row written out
-# twice would be exactly that.  The name and shape are kept because
-# run_pipeline.py, ui.py, build_master.py and check 9 all read them.
-# They rose against the 1.17.7 figures (733 / 1,253 / 3,424 / 5,692) because
-# v1.21.0's capacity ceilings are priced inside the payload knapsack, which
-# costs most where a programme LADDER exists: 1.29x on raw at N = 1 against
-# 2.31x on the raw searched cell.
+# The four cislunar cells, by (use_beneficiation, optimise_programme_scale),
+# AT THE CURRENT RELEASE.  Full catalog, 12 workers, measured 2026-09-16; the
+# archives and the wall clocks are under `campaign/logs/*calc-1.22.0*`, and
+# `verify_docs.py` check 9 reads them rather than trusting these four digits.
+#
+# 🚨  THIS USED TO BE DERIVED FROM THE CISLUNAR ROW ABOVE, AND UNPICKING THAT
+# IS THE POINT RATHER THAN AN OVERSIGHT.  The row above is the 2026-09
+# CAMPAIGN: seven destinations, one release, one construction, and what makes
+# it worth keeping whole is that a ratio ACROSS destinations is only meaningful
+# inside one release.  These four are the same cell one release later, and what
+# makes them worth keeping is that they are what a run costs TODAY.  They are
+# two measurements of one cell, not two copies of one measurement, so each
+# keeps its own authority and neither is edited to agree with the other.
+#
+# 🚨  AND THE SHAPE MOVED, NOT ONLY THE LEVEL, WHICH IS WHY DERIVING THE
+# BANNER FROM THE CAMPAIGN ROW HAD STOPPED BEING HONEST.  The two ratios every
+# banner prints:
+#
+#     ratio                       calc 1.21.2     calc 1.22.0
+#     beneficiation, searched        3.42x          8.11x
+#     programme search, raw          3.05x          1.96x
+#     both on, against raw N = 1    10.43x         15.89x
+#
+# So the run banner was telling a user that concentrating costs 3.4x while the
+# release they were running measures 8.1x.  A banner is the most-read copy of
+# a number in this project, which is the whole argument of the block above.
+#
+# ⚠️  THE CROSS-RELEASE READING OF THAT TABLE IS NOT ONE MEASUREMENT, AND
+# NEITHER COLUMN IS A CLEAN RATIO EITHER.  The campaign cells were measured
+# across 2026-09-11/13 and these across 2026-09-16, both in separate sessions,
+# and this project has already scored what a ratio taken across sessions is
+# worth; see `versions.md`, "Runtime: NOT measured".  What is claimed here is
+# only that these four are the best available estimate of the cell they name,
+# measured at the release doing the running, which is what a banner needs.
+#
+# ✅  ONE HALF OF THE SHAPE CHANGE IS CORROBORATED WITHOUT A CLOCK, which is
+# the reason to believe the beneficiation ratio rose rather than drifted.
+# `programme_options_priced` is a deterministic output, so it compares across
+# releases the way a wall clock does not: summed over the searched cells it is
+# 26.86 M -> 26.76 M on raw (-0.4%) and 27.99 M -> 25.93 M beneficiated
+# (-7.4%), on identical row counts and an identical median concentration
+# ratio.  The beneficiated searched cell therefore prices FEWER programme
+# options and still takes longer, so what moved is the cost of a rung and not
+# the number of them -- consistent with this release pricing a second market
+# tier inside the payload knapsack, which is walked per rung.
+MEASURED_CELL_CALC = "1.22.0"          # the release these four were measured at
 MEASURED_CELL_SECONDS: Dict[Tuple[bool, bool], int] = {
-    (False, False): MEASURED_DEST_SECONDS["cislunar"][0],  # ore, one mission
-    (False, True):  MEASURED_DEST_SECONDS["cislunar"][1],  # ore, searched
-    (True,  False): MEASURED_DEST_SECONDS["cislunar"][2],  # concentrate, N = 1
-    (True,  True):  MEASURED_DEST_SECONDS["cislunar"][3],  # both <- DEFAULT ON
+    (False, False):     735,   # ore, one mission
+    (False, True):    1_439,   # ore, searched
+    (True,  False):   4_737,   # concentrate, N = 1
+    (True,  True):   11_676,   # both <- DEFAULT ON
 }
 MEASURED_CELL_ROWS = 1_555_667   # catalog the cells above were measured on
+
+
+def measured_cell_provenance(current_version: str = None) -> str:
+    """" (measured at calc X)" when the cells above are behind the running code.
+
+    Empty when they are current, so a banner reads cleanly on the common path
+    and grows a stamp exactly when the figure it prints stops belonging to the
+    release printing it.  This file's own rule everywhere else is that a wall
+    clock is only ever true of the release it names; a banner that quotes one
+    without naming a release is relying on somebody having re-measured.
+    """
+    if current_version is None:
+        current_version = CalcConfig.pipeline_version
+    if current_version == MEASURED_CELL_CALC:
+        return ""
+    return " (measured at calc %s)" % MEASURED_CELL_CALC
+
+
+def expected_cell_seconds(destination: str, beneficiated: bool = True,
+                          search: bool = True) -> int:
+    """Best available wall clock for one cell, per destination.
+
+    Cislunar comes from `MEASURED_CELL_SECONDS` (the current release) and every
+    other destination from `MEASURED_DEST_SECONDS` (the 2026-09 campaign),
+    because that is the newest measurement each one has.  This is what the
+    launcher menus quote before somebody commits an afternoon.
+
+    🚨  NEVER TAKE A RATIO OF TWO OF THESE.  Two destinations can come back
+    from different releases, and a cross-release ratio is the arithmetic this
+    project has failed at repeatedly.  `dest_cost_span` exists for that
+    question and deliberately reads the campaign table alone, so every
+    destination in it shares one release.
+    """
+    if destination == "cislunar":
+        return MEASURED_CELL_SECONDS[(bool(beneficiated), bool(search))]
+    i = (2 if beneficiated else 0) + (1 if search else 0)
+    return MEASURED_DEST_SECONDS[destination][i]
 
 
 def dest_cost_span(beneficiated: bool = True, search: bool = True,
@@ -1160,9 +1236,10 @@ print(f"    Mining cap     : {CONFIG.max_mining_fraction:.0%} of asteroid mass p
 # Default ON as of v1.17.0, and the cost is quoted from MEASURED_CELL_SECONDS
 # rather than typed, so a re-measurement cannot leave this banner behind.
 print(f"    Beneficiation  : "
-      + ("concentrate, ~%.1fx the runtime of a raw pass "
+      + ("concentrate, ~%.1fx the runtime of a raw pass%s "
          "(search also prices not concentrating at all)"
-         % beneficiation_cost_ratio(CONFIG.optimise_programme_scale)
+         % (beneficiation_cost_ratio(CONFIG.optimise_programme_scale),
+            measured_cell_provenance(CONFIG.pipeline_version))
          if CONFIG.use_beneficiation else
          "off - run-of-mine ore at bulk grade"))
 print(f"    Return mode    : "
@@ -1173,9 +1250,10 @@ print(f"    Architecture   : "
 print(f"    Contingency    : {CONFIG.contingency_fraction:.0%}  |  "
       f"NRE amortised over {CONFIG.nre_amortization_missions} mission(s)")
 print(f"    Programme      : "
-      + ("(fleet <= %d) x (campaigns/ship) searched; N follows (~%.1fx runtime)"
+      + ("(fleet <= %d) x (campaigns/ship) searched; N follows (~%.1fx runtime%s)"
          % (CONFIG.max_fleet_ships,
-            programme_search_cost_ratio(CONFIG.use_beneficiation))
+            programme_search_cost_ratio(CONFIG.use_beneficiation),
+            measured_cell_provenance(CONFIG.pipeline_version))
          if CONFIG.optimise_programme_scale else
          f"fixed at N = {CONFIG.nre_amortization_missions} "
          f"(set optimise_programme_scale to search it)"))

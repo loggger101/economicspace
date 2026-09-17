@@ -54,6 +54,7 @@ through. Skim for the section that names what you are about to change.
 - [A check that the numbers are right is not a check that the page is complete](#a-check-that-the-numbers-are-right-is-not-a-check-that-the-page-is-complete)
 - [A flipped default breaks every reader that infers a run from the config](#a-flipped-default-breaks-every-reader-that-infers-a-run-from-the-config)
 - [A fixed point that carries its last pass makes the STOPPING TEST an answer](#a-fixed-point-that-carries-its-last-pass-makes-the-stopping-test-an-answer)
+- [One definition with two readers imposes the stricter reader on both](#one-definition-with-two-readers-imposes-the-stricter-reader-on-both)
 - [`y * 365.25 * 24.0` is not `y * 8766.0`](#y--36525--240-is-not-y--87660)
 - [A Stage 2 catalog is priced for ONE destination](#a-stage-2-catalog-is-priced-for-one-destination-and-so-are-its-ceilings)
 - [Durable lessons from the release history](#durable-lessons-from-the-release-history)
@@ -1474,11 +1475,26 @@ wall clocks, plus `beneficiation_cost_ratio()` and
 | `ui.py` | `_SECONDS_PER_ROW`, which was a second copy of the same four numbers, **and since 2026-09-14 the Stage 4 sidebar blurb as well** |
 
 **Re-measure in one place and every printed ratio moves with it**, and because
-the ratio is computed per configuration the banner says **5.24× at N = 1 and
-3.42× with the search on**, which the single hand-typed figure could not.
+the ratio is computed per configuration the banner says two different things
+for the two search settings, which the single hand-typed figure could not.
 ✅  **Both moved on their own when `MEASURED_CELL_SECONDS` was re-measured for
-the 28-cell campaign**, from 4.67× and 4.54×, and so did the `--search` help
-text (1.71× to 3.05×). That is the mechanism working: nobody edited a banner.
+the 28-cell campaign**, and again when it moved to the v1.22.0 cells on
+2026-09-16. That is the mechanism working: nobody edited a banner.
+⚠️  **The figures are deliberately not quoted in this paragraph any
+more**; it named
+five, they were a release old within a week, and a sentence about deriving
+numbers is the worst possible place to type one.
+
+🚨  **THE DICT IS NO LONGER THE CISLUNAR ROW OF `MEASURED_DEST_SECONDS`, AND
+THAT SPLIT IS THE POINT.** The campaign table is seven destinations at one
+release and is the authority for the SPAN between them;
+`MEASURED_CELL_SECONDS` is the four cislunar cells at `MEASURED_CELL_CALC` and
+is the authority for the LEVEL of a cell somebody is about to run. Two
+measurements of one cell, not two copies of one measurement. `dest_cost_span()`
+still reads the campaign table alone, so no ratio here crosses a release;
+`expected_cell_seconds()` answers the per-destination question and its
+docstring refuses to be used for a ratio. See
+[the runtime constant follows the release](versions.md#the-runtime-constant-follows-the-release-now-2026-09-16).
 
 🚨  **AND THE CLAIM ABOVE WAS FALSE WHEN IT WAS WRITTEN, IN THE ROW IT NAMES.**
 `ui.py` derived `_SECONDS_PER_ROW` from the constant and **hand-typed the same
@@ -1511,6 +1527,25 @@ the real span is **0.73-2.95x** and straddles one. See
 literal** if master is somehow not loaded when the parser is built. A
 hand-typed default there would be a sixth copy of a number this project has
 already shipped stale once.
+
+🚨  **AND THE CLASS OPENED A THIRD TIME ON 2026-09-16, IN THE FILE THAT
+DEFINES THE CONSTANT.** `use_beneficiation`'s config comment quoted **4.67x** under a
+sentence saying both its figures come from `MEASURED_CELL_SECONDS`. They did
+not: 4.67x is calc 1.17.7 and the dict derived 3.42x by then. That comment is
+**`ui_meta`'s help text for the dial**, so the dashboard showed 4.67x, the
+banner beside it printed 3.42x, and the release actually running measured
+8.11x: three figures for one ratio, on one screen. `run_pipeline.py`'s ore
+formatter carried a fourth in a docstring. **"Grep for the VALUE, not for the
+filename" reaches a file's own COMMENTS as well as its code**, and a comment
+that says "this derives" is not evidence that the number beside it does.
+
+✅  **A number a HARNESS cannot see is worth as much care as one it can.**
+None of the copies above were reachable by any check: two were comments, one a
+docstring, and check 9 reads quoted digits in prose, not claims about which
+release a dict holds. Which is how README came to say `MEASURED_CELL_SECONDS`
+"still holds the v1.17.7 set" **twice, in sentences that were false when they
+were written** -- it held the 2026-09 campaign row. A claim about a number's
+provenance rots exactly like the number and nothing checks it.
 
 ✅  **`verify_docs.py` check 9 pins the constant to the docs**, comparing
 README's cislunar wall-clock row against `MEASURED_CELL_SECONDS` in both
@@ -2830,6 +2865,58 @@ against the place somebody was last burned -- check 2's own comment says so, in
 those words, about the third copy of a version table nobody had checked. Ask of
 every check not "does it pass" but **"what is the largest thing it could be
 mistaken for covering"**, and pin the table.
+
+### One definition with two readers imposes the stricter reader on both
+
+2026-09-16, and it is the counterpart to the entry above: that one is about a
+check whose SCOPE was smaller than it looked, this one is about a definition
+whose scope was **larger**.
+
+`MEASURED_CELL_SECONDS` was derived from the cislunar row of
+`MEASURED_DEST_SECONDS`, and the de-duplication was correct when it was made:
+two typed copies of four wall clocks is exactly the defect this repo
+catalogues. But the two readers want different things, and only one of them
+was being served:
+
+| reader | wants | constraint it imposes |
+|---|---|---|
+| `dest_cost_span()` | a ratio ACROSS destinations | every row must share ONE release |
+| the run banner, `--help`, the dashboard | the LEVEL of the cell about to run | must be the CURRENT release |
+
+One object cannot satisfy both the moment a single destination is re-measured,
+and the shared definition silently resolves it in favour of the stricter
+reader. So the banner went on quoting a campaign one release back and told a
+user that concentrating costs **3.4x** while the release they were running
+measures **8.1x**.
+
+🚨  **AND THE RECORD SHOWS THE CHOICE BEING CONCEDED TWICE RATHER THAN
+QUESTIONED.** `versions.md` argued, correctly, that moving one row into a
+seven-row table would make the span "a measurement of a release difference
+wearing a destination's name", and concluded **"re-measure all seven or
+none"** -- accepting a stale banner as the price. The premise was optional.
+Splitting the dicts satisfies both readers at once: the campaign table keeps
+all seven rows at one release, and the four cislunar cells stand as their own
+measurement at their own stamp.
+
+✅  **The test to apply: is this one measurement with two readers, or two
+measurements that happen to agree today?** Two measurements of one cell at two
+releases are not copies of each other, and forcing them into one object makes
+every use inherit the strictest use. **When a shared definition forces a choice
+between two correct requirements, suspect the sharing before conceding to
+either.**
+
+⚠️  **Splitting a definition retires whatever check asserted they were
+one**, and retiring a check to make a change pass is how a guard is lost. Check 9's
+identity assertion is replaced by a stronger one rather than deleted: the four
+seconds are now compared against the `campaign/logs/*.json` the run itself
+wrote. **Two typed dicts agreeing with each other never said either was
+measured**; pinning to the artifact does.
+
+⚠️  **And name what each half is FOR in its own comment, because the two
+now disagree on purpose.** A future reader finding two different cislunar rows will
+read it as drift and "fix" it, which is this file's standing failure mode
+arriving from the one direction it has not yet arrived from: not a stale copy,
+but a **deliberate disagreement that looks like one.**
 
 ### The fleet search is coarse-then-refine, so tightening a constraint can improve a row
 

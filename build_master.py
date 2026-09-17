@@ -421,16 +421,19 @@ print(f"      NRE amortise     : over {MASTER_CONFIG.calc.nre_amortization_missi
 # releases after the measurement that retired them.
 _both_on = (MEASURED_CELL_SECONDS[(True, True)]
             / MEASURED_CELL_SECONDS[(False, False)])
+_meas_at = measured_cell_provenance(MASTER_CONFIG.calc.pipeline_version)
 print(f"      Beneficiation    : "
-      + ("ON - concentrate, not run-of-mine ore (~%.1fx runtime; "
+      + ("ON - concentrate, not run-of-mine ore (~%.1fx runtime%s; "
          "False for the raw cell)"
-         % beneficiation_cost_ratio(MASTER_CONFIG.calc.optimise_programme_scale)
+         % (beneficiation_cost_ratio(MASTER_CONFIG.calc.optimise_programme_scale),
+            _meas_at)
          if MASTER_CONFIG.calc.use_beneficiation else
          "off - flying run-of-mine ore at bulk grade"))
 print(f"      Programme        : "
-      + ("(fleet <= %d) x (campaigns/ship) searched; N follows (~%.1fx runtime)"
+      + ("(fleet <= %d) x (campaigns/ship) searched; N follows (~%.1fx runtime%s)"
          % (MASTER_CONFIG.calc.max_fleet_ships,
-            programme_search_cost_ratio(MASTER_CONFIG.calc.use_beneficiation))
+            programme_search_cost_ratio(MASTER_CONFIG.calc.use_beneficiation),
+            _meas_at)
          if MASTER_CONFIG.calc.optimise_programme_scale else
          "fixed size (set calc.optimise_programme_scale to search it)"))
 if MASTER_CONFIG.calc.use_beneficiation and MASTER_CONFIG.calc.optimise_programme_scale:

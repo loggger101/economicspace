@@ -288,15 +288,27 @@ def _search_ratio() -> float:
     return _loaded_master().programme_search_cost_ratio(False)
 
 
+def _measured_at() -> str:
+    """The release the two ratios above were measured at, when it is not ours.
+
+    Empty on the common path.  A wall clock in this project is only ever true
+    of the release it names, and these two ratios are printed to somebody
+    deciding how long to wait; when the cells behind them are a release behind
+    the code, the help text says so rather than implying a measurement nobody
+    made.
+    """
+    return _loaded_master().measured_cell_provenance()
+
+
 def preset_blurb(name: str) -> str:
     """A preset's blurb, with the `full` preset's measured cost derived onto it.
 
     ⚠️  THE TWO HOURS IN THIS STRING WERE TYPED UNTIL 2026-09-15 and had been
-    stale since the 28-cell campaign: "1.6 h at cislunar to 3.8 h at
-    earth_surface" are calc 1.17.7 figures against a current 2.7 h and 6.1 h.
-    That made it the sixth copy of a number the note above `_loaded_master`
-    says must never be typed here, and it was in the one string a user reads
-    before deciding to start a multi-hour run.
+    stale since the 28-cell campaign: the string named cislunar and
+    earth_surface at calc 1.17.7 figures, two campaigns out of date.  That
+    made it the sixth copy of a number the note above `_loaded_master` says
+    must never be typed here, and it was in the one string a user reads before
+    deciding to start a multi-hour run.
 
     Named off `MEASURED_DEST_SECONDS` rather than hard-coding `cislunar` and
     `earth_surface`, because neither is the extreme: `lunar_surface` is the
@@ -351,8 +363,9 @@ def build_parser(destinations) -> argparse.ArgumentParser:
 
     ore = p.add_mutually_exclusive_group()
     ore.add_argument("--raw", dest="raw", action="store_true",
-                     help="fly run-of-mine ore (~%.1fx faster than concentrate)"
-                          % _benef_ratio())
+                     help="fly run-of-mine ore (~%.1fx faster than "
+                          "concentrate%s)"
+                          % (_benef_ratio(), _measured_at()))
     ore.add_argument("--beneficiated", dest="raw", action="store_false",
                      help="concentrate the ore before flying it")
     p.set_defaults(raw=None)
@@ -360,7 +373,8 @@ def build_parser(destinations) -> argparse.ArgumentParser:
     prog = p.add_mutually_exclusive_group()
     prog.add_argument("--search", dest="search", action="store_true",
                       help="search programme scale: fleet x campaigns "
-                           "(~%.1fx slower)" % _search_ratio())
+                           "(~%.1fx slower%s)"
+                           % (_search_ratio(), _measured_at()))
     prog.add_argument("--no-search", dest="search", action="store_false",
                       help="price one mission per asteroid (N = 1)")
     p.set_defaults(search=None)
@@ -747,8 +761,10 @@ def print_banner(args, settings, cfg, stages) -> None:
         """Ore setting, with what beneficiation costs AT THIS SEARCH SETTING.
 
         Derived per configuration rather than quoted as one number, which the
-        single hand-typed figure could not do: it is 4.67x at N = 1 and 4.54x
-        with the programme search on.
+        single hand-typed figure could not do: the cost of concentrating is
+        not the same with the programme search on as at N = 1, and the two
+        have been as far apart as a factor of two.  The figures themselves are
+        deliberately not written here; that is what the dict is for.
         """
         if raw:
             return "run-of-mine"
