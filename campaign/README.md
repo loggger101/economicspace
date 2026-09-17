@@ -95,6 +95,12 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       those tables and supersedes `rig_bounds.py` and `extra_checks.py`, which
       are kept only because the 2026-08 archive's FINDINGS.md names them.
       Same caution as `analyse.py`: do not run it while a cell is timing.
+      `--tag calc-1.22.0` reads cells archived under a suffix, i.e. a cell
+      re-run at a later release; `analyse.py` takes the same as
+      `--tag=calc-1.22.0`.  Both compose an EXACT filename rather than
+      searching `cells/`, which is what keeps a re-measurement from being
+      picked up as though it were one of the campaign's own cells, and the
+      tag filter runs both ways so neither set can contaminate the other.
   `worked_calculation.py`  the 20-page worked derivation of ONE mission: the
       best case of whatever finished results are on disk, compared across the
       live Stage 4 catalog and every archived cell, so "which one" is a

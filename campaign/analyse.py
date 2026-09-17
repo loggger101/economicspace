@@ -31,7 +31,7 @@ DESTS = ["cislunar", "lunar_surface", "geo", "mars_orbit",
          "leo", "mars_surface", "earth_surface"]
 
 
-def load(dest, ore, search):
+def load(dest, ore, search, tag=None):
     """One archived cell as a frame, with the objective added, or None if absent.
 
     `float_precision="round_trip"` is mandatory and is the fourth entry in
@@ -41,7 +41,14 @@ def load(dest, ore, search):
     It belongs HERE, in a comparison, and never in Stage 4's own loader, where it
     would move every number in the model.
     """
-    p = os.path.join(CELLS, f"{dest}__{ore}__search-{search}.csv.gz")
+    # 🚨  An EXACT filename, tag included, and never a glob over the directory.
+    # A cell re-run at a later release is archived as `<cell>__calc-<ver>.csv.gz`
+    # so that it cannot be mistaken for the campaign's own cell, and composing
+    # the name here is what makes that property hold.  A tag with no archive
+    # behind it yields None, which reads as "that cell was not run" rather than
+    # falling back to a different release's answer.
+    suffix = f"__{tag}" if tag else ""
+    p = os.path.join(CELLS, f"{dest}__{ore}__search-{search}{suffix}.csv.gz")
     if not os.path.exists(p):
         return None
     with gzip.open(p, "rb") as fh:
@@ -125,10 +132,16 @@ def programme_invariants(df, label):
             f"fleet med {f.median():.0f} max {f.max():.0f} | N med {n.median():.0f}")
 
 
-def report(dest):
-    """Print one destination's 2x2 table, then every invariant, to stdout."""
+def report(dest, tag=None):
+    """Print one destination's 2x2 table, then every invariant, to stdout.
+
+    `tag` selects a re-measurement archived under a suffix, e.g.
+    `--tag=calc-1.22.0`; see `load`, which composes the exact filename rather
+    than searching for one.
+    """
     print(f"\n{'='*78}\n  {dest.upper()}\n{'='*78}")
-    cells = {(o, s): load(dest, o, s) for o in ("raw", "benef") for s in ("off", "on")}
+    cells = {(o, s): load(dest, o, s, tag)
+             for o in ("raw", "benef") for s in ("off", "on")}
     have = {k: v for k, v in cells.items() if v is not None}
     if not have:
         print("  no cells archived yet")
@@ -168,11 +181,20 @@ def report(dest):
 
 
 def main():
-    """Report on the named destinations, or on all five by default."""
-    args = sys.argv[1:]
+    """Report on the named destinations, or on every one of them by default.
+
+    ⚠️  This said "all five" while `DESTS` held SEVEN, from the release that
+    added `mars_orbit` and `geo` until 2026-09-16.  A docstring is prose, and
+    check 11 asserts that one EXISTS rather than that it is true, so a count
+    spelled out in one rots exactly like a count spelled out in a document.
+    Name the list; do not state its length.
+    """
+    args = [a for a in sys.argv[1:] if not a.startswith("--tag=")]
+    tags = [a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--tag=")]
+    tag = tags[0] if tags else None
     targets = DESTS if (not args or args[0] == "--all") else args
     for d in targets:
-        report(d)
+        report(d, tag)
     return 0
 
 

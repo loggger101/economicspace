@@ -1,0 +1,148 @@
+{
+ "aerocapture_pct": 0.0,
+ "at_ceiling": 55419,
+ "at_ceiling_pct": 8.513936407029425,
+ "bound_pct": 15.682241009277623,
+ "cadence_median": 1.3791730353854674,
+ "calendar_mult_max": 1.0,
+ "calendar_mult_median": 1.0,
+ "clearing_median": 1.0,
+ "clearing_min": 0.7727909802154894,
+ "cycle_pct": 98.1716675295466,
+ "evaluable": 650921,
+ "fleet_max": 64.0,
+ "fleet_median": 2.0,
+ "isru_pct": 4.447697954129611,
+ "n_max": 320.0,
+ "n_median": 10.0,
+ "objective": 3.921776212309657,
+ "propellants": [
+  [
+   "Xenon  (Hall / ion)",
+   40.991149463606185
+  ],
+  [
+   "Iodine  (Hall / gridded)",
+   25.528136286891957
+  ],
+  [
+   "Water  (gridded ion / ECR)",
+   19.27899084527923
+  ],
+  [
+   "Krypton  (Hall)",
+   9.27746992338548
+  ],
+  [
+   "hydrolox  (LH2 / LOX)",
+   4.447237068707262
+  ],
+  [
+   "Argon  (Hall / ion)",
+   0.1780554015003357
+  ],
+  [
+   "methalox  (LCH4 / LOX)",
+   0.17283203338039485
+  ],
+  [
+   "Hydrazine arcjet",
+   0.11998383828452301
+  ],
+  [
+   "MMH / NTO  (hypergolic)",
+   0.00399434032701357
+  ],
+  [
+   "FEEP  (indium field emission)",
+   0.0015362847411590653
+  ],
+  [
+   "Aerozine-50 / NTO  (hypergolic)",
+   0.0006145138964636261
+  ]
+ ],
+ "repl_best": {
+  "designation": "2014 UV210",
+  "margin": 1.3979877092050295,
+  "obj": 5.482594943061555,
+  "propellant": "FEEP  (indium field emission)",
+  "rank": 18
+ },
+ "repl_propellants": [
+  [
+   "FEEP  (indium field emission)",
+   100.0
+  ]
+ ],
+ "repl_rows": 10,
+ "rows": 650921,
+ "sat_max": 1.0,
+ "sat_median": 1.0,
+ "sat_min": 1.0,
+ "span_median": 11.44029355356507,
+ "unsold_rows": 0,
+ "vehicles": [
+  [
+   "Falcon Heavy (reusable side cores)",
+   71.82023624986749
+  ],
+  [
+   "SLS Block 1B (Cargo)",
+   25.992555164144342
+  ],
+  [
+   "New Glenn",
+   1.7799395011068933
+  ],
+  [
+   "Vulcan Centaur VC6",
+   0.21047100953879197
+  ],
+  [
+   "H3 (24L)",
+   0.07251263978270789
+  ],
+  [
+   "Long March 7",
+   0.048085712398278746
+  ],
+  [
+   "Falcon 9 (reusable)",
+   0.03272286498668809
+  ],
+  [
+   "Long March 5",
+   0.017820902997445157
+  ],
+  [
+   "LVM3 (GSLV Mk III)",
+   0.011214878610461177
+  ],
+  [
+   "Soyuz-2.1b",
+   0.009217708446954392
+  ],
+  [
+   "Ariane 6 (A64)",
+   0.004916111171709009
+  ],
+  [
+   "Atlas V 551",
+   0.00030725694823181306
+  ]
+ ],
+ "w_gt_trips": 0,
+ "w_lt_trips_pct": 8.131247878006702,
+ "window_pct": 96.11243146249699,
+ "winner": {
+  "concentration_ratio": 1.0,
+  "designation": "2014 YN",
+  "fleet_ships": 2.0,
+  "max_payload_kg": 141375.0,
+  "programme_missions": 6.0,
+  "propellant": "Iodine  (Hall / gridded)",
+  "spectral_type": "M",
+  "vehicle": "Falcon Heavy (reusable side cores)"
+ }
+}

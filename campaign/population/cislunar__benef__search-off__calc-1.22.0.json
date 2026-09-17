@@ -2,72 +2,64 @@
  "aerocapture_pct": 0.0,
  "at_ceiling": 0,
  "at_ceiling_pct": 0.0,
- "bound_pct": 0.04543712788885473,
- "cadence_median": 2.099850336431704,
+ "bound_pct": 0.02180982138665027,
+ "cadence_median": 2.616944989810719,
  "calendar_mult_max": 1.0,
  "calendar_mult_median": 1.0,
  "clearing_median": 1.0,
- "clearing_min": 0.793561187100038,
- "cycle_pct": 57.51053005438824,
+ "clearing_min": 0.8967805935500189,
+ "cycle_pct": 47.838631554873665,
  "evaluable": 660253,
  "fleet_max": 1.0,
  "fleet_median": 1.0,
- "isru_pct": 10.311501803096691,
+ "isru_pct": 9.563606678046142,
  "n_max": 1.0,
  "n_median": 1.0,
- "objective": 14.107096801415992,
+ "objective": 4.52980519737922,
  "propellants": [
   [
    "Xenon  (Hall / ion)",
-   60.60994800477999
+   62.059543841527415
   ],
   [
    "Iodine  (Hall / gridded)",
-   15.897239391566567
+   14.346470216719954
   ],
   [
    "Water  (gridded ion / ECR)",
-   12.550794922552415
+   13.295660905743707
   ],
   [
    "hydrolox  (LH2 / LOX)",
-   10.312864916933357
+   9.563758135139105
   ],
   [
    "Krypton  (Hall)",
-   0.41635554855487217
+   0.5297969111840461
   ],
   [
    "methalox  (LCH4 / LOX)",
-   0.17675042748764488
+   0.16433094586469127
   ],
   [
    "Argon  (Hall / ion)",
-   0.01787193696961619
+   0.0336234746377525
   ],
   [
    "FEEP  (indium field emission)",
-   0.01014762522851089
+   0.006209740811476813
   ],
   [
    "MMH / NTO  (hypergolic)",
-   0.007118483369253907
-  ],
-  [
-   "Aerozine-50 / NTO  (hypergolic)",
    0.0006058283718513963
-  ],
-  [
-   "HTP / RP-1  (peroxide bipropellant)",
-   0.00030291418592569817
   ]
  ],
  "repl_best": {
-  "designation": "363505",
-  "margin": 1.52034681125112,
-  "obj": 21.447679638043677,
+  "designation": "2014 UV210",
+  "margin": 1.369609552597485,
+  "obj": 6.204064469736315,
   "propellant": "FEEP  (indium field emission)",
-  "rank": 147
+  "rank": 33
  },
  "repl_propellants": [
   [
@@ -75,57 +67,57 @@
    100.0
   ]
  ],
- "repl_rows": 67,
+ "repl_rows": 41,
  "rows": 660253,
  "sat_max": 1.0,
  "sat_median": 1.0,
  "sat_min": 1.0,
- "span_median": 6.953706654286514,
- "unsold_rows": 273,
+ "span_median": 7.632186256108511,
+ "unsold_rows": 0,
  "vehicles": [
   [
    "Falcon Heavy (reusable side cores)",
-   66.38546133073231
+   57.115681413034096
   ],
   [
    "SLS Block 1B (Cargo)",
-   30.92254029894601
+   40.28319447242193
   ],
   [
    "New Glenn",
-   2.4122571196192975
+   2.314415837565297
   ],
   [
    "H3 (24L)",
-   0.07542563229549884
-  ],
-  [
-   "Vulcan Centaur VC6",
-   0.059219723348473995
+   0.07754603159697873
   ],
   [
    "Long March 7",
-   0.05664495276810556
+   0.06164303683587958
+  ],
+  [
+   "Vulcan Centaur VC6",
+   0.056342038582179864
   ],
   [
    "Falcon 9 (reusable)",
-   0.03165453242923546
+   0.031200161150346913
   ],
   [
    "Long March 5",
-   0.02347584940924161
+   0.02317293522331591
   ],
   [
    "Ariane 6 (A64)",
-   0.014388423831470664
+   0.013934052552582116
   ],
   [
    "LVM3 (GSLV Mk III)",
-   0.009693253949622341
+   0.01181365325110223
   ],
   [
    "Soyuz-2.1b",
-   0.007572854648142454
+   0.009238882670733795
   ],
   [
    "Atlas V 551",
@@ -133,17 +125,17 @@
   ],
   [
    "Ariane 6 (A62)",
-   0.00030291418592569817
+   0.00045437127888854726
   ]
  ],
  "w_gt_trips": 0,
- "w_lt_trips_pct": 99.82052334483902,
- "window_pct": 34.3413812583964,
+ "w_lt_trips_pct": 99.70132661267726,
+ "window_pct": 26.161335124565888,
  "winner": {
-  "concentration_ratio": 2.2222222222222223,
-  "designation": "2014 WE121",
+  "concentration_ratio": 1.550132625994695,
+  "designation": "2018 DT",
   "fleet_ships": 1.0,
-  "max_payload_kg": 94910.61983495657,
+  "max_payload_kg": 141375.0,
   "programme_missions": 1.0,
   "propellant": "Iodine  (Hall / gridded)",
   "spectral_type": "M",
