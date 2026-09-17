@@ -763,8 +763,12 @@ def s_body(out):
         ("m_min", "= phi_min * m = %s * %s"
          % (prec(C["cfg"].max_mining_fraction, 4), prec(B["mass"], 15))),
         ("", "= %s kg" % prec(B["mineable"], 15),
-         "one mission may not strip more than %s of the body"
-         % pct(C["cfg"].max_mining_fraction, 0)),
+         # phi_min is a dial, so this gloss derives from it rather than
+         # asserting the depletion limit the default no longer imposes.
+         ("the whole body is on the table, so this bound is the body itself"
+          if C["cfg"].max_mining_fraction >= 1.0 else
+          "one mission may not strip more than %s of the body"
+          % pct(C["cfg"].max_mining_fraction, 0))),
     ]
     # 🚨  WHAT THE MASS RESTS ON, which is the question a mass with no
     # sensitivity beside it invites and does not answer.  Both inputs to the
@@ -787,9 +791,13 @@ def s_body(out):
         outputs([("m", prec(B["mass"], 12, "kg"), "mass of the body"),
                  ("m_min", prec(B["mineable"], 12, "kg"),
                   "what one mission may take")]),
-        para(lead + " Mass follows from the diameter and the bulk density, "
-             "and only a fraction of it is ever available: one mission cannot "
-             "strip-mine an asteroid."),
+        para(lead + " Mass follows from the diameter and the bulk density."
+             + (" All of it is available to one mission, so what the rig "
+                "actually takes is set by the dig rate, the capsule volume "
+                "and the rocket equation rather than by the body."
+                if C["cfg"].max_mining_fraction >= 1.0 else
+                " Only a fraction of it is ever available: one mission may "
+                "not strip-mine the asteroid.")),
         deriv(steps),
         kv(pairs),
         para("The rig moves %s kg of rock on this mission (%s), which "
