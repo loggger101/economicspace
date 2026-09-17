@@ -695,6 +695,61 @@ def phase_table(body, minerals):
     return phases, alloy, yields
 
 
+# How close two statements of one quantity have to be before the difference
+# is float association rather than a disagreement.  🚨  IT IS READ BY THREE
+# THINGS -- the comparison below, the line the run prints, and the sentence in
+# the document's footer -- and until 2026-09-17 it was TYPED into all three,
+# so tightening it would have left the page claiming the old bound while the
+# check enforced the new one.  The footer carries it out of `check()` now.
+CLOSE_TOL = 1e-12
+
+
+def taxonomy_fraction_span():
+    """How far short of 1.0 Module 1's taxonomy fractions actually fall.
+
+    🚨  THIS WAS TYPED INTO THE DOCUMENT AS "between 0.73 and 0.96", AND THE
+    SAME PAIR OF DIGITS HAS ALREADY BEEN WRONG ONCE IN THIS REPO.  It read
+    0.76-0.96 in CLAUDE.md and in seven places in code until 2026-09-15 --
+    somebody had read the `C` row, which sums to exactly 0.76, and generalised
+    it to the whole complex when `Cgh` sums to 0.73.  It was wrong at birth
+    rather than gone stale, because nothing had ever executed it, and the
+    correction then reached the docs and left the code copies standing, one of
+    which this document RENDERED to a reader for a day.
+
+    So it is computed.  The interval is a consequence, and what the page
+    asserts is the PROPERTY behind it: every real class sums to strictly less
+    than one, which is what guarantees there is a residual for the bulk
+    silicate floor to catch.  An interval would go red the day somebody
+    re-measures a taxonomy row, which is a legitimate act; the property would
+    not.  That is `verify_stage1.py` check 2's distinction, applied here.
+
+    `Unknown` is the deliberate exception -- all four fractions are `None`, so
+    the residual is the whole body -- and is excluded rather than skipped
+    quietly.
+    """
+    import master
+    fields = [column[len("comp_"):] for column in master.FRACTION_TO_MINERAL]
+    sums, absent = {}, []
+    for name, row in master.TAXONOMY_COMPOSITION.items():
+        values = [row.get(field) for field in fields]
+        if any(v is None for v in values):
+            absent.append(name)
+            continue
+        sums[name] = sum(float(v) for v in values)
+    assert sums, "no taxonomy class carries a full set of fractions"
+    low, high = min(sums.values()), max(sums.values())
+    assert high < 1.0, (
+        "a taxonomy class sums to %r, so it leaves no residual for the "
+        "bulk-silicate floor: %s"
+        % (high, [n for n, s in sums.items() if s >= 1.0]))
+    return {
+        "low": low, "high": high, "classes": len(sums),
+        "at_low": sorted(n for n, s in sums.items() if s == low),
+        "at_high": sorted(n for n, s in sums.items() if s == high),
+        "unfractioned": sorted(absent),
+    }
+
+
 def market_ceilings(minerals):
     """{phase: (market key, kg/yr)}, with the residual pooled onto silicates."""
     import master
@@ -1233,6 +1288,14 @@ def context(body, archived, tables):
         # Module 3 rows the page consumed silently: an oversize factor with
         # none of its inputs beside it is a number asking to be trusted.
         w_1au=val("Power system specific mass"),
+        # 🚨  BOTH RATES ON EVERY ROW, NOT JUST THE ONE THIS MISSION FLEW.
+        # `plant_w_per_kg` above is whichever source won, so the page could
+        # say what this plant manages and not why the model chose it.  The
+        # crossover distance is the whole argument -- solar falls as 1/r^2
+        # and a radioisotope source does not, so they cross at
+        # sqrt(w_solar / w_rtg) -- and it was TYPED into the prose as "3.46
+        # AU", three releases away from either number it is made of.
+        rtg_w_per_kg=val("RTG specific power"),
         dark_frac=val("Eclipse / night-side dark fraction") if eclipse_on else 0.0,
         storage_wh_per_kg=val("Energy storage usable specific energy"),
         storage_eff=val("Energy storage round-trip efficiency"),
@@ -1242,6 +1305,9 @@ def context(body, archived, tables):
         water_wh=val("Water liberation energy (bound water)"),
         contain_per_kg=val("Volatile cargo containment"),
         destination=dest,
+        # The interval Module 1's taxonomy fractions actually span, and the
+        # classes at each end.  Derived rather than quoted: see the docstring.
+        frac_span=taxonomy_fraction_span(),
         # Which return leg this row flew.  Aerocapture is a TRADE rather than a
         # saving: it buys dv with a heat shield massing a fraction of the
         # returned stack, hauled out from Earth as dead mass and pushed back
@@ -2481,13 +2547,13 @@ def check(derived, archived):
         rel = abs(ours - theirs) / max(abs(theirs), 1e-30)
         if rel > worst:
             worst, worst_name = rel, name
-        if rel < 1e-12:
+        if rel < CLOSE_TOL:
             close += 1
         else:
             bad.append((name, ours, theirs, rel))
     return {"n": exact + close + len(bad), "exact": exact, "close": close,
             "bad": bad, "worst": worst, "worst_name": worst_name,
-            "skipped": skipped, "names": names}
+            "skipped": skipped, "names": names, "tol": CLOSE_TOL}
 
 
 def comparable(C, B, DV, M, P, ladder):
@@ -3011,8 +3077,108 @@ def not_shown(row):
     return out
 
 
+# ─────────────────────────────────────────────────── the typed-number lint
+# 🚨  A NUMBER IN PROSE IS A NUMBER WAITING TO ROT, AND THIS DOCUMENT HAS
+# ALREADY SHIPPED TWO.  The composition sentence asserted that Module 1's
+# fractions "sum to between 0.73 and 0.96" and the power note that solar and a
+# radioisotope source "cross near 3.46 AU"; both were correct on the day they
+# were written, neither was ever executed, and the first pair had already been
+# WRONG at birth elsewhere in this repo -- 0.76 for four years, because
+# somebody read the `C` row and generalised it to the complex.  The document
+# whose whole claim is that nothing in it is typed was rendering both to a
+# reader.
+#
+# The remedy this repo prescribes for a number nothing checks is a checker or
+# a deletion, never a correction.  Both of those became derivations; this is
+# what stops the third one arriving.  It reads the renderer's own source and
+# fails on any digit reaching PROSE -- `para`, `note` and a heading -- that is
+# not on the register below.
+#
+# ⚠️  PROSE, NOT ARITHMETIC.  A `deriv` row exists to show `365.25 * 24 *
+# 3600`, and an `eq` block exists to show the equation's own constants; a
+# lint that flagged those would be asking the page to stop being a
+# derivation.  The distinction is what the number is DOING: a substitution
+# displays a constant the reader is meant to check, a sentence asserts one
+# they are meant to believe.
+PROSE_CALLS = ("para", "note")
+
+# A digit that survives in prose, and why it is allowed to.  ⚠️  ADD A ROW
+# WHEN YOU HAVE DECIDED TO KEEP THE NUMBER, never to quiet a red line.  Each
+# row is a claim that the value cannot go stale -- because it is definitional,
+# because it names something outside this model, or because it is symbolic.
+TYPED_OK = {
+    "1": "symbolic or a name: 1 AU, 1/r2, (R - 1), Module 1",
+    "2": "symbolic or a name: the exponent in 1/r2, Stage 2",
+    "1.0": "breakeven, which is what the ratio MEANS rather than a measurement",
+    "1.5": "DOE Pu-238 production, kg/yr: a fact about the world, not this model",
+    "1.21": "calc 1.21.0, naming the release that shipped the hard ceiling",
+    "2026": "the 2026-09 campaign, naming a measurement rather than making one",
+}
+
+
+def prose_numbers(path=None):
+    """Every digit-bearing token the renderer writes into a SENTENCE.
+
+    Walks the source rather than the page, because the page cannot tell a
+    number that was derived from one that was typed -- they render
+    identically, which is the whole difficulty.  A format string reaching
+    `para` counts; its `%s` holes do not, because those are the derived half.
+    """
+    import ast
+    if path is None:
+        path = os.path.join(CAMP, "worked_calculation_doc.py")
+    with open(path, encoding="utf-8") as handle:
+        tree = ast.parse(handle.read())
+    token = re.compile(r"(?<![\w.#-])\d[\d,]*(?:\.\d+)?(?![\w])")
+    found, used = [], set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in PROSE_CALLS):
+            continue
+        for inner in ast.walk(node):
+            if not (isinstance(inner, ast.Constant)
+                    and isinstance(inner.value, str)):
+                continue
+            for match in token.finditer(inner.value):
+                word = match.group(0)
+                if word in TYPED_OK:
+                    used.add(word)
+                    continue
+                context = inner.value[max(0, match.start() - 60):
+                                      match.end() + 60]
+                found.append((inner.lineno, word,
+                              " ".join(context.split())))
+    # 🚨  AND A REGISTER ROW NOTHING MATCHES IS A ROW NOBODY READ.  The
+    # register is a list of numbers the document has AGREED to keep typed, so
+    # an entry with nothing behind it is a permission still being granted for
+    # a sentence that has since been rewritten -- which is how an allowlist
+    # quietly stops being a decision and starts being a way past the check.
+    for word in sorted(set(TYPED_OK) - used):
+        found.append((0, word, "on the register and in no sentence: %s"
+                      % TYPED_OK[word]))
+    return found
+
+
+def audit_verdict(incomplete, typed):
+    """The one-line verdict, naming which of the two complaints was raised."""
+    if incomplete and typed:
+        return "*** THE PAGE IS INCOMPLETE AND ASSERTS A TYPED NUMBER ***"
+    if incomplete:
+        return "*** THE PAGE IS INCOMPLETE ***"
+    return "*** THE PAGE ASSERTS A NUMBER NOTHING DERIVES ***"
+
+
 def report_audit(row, html_text):
-    """Run both halves against the rendered page and print what they find."""
+    """Run the audit against the rendered page and print what it finds.
+
+    Returns `(incomplete, typed)`, kept apart because they are different
+    complaints and one message cannot carry both: a missing column or rate
+    means the page does not SHOW something, and a typed number means it shows
+    something it should not have been able to assert.  Folding them into one
+    total made a prose finding print "THE PAGE IS INCOMPLETE" about a page
+    that is complete.
+    """
     text = rendered_text(html_text)
     numbers = page_numbers(text)
     cols = audit_columns(row, text, numbers, skip=not_shown(row))
@@ -3041,7 +3207,14 @@ def report_audit(row, html_text):
     hits, moved = discrimination(row, text, numbers)
     print("  matcher   %d of %d values still matched after moving every one "
           "by %.1f%%" % (hits, moved, (PERTURBATION - 1.0) * 100.0))
-    return len(cols["missing"]) + len(rates["missing"])
+    typed = prose_numbers()
+    print("  prose     %d typed number(s) in a sentence, %d on the register"
+          % (len(typed), len(TYPED_OK)))
+    for line, word, context in typed:
+        where = ("line %d" % line) if line else "on the register, unused"
+        print("     ! number typed in prose    %-10s %s: %s"
+              % (word, where, context[:90]))
+    return len(cols["missing"]) + len(rates["missing"]), len(typed)
 
 
 def main():
@@ -3141,8 +3314,8 @@ def main():
     print("  charging  %s" % describe_terms(terms))
     print("  market    %s" % terms["market"])
     c = out["check"]
-    print("  derived   %d quantities: %d bit-exact, %d within 1e-12, %d DIFFER"
-          % (c["n"], c["exact"], c["close"], len(c["bad"])))
+    print("  derived   %d quantities: %d bit-exact, %d within %g, %d DIFFER"
+          % (c["n"], c["exact"], c["close"], c["tol"], len(c["bad"])))
     print("  worst     %.3e relative  (%s)" % (c["worst"], c["worst_name"]))
     if c["skipped"]:
         print("  skipped   %d quantity(s) the row has no column for: %s"
@@ -3172,10 +3345,10 @@ def main():
     # right, `report_audit` asks whether they are all there.
     import worked_calculation_doc
     html = worked_calculation_doc.document(out)
-    findings = report_audit(winner, html) if args.audit else 0
+    incomplete, typed = (report_audit(winner, html) if args.audit else (0, 0))
     if args.verify:
-        if findings:
-            print("\n*** THE PAGE IS INCOMPLETE ***")
+        if incomplete or typed:
+            print("\n%s" % audit_verdict(incomplete, typed))
             return 1
         print("  OK  derivation reproduces the row")
         return 0
@@ -3185,8 +3358,8 @@ def main():
     print("  wrote     %s  (%d chars)" % (html_path, len(html)))
     if args.pdf and render_pdf(html_path, args.out + ".pdf"):
         print("  wrote     %s" % (args.out + ".pdf"))
-    if findings:
-        print("\n*** THE PAGE IS INCOMPLETE ***")
+    if incomplete or typed:
+        print("\n%s" % audit_verdict(incomplete, typed))
         return 1
     return 0
 

@@ -52,6 +52,8 @@ through. Skim for the section that names what you are about to change.
 - [The older matrices, and the claims they retired](#the-older-matrices-and-the-claims-they-retired)
 - [The corrections the model accumulated](#the-corrections-the-model-accumulated)
 - [A check that the numbers are right is not a check that the page is complete](#a-check-that-the-numbers-are-right-is-not-a-check-that-the-page-is-complete)
+- [A page that derives every FIGURE can still type a FACT](#a-page-that-derives-every-figure-can-still-type-a-fact)
+- [One section's identity, written down four times](#one-sections-identity-written-down-four-times)
 - [A flipped default breaks every reader that infers a run from the config](#a-flipped-default-breaks-every-reader-that-infers-a-run-from-the-config)
 - [A fixed point that carries its last pass makes the STOPPING TEST an answer](#a-fixed-point-that-carries-its-last-pass-makes-the-stopping-test-an-answer)
 - ["Count them in the header" is advice, and advice rots like a count](#count-them-in-the-header-is-advice-and-advice-rots-like-a-count)
@@ -2601,6 +2603,99 @@ one function that the audit calls, so the two cannot drift; the page rendered
 byte-identical afterwards, which is what says it was a de-duplication rather
 than a change. **An exemption is a claim about a COLUMN; this was a claim
 about a ROW, and only the renderer knows which.**
+
+### A page that derives every FIGURE can still type a FACT
+
+2026-09-17, on `campaign/worked_calculation.py`, and it is the third entry
+about that document because it is the only artifact in the repo whose whole
+claim is that nothing in it is typed. Every **figure** on the page is derived
+from the equations and then compared column by column against the row the run
+produced, which is what the footer reports. The **sentences** around those
+figures are ordinary writing, and nothing had ever looked at them.
+
+Two of them asserted values nothing derived: the interval Module 1's taxonomy
+fractions span, and the distance at which a solar array and a radioisotope
+source deliver the same watts per kilogram. Both were correct on the day they
+were written. Neither was ever executed.
+
+🚨  **AND THE FIRST WAS A NUMBER THIS FILE HAD ALREADY CAUGHT BEING WRONG AT
+BIRTH.** See
+[Correctness invariants](#correctness-invariants-that-were-expensive-to-find),
+which records that interval being wrong in every revision of
+`modules/catalog.py` that has ever existed, the fix reaching the docs, and
+seven copies standing in code afterwards. This document was one of them, and
+the one that **rendered its copy to a reader**. So the sentence was not merely
+typed; it was typed, corrected elsewhere, and left.
+
+⚠️  **NO EXISTING CHECK COULD SEE EITHER, AND THE REASON IS WORTH HAVING.**
+The column audit asks whether every quantity the model computed appears on the
+page; the rate audit asks the same of every reference constant the derivation
+read. Both are questions about **absence**. Here nothing was absent: the page
+was complete, the comparison was clean, and one of its sentences was untrue.
+A derived number and a typed one render identically, which is exactly why the
+checker reads the renderer's **source** rather than the page.
+
+✅  **Both derive now**, and what stops the third one is a register:
+
+| | |
+|---|---|
+| what is checked | any digit reaching `para` or `note` in the renderer |
+| what is NOT | `eq` and `deriv`, which exist to SHOW their own constants |
+| how a survivor is allowed | a row on `TYPED_OK` giving the reason it cannot rot |
+| a row nothing matches | **also a finding** |
+
+⚠️  **PROSE, NOT ARITHMETIC, AND THE LINE IS WHAT THE NUMBER IS DOING.** A
+substitution block displays a constant the reader is meant to CHECK; a
+sentence asserts one they are meant to BELIEVE. A lint that flagged the first
+would be asking the page to stop being a derivation, which is the one thing it
+is for.
+
+⚠️  **A register row nothing matches is a row nobody read.** The allowlist is
+a list of numbers the document has AGREED to keep typed, so an entry with
+nothing behind it is a permission still being granted for a sentence somebody
+has since rewritten. That is how an allowlist quietly stops being a decision
+and becomes a way past the check, and it is the same failure this file records
+for skips that always fire.
+
+✅  **IT LIVES IN `verify_docs.py` AS CHECK 14, NOT ONLY IN `--audit`**, and
+that placement is the reusable part. The other two audits need a finished
+document, which means `master`, 868 MB of inputs and about three minutes; this
+one reads a source file, so it runs in a second, in CI, on a clone with no
+inputs at all. **When a check splits into a half that needs the artifact and a
+half that needs only the source, move the second half somewhere it will
+actually run.**
+
+✅  **And it was measured by feeding it a wrong answer**, which is the
+standing rule here for anything that prints a clean line: with an empty
+register it flags thirteen tokens, with the register none; planting one stale
+sentence takes the docs harness to exit 1 and names the number, the line and
+the file. A check nobody has seen fail is a check nobody has seen.
+
+### One section's identity, written down four times
+
+The same pass, in the renderer, and it is the ordinary version of the lesson
+above rather than a subtle one. A section's **number**, **title** and
+**anchor** were typed into the `h(2, ...)` call inside the section, again into
+the contents list at the foot of the file under a different wording, and again
+into every sentence elsewhere that said "see section 6". Three sections have
+early-return branches that repeated their own heading, so one section carried
+up to **four** copies of its own identity with nothing holding them together.
+
+🚨  **INSERTING A SECTION RENUMBERED THE HEADINGS AND LEFT EVERY
+CROSS-REFERENCE IN THE PROSE POINTING ONE SHORT, SILENTLY.** Nothing renders
+wrong; the reader simply arrives at the wrong section.
+
+✅  The number is the **position** in one ordered list now, the heading and
+the cross-reference are both written from it, and a cross-reference is a real
+link rather than a phrase, so it cannot be right about the number and useless
+to click. The contents list reads the same list.
+
+⚠️  **The check is the part worth copying, because the list alone does not
+catch the branches.** After rendering, each section is asserted to have
+emitted its own anchor **exactly once**: a branch that forgets its heading
+renders under the one above it, and a branch that keeps a stale one renders
+under the wrong number, and both look like a perfectly ordinary page. A count
+of one is what tells those apart from a section that simply worked.
 
 ### A FLIPPED DEFAULT BREAKS EVERY READER THAT INFERS A RUN FROM THE CONFIG
 
