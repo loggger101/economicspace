@@ -108,8 +108,8 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       measurement rather than whichever file got passed in.  Every figure is
       re-derived from the equations and then checked column by column against
       that mission's own row; `--verify` runs the check and writes nothing,
-      `--pdf` renders with headless Chrome, `--cell` and `--designation`
-      override the choice.  It is the only script here that imports `master`,
+      `--audit` adds the completeness audit below, `--pdf` renders with
+      headless Chrome, `--cell` and `--designation` override the choice.  It is the only script here that imports `master`,
       and the only campaign output that is gitignored rather than committed,
       because it is generated from the run it describes.
   `worked_calculation_doc.py`  the renderer that script writes through.  It
@@ -160,15 +160,32 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
   document that quietly describes the wrong mission is the failure all of this
   exists to prevent.
 
-  ✅  COMPLETENESS WAS THEN MEASURED SEPARATELY, because a clean check says
-  the page is CORRECT and says nothing about whether it is whole: a quantity
-  that is never displayed is never compared either.  Rendering the page,
-  pulling every number out of it and matching each against the row's columns
-  finds nothing missing on four mission shapes, over 97 to 109 non-zero
-  columns each.  The rates behind those quantities are on the page too -- the
-  rig's throughput, the three processing energies, the electric stage's
-  per-newton and per-kilowatt figures, the alloy's element yields -- so every
-  displayed number can be reproduced from the page rather than taken on trust.
+  ✅  COMPLETENESS IS MEASURED SEPARATELY, BY `--audit`, because a clean
+  check says the page is CORRECT and says nothing about whether it is whole:
+  a quantity that is never displayed is never compared either.  It renders
+  the page, pulls every number out of it and asks two questions.  Of every
+  column: does the page show it, at any unit the page is allowed to use?  Of
+  every reference-table constant the derivation READ: the same.  The second
+  question is the one a column audit cannot ask, because a rate is an input
+  and no output column names it -- the rig's throughput, the three processing
+  energies, the electric stage's per-newton and per-kilowatt figures, the
+  alloy's element yields.  Between them they are what makes every displayed
+  number reproducible from the page rather than taken on trust.
+
+  ✅  THE LIST OF RATES IS RECORDED RATHER THAN TYPED.  A list of constants
+  to look for would be a second copy of what the derivation reads; instead
+  every reference-table read is logged as it happens, so a rate added to the
+  cascade joins the audit with no edit here.
+
+  🚨  AND THE AUDIT MEASURES ITSELF ON EVERY RUN, which is not decoration.
+  Its first version tested only that a page number was consistent with a
+  column at the precision it was printed to, and that is not sufficient: a
+  bare `0` on the page is consistent with any cost in the model once the
+  audit may look in millions and billions.  Moving every number by a third
+  left 99 of 100 columns still matching, i.e. a check that could not fail.
+  A match must now pin the value to within a percent or be exact, and the
+  `matcher` line reports what the same perturbation does today -- one figure
+  is the answer and the one below it is what the answer is worth.
 
 Per cell: `profitability_catalog.csv` is archived gzipped to `cells/` and one
 row is appended to `results.csv`.
