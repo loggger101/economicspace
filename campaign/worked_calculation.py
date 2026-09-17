@@ -55,6 +55,7 @@ column behind it, rather than a constant somebody has to remember to move.
     py campaign/worked_calculation.py            # derive, check, write the HTML
     py campaign/worked_calculation.py --pdf      # and render it with Chrome
     py campaign/worked_calculation.py --verify   # derive and check, write nothing
+    py campaign/worked_calculation.py --audit    # and audit the page for completeness
     py campaign/worked_calculation.py --cell X   # a named cell, guard bypassed
 """
 import argparse
@@ -63,6 +64,7 @@ import gzip
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 
@@ -241,7 +243,8 @@ def candidate_sources(catalog_path):
             row = run_winner(catalog_path)
             found.append((float(row["total_cost_usd"])
                           / float(row["gross_value_usd"]),
-                          "catalog", catalog_path))
+                          "catalog", catalog_path,
+                          str(row.get("pipeline_version") or "?")))
         except SystemExit:
             pass
     if os.path.exists(LEDGER):
@@ -250,8 +253,41 @@ def candidate_sources(catalog_path):
                 continue
             archive = os.path.join(CAMP, "cells", "%s.csv.gz" % r["cell"])
             if os.path.exists(archive):
-                found.append((float(r["best_obj"]), "cell", r["cell"]))
+                found.append((float(r["best_obj"]), "cell", r["cell"],
+                              r.get("calc_version") or "?"))
     return sorted(found)
+
+
+def unseen_archives():
+    """Re-measured archives this comparison deliberately cannot pick.
+
+    🚨  A SELECTION THAT CANNOT SEE A FILE MUST SAY SO, AND THIS ONE DID NOT.
+    `campaign/run_cell.py` archives a re-measurement under a name carrying its
+    release -- `cislunar__benef__search-on__calc-1.22.0.csv.gz` -- precisely
+    so that it can never be mistaken for one of the campaign's own cells, and
+    `candidate_sources` looks only at the live catalog and at cells named in
+    the LEDGER.  Both halves of that are right and the combination was silent:
+    with a 2x2 re-measured, the best result on disk sat in a suffixed archive
+    while the run announced a different cell as "the best case" and said
+    nothing about the four files it had not looked at.
+
+    ✅  LISTING IS NOT SELECTING, which is the distinction that makes this
+    safe.  What was declined, for good reasons, was making the SELECTION glob
+    this directory -- that would undo the property the suffix exists for.
+    Telling the reader what is here, and which flag reaches it, takes nothing
+    away from that.
+    """
+    cells = os.path.join(CAMP, "cells")
+    if not os.path.isdir(cells):
+        return []
+    known = {r["cell"] for r in ledger_rows()} if os.path.exists(LEDGER) else set()
+    out = []
+    for name in sorted(os.listdir(cells)):
+        if not name.endswith(".csv.gz"):
+            continue
+        if name[:-len(".csv.gz")] not in known:
+            out.append(os.path.join("campaign", "cells", name))
+    return out
 
 
 def terms_in_force(row, cfg):
@@ -820,6 +856,74 @@ def raw_sale(load, phases, caps, keys, surplus_frac):
             "usd_per_kg": value / load["loaded"] if load["loaded"] else 0.0}
 
 
+# -------------------------------------------------------------- rate ledger
+# Every reference-table constant the derivation reads, recorded as it is read.
+#
+# 🚨  THE RATES ARE THE HALF A COLUMN AUDIT CANNOT SEE.  A column audit asks
+# whether every quantity the model OUTPUT is on the page; it is silent about
+# the constants that produced them, because a rate is an input and no output
+# column names it.  A dig time with no rig throughput beside it, a power draw
+# with none of its three energy rates, an electric stage with no per-newton
+# figure: each is a number the page asks a reader to take on trust.
+#
+# ✅  SO THE LIST IS RECORDED RATHER THAN TYPED.  A hand-maintained list of
+# rates to look for is a second copy of what the derivation reads, and this
+# repo has a file full of what happens to second copies.  `val` and the two
+# `Recorded` rows below log every constant they hand out, so the audit's list
+# IS the derivation's list, and a rate added to the cascade tomorrow joins the
+# audit with no edit here.
+RATE_LOG = []
+
+
+def record_rate(table, field, value):
+    """Log one reference-table read, if it is a number worth showing."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return value
+    # A zero rate has nothing to show and matches anything; see the same
+    # exclusion in the column audit, and for the same reason.
+    if number == number and number != 0.0:
+        RATE_LOG.append((table, field, number))
+    return value
+
+
+class Recorded(object):
+    """A reference-table row that logs which of its fields were read.
+
+    ⚠️  IT MUST STAY A PROXY AND NOT A COPY.  `C["pro"]` and `C["veh"]` are
+    read again in the cost cascade, hundreds of lines from here, and those
+    reads are rates too -- `cost_usd_per_kg` and `usd_per_kg_to_leo` are two
+    of the largest lines in the answer.  A dict snapshot taken at construction
+    would record the fields this function happens to touch and miss those.
+    """
+
+    def __init__(self, row, table):
+        """Wrap one row of `table`, which is named so the log can say where."""
+        self._row = row
+        self._table = table
+
+    def __getitem__(self, field):
+        """The field, logged.  This is the read the derivation mostly makes."""
+        return record_rate(self._table, field, self._row[field])
+
+    def get(self, field, default=None):
+        """The field if the table carries it, logged; otherwise `default`.
+
+        ⚠️  A DEFAULT IS NOT A RATE AND MUST NOT BE LOGGED AS ONE.  A column
+        an older table does not have is a fallback this derivation chose, not
+        a constant a reader could look up, so the miss returns before
+        `record_rate` sees it.
+        """
+        if field not in self._row:
+            return default
+        return record_rate(self._table, field, self._row.get(field, default))
+
+    def __contains__(self, field):
+        """Membership, unlogged: asking is not reading."""
+        return field in self._row
+
+
 # ------------------------------------------------------------------ context
 def context(body, archived, tables):
     """Everything about this body and architecture that no search varies.
@@ -833,9 +937,11 @@ def context(body, archived, tables):
     import master
     ops = tables["ops"]
     veh = tables["vehicles"]
-    veh = veh[veh["name"] == archived["vehicle"]].iloc[0]
+    veh = Recorded(veh[veh["name"] == archived["vehicle"]].iloc[0],
+                   "Module 3 vehicles")
     pro = tables["propellants"]
-    pro = pro[pro["name"] == archived["propellant"]].iloc[0]
+    pro = Recorded(pro[pro["name"] == archived["propellant"]].iloc[0],
+                   "Module 3 propellants")
 
     shape = dict(beneficiated=bool(archived["beneficiation"]),
                  aero=bool(archived["aerocapture_return"]),
@@ -932,7 +1038,8 @@ def context(body, archived, tables):
         if item not in rows:
             sys.exit("Module 3 has no row named %r; the ops table was renamed "
                      "underneath this derivation." % item)
-        return master._ops_value(ops, item, default=float("nan"))
+        return record_rate("Module 3 operations", item,
+                           master._ops_value(ops, item, default=float("nan")))
 
     a_au = float(body["semi_major_axis_au"])
 
@@ -2584,6 +2691,359 @@ def describe_terms(terms):
     return ", ".join(on) if on else "none (physics only)"
 
 
+# ---------------------------------------------------------- completeness
+# 🚨  A CHECK THAT THE NUMBERS ARE RIGHT IS NOT A CHECK THAT THE PAGE IS
+# COMPLETE, and the two failures look identical from inside `check`: zero
+# differing, every time.  A quantity that is never DISPLAYED is never compared
+# either, so the check above is silent about anything the page leaves out --
+# and it was silent about `hardware_cost_usd`, whose five components were all
+# printed and whose sum was not, and about `profit_usd`, which is the column
+# the output CSV is sorted by.
+#
+# ✅  SO COMPLETENESS IS MEASURED SEPARATELY, AND IT IS MEASURED HERE RATHER
+# THAN FROM MEMORY.  This audit has been run by hand once per release and
+# thrown away each time; on its last run it found cost lines rendering at two
+# significant figures, a ceiling the page never mentioned, and text columns
+# that decide how a number beside them should be read.  A check that finds
+# defects on every run it is given and is then discarded is this repo's most
+# expensive habit -- `verify.py`'s header is a list of what it has cost.  It
+# is a subcommand now, and on its first run as one it found the zero-plant
+# branch asserting a specific power whose three terms were nowhere on the
+# page.
+NUMBER = re.compile(r"-?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?")
+
+# The page is allowed to change a number's UNIT and not its value: dollars
+# render in millions, metres per second in kilometres, fractions as percent.
+# ⚠️  EVERY SCALE ADDED HERE WEAKENS THE AUDIT, because each one is another
+# chance for a column to match a number it has nothing to do with.  So the
+# run prints how many columns each scale accounted for: a page that suddenly
+# needs `percent` or `billions` for a dozen of them is matching by
+# coincidence, and the tally is the only warning of that a clean run gives.
+SCALES = ((1.0, "as is"), (1e-6, "millions"), (1e-3, "thousands"),
+          (1e-9, "billions"), (100.0, "percent"), (1e3, "x1000"))
+
+# How tightly a page number has to pin a value before the match counts as
+# evidence.  One percent is two significant figures, which every formatter on
+# the page clears comfortably -- `fmt` shows at least one decimal, `prec`
+# shows twelve significant figures, and `musd` scales its precision to the
+# size of the line.  It is the bare integers that this excludes, and they are
+# matched exactly or not at all.
+RESOLUTION = 0.01
+
+# Columns a complete page is not expected to print, each with its reason.
+# ⚠️  ADD A ROW WHEN YOU HAVE READ THE FINDING AND DECIDED TO KEEP IT, never
+# to quiet a red line you have not read.  Every row here is a claim that the
+# page is better without the number, and each one was argued once.
+NOT_SHOWN = {
+    "catalog_date": "when the run happened, not what it computed",
+}
+
+
+def rendered_text(html_text):
+    """The page as a reader sees it: tags out, entities back, one string.
+
+    Tags become a space rather than nothing, so that two numbers in adjacent
+    cells cannot be concatenated into a third number that appears on no part
+    of the page.
+    """
+    import html as html_module
+    text = re.sub(r"(?is)<(script|style).*?</\1>", " ", html_text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    return html_module.unescape(text)
+
+
+def page_numbers(text):
+    """Every number the page shows, with the precision it was shown at.
+
+    A number printed with `d` decimals states its value to within half of the
+    last place, so each pair carries its own tolerance and the caller never
+    has to guess one.  An exponential rendering carries its tolerance the same
+    way: `1.234e-06` is precise to 0.0005e-06, not to 0.0005.
+    """
+    found = []
+    for token in NUMBER.finditer(text):
+        raw = token.group(0).replace(",", "").lower()
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        mantissa, marker, exponent = raw.partition("e")
+        decimals = len(mantissa.partition(".")[2])
+        half = 0.5 * (10.0 ** -decimals) * (10.0 ** (int(exponent) if marker
+                                                     else 0))
+        found.append((value, half))
+    return found
+
+
+def on_page(value, numbers, slack=0.0):
+    """The scale at which the page shows `value`, or None if it does not.
+
+    `slack` is the uncertainty in `value` ITSELF, which is zero for a float
+    off the row and is not zero for a number recovered from a rounded string:
+    `payload_mix` states its masses to the kilogram, so a hold of 98,618.4 kg
+    reaches here as 98,618 and would miss a page that printed the true figure.
+    The two tolerances add, in the units the comparison is made in.
+
+    🚨  A MATCH IS ONLY EVIDENCE IF THE PAGE NUMBER IS PRECISE ENOUGH TO BE
+    ONE, AND THE FIRST VERSION OF THIS FUNCTION WAS NOT.  Consistency with a
+    rounding is the whole test, so a page printing a bare `0` was consistent
+    with any cost in the model once the audit was allowed to look in billions,
+    and a bare `3` with anything from 2.5 to 3.5 at six different scales.
+    MEASURED RATHER THAN FEARED: every numeric column was moved by 31% and
+    **99 of 100 still matched**, which is a check that reports clean and means
+    nothing -- the exact failure this repo files under a diagnostic that
+    agrees with itself perfectly.  A page number must now pin the value to
+    within `RESOLUTION`, or print it exactly; the same perturbation now
+    matches 3 of 100.
+    """
+    for scale, name in SCALES:
+        target = value * scale
+        room = half_room = slack * abs(scale)
+        for shown, half in numbers:
+            gap = abs(target - shown)
+            # Printed exactly, at whatever precision: an integer rendered as
+            # an integer is the commonest case and carries no rounding at all.
+            if gap <= abs(target) * 1e-12:
+                return name
+            room = half + half_room
+            if (gap <= room * (1.0 + 1e-9)
+                    and room <= RESOLUTION * abs(target)):
+                return name
+    return None
+
+
+def composite(word):
+    """A text cell split into the words and numbers it is made of, or None.
+
+    Returns None for a cell that is a single word, which is the ordinary case
+    and wants the substring test instead.  A cell with digits in it is taken
+    apart: `nickel-iron 98,618kg; silicates 40,785kg` becomes three names and
+    three masses, each of which the page has to account for separately.
+    """
+    if not NUMBER.search(word):
+        return None
+    parts = []
+    for piece in re.split(r"[;,]?\s+", word):
+        piece = piece.strip()
+        if not piece:
+            continue
+        number = NUMBER.match(piece)
+        if number and number.group(0) not in ("-",):
+            raw = number.group(0).replace(",", "")
+            try:
+                parts.append(("number", float(raw), len(raw.partition(".")[2])))
+            except ValueError:
+                parts.append(("word", piece, 0))
+        else:
+            # A trailing unit is not a word the page owes the reader: `98,618kg`
+            # is one number wearing its unit, and the unit is on the page's own
+            # column header rather than beside the figure.
+            stripped = re.sub(r"^[^A-Za-z]*|[^A-Za-z)]*$", "", piece)
+            if stripped:
+                parts.append(("word", stripped, 0))
+    return parts or None
+
+
+def composite_part_on_page(part, text, numbers):
+    """One piece of a composite cell: a word to find or a number to match."""
+    kind, value, decimals = part
+    if kind == "word":
+        return value.lower() in text.lower()
+    return on_page(value, numbers, slack=0.5 * (10.0 ** -decimals)) is not None
+
+
+def audit_columns(row, text, numbers, skip=None):
+    """Every column of the row against the rendered page.
+
+    ⚠️  A ZERO MATCHES ANYTHING AND IS THEREFORE NOT EVIDENCE.  A raw mission
+    carries a third of its ISRU and heat-shield columns at 0.0, and a page
+    that happens to print a zero anywhere would let the audit congratulate
+    itself on every one of them.  They are counted apart, and the summary
+    quotes the non-zero total, which is the number that means something.
+    """
+    missing, shown, zeros, exempt = [], [], [], []
+    skip = NOT_SHOWN if skip is None else skip
+    for column in row.index:
+        value = row[column]
+        if column in skip:
+            exempt.append(column)
+            continue
+        if value is None or (not isinstance(value, str) and pd.isna(value)):
+            zeros.append(column)
+            continue
+        if isinstance(value, str):
+            # A text column is a WORD the page has to say, and it usually
+            # decides how a number beside it should be read: `thrust_scaling`
+            # is what separates a conventional thruster's specific mass from a
+            # replicated device's, and the figure alone does not say which.
+            word = str(value).strip()
+            if not word:
+                zeros.append(column)
+                continue
+            if word.lower() in text.lower():
+                shown.append((column, "verbatim"))
+                continue
+            if word.replace("_", " ").lower() in text.lower():
+                shown.append((column, "words"))
+                continue
+            # 🚨  AND WHEN IT IS NOT A WORD AT ALL, TAKE IT APART.
+            # `payload_mix` is three phase names and three masses in one cell,
+            # and asking whether that whole string appears on the page asks
+            # the wrong question: the page renders the same hold as a TABLE,
+            # so the audit reports a gap that is a punctuation difference.  A
+            # text column carrying digits is a sentence of numbers, and every
+            # part of it is checked on its own -- a stronger test than the
+            # substring above, because it holds the hold table to the row
+            # phase by phase and kilogram by kilogram.
+            # ⚠️  THE ORDER MATTERS AND IS NOT COSMETIC.  `pipeline_version`
+            # is `1.22.0`, which a number-splitter reads as 1.22 and a version
+            # is not a measurement; trying the whole string first means only
+            # the cells that really are composites are ever taken apart.
+            parts = composite(word)
+            if parts:
+                absent = [part for part in parts
+                          if not composite_part_on_page(part, text, numbers)]
+                if absent:
+                    missing.append((column, "; ".join(str(p[1])
+                                                      for p in absent)))
+                else:
+                    shown.append((column, "part by part"))
+                continue
+            missing.append((column, word))
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if number == 0.0:
+            zeros.append(column)
+            continue
+        scale = on_page(number, numbers)
+        if scale:
+            shown.append((column, scale))
+        else:
+            missing.append((column, number))
+    return {"missing": missing, "shown": shown, "zeros": zeros,
+            "exempt": exempt}
+
+
+def audit_rates(text, numbers):
+    """Every reference-table constant the derivation read, against the page.
+
+    🚨  ASK OF EVERY DISPLAYED NUMBER: COULD A READER REPRODUCE IT FROM WHAT
+    IS ALSO ON THE PAGE?  Where the answer is no, the page is asking to be
+    trusted, which is the one thing a worked calculation must never do.  A dig
+    time cannot be checked without the rig's throughput, and a power draw
+    cannot be checked without the three energy rates behind it.  Neither of
+    those is an output column, so `audit_columns` cannot see either.
+    """
+    missing, shown = [], []
+    seen = set()
+    for table, field, value in RATE_LOG:
+        if (table, field) in seen:
+            continue
+        seen.add((table, field))
+        scale = on_page(value, numbers)
+        if scale:
+            shown.append((table, field, value, scale))
+        else:
+            missing.append((table, field, value))
+    return {"missing": missing, "shown": shown}
+
+
+# The factor the audit moves every number by to measure itself.  Not round,
+# deliberately: 1.3 would land on a page that happens to print both a value
+# and a third of it, and this audit exists because a plausible-looking
+# coincidence is exactly what it is bad at telling from a real match.
+PERTURBATION = 1.317
+
+
+def discrimination(row, text, numbers):
+    """How often the audit matches a number the page has never contained.
+
+    🚨  A COMPLETENESS MATCHER THAT ACCEPTS ANY ROUNDING ACCEPTS EVERYTHING,
+    and it looks identical to one that works: both print a clean line.  The
+    first version of this audit matched **99 of 100** columns after every one
+    of them had been moved by 31%, because a page printing a bare `0` is
+    consistent with any cost in the model once six unit scales are allowed.
+    So the audit measures itself, on every run, against the same page: move
+    every number and count how many still find a home.  A few percent is the
+    floor -- the page holds hundreds of numbers and some collision is
+    inevitable -- and anything approaching the column count means the matcher
+    has stopped discriminating and the clean line above it means nothing.
+    """
+    fake = row.copy()
+    moved = 0
+    for column in row.index:
+        value = row[column]
+        if isinstance(value, str) or value is None:
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if number == number and number != 0.0:
+            fake[column] = number * PERTURBATION
+            moved += 1
+    out = audit_columns(fake, text, numbers)
+    hits = sum(1 for column, _how in out["shown"]
+               if not isinstance(row[column], str))
+    return hits, moved
+
+
+def not_shown(row):
+    """The columns this page is not expected to print, for THIS row.
+
+    ⚠️  MOST OF IT IS A CONSTANT AND ONE ENTRY IS NOT, WHICH IS THE POINT.
+    Whether the page owes the reader `comp_group` depends on the row: the
+    header prints the taxonomy group only where it says something the spectral
+    letter does not, so on a `D` / `D-type` body the column is deliberately
+    absent and on an `M` / `X-complex` body it is deliberately there.  A flat
+    exemption would cover both and stop checking the case that matters, so
+    the question is asked of the renderer, which owns the rule.
+    """
+    import worked_calculation_doc
+    out = dict(NOT_SHOWN)
+    if worked_calculation_doc.group_restates_type(
+            row.get("comp_group"), row.get("spectral_type")):
+        out["comp_group"] = ("the spectral letter already says it; the header "
+                             "drops a group that only restates the type")
+    return out
+
+
+def report_audit(row, html_text):
+    """Run both halves against the rendered page and print what they find."""
+    text = rendered_text(html_text)
+    numbers = page_numbers(text)
+    cols = audit_columns(row, text, numbers, skip=not_shown(row))
+    rates = audit_rates(text, numbers)
+    print("  page      %d numbers, %d distinct"
+          % (len(numbers), len(set(n for n, _ in numbers))))
+    print("  columns   %d of %d non-zero shown, %d zero or blank, %d not "
+          "expected" % (len(cols["shown"]),
+                        len(cols["shown"]) + len(cols["missing"]),
+                        len(cols["zeros"]), len(cols["exempt"])))
+    tally = {}
+    for _column, how in cols["shown"] + [(t, h) for t, _f, _v, h
+                                         in rates["shown"]]:
+        tally[how] = tally.get(how, 0) + 1
+    print("  matched   %s"
+          % ", ".join("%s %d" % (how, n)
+                      for how, n in sorted(tally.items(), key=lambda kv:
+                                           -kv[1])))
+    for column, value in cols["missing"]:
+        print("     ! column not on the page  %-34s %r" % (column, value))
+    print("  rates     %d of %d reference constants shown"
+          % (len(rates["shown"]), len(rates["shown"]) + len(rates["missing"])))
+    for table, field, value in rates["missing"]:
+        print("     ! rate not on the page    %-34s %r  (%s)"
+              % (field, value, table))
+    hits, moved = discrimination(row, text, numbers)
+    print("  matcher   %d of %d values still matched after moving every one "
+          "by %.1f%%" % (hits, moved, (PERTURBATION - 1.0) * 100.0))
+    return len(cols["missing"]) + len(rates["missing"])
+
+
 def main():
     """Derive the best case of a run, check it, and write the document."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -2602,6 +3062,8 @@ def main():
     ap.add_argument("--pdf", action="store_true", help="also render the PDF")
     ap.add_argument("--verify", action="store_true",
                     help="derive and check only; write nothing")
+    ap.add_argument("--audit", action="store_true",
+                    help="also audit the rendered page for completeness")
     ap.add_argument("--out", default=os.path.join(CAMP, "worked_calculation"),
                     help="output path without an extension")
     args = ap.parse_args()
@@ -2616,12 +3078,30 @@ def main():
             sys.exit("nothing to document: no Stage 4 catalog at %s and no "
                      "completed campaign cell with an archive.\nRun Stage 4, "
                      "or pass --catalog." % args.catalog)
-        best_obj, kind, name = found[0]
+        best_obj, kind, name, release = found[0]
         if len(found) > 1:
-            print("  compared  %d finished results; best is %s at %.4fx"
-                  % (len(found), name, best_obj))
+            # ⚠️  NAME THE RELEASE ON BOTH LINES.  The ledger is a
+            # single-release artifact by design and the live catalog is
+            # whatever ran last, so this ranking routinely puts two different
+            # models in one ordering: 4.5298x at calc 1.22.0 came out "best"
+            # over 6.6622x at 1.21.2, which is not a better mission so much as
+            # a cheaper model.  The comparison is still worth making -- it is
+            # how you find the document's subject -- but it has to be legible
+            # as what it is.  This repo's standing rule about wall clocks
+            # applies unchanged to objectives: a figure is only ever true of
+            # the release it names.
+            print("  compared  %d finished results; best is %s at %.4fx "
+                  "(calc %s)" % (len(found), name, best_obj, release))
             runner = found[1]
-            print("  runner-up %s at %.4fx" % (runner[2], runner[0]))
+            print("  runner-up %s at %.4fx (calc %s)"
+                  % (runner[2], runner[0], runner[3]))
+        missed = unseen_archives()
+        if missed:
+            print("  NOT compared: %d archive(s) under a release suffix, which"
+                  " this\n                selection cannot pick by design. To"
+                  " document one:" % len(missed))
+            for path in missed:
+                print("                  --catalog %s" % path)
         if kind == "cell":
             args.cell = name
         else:
@@ -2682,18 +3162,32 @@ def main():
         print("    this row.  See the table in `terms_in_force` for which")
         print("    dials those are and which column catches each.")
         return 1
-    if args.verify:
+    if args.verify and not args.audit:
         print("  OK  derivation reproduces the row")
         return 0
 
+    # ⚠️  THE AUDIT NEEDS THE PAGE, so it is rendered even under `--verify`.
+    # The two questions are different and the second one cannot be asked
+    # without the answer to the first: `check` asks whether the numbers are
+    # right, `report_audit` asks whether they are all there.
     import worked_calculation_doc
     html = worked_calculation_doc.document(out)
+    findings = report_audit(winner, html) if args.audit else 0
+    if args.verify:
+        if findings:
+            print("\n*** THE PAGE IS INCOMPLETE ***")
+            return 1
+        print("  OK  derivation reproduces the row")
+        return 0
     html_path = args.out + ".html"
     with open(html_path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(html)
     print("  wrote     %s  (%d chars)" % (html_path, len(html)))
     if args.pdf and render_pdf(html_path, args.out + ".pdf"):
         print("  wrote     %s" % (args.out + ".pdf"))
+    if findings:
+        print("\n*** THE PAGE IS INCOMPLETE ***")
+        return 1
     return 0
 
 
