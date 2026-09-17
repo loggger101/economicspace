@@ -234,17 +234,19 @@ STAGES = [
     Stage("calc",      4, "Profitability",
           "The headline output, and the only stage whose runtime you choose. "
           "Measured on the full 1.55 M-row catalog at cislunar, 12 workers, "
-          "calc 1.21.2, in the 2026-09 28-cell campaign: %s raw at N = 1, "
+          "calc %s: %s raw at N = 1, "
           "%s with optimise_programme_scale, %s with use_beneficiation, and "
           "%s with both, and both of those flags DEFAULT ON as of calc "
           "v1.17.0, so budget for the %s unless you turn one off. Destination "
           "changes that: the other six span %.2f-%.2fx cislunar on that cell "
           "(%s is FASTER, %s dearest), so the default elsewhere runs %.1f-%.1f "
-          "h. Seconds with eval_row_cap set low. WARNING: calc v1.22.0 gave "
-          "the payload knapsack a second price tier and has not been "
-          "re-measured on a full catalog, so treat these as a floor rather "
-          "than a budget."
-          % (_cell_time(False, False), _cell_time(False, True),
+          "h. Seconds with eval_row_cap set low. That span is the 2026-09 "
+          "campaign's, which is the only seven-destination measurement there "
+          "is, so it is one release older than the cislunar cells it is "
+          "applied to: read it as the shape of the difference, not as a "
+          "second measurement of the other six."
+          % (master.MEASURED_CELL_CALC,
+             _cell_time(False, False), _cell_time(False, True),
              _cell_time(True, False), _cell_time(True, True),
              _cell_time(True, True),
              _DEST_LO[0], _DEST_HI[0], _DEST_LO[1], _DEST_HI[1],
@@ -619,8 +621,10 @@ def _stage_minutes(key: str) -> float:
                                   MASTER.calc.optimise_programme_scale)
 
     # Seconds per row, read straight off `master.MEASURED_CELL_SECONDS` --
-    # README.md, "Beneficiation", carries the same wall clock for all
-    # twenty-eight cells; calc 1.21.2, 12 workers, over
+    # the four cislunar cells at the CURRENT release (calc.MEASURED_CELL_CALC),
+    # not README's twenty-eight, which are the 2026-09 campaign one release
+    # back.  The two disagree about this cell on purpose; see the block above
+    # the constant.  12 workers, over
     # master.MEASURED_CELL_ROWS (the 1,555,667-row catalog those cells were
     # measured on; 1,555,618 of them carry positive mass, a 0.003% difference
     # that does not matter to an estimate the stage bar replaces within a

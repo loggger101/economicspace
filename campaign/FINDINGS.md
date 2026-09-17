@@ -28,6 +28,15 @@ the decomposition is in [calc v1.22.0](../versions.md#calc-v1220), and one of
 the four runs the other way. Every figure here remains a correct measurement of
 the code it names, which is why it is kept.
 
+✅  **ONE ROW OF THE MATRIX BELOW HAS BEEN RE-RUN AT THOSE DEFAULTS**, on the
+full catalog on 2026-09-16: cislunar comes out **2.09x to 3.11x better across
+the square**, with both evaluable counts reproducing exactly. The four cells
+are in
+[the full-catalog cislunar 2x2](../versions.md#the-full-catalog-cislunar-2x2-at-these-defaults-2026-09-16)
+and are deliberately not restated here. ⚠️  **That is one destination of seven
+and the factor spans the square**, so it is not a scale factor for the six rows
+below it; it is the one row somebody has measured twice.
+
 ⚠️  **A v1.22.0 campaign would also carry one more column**,
 `surplus_payload_kg`, which the cells under `cells/` do not have.
 `population.py` reads with `usecols` and will raise on it rather than render a

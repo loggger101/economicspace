@@ -136,7 +136,7 @@ echo    [3]  Quick re-run           Stage 4 only, reuses catalogs on disk
 echo    [4]  Standard run           Stage 4 only, 20,000-row sample
 echo    [5]  Full run               THE PIPELINE DEFAULTS - every row,
 echo                                beneficiated, programme search on
-echo                                *** 2.7 h at cislunar, 6.1 h at earth_surface ***
+echo                                *** 3.2 h at cislunar, 6.1 h at earth_surface ***
 echo.
 echo         2-4 override those defaults so a run finishes in reasonable
 echo         time. Every run prints each setting marked [default], or
@@ -257,7 +257,7 @@ echo.
 echo   THE PIPELINE DEFAULTS: every one of 1.55 million rows, beneficiated,
 echo   with the programme search on. This preset overrides nothing -- it is
 echo   what a configure-nothing run does. Measured 2026-09: Stage 4 alone
-echo   is 2.7 h at cislunar and 6.1 h at earth_surface, the config default.
+echo   is 3.2 h at cislunar and 6.1 h at earth_surface, the config default.
 echo   Budget half a day if Stages 1-3 run too.
 echo.
 echo   Ctrl-C is safe. Each stage writes its CSV before the next one starts.

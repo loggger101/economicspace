@@ -737,10 +737,18 @@ reading 1.4x off it. The wall clock is a fact about this run. The ratio is not
 a measurement, and isolating the tiered walk's real cost still needs the
 interleaved construction calc v1.17.4 and v1.17.6 used.
 
-⚠️  `MEASURED_CELL_SECONDS` is therefore **still unchanged**, and
-deliberately: it holds four cells measured as a set, and replacing one of them
-with a figure from a different release would make the dict internally
-incomparable, which is exactly what it was rebuilt to prevent.
+⚠️  `MEASURED_CELL_SECONDS` was therefore **left unchanged by the run that
+measured this cell**, and deliberately: it holds four cells measured as a set,
+and replacing one of them with a figure from a different release would make
+the dict internally incomparable, which is exactly what it was rebuilt to
+prevent.
+
+✅  **THAT OBJECTION DISSOLVED THE MOMENT THE OTHER THREE LANDED, AND THE DICT
+MOVED ON 2026-09-16**; see
+[the runtime constant follows the release now](#the-runtime-constant-follows-the-release-now-2026-09-16).
+The reason to wait was never that one release is better than another, it was
+that a dict half at one release and half at the next is a set nobody can take
+a ratio inside. Four cells at one release is a set again.
 
 #### The whole square against v1.21.2
 
@@ -849,13 +857,21 @@ it carries is still a v1.21.2 claim. The two destinations whose ORDERING
 against cislunar is close, `mars_orbit` at 11% on the default cell, cannot be
 re-ranked from this square.
 
-⚠️  **`MEASURED_CELL_SECONDS` is still unchanged, and the temptation to
-update it is now stronger and still wrong.** A complete cislunar 2x2 at
-v1.22.0 looks like exactly what that dict holds. But it is the cislunar ROW of
-`MEASURED_DEST_SECONDS`, whose other six rows are v1.21.2, and `dest_cost_span()`
-computes a span ACROSS destinations; a single row from another release would
-make that span a measurement of a release difference wearing a destination's
-name. Re-measure all seven or none.
+⚠️  **`MEASURED_CELL_SECONDS` was still unchanged here, and the argument for
+leaving it was about the DICT rather than about the numbers.** A complete
+cislunar 2x2 at v1.22.0 looks like exactly what that dict holds. But it was the
+cislunar ROW of `MEASURED_DEST_SECONDS`, whose other six rows are v1.21.2, and
+`dest_cost_span()` computes a span ACROSS destinations; a single row from
+another release would make that span a measurement of a release difference
+wearing a destination's name. Re-measure all seven or none.
+
+🚨  **THAT ARGUMENT WAS RIGHT AND ITS PREMISE WAS OPTIONAL, WHICH IS THE PART
+WORTH KEEPING.** The two dicts were one object, so every use inherited the
+constraint of the strictest use. Splitting them satisfies both readers at once
+and neither has to compromise: see
+[the runtime constant follows the release now](#the-runtime-constant-follows-the-release-now-2026-09-16).
+**When a shared definition forces a choice between two correct requirements,
+check whether it is one measurement or two before conceding to either.**
 
 ✅  **The worked calculation was regenerated against this row** and
 reproduces it: **88 derived quantities, 87 bit-exact, 1 within 1e-12, 0
@@ -863,6 +879,120 @@ differing**, worst 6.795e-16 relative on `diameter_km`. It reads all four of
 this release's flags off the row rather than the live config, which is the
 reader-side fix this release's own notes describe, exercised here for the first
 time on a full-catalog winner.
+
+### The runtime constant follows the release now (2026-09-16)
+
+The section above measured all four cislunar cells at v1.22.0 and deliberately
+left `MEASURED_CELL_SECONDS` alone, for a reason that was about the dict rather
+than the numbers: it WAS the cislunar row of `MEASURED_DEST_SECONDS`, so moving
+it would have put one release's row inside a seven-row table that
+`dest_cost_span()` takes ratios across. This is the change that removes the
+premise instead of conceding to it.
+
+🚨  **THE BANNER WAS TELLING USERS THAT CONCENTRATING COSTS 3.4x WHILE THE
+RELEASE THEY WERE RUNNING MEASURES 8.1x.** That is the exact failure the whole
+constant exists to prevent, and it had been reintroduced not by typing a number
+but by deriving one from the wrong measurement:
+
+| what the banner prints | calc 1.21.2 (what it said) | calc 1.22.0 (measured) |
+|---|---|---|
+| beneficiation, with the search on | 3.42x | **8.11x** |
+| programme search, on raw ore | 3.05x | **1.96x** |
+| both on, against the raw N = 1 cell | 10.43x | **15.89x** |
+
+⚠️  **The cross-release reading of that table is not one measurement, and
+neither column is a clean ratio either** -- the campaign cells span 2026-09-11/13
+and these 2026-09-16, both across sessions, which is the thing this release's
+own notes say cannot be resolved on this host. What is claimed is narrower: the
+right column is the best available estimate of the cell somebody is about to
+run, measured at the release that will run it.
+
+#### What was split, and what each half is now for
+
+| | holds | is the authority for |
+|---|---|---|
+| `MEASURED_DEST_SECONDS` | the 2026-09 campaign, seven destinations, calc 1.21.2 | the SPAN across destinations, and README's 28-cell table |
+| `MEASURED_CELL_SECONDS` | the four cislunar cells at `MEASURED_CELL_CALC` | the LEVEL of a cell somebody is about to run: both banners, `--help`, the dashboard estimate |
+
+**They are two measurements of one cell, not two copies of one measurement**,
+so each keeps its own authority and neither is edited to agree with the other.
+`dest_cost_span()` is untouched and still reads the campaign table alone, so
+no ratio in this project crosses a release; `expected_cell_seconds()` is the
+new accessor for the other question, best-available per destination, and its
+docstring refuses to be used for a ratio.
+
+✅  **`measured_cell_provenance()` makes the staleness say so.** When
+`MEASURED_CELL_CALC` is behind the running `pipeline_version` every banner and
+both `--help` strings grow " (measured at calc X)", and the string is empty on
+the common path. This file's rule everywhere else is that a wall clock is only
+ever true of the release it names; a banner quoting one without naming a
+release was relying on somebody having re-measured.
+
+#### The half of the shape change that does not need a clock
+
+The beneficiated searched cell got **dearer** while three of the four got
+cheaper, and a cross-session wall clock cannot establish that on its own.
+`programme_options_priced` can: it is a deterministic output, so it compares
+across releases the way a wall clock does not.
+
+| searched cell | v1.21.2 | v1.22.0 | |
+|---|---|---|---|
+| raw, options priced | 26,854,749 | 26,757,376 | -0.4% |
+| **beneficiated, options priced** | 27,992,344 | **25,927,278** | **-7.4%** |
+
+Row counts are identical in both (650,921 and 660,253) and so is the median
+concentration ratio (1.0000 and 7.4074), so this is the same population doing
+the same sweep. **The beneficiated searched cell prices 7.4% FEWER programme
+options and still takes longer**, which puts the cost in the price of a rung
+rather than in the number of them, and the second market tier v1.22.0 put
+inside the payload knapsack is walked per rung.
+
+⚠️  **This is not a runtime table and must not be quoted as one.** It is an
+argument about WHERE a cost is, made from counts, because the clock cannot make
+it. Isolating the tiered walk's cost still needs the interleaved construction
+calc v1.17.4 and v1.17.6 used.
+
+#### The check that replaced the identity
+
+Check 9 used to assert that `MEASURED_CELL_SECONDS` was the cislunar row of
+`MEASURED_DEST_SECONDS`. Unpicking the derivation retires that assertion, and
+retiring a check to make a change pass is how a guard is lost, so it is
+replaced by a stronger one: the four seconds are compared against
+`campaign/logs/*.json`, the per-cell status and queue-progress files the run
+itself wrote, which are committed and carry `wall_s` and `calc_version`.
+
+**The constant is pinned to the measurement now rather than to a second copy of
+one**, which is a thing the identity could never do: two typed dicts agreeing
+with each other says nothing about whether either was measured.
+
+⚠️  **A missing log is a FAILURE, not a skip**, because this repo has now found
+six checks that could not run and said they passed. Both failure modes were
+proved by causing them: a wall clock edited by 676 s names the cell and the
+log, and a `MEASURED_CELL_CALC` bumped to a release with no cells behind it
+reports that nobody can say where the four numbers came from.
+
+⚠️  **The launcher hours moved with it, cislunar only.** `run.bat`, `run.sh`
+and README quote "N h at &lt;destination&gt;" and are typed because shell cannot
+import `master`; cislunar goes **2.7 h to 3.2 h** and the other six are
+unchanged, because a menu should quote the newest figure each destination has.
+Check 9 pins all of them through `expected_cell_seconds`, which is a LEVEL per
+row and never a ratio between rows.
+
+#### Two stale figures the same pass found
+
+🚨  **README said `MEASURED_CELL_SECONDS` "is unchanged and still holds the
+v1.17.7 set", twice, and it was wrong when it was written.** The dict held the
+2026-09 campaign row, one release back, not the one before that. Both copies
+went in with the 2x2 and neither was ever true.
+
+⚠️  **`use_beneficiation`'s config comment quoted 4.67x, which is the DASHBOARD
+HELP TEXT for that dial**, under a sentence saying both figures come from the
+dict. They did not: 4.67x is calc 1.17.7 and the dict derived 3.42x. So the
+dashboard told a reader 4.67x, the banner beside it said 3.42x, and the release
+running measures 8.11x. Both are de-typed now, and `run_pipeline.py`'s ore
+formatter lost a third copy in the same pass. **Deriving one figure in a file
+does not make the file derive that figure** -- this project's own lesson, found
+again in a file whose comment says numbers must never be typed in it.
 
 ## calc v1.21.2
 

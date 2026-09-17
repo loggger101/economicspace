@@ -306,7 +306,7 @@ case "$ACTION" in
     echo "  beneficiated, with the programme search on.  This preset overrides"
     echo "  nothing; it is what a configure-nothing run does.  Measured"
     echo "  2026-09 on the reference host: Stage 4 alone is"
-    echo "  2.7 h at cislunar and 6.1 h at earth_surface.  Ctrl-C is safe;"
+    echo "  3.2 h at cislunar and 6.1 h at earth_surface.  Ctrl-C is safe;"
     echo "  each stage writes its CSV before the next one starts."
     echo
     exec "$PY" run_pipeline.py --preset full --destination "$DEST" $YES

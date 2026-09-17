@@ -97,6 +97,7 @@ import ast
 import contextlib
 import importlib.util
 import io
+import json
 import os
 import re
 import sys
@@ -1063,6 +1064,88 @@ CLAUDE_REGISTER = re.compile(r"^\|.*28-cell wall clocks.*\|$", re.M)
 LAUNCHER_HOURS = re.compile(r"([\d.]+) h at ([a-z_]+)")
 
 
+# The campaign harness writes one JSON per cell it finishes: a per-cell
+# `*.status.json` and, for a queue, a `*.progress.json` holding a `done` list of
+# the same records.  Both carry `wall_s` and `calc_version`, both are committed,
+# and between them they are the only machine-readable record of what a cell
+# actually took.  That makes them the right thing to pin a typed constant to.
+CELL_LOGS = os.path.join(REPO, "campaign", "logs")
+
+
+def _measured_cells_on_disk(destination, calc_version):
+    """`{(benef, search): wall_s}` for one destination at one release.
+
+    Reads every campaign log rather than a named file, because a cell can have
+    been measured by `run_cell.py` (its own status file) or inside a queue (one
+    progress file holding several), and which one a given cell went through is
+    not something a check should have to know.
+    """
+    found = {}
+    if not os.path.isdir(CELL_LOGS):
+        return found
+    for fn in sorted(os.listdir(CELL_LOGS)):
+        if not fn.endswith(".json"):
+            continue
+        try:
+            with io.open(os.path.join(CELL_LOGS, fn), encoding="utf-8") as fh:
+                blob = json.load(fh)
+        except (ValueError, OSError):
+            continue
+        records = blob.get("done") if isinstance(blob.get("done"), list) else [blob]
+        for rec in records:
+            if not isinstance(rec, dict) or rec.get("rc") not in (0, "0"):
+                continue
+            if rec.get("destination") and rec["destination"] != destination:
+                continue
+            if not rec.get("destination") and not str(
+                    rec.get("cell", "")).startswith(destination + "__"):
+                continue
+            if str(rec.get("calc_version")) != calc_version:
+                continue
+            if rec.get("wall_s") is None:
+                continue
+            key = (rec.get("ore") == "benef", rec.get("search") == "on")
+            found[key] = float(rec["wall_s"])
+    return found
+
+
+def _check_cell_seconds(_m, cells, bad):
+    """`MEASURED_CELL_SECONDS` against the campaign logs it was measured from.
+
+    ⚠️  A MISSING LOG IS A FAILURE, NOT A SKIP.  This repo has now found six
+    checks that could not run and said they passed anyway, and the constant
+    this one guards is printed to a user on every run.  If the release stamped
+    on the constant has no finished cislunar cells behind it on disk, the right
+    answer is that nobody can tell where those four numbers came from.
+    """
+    stamp = getattr(_m, "MEASURED_CELL_CALC", None)
+    if stamp is None:
+        bad.append("master has MEASURED_CELL_SECONDS but no "
+                   "MEASURED_CELL_CALC saying which release measured it")
+        return 0
+    logged = _measured_cells_on_disk("cislunar", stamp)
+    if not logged:
+        bad.append("MEASURED_CELL_SECONDS is stamped calc %s and "
+                   "campaign/logs has no finished cislunar cell at that "
+                   "release to check it against" % stamp)
+        return 0
+    n = 0
+    labels = {(False, False): "raw N=1", (False, True): "raw searched",
+              (True, False): "benef N=1", (True, True): "benef+searched"}
+    for key, lab in sorted(labels.items()):
+        if key not in logged:
+            bad.append("MEASURED_CELL_SECONDS has %s and campaign/logs has no "
+                       "cislunar %s at calc %s" % (lab, lab, stamp))
+            continue
+        n += 1
+        # The logs carry tenths; the constant is whole seconds by convention.
+        if abs(cells[key] - logged[key]) > 1.0:
+            bad.append("MEASURED_CELL_SECONDS %-15s says %d s, "
+                       "campaign/logs says %.1f s"
+                       % (lab, cells[key], logged[key]))
+    return n
+
+
 def check_runtime() -> bool:
     """README's whole 28-cell wall-clock table, against `MEASURED_DEST_SECONDS`.
 
@@ -1079,6 +1162,12 @@ def check_runtime() -> bool:
     anyway, because the only row anybody had pinned was cislunar's own.  A
     check that reads one row of a table is a check on that row, not on the
     table.
+
+    Since 2026-09-16 it covers a second dict as well.  `MEASURED_CELL_SECONDS`
+    is no longer the cislunar row of this one -- it is the same cell one
+    release later, which is what a banner should quote -- so the identity that
+    used to be asserted here is gone and `_check_cell_seconds` pins those four
+    to the campaign logs instead.
     """
     try:
         sys.path.insert(0, REPO)
@@ -1103,17 +1192,15 @@ def check_runtime() -> bool:
     n = 0
     labels = ["raw N=1", "raw searched", "benef N=1", "benef+searched"]
 
-    # -- the cislunar row of the dict must BE MEASURED_CELL_SECONDS ------------
-    # These are one measurement with two readers, and the derivation is what
-    # makes that true; assert it rather than trusting it, because a hand-edit
-    # that re-typed the cislunar row would reintroduce the second copy the
-    # whole block exists to prevent.
-    want_cis = (cells[(False, False)], cells[(False, True)],
-                cells[(True, False)], cells[(True, True)])
-    if tuple(dests.get("cislunar", ())) != want_cis:
-        bad.append("MEASURED_CELL_SECONDS %s is not the cislunar row of "
-                   "MEASURED_DEST_SECONDS %s"
-                   % (list(want_cis), list(dests.get("cislunar", ()))))
+    # -- MEASURED_CELL_SECONDS against the logs it was measured from ----------
+    # 🚨  THIS USED TO ASSERT THAT THE TWO DICTS AGREED ON CISLUNAR, and that
+    # assertion was retired on 2026-09-16 rather than broken: they are two
+    # measurements of one cell at two releases now, so agreement would be the
+    # defect.  What replaces it has to be stronger, or unpicking the derivation
+    # would have cost a check.  It is: the four seconds are compared against
+    # `campaign/logs/*.json`, the artifacts the run itself wrote, so the
+    # constant is pinned to a measurement rather than to a second copy of one.
+    n += _check_cell_seconds(_m, cells, bad)
 
     # -- README's table, every row --------------------------------------------
     readme = read(os.path.join(REPO, "README.md"))
@@ -1167,9 +1254,14 @@ def check_runtime() -> bool:
                            "destination" % (fn, dest))
                 continue
             n += 1
-            want = round(dests[dest][3] / 3600.0, 1)
+            # `expected_cell_seconds`, not the campaign table: cislunar has
+            # been re-measured since and a menu quoting hours should quote the
+            # newest figure the destination has.  It is a LEVEL per row and
+            # never a ratio between rows, which is the one thing that accessor
+            # refuses to be used for.
+            want = round(_m.expected_cell_seconds(dest, True, True) / 3600.0, 1)
             if abs(float(got_s) - want) > 0.05:
-                bad.append("%s says %s h at %s, MEASURED_DEST_SECONDS says "
+                bad.append("%s says %s h at %s, expected_cell_seconds says "
                            "%.1f h" % (fn, got_s, dest, want))
 
     print("9. runtime     %d cells checked, %d mismatched" % (n, len(bad)))

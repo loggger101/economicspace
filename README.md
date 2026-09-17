@@ -220,7 +220,7 @@ semantics, so `./run.sh quick leo` does what `run.bat quick leo` does:
 ./run.sh quick     400-row sample, all four stages
 ./run.sh rerun     Stage 4 only, against the catalogs already on disk
 ./run.sh standard  20,000-row sample, Stage 4 only
-./run.sh full      THE PIPELINE DEFAULTS (2.7 h at cislunar, 6.1 h at earth_surface)
+./run.sh full      THE PIPELINE DEFAULTS (3.2 h at cislunar, 6.1 h at earth_surface)
 ./run.sh verify    verify_stage3.py, then verify.py against the newest baseline
 ./run.sh campaign  the resumable measurement queue
 ./run.sh ui        the dashboard, in the foreground, reachable over the network
@@ -261,7 +261,7 @@ run.bat ui         open the dashboard (hands off to _START HERE.vbs, then
 run.bat quick      400-row sample, all four stages
 run.bat rerun      Stage 4 only, against the catalogs already on disk
 run.bat standard   20,000-row sample, Stage 4 only
-run.bat full       THE PIPELINE DEFAULTS (2.7 h at cislunar, 6.1 h at earth_surface)
+run.bat full       THE PIPELINE DEFAULTS (3.2 h at cislunar, 6.1 h at earth_surface)
 run.bat verify     verify_stage3.py, then verify.py against the baseline
 run.bat build      rebuild master.py from modules/
 run.bat help       run_pipeline.py --help
@@ -973,7 +973,7 @@ py verify_docs.py
 | 6 | dashes | an em- or en-dash creeping back into prose a reader sees, or a line left opening with a bare comma by the pass that removed them: the docs, the root scripts, the campaign scripts, and comments in `modules/` |
 | 7 | manifests | a list documented in one place drifting from the list defined in another: `requirements.txt` against `_MASTER_REQUIRED`, and the `run.bat` block above against run.bat's own dispatcher |
 | 8 | help | a config dial the dashboard renders with no help text, because the UI scrapes its help from the field's own comment |
-| 9 | runtime | the **whole twenty-eight-cell** wall-clock table above drifting from `calc.MEASURED_DEST_SECONDS`, which every banner and `--help` string derives its cost ratios from; also CLAUDE.md's copy of the cislunar row, the identity between the two dicts, and every "N h at &lt;destination&gt;" in `run.bat`, `run.sh` and this file, which are typed because shell cannot import `master` |
+| 9 | runtime | the **whole twenty-eight-cell** wall-clock table above drifting from `calc.MEASURED_DEST_SECONDS`; also CLAUDE.md's copy of the cislunar row, `calc.MEASURED_CELL_SECONDS` (the cislunar cells at the current release, which every banner and `--help` string derives its cost ratios from) against the `campaign/logs/` JSON that measured it, and every "N h at &lt;destination&gt;" in `run.bat`, `run.sh` and this file, which are typed because shell cannot import `master` |
 | 10 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
 | 11 | docstrings | a module, class or function in the repo's own Python with no docstring |
 | 12 | pairs | one measurement quoted in BOTH README and CLAUDE.md without a row on CLAUDE.md's register of known copies |
@@ -1036,7 +1036,10 @@ v1.16.0 figures were still being *printed on every run* three releases after
 the measurement that retired them. Those ratios now derive from one dict,
 `calc.MEASURED_CELL_SECONDS`, so a re-measurement moves `--help`, both run
 banners and the dashboard estimate at once; check 9 holds the table above to
-the same numbers, so the docs cannot drift from it either.
+`calc.MEASURED_DEST_SECONDS`, so the docs cannot drift from it either, and
+holds `MEASURED_CELL_SECONDS` to the `campaign/logs/` JSON the run that
+measured it wrote, so the constant itself is pinned to a measurement rather
+than to somebody's typing.
 
 ✅  **Check 12 is the one hunt in this project that was prescribed in prose and
 rebuilt from memory every time it ran.** CLAUDE.md describes it exactly, "
@@ -1843,8 +1846,15 @@ default cell lands within 0.3% and the raw figure is 10.7% low.
 four are FASTER than their campaign counterparts and one is slower, but the
 campaign cells were measured across four days in separate sessions, and this
 release's own finding is that a ratio taken across a session is a measurement
-of the session. `MEASURED_CELL_SECONDS` is unchanged and still holds the
-v1.17.7 set, so every derived runtime banner still quotes that release.
+of the session.
+
+✅  **They ARE what `MEASURED_CELL_SECONDS` holds as of 2026-09-16**, so the
+banners, `--help` and the dashboard estimate now quote this release rather
+than the campaign's. What that dict is for is the LEVEL of the cell somebody
+is about to run; the seven-destination SPAN stays on the campaign table, where
+every row shares one release. 🚨  **This paragraph said the dict "still holds
+the v1.17.7 set" and that was wrong when it was written**: it held the 2026-09
+campaign row, one release back, not the one before that.
 
 ✅  **The evaluable set did not move by a single row.** That is the invariant
 worth reading: this release put a second price tier inside the payload
@@ -1861,9 +1871,10 @@ has failed four times.
 ⚠️  **Do not read the wall clock as a ratio against the 9,878 s the same
 cell took on v1.21.2.** The two runs are five days apart in separate sessions,
 and this release's own finding is that a ratio taken across a session is a
-measurement of the session. `MEASURED_CELL_SECONDS` is unchanged and still
-holds the v1.17.7 set, so every derived runtime banner still quotes that
-release.
+measurement of the session. What IS comparable across the two is the work each
+did: this cell prices **7.4% fewer** programme options than its campaign
+counterpart and still takes longer, which is a statement about the cost of a
+rung rather than about the number of them.
 
 The population detail, the rows that got worse and why, the structural moves
 and the full invariant results are in
