@@ -452,7 +452,7 @@ combination, not a product of the parts.**
 ### Runtime: NOT measured, and the reason is worth more than the number
 
 ℹ️  **One full-catalog cell has been run since, on 2026-09-16, and it is a wall clock rather than a ratio**; see
-[the first full-catalog cell at these defaults](#the-first-full-catalog-cell-at-these-defaults-2026-09-16).
+[the full-catalog cislunar 2x2 at these defaults](#the-full-catalog-cislunar-2x2-at-these-defaults-2026-09-16).
 Nothing below is superseded by it: the objection is to the RATIO, and one cell measured
 five days after another in a separate session cannot supply one.
 
@@ -563,17 +563,35 @@ inside the cost cascade to silence a checker is not something this project
 does. The floor is six orders of magnitude above the residue and far below any
 mass the model can mean.
 
-### The first full-catalog cell at these defaults (2026-09-16)
+### The full-catalog cislunar 2x2 at these defaults (2026-09-16)
 
 The subsection above says no runtime table is published for this release and
 that `MEASURED_CELL_SECONDS` still holds v1.17.7 figures. This is the cell that
 closes the first half of that gap and deliberately does not close the second.
 
-**cislunar, beneficiated, programme search on, every row of the 1,555,667-row
-catalog, 12 workers, calc `1.22.0` at its own defaults.** Stages 1-3 were not
+**All four cislunar cells, every row of the 1,555,667-row catalog, 12 workers,
+calc `1.22.0` at its own defaults, 18,586 s in total.** Stages 1-3 were not
 run; the live Stage 2 catalog was verified byte-identical to
 `campaign/stage2/mineral_value_catalog.cislunar.csv` before launch, so the
 2026-09-09 price epoch is the one the 28-cell campaign used.
+
+⚠️  **The four are ONE construction, deliberately.** Every cell was run as
+`--preset full` with the two axes laid on top, because `resolve()` applies the
+preset first and explicit flags after it. `campaign/run_cell.py` would have used
+the default preset plus overrides, which leaves `jpl_limit` differing between
+cells; Stage 4 never reads it, so it cannot move a number, but it would make
+the 2x2 four constructions rather than one, and comparability across the square
+is the whole reason for running it.
+
+| cell | best | evaluable | wall |
+|---|---|---|---|
+| raw, N = 1 | **5.3483x** | 650,921 | 735 s |
+| raw, searched | **3.9218x** | 650,921 | 1,439 s |
+| beneficiated, N = 1 | **4.5298x** | 660,253 | 4,737 s |
+| **beneficiated + searched** (default) | **3.1822x** | 660,253 | 11,676 s |
+
+The default cell is the one measured first and described in detail below; the
+other three landed on the same day.
 
 | | v1.21.2 (the campaign) | **v1.22.0 (this run)** |
 |---|---|---|
@@ -724,14 +742,120 @@ deliberately: it holds four cells measured as a set, and replacing one of them
 with a figure from a different release would make the dict internally
 incomparable, which is exactly what it was rebuilt to prevent.
 
+#### The whole square against v1.21.2
+
+Every cell reproduces its campaign counterpart's evaluable count exactly, and
+no cell's winner is worse:
+
+| cell | v1.21.2 | v1.22.0 | factor | median improvement | rows worse |
+|---|---|---|---|---|---|
+| raw, N = 1 | 15.3937x | 5.3483x | **2.878x** | +61.24% | **0** |
+| raw, searched | 9.5435x | 3.9218x | **2.433x** | +54.61% | 168 |
+| benef, N = 1 | 14.1071x | 4.5298x | **3.114x** | +66.38% | **0** |
+| benef, searched | 6.6622x | 3.1822x | **2.094x** | +57.54% | 251 |
+
+🚨  **THE REGRESSIONS ARE CONFINED TO THE SEARCHED CELLS, AND THAT PROVES
+THE MECHANISM RATHER THAN MERELY AGREEING WITH IT.** The single-cell note above
+argued from the 251 rows' position on the ladder that the cause is the learning
+curve's withdrawal. The learning curve is **exactly inert at N = 1**, so if
+that reading is right the N = 1 cells must carry ZERO regressions. They do:
+**0 of 650,921 and 0 of 660,253**, against 168 and 251 in the searched cells.
+A hypothesis about a programme-scale term, checked on the cells where no
+programme exists, is a much stronger test than the ladder position it was
+formed from.
+
+⚠️  **The capped-sample projection was good on the default cell and
+noticeably worse on raw ore.** The release note projects **2.6x on raw and 2.1x
+on the default cell**. Measured: **2.878x** and **2.094x**, so the default
+cell lands within 0.3% and the raw figure is **10.7% low**. The raw number is
+the one a reader reaches for when rescaling an older raw cell, which is the
+worse of the two to be wrong about.
+
+✅  **Both N = 1 cells share a maximum r of 0.5863**, i.e. even the
+least-improved row of either improves by 41.4%, and the bound is identical
+across ore states. At N = 1 three of the four flips are pure removals of a
+charge and the fourth is inert, so the floor on how little they can help is a
+property of the cost cascade rather than of the ore.
+
+#### Invariants on the full population
+
+`campaign/analyse.py`'s own `never_worse`, `mass_ledger` and
+`programme_invariants`, called on these four frames rather than restated:
+
+| pairing | pairs | max r | worse | declined | median |
+|---|---|---|---|---|---|
+| benef <= raw, search OFF | 650,921 | 1.000000 | **0** | 56,707 | +51.6% |
+| benef <= raw, search ON | 650,921 | 1.000000 | **0** | 80,528 | +47.7% |
+| search ON <= OFF, raw | 650,921 | 1.000000 | **0** | 4 | +39.3% |
+| search ON <= OFF, benef | 660,253 | 0.997496 | **0** | 0 | +39.0% |
+
+🚨  **THIS IS THE CHECK THIS RELEASE MOST NEEDED AND HAD ONLY EVER HAD ON
+155 ROWS.** Selling the surplus at a discount RAISES revenue toward the
+unbounded case, and the whole argument of check 7 is that it must never pass
+it. Four pairings, **zero exceptions on roughly 650,000 paired rows each**, is
+the population-scale statement of that, and it is what the 2x2 buys beyond four
+more headline numbers.
+
+- **mass ledger**: `max |error| 0.000000000 kg` on all four cells
+- **programme structure**: `N = F x W` on every row of both searched cells, and
+  `W > trips` never
+- **market columns** at check 7's thresholds: clean on all four cells, and
+  `unsold_payload_kg` above a milligram is **0 rows in the whole square**
+
+#### A ceiling is nearly inert without the search
+
+| cell | rows a ceiling binds | rows selling surplus |
+|---|---|---|
+| raw, N = 1 | 0.32% | 2,110 |
+| raw, searched | **15.68%** | 102,079 |
+| benef, N = 1 | 0.02% | 114 |
+| benef, searched | 6.53% | 32,349 |
+
+✅  **A capacity ceiling is an ANNUAL allowance, so a single delivery barely
+reaches one**: 0.02% of beneficiated rows at N = 1 against 6.53% searched, and
+0.32% against 15.68% on raw ore. The market model is very nearly inert on a
+single-mission run, which is worth knowing before attributing anything in an
+N = 1 cell to it.
+
+⚠️  **And beneficiation RELIEVES the ceiling on the searched cells**,
+15.68% to 6.53%, because concentrating is exactly the way to sell the same
+value in fewer kilograms. That is the same direction the 28-cell campaign
+reports at every destination except `cislunar`, which under a hard wall was the
+exception; under a discounted surplus it is not.
+
+#### Programme structure, and the rig's last trips
+
+| | v1.21.2 | v1.22.0 |
+|---|---|---|
+| `W < trips`, raw searched | 20.86% | **8.131%** |
+| `W < trips`, benef searched | 22.14% | **3.509%** |
+| fleet median, raw / benef | 3 / 6 | **2 / 4** |
+| N median, raw / benef | 12 / 30 | **10 / 20** |
+
+🚨  **THE RIG'S LAST TRIPS COME BACK ON BOTH SEARCHED CELLS, AND THE THREE
+POINTS NOW MAKE A SEQUENCE.** On the 2026-08 `elasticity` campaign `W < trips`
+ran **0.319%** at cislunar raw searched; calc v1.21.0's hard wall took it to
+**20.86%**; selling that campaign's load at half price brings it back to
+**8.131%**. A demand curve always permitted the sale at a worse price, a wall
+refused it outright, and a discount is between the two -- so the diagnostic
+lands between the two, which is the behaviour a reader should expect and is
+better evidence than either endpoint alone.
+
 #### What this does NOT settle
 
-⚠️  **One cell of four.** The raw and N = 1 cislunar cells have not been
-run at these defaults, so nothing here checks the never-worse pairings, and the
-`benef <= raw` relation at v1.22.0 rests on the 155-row verification cells
-rather than on a population. The other six destinations are untouched, so the
+⚠️  **One destination of seven.** The other six are untouched, so the
 28-cell matrix stands as the only seven-destination measurement and every claim
-it carries is still a v1.21.2 claim.
+it carries is still a v1.21.2 claim. The two destinations whose ORDERING
+against cislunar is close, `mars_orbit` at 11% on the default cell, cannot be
+re-ranked from this square.
+
+⚠️  **`MEASURED_CELL_SECONDS` is still unchanged, and the temptation to
+update it is now stronger and still wrong.** A complete cislunar 2x2 at
+v1.22.0 looks like exactly what that dict holds. But it is the cislunar ROW of
+`MEASURED_DEST_SECONDS`, whose other six rows are v1.21.2, and `dest_cost_span()`
+computes a span ACROSS destinations; a single row from another release would
+make that span a measurement of a release difference wearing a destination's
+name. Re-measure all seven or none.
 
 ✅  **The worked calculation was regenerated against this row** and
 reproduces it: **88 derived quantities, 87 bit-exact, 1 within 1e-12, 0
