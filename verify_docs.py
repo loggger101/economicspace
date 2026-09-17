@@ -34,6 +34,9 @@ counts-in-prose failure this file was written to catch:
                      carries one
    12. pairs         no measurement is quoted in BOTH README and CLAUDE.md
                      without a row on CLAUDE.md's register of known copies
+   13. scope         which checks `verify.py` runs, against every sentence in
+                     either file that says -- its own docstring list, README's
+                     table, and the four claims about what a subcommand covers
 
     py verify_docs.py                       # every check except 10
     py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 10
@@ -1473,6 +1476,182 @@ def check_transfer(before: str, after: List[str]) -> bool:
 
 
 # --------------------------------------------------------------------- driver
+# --------------------------------------------------------- 13. harness scope
+# Every section `verify.py` PRINTS, as `print("\n<N>. <NAME>")`.  That is the
+# ground truth for "which checks are there", because it is what a run emits and
+# what every document tells a reader to count.
+VERIFY_SECTION = re.compile(r'print\(\s*"\\n(\d+)\.\s')
+
+# A numbered line of the module docstring's own list of checks.
+VERIFY_LIST_ITEM = re.compile(r"^ {4}(\d+)\.\s+\S", re.M)
+
+# README's table of what each check catches: "| 4 | mass ledger | ... |".
+#
+# ⚠️  ANCHORED ON ITS SECTION, BECAUSE README CARRIES TWO SUCH TABLES.  The
+# other one is `verify_docs.py`'s own checks, under the same "| # | check |"
+# heading a few hundred lines away, and a pattern loose enough to read one
+# reads both -- which on the first run of this check reported that verify.py
+# ran twelve checks.  Two tables of the same shape in one document is exactly
+# what this repo's register discipline is about.
+README_VERIFY_SECTION = "## Verifying a change"
+README_CHECK_HEADER = "| # | check | catches |"
+README_CHECK_ROW = re.compile(r"^\| (\d+) \|", re.M)
+
+# Every sentence that claims WHICH checks a subcommand runs.  All four forms
+# this repo has actually used, in both files: a comment on the usage line, the
+# BUDGET paragraph, and README's prose.  A claim written in a fifth form is not
+# checked, which is why the message says to write it like one of these.
+SCOPE_CLAIM = (
+    re.compile(r"verify\.py invariants\s+# ([\d, to]+?) only; needs no baseline"),
+    re.compile(r"`py verify\.py invariants` runs ([\d, to and]+?) and needs no"),
+    re.compile(r"--skip prune parallel  # ~5 min: ([\d, to and]+)$", re.M),
+    re.compile(r"turns off 2 and 3 and leaves ([\d, to and]+?) running"),
+)
+
+
+def _numbers(text):
+    """The check numbers a phrase like "1 and 4 to 7" names, expanded."""
+    out, parts = set(), re.split(r",| and ", text)
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        span = re.match(r"^(\d+)\s*(?:to|-)\s*(\d+)$", part)
+        if span:
+            out.update(range(int(span.group(1)), int(span.group(2)) + 1))
+        elif part.isdigit():
+            out.add(int(part))
+    return out
+
+
+def _function_body(src, name):
+    """One top-level function's source, by slicing between `def` lines."""
+    start = src.index("def %s(" % name)
+    rest = src.find("\ndef ", start)
+    return src[start:rest if rest != -1 else len(src)]
+
+
+def check_harness_scope() -> bool:
+    """Which checks `verify.py` runs, against every document that says.
+
+    🚨  THIS EXISTS BECAUSE THE COUNT ROTTED IN THE FILE NAMED AS ITS OWN
+    AUTHORITY.  CLAUDE.md and README both tell a reader to count the checks in
+    `verify.py`'s header rather than quote a number; on 2026-09-16 that header
+    was wrong in three places at once and README in a fourth, all of them
+    omitting check 7, which had landed a release earlier.  `cmd_check`'s own
+    docstring records the same rot being found and fixed ONCE before -- in the
+    docstring, not in the header ten lines above it, which is this repo's
+    standing failure of fixing one half of a defect class.
+
+    ⚠️  A count nothing checks is a number waiting to rot, and CLAUDE.md's rule
+    is that the fix is a checker or a deletion, never a correction.  Deleting
+    was not available here: a reader has to be told which subcommand runs what
+    before choosing one, and "count them" is the advice that failed.  So this
+    derives the answer from the code and holds all four claims to it.
+
+    Ground truth is what a run PRINTS, not what any list says, because the
+    numbering a reader sees on screen is the thing the documents are describing.
+    """
+    bad: List[str] = []
+    vp = os.path.join(REPO, "verify.py")
+    if absent(("verify.py",)):
+        print("13. scope      1 NOT ON DISK (verify.py)")
+        return False
+    src = read(vp)
+
+    runs = {}
+    for fn in ("cmd_check", "cmd_invariants"):
+        try:
+            runs[fn] = {int(n) for n in VERIFY_SECTION.findall(_function_body(src, fn))}
+        except ValueError:
+            bad.append("verify.py has no %s to read its sections from" % fn)
+            runs[fn] = set()
+    # Check 1 is printed as part of the baseline comparison rather than as a
+    # numbered banner, so it is added from the command that owns it instead of
+    # being inferred.  Asserting it is present keeps that from going stale too.
+    if runs.get("cmd_check") and 1 not in runs["cmd_check"]:
+        runs["cmd_check"].add(1)
+    every = runs.get("cmd_check", set())
+    n = 0
+
+    # -- the module docstring's own numbered list --------------------------
+    listed = {int(x) for x in VERIFY_LIST_ITEM.findall(src.split('"""')[1])}
+    n += 1
+    if listed != every:
+        bad.append("verify.py's docstring lists checks %s and it runs %s"
+                   % (sorted(listed), sorted(every)))
+
+    # -- README's table of what each check catches -------------------------
+    readme = read(os.path.join(REPO, "README.md"))
+    start = readme.find(README_VERIFY_SECTION)
+    if start == -1:
+        bad.append("README has no %r section to find the check table in"
+                   % README_VERIFY_SECTION)
+        section = ""
+    else:
+        # To the next heading of ANY level, not the next `##`: "Verifying a
+        # change" has five `###` subsections under it and the last of them
+        # carries verify_docs.py's own check table, in the same shape.
+        nxt = re.search(r"^#{2,6} ", readme[start + 1:], re.M)
+        section = (readme[start:start + 1 + nxt.start()] if nxt
+                   else readme[start:])
+    # From the table's own header to the first line that is not a row, rather
+    # than by matching row TEXT: check 6 is "Stage 2 tables" and a pattern
+    # keyed on a lower-case name silently dropped it, so the check quietly
+    # measured six of seven -- which is the defect this check exists for,
+    # committed inside the check itself on its first run.
+    head = section.find(README_CHECK_HEADER)
+    rows = ""
+    if head == -1:
+        bad.append("README's %r section has no %r table"
+                   % (README_VERIFY_SECTION, README_CHECK_HEADER))
+    else:
+        for line in section[head:].split("\n")[2:]:
+            if not line.startswith("|"):
+                break
+            rows += line + "\n"
+    tabled = {int(x) for x in README_CHECK_ROW.findall(rows)}
+    n += 1
+    if tabled != every:
+        bad.append("README's check table under %r covers %s and verify.py "
+                   "runs %s" % (README_VERIFY_SECTION, sorted(tabled),
+                                sorted(every)))
+
+    # -- every claim about what a subcommand runs --------------------------
+    # `invariants` is whatever cmd_invariants prints; the `--skip` loop is
+    # everything cmd_check prints minus the two checks the flag turns off.
+    want = {"invariants": runs.get("cmd_invariants", set()),
+            "skip": every - {2, 3}}
+    found = 0
+    for text, where in ((src, "verify.py"), (readme, "README.md")):
+        for pattern in SCOPE_CLAIM:
+            for claim in pattern.findall(text):
+                found += 1
+                n += 1
+                got = _numbers(claim)
+                # Which claim this is: the two `--skip` forms name 2 and 3, the
+                # two `invariants` forms do not.
+                key = "skip" if "skip" in pattern.pattern or "turns off" in pattern.pattern \
+                    else "invariants"
+                if got != want[key]:
+                    bad.append("%s says %r runs %s, the code runs %s"
+                               % (where, claim.strip(), sorted(got),
+                                  sorted(want[key])))
+    if found < 4:
+        # Not a skip.  These sentences are the thing this check exists for, and
+        # a reworded one that no pattern matches is silently unchecked -- which
+        # is how the rot got in.
+        bad.append("only %d of the 4 known scope sentences matched; one has "
+                   "been reworded, so rewrite it in the existing form or add "
+                   "the form to SCOPE_CLAIM" % found)
+
+    print("13. scope      %d claims checked against verify.py's %d checks, "
+          "%d wrong" % (n, len(every), len(bad)))
+    for b in bad:
+        print("     ! " + b)
+    return not bad
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run every check except 10, plus 10 if `--before` names a snapshot.
 
@@ -1506,7 +1685,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                check_help,
                check_runtime,
                check_docstrings,
-               check_pairs):
+               check_pairs,
+               check_harness_scope):
         ok = fn() and ok
     if args.before:
         if len(args.before) < 2:
