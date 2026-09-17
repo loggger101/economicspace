@@ -2542,6 +2542,66 @@ input rather than an output, so no column names it and no comparison misses it.
 also on the page?** Where the answer is no, the page is asking to be trusted,
 which is the one thing a worked calculation must never do.
 
+✅  **BOTH HALVES ARE `py campaign/worked_calculation.py --audit` NOW, AND
+THAT IS THE POINT OF THIS ENTRY RATHER THAN A FOOTNOTE TO IT.** The audit
+above was run by hand once per release and thrown away each time; between
+them it found `hardware_cost_usd`, `profit_usd`, three cost lines rendering at
+two significant figures, a ceiling the page never mentioned and three text
+columns. A check that finds several defects on every run it is given and is
+then discarded is the habit `verify.py`'s header is a list of the cost of,
+and it had been repeated twice on this document before anybody noticed it was
+the same habit. **`--audit` implies the derivation, so it renders the page and
+takes about as long as a build.**
+
+✅  **The rates half is RECORDED rather than listed**, which is what makes it
+total. A hand-maintained list of constants to look for would be a second copy
+of what the derivation reads; instead `val` and the two `Recorded`
+reference-table rows log every constant they hand out, so the audit's list IS
+the derivation's list and a rate added to the cascade tomorrow joins the audit
+with no edit. ⚠️  A DEFAULT IS NOT A RATE: a column an older table does not
+carry is a fallback this derivation chose, not a figure a reader could look
+up, so the miss is not logged.
+
+🚨  **AND THE FIRST VERSION OF IT MATCHED 99 OF 100 COLUMNS AFTER EVERY ONE
+HAD BEEN MOVED BY 31%.** Its test was that a page number is consistent with
+the column at the precision it was printed to, which is the right test and is
+not sufficient: a page printing a bare `0` is consistent with any cost in the
+model once the audit is allowed to look in millions and billions, and a bare
+`3` with anything from 2.5 to 3.5 at six unit scales at once. It reported the
+page complete, and it would have reported almost any page complete.
+
+✅  **The fix is that a match must PIN the value, not merely fail to
+contradict it**: the page number has to agree to within a percent, or be
+exact. Bare integers are then matched exactly or not at all, which is the
+right answer for a fleet size and costs nothing, because every formatter on
+the page renders a real measurement to at least three significant figures.
+
+🚨  **THE GENERAL RULE IS THE ONE THIS FILE KEEPS ARRIVING AT FROM NEW
+DIRECTIONS, AND HERE IT IS ABOUT A CHECKER RATHER THAN A DIAGNOSTIC: MEASURE
+A CHECK BY FEEDING IT WRONG ANSWERS.** Both versions printed the same clean
+line on the same page; nothing about the output distinguished the one that
+worked from the one that could not fail. The sibling entries say a diagnostic
+that has gone constant reads exactly like a clean result, and that a skip you
+have read is not a skip you have measured. **A matcher that accepts
+everything is the third member of that family**, and it is the one a clean
+run cannot reveal, because a check that cannot fail has no failing case to
+show you. So the audit now perturbs every number and prints how many still
+find a home, **on every run, beside the result it qualifies** -- one figure
+is the answer and the other is what the answer is worth.
+
+⚠️  **A FALSE POSITIVE IS ANSWERED BY SHARING THE PAGE'S RULE, NOT BY
+EXEMPTING THE COLUMN.** On the best case the audit reported `comp_group`
+(`D-type`) absent, correctly: the header prints `2021 CX5 (D)` and drops a
+group that only restates the letter, which is a deliberate and good decision.
+The tempting fix is a row in the exemption list. It is the wrong one, because
+the header keeps the group where it says something the letter does not --
+`X-complex` beside an `M` -- and a flat exemption stops checking **exactly the
+bodies where the column carries information**. The renderer's condition is now
+one function that the audit calls, so the two cannot drift; the page rendered
+byte-identical afterwards, which is what says it was a de-duplication rather
+than a change. **An exemption is a claim about a COLUMN; this was a claim
+about a ROW, and only the renderer knows which.**
+
 ### A FLIPPED DEFAULT BREAKS EVERY READER THAT INFERS A RUN FROM THE CONFIG
 
 This file already records the harness side of this: when calc `1.21.0` made
@@ -3582,6 +3642,26 @@ single-release artifact, and making `candidate_sources` GLOB `campaign/cells/`
 would undo the property that makes a suffixed archive safe in the first place,
 since every re-measurement would then compete with the campaign's own cells for
 the document.
+
+✅  **AND THE RUN SAYS SO NOW, WHICH IS THE HALF THAT WAS MISSING.** The
+sentence above ends "and said nothing about it", and that was the whole
+defect: both halves of the design are right and the COMBINATION was silent.
+A no-flag run now prints the suffixed archives it did not compare and the
+`--catalog` line that reaches each. 🚨  **Listing is not selecting**, which is
+the distinction that keeps this from being the globbing that was declined: the
+selection still cannot pick one of these files, it can only tell you they are
+there. **A selection that cannot see a file must say so** -- the sibling
+lesson is the one about a check that reads one row of a table, and this is
+that lesson about a chooser rather than a checker.
+
+🚨  **IT ALSO RANKED ACROSS RELEASES WITHOUT SAYING SO, WHICH IS THE SUBTLER
+HALF.** The ledger is a single-release artifact by design and the live catalog
+is whatever ran last, so the comparison routinely orders two different models:
+it called **4.5298x** at calc `1.22.0` the best case over **6.6622x** at
+`1.21.2`, which is not a better mission so much as a cheaper model. Both lines
+name their release now. **This file's standing rule about wall clocks applies
+unchanged to objectives, and to any other quantity a chooser sorts on: a
+figure is only ever true of the release it names.**
 
 ### RUNNING `verify.py` USED TO OVERWRITE THE LIVE STAGE 4 CATALOG
 

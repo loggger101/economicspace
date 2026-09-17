@@ -278,6 +278,28 @@ def english(items):
 
 
 # ───────────────────────────────────────────────────────────────── sections
+def group_restates_type(comp_group, spectral_type):
+    """True when the taxonomy GROUP adds nothing to the spectral LETTER.
+
+    `D-type` beside a `D` is one fact written twice, and the header drops the
+    group when that is all it is.  `X-complex` beside an `M` is two facts and
+    is kept.
+
+    🚨  THE COMPLETENESS AUDIT CALLS THIS TOO, AND THAT IS THE WHOLE REASON IT
+    IS A FUNCTION.  `comp_group` is an output column, so `--audit` asks the
+    page to show it; on a body where the header suppresses it the audit is
+    right that the string is absent and wrong that anything is missing.  The
+    alternative was an exemption for the column, which would have stopped it
+    being checked on exactly the bodies where it carries information -- the
+    header's rule and the audit's rule have to be ONE rule, or the next edit
+    to either silently pulls them apart.
+    """
+    if not comp_group:
+        return True
+    return (str(comp_group).lower().replace("-type", "")
+            == str(spectral_type or "").lower())
+
+
 def s_header(out):
     """Title block: what this document is about and how it was produced."""
     a = architecture(out)
@@ -289,11 +311,10 @@ def s_header(out):
         # and printing "D, D-type" reads as two facts where there is one.
         ("body", "%s  (%s%s)"
          % (body, esc(out["archived"].get("spectral_type", "type unknown")),
-            ", " + esc(C["comp_group"])
-            if C.get("comp_group")
-            and C["comp_group"].lower().replace("-type", "")
-            != str(out["archived"].get("spectral_type", "")).lower()
-            else "")),
+            "" if group_restates_type(
+                C.get("comp_group"),
+                out["archived"].get("spectral_type", ""))
+            else ", " + esc(C["comp_group"]))),
         # The ROW's destination, not the live config's.  See the guard in
         # `context`: those two disagreed silently until 2026-09-14, and this
         # line is where the disagreement was visible.
@@ -1490,19 +1511,54 @@ def s_power(out):
                            "separate and no ice to bake out"),
         ]
         if a["power"] != "rtg":
+            # 🚨  AND THE COUNTERFACTUAL HAS TO BE DERIVED TOO, OR IT IS JUST
+            # A NUMBER.  This branch was given `w_bare` and `dark_h` when a
+            # column audit found them missing, and the audit could not then
+            # see that `w_plant` below is a function of three MORE terms --
+            # the oversize factor, the storage's specific energy and the
+            # baseline dark period the 1 AU rating already pays for -- none of
+            # which is an output column.  So the fix landed on the half that
+            # had been measured and the other half stayed hidden for a
+            # release, which is this repo's most-repeated defect and is now
+            # caught by `--audit`'s rate half rather than by reading.
+            excess = max(0.0, C["dark_h"] - max(0.0, C["baseline_dark_h"]))
+            kg_per_w = 1.0 / C["w_plant"] if C["w_plant"] else 0.0
             rate += [
                 ("w_bare", "= w_1AU / a^2 = %s / %s^2 = %s W/kg"
                  % (prec(C["w_1au"], 6), prec(C["a_au"], 12),
                     prec(C["w_bare"], 12))),
+                ("oversize", "= ((1 - f) + f / eta) / (1 - f) = "
+                             "((1 - %s) + %s / %s) / (1 - %s) = %s"
+                 % (prec(C["dark_frac"], 4), prec(C["dark_frac"], 4),
+                    prec(C["storage_eff"], 4), prec(C["dark_frac"], 4),
+                    prec(C["oversize"], 12)),
+                 "the sunlit hours would have to run the load AND recharge "
+                 "the store"),
                 ("dark_h", "= min(P_rot / 2, %s) = %s h"
                  % (prec(C["max_dark_h"], 6), prec(C["dark_h"], 8)),
                  "CLAMPED" if C.get("dark_clamped") else
                  "half a rotation" if C.get("rot_measured") else
                  "half a rotation; none is measured, so the catalog median "
                  "is used"),
+                ("excess_h", "= max(0, dark_h - baseline) = max(0, %s - %s) "
+                             "= %s h"
+                 % (prec(C["dark_h"], 6), prec(C["baseline_dark_h"], 6),
+                    prec(excess, 12)),
+                 "only the storage ABOVE what the 1 AU rating already buys "
+                 "would be new mass"),
+                ("kg/W", "= oversize / w_bare + excess_h / e_storage = "
+                         "%s / %s + %s / %s = %s"
+                 % (prec(C["oversize"], 12), prec(C["w_bare"], 12),
+                    prec(excess, 12), prec(C["storage_wh_per_kg"], 6),
+                    prec(kg_per_w, 12))),
             ]
         rate.append(
-            ("w_plant", "= %s W/kg" % prec(C["plant_w_per_kg"], 12),
+            ("w_plant",
+             "= %s W/kg" % prec(C["plant_w_per_kg"], 12)
+             if a["power"] == "rtg" else
+             "= 1 / (kg/W) = %s W/kg" % prec(C["plant_w_per_kg"], 12),
+             "flat: a radioisotope source takes neither penalty"
+             if a["power"] == "rtg" else
              "what a plant on this body would cost per watt, had one been "
              "needed"))
         return "".join([
@@ -1514,10 +1570,12 @@ def s_power(out):
                  "still costs time, which is what bounds the payload; it just "
                  "does not cost watts."),
             deriv(rate),
-            para("Those last two are properties of the body rather than of "
-                 "the mission, and the model reports them on every row. They "
-                 "are what a concentrating mission to the same target would "
-                 "have paid for its watts."),
+            para("Everything under the draw is a property of the body "
+                 "rather than of the mission, and the model reports it on "
+                 "every row. It is what a concentrating mission to the same "
+                 "target would have paid for its watts, and it is derived "
+                 "here rather than asserted so that the comparison can be "
+                 "checked as easily as the mission that was flown."),
         ])
     # ⚠️  A DRAW WITH NO RATES BEHIND IT CANNOT BE CHECKED.  Excavation is
     # charged per kilogram MOVED, beneficiation per kilogram of product OUT,
