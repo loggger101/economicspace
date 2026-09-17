@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 """The worked-calculation document for the campaign's BEST cell, re-derived.
 
-`~/Documents/<body>_calculation.pdf` is a 20-page derivation of one cell: every
-equation, substitution and result behind the campaign's lowest cost/revenue
-ratio, in the order the model evaluates them.  This builds it.
+The document is a derivation of one cell: every equation, substitution and
+result behind the best case on disk, in the order the model evaluates them.
+This builds it.  ⚠️  A PAGE COUNT IS DELIBERATELY NOT STATED, here or in
+`campaign/README.md`.  Both said "20-page" while the document rendered at
+twelve, which is this repo's standing failure mode -- a number in prose that
+nothing checks -- committed about the file that exists to avoid it.
 
 WHY IT IS A SCRIPT AND NOT A DOCUMENT.  The first one was written by hand, for
 2014 WE121 at 9.5435x, and it was stale nine hours later: it was compiled on
@@ -171,6 +174,36 @@ DV_GTO_APOGEE_TO_GEO = circularise_at_geo(V_GTO_APOGEE)
 A_GEO_AEROCAPTURE = ((6_378.14 + 100.0) + R_GEO) / 2.0
 DV_GEO_AEROCAPTURE_ARRIVAL = circularise_at_geo(
     math.sqrt(MU_EARTH * (2.0 / R_GEO - 1.0 / A_GEO_AEROCAPTURE)))
+
+
+# The cruise-time fit, in years per m/s of delta-v.  Calibrated on CHEMICAL
+# transfers, which is why an electric stage takes a thrust-time floor instead
+# of this; see `mass_and_clock`.
+TAU_CRUISE_FIT_YR_PER_M_S = 0.00023
+
+# 🚨  THE CONSTANTS THE DERIVATION FIXES AT IMPORT, HANDED TO THE DOCUMENT
+# RATHER THAN RETYPED IN IT.  Every one of these already appears in an
+# expression above; what this dict adds is a NAME the renderer can print a
+# value against, so a nomenclature table can be a view of the derivation
+# instead of a second copy of it.  Nothing here is read by the derivation, and
+# nothing may be added here that is not already defined above: a constant whose
+# only definition is this dict is a number the model does not use.
+PHYSICS = {
+    "g0": G0,
+    "mu_earth": MU_EARTH,
+    "v_earth": V_EARTH,
+    "r_leo": R_LEO,
+    "r_moon": R_MOON,
+    "dv_nrho": DV_NRHO,
+    "dv_leo_deorbit": DV_LEO_DEORBIT,
+    "dv_aerobrake_trim": DV_AEROBRAKE_TRIM,
+    "dv_nrho_to_lunar_surface": DV_NRHO_TO_LUNAR_SURFACE,
+    "r_geo": R_GEO,
+    "v_geo": V_GEO,
+    "mu_mars": MU_MARS,
+    "a_mars_au": A_MARS_AU,
+    "tau_fit": TAU_CRUISE_FIT_YR_PER_M_S,
+}
 
 
 def ledger_rows():
@@ -438,7 +471,13 @@ def run_winner(path):
     if not len(usable):
         sys.exit("%s has no row with positive gross value" % path)
     ratio = usable["total_cost_usd"] / usable["gross_value_usd"]
-    return usable.loc[ratio.idxmin()]
+    row = usable.loc[ratio.idxmin()]
+    # Carried on the row rather than returned separately, so no caller's
+    # signature changes and nothing has to remember to thread it.  "The best
+    # case" is not a measurement until the page says what it beat.
+    row.attrs["population"] = int(len(usable))
+    row.attrs["rows"] = int(len(frame))
+    return row
 
 
 def archived_winner(cell, designation):
@@ -455,16 +494,26 @@ def archived_winner(cell, designation):
                  "campaign/cells/ is gitignored; re-run the cell or copy it in."
                  % path)
     needle = "%s," % designation
+    hits, total = [], 0
     with gzip.open(path, "rt", encoding="utf-8") as fh:
         header = fh.readline()
-        hits = [line for line in fh if needle in line]
+        for line in fh:
+            total += 1
+            if needle in line:
+                hits.append(line)
     frame = pd.read_csv(_lines(header, hits), float_precision="round_trip",
                         dtype={"designation": str})
     frame = frame[frame["designation"] == designation]
     if len(frame) != 1:
         sys.exit("expected one row for %s in %s, found %d"
                  % (designation, cell, len(frame)))
-    return frame.iloc[0]
+    row = frame.iloc[0]
+    # Counted while streaming, which costs nothing: the loop above already
+    # touches every line.  An archived cell holds evaluable rows only, so this
+    # is the evaluable population and not the catalog.
+    row.attrs["population"] = total
+    row.attrs["rows"] = total
+    return row
 
 
 def catalog_body(designation):
@@ -654,21 +703,40 @@ def knapsack(payload_kg, feed_kg, phases, recovery, caps=None, keys=None,
 
     remaining, total, mix = float(payload_kg), 0.0, {}
     surplus, taken = 0.0, {}
+    # The walk itself, recorded rung by rung so the document can show WHY each
+    # phase took what it took.  Nothing below reads it: it is appended to and
+    # never consulted, which is what makes it safe to add to a function every
+    # release is argued from.  A hold table without the supply beside it is a
+    # list of answers, and the two bounds -- you cannot load more of a phase
+    # than the feed contained, and the hold fills -- are invisible without it.
+    walk = []
     for name, frac, price, full in tiers:
         if remaining <= 0:
-            break
+            walk.append({"phase": name, "price": price, "full": full,
+                         "supply": float(feed_kg) * frac * recovery,
+                         "available": 0.0, "allowance": None, "hold": 0.0,
+                         "take": 0.0, "stopped": True})
+            continue
         take = min(float(feed_kg) * frac * recovery - taken.get(name, 0.0),
                    remaining)
+        step = {"phase": name, "price": price, "full": full,
+                "supply": float(feed_kg) * frac * recovery,
+                "available": (float(feed_kg) * frac * recovery
+                              - taken.get(name, 0.0)),
+                "allowance": None, "hold": remaining, "stopped": False}
         if full and caps is not None:
             key = (keys or {}).get(name, name)
             allowance = caps.get(key)
             if allowance is not None:
+                step["allowance"] = allowance
                 take = min(take, allowance)
                 caps[key] = allowance - take
         # Recorded before the skip: a full tier whose allowance is spent takes
         # nothing, and if that went unrecorded its own surplus tier would be
         # read as the full one and clipped at the same exhausted allowance.
         taken[name] = taken.get(name, 0.0) + take
+        step["take"] = take
+        walk.append(step)
         if take <= 0:
             continue
         mix[name] = mix.get(name, 0.0) + take
@@ -678,6 +746,7 @@ def knapsack(payload_kg, feed_kg, phases, recovery, caps=None, keys=None,
         remaining -= take
     loaded = float(payload_kg) - remaining
     return {"mix": mix, "value": total, "loaded": loaded, "surplus": surplus,
+            "walk": walk,
             "usd_per_kg": total / loaded if loaded > 0 else 0.0}
 
 
@@ -721,6 +790,10 @@ def raw_sale(load, phases, caps, keys, surplus_frac):
     price = {n: p for n, _f, p in phases}
     remaining = dict(caps)
     value = unsold = surplus = 0.0
+    # Recorded and never read here, exactly as in `knapsack`: the document
+    # needs to show which phase met its ceiling and by how much, and a sale
+    # reported only by its total cannot say.
+    walk = []
     for name, kg in load["mix"].items():
         key = keys.get(name, name)
         allowance = remaining.get(key, float("inf"))
@@ -733,11 +806,17 @@ def raw_sale(load, phases, caps, keys, surplus_frac):
             else:
                 unsold += over
             remaining[key] = 0.0
+            walk.append({"phase": name, "price": price[name], "hold": kg,
+                         "allowance": allowance, "full": allowance,
+                         "over": over, "bound": True})
         else:
             value += kg * price[name]
             remaining[key] = allowance - kg
+            walk.append({"phase": name, "price": price[name], "hold": kg,
+                         "allowance": allowance, "full": kg,
+                         "over": 0.0, "bound": False})
     return {"mix": dict(load["mix"]), "value": value, "loaded": load["loaded"],
-            "surplus": surplus, "unsold": unsold,
+            "surplus": surplus, "unsold": unsold, "walk": walk,
             "usd_per_kg": value / load["loaded"] if load["loaded"] else 0.0}
 
 
@@ -863,6 +942,12 @@ def context(body, archived, tables):
     rot_h = body.get("rotation_period_h")
     rot_h = (float(rot_h) if rot_h is not None and not pd.isna(rot_h)
              else cfg.default_rotation_period_h)
+    # ⚠️  A NIGHT IS HALF A ROTATION, UP TO A CEILING.  A slow rotator would
+    # otherwise buy a storage bank sized for a week of darkness, so the model
+    # clamps it; the clamp has an output column of its own, which is the
+    # model's own statement that it is worth reporting.
+    rot_measured = not pd.isna(body.get("rotation_period_h"))
+    dark_clamped = rot_h / 2.0 > cfg.max_dark_period_h
     dark_h = min(rot_h / 2.0, cfg.max_dark_period_h)
     # 🚨  `model_eclipse_power` ZEROES THE DARK FRACTION, AND THE ROW SAYS SO.
     # With the flag off the plant takes the bare 1/r^2 figure and the oversize
@@ -930,9 +1015,41 @@ def context(body, archived, tables):
     # Read as the leg chain rather than as one number so the document can show
     # the stage that produces it; one `burn` leg for a cislunar depot.
     legs = master._DELIVERY_LEGS.get(cfg.delivery_destination) or []
+    # 🚨  THE FOUR COLUMNS BEHIND EVERY PRICE IN THE PHASE TABLE, so the page
+    # can show where a delivered price comes from instead of asserting it.
+    # Stage 2 writes them all: a commodity USED at the destination is worth its
+    # terrestrial quote PLUS its utility share of the launch cost avoided, less
+    # what refining it on site costs; one flown HOME is worth its terrestrial
+    # quote less the downleg, floored at zero.  Which of the two happened is
+    # `value_route`, and it is the column that explains why ruthenium prices at
+    # exactly zero beside rhodium at six figures.
+    # 🚨  `earth_surface` HAS NONE OF THESE COLUMNS, AND THAT IS STRUCTURAL
+    # RATHER THAN A STALE ARTIFACT.  A kilogram landed on Earth avoids no
+    # launch, so Stage 2 writes no utility, no downleg and no route for it:
+    # six of the seven destinations carry the five columns and the seventh
+    # carries none.  Reading them unconditionally raised `KeyError` on the one
+    # destination whose whole point is that the chain does not apply, which is
+    # this repo's own "a column the file does not have" trap arriving in the
+    # document.  An empty dict is the right answer there, and the renderer
+    # already has a branch for a destination with no delivery legs.
+    needed = ("terrestrial_price_usd_per_kg", "in_space_utility",
+              "downleg_cost_usd_per_kg", "in_space_processing_usd_per_kg",
+              "value_route", "price_usd_per_kg")
+    price_parts = {}
+    if all(column in tables["minerals"].columns for column in needed):
+        for _i, m in tables["minerals"].iterrows():
+            price_parts[str(m["name"])] = {
+                "terrestrial": float(m["terrestrial_price_usd_per_kg"]),
+                "utility": float(m["in_space_utility"]),
+                "downleg": float(m["downleg_cost_usd_per_kg"]),
+                "refining": float(m["in_space_processing_usd_per_kg"]),
+                "route": str(m["value_route"]),
+                "delivered": float(m["price_usd_per_kg"]),
+            }
     return dict(
         cfg=cfg, body=body, veh=veh, pro=pro, ops=ops, val=val,
-        minerals=tables["minerals"], legs=legs,
+        minerals=tables["minerals"], legs=legs, price_parts=price_parts,
+        physics=PHYSICS,
         leo_usd_per_kg=master._LEO_USD_PER_KG,
         p_l=master.delivered_cost_usd_per_kg(cfg.delivery_destination),
         a_au=a_au, e=float(body["eccentricity"]),
@@ -988,7 +1105,31 @@ def context(body, archived, tables):
         thruster_kg_per_n=float(pro["thruster_kg_per_n"]),
         ppu_kg_per_kw=val("Power processing unit specific mass"),
         w_bare=w_bare, w_plant=w_plant, oversize=oversize, dark_h=dark_h,
-        rot_h=rot_h,
+        rot_h=rot_h, rot_measured=rot_measured, dark_clamped=dark_clamped,
+        max_dark_h=cfg.max_dark_period_h,
+        # Read off the ROW, like every other architecture choice: these are
+        # what the search settled on, not what this derivation decided.
+        thrust_scaling=(str(archived["thrust_scaling"])
+                        if "thrust_scaling" in archived
+                        and not pd.isna(archived["thrust_scaling"])
+                        else "unknown"),
+        storage_class=str(pro.get("storage_class")
+                          or pro.get("propellant_storage_class") or "unknown"),
+        arch_label=(str(archived["delivery_arch"])
+                    if "delivery_arch" in archived
+                    and not pd.isna(archived["delivery_arch"]) else ""),
+        comp_group=(str(archived["comp_group"])
+                    if "comp_group" in archived
+                    and not pd.isna(archived["comp_group"]) else ""),
+        # The 1 AU rating the 1/r^2 derating starts from, and the three storage
+        # figures the night-side oversize is computed against.  All four are
+        # Module 3 rows the page consumed silently: an oversize factor with
+        # none of its inputs beside it is a number asking to be trusted.
+        w_1au=val("Power system specific mass"),
+        dark_frac=val("Eclipse / night-side dark fraction") if eclipse_on else 0.0,
+        storage_wh_per_kg=val("Energy storage usable specific energy"),
+        storage_eff=val("Energy storage round-trip efficiency"),
+        baseline_dark_h=val("Power-system row baseline dark period"),
         dig_wh=val("Drilling / excavation energy"),
         benef_wh=val("Beneficiation / on-site processing energy"),
         water_wh=val("Water liberation energy (bound water)"),
@@ -1059,6 +1200,46 @@ def context(body, archived, tables):
         rate_kg_yr=cfg.mining_hardware_kg
         * cfg.mining_rate_kg_per_day_per_kg_rig * 365.25,
     )
+
+
+def delivery_chain(C):
+    """The launch cost avoided, leg by leg, with every stage's own arithmetic.
+
+    This is where an in-space price comes from and it had been READ off
+    `master` as a single number.  Reading it is not wrong; printing it is,
+    because `p_L` is the largest term in every delivered price on the page and
+    the document's whole claim is that its figures are derived rather than
+    quoted.  So the chain is walked here as Module 2 walks it -- backwards from
+    the payload, each leg multiplying up the mass the one above it demands --
+    and the answer is compared against Module 2's own at the end.
+
+        R  = exp(dv / (Isp g0))          rocket equation
+        d  = delta (R - 1) / (1 - delta R)   stage dry mass per kg of payload
+        m0 = R (1 + d)                   mass at the start of the leg
+
+    An `edl` leg DIVIDES rather than multiplying: surviving 30% of entry mass
+    means arriving with 1/0.30 kg for every kilogram that lands.  A destination
+    with no legs at all is the Earth's surface, which avoids no launch.
+    """
+    mass, steps = 1.0, []
+    for leg in reversed(C["legs"]):
+        before = mass
+        if leg[0] == "edl":
+            frac = float(leg[1])
+            mass = mass / frac if frac > 0 else float("inf")
+            steps.append({"kind": "edl", "surviving": frac, "before": before,
+                          "after": mass})
+            continue
+        _kind, dv, isp, dry = leg
+        r = math.exp(float(dv) / (float(isp) * G0))
+        d = dry * (r - 1.0) / (1.0 - dry * r) if dry * r < 1.0 else float("inf")
+        m0 = r * (1.0 + d)
+        mass *= m0
+        steps.append({"kind": "burn", "dv": float(dv), "isp": float(isp),
+                      "dry": float(dry), "ve": float(isp) * G0, "R": r, "d": d,
+                      "m0": m0, "before": before, "after": mass})
+    return {"steps": steps, "kg_in_leo": mass,
+            "usd_per_kg": C["leo_usd_per_kg"] * mass if C["legs"] else 0.0}
 
 
 def derive_body(C):
@@ -1326,6 +1507,17 @@ def derive_dv(C):
                 apsis=("aphelion" if chosen is aph else "perihelion"),
                 aph_round=rounds["aphelion"] / 1000.0,
                 peri_round=rounds["perihelion"] / 1000.0,
+                # The three terms between a geometry and a flown leg, reported
+                # so the page can show them IN ORDER.  Floor first, then the
+                # penalty: a body cheap enough to arrive at pays the floor
+                # times the penalty rather than its own value times it, and a
+                # document that showed only the product could not say which.
+                floor_out=3000.0, floor_ret=300.0, ceiling=ceiling,
+                penalty=lam, r_target=(big_q if chosen is aph else q_au),
+                raw_out=chosen["out"] * 1000.0,
+                raw_ret=chosen[key] * 1000.0,
+                floored_out=bounded(chosen["out"], 3000.0),
+                floored_ret=bounded(chosen[key], 300.0),
                 dv_out=lam * bounded(chosen["out"], 3000.0),
                 dv_ret=lam * bounded(chosen[key], 300.0))
 
@@ -1401,9 +1593,18 @@ def _cascade(C, R, hardware_kg, struct_frac):
         m_at = (hardware_kg + d0 + struct_frac * m_pay + m_tps
                 + t * m_rprop + m_rprop)
     m_oprop = m_at * k_out * (R["R_out"] - 1.0)
+    # The one coefficient both branches turn on, reported rather than left for
+    # a reader to reassemble.  `coef` is what multiplies the returning stack:
+    # k_ret * s_tps, times R_ret when the return propellant is carried up from
+    # Earth and not when it is made on site.  denom and bracket are then one
+    # expression each in it, which is what makes the two branches one solve
+    # rather than two, and it is the line the document shows.
     return dict(m_pay=m_pay, denom=denom, bracket=bracket, m_after=m_after,
                 m_rprop=m_rprop, m_at=m_at, m_oprop=m_oprop, m_tps=m_tps,
-                m_prop=m_oprop + m_rprop)
+                m_prop=m_oprop + m_rprop, s_tps=s_tps, d0=d0,
+                struct_frac=struct_frac, hardware_kg=hardware_kg,
+                coef=(k_ret * s_tps if C["isru"]
+                      else k_ret * s_tps * R["R_ret"]))
 
 
 def _ep_stage(C, m_prop):
@@ -1464,7 +1665,7 @@ def mass_and_clock(C, B, DV, ratio):
     # launch, so there is no hold time for it to boil away over.
     models_boiloff = (cfg.model_propellant_boiloff and C["boiloff_pct"] > 0
                       and not isru)
-    outbound_yr = max(0.5, 0.00023 * DV["dv_out"])
+    outbound_yr = max(0.5, TAU_CRUISE_FIT_YR_PER_M_S * DV["dv_out"])
     throughput = C["rate_kg_yr"] * cfg.max_mining_duration_yr
     phases = C["phases"]
     plant_kg = ep_kg = 0.0
@@ -1657,8 +1858,8 @@ def mass_and_clock(C, B, DV, ratio):
         return None
 
     stay = dig_yr + DV["window_wait"]
-    t_out = max(0.5, 0.00023 * DV["dv_out"])
-    t_back = max(0.5, 0.00023 * DV["dv_ret"])
+    t_out = max(0.5, TAU_CRUISE_FIT_YR_PER_M_S * DV["dv_out"])
+    t_back = max(0.5, TAU_CRUISE_FIT_YR_PER_M_S * DV["dv_ret"])
     chem = t_out + stay + t_back
     # The delta-v-linear cruise estimate is calibrated to CHEMICAL transfers.
     # An electric stage thrusts for most of the trip instead, so its duration
@@ -1674,6 +1875,12 @@ def mass_and_clock(C, B, DV, ratio):
     trips = (min(calendar_cap, int(C["val"]("Mining rig maximum trips")))
              if C["rig_trip_limit"] else calendar_cap)
     return {"R": R, "passes": passes, "cascade": cas, "ep": ep, "m_tps": m_tps,
+            # The hardware the closed form was SOLVED at, which is the previous
+            # pass's, against the hardware the stack actually flies.  The
+            # difference is the whole of the launch-mass margin -- the loop does
+            # not re-solve at its own fixed point -- and it is the one identity
+            # on the page that checks the cascade against itself.
+            "hw_solved": passes[-1]["hw_in"], "f_solved": passes[-1]["f_used"],
             "throughput": throughput, "vol_cap": vol_cap, "m_pay": m_pay,
             "feed": feed, "ratio": feed / m_pay, "load": load, "water": water,
             "c_frac": c_frac, "f_eff": f_eff, "m_containment": c_frac * m_pay,
@@ -2154,11 +2361,12 @@ def check(derived, archived):
     names come back with the result and the caller prints them.
     """
     exact = close = 0
-    worst, worst_name, bad, skipped = 0.0, "", [], []
+    worst, worst_name, bad, skipped, names = 0.0, "", [], [], []
     for name, ours in sorted(derived.items()):
         if name not in archived:
             skipped.append(name)
             continue
+        names.append(name)
         theirs = float(archived[name])
         if ours == theirs:
             exact += 1
@@ -2172,7 +2380,7 @@ def check(derived, archived):
             bad.append((name, ours, theirs, rel))
     return {"n": exact + close + len(bad), "exact": exact, "close": close,
             "bad": bad, "worst": worst, "worst_name": worst_name,
-            "skipped": skipped}
+            "skipped": skipped, "names": names}
 
 
 def comparable(C, B, DV, M, P, ladder):
@@ -2326,6 +2534,17 @@ def build(archived, label):
     C["market_kg"] = caps
     C["market_keys"] = {n: (n if n in caps else alias.get(n, n))
                         for n, _f, _p in phases}
+    C["chain"] = delivery_chain(C)
+    # ⚠️  DERIVED AND THEN HELD TO MODULE 2's OWN ANSWER.  Walking the chain
+    # here is what lets the page show it; agreeing with `delivered_cost_usd_per_kg`
+    # to the last bit is what says the walk is the model's and not a second
+    # opinion about it.  A destination with no legs prices at zero on both
+    # sides, which is the Earth's surface and not a failure.
+    if abs(C["chain"]["usd_per_kg"] - C["p_l"]) > 1e-9 * max(1.0, C["p_l"]):
+        sys.exit("the delivery chain derived here gives %.10f $/kg and "
+                 "Module 2 gives %.10f; the leg walk has drifted from "
+                 "`delivered_cost_usd_per_kg`."
+                 % (C["chain"]["usd_per_kg"], C["p_l"]))
     B = derive_body(C)
     DV = derive_dv(C)
     DV.update(derive_periods(C))
@@ -2334,6 +2553,7 @@ def build(archived, label):
     M, ladder = won["M"], won["ladder"]
     P = ladder["best"]
     result = check(comparable(C, B, DV, M, P, ladder), archived)
+    C["population"] = int(getattr(archived, "attrs", {}).get("population") or 0)
     return {"C": C, "B": B, "DV": DV, "M": M, "P": P, "ladder": ladder,
             "sweep": sweep, "ratio": ratio, "archived": archived,
             "check": result, "cell": label, "designation": designation,
