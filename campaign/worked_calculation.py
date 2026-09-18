@@ -23,10 +23,25 @@ patched-conic transfer, the tankage closure, the mass cascade and its fixed
 point, the electric stage, the eclipse-derated plant, the payload knapsack, the
 clock, the capacity ceilings, the reliability product and the whole cost
 cascade.  What it DOES read from `master` is reference data and table
-accessors, never a solver: the config, `_ops_value`, `RARE_METAL_ELEMENTS`,
-`_PHASE_MARKET_ALIAS` and the catalog loaders.  Nothing here calls
+accessors -- the config, `_ops_value`, `RARE_METAL_ELEMENTS`,
+`_PHASE_MARKET_ALIAS` and the catalog loaders -- plus ONE deliberate borrowing
+that is not data: the SHAPE of the programme ladder.  Nothing here calls
 `max_return_payload_kg`, `_evaluate_combo_at_ratio`, `evaluate_combo`,
-`optimal_payload_mix`, `mission_cost_usd` or the programme ladder.
+`optimal_payload_mix` or `mission_cost_usd`.
+
+🚨  AND THIS PARAGRAPH SAID "never a solver ... or the programme ladder"
+WHILE `programme_ladder` CALLED `_programme_ladder_cached`, twelve hundred
+lines below, under its own docstring explaining why that is deliberate.  One
+file disagreed with itself about its own independence, and the document's
+FOOTER carried the same denial to every reader.  It also called the model's
+night-side derate and its synodic period -- the plant and the clock, two of
+the things that sentence NAMES as written out here.  Those two are written out
+now; the remedy for the rest is the one this repo prescribes for a number that
+nothing checks.  The claim is DERIVED: `BORROWED` is the register,
+`model_borrows` walks this file's own AST against it, and the footer prints
+what it finds, so a borrowing added tomorrow discloses itself rather than
+waiting for somebody to remember a sentence.  `verify_docs.py` check 16 fails
+on a borrow that is on no row, and on a row that matches no borrow.
 
 That is what makes the check at the end worth running: two statements of one
 model, compared column by column.  `--verify` runs it and prints nothing else.
@@ -559,8 +574,28 @@ def row_destination(row):
 _WINNER_CACHE = {}
 
 
-def run_winner(path):
-    """The best row of a Stage 4 output catalog, by the project's objective.
+def run_winner(path, designation=None):
+    """The best row of a Stage 4 output catalog, or a named one, with provenance.
+
+    🚨  `--designation` USED TO READ THE FILE ITSELF, AND SO GOT A ROW
+    WITH NO PROVENANCE ON IT.  Three things are properties of the FILE rather
+    than of the row -- the evaluable population, its size, and whether the run
+    had beneficiation on -- and `main` fetched a named row with a bare
+    `read_csv`, which attaches none of them.  `run_setting` then fell through
+    its file source to its LAST resort, the live config, whose
+    `use_beneficiation` is True: so a named row out of a RAW catalog was
+    derived against the beneficiated purity bound.  Measured on 2005 TH50 of
+    `earth_surface__raw__search-on`, `best_phase_usd_per_kg` came out 5.28x
+    the row's, and the page also told the reader the best case beat a
+    population of zero.
+
+    ⚠️  IT IS THE SAME DEFECT CLAUDE.md RECORDS FOR THE SURPLUS TIER -- a
+    reader inferring a run from the live config -- in the one path that
+    bypassed the machinery built to stop it.  The remedy is this repo's "one
+    definition with two readers": the row is picked HERE either way, so
+    whatever is attached to the winner is attached to a named row too and a
+    caller cannot get one without the other.  It also removes a second read of
+    a file this function had already loaded.
 
     🚨  READ ONCE PER FILE.  `candidate_sources` asks for the live
     catalog's best case in order to rank the sources, and then `main` asks the
@@ -579,7 +614,8 @@ def run_winner(path):
         sys.exit("no catalog at %s\nRun Stage 4 first, or pass --cell to "
                  "document an archived campaign cell instead." % path)
     stat = os.stat(path)
-    key = (os.path.abspath(path), stat.st_size, stat.st_mtime_ns)
+    key = (os.path.abspath(path), stat.st_size, stat.st_mtime_ns,
+           designation)
     if key in _WINNER_CACHE:
         return _WINNER_CACHE[key]
     frame = pd.read_csv(path, low_memory=False, float_precision="round_trip",
@@ -589,8 +625,14 @@ def run_winner(path):
     usable = frame[frame["gross_value_usd"] > 0]
     if not len(usable):
         sys.exit("%s has no row with positive gross value" % path)
-    ratio = usable["total_cost_usd"] / usable["gross_value_usd"]
-    row = usable.loc[ratio.idxmin()]
+    if designation is None:
+        ratio = usable["total_cost_usd"] / usable["gross_value_usd"]
+        row = usable.loc[ratio.idxmin()]
+    else:
+        hit = frame[frame["designation"] == designation]
+        if not len(hit):
+            sys.exit("%s is not in %s" % (designation, path))
+        row = hit.iloc[0]
     # Carried on the row rather than returned separately, so no caller's
     # signature changes and nothing has to remember to thread it.  "The best
     # case" is not a measurement until the page says what it beat.
@@ -1137,6 +1179,126 @@ class Recorded(object):
         """Membership, unlogged: asking is not reading."""
         return field in self._row
 
+    def raw(self, field, default=None):
+        """The field, UNLOGGED: asking what the table says is not using it.
+
+        ⚠️  READING IS NOT SPENDING, AND THAT IS THE WHOLE RULE.
+        `run_propellant_price` compares the table against the price the row was
+        actually costed at, so it has to read the table even when it then
+        declines to use it; logging that read would put a rate on the audit's
+        list that no cost line on the page spends, which is the audit's own
+        complaint about a rate a branch cannot use, arriving from the other
+        side.  The value that IS used is logged, once, by the caller.  The
+        other use is the run's own report, which names the propellant it
+        substituted a price for -- a label, not a rate.
+
+        ⚠️  SO REACH FOR `__getitem__` UNLESS YOU CAN SAY WHY THE READ IS
+        NOT A USE.  This is a way past the rate audit, and an unexplained call
+        is a rate that quietly stopped being checked.
+        """
+        return self._row.get(field, default)
+
+
+# ------------------------------------------------- the price the RUN paid
+def run_propellant_price(pro, archived):
+    """($/kg the run was costed at, the table's figure if it has since moved).
+
+    🚨  A STAGE 3 TABLE ON DISK IS NOT NECESSARILY THE ONE THE RUN READ,
+    AND NOTHING ABOUT A REFETCHED PRICE LOOKS WRONG.  Every other architecture
+    term this derivation needs is read off the ROW for exactly this reason --
+    the tank fraction, the eclipse flag, the window wait, the ore setting --
+    and the propellant price was the one input still taken from whatever
+    `propellants.csv` happens to hold today.  Three of the live-priced
+    propellants were refetched on 2026-09-17 and moved by up to 4.2%, so every
+    archived chemical mission stopped reproducing: measured on
+    `earth_surface__raw__search-on`, 2005 TH50 came out **7 columns DIFFER**,
+    the two propellant lines by 1.660e-03 relative and five totals downstream
+    of them by ~1.5e-08.
+
+    ✅  AND THE PRICE WAS RECOVERABLE FROM THE ROW ALL ALONG.  A Stage 4
+    output carries the cost and the mass, so their ratio IS the input:
+    measured constant per propellant across a cell, and the round trip is
+    bit-exact on 3,916 of 4,000 rows and inside 1e-12 on the other 84.  This
+    is CLAUDE.md's "an input you cannot recover from a backup may still be
+    recoverable from an output that was priced with it", taken from a one-off
+    rescue to the normal path.
+
+    ⚠️  THE TABLE WINS WHEN THE TWO AGREE, and that is not a nicety.
+    Recovering by division introduces a rounding the run never made, so
+    snapping to the table's own float where nothing has moved is what keeps
+    the unmoved cells bit-exact rather than merely close -- which is the
+    standard this project argues its releases from.
+
+    ⚠️  OUTBOUND, NEVER THE RETURN.  Propellant made on site is billed at
+    `isru_processing_usd_per_kg` and not at the propellant's price at all, so
+    the return pair recovers the wrong number on exactly the missions ISRU
+    exists for.  The outbound leg is always bought.
+    """
+    table_price = float(pro.raw("cost_usd_per_kg"))
+    cost = archived.get("outbound_prop_cost_usd")
+    mass = archived.get("m_outbound_prop_kg")
+    used, moved = table_price, None
+    if cost is not None and mass is not None:
+        try:
+            cost, mass = float(cost), float(mass)
+        except (TypeError, ValueError):
+            cost = mass = float("nan")
+        # A row that bought no outbound propellant divides by zero and knows
+        # nothing about the price; so does one too old to carry the columns.
+        if mass > 0.0 and cost == cost and mass == mass:
+            recovered = cost / mass
+            if abs(recovered - table_price) > 1e-9 * max(1.0, abs(table_price)):
+                used, moved = recovered, table_price
+    # Logged ONCE, on the value actually spent.  See `Recorded.raw`.
+    record_rate("M3 propellants", "cost_usd_per_kg", used)
+    return used, moved
+
+
+# ------------------------------------------------------- the night-side plant
+def eclipse_derate(w_bare, dark_h, dark_fraction, storage_wh_per_kg,
+                   storage_efficiency, baseline_dark_h):
+    """(effective W/kg for a plant that spends half its time in shadow, oversize).
+
+    🚨  THIS WAS CALLED OUT OF THE PIPELINE WHILE THE FOOTER TOLD THE READER
+    THE PLANT WAS DERIVED HERE.  It is the single largest correction on the
+    plant -- the battery term alone is about a third of it -- and the page
+    already carried all six of its inputs, so what was borrowed was the
+    arithmetic and nothing else.  See `model_borrows`.
+
+    Both eclipse terms are proportional to the continuous draw P, so they
+    collapse into one specific power the rest of the cascade can use exactly
+    where it used the bare 1/r^2 figure:
+
+        m_plant = P*oversize/w + P*dh/e_store = P * (oversize/w + dh/e_store)
+
+    The array is oversized because sunlit hours run the load AND recharge the
+    store, and the recharge is lossy.  The storage term is an INCREMENT: the
+    60 W/kg system-level rating already carries a LEO-class battery, and
+    Module 3 names how much (`Power-system row baseline dark period`), so only
+    the excess is new mass.  Charging the whole dark period would buy that
+    battery twice.
+
+    ⚠️  WRITTEN TERM FOR TERM, NOT TIDIED.  Float multiplication does not
+    associate, and this file argues its agreement in the last bit; the
+    `(1 - f) + f/eta` over `(1 - f)` is the model's association and a cancelled
+    version of it is a different number.  Same rule as `hours`.
+    """
+    w = float(w_bare)
+    if w <= 0:
+        return w, 1.0
+    f = max(0.0, min(0.95, float(dark_fraction)))
+    # Exactly 1.0 at f = 0: permanent sunlight, which is what a free-flying EP
+    # array enjoys and why it never takes this term.
+    if f <= 0.0:
+        return w, 1.0
+    eta = max(0.05, min(1.0, float(storage_efficiency)))
+    oversize = ((1.0 - f) + f / eta) / (1.0 - f)
+    kg_per_w = oversize / w
+    if storage_wh_per_kg > 0:
+        excess_h = max(0.0, float(dark_h) - max(0.0, float(baseline_dark_h)))
+        kg_per_w += excess_h / float(storage_wh_per_kg)
+    return (1.0 / kg_per_w if kg_per_w > 0 else w), oversize
+
 
 # ------------------------------------------------------------------ context
 def context(body, archived, tables):
@@ -1277,7 +1439,7 @@ def context(body, archived, tables):
     # night-side penalty the run did not take.
     if not eclipse_on:
         dark_h = 0.0
-    w_plant, oversize = master.eclipse_effective_w_per_kg(
+    w_plant, oversize = eclipse_derate(
         w_bare, dark_h,
         val("Eclipse / night-side dark fraction") if eclipse_on else 0.0,
         val("Energy storage usable specific energy"),
@@ -1294,6 +1456,8 @@ def context(body, archived, tables):
     tank_frac = (float(row_tank) if row_tank is not None and not pd.isna(row_tank)
                  else (float(pro["tank_kg_per_L"]) / float(pro["density_kg_per_L"])
                        if cfg.model_tank_mass else 0.0))
+
+    prop_usd_per_kg, prop_moved = run_propellant_price(pro, archived)
 
     row_wait = archived.get("launch_window_wait_yr")
     windows_on = (bool(cfg.model_launch_windows)
@@ -1416,6 +1580,11 @@ def context(body, archived, tables):
         plant_usd_per_w=val("RTG (radioisotope power)" if shape["power"] == "rtg"
                             else "Power system (solar + battery)"),
         boiloff_pct=float(pro.get("boiloff_pct_per_day") or 0.0),
+        # 🚨  THE PRICE THE RUN PAID, WHICH IS NOT ALWAYS THE PRICE ON
+        # DISK.  Read off the row like every other term the run settled; see
+        # `run_propellant_price`.  `prop_moved` is the table's own figure when
+        # the two disagree, and None when they do not, so the run can say so.
+        prop_usd_per_kg=prop_usd_per_kg, prop_moved=prop_moved,
         tank_frac=tank_frac,
         leo_cap=float(veh["payload_leo_kg"]),
         fairing_m3=float(veh["fairing_volume_m3"]),
@@ -2269,10 +2438,31 @@ def derive_periods(C):
     delta-v and accessibility in TIME pull against each other.
     """
     import master
+    # A LOOKUP, not a computation: it reads `window_phasing_au` off the
+    # destination's row in `DELIVERY_ARCHITECTURES`, which is the table where a
+    # destination declares its own physical mission.  On the register as data.
     a_dest = master.window_phasing_au(C["cfg"].delivery_destination)
     t_ast = C["a_au"] ** 1.5
-    synodic = master.synodic_period_yr(C["a_au"], a_dest)
-    return {"t_ast": t_ast, "a_dest": a_dest, "synodic": synodic,
+    t_dest = a_dest ** 1.5
+    # 🚨  THE SYNODIC PERIOD WAS CALLED OUT OF THE PIPELINE, in the
+    # function whose docstring restates why it is counterintuitive, under a
+    # footer telling the reader the clock was derived here.  Both guards are
+    # reproduced rather than assumed away: they are not decoration, and the
+    # second one is the whole reason a near-destination body does not report an
+    # infinite wait.  See `model_borrows`.
+    if not (0.05 < C["a_au"] < 100.0) or a_dest <= 0:
+        # Not a geometry this term can speak about; the model answers one year
+        # rather than refusing, and so does this.
+        synodic = 1.0
+    else:
+        denom = abs(1.0 / t_ast - 1.0 / t_dest)
+        # A body whose period matches the destination's has windows that never
+        # come round.  The cap stands in for a real mission accepting a worse
+        # transfer rather than waiting forever, and it BINDS: it is the value
+        # every co-orbital body in the catalog reports.
+        synodic = 10.0 if denom <= 1e-9 else min(1.0 / denom, 10.0)
+    return {"t_ast": t_ast, "t_dest": t_dest, "a_dest": a_dest,
+            "synodic": synodic,
             "window_wait": 0.5 * synodic if C["windows"] else 0.0}
 
 
@@ -2489,7 +2679,10 @@ def cost(C, M, n_missions, per_ship):
                 if n_missions > 1 else 0.0)
     rig_share = (rig_total - terminal) / share
 
-    prop_cost = float(C["pro"]["cost_usd_per_kg"])
+    # Resolved once in `context`, off the ROW where the row knows better than
+    # the table on disk.  Reading `C["pro"]["cost_usd_per_kg"]` here is what
+    # made every archived chemical mission fail to reproduce.
+    prop_cost = C["prop_usd_per_kg"]
     # Whether there is an electric stage to price at all, which is also whether
     # the page has anywhere to show the two rates that price it.
     has_ep = M["ep"]["power"] > 0.0
@@ -2957,6 +3150,12 @@ def build(archived, label, body=None, run_beneficiated=None):
     return {"C": C, "B": B, "DV": DV, "M": M, "P": P, "ladder": ladder,
             "sweep": sweep, "ratio": ratio, "archived": archived,
             "check": result, "cell": label, "designation": designation,
+            # 🚨  THE FOOTER'S OWN CLAIM, DERIVED.  It used to be a typed
+            # sentence saying this file reads nothing from the model but
+            # reference data, and that was false in four places.  Scanned off
+            # this file's AST now, so a borrow added tomorrow discloses itself
+            # on the next render whether or not anybody remembers the footer.
+            "borrows": borrowed_shape(),
             "terms": C["terms"]}
 
 
@@ -3012,8 +3211,17 @@ NUMBER = re.compile(r"-?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?")
 # run prints how many columns each scale accounted for: a page that suddenly
 # needs `percent` or `billions` for a dozen of them is matching by
 # coincidence, and the tally is the only warning of that a clean run gives.
+# ⚠️  `1e6` IS THE ONE THAT RUNS THE OTHER WAY, AND IT IS NOT A NEW
+# LICENCE.  calc writes `gross_M$`, `cost_M$` and `profit_M$`, which are three
+# columns the page already shows divided by a million; they matched only while
+# `musd` happened to render those same three in millions, so making `musd` fall
+# back to dollars on a small line took them off the page in the audit's eyes
+# while the reader could see them perfectly.  The page is allowed to change a
+# number's unit and not its value -- this is that sentence for a column that
+# arrives already scaled.
 SCALES = ((1.0, "as is"), (1e-6, "millions"), (1e-3, "thousands"),
-          (1e-9, "billions"), (100.0, "percent"), (1e3, "x1000"))
+          (1e-9, "billions"), (100.0, "percent"), (1e3, "x1000"),
+          (1e6, "M$ column"))
 
 # How tightly a page number has to pin a value before the match counts as
 # evidence.  One percent is two significant figures, which every formatter on
@@ -3302,6 +3510,128 @@ def not_shown(row):
         out["comp_group"] = ("the spectral letter already says it; the header "
                              "drops a group that only restates the type")
     return out
+
+
+# ──────────────────────────────────── what this derivation borrows
+# 🚨  A PAGE THAT DERIVES EVERY FIGURE CAN STILL TYPE A CLAIM ABOUT
+# ITSELF, AND THIS ONE DID.  The Verification footer told every reader that
+# "the transfer, the tankage, the mass cascade and its fixed point, the
+# electric stage, the plant, the knapsack, the clock, the ceilings and the
+# whole cost cascade are written out from the equations here, not called out
+# of the pipeline", and that "what it reads from the model is reference data
+# and table accessors".  That was FALSE in four places, three of them inside
+# things the same sentence NAMES:
+#
+#   the plant  -> `eclipse_effective_w_per_kg`, the night-side derate, whose
+#                 battery term is about a third of the plant mass
+#   the clock  -> `synodic_period_yr`, Kepler plus a cap that BINDS
+#   the price  -> `delivered_cost_usd_per_kg`, printed in the substitution
+#                 table three paragraphs below the chain that derives it
+#   the ladder -> `_programme_ladder_cached`, which the module docstring also
+#                 denied while `programme_ladder`'s own docstring, twelve
+#                 hundred lines below, explained why it is deliberate
+#
+# The first two are written out now.  The third prints its own answer.  The
+# fourth stays, because reproducing the search's SHAPE by hand would be a
+# second opinion about what the search proposed rather than a check on what it
+# concluded -- so it is DISCLOSED instead, which is the thing a footer denying
+# it could never do.
+#
+# ⚠️  THE LESSON IS NARROWER THAN "DERIVE EVERYTHING" AND IS THE ONE THIS
+# REPO KEEPS ARRIVING AT: a claim about a number rots exactly like the number,
+# and nothing was checking this one because it carries no digit.  Check 14
+# reads every digit reaching prose; it cannot read a sentence that asserts
+# which functions a file calls.  So the sentence is DERIVED now, off the
+# register below, by walking this file's own AST.  Add a borrow and the
+# footer says so on the next render whether or not anybody edits it.
+
+# Every attribute of `master` this file may touch, and what kind of borrowing
+# it is.  ⚠️  `data` is a reference table, a config or an accessor into one:
+# the footer's claim covers these and they need no disclosure.  `shape` is a
+# DECISION borrowed on purpose, and the footer names every one of them.
+#
+# ⚠️  ADD A ROW WHEN YOU HAVE DECIDED TO BORROW, never to quiet a red line.
+# A row nothing matches is a permission still being granted for a call
+# somebody has since removed, which is how an allowlist stops being a decision
+# -- the same rule `TYPED_OK` is under.
+BORROWED = {
+    "CALC_CONFIG": ("data", "the run's own config"),
+    "DELIVERY_ARCHITECTURES": ("data", "the destination table"),
+    "FRACTION_TO_MINERAL": ("data", "composition column -> mineral name"),
+    "RARE_METAL_ELEMENTS": ("data", "which elements price as rare metals"),
+    "TAXONOMY_COMPOSITION": ("data", "Module 1's taxonomy fractions"),
+    "_DELIVERY_LEGS": ("data", "the leg chain `delivery_chain` walks itself"),
+    "_LEO_USD_PER_KG": ("data", "Module 3's launch price"),
+    "_PHASE_MARKET_ALIAS": ("data", "phase -> market key"),
+    "_RESIDUAL_PHASE": ("data", "the name of the composition residual"),
+    "_load_csv": ("data", "the CSV loader, so the tables are read as the run read them"),
+    "_ops_value": ("data", "a row out of the operational table"),
+    "window_phasing_au": ("data", "a lookup into DELIVERY_ARCHITECTURES"),
+    "delivered_cost_usd_per_kg": (
+        "data", "compared against this file's own chain, never printed"),
+    "_market_mode": ("shape", "which market model the ladder is keyed on"),
+    "_programme_ladder_cached": (
+        "shape", "which (N, F, W) the search proposed; every value is priced here"),
+    "_fleet_refinement_cached": (
+        "shape", "the fleet refinement pass around the coarse winner"),
+}
+
+
+def model_borrows(path=None):
+    """What this file takes from `master`, and anything not on the register.
+
+    Walks the AST rather than grepping, so an alias (`import master as _m`) is
+    followed and a `master` in a comment or a docstring is not counted.
+    Returns `(borrows, findings)`: the first is what the footer discloses, the
+    second is what a checker fails on.
+
+    ⚠️  THE SECOND LIST HAS TWO HALVES AND BOTH ARE FINDINGS.  A call with
+    no row is a borrowing nobody decided; a row with no call is a decision
+    nobody has read since the call went away.
+    """
+    import ast
+    if path is None:
+        path = os.path.abspath(__file__)
+    with open(path, encoding="utf-8") as handle:
+        tree = ast.parse(handle.read())
+    aliases = {a.asname or a.name for node in ast.walk(tree)
+               if isinstance(node, ast.Import)
+               for a in node.names if a.name == "master"}
+    owner = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for n in range(node.lineno, (node.end_lineno or node.lineno) + 1):
+                owner.setdefault(n, node.name)
+    seen = {}
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id in aliases):
+            seen.setdefault(node.attr, []).append(
+                (node.lineno, owner.get(node.lineno, "<module>")))
+    findings = []
+    for attr in sorted(seen):
+        if attr not in BORROWED:
+            where = ", ".join("%s:%d" % (fn, ln) for ln, fn in seen[attr])
+            findings.append(
+                (seen[attr][0][0], attr,
+                 "borrowed from the model and on no register row (%s)" % where))
+    for attr in sorted(set(BORROWED) - set(seen)):
+        findings.append((0, attr, "on the register and borrowed nowhere: %s"
+                         % BORROWED[attr][1]))
+    borrows = {a: BORROWED[a] for a in seen if a in BORROWED}
+    return borrows, findings
+
+
+def borrowed_shape(path=None):
+    """The `shape` borrows alone, as (name, why) pairs, for the footer.
+
+    Sorted, because the footer is prose and prose that reorders itself between
+    renders is a diff nobody can read.
+    """
+    borrows, _findings = model_borrows(path)
+    return sorted((name, why) for name, (kind, why) in borrows.items()
+                  if kind == "shape")
 
 
 # ─────────────────────────────────────────────────── the typed-number lint
@@ -4251,15 +4581,11 @@ def main():
             winner = archived_winner(args.cell, row["winner"])
         label = args.cell
     else:
-        winner = run_winner(args.catalog)
-        if args.designation:
-            frame = pd.read_csv(args.catalog, low_memory=False,
-                                float_precision="round_trip",
-                                dtype={"designation": str})
-            hit = frame[frame["designation"] == args.designation]
-            if not len(hit):
-                sys.exit("%s is not in %s" % (args.designation, args.catalog))
-            winner = hit.iloc[0]
+        # ⚠️  THROUGH `run_winner` EVEN WHEN A BODY IS NAMED.  This
+        # re-read the catalog itself and handed `build` a row carrying none of
+        # the file's provenance, so the derivation inferred the run's ore
+        # setting from the LIVE CONFIG.  See `run_winner`.
+        winner = run_winner(args.catalog, args.designation or None)
         label = os.path.basename(args.catalog)
 
     # ⚠️  THE LEDGER KNOWS WHAT THE ROW CANNOT SAY.  `--cell` names a cell
@@ -4278,6 +4604,18 @@ def main():
           % (out["designation"], obj, terms["stamp"]))
     print("  charging  %s" % describe_terms(terms))
     print("  market    %s" % terms["market"])
+    # ⚠️  A SUBSTITUTED INPUT MUST SAY SO.  The propellant price comes off
+    # the row when the Stage 3 table on disk has moved since the run, which is
+    # the only reason an archived chemical mission reproduces at all -- and a
+    # derivation that silently used a different input from the one the reader
+    # can look up would be the quietest kind of wrong.  Silent when the table
+    # still agrees, which is every run on an unmoved table.
+    if out["C"]["prop_moved"] is not None:
+        print("  propellant %s priced off the ROW at %.12g $/kg; the Stage 3 "
+              "table on disk now says %.12g, so it has been refetched since "
+              "this run"
+              % (str(out["C"]["pro"].raw("name")),
+                 out["C"]["prop_usd_per_kg"], out["C"]["prop_moved"]))
     c = out["check"]
     print("  derived   %d quantities: %d bit-exact, %d within %g, %d DIFFER"
           % (c["n"], c["exact"], c["close"], c["tol"], len(c["bad"])))

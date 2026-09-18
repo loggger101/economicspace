@@ -162,8 +162,11 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
                programme search and its N, `model_tank_mass` (via
                `tank_mass_frac`), `model_eclipse_power` (via
                `array_oversize_factor`), `model_low_thrust_time` (via
-               `ep_thrust_yr`) and `model_launch_windows` (via
-               `launch_window_wait_yr`).
+               `ep_thrust_yr`), `model_launch_windows` (via
+               `launch_window_wait_yr`) and, since 2026-09-18, the
+               PROPELLANT PRICE (via `outbound_prop_cost_usd` over
+               `m_outbound_prop_kg`).  That last one is not a dial at all,
+               which is why it took longest to find: see below.
     REFUSED    named by the guard rather than approximated: an unknown
                destination, a power source that is neither solar nor RTG, the
                fallback delta-v pair, and `model_rig_service_life` off, which
@@ -224,6 +227,63 @@ py campaign/worked_calculation.py --sweep --audit   # and audit every page it re
   to twenty times the one the run took, the launch stack then fails against the
   vehicle, and the refusal used to blame the concentration ladder. It names the
   guard now and prints the arithmetic that points at the dial.
+
+  🚨  AND THE PAGE'S CLAIM ABOUT ITS OWN INDEPENDENCE WAS TYPED, AND
+  FALSE. The Verification footer told every reader that what this derivation
+  reads from the model is "reference data and table accessors". It also called
+  the model's night-side derate, its synodic period and its delivered price --
+  and two of those sit inside things the same sentence NAMES as written out
+  here, the plant and the clock. The module docstring carried the same denial
+  while `programme_ladder`'s own docstring, twelve hundred lines below,
+  explained why borrowing the ladder's SHAPE is deliberate.
+
+  Nothing could see it. Check 14 fails on any DIGIT reaching prose; a sentence
+  about which functions a file calls carries none. So the derate and the
+  synodic period are written out, the delivered price is compared rather than
+  printed, and the claim is DERIVED: `BORROWED` is the register,
+  `model_borrows` walks the file's own AST against it, and the footer prints
+  what it finds. `verify_docs.py` check 16 fails on a borrow that is on no row
+  AND on a row that matches no borrow -- both halves proved by planting one of
+  each.
+
+  ⚠️  WHAT IS LEFT IS DISCLOSED RATHER THAN DENIED. The ladder's rungs are
+  read from the model on purpose: reproducing which programmes the search
+  proposed would be a second opinion about what it offered rather than a check
+  on what it concluded. Every value at every rung is priced here.
+
+  🚨  A STAGE 3 TABLE ON DISK IS NOT THE TABLE THE RUN READ, AND THE
+  PROPELLANT PRICE WAS THE LAST INPUT STILL TAKEN FROM IT. Three live-priced
+  propellants were refetched on 2026-09-17, so every archived CHEMICAL mission
+  stopped reproducing: on `earth_surface__raw__search-on`, 2005 TH50 came out
+  **7 columns DIFFER** -- the two propellant lines by 1.660e-03 relative and
+  five totals downstream of them by ~1.5e-08. The price was recoverable from
+  the row all along, because a Stage 4 output carries both the cost and the
+  mass, and their ratio is constant per propellant across a cell. It is read
+  off the row now, the table still wins where the two agree so an unmoved cell
+  stays bit-exact, and the run SAYS SO when it substitutes:
+
+```
+  propellant methalox  (LCH4 / LOX) priced off the ROW at 0.186202302606 $/kg;
+             the Stage 3 table on disk now says 0.185893237684, so it has been
+             refetched since this run
+```
+
+  ⚠️  THE OUTBOUND LEG, NEVER THE RETURN. Propellant made on site is billed
+  at `isru_processing_usd_per_kg` and not at the propellant's price at all, so
+  the return pair recovers the wrong number on exactly the missions ISRU exists
+  for.
+
+  🚨  `--designation` BYPASSED THE ONE FUNCTION THAT ATTACHES A ROW'S
+  PROVENANCE. Three things are properties of the FILE and not of the row -- the
+  evaluable population, its size, and whether the run had beneficiation on --
+  and this path re-read the catalog with a bare `read_csv`, which attaches
+  none. `run_setting` then fell through its file source to its LAST resort, the
+  live config, whose `use_beneficiation` is True: a named row out of a RAW
+  catalog was derived against the beneficiated purity bound, `5.28x` out on
+  `best_phase_usd_per_kg`, and the page told the reader the best case beat a
+  population of zero. `run_winner` picks the row either way now, so a caller
+  cannot get one without the other -- and it drops a second read of a file the
+  function had already loaded.
 
   🚨  ON ITS FIRST AUDITED RUN THE PAGE WAS CLEAN AT CISLUNAR AND AT NO
   OTHER DESTINATION. `leo` refused outright -- the derivation read an EMPTY

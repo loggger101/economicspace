@@ -55,6 +55,10 @@ through. Skim for the section that names what you are about to change.
 - [A page that derives every FIGURE can still type a FACT](#a-page-that-derives-every-figure-can-still-type-a-fact)
 - [Four shapes chosen by hand is a sample; the shapes are found now](#four-shapes-chosen-by-hand-is-a-sample-the-shapes-are-found-now)
 - [The page is code, and its branches are the prose](#the-page-is-code-and-its-branches-are-the-prose)
+- [A page that derives every FIGURE can still type a CLAIM ABOUT ITSELF](#a-page-that-derives-every-figure-can-still-type-a-claim-about-itself)
+- [An input read from the LIVE table is a term read from the wrong run](#an-input-read-from-the-live-table-is-a-term-read-from-the-wrong-run)
+- [A convenience path that bypasses the constructor loses what the constructor attached](#a-convenience-path-that-bypasses-the-constructor-loses-what-the-constructor-attached)
+- [Fixing the page can break the audit that was matching through the old rendering](#fixing-the-page-can-break-the-audit-that-was-matching-through-the-old-rendering)
 - [A refusal that names the wrong constraint sends the reader to the wrong file](#a-refusal-that-names-the-wrong-constraint-sends-the-reader-to-the-wrong-file)
 - [A column can describe the RUN rather than the mission](#a-column-can-describe-the-run-rather-than-the-mission)
 - [One section's identity, written down four times](#one-sections-identity-written-down-four-times)
@@ -2825,6 +2829,169 @@ entry, rows were fetched from whichever path won, and the architectures the
 cells had been passed in FOR were silently answered from the wrong file. The
 tell was two swept missions reporting the same body at the same objective.
 Keyed by path now, labelled by parent directory.
+
+### A page that derives every FIGURE can still type a CLAIM ABOUT ITSELF
+
+2026-09-18, and it is the fifth entry about `campaign/worked_calculation.py`
+because it is the only artifact here whose whole claim is that nothing in it is
+typed. The [previous entry](#a-page-that-derives-every-figure-can-still-type-a-fact)
+is about two SENTENCES asserting values nothing derived. This is the same
+mechanism one level up: a sentence asserting something about the FILE.
+
+The document's Verification footer told every reader that the transfer, the
+tankage, the mass cascade, the electric stage, **the plant**, the knapsack,
+**the clock**, the ceilings and the cost cascade "are written out from the
+equations here, not called out of the pipeline", and that "what it reads from
+the model is reference data and table accessors". It was false in four places,
+and two of them are inside things that sentence NAMES:
+
+| what | it called | the sentence says |
+|---|---|---|
+| the plant | `eclipse_effective_w_per_kg` | derived here |
+| the clock | `synodic_period_yr` | derived here |
+| the price | `delivered_cost_usd_per_kg` | printed three paragraphs below the chain deriving the same quantity |
+| the ladder | `_programme_ladder_cached` | denied outright, in the module docstring too |
+
+🚨  **AND THE MODULE DISAGREED WITH ITSELF ABOUT ITS OWN INDEPENDENCE.**
+`programme_ladder`'s docstring, twelve hundred lines below the one denying it,
+explains why borrowing the ladder's SHAPE is deliberate and right. Both were
+written by somebody who knew; neither could see the other.
+
+⚠️  **NO CHECK COULD SEE ANY OF IT, AND THE REASON IS THE REUSABLE PART.**
+Check 14 fails on any DIGIT reaching prose. **This claim carries no digit** --
+it is a sentence about which functions a file calls, and the only thing that
+can read that is the file's AST. A claim about a number rots exactly like the
+number, and the remedy is the one this file prescribes for a number: a checker
+or a deletion, never a correction.
+
+✅  **The two computations are written out**, which cost eighteen lines and
+made the claim true where it could be; the price is compared rather than
+printed. What is left is **disclosed** rather than denied, which is the thing a
+footer denying it could never do: `BORROWED` is the register, `model_borrows`
+walks the AST against it, and the footer **prints what it finds**, so a
+borrowing added tomorrow discloses itself whether or not anybody remembers the
+sentence.
+
+⚠️  **BOTH HALVES OF THE REGISTER ARE FINDINGS, and this is the third
+allowlist here under that rule** (`TYPED_OK`, `NOT_SHOWN`, now `BORROWED`). A
+borrow on no row is a borrowing nobody decided; **a row matching no borrow is a
+permission still being granted for a call that has gone.** `verify_docs.py`
+check 16, source-only so it runs on a clone with no inputs, and **proved by
+planting one of each**.
+
+🚨  **AND THE FIRST DRAFT OF THE DISCLOSURE OPENED "One thing is borrowed"
+ABOVE A DERIVED LIST OF THREE NAMES.** A count in prose disagreeing with the
+list beside it, in the paragraph written to stop exactly that, caught only by
+reading the rendered page. **Name the list; do not state its length** -- and
+render the thing you just made derive before believing it reads right.
+
+### An input read from the LIVE table is a term read from the wrong run
+
+The same pass, and it is the sharpest instance here of a rule this file already
+states for dials, arriving for a REFERENCE PRICE.
+
+Every architecture term the derivation needs is read off the ROW for one
+reason: the process doing the deriving is not the run being derived. The
+propellant price was the last input still taken from whatever
+`propellants.csv` happens to hold today -- and three live-priced propellants
+were refetched on 2026-09-17 by
+[the guard that did not exist](#a-guard-on-one-door-is-not-a-guard-on-the-room).
+
+🚨  **SO EVERY ARCHIVED CHEMICAL MISSION STOPPED REPRODUCING, AND THE
+SIGNATURE IS WORTH RECOGNISING.** On `earth_surface__raw__search-on`, 2005 TH50
+came out **7 columns DIFFER**: the two propellant lines at **1.660e-03**
+relative -- *the same relative error on both* -- and five totals downstream of
+them at ~1.5e-08. **Two columns sharing one relative error to four significant
+figures is a PRICE, not an arithmetic slip**, and the five that follow are its
+propagation into much larger numbers.
+
+✅  **AND THE PRICE WAS RECOVERABLE FROM THE ROW ALL ALONG.** A Stage 4 output
+carries the cost and the mass, so their ratio IS the input: measured constant
+per propellant across a cell, and the round trip is bit-exact on **3,916 of
+4,000** rows and inside 1e-12 on the other 84. This file already records that
+recovery as a one-off rescue; it is the normal path now.
+
+⚠️  **THE TABLE WINS WHERE THE TWO AGREE, and that is not a nicety.**
+Recovering by division introduces a rounding the run never made, so snapping to
+the table's own float where nothing has moved is what keeps an unmoved cell
+**bit-exact** rather than merely close, which is the standard this project
+argues its releases from.
+
+⚠️  **THE OUTBOUND LEG, NEVER THE RETURN.** Propellant made on site is billed
+at `isru_processing_usd_per_kg` and not at the propellant's price at all, so the
+return pair recovers the wrong number **on exactly the missions ISRU exists
+for**.
+
+✅  **And a substituted input SAYS SO**, naming the propellant, both prices and
+what the difference means. A derivation quietly using a different input from the
+one its reader can look up is the quietest kind of wrong.
+
+### A convenience path that bypasses the constructor loses what the constructor attached
+
+The same pass, and it is
+[a flipped default breaks every reader](#a-flipped-default-breaks-every-reader-that-infers-a-run-from-the-config)
+arriving in the one code path that went around the machinery built to stop it.
+
+Three things are properties of the FILE and not of the row: the evaluable
+population, the file's size, and **whether the run had beneficiation on**.
+`run_winner` attaches all three. `--designation` re-read the catalog with a bare
+`read_csv` and took `hit.iloc[0]`, which attaches none -- so `run_setting` fell
+through its file source to its **LAST resort, the live config**, whose
+`use_beneficiation` is True.
+
+🚨  **A NAMED ROW OUT OF A RAW CATALOG WAS THEREFORE DERIVED AGAINST THE
+BENEFICIATED PURITY BOUND.** `best_phase_usd_per_kg` came out **5.28x** the
+row's, and the same page told the reader the best case beat a population of
+**zero**. Neither is subtle once seen, and the path had existed for releases.
+
+✅  **AND THE GUARD FIRED THE FIRST TIME ANYBODY WALKED IT**, which is the
+half worth keeping. `run_setting`'s fallback chain is written to degrade
+quietly -- correctly, since a missing source is not an error -- and what stops
+a quiet degradation becoming a confident wrong page is that the column it
+decides is a COMPARED one. It came out 5.28x and the run refused. **So the
+defect was never "the inference is wrong"; it was that nothing had ever run
+`--designation` against a raw catalog.** A fallback chain plus a compared
+column is a sound design; it just cannot tell you about a path nobody takes,
+which is what `--sweep` exists for one level up.
+
+⚠️  `--cell` was never affected, because it reads the ore state from the
+campaign LEDGER, which is a stronger source than the file heuristic and sits
+above it in the chain.
+
+✅  **The remedy is this repo's "one definition with two readers": the row is
+picked in `run_winner` either way**, so a caller cannot get a row without its
+provenance. It also removes a second read of a file that function had already
+loaded.
+
+⚠️  **The general question: what does the ORDINARY path attach that the
+shortcut does not?** A shortcut that returns the same TYPE is the dangerous
+kind, because nothing downstream can tell the difference -- `run_setting`'s
+fallback chain is written to degrade quietly, which is right, and quiet
+degradation is invisible exactly when a caller has silently removed the source
+above it.
+
+### Fixing the page can break the audit that was matching through the old rendering
+
+The same pass, and it is small, cheap and worth knowing before it wastes an
+hour. Two cost lines were rendering at a precision that destroyed them: a $778
+return-propellant line as `$0.0008M`, and a **$0.186/kg propellant as `$0/kg`**,
+which tells a reader the propellant is free. Both are
+[the two-significant-figures defect](#four-shapes-chosen-by-hand-is-a-sample-the-shapes-are-found-now)
+again, in `musd` and in `usd`.
+
+🚨  **FIXING THE FIRST ONE TOOK A COLUMN OFF THE PAGE IN THE AUDIT'S EYES
+WHILE THE READER COULD SEE IT PERFECTLY.** calc writes `gross_M$`, `cost_M$` and
+`profit_M$`, which are three columns the page already shows divided by a
+million. They had only ever matched because `musd` rendered those same three in
+millions; making `musd` fall back to dollars below $0.1M -- correct, and more
+readable -- left the audit with a scale that ran one way only.
+
+✅  **The fix is the symmetric scale, and it was MEASURED rather than waved
+through.** This file's own warning is that every scale added to that list
+weakens the audit. The audit's perturbation figure -- how many values still find
+a home after every one is moved by 31.7% -- is **unchanged at 7 of 94**, and the
+new scale accounted for exactly **one** column. **A scale that costs the matcher
+nothing is a unit; one that costs it something is a licence.**
 
 ### A refusal that names the wrong constraint sends the reader to the wrong file
 
