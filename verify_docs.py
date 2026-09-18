@@ -43,6 +43,11 @@ counts-in-prose failure this file was written to catch:
    15. guards        every FETCHING stage module refuses to overwrite its own
                      outputs when it is run directly, and the three mirrored
                      copies of that guard are still the same guard
+   16. borrows       every `master` attribute the worked calculation touches is
+                     on its own register, and every register row is touched --
+                     the footer's claim about what it borrows is derived from
+                     that scan rather than typed, because it was typed once and
+                     was false in four places
 
     py verify_docs.py                       # every check except 10
     py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 10
@@ -1886,6 +1891,69 @@ def check_overwrite_guards() -> bool:
     return not bad
 
 
+# ------------------------------------------------------------ 16. borrows
+def check_model_borrows() -> bool:
+    """Every `master` attribute the worked calculation touches is on its register.
+
+    🚨  A PAGE THAT DERIVES EVERY FIGURE CAN STILL TYPE A CLAIM ABOUT
+    ITSELF.  The document's Verification footer told every reader that what
+    the derivation reads from the model is "reference data and table
+    accessors", and that was FALSE in four places -- the night-side derate,
+    the synodic period, the delivered price and the programme ladder -- two of
+    them inside things the same sentence NAMES as written out there.  The
+    module docstring carried the same denial while the function twelve hundred
+    lines below it explained why the borrowing was deliberate.
+
+    ⚠️  NO EXISTING CHECK COULD SEE IT, AND THE REASON IS THE REUSABLE
+    PART.  Check 14 fails on any DIGIT reaching prose; this claim carries no
+    digit.  It is a sentence about which functions a file calls, and the only
+    thing that can read that is the file's AST -- which is what
+    `model_borrows` does, against the `BORROWED` register beside it.
+
+    The two halves are both findings.  A borrow on no row is a borrowing
+    nobody decided; a row matching no borrow is a permission still being
+    granted for a call that has gone, which is how an allowlist stops being a
+    decision -- the same rule check 14 holds `TYPED_OK` to.
+
+    Source-only, like check 14 and for the same reason: importing that module
+    pulls in `master` and 868 MB of catalogs, and this has to be runnable on a
+    clone with no inputs at all.
+    """
+    rel = "campaign/worked_calculation.py"
+    path = os.path.join(REPO, *rel.split("/"))
+    if absent([rel]):
+        print("16. borrows    ! %s is not on disk" % rel)
+        return False
+    namespace: dict = {"os": os, "re": re,
+                       "CAMP": os.path.join(REPO, "campaign")}
+    tree = ast.parse(read(path))
+    wanted = ("model_borrows", "BORROWED")
+    body = [n for n in tree.body
+            if (isinstance(n, ast.FunctionDef) and n.name in wanted)
+            or (isinstance(n, ast.Assign)
+                and any(getattr(t, "id", "") in wanted for t in n.targets))]
+    missing = set(wanted) - {getattr(n, "name", None) or
+                             getattr(n.targets[0], "id", None) for n in body}
+    if missing:
+        print("16. borrows    ! %s no longer defines %s"
+              % (rel, ", ".join(sorted(missing))))
+        return False
+    exec(compile(ast.Module(body=body, type_ignores=[]), path, "exec"),
+         namespace)
+    borrows, findings = namespace["model_borrows"](path)
+    shape = sum(1 for kind, _why in borrows.values() if kind == "shape")
+    print("16. borrows    %d borrowing(s) from the model in the worked "
+          "calculation, %d of them decisions rather than data, %d unregistered"
+          % (len(borrows), shape, len(findings)))
+    for line, name, why in findings:
+        where = "line %d" % line if line else "register"
+        print("     ! %-28s %-12s %s" % (name, where, why[:76]))
+    if findings:
+        print("       Derive it, or add a row to BORROWED in %s saying what "
+              "kind of borrowing it is." % rel)
+    return not findings
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run every check except 10, plus 10 if `--before` names a snapshot.
 
@@ -1922,7 +1990,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                check_pairs,
                check_harness_scope,
                check_prose_numbers,
-               check_overwrite_guards):
+               check_overwrite_guards,
+               check_model_borrows):
         ok = fn() and ok
     if args.before:
         if len(args.before) < 2:
