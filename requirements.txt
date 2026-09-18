@@ -14,4 +14,4 @@ numpy
 yfinance
 tqdm
 pyarrow
-spacecost @ git+https://github.com/loggger101/spacecost@v0.1.1
+spacecost @ git+https://github.com/loggger101/spacecost@v0.2.0

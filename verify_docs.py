@@ -40,6 +40,9 @@ counts-in-prose failure this file was written to catch:
    14. prose         no number typed into a sentence the worked calculation
                      renders, against the register beside the derivation that
                      would otherwise have had to produce it
+   15. guards        every FETCHING stage module refuses to overwrite its own
+                     outputs when it is run directly, and the three mirrored
+                     copies of that guard are still the same guard
 
     py verify_docs.py                       # every check except 10
     py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 10
@@ -322,14 +325,28 @@ _STAMP_HEADER = "| stamp | why it moved | what a re-run gives |"
 _WORDS = ("zero one two three four five six seven eight nine ten eleven twelve "
           "thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty"
           ).split()
+# Twenty is where the list used to stop, and the stamp table reached twenty-one
+# on 2026-09-17: the checker then read "Twenty-one" as ONE and reported the docs
+# wrong about a count they had right. A checker that cannot parse the number the
+# docs are obliged to say is a checker that fails on success -- the same shape as
+# check 13's own first draft, which measured six checks of seven because one was
+# spelled differently.
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
+         "seventy": 70, "eighty": 80, "ninety": 90}
 
 
 def _spelled(token: str) -> Optional[int]:
-    """`"thirteen"` or `"13"` as an int, else None."""
+    """`"thirteen"`, `"twenty-one"` or `"13"` as an int, else None."""
     token = token.strip().lower()
     if token.isdigit():
         return int(token)
-    return _WORDS.index(token) if token in _WORDS else None
+    if token in _WORDS:
+        return _WORDS.index(token)
+    if "-" in token:
+        tens, _, units = token.partition("-")
+        if tens in _TENS and units in _WORDS[1:10]:
+            return _TENS[tens] + _WORDS.index(units)
+    return _TENS.get(token)
 
 
 def _stamp_table(text: str) -> Optional[List[str]]:
@@ -358,11 +375,11 @@ def _stamp_prose(doc: str, total: int, perf: int,
     """
     text = read(os.path.join(REPO, doc))
     for pat, want, label in (
-            (r"([A-Za-z]+) stamps so far", total, "total"),
-            (r"stands unaltered across all ([a-z]+)", total, "total"),
-            (r"([A-Za-z]+) rows are \*?\*?performance", perf, "performance"),
-            (r"performance stamps and ([a-z]+) are not", total - perf, "other"),
-            (r"the other ([a-z]+) are `", total - perf, "other")):
+            (r"([A-Za-z]+(?:-[A-Za-z]+)?) stamps so far", total, "total"),
+            (r"stands unaltered across all ([a-z]+(?:-[a-z]+)?)", total, "total"),
+            (r"([A-Za-z]+(?:-[A-Za-z]+)?) rows are \*?\*?performance", perf, "performance"),
+            (r"performance stamps and ([a-z]+(?:-[a-z]+)?) are not", total - perf, "other"),
+            (r"the other ([a-z]+(?:-[a-z]+)?) are `", total - perf, "other")):
         for m in re.finditer(pat, text):
             seen += 1
             if _spelled(m.group(1).lower()) != want:
@@ -933,34 +950,56 @@ def check_manifests() -> bool:
                        % extra)
 
     # The PINNED REF, which the name comparison above deliberately throws
-    # away. `spacecost` is not on PyPI, so it installs from a tagged git URL,
-    # and that URL is typed in TWO places: `requirements.txt`, which
-    # `pip install -r` reads, and `_MASTER_PIP_SPEC` in build_master.py, which
-    # is written into master.py and auto-installs at import for the Colab
-    # paste. Nothing compared them until 2026-09-15.
+    # away. `spacecost` is not on PyPI, so it installs from a tagged git URL.
     #
-    # 🚨  A ONE-LINE REPIN OF EITHER ALONE IS THE PARALLEL-REPO DIVERGENCE.
-    # The two paths would install different revisions of the reference tables,
-    # both would report a `spacecost` that imports cleanly, and every stamp in
-    # this repo would still read `transportation 1.14.0`, because that stamp
+    # 🚨  A ONE-LINE REPIN OF ONE COPY ALONE IS THE PARALLEL-REPO DIVERGENCE.
+    # Two paths would install different revisions of the reference tables, both
+    # would report a `spacecost` that imports cleanly, and every stamp in this
+    # repo would still read the same contract version, because that stamp
     # identifies the DATA CONTRACT and not the commit. `1.0.6`, `1.1.4` and
     # `1.3.6` each shipped as two different things the last time this project
     # ran two sources of one truth; see versions.md.
-    if os.path.exists(req_p) and os.path.exists(bm_p):
-        req_ref = re.search(r"^spacecost\s*@\s*(\S+)", read(req_p), re.M)
-        spec_ref = re.search(r'"spacecost"\s*:\s*"([^"]+)"', read(bm_p))
-        n += 1
-        if req_ref is None or spec_ref is None:
-            # Not a skip. Both are supposed to be there, and one of them going
-            # missing is the drift rather than a reason to pass quietly.
-            bad.append("the pinned spacecost ref could not be read from %s"
-                       % ("requirements.txt" if req_ref is None
-                          else "build_master.py's _MASTER_PIP_SPEC"))
-        elif req_ref.group(1) != spec_ref.group(1):
-            bad.append("pinned spacecost ref differs: requirements.txt has %s, "
-                       "_MASTER_PIP_SPEC has %s -- `pip install -r` and a Colab "
-                       "paste would install different Stage 3 tables"
-                       % (req_ref.group(1), spec_ref.group(1)))
+    #
+    # ⚠️  THIS READ TWO FILES BY NAME AND THERE WERE FOUR COPIES.  It compared
+    # `requirements.txt` against `_MASTER_PIP_SPEC` and knew nothing of
+    # `_PIP_SPEC` in modules/transportation.py -- which is what a STANDALONE
+    # module run installs from, so the module could have gone on fetching the
+    # old tables past a repin -- or of README's sentence naming the tag. That is
+    # "a check that reads one row of a table is a check on that row", the lesson
+    # this repo wrote down for check 9 and then left standing here. So the URL
+    # is now found rather than looked up: every first-party file is scanned, and
+    # a fifth copy appearing tomorrow joins the comparison with no edit.
+    #
+    # Only the URL FORM counts. A bare `v0.1.1` in prose is usually history --
+    # both documents tell the story of a checkout that sat two commits past it
+    # -- and pinning those to the live tag would rewrite an account of what
+    # happened. README's one live claim is matched explicitly instead.
+    pin_re = re.compile(r"github\.com/loggger101/spacecost@(\S+?)[\"'\s,)]")
+    pins: Dict[str, List[str]] = {}
+    for rel in sorted(set(FIRST_PARTY_PY + DOCS + ["requirements.txt"])):
+        path = os.path.join(REPO, rel)
+        if not os.path.exists(path):
+            continue                      # absent() covers first-party files
+        for ref in pin_re.findall(read(path) + "\n"):
+            pins.setdefault(ref.rstrip("\"'`,"), []).append(rel)
+    # README says the tag in prose, beside the sentence that explains it.
+    if os.path.exists(readme_p):
+        m = re.search(r"spacecost is pinned to a tagged release\*\*, `([^`]+)`",
+                      read(readme_p))
+        if m:
+            pins.setdefault(m.group(1), []).append("README.md (prose)")
+    n += 1
+    if not pins:
+        # Not a skip. The pin is supposed to be typed in several places, and
+        # all of them going missing is the drift rather than a reason to pass.
+        bad.append("no pinned spacecost ref found anywhere in the first-party "
+                   "files -- it is typed in at least requirements.txt, "
+                   "build_master.py and modules/transportation.py")
+    elif len(pins) > 1:
+        bad.append("the pinned spacecost ref disagrees across %d copies: %s"
+                   % (sum(len(v) for v in pins.values()),
+                      "; ".join("%s in %s" % (ref, ", ".join(sorted(files)))
+                                for ref, files in sorted(pins.items()))))
 
     # README's `./run.sh` block <-> the words run.sh's dispatcher accepts.
     # Same check as the one above and for the same reason: `run.bat help`
@@ -1736,6 +1775,117 @@ def check_prose_numbers() -> bool:
     return not typed
 
 
+# ------------------------------------------------------------- 15. guards
+# The three modules that FETCH.  Stage 4 computes and is not on this list: it
+# writes a catalog it can rebuild from inputs that are still there.
+FETCHING_MODULES = ["modules/catalog.py", "modules/mineral_value.py",
+                    "modules/transportation.py"]
+
+
+def _nested_block(src: str, header: str) -> str:
+    """One INDENTED function's source, from its `def` to the next line at or
+    outside its own indentation.
+
+    `_function_body` slices between top-level `def` lines and cannot see this
+    one: the guard lives inside `if __name__ == "__main__":`, so it is indented,
+    and the next top-level `def` is nowhere below it.  Asking the wrong slicer
+    would have returned everything to end of file -- each module's preview code
+    included -- and the comparison would have reported drift on three files that
+    agree.
+    """
+    start = src.index(header)
+    indent = len(header) - len(header.lstrip())
+    out = []
+    for line in src[start:].splitlines(True):
+        if out and line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        out.append(line)
+    return "".join(out)
+
+
+def check_overwrite_guards() -> bool:
+    """A stage module run DIRECTLY still refuses to overwrite its own inputs.
+
+    WHY THIS EXISTS.  `run_pipeline.py` has asked before Stages 1-3 overwrite a
+    CSV since 2026-08-23, and CLAUDE.md's "RUNNING STAGE 2 OR STAGE 3 DESTROYS
+    EVERY BASELINE YOU HOLD" is written as though that guard were the only door.
+    It is not: `py modules/transportation.py` runs the stage with no guard
+    anywhere in the path, and on 2026-09-17 that re-fetched three live
+    propellant prices over the campaign's frozen tables while somebody was
+    smoke-testing an import.  The frozen values were recoverable only because an
+    archived cell had been priced with them.
+
+    WHAT IT HOLDS.  Each fetching module defines `_confirm_overwrite` inside its
+    `__main__` block and calls it before building.  The guard is MIRRORED rather
+    than shared, because a stage module is standalone by construction and cannot
+    import a helper -- the same argument that keeps `TransportConfig` mirrored
+    against spacecost -- so the copies are asserted equal here, the way
+    `_check_config_surface` asserts that dial surface.
+
+    ⚠️  Equal after normalising the paths each names, and nothing else: a fix
+    applied to one copy and not the others is exactly the "fixing one half of a
+    defect class" failure this repo keeps recording.
+    """
+    bad: List[str] = []
+    if absent(FETCHING_MODULES):
+        print("15. guards     %d NOT ON DISK" % len(absent(FETCHING_MODULES)))
+        return False
+
+    bodies = {}
+    for rel in FETCHING_MODULES:
+        src = read(os.path.join(REPO, rel))
+        run = src.partition("# RUN & PREVIEW")[2]
+        if not run:
+            bad.append("%s: no RUN & PREVIEW block to guard" % rel)
+            continue
+        if "def _confirm_overwrite(" not in run:
+            bad.append("%s: its standalone run defines no _confirm_overwrite, "
+                       "so running the module overwrites its inputs unasked"
+                       % rel)
+            continue
+        # 🚨  MENTIONED IS NOT GATED, and the first draft of this check
+        # accepted the difference.  Neutering the call to
+        # `if False and _confirm_overwrite(...)` left the substring in place
+        # and this check green, which is the "a check that cannot fail" shape
+        # it exists to catch -- found by planting exactly that, because a check
+        # nobody has seen fail is a check nobody has seen.  So the GATE is what
+        # is matched: the refusal, its exit, and its position ahead of the
+        # build it guards.
+        after = run.partition("def _confirm_overwrite(")[2]
+        gate = after.find("if not _confirm_overwrite(")
+        build = re.search(r"\bbuild_\w*catalog\(CONFIG\)", after)
+        if gate == -1:
+            bad.append("%s: _confirm_overwrite is defined but nothing is "
+                       "gated on it -- the build runs either way" % rel)
+        elif build is None:
+            bad.append("%s: no build call found in the run block, so the "
+                       "guard cannot be shown to precede it" % rel)
+        elif gate > build.start():
+            bad.append("%s: the guard is called AFTER the build, which has "
+                       "already overwritten the files by then" % rel)
+        elif "sys.exit(" not in after[gate:build.start()]:
+            bad.append("%s: the guard refuses and the run continues anyway "
+                       "-- no sys.exit between the refusal and the build"
+                       % rel)
+        bodies[rel] = _nested_block(run, "    def _confirm_overwrite(")
+
+    # The copies must still be ONE guard.  Compared as text, since that is what
+    # drifts; the call sites differ (each names its own files) and are not here.
+    if len(bodies) > 1:
+        ref_rel, ref_body = sorted(bodies.items())[0]
+        for rel, body in sorted(bodies.items())[1:]:
+            if body != ref_body:
+                bad.append("%s's overwrite guard has drifted from %s's -- they "
+                           "are mirrored copies of one guard and must stay "
+                           "identical" % (rel, ref_rel))
+
+    print("15. guards     %d fetching module(s) refuse to overwrite unasked, "
+          "%d drifted" % (len(bodies), len(bad)))
+    for line in bad:
+        print("     " + line)
+    return not bad
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run every check except 10, plus 10 if `--before` names a snapshot.
 
@@ -1771,7 +1921,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                check_docstrings,
                check_pairs,
                check_harness_scope,
-               check_prose_numbers):
+               check_prose_numbers,
+               check_overwrite_guards):
         ok = fn() and ok
     if args.before:
         if len(args.before) < 2:

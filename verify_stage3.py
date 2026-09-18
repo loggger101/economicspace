@@ -89,8 +89,12 @@ REPO = os.path.dirname(os.path.abspath(__file__))
 # literal looked deliberate rather than rotten.
 PINNED_DATE = _dt.date.today().isoformat()
 
+# ⚠️  A TABLE MISSING FROM THIS LIST IS A TABLE NOTHING COMPARES, and nothing
+# says so: checks 3 and 4 walk it, so an omission makes a count quietly smaller
+# rather than making anything red.  `environments.csv` arrived with the v1.15.0
+# contract (spacecost v0.2.0) and is the first row added here since the split.
 TABLES = ["launch_vehicles.csv", "propellants.csv", "delta_v_segments.csv",
-          "operational_costs.csv", "storage_systems.csv"]
+          "operational_costs.csv", "storage_systems.csv", "environments.csv"]
 SUMMARY = "transportation_summary.csv"
 
 
@@ -191,7 +195,11 @@ def check_data_contract(t) -> bool:
 
 
 def check_output(t, tmp) -> bool:
-    """The adapter's six CSVs, byte for byte, against the package's own.
+    """The adapter's CSVs, byte for byte, against the package's own.
+
+    The count is DERIVED from `TABLES`, never spelled: it read "six" from the
+    split until the v1.15.0 contract made it seven, which is this repo's
+    standing failure mode arriving inside a checker.
 
     Both are built here rather than one being read off disk, because the point
     is that the ADAPTER adds nothing and loses nothing on the way through.
@@ -220,7 +228,8 @@ def check_output(t, tmp) -> bool:
         ok = ok and same
         print("     %-30s %s  %s" % (name, a[:16],
                                      "match" if same else "*** DIFFER ***"))
-    print("3. output      %s" % ("six files byte-identical through both paths"
+    print("3. output      %s" % ("%d files byte-identical through both paths"
+                                 % (len(TABLES) + 1)
                                  if ok else "*** THE ADAPTER CHANGES THE DATA ***"))
     return ok
 
@@ -325,7 +334,7 @@ def _reference_matches_tag(root: str, tag: str):
 
 
 def check_against_committed_reference(t, tmp) -> bool:
-    """The five tables against the CSVs spacecost commits under `reference/`.
+    """The reference tables against the CSVs spacecost commits there.
 
     This is the half that pins the CONTENT rather than the plumbing: check 3
     would still pass if both sides moved together.  See `_reference_dir` for
@@ -350,10 +359,17 @@ def check_against_committed_reference(t, tmp) -> bool:
         return True
 
     built = os.path.join(tmp, "adapter", "transportation")
-    ok, n = True, 0
+    ok, n, unheld = True, 0, []
     for name in TABLES:
         want = os.path.join(ref, name)
         if not os.path.exists(want):
+            # ⚠️  NOT A SILENT CONTINUE.  A table the pinned tag does not commit
+            # is a table this check does not cover, and the only symptom used to
+            # be a smaller `n` -- the "count that is quietly smaller" shape this
+            # repo has already been caught by once, in `verify_docs.py`'s file
+            # enumeration.  It is legitimate (an older tag predates a table), so
+            # it is reported rather than failed.
+            unheld.append(name)
             continue
         n += 1
         # Content, not bytes: see `_content_sha`.  The docstring above has
@@ -362,6 +378,9 @@ def check_against_committed_reference(t, tmp) -> bool:
         ok = ok and same
         if not same:
             print("     %-30s *** DIFFERS from spacecost reference/ ***" % name)
+    if unheld:
+        print("     %d table(s) not committed under reference/ at this tag, so "
+              "NOT compared: %s" % (len(unheld), ", ".join(unheld)))
     print("4. reference   %s" % (
         "%d tables match spacecost's committed CSVs (%s)" % (n, note)
         if ok else "*** CONTENT MOVED *** (%s)" % note))

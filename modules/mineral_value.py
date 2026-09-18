@@ -2146,6 +2146,58 @@ print("    mineral_to_element_value(catalog, 'nickel-iron')")
 # RUN & PREVIEW
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+
+    # ── OVERWRITE GUARD ──────────────────────────────────────────────────────
+    # A FETCHING stage writes over the only copy of its inputs, and there is no
+    # undo: every `.verify` baseline and every committed measurement was taken
+    # against the files this run is about to replace.  `run_pipeline.py` has
+    # asked before doing that since 2026-08-23; running THIS FILE went nowhere
+    # near that guard, which is the hole somebody fell into on 2026-09-17 while
+    # smoke-testing an import, re-fetching three live propellant prices over the
+    # campaign's frozen tables.
+    #
+    # ⚠️  Mirrored, not shared: a stage module is standalone by construction and
+    # cannot import a helper.  `verify_docs.py` check 15 holds the three copies
+    # to each other, so edit one and the docs harness names the other two.
+    def _confirm_overwrite(paths, what):
+        """True when it is safe to overwrite `paths`; ask the user if it is not.
+
+        Refuses on EOF rather than hanging, because stdin here may be a
+        scheduled task's dead handle -- the `set /p` trap in `run.bat`, which
+        waits forever instead of failing.  `--yes` skips the question, which is
+        what a scripted caller passes.
+        """
+        existing = [p for p in paths if os.path.exists(p)]
+        if not existing or "--yes" in sys.argv:
+            return True
+        print("")
+        print("  " + "=" * 71)
+        print("  THIS RE-FETCHES LIVE DATA AND OVERWRITES WHAT IS ON DISK")
+        print("  " + "=" * 71)
+        print("  %s" % what)
+        for p in existing[:8]:
+            print("    %s" % p)
+        if len(existing) > 8:
+            print("    ... and %d more" % (len(existing) - 8))
+        print("")
+        print("  The values on disk are the only copy.  Any verify.py baseline")
+        print("  or archived measurement taken against them stops reproducing,")
+        print("  and that looks exactly like a code regression.")
+        print("")
+        try:
+            return input("  Type 'yes' to overwrite: ").strip().lower() == "yes"
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            print("  No console to confirm on (stdin is not a terminal).")
+            print("  Pass --yes if overwriting them is what you meant.")
+            return False
+
+    if not _confirm_overwrite(
+            [os.path.join(CONFIG.output_dir, CONFIG.catalog_filename)],
+            "Stage 2 re-fetches live metal prices and re-prices every commodity."):
+        print("  Cancelled; nothing was fetched and nothing was written.")
+        sys.exit(1)
+
     catalog = build_mineral_value_catalog(CONFIG)
 
     if not catalog.empty:

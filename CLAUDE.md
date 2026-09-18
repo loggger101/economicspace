@@ -62,6 +62,7 @@ through. Skim for the section that names what you are about to change.
 - [A Stage 2 catalog is priced for ONE destination](#a-stage-2-catalog-is-priced-for-one-destination-and-so-are-its-ceilings)
 - [Durable lessons from the release history](#durable-lessons-from-the-release-history)
 - [The verification harness is committed now](#the-verification-harness-is-committed-now)
+- [A guard on one door is not a guard on the room](#a-guard-on-one-door-is-not-a-guard-on-the-room)
 - [Running `verify.py` used to overwrite the live Stage 4 catalog](#running-verifypy-used-to-overwrite-the-live-stage-4-catalog)
 - [Stage 3 lives in another repository now](#stage-3-lives-in-another-repository-now)
 - [Config discipline](#config-discipline)
@@ -181,22 +182,25 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.14.0`,
-calc `1.23.0`, master `1.28.0` (the master version is a literal in
+Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.15.0`,
+calc `1.23.0`, master `1.29.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
-ℹ️  **transportation `1.14.0` is now spacecost's data-contract version**, not a
-number this repo owns. The tables moved out; the stamp did not move with them,
-because the stamp identifies the data and the data is unchanged.
+ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
+number this repo owns, and `verify_stage3.py` check 2 asserts the two are
+equal. It stayed at `1.14.0` through the split because the data did not move;
+it moved to `1.15.0` when the package gained a sixth table (`environments`,
+spacecost v0.2.0). **So it follows a repin, and a repin follows it: the two
+are one number in two repositories.**
 
-ℹ️  **TWENTY stamps so far do NOT mean the numbers moved.** The rule
+ℹ️  **TWENTY-ONE stamps so far do NOT mean the numbers moved.** The rule
 is one-directional: *changing a number means bumping; bumping does not mean a
 number changed*, and reading a version as evidence that a result moved is the
 mistake this table exists to prevent.
 
 ⚠️  Most rows are **calc** stamps. The exceptions are `mineral_value 1.7.1`,
-`mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0` and
-`transportation 1.14.0`, so read the module and not just the number: `1.7.1`
+`mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0`,
+`transportation 1.14.0` and `transportation 1.15.0`, so read the module and not just the number: `1.7.1`
 and `1.17.1` are different modules and unrelated releases, and so are `1.14.0`
 and `1.19.0`, which shipped together.
 
@@ -222,13 +226,14 @@ and `1.19.0`, which shipped together.
 | mineral_value `1.9.0` | **a seventh destination** | bit-identical, verified |
 | transportation `1.14.0` | **four reference rows** | bit-identical, verified |
 | `1.19.1` | **a check that cried wolf** | bit-identical, verified |
+| transportation `1.15.0` | **a sixth reference table** | bit-identical, verified |
 
-**Every measured cell in this file stands unaltered across all twenty; do not
+**Every measured cell in this file stands unaltered across all twenty-one; do not
 re-measure anything on account of any of them.** Each release's own section
 carries its verification.
 
 ⚠️  **Derive the taxonomy from the table above, not from a count in prose.**
-Eight rows are *performance* stamps; the other twelve are `1.17.0` (a default
+Eight rows are *performance* stamps; the other thirteen are `1.17.0` (a default
 flip), `1.17.3` (a cleanup), `1.17.7` (a memory bound), `1.17.8` (a new
 upstream check), `1.19.1` (that same check, fixed), `1.7.1` (a silent default
 closed in another module), and two
@@ -3804,6 +3809,68 @@ name their release now. **This file's standing rule about wall clocks applies
 unchanged to objectives, and to any other quantity a chooser sorts on: a
 figure is only ever true of the release it names.**
 
+### A guard on one door is not a guard on the room
+
+2026-09-17, and it is the third member of the family above rather than a new
+one. The two sections before it are about an INPUT you cannot get back and an
+OUTPUT archive you cannot get back; this is about the fact that **both of those
+sections describe the guarded path and there is an unguarded one beside it.**
+
+`run_pipeline.py` has asked before Stages 1-3 overwrite a CSV since 2026-08-23,
+and `preflight()` refuses a mismatched destination before that. Neither is in
+the path when you run the module itself:
+
+```bash
+py modules/transportation.py     # Stage 3, no guard, straight into asteroid_pipeline/
+```
+
+🚨  **THAT IS HOW THE CAMPAIGN'S FROZEN STAGE 3 TABLES WERE RE-FETCHED**, while
+smoke-testing that a repinned adapter still imported. The banner it was run
+for prints four lines before the fetch starts; the fetch is the next thing that
+happens.
+
+| propellant | frozen 2026-09-09 | re-fetched 2026-09-17 | moved |
+|---|---|---|---|
+| methalox | 0.186202302606 | 0.185893 | **-0.17%** |
+| kerolox | 0.580466991536 | 0.599073 | **+3.21%** |
+| HTP / RP-1 | 1.455541072067 | 1.516942 | **+4.22%** |
+
+✅  **THE FROZEN VALUES CAME BACK OUT OF AN ARCHIVED CELL, AND THAT IS THE
+REUSABLE PART.** A Stage 4 output carries `outbound_prop_cost_usd` and
+`m_outbound_prop_kg`, so their ratio IS the input price: constant to 1.7e-16
+across the 100,392 methalox rows of `leo__benef__search-on`. **An input you
+cannot recover from a backup may still be recoverable from an output that was
+priced with it** -- ask what the run multiplied it by before concluding it is
+gone.
+
+⚠️  **What it cost was measured rather than assumed, and it was nothing that is
+committed.** All four calc `1.23.0` cells reproduce their hashes exactly,
+because no winner in any of them flies a live-priced propellant: 72 xenon, 39
+iodine, 22 water ion, 14 krypton, 8 hydrolox on the raw cell. What is lost is
+exact input-identity with the 2026-09 campaign for rows that DO choose one,
+which is 11-15% of the beneficiated cells at four destinations.
+
+✅  **The three FETCHING modules guard their own standalone run now.**
+`_confirm_overwrite` names the files, refuses on EOF rather than hanging on a
+dead stdin (the `set /p` trap, one level out), and takes `--yes`. Proved by
+re-running the command that caused the damage: hash unchanged, nothing
+fetched. `verify_docs.py` check 15 holds the three mirrored copies to each
+other, because a stage module is standalone by construction and cannot import a
+helper -- the same argument that keeps `TransportConfig` mirrored.
+
+🚨  **AND THE CHECK'S FIRST DRAFT COULD NOT FAIL.** It asserted that
+`_confirm_overwrite` was MENTIONED after its definition, which
+`if False and _confirm_overwrite(...)` satisfies perfectly. Found by planting
+exactly that. It matches the GATE now -- the refusal, a `sys.exit` between it
+and the build, and its position ahead of the build. **Mentioned is not gated**,
+and the only way anyone found out is the standing rule: feed a new check a
+wrong answer before believing its clean line.
+
+⚠️  **Stage 4 is deliberately NOT on that list.** It computes rather than
+fetches, and its output is rebuildable from inputs that are still there; its
+own overwrite problem was `verify.py` writing cells onto the live catalog, and
+that was fixed by redirecting `output_dir`, not by asking a question.
+
 ### RUNNING `verify.py` USED TO OVERWRITE THE LIVE STAGE 4 CATALOG
 
 The third member of a family this file already has two entries for. The first
@@ -4028,9 +4095,16 @@ person who fixed the other half.
 
 ## Stage 3 lives in another repository now
 
-`modules/transportation.py` is an adapter. Every reference row, all 141 of
-them, is in [`spacecost`](https://github.com/loggger101/spacecost), pinned to
-tag `v0.1.1` in `requirements.txt` and in `_MASTER_REQUIRED`.
+`modules/transportation.py` is an adapter. Every reference row is in
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.2.0`.
+**Do not state the row count here**; the adapter's ready banner prints it on
+every import, and this sentence carried "all 141 of them" into a release that
+added a whole table.
+
+⚠️  **THE PIN IS TYPED IN FOUR PLACES**, and a repin that misses one is the
+parallel-repo divergence in miniature: `requirements.txt`, `_MASTER_PIP_SPEC`
+in `build_master.py`, `_PIP_SPEC` in this module (**what a standalone module
+run installs from**) and README's sentence naming the tag.
 
 🚨  **THIS PROJECT HAS ALREADY BEEN BURNED BY A SPLIT, AND THE LESSON WAS NOT
 "DO NOT SPLIT".** It was developed in two places at once and `1.0.6` / `1.1.4` /
@@ -4043,10 +4117,11 @@ so that drift cannot be committed:
 |---|---|---|
 | the **data** | one copy, in spacecost; this repo holds none | nothing can drift |
 | the **dials** | ten fields, mirrored, compared at import time | `_check_config_surface()` raises, so the import fails, not the run |
-| the **output** | six CSVs, byte for byte, both paths | `verify_stage3.py`, which names the file and the side |
+| the **output** | every CSV, byte for byte, both paths | `verify_stage3.py`, which names the file and the side |
 | the **behaviour** | `validate()`'s sanity bands, driven against the one defect they are known to have had | `verify_stage3.py` check 5 |
 | the **revision** | pip's `direct_url.json` against the pinned tag | `verify_stage3.py` check 6 |
-| the **pin itself** | its two typed copies, held to each other | `verify_docs.py` check 7 |
+| the **pin itself** | every typed copy, found rather than listed | `verify_docs.py` check 7 |
+| the **contract** | this module's stamp against `spacecost.DATA_VERSION` | `verify_stage3.py` check 2 |
 
 🚨  **THE PIN WAS TYPED TWICE AND COMPARED NOWHERE, UNTIL 2026-09-15.** The
 tagged git URL lives in `requirements.txt`, which `pip install -r` reads, and
@@ -4248,6 +4323,16 @@ Undoing any of these silently corrupts the output:
   `verify_stage3.py` check 6 holds the INSTALLED revision to both. What is
   still on you is cutting the release: neither check can tell "the tag has not
   been repinned" from "the edit was never released".
+
+  ✅  **WALKED ONCE, ON 2026-09-17**, for spacecost v0.1.1 -> v0.2.0 and the
+  contract 1.14.0 -> 1.15.0. The tables did not change; the package gained a
+  sixth (`environments`, 23 destinations), and the stamp is the package's, so
+  it followed. **A repin does not require a restamp** -- Stage 4 reads no column
+  that moved, and restamping means a fetch -- but the CSVs on disk read 1.15.0
+  anyway, because the accident under
+  [a guard on one door](#a-guard-on-one-door-is-not-a-guard-on-the-room) had
+  already rebuilt them. See
+  [transportation v1.15.0](versions.md#transportation-v1150--master-v1290).
 
   🚨  **A MODULE 3 TABLE IS NOW A `spacecost` EDIT, AND THAT IS FOUR STEPS, NOT
   ONE.** Change the row there, bump its `pipeline_version` if the number moves,

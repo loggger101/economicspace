@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.28.0)
+"""Master Asteroid Profitability Pipeline (1.29.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -121,7 +121,7 @@ _MASTER_REQUIRED = [
 # requirements.txt
 # and delete this dict; nothing else here changes.
 _MASTER_PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.1.1",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.2.0",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -5509,7 +5509,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.14.0"
+    pipeline_version: str = "1.15.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 TRANSPORT_CONFIG = TransportConfig()
@@ -5572,6 +5572,11 @@ PROPELLANTS_REFERENCE       = spacecost.PROPELLANTS_REFERENCE
 DELTA_V_REFERENCE           = spacecost.DELTA_V_REFERENCE
 OPERATIONAL_COSTS_REFERENCE = spacecost.OPERATIONAL_COSTS_REFERENCE
 STORAGE_REFERENCE           = spacecost.STORAGE_REFERENCE
+# The sixth, new in the v1.15.0 contract.  Nothing in Stage 4 reads it yet; it
+# is re-exported on the same terms as the other five so that this module's
+# surface is the package's surface rather than the subset somebody needed on
+# the day.
+ENVIRONMENTS_REFERENCE      = spacecost.ENVIRONMENTS_REFERENCE
 
 # Physical constants and unit helpers, likewise.
 G0_M_S2                     = spacecost.G0_M_S2
@@ -5585,6 +5590,7 @@ load_propellants             = spacecost.load_propellants
 load_delta_v                 = spacecost.load_delta_v
 load_operational_costs       = spacecost.load_operational_costs
 load_storage                 = spacecost.load_storage
+load_environments            = spacecost.load_environments
 propellant_mass_for_dv       = spacecost.propellant_mass_for_dv
 cost_per_dv_usd_per_kg       = spacecost.cost_per_dv_usd_per_kg
 build_transportation_summary = spacecost.build_transportation_summary
@@ -5608,15 +5614,21 @@ validate_transport = _spacecost_validate
 def build_transportation_catalog(
     config: TransportConfig = TRANSPORT_CONFIG,
 ) -> Dict[str, pd.DataFrame]:
-    """Run Stage 3: build every reference table and write the six CSVs.
+    """Run Stage 3: build every reference table and write the seven CSVs.
 
     Delegates to `spacecost.build_catalog`, which is the same code this file
-    used to hold.  The six CSVs are byte-identical to the ones it produced at
-    pipeline_version 1.14.0; `verify_stage3.py` is that claim as a check.
+    used to hold.  Six reference tables and the composite summary, every one
+    byte-identical through this path and through the package's own, which is
+    what `verify_stage3.py` check 3 asserts file by file.
 
-    Returns the same dict of frames as before:
+    Returns a dict of frames:
         {launch_vehicles, propellants, delta_v_segments, operational_costs,
-         storage_systems, summary}
+         storage_systems, environments, summary}
+
+    `environments` arrived with the v1.15.0 contract and is the one key a
+    caller written against v1.14.0 will not know.  Nothing in Stage 4 reads
+    it; it is returned because a build that writes a file and leaves it out of
+    its own return value has two answers to what it built.
     """
     # A library is silent by default and a pipeline STAGE reports progress, so
     # verbosity is turned on for the call and put back afterwards.  Restored in
@@ -5635,7 +5647,8 @@ print(f"    Tables    : {len(LAUNCH_VEHICLES_REFERENCE)} vehicles, "
       f"{len(PROPELLANTS_REFERENCE)} propellants, "
       f"{len(DELTA_V_REFERENCE)} dv segments, "
       f"{len(OPERATIONAL_COSTS_REFERENCE)} ops rows, "
-      f"{len(STORAGE_REFERENCE)} storage systems")
+      f"{len(STORAGE_REFERENCE)} storage systems, "
+      f"{len(ENVIRONMENTS_REFERENCE)} environments")
 print(f"    Output dir: {os.path.join(TRANSPORT_CONFIG.output_dir, TRANSPORT_CONFIG.subdir)}")
 
 
@@ -15026,7 +15039,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.28.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.29.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

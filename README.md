@@ -124,9 +124,12 @@ They left because nothing in their schema knew what an asteroid was, and a
 launch price is useful to anyone costing a mission. This pipeline is that
 package's first consumer.
 
-**Nothing about the model changed.** The six CSVs Stage 4 reads are byte
-identical, `pipeline_version` is the same `1.14.0`, and all four Stage 4 cells
-reproduce their committed hashes. Two checks say so and both are cheap:
+**Nothing about the model changed**, at the split or at the v0.2.0 repin that
+followed it. The tables Stage 4 reads are byte identical through either path,
+and all four Stage 4 cells reproduce their committed hashes. What the repin
+moved is the stamp: `pipeline_version` is spacecost's DATA CONTRACT, mirrored
+here and asserted equal, and it went `1.14.0` -> `1.15.0` when the package
+gained a sixth table. Two checks say so and both are cheap:
 
 ```bash
 py verify_stage3.py
@@ -143,9 +146,13 @@ compared byte for byte. **The invariants, and what fails when each breaks, are
 in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now)**, which is
 where the editing rules live.
 
-**spacecost is pinned to a tagged release**, `v0.1.1`, in both
-`requirements.txt` and `_MASTER_REQUIRED`. An untagged URL would let a fresh
-install pick up a different table with nothing here moving.
+**spacecost is pinned to a tagged release**, `v0.2.0`, in all four places that
+type it: `requirements.txt`, `_MASTER_PIP_SPEC` in `build_master.py`,
+`_PIP_SPEC` in `modules/transportation.py` (what a standalone module run
+installs from) and this sentence. An untagged URL would let a fresh install
+pick up a different table with nothing here moving, and a repin of one copy
+alone is the same divergence in miniature -- `verify_docs.py` check 7 scans
+every first-party file for the URL and fails when they disagree.
 
 `run.bat`, `run_pipeline.py`, `ui.py` and `ui_meta.py` sit at the root rather
 than in `modules/` on purpose:
@@ -162,7 +169,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.2.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
 | 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.14.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems |
+| 3 | `modules/transportation.py` | 1.15.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read |
 | 4 | `modules/calc.py` | 1.23.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
@@ -816,7 +823,7 @@ py verify_stage3.py
 It asserts six things: the ten config dials match the package's field for
 field, the `pipeline_version` this repo stamps is the package's data-contract
 version, the six CSVs are byte identical whether built through the adapter or
-through the package directly, the five tables match the CSVs spacecost commits
+through the package directly, the reference tables match the CSVs spacecost commits
 under `reference/`, Stage 3's `validate()` still covers a propellant row that
 omits its `propellantless` flag, and the spacecost that is actually INSTALLED
 is the revision `requirements.txt` pins. The third would still pass if both
@@ -988,6 +995,7 @@ py verify_docs.py
 | 11 | docstrings | a module, class or function in the repo's own Python with no docstring |
 | 12 | pairs | one measurement quoted in BOTH README and CLAUDE.md without a row on CLAUDE.md's register of known copies |
 | 13 | scope | a document disagreeing with `verify.py` about which checks it runs: its own docstring list, the check table above, and the four sentences in either file that say what `invariants` or `--skip prune parallel` covers. All four omitted check 7 for a release, in the file CLAUDE.md names as the authority for counting them |
+| 15 | guards | a FETCHING stage module that would overwrite its own inputs when run directly, with no question asked. `run_pipeline.py` has guarded that since 2026-08-23 and `py modules/transportation.py` never did: on 2026-09-17 it re-fetched three live propellant prices over the campaign's frozen tables while somebody smoke-tested an import. The guard is mirrored into all three fetching modules, because a stage module is standalone and cannot import a helper, so this holds the copies to each other, to the call, and to the `sys.exit` between the refusal and the build |
 | 14 | prose | a number typed into a sentence the worked calculation renders, where every figure beside it is derived and compared against the model. It shipped two: Module 1's taxonomy fractions "sum to between 0.73 and 0.96" and the solar/RTG crossover "near 3.46 AU", both correct when written and neither ever executed. Both derive now, and a survivor needs a row on the register in `campaign/worked_calculation.py` saying why it cannot rot. It reads the renderer's source, so it needs no run and no inputs, which is what lets it live here rather than in that script's own `--audit` |
 
 ⚠️  **Every one of these fails if a file it is supposed to read is not on
