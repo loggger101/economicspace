@@ -413,6 +413,130 @@ case the bound is now reserved for. Set `max_mining_fraction` below 1.0 to
 restore a depletion limit; a 1.22.0 catalog is reproduced exactly by setting it
 to 0.05.
 
+### The full-catalog default cell at this release (2026-09-18)
+
+The release above is argued from 400/150-row stride cells. This is the
+configure-nothing cell over every row of the 1,555,667-row catalog: `cislunar`,
+beneficiated, programme search on, 12 workers, `--preset full`, **12,000.5 s**.
+Stages 1-3 were not run, and the live Stage 2 catalog was verified
+byte-identical to `campaign/stage2/mineral_value_catalog.cislunar.csv` before
+launch, so the 2026-09-09 price epoch is the 28-cell campaign's.
+
+| | v1.22.0 | **v1.23.0 (this run)** |
+|---|---|---|
+| cost / revenue | 3.1822x | **3.1822x** |
+| winner | 2021 CX5 (D) | 2021 CX5 (D) |
+| vehicle / propellant | New Glenn / iodine | New Glenn / iodine |
+| payload | 62,283 kg | 62,283 kg |
+| programme | N = 18, 6 ships x 3 campaigns | N = 18, 6 ships x 3 campaigns |
+| evaluable rows | 660,253 | **660,253** |
+| wall clock | 11,676 s | 12,000 s |
+
+#### The winner is bit-identical and the population is not
+
+The objective is `3.182208152479452` in both builds, the payload
+`62282.753868077045` and the concentration ratio `3.518630541998643`: the same
+floats, not the same rounding. Paired row by row on `designation`, **7,513 rows
+(1.14%) move**, 3,336 change propellant and 4,740 change vehicle.
+
+🚨  **THAT IS THIS PROJECT'S STANDING CAMPAIGN FINDING RUNNING BACKWARDS.**
+The 2026-09 campaign's most reusable result is that winner rows moved 8-69%
+while the population medians moved 0.1 to 2.3 pp. Here the winner does not move
+at all and the population does. **A headline that reproduces exactly is not
+evidence that the model did not change.**
+
+#### Two things moved between the cells, so they are attributed rather than guessed
+
+The propellant price is recoverable from a Stage 4 row as
+`outbound_prop_cost_usd / m_outbound_prop_kg`. Exactly three moved, and they are
+the three refetched on 2026-09-17 by the guard that did not exist:
+
+| propellant | v1.22.0 | v1.23.0 | moved |
+|---|---|---|---|
+| HTP / RP-1 | 1.455541 | 1.516942 | **+4.218%** |
+| kerolox | 0.580467 | 0.599073 | **+3.205%** |
+| methalox | 0.186202 | 0.185893 | **-0.166%** |
+
+Every other propellant price is identical to the last bit. A price move can only
+reach a row whose chosen propellant is one of those three in one build or the
+other, which makes the split exact:
+
+| | rows |
+|---|---|
+| objective moved | 7,513 |
+| reachable by a price move | 1,436 |
+| **NOT reachable, so the dial** | **6,077** |
+
+The dial-only rows are **5,830 better and 247 worse**, worst regression
+**+391.27** on the objective, which is `max_mining_fraction` no longer sizing a
+mission that nothing physical asked to be small.
+
+⚠️  **The methalox share halving is the DIAL, not the price**, and the
+direction is what says so: methalox got **cheaper** and lost share, 0.1989% to
+0.0830%, with 866 rows leaving it for iodine (529) and xenon (127). A bigger
+haul is a different mass ratio, and methalox wins on tankage at high mass ratio.
+
+#### The 65-row sample could not have seen this
+
+The release note above reports both beneficiated cislunar cells **bit-identical**
+under this dial, `0 of 65 rows` moved. On the full catalog the same cell moves
+6,077 rows on the dial alone.
+
+✅  **That is not a contradiction and the arithmetic is the point**: 1.14% of 65
+rows is under one row, so a clean sample was the expected outcome either way.
+What was wrong is the reading. **"Bit-identical on 65 rows" is a statement about
+the sample**, and it was carried forward as a statement about the cell. THE
+SAMPLING RULE already covers wall clocks, cost ratios and memory; this is the
+fourth quantity, a **population share**, and it is the one that looks safest
+because a hash either matches or it does not.
+
+#### Invariants, on all 660,253 rows
+
+- **mass ledger**: `max |error| 0.000000000 kg`
+- **programme structure**: `N = F x W` on every row, and `W > trips` never
+- `W < trips` on **23,151 rows (3.51%)**
+- **`saturation_multiplier` identically 1.0**, min and max, which is correct and
+  inert under `capacity_cap`
+- `unsold_payload_kg` and `surplus_payload_kg` are exclusive: **0 rows carry
+  both**, 0 unsold and 31,576 with a genuine surplus
+- clearing min **0.839715**, median 1.000000, **6.42%** of rows bound
+- **113,222 rows (17.15%)** at `max_fleet_ships`
+
+⚠️  **A bare `unsold_payload_kg > 0` reports 1,882 unsold rows against a true
+0.** The beneficiated path forms that column by subtracting two associations of
+one quantity, so an unshrunk hold leaves a ULP. The milligram floor is the same
+one `verify.py` check 7 takes.
+
+⚠️  **The never-worse pairings are NOT reported, because they cannot be run.**
+Both join two runs on `designation`, and the v1.23.0 square has only this
+corner; the other three cells are v1.22.0 or older. Joining across releases
+compares two models rather than two settings.
+
+#### `MEASURED_CELL_SECONDS` deliberately does not move
+
+It is the four cislunar cells at `MEASURED_CELL_CALC`, and only one of the four
+exists at v1.23.0. Moving one row would make the dict a mixed-release object and
+`verify_docs.py` check 9 would go red, having no v1.23.0 logs behind the other
+three. The wall clock is 2.8% off v1.22.0's anyway, which is inside the session
+drift this release's own runtime note says the host cannot resolve.
+
+#### The archive, and the worked calculation
+
+Archived as `cislunar__benef__search-on__calc-1.23.0.csv.gz`, calc-suffixed so
+that `population.py`, `analyse.py` and `worked_calculation.py` cannot mistake it
+for the campaign's own cell, all three building exact filenames rather than
+globbing.
+
+`py campaign/worked_calculation.py --audit --catalog <that archive>` derives
+**88 quantities: 87 bit-exact, 1 within 1e-12** (`diameter_km`, 6.795e-16
+relative), **0 DIFFER**, with 121 of 121 non-zero columns shown, **35 of 35**
+reference constants shown, 2 of 106 values still matched after every one is
+moved 31.7%, and no typed number in a sentence.
+
+✅  **It is the first archive that needs no `--max-mining-fraction` override**,
+because the run and the live default are both 1.0. Every older archive was
+written at 0.05 and re-derives as a different, smaller mission without the flag.
+
 ## calc v1.22.0
 
 **Four defaults moved. The surplus past a market ceiling sells at half price

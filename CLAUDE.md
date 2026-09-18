@@ -70,6 +70,7 @@ through. Skim for the section that names what you are about to change.
 - [One definition with two readers imposes the stricter reader on both](#one-definition-with-two-readers-imposes-the-stricter-reader-on-both)
 - [`y * 365.25 * 24.0` is not `y * 8766.0`](#y--36525--240-is-not-y--87660)
 - [A Stage 2 catalog is priced for ONE destination](#a-stage-2-catalog-is-priced-for-one-destination-and-so-are-its-ceilings)
+- [A bit-identical WINNER is not a bit-identical CELL](#a-bit-identical-winner-is-not-a-bit-identical-cell)
 - [Durable lessons from the release history](#durable-lessons-from-the-release-history)
 - [The verification harness is committed now](#the-verification-harness-is-committed-now)
 - [A guard on one door is not a guard on the room](#a-guard-on-one-door-is-not-a-guard-on-the-room)
@@ -3703,6 +3704,55 @@ cell it binds on**, and note the corollary for the population: *how often a cap
 binds says nothing about whether it is setting your headline*, which is the
 same sentence this file already writes about the RTG branch and about survivor
 counts.
+
+### A bit-identical WINNER is not a bit-identical CELL
+
+2026-09-18, the full-catalog cislunar default cell at calc `1.23.0`, and it is
+[the campaign's headline finding](#what-the-model-currently-says-and-what-that-retired)
+running backwards.
+
+That finding is that winner rows moved 8-69% between the two campaigns while
+the population medians moved 0.1 to 2.3 pp, and the rule drawn from it is to
+quote a median before claiming the model changed. Here the winner does not move
+**at all** -- `3.182208152479452` in both builds, the same float, with the same
+payload and the same concentration ratio -- and **7,513 rows (1.14%) do**, 3,336
+of them changing propellant.
+
+🚨  **SO A HEADLINE THAT REPRODUCES EXACTLY IS NOT EVIDENCE THAT THE MODEL DID
+NOT CHANGE**, which is the same sentence as the campaign's and with the terms
+swapped. A best-case cell was already a poor detector for anything wrong below
+the top; this is the case where it is a poor detector for something that is not
+wrong at all, merely different.
+
+⚠️  **AND THE SAMPLE HAD ALREADY SAID SO, IN THE WORD "BIT-IDENTICAL".**
+[calc v1.23.0](versions.md#calc-v1230) reports both beneficiated cislunar cells
+bit-identical under `max_mining_fraction`, `0 of 65 rows` moved, and that is a
+correct measurement. The full cell moves 6,077 rows on that dial alone. **1.14%
+of 65 rows is under one row**, so a clean sample was the expected outcome
+whichever way the population went: the sample never had the power to answer the
+question it was read as answering.
+
+✅  **THE SAMPLING RULE COVERS A POPULATION SHARE, AND IT IS THE MEMBER THAT
+LOOKS SAFEST.** A wall clock quoted from a sample is obviously a projection; a
+HASH is not, because it either matches or it does not, and nothing about
+`MATCH` says how many rows were behind it. **Ask what fraction a sample could
+have detected before reading a clean one as a property of the cell.**
+
+✅  **Two confounded changes are separable when one of them is recoverable
+from the row.** The prices of three propellants had moved between the two
+builds, so the population shift had two candidate causes. A Stage 4 row carries
+`outbound_prop_cost_usd` and `m_outbound_prop_kg`, and their ratio IS the input,
+so the three that moved can be named and every other price shown identical. A
+price reaches only a row flying one of the three, which splits 7,513 into
+**1,436 price-reachable and 6,077 that are the dial** -- an exact partition
+rather than an argument. **Before attributing a shift to the change you made,
+ask which of the other candidates leaves a fingerprint in the output.**
+
+⚠️  **Read the DIRECTION, not only the size.** The loudest single move was
+methalox halving its share, and methalox is one of the three repriced
+propellants, which makes it look like the price. It got **cheaper** and lost
+share, so it cannot be. A confound that points the wrong way is evidence
+against itself.
 
 ### A ratio taken across a session is a measurement of the session
 
