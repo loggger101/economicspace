@@ -1977,6 +1977,27 @@ def _ep_stage(C, m_prop):
                 thrust_yr=C["cfg"].ep_target_thrust_yr)
 
 
+# The last guard the cascade refused on, for the message when every rung fails.
+# Recorded rather than returned, so that `return None` stays one word at each
+# of the nine sites that use it: a cascade that reported its own reason through
+# its return value would have to be unpacked by every caller of every rung.
+REFUSAL = []
+
+
+def refuse(reason):
+    """Record why the cascade could not close, and return the None it returns.
+
+    🚨  THE MESSAGE WAS ABOUT THE WRONG THING.  When no rung of
+    the ratio ladder closed, the derivation said "no concentration ratio closes
+    a mission on this body" -- on a RAW row, where no ratio is involved and
+    what actually refused was the launch stack against the vehicle's capacity.
+    A refusal that names the wrong constraint sends the next reader to the
+    wrong file.
+    """
+    REFUSAL.append(reason)
+    return None
+
+
 def mass_and_clock(C, B, DV, ratio):
     """The coupled sizing loop, then the mission actually flown.
 
@@ -2038,16 +2059,16 @@ def mass_and_clock(C, B, DV, ratio):
             dv_ret_eff = C["ve"] * math.log(1.0 + (r_ret_raw - 1.0) * boiloff_factor)
         R = _ratios(C, DV["dv_out"], dv_ret_eff)
         if R is None:
-            return None
+            return refuse("the tank cannot close: delta (R - 1) >= 1 on this propellant")
         hw_in = cfg.mining_hardware_kg + plant_kg + ep_kg
         cas = _cascade(C, R, hw_in, struct)
         if cas is None:
-            return None
+            return refuse("the mass cascade does not converge at this hardware mass")
         ep = _ep_stage(C, cas["m_prop"])
         trial_pay = min(cas["m_pay"], B["mineable"],
                         max(0.0, throughput - isru_feed))
         if trial_pay <= 0:
-            return None
+            return refuse("no payload is left once the rig, the plant and the feed are paid")
         new_isru_prop = new_isru_feed = 0.0
         if isru:
             # Propellant made on site is dug before it is burnt, so it takes
@@ -2058,7 +2079,7 @@ def mass_and_clock(C, B, DV, ratio):
                              * (1.0 + C["tps_frac"]) * (R["R_ret"] - 1.0))
             new_isru_feed = new_isru_prop * C["isru_feed_per_kg_prop"]
             if new_isru_feed >= throughput or new_isru_feed >= B["mineable"]:
-                return None
+                return refuse("the ISRU feed alone exceeds what the rig can dig or the body allows")
         # A raw mission digs exactly what it flies: there is no feed above
         # the payload, so no ratio, and the hold is the body's own mix.
         trial_feed = (min(trial_pay * ratio,
@@ -2100,7 +2121,7 @@ def mass_and_clock(C, B, DV, ratio):
         # UNAVAILABLE: DOE produces about 1.5 kg of Pu-238 a year, roughly one
         # flagship RTG for the whole world.
         if C["power_source"] == "rtg" and draw > cfg.rtg_max_power_w:
-            return None
+            return refuse("the radioisotope plant exceeds `rtg_max_power_w`")
         new_plant = draw / C["plant_w_per_kg"] if draw > 0 else 0.0
         new_frac = C["contain_per_kg"] * min(1.0, water / trial_pay)
         new_stay = trial_dig + DV["window_wait"]
@@ -2141,7 +2162,7 @@ def mass_and_clock(C, B, DV, ratio):
     m_pay = (min(demand, vol_cap) if C["beneficiated"]
              else min(demand, vol_cap, ore_throughput))
     if m_pay <= 0:
-        return None
+        return refuse("no payload is left once the rig, the plant and the feed are paid")
     feed = (max(min(m_pay * ratio, ore_throughput, ore_mineable), m_pay)
             if C["beneficiated"] else m_pay)
     load = (knapsack(m_pay, feed, phases, C["recovery"])
@@ -2169,7 +2190,7 @@ def mass_and_clock(C, B, DV, ratio):
         isru_prop = m_rprop
         isru_feed = isru_prop * C["isru_feed_per_kg_prop"]
         if isru_feed + feed > throughput + 1e-6:
-            return None
+            return refuse("the feed exceeds what the rig can dig in the time")
     isru_water = isru_prop * C["isru_water_per_kg_prop"] if isru else 0.0
 
     dig_yr = max((feed + isru_feed) / C["rate_kg_yr"],
@@ -2183,7 +2204,7 @@ def mass_and_clock(C, B, DV, ratio):
     if liberated > 0:
         draw += C["water_wh"] * liberated / hours(dig_yr)
     if C["power_source"] == "rtg" and draw > cfg.rtg_max_power_w:
-        return None
+        return refuse("the radioisotope plant exceeds `rtg_max_power_w`")
     plant_kg = draw / C["plant_w_per_kg"] if draw > 0 else 0.0
     hw = cfg.mining_hardware_kg + plant_kg + ep["mass"]
 
@@ -2195,7 +2216,7 @@ def mass_and_clock(C, B, DV, ratio):
     m_tank_out = R["t"] * m_oprop
     m_launch = m_at + m_tank_out + m_oprop
     if m_launch > C["leo_cap"]:
-        return None
+        return refuse("the launch stack exceeds the vehicle's capacity to LEO")
 
     stay = dig_yr + DV["window_wait"]
     t_out = max(0.5, TAU_CRUISE_FIT_YR_PER_M_S * DV["dv_out"])
@@ -2209,7 +2230,7 @@ def mass_and_clock(C, B, DV, ratio):
     electric_floor = (ep["thrust_yr"] + stay) if ep["thrust_yr"] > 0 else 0.0
     duration = max(1.0, chem, electric_floor)
     if duration > cfg.max_mission_duration_yr:
-        return None
+        return refuse("the mission runs past `max_mission_duration_yr`")
     cadence = max(stay, DV["synodic"])
     calendar_cap = max(1, int(C["val"]("Mining rig service life") // stay))
     trips = (min(calendar_cap, int(C["val"]("Mining rig maximum trips")))
@@ -2469,6 +2490,9 @@ def cost(C, M, n_missions, per_ship):
     rig_share = (rig_total - terminal) / share
 
     prop_cost = float(C["pro"]["cost_usd_per_kg"])
+    # Whether there is an electric stage to price at all, which is also whether
+    # the page has anywhere to show the two rates that price it.
+    has_ep = M["ep"]["power"] > 0.0
     lines = {
         "launch": M["m_launch"] * float(C["veh"]["usd_per_kg_to_leo"]),
         "oprop": M["m_oprop"] * prop_cost,
@@ -2495,9 +2519,15 @@ def cost(C, M, n_missions, per_ship):
         # would be exactly the asymmetry this codebase keeps finding: a mass in
         # the rocket equation with the wrong price in the ledger.
         "plant": M["draw"] * C["plant_usd_per_w"] * lc,
-        "ep": (M["ep"]["power"] * val("Power system (solar + battery)")
+        # The EP array is priced at the SOLAR rate even on a radioisotope
+        # mission, because nuclear heat runs the processing plant and the
+        # thruster still flies panels.  Both rates are only rates for a page
+        # that has an electric stage to show them on; see `val`.
+        "ep": (M["ep"]["power"]
+               * val("Power system (solar + battery)", used=has_ep)
                + M["ep"]["power"] / 1000.0
-               * val("Electric propulsion system recurring cost")) * lc,
+               * val("Electric propulsion system recurring cost",
+                     used=has_ep)) * lc,
         "tank": ((M["m_tank_ret"] + M["m_tank_out"])
                  * val("Propellant tank recurring cost") * lc),
     }
@@ -2668,10 +2698,29 @@ def concentration_sweep(C, B, DV):
             return None
         return {"M": M, "ladder": programme_ladder(C, M)}
 
+    del REFUSAL[:]
     priced = [(kind, r, at(r)) for kind, r in rungs]
     live = [p for p in priced if p[2]]
     if not live:
-        sys.exit("no concentration ratio closes a mission on this body")
+        why = REFUSAL[-1] if REFUSAL else "the cascade refused without saying why"
+        hauled = float(B["mineable"])
+        row_pay = float(C["archived_payload"] or 0.0)
+        hint = ""
+        if row_pay and hauled > row_pay * 1.000001:
+            # ⚠️  THE COMMONEST CAUSE IS A DIAL, NOT THE BODY.
+            # `max_mining_fraction` went 0.05 -> 1.0 in calc 1.23.0 and is read
+            # from the LIVE config, so a row written before that is re-derived
+            # with a haul up to twenty times the one its run took -- and the
+            # stack it builds then fails against the vehicle.  The row's own
+            # payload against this derivation's depletion allowance is what
+            # says so, and it costs nothing to check before blaming the body.
+            hint = ("\n  This derivation allows %.0f kg to be mined and the "
+                    "row hauled %.0f kg.\n  A run made before calc 1.23.0 "
+                    "capped it at 5%% of the body: re-run with\n"
+                    "  --max-mining-fraction 0.05 to derive it as that run "
+                    "did." % (hauled, row_pay))
+        sys.exit("no mission closes on this body at any concentration ratio.\n"
+                 "  The cascade refused because %s.%s" % (why, hint))
     best_r = min(live, key=lambda p: p[2]["ladder"]["best"]["obj"])[1]
     step = r_max ** (1.0 / (steps - 1))
     for ratio in (best_r / step ** 0.5, best_r * step ** 0.5):
@@ -2866,6 +2915,8 @@ def build(archived, label, body=None, run_beneficiated=None):
     # derivation charges.  See `terms_in_force`.
     C["terms"] = terms_in_force(archived, C["cfg"])
     C["run_beneficiated"] = run_setting(archived, C["cfg"], run_beneficiated)
+    # Only ever read to explain a refusal; the cascade derives its own payload.
+    C["archived_payload"] = float(archived.get("max_payload_kg") or 0.0)
     phases, alloy, yields = phase_table(body, tables["minerals"])
     caps, alias = market_ceilings(tables["minerals"])
     C["phases"] = phases
@@ -3404,7 +3455,23 @@ def report_audit(row, html_text, quiet=False):
 # question as either audit: those ask whether ONE page is right and whole, this
 # asks how much of the space of pages has ever been rendered.
 SWEEP_AXES = ("dest", "beneficiated", "searched", "aero", "isru", "power",
-              "apsis", "electric")
+              "apsis", "electric", "plant", "capture", "market", "terms")
+# 🚨  AN AXIS IS A BRANCH THE PAGE TAKES, NOT A FACT ABOUT THE
+# MISSION.  `plant` and `capture` were added when the renderer's own line
+# coverage showed 28 lines no swept mission had ever rendered: the zero-plant
+# section, which only a raw mission carrying no ice reaches, and the propulsive
+# Earth or LEO return, which every aerocaptured mission skips.  Both were
+# invisible to a cover built from `aero` and `beneficiated` alone, because
+# those were satisfied by OTHER missions -- a raw ISRU mission covers "raw",
+# and an aerocaptured LEO mission covers "leo".
+#
+# 🚨  AND `market` IS WHY THE SAME SWEEP COVERED DIFFERENT LINES
+# TWICE RUNNING.  The sale section branches on the market MODEL, on whether a
+# ceiling bound the load, and on whether the surplus past it sold -- none of
+# which is an architecture, so two covers that both satisfied every
+# architectural axis exercised different halves of it, and the second reported
+# MORE uncovered lines than the first.  A coverage report that moves when
+# nothing moved is a coverage report nobody can act on.
 
 
 def sweep_signature(row):
@@ -3424,7 +3491,58 @@ def sweep_signature(row):
     sig = dict(row_shape(row))
     sig["dest"] = row_destination(row)
     sig["searched"] = float(row.get("programme_missions") or 1) > 1
+    sig["plant"] = float(row.get("power_system_kg") or 0.0) > 0.0
+    sig["capture"] = "%s/%s" % (sig["dest"], "aero" if sig["aero"] else "prop")
+    # 🚨  THE OPTIONAL TERMS ARE BRANCHES, AND `terms_in_force`
+    # IS THEIR LIST.  Insurance has a paragraph, a cost line and a rate of its
+    # own; so do reliability, the learning curve and the cost of capital.  None
+    # of them is an architecture, so a cover built from architectures alone
+    # never asked for a page that charges any of them -- and every cell on disk
+    # has all four switched off, which is why those sections had never rendered
+    # at all.  With this axis a `--source` cell that charges one is picked.
+    sig["terms"] = term_state(row)
+    sig["market"] = market_state(
+        str(row.get("market_model") or "capacity_cap"),
+        float(row.get("market_clearing_fraction") or 1.0),
+        float(row.get("surplus_payload_kg") or 0.0),
+        float(row.get("unsold_payload_kg") or 0.0))
     return tuple((k, sig[k]) for k in SWEEP_AXES)
+
+
+def term_state(row):
+    """Which optional cost terms a row carries, as the page branches on them.
+
+    The same four `terms_in_force` infers, read the same way: each has a
+    diagnostic column that sits at its inert value when the term is off.
+    """
+    def num(name, default):
+        """One column as a float, with a default for absent or blank."""
+        value = row.get(name)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    return "%s%s%s%s" % (
+        "i" if num("launch_insurance_cost_usd", 0.0) > 0.0 else "-",
+        "r" if num("p_success", 1.0) < 1.0 else "-",
+        "l" if num("learning_curve_factor", 1.0) != 1.0 else "-",
+        "w" if num("wacc_multiplier_upfront", 1.0) != 1.0 else "-")
+
+
+def market_state(mode, clearing, surplus_kg, unsold_kg):
+    """How the load SOLD, as the sale section branches on it.
+
+    Three questions, and the page reads differently for each answer: which
+    market model priced it, whether a ceiling bound the load at all, and
+    whether what was past the ceiling sold at a discount or was abandoned.
+    The milligram floor is the one `verify.py` check 7 takes, because both mass
+    columns are formed by subtraction and a hold the ceilings did not shrink
+    leaves a ULP rather than a zero.
+    """
+    tail = ("surplus" if surplus_kg > 1e-6 else
+            "unsold" if unsold_kg > 1e-6 else "whole")
+    return "%s/%s/%s" % (mode, "bound" if clearing < 1.0 else "clear", tail)
 
 
 def _sig_from_cells(cells, idx):
@@ -3455,7 +3573,22 @@ def _sig_from_cells(cells, idx):
             ("power", cells[idx["power_source"]]),
             ("apsis", cells[idx["rendezvous_apsis"]]),
             ("electric", (num("ep_thrust_yr") > 0.0 if "ep_thrust_yr" in idx
-                          else num("dv_penalty_factor", 1.0) > 1.0)))
+                          else num("dv_penalty_factor", 1.0) > 1.0)),
+            ("plant", num("power_system_kg", 0.0) > 0.0),
+            ("terms", "%s%s%s%s" % (
+                "i" if num("launch_insurance_cost_usd", 0.0) > 0.0 else "-",
+                "r" if num("p_success", 1.0) < 1.0 else "-",
+                "l" if num("learning_curve_factor", 1.0) != 1.0 else "-",
+                "w" if num("wacc_multiplier_upfront", 1.0) != 1.0 else "-")),
+            ("market", market_state(
+                cells[idx["market_model"]] if "market_model" in idx
+                else "capacity_cap",
+                num("market_clearing_fraction", 1.0),
+                num("surplus_payload_kg", 0.0),
+                num("unsold_payload_kg", 0.0))),
+            ("capture", "%s/%s" % (cells[idx["delivery_destination"]],
+                                   "aero" if flag("aerocapture_return")
+                                   else "prop")))
 
 
 def scan_shapes(path, chunk_rows=250_000):
@@ -3493,6 +3626,11 @@ def scan_shapes(path, chunk_rows=250_000):
             # line as one that scanned everything.
             sys.exit("%s has no %r column; it is not a Stage 4 catalog"
                      % (os.path.basename(path), column))
+    optional = optional + ("power_system_kg", "market_model",
+                           "market_clearing_fraction", "surplus_payload_kg",
+                           "unsold_payload_kg", "launch_insurance_cost_usd",
+                           "p_success", "learning_curve_factor",
+                           "wacc_multiplier_upfront")
     usecols = list(need) + [c for c in optional if c in head.columns]
 
     def truthy(frame, column):
@@ -3523,6 +3661,7 @@ def scan_shapes(path, chunk_rows=250_000):
         any_benef = any_benef or bool(benef.any())
         axes = pd.DataFrame({
             "dest": chunk["delivery_destination"].astype(str),
+        "plant": number(chunk, "power_system_kg", 0.0) > 0.0,
             "beneficiated": benef,
             "searched": number(chunk, "programme_missions", 1.0) > 1.0,
             "aero": truthy(chunk, "aerocapture_return"),
@@ -3533,6 +3672,23 @@ def scan_shapes(path, chunk_rows=250_000):
                          if "ep_thrust_yr" in chunk.columns
                          else number(chunk, "dv_penalty_factor", 1.0) > 1.0),
         }, index=chunk.index)
+        axes["capture"] = (axes["dest"] + "/"
+                           + axes["aero"].map({True: "aero", False: "prop"}))
+        mode = (chunk["market_model"].astype(str) if "market_model"
+                in chunk.columns else pd.Series("capacity_cap",
+                                                index=chunk.index))
+        clearing = number(chunk, "market_clearing_fraction", 1.0)
+        surplus = number(chunk, "surplus_payload_kg", 0.0)
+        unsold = number(chunk, "unsold_payload_kg", 0.0)
+        axes["market"] = [market_state(m, c, s_kg, u_kg) for m, c, s_kg, u_kg
+                          in zip(mode, clearing, surplus, unsold)]
+        flags = zip(number(chunk, "launch_insurance_cost_usd", 0.0) > 0.0,
+                    number(chunk, "p_success", 1.0) < 1.0,
+                    number(chunk, "learning_curve_factor", 1.0) != 1.0,
+                    number(chunk, "wacc_multiplier_upfront", 1.0) != 1.0)
+        axes["terms"] = ["".join(c if on else "-" for c, on
+                                 in zip("irlw", row_flags))
+                         for row_flags in flags]
         axes["_obj"] = (cost[keep] / value[keep])
         axes["_des"] = chunk["designation"].astype(str)
         winners = axes.loc[axes.groupby(list(SWEEP_AXES), dropna=False,
@@ -3584,7 +3740,24 @@ def rows_for(path, designations, population=None):
     return out
 
 
-def sweep_sources():
+def source_label(path):
+    """A name for one Stage 4 output that another one cannot collide with.
+
+    🚨  EVERY STAGE 4 CATALOG IS CALLED `profitability_catalog.csv`,
+    so a sweep that keyed its sources by basename silently merged the live
+    catalog with every `--source` cell: one entry survived, rows were fetched
+    from whichever path won, and the architectures the other cells were passed
+    in FOR came out of the wrong file.  The directory is what distinguishes
+    them, so the label carries it.
+    """
+    parent = os.path.basename(os.path.dirname(os.path.abspath(path)))
+    name = os.path.basename(path)
+    if os.path.abspath(path) == os.path.abspath(CATALOG):
+        return name
+    return "%s/%s" % (parent, name)
+
+
+def sweep_sources(extra=None):
     """Where architectures can be found, in the order that reaches most.
 
     The live catalog first, because it is the current release and the page
@@ -3595,8 +3768,18 @@ def sweep_sources():
     because opening one costs a pass over 350-500 MB.
     """
     sources = []
+    # ⚠️  NAMED SOURCES FIRST, because a caller who passes one is
+    # asking for exactly it.  This is how a branch that NOTHING on disk reaches
+    # gets rendered at all: three of the renderer's sections belong to terms
+    # every archived cell has switched off -- insurance, the unbounded and
+    # single-mission market models -- so the only way to exercise them is a
+    # small cell run with them ON, written somewhere harmless and passed here.
+    for path in (extra or []):
+        if not os.path.exists(path):
+            sys.exit("no Stage 4 output at %s" % path)
+        sources.append(("catalog", source_label(path), path, open))
     if os.path.exists(CATALOG):
-        sources.append(("catalog", os.path.basename(CATALOG), CATALOG, open))
+        sources.append(("catalog", source_label(CATALOG), CATALOG, open))
     rows = ledger_rows() if os.path.exists(LEDGER) else []
     ordered = sorted(rows, key=lambda r: (r.get("destination") or "",
                                           r.get("ore") or "",
@@ -3628,7 +3811,7 @@ def sweep_sources():
     return sources
 
 
-def sweep_candidates(max_sources):
+def sweep_candidates(max_sources, extra=None):
     """Every architecture the scanned sources hold, with its best mission.
 
     Returns the architectures, and per source what the scan learned about the
@@ -3637,14 +3820,14 @@ def sweep_candidates(max_sources):
     See `run_setting`.
     """
     found, about = {}, {}
-    for kind, name, path, _opener in sweep_sources()[:max_sources]:
+    for kind, name, path, _opener in sweep_sources(extra)[:max_sources]:
         print("  scanning  %s" % name)
         shapes, any_benef, rows = scan_shapes(path)
-        about[name] = {"path": path, "beneficiated": any_benef, "rows": rows,
-                       "kind": kind}
+        about[path] = {"path": path, "beneficiated": any_benef, "rows": rows,
+                       "kind": kind, "label": name}
         for sig, (obj, des) in shapes.items():
             if sig not in found or obj < found[sig][0]:
-                found[sig] = (obj, kind, name, des)
+                found[sig] = (obj, kind, path, des)
     return found, about
 
 
@@ -3689,21 +3872,134 @@ def describe_signature(sig):
         "searched" if d["searched"] else "N = 1",
         "aerocapture" if d["aero"] else "propulsive",
         "ISRU" if d["isru"] else "propellant bought",
+        "plant" if d["plant"] else "no plant",
+        str(d["market"]),
+        "terms " + str(d["terms"]),
         str(d["power"]),
         str(d["apsis"]),
         "electric" if d["electric"] else "chemical"])
 
 
-def ore_of(cell):
-    """The ore state the campaign recorded for one cell, or None.
+def ore_of(path):
+    """The ore state the campaign recorded for one archived cell, or None.
+
+    Takes the archive PATH, because a sweep keys its sources by path: every
+    Stage 4 catalog shares one basename and only the path tells two apart.
 
     The ledger is the only surviving statement of a run's `use_beneficiation`
     for an archived row that declined to concentrate; see `run_setting`.
     """
+    cell = os.path.basename(path)
+    for suffix in (".csv.gz", ".csv"):
+        if cell.endswith(suffix):
+            cell = cell[:-len(suffix)]
     led = next((r for r in ledger_rows() if r["cell"] == cell), None)
     if not led or not led.get("ore"):
         return None
     return led["ore"].strip().lower().startswith("benef")
+
+
+def renderer_lines():
+    """Every line of the renderer that COULD execute, from its own code objects.
+
+    Read out of the compiled module rather than by parsing it, so a line that
+    carries no code -- a blank, a comment, the continuation of an expression --
+    is never counted as unrendered.  Every function and comprehension is a code
+    object of its own, and they are walked recursively.
+
+    ⚠️  THE MODULE'S OWN LINES ARE NOT IN IT, and leaving them in
+    made every `def` and every module constant read as never rendered: they run
+    at IMPORT, which is before any tracer is installed, so they would be 185
+    findings that are nothing but the shape of the measurement.  The question
+    is which lines of the renderer's FUNCTIONS have ever run.
+    """
+    import dis
+    import io
+    import worked_calculation_doc as doc
+    top = compile(io.open(doc.__file__, encoding="utf-8").read(),
+                  doc.__file__, "exec")
+    # 🚨  A MODULE-LEVEL COMPREHENSION IS NOT A BRANCH.  It has a
+    # code object of its own and it runs at import, so it can never be traced
+    # and would sit in the report forever as one line nobody can cover.  A
+    # comprehension INSIDE a function is wanted, and it arrives through its
+    # parent, so the filter is only on what the module itself holds.
+    inner = ("<genexpr>", "<listcomp>", "<dictcomp>", "<setcomp>")
+    seen, todo = set(), [c for c in top.co_consts
+                         if hasattr(c, "co_code") and c.co_name not in inner]
+    while todo:
+        code = todo.pop()
+        for _offset, line in dis.findlinestarts(code):
+            if line:
+                seen.add(line)
+        todo += [c for c in code.co_consts if hasattr(c, "co_code")]
+    return seen
+
+
+def render_traced(out, hit):
+    """Render one document, recording which renderer lines ran.
+
+    🚨  THE PAGE IS CODE, AND ITS BRANCHES ARE THE PROSE.  A
+    section whose early return no mission has ever taken is a paragraph nobody
+    has read in the shape it was written for -- the `leo` chain branch sat
+    wrong for as long as it sat unrendered.  `settrace` costs a factor of ten
+    on a render measured in milliseconds, which is nothing beside the pass over
+    the archive that fetched the row.
+    """
+    import sys as _sys
+    import worked_calculation_doc as doc
+    path = doc.__file__
+
+    def tracer(frame, event, _arg):
+        """Record every line executed in the renderer, and keep tracing.
+
+        A `call` counts as well as a `line`: since Python 3.11 a function's
+        `def` line carries its RESUME instruction, so it is an executable line
+        that no line event ever reports, and counting only lines reported every
+        function in the file as one line short of rendered.
+        """
+        if frame.f_code.co_filename == path and event in ("call", "line"):
+            hit.add(frame.f_lineno)
+        return tracer
+
+    _sys.settrace(tracer)
+    try:
+        return doc.document(out)
+    finally:
+        _sys.settrace(None)
+
+
+def report_coverage(hit):
+    """Name the renderer's branches that no swept mission rendered.
+
+    ⚠️  GROUPED BY FUNCTION, because a bare list of line numbers
+    is a number nobody acts on.  What is actionable is "this section has a
+    branch nothing on disk takes", and the answer is either a mission that
+    would take it or a branch that should not be there.
+    """
+    import ast
+    import io
+    import worked_calculation_doc as doc
+    source = io.open(doc.__file__, encoding="utf-8").read()
+    tree = ast.parse(source)
+    owner, lines = {}, source.split("\n")
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for n in range(node.lineno, (node.end_lineno or node.lineno) + 1):
+                owner[n] = node.name
+    executable = renderer_lines()
+    missed = sorted(executable - hit)
+    by_fn = {}
+    for line in missed:
+        by_fn.setdefault(owner.get(line, "<module>"), []).append(line)
+    print("\n  RENDERER COVERAGE")
+    print("    %d of %d executable lines rendered by the missions above, "
+          "%d never" % (len(executable & hit), len(executable), len(missed)))
+    for fn, got in sorted(by_fn.items(), key=lambda kv: -len(kv[1])):
+        first = got[0]
+        text = lines[first - 1].strip() if first <= len(lines) else ""
+        print("    %-22s %3d line(s), first at %d: %s"
+              % (fn, len(got), first, text[:66]))
+    return missed
 
 
 def sweep(args):
@@ -3724,7 +4020,7 @@ def sweep(args):
     verified branch" case exactly -- and a sweep that reported only what it
     derived would look identical whether the space was covered or nearly bare.
     """
-    found, about = sweep_candidates(args.max_sources)
+    found, about = sweep_candidates(args.max_sources, args.source)
     if not found:
         sys.exit("nothing to sweep: no Stage 4 catalog and no archived cell.")
     chosen, uncovered, want = cover(dict(found), args.max_shapes)
@@ -3735,35 +4031,50 @@ def sweep(args):
     bodies = catalog_bodies([des for _s, _o, _k, _n, des in chosen])
     # One pass per SOURCE for the chosen rows; see `rows_for`.
     per_source = {}
-    for _sig, _obj, _kind, name, des in chosen:
-        per_source.setdefault(name, []).append(des)
+    for _sig, _obj, _kind, path, des in chosen:
+        per_source.setdefault(path, []).append(des)
     rows = {}
-    for name, wanted in per_source.items():
-        meta = about[name]
-        rows[name] = rows_for(meta["path"], wanted, population=meta["rows"])
+    for path, wanted in per_source.items():
+        meta = about[path]
+        rows[path] = rows_for(meta["path"], wanted, population=meta["rows"])
 
-    failures, audited, refused = 0, 0, 0
-    for sig, obj, kind, name, des in chosen:
-        label = "%s  %s" % (name, des)
+    failures, audited, refused, hit = 0, 0, 0, set()
+    # Axis values a mission actually DERIVED.  A refusal covers nothing: it is
+    # the cover's claim that fails, not only the mission, and a coverage table
+    # that counted refused missions reported values whose page never rendered.
+    derived_values = set()
+    for sig, obj, kind, path, des in chosen:
+        label = "%s  %s" % (about[path]["label"], des)
         try:
-            told = ore_of(name) if kind == "cell" else None
-            out = build(rows[name][des], label, body=bodies[des],
+            told = ore_of(path) if kind == "cell" else None
+            out = build(rows[path][des], label, body=bodies[des],
                         run_beneficiated=(told if told is not None
-                                          else about[name]["beneficiated"]))
+                                          else about[path]["beneficiated"]))
         except SystemExit as exc:
             # ⚠️  A REFUSAL IS A RESULT.  `context` declines the shapes this
             # cascade does not cover, by name, and finding out which those are
             # is half of what a sweep is for -- so it is counted and reported
             # rather than ending the run.
             print("  %-52s REFUSED" % label)
-            print("      %s" % str(exc).splitlines()[0])
+            # ⚠️  THE WHOLE MESSAGE.  A refusal names the guard
+            # that fired and, where the cause is a dial this process reads from
+            # the live config rather than from the row, the flag that would
+            # settle it -- and printing only the first line threw exactly that
+            # away, on the rows where it is the difference between a defect and
+            # a release boundary.
+            for line in str(exc).splitlines():
+                print("      %s" % line.strip())
             refused += 1
             continue
+        derived_values |= set(sig)
         c = out["check"]
+        # Rendered even without `--audit`, because the coverage question is
+        # about the PAGE and a mission that is only derived renders nothing.
+        html = render_traced(out, hit)
         # The scan said this row was one architecture; `row_shape` says what it
         # is.  See `sweep_signature`: the scan is a fast path, not a second
         # definition, and this is what keeps it honest.
-        seen = sweep_signature(rows[name][des])
+        seen = sweep_signature(rows[path][des])
         if seen != sig:
             print("  %-52s *** SCAN AND ROW DISAGREE ***" % label)
             print("      scanned %s" % describe_signature(sig))
@@ -3771,10 +4082,7 @@ def sweep(args):
             failures += 1
         note = ""
         if args.audit:
-            import worked_calculation_doc
-            incomplete, typed = report_audit(
-                rows[name][des], worked_calculation_doc.document(out),
-                quiet=True)
+            incomplete, typed = report_audit(rows[path][des], html, quiet=True)
             audited += 1
             note = ("  audit clean" if not (incomplete or typed)
                     else "  *** audit: %d incomplete, %d typed ***"
@@ -3790,19 +4098,23 @@ def sweep(args):
             print("      ! %-28s derived %r  row %r  rel %.3e"
                   % (nm, ours, theirs, rel))
 
+    report_coverage(hit)
     print("\n  COVERAGE, over what is on disk")
+    never = {(a, v) for a, values in want.items() for v in values
+             if (a, v) not in derived_values}
     for axis in SWEEP_AXES:
         values = sorted(str(v) for v in want.get(axis, ()))
-        missing = sorted(str(v) for a, v in uncovered if a == axis)
+        missing = sorted(str(v) for a, v in never if a == axis)
         print("    %-13s %-56s%s"
               % (axis, ", ".join(values) or "-",
                  "NOT DERIVED: " + ", ".join(missing) if missing else ""))
     print("\n  %d derived, %d audited, %d refused, %d failure(s)"
           % (len(chosen) - refused, audited, refused, failures))
-    if uncovered:
-        print("  %d axis value(s) on disk went underived; raise --max-shapes"
-              % len(uncovered))
-    return 1 if (failures or refused or uncovered) else 0
+    if never:
+        print("  %d axis value(s) on disk went underived; raise --max-shapes, "
+              "or read\n  the refusals above, which say what would derive them"
+              % len(never))
+    return 1 if (failures or refused or never) else 0
 
 
 def main():
@@ -3837,7 +4149,26 @@ def main():
     ap.add_argument("--max-shapes", type=int, default=10, metavar="N",
                     dest="max_shapes",
                     help="missions to derive in a sweep (default: 10)")
+    ap.add_argument("--max-mining-fraction", type=float, default=None,
+                    metavar="F", dest="max_mining_fraction",
+                    help="the depletion cap the RUN used, when it is not the "
+                         "live default: calc moved it from 0.05 to 1.0 in "
+                         "1.23.0, and a row written before that hauls less "
+                         "than this derivation would")
+    ap.add_argument("--source", action="append", metavar="CSV",
+                    help="another Stage 4 output for --sweep to scan, ahead of "
+                         "the live catalog; repeatable. A cell run with a term "
+                         "no archived cell carries is how a sweep reaches the "
+                         "page's branches for it")
     args = ap.parse_args()
+
+    # ⚠️  A DIAL SET HERE IS SET FOR THE WHOLE PROCESS, which is
+    # right for one document and right for a sweep of cells from one campaign,
+    # and wrong for a sweep that mixes releases -- which is why the refusal
+    # NAMES it rather than this guessing per row.
+    if args.max_mining_fraction is not None:
+        import master
+        master.CALC_CONFIG.max_mining_fraction = args.max_mining_fraction
 
     # A sweep answers a different question from a document and shares only the
     # derivation, so it is dispatched before any of the source-picking below:
