@@ -37,7 +37,22 @@ def fmt(value, places=2, unit=""):
 
 
 def usd(value, places=0):
-    """Dollars, which are always large enough here to want separators."""
+    """Dollars, at `places` decimals or enough to keep a small rate legible.
+
+    🚨  "ALWAYS LARGE ENOUGH TO WANT SEPARATORS" WAS FALSE OF EVERY
+    RATE ON THE PAGE, AND `places=0` THEN PRINTED THEM AS `$0`.  Methalox is
+    $0.186/kg, so a chemical mission's cost table read "6,491.7 kg x $0/kg" --
+    a basis that tells the reader the propellant is free and that no audit can
+    match against the line beside it.  `places` is a MINIMUM now: a value under
+    a dollar gets whatever it needs for three significant figures, and nothing
+    at or above a dollar renders differently from before.
+    """
+    try:
+        size = abs(float(value))
+    except (TypeError, ValueError):
+        return "$" + fmt(value, places)
+    if 0.0 < size < 1.0:
+        places = max(places, 2 - int(math.floor(math.log10(size))))
     return "$" + fmt(value, places)
 
 
@@ -55,6 +70,15 @@ def musd(value):
         millions = float(value) / 1e6
     except (TypeError, ValueError):
         return fmt(value)
+    # 🚨  AND THE TIERS STOPPED AT FOUR DECIMALS, WHICH IS ONE
+    # SIGNIFICANT FIGURE ON A $778 LINE.  A return-propellant line of $778.22
+    # rendered `$0.0008M` and the column audit reported it absent, correctly:
+    # the page was not showing it, it was showing a rounding of it.  Below
+    # $0.1M the millions are the wrong UNIT rather than the wrong precision, so
+    # the line falls back to plain dollars.  The table's header says "cost" and
+    # claims no unit, which is what makes that safe.
+    if abs(float(value)) < 100_000.0:
+        return usd(value, 2)
     size = abs(millions)
     return "$" + fmt(millions, 2 if size >= 10.0 else 3 if size >= 1.0 else 4) + "M"
 
@@ -573,8 +597,12 @@ def s_nomenclature(out):
         ["-", "storage class", esc(C["storage_class"]), "-", "K"],
         ["sigma_tank", "tank mass per litre",
          prec(float(C["pro"]["tank_kg_per_L"]), 10), "kg/L", "K"],
+        # ⚠️  THE PRICE THE RUN PAID.  The nomenclature table is where a
+        # reader looks up the symbol the cost lines multiply by, so it has to
+        # be the same number those lines used -- not the Stage 3 table as it
+        # stands today.  See `run_propellant_price`.
         ["c_prop", "propellant price",
-         prec(float(C["pro"]["cost_usd_per_kg"]), 6), "$/kg", "K"],
+         prec(C["prop_usd_per_kg"], 6), "$/kg", "K"],
     ]
     if a["electric"]:
         vehicle_rows += [
@@ -948,10 +976,18 @@ def s_composition(out):
             if part is None or name == "nickel-iron":
                 continue
             if part["route"].startswith("used"):
+                # 🚨  THE DERIVED P_L, NOT MODULE 2's.  This line printed
+                # `C["p_l"]` -- the pipeline's own answer -- three paragraphs
+                # below the chain that derives the same quantity here, so one
+                # page carried two statements of its largest price term and
+                # showed the borrowed one.  They agree because `build` asserts
+                # it, which is a check and not a licence to print the other
+                # side of it.  See `model_borrows`.
                 shown = ("%s + %s * %s - %s"
                          % (prec(part["terrestrial"], 8),
                             prec(part["utility"], 4),
-                            prec(C["p_l"], 12), prec(part["refining"], 10)))
+                            prec(chain["usd_per_kg"], 12),
+                            prec(part["refining"], 10)))
             else:
                 shown = ("max(0, %s - %s)"
                          % (prec(part["terrestrial"], 8),
@@ -2584,13 +2620,19 @@ def s_cost(out):
         "launch": "%s kg x %s"
                   % (fmt(M["m_launch"], 1),
                      usd(float(C["veh"]["usd_per_kg_to_leo"]), 0) + "/kg"),
+        # ⚠️  THE PRICE THE RUN PAID, WHICH IS THE ONE THE LINE BESIDE
+        # IT WAS COSTED AT.  These read `C["pro"]["cost_usd_per_kg"]` -- the
+        # Stage 3 table as it stands TODAY -- while the cost came from the
+        # price recovered off the row, so a page whose propellant table had
+        # been refetched showed a basis that does not multiply out to its own
+        # line.  See `run_propellant_price`.
         "oprop": "%s kg x %s"
                  % (fmt(M["m_oprop"], 1),
-                    usd(float(C["pro"]["cost_usd_per_kg"]), 0) + "/kg"),
+                    usd(C["prop_usd_per_kg"], 0) + "/kg"),
         "rprop": "%s kg x %s"
                  % (fmt(M["m_rprop"], 1),
                     usd(C["cfg"].isru_processing_usd_per_kg if a["isru"]
-                        else float(C["pro"]["cost_usd_per_kg"]), 0) + "/kg"),
+                        else C["prop_usd_per_kg"], 0) + "/kg"),
         "rig": "%s over %d campaign(s)"
                % (musd(cst["rig_total"] - cst["terminal"]), cst["share"]),
         "capsule": "%s kg x %s%s"
@@ -2891,6 +2933,31 @@ def s_footer(out):
              "ceilings and the whole cost cascade are written out from the "
              "equations here, not called out of the pipeline. What it reads "
              "from the model is reference data and table accessors."),
+        # 🚨  THE SENTENCE ABOVE USED TO END THE PARAGRAPH, AND IT WAS
+        # FALSE.  The derivation called the model's own night-side derate, its
+        # synodic period and its delivered price, two of which sit inside
+        # things that sentence NAMES -- the plant and the clock.  The first
+        # two are written out here now and the third is compared rather than
+        # printed, so the claim is true of every borrow that is left; what
+        # remains is the search's SHAPE, which is deliberate and is therefore
+        # DISCLOSED rather than denied.  The list is scanned off the
+        # derivation's AST, so it cannot go stale the way the sentence did.
+        # ⚠️  NO COUNT.  This sentence opened "One thing is borrowed"
+        # above a derived list of three names -- a number in prose disagreeing
+        # with the list beside it, in the paragraph written to stop exactly
+        # that.  Name the list; do not state its length.
+        para("What is borrowed on purpose, and is not derived here, is "
+             "<strong>which</strong> programmes the search proposed. "
+             "Reproducing the ladder's shape by hand would be a second "
+             "opinion about what the search offered rather than a check on "
+             "what it concluded, so the rungs are read from the model and "
+             "every value at every rung is priced here. In full: %s."
+             % ("; ".join("<code>%s</code> (%s)" % (esc(name), esc(why))
+                          for name, why in out["borrows"])))
+        if out.get("borrows") else
+        para("Nothing at all is borrowed from the model beyond reference "
+             "data: every decision on this page as well as every figure is "
+             "made here."),
         para("The two are then compared column by column against the row the "
              "run actually produced, and %s: <strong>%d quantities, %d "
              "bit-exact, %d within %s, %d differing</strong>, worst "
