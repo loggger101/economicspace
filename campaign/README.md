@@ -221,12 +221,47 @@ py campaign/worked_calculation.py --sweep --audit   # and audit every page it re
   built with those terms ON, which is a 400-row cell written into a scratch
   directory in about a minute, and the sweep scans it ahead of everything else.
 
+  🚨  `--max-sources` CAPS WHAT THE SWEEP DISCOVERED, NEVER WHAT YOU NAMED.
+  It used to slice the whole list, and named sources come first -- so
+  `--max-sources 1` with four `--source` arguments swept one of them and
+  reported a clean cover of a space it had never opened. `--max-sources 0` is
+  useful now: the named sources and nothing else, which skips the 1.1 GB live
+  catalog and every archive, and is what makes the optional-term sweep cheap:
+
+```
+py campaign/worked_calculation.py --sweep --audit --max-sources 0 \
+    --source <cell-with-insurance>/profitability_catalog.csv \
+    --source <cell-with-unbounded>/profitability_catalog.csv
+```
+
+  ⚠️  BUILD THOSE CELLS WITH `output_dir` REPOINTED AND `input_dir` LEFT
+  ALONE. `build_profitability_catalog` WRITES `<output_dir>/profitability_catalog.csv`
+  as a side effect, so a builder that leaves that field alone replaces the live
+  Stage 4 catalog with its 158-row sample; `input_dir` carries the ~868 MB of
+  inputs and redirecting it makes every cell fail to LOAD instead. Reset every
+  field a cell can differ on, in both directions, or the second cell inherits
+  the first one's.
+
   🚨  EVERY CELL ON DISK WAS RUN AT `max_mining_fraction` 0.05 AND THE LIVE
   DEFAULT IS 1.0, so a sweep over archived cells wants
   `--max-mining-fraction 0.05`. Without it the derivation re-derives a haul up
   to twenty times the one the run took, the launch stack then fails against the
   vehicle, and the refusal used to blame the concentration ladder. It names the
   guard now and prints the arithmetic that points at the dial.
+
+  🚨  AND THE OTHER DIRECTION IS THE QUIET ONE. A cap that is too LOOSE
+  refuses; one that is too TIGHT still closes a mission, just a smaller one, and
+  writes a confident document about it. Measured on a 158-row insurance cell
+  swept at 0.05 against rows run at 1.0: 53 columns DIFFER with every MASS
+  agreeing to 5.7e-05, which is a search landing elsewhere rather than
+  arithmetic going wrong. `mining_cap_note` now names the dial whenever the
+  row's own feed exceeds what this process is allowed to dig -- a one-sided test
+  and airtight in that direction, because the run actually dug that much, so its
+  cap permitted it.
+
+  ⚠️  One `--max-mining-fraction` covers every source, so a sweep mixing
+  archived cells with current ones cannot be right for both. That note is the
+  compensation, not a fix.
 
   🚨  AND THE PAGE'S CLAIM ABOUT ITS OWN INDEPENDENCE WAS TYPED, AND
   FALSE. The Verification footer told every reader that what this derivation
