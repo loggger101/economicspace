@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [transportation v1.15.0 / master v1.29.0](#transportation-v1150--master-v1290)
 - [calc v1.23.0](#calc-v1230)
 - [calc v1.22.0](#calc-v1220)
 - [calc v1.21.2](#calc-v1212)
@@ -80,9 +81,9 @@ one that does not say is not to be used.
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.2.0** | v1.2.0, orbit quality, a total NEOWISE sort, the element epoch |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
-| 3 | `modules/transportation.py` | **1.14.0** | v1.14.0, four geostationary Δv segments. ⚠️  Owned by [`spacecost`](https://github.com/loggger101/spacecost) since master v1.25.0 |
+| 3 | `modules/transportation.py` | **1.15.0** | v1.15.0, the `environments` table: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.23.0** | v1.23.0, the 5% depletion cap comes off: a mission may take the whole body |
-| - | `master.py` | **1.28.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.29.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -97,7 +98,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Twenty stamps so far have moved without moving a number:
+Twenty-one stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -120,16 +121,17 @@ Twenty stamps so far have moved without moving a number:
 | calc `1.19.0` | **a seventh destination** | bit-identical, verified |
 | mineral_value `1.9.0` | **a seventh destination** | bit-identical, verified |
 | transportation `1.14.0` | **four reference rows** | bit-identical, verified |
+| transportation `1.15.0` | **a sixth reference table** | bit-identical, verified |
 | calc `1.19.1` | **a check that cried wolf** | bit-identical, verified |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
 together. Every row above is calc except `mineral_value 1.7.1`,
-`mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0` and
-`transportation 1.14.0`.
+`mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0`,
+`transportation 1.14.0` and `transportation 1.15.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and twelve are not, and that split rotted in prose
+rows are performance stamps and thirteen are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -154,6 +156,116 @@ four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
 
+## transportation v1.15.0 / master v1.29.0
+
+**spacecost v0.1.1 -> v0.2.0, and the data contract 1.14.0 -> 1.15.0.** The
+stamp is not a number this repo owns any more; it is the package's data
+contract, mirrored here, and `verify_stage3.py` check 2 asserts the two are
+equal. It moved because the package gained a table.
+
+`environments`, 23 destinations of solar flux, dark period and one-way light
+time. Those are the multipliers three `operational_costs` rows are already
+silent functions of, since 60 W/kg is a figure AT 1 AU. **Stage 4 derives its
+own 1/r^2 array scaling and does not read the table**, so it moves no number
+here; it is re-exported and written like the other five because a consumer that
+can see five tables of six is a consumer that will one day re-derive the sixth.
+
+**No pre-existing VALUE moved.** The five inherited tables are byte-identical
+to the 1.14.0 build once the two provenance columns are stripped, which is
+`verify_stage3.py` check 3 over seven files and check 4 against the CSVs
+spacecost commits at the pinned tag. What moved on them is the stamp, and it is
+a column on every one.
+
+**Verified against the model**: all four calc v1.23.0 cells reproduce their
+committed hashes exactly -- `a3333bc04f08e6f9` / `1640c4fe82e521d4` /
+`a90b6bdd12db585e` / `af407f7e2376bb7c`, 143 of 143 columns each. The Stage 3
+seam is green on all six checks, the docs harness on all fifteen, Stage 1 on
+all nine.
+
+### A repin does not require a restamp, and the disk was restamped anyway
+
+**The rule first, because it is the part that generalises: re-run Stage 3 when
+a ROW changes, not when a stamp does.** Stage 4 reads no column this contract
+moved, so leaving the CSVs at 1.14.0 would have cost one `stamp_check()` line
+and nothing else -- the deliberate-lag case that check's own note describes --
+where re-running means re-fetching live fuel prices over the only copy of the
+tables every committed measurement was taken against.
+
+**That is not the state on disk.** The accident recorded below had already
+rebuilt them at the new contract before the decision was made, so
+`asteroid_pipeline/transportation/` carries seven files stamped **1.15.0** and
+dated 2026-09-17: the same 36 vehicles, 41 propellants, 33 delta-v segments, 44
+operational rows and 20 storage systems, the new 23-row `environments` table,
+and three live-priced propellant rows that moved with the fetch. It is recorded
+rather than restored, because a byte restoration of a file that no longer
+exists cannot be verified against anything -- and the values that matter are in
+the table below, read back out of an archived cell.
+
+### A guard on one door is not a guard on the room
+
+`run_pipeline.py` has asked before Stages 1-3 overwrite a CSV since
+2026-08-23, and CLAUDE.md's "RUNNING STAGE 2 OR STAGE 3 DESTROYS EVERY BASELINE
+YOU HOLD" is written as though that guard were the only way in. It is not.
+`py modules/transportation.py` runs the stage with no guard anywhere in the
+path, and on 2026-09-17 that is exactly what happened here, while
+smoke-testing an import that had just been repinned.
+
+It re-fetched three live propellant prices over the campaign's frozen tables:
+
+| propellant | frozen 2026-09-09 | re-fetched 2026-09-17 | moved |
+|---|---|---|---|
+| methalox (LCH4 / LOX) | 0.186202302606 | 0.185893 | **-0.17%** |
+| kerolox (RP-1 / LOX) | 0.580466991536 | 0.599073 | **+3.21%** |
+| HTP / RP-1 | 1.455541072067 | 1.516942 | **+4.22%** |
+
+**The frozen values were recoverable only because an archived cell had been
+priced with them.** `leo__benef__search-on` carries `outbound_prop_cost_usd`
+and `m_outbound_prop_kg` on 100,392 methalox rows, and their ratio is constant
+to 1.7e-16 across all of them: the input price, read back out of an output.
+The three figures above are that ratio, on the rows of that cell whose
+propellant is each fuel. **A live catalog with no archive behind it is not
+recoverable at all.**
+
+What it cost, measured rather than assumed: **nothing that is committed.** All
+four v1.23.0 cells reproduce, because no winner in any of them flies a
+live-priced propellant -- they are 72 xenon, 39 iodine, 22 water ion, 14
+krypton and 8 hydrolox on the raw cell, every one reference-priced. What is
+lost is exact input-identity with the 2026-09 campaign for rows that DO choose
+one, which is 11 to 15% of the beneficiated cells at four destinations.
+
+✅  **The three fetching modules now guard their own standalone run.**
+`_confirm_overwrite` names the files, refuses on EOF rather than hanging on a
+scheduled task's dead stdin, and takes `--yes` for a scripted caller. Proved by
+re-running the command that caused the damage: the file's hash is unchanged and
+nothing was fetched. Proved the other way too -- a second run into a scratch
+directory with `--yes` writes all seven files.
+
+The guard is MIRRORED rather than shared, because a stage module is standalone
+by construction and cannot import a helper, so `verify_docs.py` check 15 holds
+the three copies to each other and to the call.
+
+🚨  **And its first draft could not fail.** It tested that
+`_confirm_overwrite` was MENTIONED after the build, which neutering the call to
+`if False and _confirm_overwrite(...)` satisfies perfectly. Found by planting
+exactly that. It matches the GATE now: the refusal, a `sys.exit` between it and
+the build, and its position ahead of the build. A check nobody has seen fail is
+a check nobody has seen.
+
+### The pin was typed in four places and two of them were checked
+
+`verify_docs.py` check 7 compared `requirements.txt` against
+`_MASTER_PIP_SPEC`, which is the pair that had burned somebody. The other two
+are `_PIP_SPEC` in `modules/transportation.py` -- **what a standalone module run
+installs from, so the module could have gone on fetching the old tables past a
+repin** -- and README's sentence naming the tag.
+
+It scans every first-party file for the URL form now, so a fifth copy joins the
+comparison with no edit here. Only the URL form counts: a bare `v0.1.1` in prose
+is usually history, and both documents tell the story of a checkout that sat two
+commits past it. Proved by repinning one copy alone: it goes red and names the
+file.
+
+
 ## Releases
 
 Newest first. Each heading names every module whose `pipeline_version`
@@ -161,6 +273,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [transportation v1.15.0 / master v1.29.0](#transportation-v1150--master-v1290) | 2026-09-17 | **spacecost v0.2.0**: a sixth reference table, and the guard a stage module run directly never had |
 | [calc v1.23.0](#calc-v1230) | 2026-09-17 | **the depletion cap comes off**: `max_mining_fraction` 0.05 -> 1.0, and a constraint that bound on 2% of bodies was sizing the mission on them |
 | [calc v1.22.0](#calc-v1220) | 2026-09-14 | **four defaults moved**: the surplus past a ceiling sells at half price, and reliability, the learning curve and the cost of capital come off |
 | [calc v1.21.2](#calc-v1212) | 2026-09-08 | **one market, two allowances**: the composition residual and the `silicates` phase each drew the full silicates ceiling, on 100% of bodies |

@@ -44,6 +44,18 @@ Inputs frozen for the whole campaign:
     so on every run.  That is the deliberate-lag case its own note describes,
     not a failed write.
   Stage 3 transportation/*.csv    2026-09-09  (propellants 41, ops 44, dv 33)
+    NO LONGER ON DISK IN THAT FORM.  On 2026-09-17 a direct `py
+    modules/transportation.py` rebuilt them at the spacecost v0.2.0 contract:
+    same rows, new stamp, and three live-priced propellant rows re-fetched
+    (methalox -0.17%, kerolox +3.21%, HTP/RP-1 +4.22%).  The campaign's own
+    values are recorded in versions.md under transportation v1.15.0, recovered
+    from an archived cell rather than from a backup -- `outbound_prop_cost_usd
+    / m_outbound_prop_kg` on the methalox rows of leo__benef__search-on IS the
+    input price.  A cell of this campaign that chose a chemical propellant will
+    not reproduce bit-exactly against the tables now on disk; the 11-15% of
+    beneficiated rows at leo, geo, mars_orbit, mars_surface and earth_surface
+    that fly methalox are the population that cares.  The three fetching
+    modules refuse to overwrite unasked now.
   Stage 2 mineral_value           2026-09-09, all SEVEN destinations priced in
     one sitting, frozen into `stage2/`.  Never re-fetched during the campaign;
     `run_cell.py` copies the right one into place per cell.

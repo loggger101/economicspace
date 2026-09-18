@@ -13,6 +13,16 @@ an asteroid was.  A launch price is useful to anyone costing a mission, so the
 tables became a package other projects can cite, and this pipeline became its
 first consumer.
 
+AND A TABLE HAS NOW ARRIVED THAT NEVER LIVED HERE, which is the split paying
+for itself in the direction nobody designed it for.  spacecost v0.2.0 adds
+`environments`: 23 destinations of solar flux, dark period and one-way light
+time, the multipliers three `operational_costs` rows are already silent
+functions of, since 60 W/kg is a figure AT 1 AU.  Stage 4 derives its own
+1/r^2 array scaling and does not read the table, so it moves no number here.
+It is re-exported and written like the other five anyway, because a consumer
+that can see five tables of six is a consumer that will one day re-derive the
+sixth.
+
 WHAT THIS FILE STILL OWNS, and why each did not move:
 
     TransportConfig     the dials, because two of the defaults are this
@@ -25,17 +35,37 @@ WHAT THIS FILE STILL OWNS, and why each did not move:
 
 THE CSVs ARE UNCHANGED, BYTE FOR BYTE, AND THAT IS THE POINT.  spacecost was
 extracted by slicing source line ranges rather than by re-typing anything, and
-both its test suite and this repo's `verify_stage3.py` assert the six files are
-identical to the ones this module used to write.  `pipeline_version` therefore
-does NOT move: the stamp identifies the DATA, the data did not change, and
-spacecost's data-contract version is the same 1.14.0 this module last shipped.
-Bumping it would desynchronise every archived catalog to announce a refactor.
+both its test suite and this repo's `verify_stage3.py` assert every file is
+identical through this path and through the package's own.
+
+`pipeline_version` IS NOT A NUMBER THIS MODULE OWNS.  It is spacecost's DATA
+CONTRACT, mirrored here, and `verify_stage3.py` check 2 asserts the two are
+equal -- so it moves when the package's moves and at no other time.  v0.1.1 ->
+v0.2.0 took it 1.14.0 -> 1.15.0 for the sixth table.  No pre-existing VALUE
+moved: the five inherited tables are byte-identical to the 1.14.0 build once
+the two provenance columns are stripped.
+
+RE-RUN STAGE 3 WHEN A ROW CHANGES, NOT WHEN A STAMP DOES.  A repin does not
+require a restamp: Stage 4 reads no column this contract moved, so leaving the
+CSVs at the older stamp costs one `stamp_check()` line and nothing else, where
+re-running re-fetches live fuel prices over the only copy of the tables every
+committed measurement and every `.verify` baseline was taken against.  The
+campaign's inputs are frozen at 2026-09-09 on purpose.
+
+🚨  THE FILES ON DISK ARE AT 1.15.0 ALL THE SAME, dated 2026-09-17, because
+this module was run directly while somebody smoke-tested the repin -- before
+the guard below existed.  Three live-priced propellant rows moved with it.  The
+frozen values are recorded in
+[transportation v1.15.0](../versions.md#transportation-v1150--master-v1290);
+they were recoverable only because an archived Stage 4 cell had been priced
+with them.
 
     to re-check that claim:   py verify_stage3.py
 
 Active sources:
     - spacecost (the reference tables, cited per row)  launch, propellant,
-                                                       dv, operational, storage
+                                                       dv, operational,
+                                                       storage, environments
     - yfinance  (Yahoo Finance)                        live commodity prices as
                                                        proxies for RP-1 (HO=F),
                                                        methane (NG=F), and a
@@ -69,7 +99,7 @@ import subprocess, sys
 # the two to each other.
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.1.1",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.2.0",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -213,7 +243,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.14.0"
+    pipeline_version: str = "1.15.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 CONFIG = TransportConfig()
@@ -276,6 +306,11 @@ PROPELLANTS_REFERENCE       = spacecost.PROPELLANTS_REFERENCE
 DELTA_V_REFERENCE           = spacecost.DELTA_V_REFERENCE
 OPERATIONAL_COSTS_REFERENCE = spacecost.OPERATIONAL_COSTS_REFERENCE
 STORAGE_REFERENCE           = spacecost.STORAGE_REFERENCE
+# The sixth, new in the v1.15.0 contract.  Nothing in Stage 4 reads it yet; it
+# is re-exported on the same terms as the other five so that this module's
+# surface is the package's surface rather than the subset somebody needed on
+# the day.
+ENVIRONMENTS_REFERENCE      = spacecost.ENVIRONMENTS_REFERENCE
 
 # Physical constants and unit helpers, likewise.
 G0_M_S2                     = spacecost.G0_M_S2
@@ -289,6 +324,7 @@ load_propellants             = spacecost.load_propellants
 load_delta_v                 = spacecost.load_delta_v
 load_operational_costs       = spacecost.load_operational_costs
 load_storage                 = spacecost.load_storage
+load_environments            = spacecost.load_environments
 propellant_mass_for_dv       = spacecost.propellant_mass_for_dv
 cost_per_dv_usd_per_kg       = spacecost.cost_per_dv_usd_per_kg
 build_transportation_summary = spacecost.build_transportation_summary
@@ -312,15 +348,21 @@ validate = _spacecost_validate
 def build_transportation_catalog(
     config: TransportConfig = CONFIG,
 ) -> Dict[str, pd.DataFrame]:
-    """Run Stage 3: build every reference table and write the six CSVs.
+    """Run Stage 3: build every reference table and write the seven CSVs.
 
     Delegates to `spacecost.build_catalog`, which is the same code this file
-    used to hold.  The six CSVs are byte-identical to the ones it produced at
-    pipeline_version 1.14.0; `verify_stage3.py` is that claim as a check.
+    used to hold.  Six reference tables and the composite summary, every one
+    byte-identical through this path and through the package's own, which is
+    what `verify_stage3.py` check 3 asserts file by file.
 
-    Returns the same dict of frames as before:
+    Returns a dict of frames:
         {launch_vehicles, propellants, delta_v_segments, operational_costs,
-         storage_systems, summary}
+         storage_systems, environments, summary}
+
+    `environments` arrived with the v1.15.0 contract and is the one key a
+    caller written against v1.14.0 will not know.  Nothing in Stage 4 reads
+    it; it is returned because a build that writes a file and leaves it out of
+    its own return value has two answers to what it built.
     """
     # A library is silent by default and a pipeline STAGE reports progress, so
     # verbosity is turned on for the call and put back afterwards.  Restored in
@@ -339,7 +381,8 @@ print(f"    Tables    : {len(LAUNCH_VEHICLES_REFERENCE)} vehicles, "
       f"{len(PROPELLANTS_REFERENCE)} propellants, "
       f"{len(DELTA_V_REFERENCE)} dv segments, "
       f"{len(OPERATIONAL_COSTS_REFERENCE)} ops rows, "
-      f"{len(STORAGE_REFERENCE)} storage systems")
+      f"{len(STORAGE_REFERENCE)} storage systems, "
+      f"{len(ENVIRONMENTS_REFERENCE)} environments")
 print(f"    Output dir: {os.path.join(CONFIG.output_dir, CONFIG.subdir)}")
 
 
@@ -348,6 +391,62 @@ print(f"    Output dir: {os.path.join(CONFIG.output_dir, CONFIG.subdir)}")
 # ─────────────────────────────────────────────────────────────────────────────
 # Only self-runs when executed directly; importing this module is side-effect free.
 if __name__ == "__main__":
+
+    # ── OVERWRITE GUARD ──────────────────────────────────────────────────────
+    # A FETCHING stage writes over the only copy of its inputs, and there is no
+    # undo: every `.verify` baseline and every committed measurement was taken
+    # against the files this run is about to replace.  `run_pipeline.py` has
+    # asked before doing that since 2026-08-23; running THIS FILE went nowhere
+    # near that guard, which is the hole somebody fell into on 2026-09-17 while
+    # smoke-testing an import, re-fetching three live propellant prices over the
+    # campaign's frozen tables.
+    #
+    # ⚠️  Mirrored, not shared: a stage module is standalone by construction and
+    # cannot import a helper.  `verify_docs.py` check 15 holds the three copies
+    # to each other, so edit one and the docs harness names the other two.
+    def _confirm_overwrite(paths, what):
+        """True when it is safe to overwrite `paths`; ask the user if it is not.
+
+        Refuses on EOF rather than hanging, because stdin here may be a
+        scheduled task's dead handle -- the `set /p` trap in `run.bat`, which
+        waits forever instead of failing.  `--yes` skips the question, which is
+        what a scripted caller passes.
+        """
+        existing = [p for p in paths if os.path.exists(p)]
+        if not existing or "--yes" in sys.argv:
+            return True
+        print("")
+        print("  " + "=" * 71)
+        print("  THIS RE-FETCHES LIVE DATA AND OVERWRITES WHAT IS ON DISK")
+        print("  " + "=" * 71)
+        print("  %s" % what)
+        for p in existing[:8]:
+            print("    %s" % p)
+        if len(existing) > 8:
+            print("    ... and %d more" % (len(existing) - 8))
+        print("")
+        print("  The values on disk are the only copy.  Any verify.py baseline")
+        print("  or archived measurement taken against them stops reproducing,")
+        print("  and that looks exactly like a code regression.")
+        print("")
+        try:
+            return input("  Type 'yes' to overwrite: ").strip().lower() == "yes"
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            print("  No console to confirm on (stdin is not a terminal).")
+            print("  Pass --yes if overwriting them is what you meant.")
+            return False
+
+    if not _confirm_overwrite(
+            [os.path.join(CONFIG.output_dir, CONFIG.subdir, f)
+                   for f in ("launch_vehicles.csv", "propellants.csv",
+                             "delta_v_segments.csv", "operational_costs.csv",
+                             "storage_systems.csv", "environments.csv",
+                             "transportation_summary.csv")],
+            "Stage 3 re-fetches live fuel prices and rewrites every reference table."):
+        print("  Cancelled; nothing was fetched and nothing was written.")
+        sys.exit(1)
+
     catalog = build_transportation_catalog(CONFIG)
 
     if catalog and not catalog["launch_vehicles"].empty:
