@@ -187,6 +187,53 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
   document that quietly describes the wrong mission is the failure all of this
   exists to prevent.
 
+  ✅  **AND WHICH MISSIONS IT HAS EVER BEEN RUN ON IS A MEASUREMENT NOW,
+  NOT A RITUAL.** `--sweep` streams every Stage 4 output on disk once, keeps
+  the cheapest mission of each distinct ARCHITECTURE, and derives a greedy
+  cover of the axis values between them -- destination, ore state, programme
+  size, return mode, propellant sourcing, power source, rendezvous apsis and
+  electric against chemical. The axes are `row_shape`'s, so they are the ones
+  the renderer branches on rather than a list somebody maintains.
+
+```
+py campaign/worked_calculation.py --sweep           # one mission per architecture
+py campaign/worked_calculation.py --sweep --audit   # and audit every page it renders
+```
+
+  🚨  ON ITS FIRST AUDITED RUN THE PAGE WAS CLEAN AT CISLUNAR AND AT NO
+  OTHER DESTINATION. `leo` refused outright -- the derivation read an EMPTY
+  delivery chain (`[]`, nothing above LEO) as a MISSING one (`None`,
+  `earth_surface`, which avoids no launch) and returned 0 $/kg where Module 2
+  returns 4,253. An RTG page hid the solar array it was chosen over, three
+  output columns and three rates with it. A dense in-space hold rendered as
+  "0.02 m3" because the volume was printed to two decimal places. And a
+  chemical mission was reported incomplete for a power-processing rate no
+  chemical page can show. All fixed; re-run the command rather than trusting
+  this paragraph.
+
+  ⚠️  IT HAS TO BE AFFORDABLE OR IT IS ANOTHER RITUAL. The first
+  version scanned with `csv.reader`, parsing every field of every row to
+  look at eight of them, and then re-streamed the whole source once per
+  MISSION to fetch each row. It scans with pandas over the axis columns
+  only and fetches the chosen rows in one pass per source; the rewrite was
+  compared against the old one on a real archive, architecture by
+  architecture, before it was trusted.
+
+  ⚠️  A REFUSAL AND AN UNCOVERED AXIS VALUE ARE BOTH RESULTS. The guard in
+  `context` declines shapes the cascade does not cover, by name, and finding
+  out which those are is half of what the sweep is for; an axis value that
+  exists on disk and went underived is reported rather than passed over. Both
+  make the run exit 1.
+
+  🚨  IT FOUND A DEFECT ON ITS FIRST RUN. `best_phase_usd_per_kg` came out
+  61% low on an RTG, ISRU, chemical, raw mission, because the model writes that
+  column from the RUN's `use_beneficiation` and the derivation read the ROW's
+  own `beneficiation`. Those agree on every row except one that declined to
+  concentrate inside a beneficiated run -- 15.8% of bodies, and never the
+  winner, which is why a document about the best case could not see it. See
+  `run_setting`, which carries the measurement: such a row is identical to the
+  same body's raw row in 142 of 143 columns.
+
   ✅  COMPLETENESS IS MEASURED SEPARATELY, BY `--audit`, because a clean
   check says the page is CORRECT and says nothing about whether it is whole:
   a quantity that is never displayed is never compared either.  It renders
