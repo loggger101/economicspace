@@ -2924,6 +2924,64 @@ def concentration_sweep(C, B, DV):
     return {"r_max": r_max, "step": step, "rungs": priced, "winner": winner}
 
 
+# ------------------------------------------------- the dial the row refutes
+def mining_cap_note(C, B):
+    """A line naming `max_mining_fraction` when the ROW disproves this one.
+
+    🚨  THE CAP CAN BIND SILENTLY, AND THE LOUD HALF WAS THE ONLY
+    HALF ANYBODY HAD SEEN.  When a too-LOOSE cap makes this derivation
+    over-dig, the launch stack fails against the vehicle and
+    `concentration_sweep` refuses with a hint naming the dial.  When it is too
+    TIGHT the mission still closes: the derivation digs less, picks a different
+    concentration ratio and a different fleet, and writes a confident document
+    about a smaller mission.  Measured on a 158-row insurance cell swept with
+    `--max-mining-fraction 0.05` against rows run at 1.0: 53 columns DIFFER,
+    `feed_processed_kg` 117,405 against 209,809 and `fleet_ships` 3 against 5,
+    with every MASS agreeing to 5.7e-05 -- which is the signature of a search
+    that landed elsewhere rather than of arithmetic that went wrong.
+
+    ✅  THE TEST IS ONE-SIDED, AND AIRTIGHT IN THAT DIRECTION.  An
+    allowance ABOVE the haul proves nothing, because a cap that does not bind
+    is supposed to sit above it -- which is why the refusal uses that only as a
+    hint, after something else has already failed.  An allowance BELOW the haul
+    is different in kind: the run being documented actually mined that much, so
+    its own cap permitted it, and a cap permitting less is provably not the one
+    that run used.
+
+    ⚠️  ONE OVERRIDE, EVERY SOURCE.  `--max-mining-fraction`
+    replaces the field on the live config, so a sweep mixing archived cells
+    with cells built at the current default cannot be right for both at once.
+    That is what this line is for: it names the row the dial is wrong for,
+    instead of leaving fifty differing columns to be read as a defect.
+    """
+    # ⚠️  THE FEED, NOT THE PAYLOAD.  The allowance limits how much
+    # regolith may be DUG; `archived_payload` is what comes HOME, and on a raw
+    # mission those differ by orders of magnitude.  The first version of this
+    # compared the allowance against the payload, so it never fired on the very
+    # case it was written for: the numbers were 117,405 against 39,546 where
+    # the comparison that matters was 117,405 against a feed of 209,809.
+    # Measured, not reasoned about -- the body is 2,348,111 kg, 5% of it is
+    # 117,405.5, and the derived feed came out 117,405.54, so the cap had bound
+    # to the digit while the row had dug 8.9% of the body.
+    row_feed = C.get("archived_feed")
+    try:
+        allowance = float(B["mineable"])
+        dug = float(row_feed)
+    except (TypeError, ValueError, KeyError):
+        return ""
+    if not (dug > 0.0 and allowance > 0.0):
+        return ""
+    # Equal is the ordinary case: the cap is exactly what bound that run too.
+    if allowance >= dug * 0.999999:
+        return ""
+    return ("\n    max_mining_fraction is %g here, which allows %.0f kg of this "
+            "body to be dug,\n    and the row records a feed of %.0f kg -- so "
+            "the run that wrote it was\n    not capped the way this process "
+            "is.  That alone re-picks the ratio and\n    the fleet, and every "
+            "column downstream of them."
+            % (C["cfg"].max_mining_fraction, allowance, dug))
+
+
 # -------------------------------------------------------------- verification
 def check(derived, archived):
     """Every derived quantity against the archived row, column by column.
@@ -3108,8 +3166,12 @@ def build(archived, label, body=None, run_beneficiated=None):
     # derivation charges.  See `terms_in_force`.
     C["terms"] = terms_in_force(archived, C["cfg"])
     C["run_beneficiated"] = run_setting(archived, C["cfg"], run_beneficiated)
-    # Only ever read to explain a refusal; the cascade derives its own payload.
+    # Only ever read to EXPLAIN a disagreement; the cascade derives both of
+    # these itself and never consults them.  The feed is the one the mining cap
+    # is comparable with -- the cap limits what may be DUG, and the payload is
+    # what comes home.  See `mining_cap_note`.
     C["archived_payload"] = float(archived.get("max_payload_kg") or 0.0)
+    C["archived_feed"] = float(archived.get("feed_processed_kg") or 0.0)
     phases, alloy, yields = phase_table(body, tables["minerals"])
     caps, alias = market_ceilings(tables["minerals"])
     C["phases"] = phases
@@ -4150,7 +4212,22 @@ def sweep_candidates(max_sources, extra=None):
     See `run_setting`.
     """
     found, about = {}, {}
-    for kind, name, path, _opener in sweep_sources(extra)[:max_sources]:
+    # 🚨  THE CAP IS ON WHAT WAS DISCOVERED, NEVER ON WHAT WAS
+    # ASKED FOR.  `sweep_sources` puts named sources first and says, in as many
+    # words, that "a caller who passes one is asking for exactly it" -- and a
+    # plain `[:max_sources]` over the whole list then threw them away again.
+    # With `--max-sources 1` and four `--source` arguments, three were silently
+    # dropped and the sweep reported a clean cover of a space it had never
+    # opened, which is the one failure mode a coverage tool has that matters.
+    #
+    # ✅  AND IT MAKES `--max-sources 0` MEAN SOMETHING USEFUL: sweep
+    # the named sources and nothing else, which skips the pass over the 1.1 GB
+    # live catalog and every 350-500 MB archive.  That is what turns the
+    # optional-term sweep from a half-hour job into a cheap one.
+    named = len(extra or [])
+    sources = sweep_sources(extra)
+    sources = sources[:named] + sources[named:named + max(0, max_sources)]
+    for kind, name, path, _opener in sources:
         print("  scanning  %s" % name)
         shapes, any_benef, rows = scan_shapes(path)
         about[path] = {"path": path, "beneficiated": any_benef, "rows": rows,
@@ -4427,6 +4504,14 @@ def sweep(args):
         for nm, ours, theirs, rel in c["bad"]:
             print("      ! %-28s derived %r  row %r  rel %.3e"
                   % (nm, ours, theirs, rel))
+        # ⚠️  A SWEEP IS WHERE THIS BITES, because one
+        # `--max-mining-fraction` covers every source and archived cells and
+        # current ones want different ones.  Named per mission, not once.
+        if c["bad"]:
+            note = mining_cap_note(out["C"], out["B"])
+            if note:
+                for line in note.strip("\n").splitlines():
+                    print("      %s" % line.strip())
 
     report_coverage(hit)
     print("\n  COVERAGE, over what is on disk")
@@ -4637,6 +4722,11 @@ def main():
         print("    from the LIVE config may disagree with the run that made")
         print("    this row.  See the table in `terms_in_force` for which")
         print("    dials those are and which column catches each.")
+        # One of those dials can be RULED IN rather than merely suspected, so
+        # it is named outright instead of leaving the reader the whole table.
+        note = mining_cap_note(out["C"], out["B"])
+        if note:
+            print(note.lstrip("\n"))
         return 1
     if args.verify and not args.audit:
         print("  OK  derivation reproduces the row")
