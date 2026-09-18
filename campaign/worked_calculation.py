@@ -57,6 +57,7 @@ column behind it, rather than a constant somebody has to remember to move.
     py campaign/worked_calculation.py --verify   # derive and check, write nothing
     py campaign/worked_calculation.py --audit    # and audit the page for completeness
     py campaign/worked_calculation.py --cell X   # a named cell, guard bypassed
+    py campaign/worked_calculation.py --sweep    # one mission per architecture
 """
 import argparse
 import csv
@@ -222,6 +223,24 @@ def best_cell(rows):
     return min(done, key=lambda r: float(r["best_obj"]))
 
 
+def _release_key(stamp):
+    """A calc stamp as a sortable tuple, so "1.9.0" is older than "1.22.0".
+
+    ⚠️  STRING ORDER IS NOT VERSION ORDER, and this repo has a module whose
+    stamps run past .9: compared as text, "1.9.0" sorts ABOVE "1.22.0" and the
+    selection would call the older model the newer one.  Anything unparseable
+    sorts oldest rather than raising, because a stamp this cannot read is a
+    reason to prefer a stamp it can.
+    """
+    parts = []
+    for piece in str(stamp).split("."):
+        try:
+            parts.append(int(piece))
+        except ValueError:
+            return (-1,)
+    return tuple(parts) or (-1,)
+
+
 def candidate_sources(catalog_path):
     """Every finished result on disk, as (objective, kind, name) triples.
 
@@ -288,6 +307,52 @@ def unseen_archives():
         if name[:-len(".csv.gz")] not in known:
             out.append(os.path.join("campaign", "cells", name))
     return out
+
+
+def run_setting(archived, cfg, told=None):
+    """Whether the RUN that produced this row had beneficiation on.
+
+    🚨  THIS IS NOT THE SAME QUESTION AS "DID THIS MISSION CONCENTRATE",
+    AND THE MODEL ASKS THE FIRST ONE.  `best_phase_usd_per_kg` is the PURITY
+    BOUND the search was given -- the richest hold obtainable, 100% of the best
+    phase present -- and calc writes it from `config.use_beneficiation`, not
+    from what the winning candidate chose.  A raw run was never given a bound,
+    so it reports the bulk value instead.
+
+    🚨  SO A BODY THAT DECLINES TO CONCENTRATE INSIDE A BENEFICIATED RUN
+    CARRIES A BOUND ITS OWN MISSION DOES NOT USE, and that is 15.8% of bodies,
+    not a corner.  Reading the row's `beneficiation` column here derived the
+    bulk value against a row holding the phase maximum: 61% out on 2021 TN102,
+    which `--sweep` found on its first run because the DOCUMENT's subject is
+    always the best case and the best case never declines.
+
+    ⚠️  IT IS NOT RECOVERABLE FROM THE ROW, AND THAT WAS MEASURED RATHER
+    THAN ASSUMED.  The same body run raw and run beneficiated-but-declining
+    produces rows identical in 142 of 143 columns; the only one that differs is
+    `best_phase_usd_per_kg` itself.  Inferring the flag from that column would
+    be deciding the answer from the answer, which is the "check that cannot
+    fail" shape this repo has now been caught by twice.
+
+    ✅  THE FILE ANSWERS IT, AND THE FILE IS NOT THE ROW.  Three sources, in
+    order: a row that DID concentrate settles it alone; a caller who knows says
+    so (`--cell` reads the ledger's own `ore` column, which is the campaign's
+    record of that run); and otherwise the catalog the row came from is asked,
+    because a raw run's output contains no concentrating row anywhere.  The
+    live config is the last resort and the weakest, since it describes this
+    process rather than the run that wrote the file.
+
+    Either way the check is the guard: a wrong answer here fails loudly on this
+    one column instead of printing a confident wrong page.
+    """
+    if bool(archived["beneficiation"]):
+        return True
+    if told is not None:
+        return bool(told)
+    told = archived.attrs.get("run_beneficiated") if hasattr(archived, "attrs") \
+        else None
+    if told is not None:
+        return bool(told)
+    return bool(getattr(cfg, "use_beneficiation", False))
 
 
 def terms_in_force(row, cfg):
@@ -488,8 +553,22 @@ def row_destination(row):
     return str(master.CALC_CONFIG.delivery_destination)
 
 
+# One entry, keyed on the file's identity rather than on its name: the default
+# path asks for the same catalog twice, once to rank the sources and once to
+# fetch the subject, and a full-catalog cell is 1.1 GB.
+_WINNER_CACHE = {}
+
+
 def run_winner(path):
     """The best row of a Stage 4 output catalog, by the project's objective.
+
+    🚨  READ ONCE PER FILE.  `candidate_sources` asks for the live
+    catalog's best case in order to rank the sources, and then `main` asks the
+    same question of the same file to get its subject: two pandas reads of
+    1.1 GB to answer one question, which was most of the wall clock of a
+    default run.  The memo is keyed on path, size and mtime, so a catalog
+    rewritten between two calls in one process is read again rather than
+    answered from a stale frame.
 
     ⚠️  NOT the first row.  The file is sorted by `profit_usd` descending and
     the project ranks on `total_cost_usd / gross_value_usd`; those are
@@ -499,6 +578,10 @@ def run_winner(path):
     if not os.path.exists(path):
         sys.exit("no catalog at %s\nRun Stage 4 first, or pass --cell to "
                  "document an archived campaign cell instead." % path)
+    stat = os.stat(path)
+    key = (os.path.abspath(path), stat.st_size, stat.st_mtime_ns)
+    if key in _WINNER_CACHE:
+        return _WINNER_CACHE[key]
     frame = pd.read_csv(path, low_memory=False, float_precision="round_trip",
                         dtype={"designation": str})
     if not len(frame):
@@ -513,7 +596,49 @@ def run_winner(path):
     # case" is not a measurement until the page says what it beat.
     row.attrs["population"] = int(len(usable))
     row.attrs["rows"] = int(len(frame))
+    # ✅  THE FILE ANSWERS WHAT THE ROW CANNOT.  A run's `use_beneficiation`
+    # is invisible in a row that declined to concentrate -- see `run_setting`
+    # -- but a RAW run's catalog contains no concentrating row at all, and a
+    # beneficiated one is mostly concentrating rows.  That is a property of the
+    # file rather than of the row, and it costs nothing here because the frame
+    # is already in memory.
+    row.attrs["run_beneficiated"] = bool(frame["beneficiation"].astype(str)
+                                         .str.lower().isin(["true", "1"]).any())
+    _WINNER_CACHE[key] = row
     return row
+
+
+def row_shape(archived):
+    """The architecture axes a row carries, as the renderer branches on them.
+
+    ONE DEFINITION WITH TWO READERS.  `context` needs it to decide what this
+    cascade can express and the renderer branches its prose on it; `--sweep`
+    needs the same answer about rows it has not derived yet, to find a covering
+    set.  Two copies of "what shape is this mission" is the defect this repo
+    catalogues first, so there is one and both call it.
+
+    Every value is read off the ROW.  See `terms_in_force` for the same
+    argument about the cost terms, and `row_destination` for the destination.
+    """
+    return dict(beneficiated=bool(archived["beneficiation"]),
+                aero=bool(archived["aerocapture_return"]),
+                isru=bool(archived["isru_return"]),
+                power=str(archived["power_source"]),
+                apsis=str(archived["rendezvous_apsis"]),
+                # 🚨  TWO DIFFERENT QUESTIONS, AND ONLY ONE OF THEM IS THE
+                # PROPELLANT.  A delta-v penalty above 1 marks an electric
+                # row and is applied to the legs UNCONDITIONALLY, but whether
+                # an electric STAGE is sized for it is `model_low_thrust_time`
+                # as well.  With that flag off the model charges the penalty
+                # and flies no array, no PPU and no thruster, and there is no
+                # thrust-time floor on the duration.  `ep_thrust_yr` is the
+                # model's own answer to "was a stage sized", so it is read
+                # rather than re-derived from the propellant row.
+                penalised=float(archived["dv_penalty_factor"]) > 1.0,
+                electric=(float(archived["ep_thrust_yr"]) > 0.0
+                          if "ep_thrust_yr" in archived
+                          and not pd.isna(archived["ep_thrust_yr"])
+                          else float(archived["dv_penalty_factor"]) > 1.0))
 
 
 def archived_winner(cell, designation):
@@ -563,21 +688,45 @@ def catalog_body(designation):
     repo catalogues: it works on a slice containing one provisional
     designation and fails on a slice that does not.
     """
+    return catalog_bodies([designation])[designation]
+
+
+def catalog_bodies(designations):
+    """The Stage 1 rows for SEVERAL bodies, in one pass over the 862 MB CSV.
+
+    🚨  A PASS PER BODY IS THE COST THAT DECIDES WHETHER A SWEEP IS AFFORDABLE.
+    One document reads one body and the pass is the price of admission; a
+    covering sweep reads eight, and eight passes over 862 MB is most of the
+    run.  The file is streamed once and every needle is matched against the
+    same line, which costs no more than the first body did.
+
+    `catalog_body` is this with one designation, kept because a single lookup
+    reads better at the call sites and because its docstring carries the dtype
+    trap that applies to both.
+    """
     path = os.path.join(ROOT, "asteroid_pipeline", "asteroid_catalog.csv")
     if not os.path.exists(path):
         sys.exit("missing %s; run_pipeline.py --check-inputs explains this" % path)
-    needle = "%s," % designation
+    wanted = [(str(d), "%s," % str(d)) for d in dict.fromkeys(designations)]
+    hits = []
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         header = fh.readline()
-        hits = [line for line in fh if needle in line]
+        for line in fh:
+            for _d, needle in wanted:
+                if needle in line:
+                    hits.append(line)
+                    break
     frame = pd.read_csv(_lines(header, hits), low_memory=False,
                         float_precision="round_trip",
                         dtype={"designation": str})
-    frame = frame[frame["designation"] == designation]
-    if len(frame) != 1:
-        sys.exit("expected one catalog row for %s, found %d"
-                 % (designation, len(frame)))
-    return frame.iloc[0]
+    out = {}
+    for des, _needle in wanted:
+        hit = frame[frame["designation"] == des]
+        if len(hit) != 1:
+            sys.exit("expected one catalog row for %s, found %d"
+                     % (des, len(hit)))
+        out[des] = hit.iloc[0]
+    return out
 
 
 def _lines(header, rows):
@@ -927,6 +1076,16 @@ def raw_sale(load, phases, caps, keys, surplus_frac):
 # `Recorded` rows below log every constant they hand out, so the audit's list
 # IS the derivation's list, and a rate added to the cascade tomorrow joins the
 # audit with no edit here.
+# Every reference-table read of the CURRENT derivation; the audit's list of
+# rates to look for is this, rather than a list somebody maintains.
+#
+# 🚨  IT IS PER DOCUMENT, AND A SWEEP BUILDS SEVERAL IN ONE
+# PROCESS.  Left to accumulate, mission two is audited against every rate
+# mission one read as well as its own, and reports as incomplete a page that
+# shows everything it actually used.  That is what made `--sweep --audit`
+# disagree with a single `--audit` of the same row: the first mission came out
+# clean and every one after it inherited the last one's reads.  `build` clears
+# it, so "the rates this derivation read" means this one.
 RATE_LOG = []
 
 
@@ -998,25 +1157,7 @@ def context(body, archived, tables):
     pro = Recorded(pro[pro["name"] == archived["propellant"]].iloc[0],
                    "Module 3 propellants")
 
-    shape = dict(beneficiated=bool(archived["beneficiation"]),
-                 aero=bool(archived["aerocapture_return"]),
-                 isru=bool(archived["isru_return"]),
-                 power=str(archived["power_source"]),
-                 apsis=str(archived["rendezvous_apsis"]),
-                 # 🚨  TWO DIFFERENT QUESTIONS, AND ONLY ONE OF THEM IS THE
-                 # PROPELLANT.  A delta-v penalty above 1 marks an electric
-                 # row and is applied to the legs UNCONDITIONALLY, but whether
-                 # an electric STAGE is sized for it is `model_low_thrust_time`
-                 # as well.  With that flag off the model charges the penalty
-                 # and flies no array, no PPU and no thruster, and there is no
-                 # thrust-time floor on the duration.  `ep_thrust_yr` is the
-                 # model's own answer to "was a stage sized", so it is read
-                 # rather than re-derived from the propellant row.
-                 penalised=float(archived["dv_penalty_factor"]) > 1.0,
-                 electric=(float(archived["ep_thrust_yr"]) > 0.0
-                           if "ep_thrust_yr" in archived
-                           and not pd.isna(archived["ep_thrust_yr"])
-                           else float(archived["dv_penalty_factor"]) > 1.0))
+    shape = row_shape(archived)
     # PER AXIS, not one monolithic comparison.  The old guard tested the whole
     # shape tuple against a single supported shape, so a raw mission -- which
     # is what the quick and standard presets fly, and therefore the commonest
@@ -1082,8 +1223,17 @@ def context(body, archived, tables):
     benef = shape["beneficiated"]
     rows = set(ops["category"])
 
-    def val(item):
+    def val(item, used=True):
         """One Module 3 row, or a failure.
+
+        🚨  `used` IS WHAT THE PAGE'S OWN BRANCH ASKS, and it
+        exists because the audit compares against what this derivation READ.
+        A chemical mission reads the power-processing figure and can do nothing
+        with it: no electric stage is sized, so no page shows it, and logging
+        it as a rate would report the page incomplete for a number it has no
+        business printing.  The rule is the one the `comp_group` false positive
+        established -- share the page's condition rather than exempt the row --
+        so the predicate here is the same shape flag the renderer branches on.
 
         `_ops_value` falls back to a default when the row is absent, which is
         silent and flattering: a renamed row would leave this document quietly
@@ -1093,8 +1243,8 @@ def context(body, archived, tables):
         if item not in rows:
             sys.exit("Module 3 has no row named %r; the ops table was renamed "
                      "underneath this derivation." % item)
-        return record_rate("Module 3 operations", item,
-                           master._ops_value(ops, item, default=float("nan")))
+        value = master._ops_value(ops, item, default=float("nan"))
+        return record_rate("Module 3 operations", item, value) if used else value
 
     a_au = float(body["semi_major_axis_au"])
 
@@ -1176,7 +1326,13 @@ def context(body, archived, tables):
     # The launch cost avoided, which is where an in-space price comes from.
     # Read as the leg chain rather than as one number so the document can show
     # the stage that produces it; one `burn` leg for a cislunar depot.
-    legs = master._DELIVERY_LEGS.get(cfg.delivery_destination) or []
+    # 🚨  `or []` WOULD DESTROY THE ONE DISTINCTION THAT MATTERS
+    # HERE.  Module 2 keys on identity: `earth_surface` maps to None and avoids
+    # no launch at all, `leo` maps to `[]` and avoids the whole LEO price with
+    # nothing to fly above it.  Flattening the first into the second made the
+    # Earth's surface price its non-existent chain at 4,253 $/kg, which is what
+    # `delivery_chain` and the renderer both test with `is not None`.
+    legs = master._DELIVERY_LEGS.get(cfg.delivery_destination)
     # 🚨  THE FOUR COLUMNS BEHIND EVERY PRICE IN THE PHASE TABLE, so the page
     # can show where a delivered price comes from instead of asserting it.
     # Stage 2 writes them all: a commodity USED at the destination is worth its
@@ -1265,7 +1421,8 @@ def context(body, archived, tables):
         fairing_m3=float(veh["fairing_volume_m3"]),
         thruster_eff=float(pro["thruster_efficiency"]),
         thruster_kg_per_n=float(pro["thruster_kg_per_n"]),
-        ppu_kg_per_kw=val("Power processing unit specific mass"),
+        ppu_kg_per_kw=val("Power processing unit specific mass",
+                          used=shape["electric"]),
         w_bare=w_bare, w_plant=w_plant, oversize=oversize, dark_h=dark_h,
         rot_h=rot_h, rot_measured=rot_measured, dark_clamped=dark_clamped,
         max_dark_h=cfg.max_dark_period_h,
@@ -1391,11 +1548,20 @@ def delivery_chain(C):
         m0 = R (1 + d)                   mass at the start of the leg
 
     An `edl` leg DIVIDES rather than multiplying: surviving 30% of entry mass
-    means arriving with 1/0.30 kg for every kilogram that lands.  A destination
-    with no legs at all is the Earth's surface, which avoids no launch.
+    means arriving with 1/0.30 kg for every kilogram that lands.
+
+    🚨  AN EMPTY CHAIN IS NOT A MISSING ONE, AND `if C["legs"]`
+    READ THEM AS THE SAME THING.  Module 2 distinguishes them by identity:
+    `earth_surface` maps to None and avoids no launch at all, while `leo` maps
+    to `[]` -- nothing to fly ABOVE LEO, and the launch TO LEO avoided in full.
+    Walking an empty chain leaves the mass at 1.0, so the price is the
+    LEO $/kg itself, which is why Module 2 returns 4,253 where this returned
+    zero.  Found by `--sweep`, on the first `leo` mission this derivation had
+    ever been pointed at: it is the model's most-used in-space destination and
+    the assertion at the end of `build` refused every one of them.
     """
     mass, steps = 1.0, []
-    for leg in reversed(C["legs"]):
+    for leg in reversed(C["legs"] or []):
         before = mass
         if leg[0] == "edl":
             frac = float(leg[1])
@@ -1412,7 +1578,8 @@ def delivery_chain(C):
                       "dry": float(dry), "ve": float(isp) * G0, "R": r, "d": d,
                       "m0": m0, "before": before, "after": mass})
     return {"steps": steps, "kg_in_leo": mass,
-            "usd_per_kg": C["leo_usd_per_kg"] * mass if C["legs"] else 0.0}
+            "usd_per_kg": (C["leo_usd_per_kg"] * mass
+                           if C["legs"] is not None else 0.0)}
 
 
 def derive_body(C):
@@ -2652,14 +2819,16 @@ def comparable(C, B, DV, M, P, ladder):
         "usd_per_kg_cost": (cst["total"] / M["m_pay"] if M["m_pay"] > 0
                             else float("nan")),
         "bulk_value_usd_per_kg": C["bulk"],
-        # The PURITY BOUND, and only a concentrating mission has one: the
-        # richest hold obtainable is 100% of the best phase present.  A raw
-        # mission cannot be concentrated past its own composition, so the model
-        # leaves this at the bulk value rather than quoting a bound that does
-        # not bind -- which is why this reads 4,917 and not 7,305 on a body
-        # whose best phase is nickel-iron.
-        "best_phase_usd_per_kg": (max(p[2] for p in C["phases"])
-                                  if C["beneficiated"] else C["bulk"]),
+        # The PURITY BOUND: the richest hold obtainable, which is 100% of the
+        # best phase present.  A raw RUN was never given one, so the model
+        # reports the bulk value instead of a bound that does not bind.
+        # 🚨  THE CONDITION IS THE RUN'S SETTING, NOT THIS MISSION'S.  A
+        # body that declines to concentrate inside a beneficiated run still
+        # carries the bound its search was given; see `run_setting`, which is
+        # where the measurement behind that sentence lives.  The model takes
+        # the floor too, because a bound below the bulk value would not be one.
+        "best_phase_usd_per_kg": (max([C["bulk"]] + [p[2] for p in C["phases"]])
+                                  if C["run_beneficiated"] else C["bulk"]),
     }
 
 
@@ -2672,7 +2841,7 @@ CHROME = [
 ]
 
 
-def build(archived, label):
+def build(archived, label, body=None, run_beneficiated=None):
     """Derive one winner end to end, and check it against its own row.
 
     `archived` is the row being documented, from wherever it came: a live
@@ -2681,7 +2850,13 @@ def build(archived, label):
     cell of that campaign" are the same question asked of different artefacts.
     """
     designation = str(archived["designation"])
-    body = catalog_body(designation)
+    # The rate log belongs to THIS derivation; see RATE_LOG.
+    del RATE_LOG[:]
+    # `body` is passed in by `--sweep`, which reads every body it needs in ONE
+    # pass over the 862 MB catalog rather than one pass each; see
+    # `catalog_bodies`.  A single document still just asks for its own.
+    if body is None:
+        body = catalog_body(designation)
     # The prices have to be chosen before anything is derived, and they are
     # chosen by the ROW's destination rather than by the config, for the same
     # reason the legs are.  See `mineral_catalog_for`.
@@ -2690,6 +2865,7 @@ def build(archived, label):
     # Before anything is derived: what the ROW charges decides what the
     # derivation charges.  See `terms_in_force`.
     C["terms"] = terms_in_force(archived, C["cfg"])
+    C["run_beneficiated"] = run_setting(archived, C["cfg"], run_beneficiated)
     phases, alloy, yields = phase_table(body, tables["minerals"])
     caps, alias = market_ceilings(tables["minerals"])
     C["phases"] = phases
@@ -3169,8 +3345,12 @@ def audit_verdict(incomplete, typed):
     return "*** THE PAGE ASSERTS A NUMBER NOTHING DERIVES ***"
 
 
-def report_audit(row, html_text):
+def report_audit(row, html_text, quiet=False):
     """Run the audit against the rendered page and print what it finds.
+
+    `quiet` returns the counts and prints nothing, which is what `--sweep`
+    needs: one line per mission rather than eight, with the detail a run away
+    for any mission that reports a finding.
 
     Returns `(incomplete, typed)`, kept apart because they are different
     complaints and one message cannot carry both: a missing column or rate
@@ -3179,13 +3359,14 @@ def report_audit(row, html_text):
     total made a prose finding print "THE PAGE IS INCOMPLETE" about a page
     that is complete.
     """
+    say = (lambda *a: None) if quiet else print
     text = rendered_text(html_text)
     numbers = page_numbers(text)
     cols = audit_columns(row, text, numbers, skip=not_shown(row))
     rates = audit_rates(text, numbers)
-    print("  page      %d numbers, %d distinct"
+    say("  page      %d numbers, %d distinct"
           % (len(numbers), len(set(n for n, _ in numbers))))
-    print("  columns   %d of %d non-zero shown, %d zero or blank, %d not "
+    say("  columns   %d of %d non-zero shown, %d zero or blank, %d not "
           "expected" % (len(cols["shown"]),
                         len(cols["shown"]) + len(cols["missing"]),
                         len(cols["zeros"]), len(cols["exempt"])))
@@ -3193,28 +3374,435 @@ def report_audit(row, html_text):
     for _column, how in cols["shown"] + [(t, h) for t, _f, _v, h
                                          in rates["shown"]]:
         tally[how] = tally.get(how, 0) + 1
-    print("  matched   %s"
+    say("  matched   %s"
           % ", ".join("%s %d" % (how, n)
                       for how, n in sorted(tally.items(), key=lambda kv:
                                            -kv[1])))
     for column, value in cols["missing"]:
-        print("     ! column not on the page  %-34s %r" % (column, value))
-    print("  rates     %d of %d reference constants shown"
+        say("     ! column not on the page  %-34s %r" % (column, value))
+    say("  rates     %d of %d reference constants shown"
           % (len(rates["shown"]), len(rates["shown"]) + len(rates["missing"])))
     for table, field, value in rates["missing"]:
-        print("     ! rate not on the page    %-34s %r  (%s)"
+        say("     ! rate not on the page    %-34s %r  (%s)"
               % (field, value, table))
     hits, moved = discrimination(row, text, numbers)
-    print("  matcher   %d of %d values still matched after moving every one "
+    say("  matcher   %d of %d values still matched after moving every one "
           "by %.1f%%" % (hits, moved, (PERTURBATION - 1.0) * 100.0))
     typed = prose_numbers()
-    print("  prose     %d typed number(s) in a sentence, %d on the register"
+    say("  prose     %d typed number(s) in a sentence, %d on the register"
           % (len(typed), len(TYPED_OK)))
     for line, word, context in typed:
         where = ("line %d" % line) if line else "on the register, unused"
-        print("     ! number typed in prose    %-10s %s: %s"
+        say("     ! number typed in prose    %-10s %s: %s"
               % (word, where, context[:90]))
     return len(cols["missing"]) + len(rates["missing"]), len(typed)
+
+
+# ---------------------------------------------------------------- the sweep
+# The axes a document's PROSE branches on, plus the two that decide which
+# cascade runs at all.  This is the coverage question, and it is not the same
+# question as either audit: those ask whether ONE page is right and whole, this
+# asks how much of the space of pages has ever been rendered.
+SWEEP_AXES = ("dest", "beneficiated", "searched", "aero", "isru", "power",
+              "apsis", "electric")
+
+
+def sweep_signature(row):
+    """A row's coverage signature: its shape, its destination and its size.
+
+    Built on `row_shape` rather than beside it, so the axes a sweep covers are
+    the axes the renderer branches on, by construction rather than by memory.
+
+    🚨  THIS IS THE AUTHORITY AND `scan_shapes` IS AN
+    OPTIMISATION.  The scan reads the same eight axes off raw CSV columns
+    because parsing whole rows to sort them is what made the first sweep
+    unaffordable, and two readings of one definition is exactly how a
+    definition drifts.  So the sweep checks: every mission it derives has its
+    scanned signature compared against this one, on the parsed row, and a
+    disagreement is a failure rather than a curiosity.
+    """
+    sig = dict(row_shape(row))
+    sig["dest"] = row_destination(row)
+    sig["searched"] = float(row.get("programme_missions") or 1) > 1
+    return tuple((k, sig[k]) for k in SWEEP_AXES)
+
+
+def _sig_from_cells(cells, idx):
+    """The signature of one CSV row, from raw cells by column index.
+
+    ⚠️  THE REFERENCE IMPLEMENTATION, kept because `scan_shapes`
+    was rewritten to read the same answer out of pandas and the two were
+    compared on a real archive before the faster one was trusted.  A rewrite
+    proved against nothing is a rewrite whose bugs look like data.  These are
+    the same fields `row_shape` reads, taken as text.
+    """
+    def num(name, default=0.0):
+        """One cell as a float, or `default` when it is blank or absent."""
+        try:
+            return float(cells[idx[name]]) if name in idx else default
+        except (ValueError, IndexError):
+            return default
+
+    def flag(name):
+        """One cell as a bool, the way a CSV spells one."""
+        return str(cells[idx[name]]).strip().lower() in ("true", "1")
+
+    return (("dest", cells[idx["delivery_destination"]]),
+            ("beneficiated", flag("beneficiation")),
+            ("searched", num("programme_missions", 1.0) > 1.0),
+            ("aero", flag("aerocapture_return")),
+            ("isru", flag("isru_return")),
+            ("power", cells[idx["power_source"]]),
+            ("apsis", cells[idx["rendezvous_apsis"]]),
+            ("electric", (num("ep_thrust_yr") > 0.0 if "ep_thrust_yr" in idx
+                          else num("dv_penalty_factor", 1.0) > 1.0)))
+
+
+def scan_shapes(path, chunk_rows=250_000):
+    """The cheapest mission of each distinct architecture in one Stage 4 output.
+
+    🚨  PARSED BY pandas, NOT BY `csv.reader`.  The first version
+    of this read every field of every row in Python to look at eight of them,
+    and a five-source sweep was still scanning after forty minutes -- which
+    makes a ritual of the command that exists to replace one.  This reads only
+    the columns the axes need, in chunks, and reduces each chunk with a
+    groupby: the architectures are what survive, so memory is the number of
+    ARCHITECTURES rather than the number of rows either way.
+
+    ⚠️  THE VALUES MUST BE THE ONES `_sig_from_cells` PRODUCES, not
+    merely equivalent ones: a signature is a dict key, and `"True"` and `True`
+    are different keys.  The two implementations were compared on a real
+    archive before this one replaced the other.
+
+    Returns `({signature: (objective, designation)}, any_beneficiated, rows)`.
+    The second is the file's own answer to a question a declining row cannot
+    settle about itself (see `run_setting`); the third is the evaluable
+    population, counted here because the pass is already reading every row and
+    the page quotes it.
+    """
+    need = ("designation", "total_cost_usd", "gross_value_usd",
+            "delivery_destination", "beneficiation", "power_source",
+            "rendezvous_apsis")
+    optional = ("aerocapture_return", "isru_return", "dv_penalty_factor",
+                "programme_missions", "ep_thrust_yr")
+    head = pd.read_csv(path, nrows=0)
+    for column in need:
+        if column not in head.columns:
+            # Not a skip.  A file without these is not a Stage 4 output, and a
+            # sweep that quietly scanned nothing would print the same clean
+            # line as one that scanned everything.
+            sys.exit("%s has no %r column; it is not a Stage 4 catalog"
+                     % (os.path.basename(path), column))
+    usecols = list(need) + [c for c in optional if c in head.columns]
+
+    def truthy(frame, column):
+        """One column as the bools a CSV spells, absent reading as False."""
+        if column not in frame.columns:
+            return pd.Series(False, index=frame.index)
+        return frame[column].astype(str).str.strip().str.lower().isin(
+            ("true", "1"))
+
+    def number(frame, column, default):
+        """One column as floats, with `default` for absent, blank or unparseable."""
+        if column not in frame.columns:
+            return pd.Series(default, index=frame.index, dtype=float)
+        return pd.to_numeric(frame[column], errors="coerce").fillna(default)
+
+    best, any_benef, rows = {}, False, 0
+    reader = pd.read_csv(path, usecols=usecols, chunksize=chunk_rows,
+                         low_memory=False, dtype={"designation": str})
+    for chunk in reader:
+        rows += len(chunk)
+        value = number(chunk, "gross_value_usd", 0.0)
+        cost = number(chunk, "total_cost_usd", 0.0)
+        keep = value > 0.0
+        if not keep.any():
+            continue
+        chunk = chunk[keep]
+        benef = truthy(chunk, "beneficiation")
+        any_benef = any_benef or bool(benef.any())
+        axes = pd.DataFrame({
+            "dest": chunk["delivery_destination"].astype(str),
+            "beneficiated": benef,
+            "searched": number(chunk, "programme_missions", 1.0) > 1.0,
+            "aero": truthy(chunk, "aerocapture_return"),
+            "isru": truthy(chunk, "isru_return"),
+            "power": chunk["power_source"].astype(str),
+            "apsis": chunk["rendezvous_apsis"].astype(str),
+            "electric": (number(chunk, "ep_thrust_yr", 0.0) > 0.0
+                         if "ep_thrust_yr" in chunk.columns
+                         else number(chunk, "dv_penalty_factor", 1.0) > 1.0),
+        }, index=chunk.index)
+        axes["_obj"] = (cost[keep] / value[keep])
+        axes["_des"] = chunk["designation"].astype(str)
+        winners = axes.loc[axes.groupby(list(SWEEP_AXES), dropna=False,
+                                        observed=True)["_obj"].idxmin()]
+        for _i, row in winners.iterrows():
+            sig = tuple((axis, row[axis]) for axis in SWEEP_AXES)
+            obj = float(row["_obj"])
+            if sig not in best or obj < best[sig][0]:
+                best[sig] = (obj, str(row["_des"]))
+    return best, any_benef, rows
+
+
+def rows_for(path, designations, population=None):
+    """Full rows for several bodies out of one Stage 4 output, in ONE pass.
+
+    🚨  ONE PASS PER SOURCE, NOT ONE PER MISSION.  `--sweep` picks
+    its missions from a scan and then needs each winner's whole row.  Asking
+    `archived_winner` for them re-streamed a 350-500 MB archive once per
+    mission, and `catalog_row` re-streamed 1.1 GB, which is where the first
+    sweep's forty minutes went: the scans themselves are seconds.
+
+    `population` is attached to each row the way `archived_winner` attaches it,
+    because the document quotes what its subject was the best OF.
+    """
+    opener = gzip.open if path.endswith(".gz") else open
+    wanted = [(str(d), "%s," % str(d)) for d in dict.fromkeys(designations)]
+    hits = []
+    with opener(path, "rt", encoding="utf-8", errors="replace") as fh:
+        header = fh.readline()
+        for line in fh:
+            for _d, needle in wanted:
+                if needle in line:
+                    hits.append(line)
+                    break
+    frame = pd.read_csv(_lines(header, hits), low_memory=False,
+                        float_precision="round_trip",
+                        dtype={"designation": str})
+    out = {}
+    for des, _needle in wanted:
+        hit = frame[frame["designation"] == des]
+        if len(hit) != 1:
+            sys.exit("expected one row for %s in %s, found %d"
+                     % (des, os.path.basename(path), len(hit)))
+        row = hit.iloc[0]
+        if population is not None:
+            row.attrs["population"] = int(population)
+            row.attrs["rows"] = int(population)
+        out[des] = row
+    return out
+
+
+def sweep_sources():
+    """Where architectures can be found, in the order that reaches most.
+
+    The live catalog first, because it is the current release and the page
+    people actually get; then the archived cells, ordered so that each new one
+    reaches a DESTINATION none before it did, then an ore state or programme
+    setting none before it did, and repeats last.  The ledger names all three
+    per cell, so the spread is known before anything is opened -- which matters,
+    because opening one costs a pass over 350-500 MB.
+    """
+    sources = []
+    if os.path.exists(CATALOG):
+        sources.append(("catalog", os.path.basename(CATALOG), CATALOG, open))
+    rows = ledger_rows() if os.path.exists(LEDGER) else []
+    ordered = sorted(rows, key=lambda r: (r.get("destination") or "",
+                                          r.get("ore") or "",
+                                          r.get("search") or ""))
+    # ⚠️  THREE WAVES, BECAUSE A DESTINATION IS NOT THE ONLY
+    # AXIS.  Ordering by new destination alone filled every slot a default
+    # sweep has with the seven destinations' first cells, which are all
+    # search-off -- so `searched` never appeared on disk and the sweep reported
+    # a covered space it had not looked at.  A new ore state or programme
+    # setting is worth a slot too, and anything left over is a repeat.
+    seen_dest, seen_mode = set(), set()
+    waves = []
+    for r in ordered:
+        archive = os.path.join(CAMP, "cells", "%s.csv.gz" % r["cell"])
+        if not os.path.exists(archive):
+            continue
+        dest = r.get("destination") or ""
+        mode = (r.get("ore") or "", r.get("search") or "")
+        if dest not in seen_dest:
+            wave, seen_dest = 0, seen_dest | {dest}
+        elif mode not in seen_mode:
+            wave = 1
+        else:
+            wave = 2
+        seen_mode.add(mode)
+        waves.append((wave, r["cell"], archive))
+    for _wave, cell, archive in sorted(waves, key=lambda w: w[0]):
+        sources.append(("cell", cell, archive, gzip.open))
+    return sources
+
+
+def sweep_candidates(max_sources):
+    """Every architecture the scanned sources hold, with its best mission.
+
+    Returns the architectures, and per source what the scan learned about the
+    file: its path, its evaluable population, and whether it is the output of a
+    beneficiated run -- the one thing a declining row cannot say about itself.
+    See `run_setting`.
+    """
+    found, about = {}, {}
+    for kind, name, path, _opener in sweep_sources()[:max_sources]:
+        print("  scanning  %s" % name)
+        shapes, any_benef, rows = scan_shapes(path)
+        about[name] = {"path": path, "beneficiated": any_benef, "rows": rows,
+                       "kind": kind}
+        for sig, (obj, des) in shapes.items():
+            if sig not in found or obj < found[sig][0]:
+                found[sig] = (obj, kind, name, des)
+    return found, about
+
+
+def cover(found, max_shapes):
+    """The smallest set of missions that shows every axis value at least once.
+
+    Greedy set cover over (axis, value) pairs, cheapest mission breaking ties,
+    which keeps each entry the best mission of its kind rather than an
+    arbitrary one.
+
+    🚨  IT IS A COVER, NOT A SAMPLE.  Deriving every architecture on disk
+    would be hundreds of documents; deriving one per axis VALUE is what answers
+    "has this cascade ever run on an RTG mission at all", which is the question
+    a hand-picked ritual of four shapes could not answer and never claimed to.
+    """
+    want = {}
+    for sig in found:
+        for axis, value in sig:
+            want.setdefault(axis, set()).add(value)
+    todo = {(axis, value) for axis, values in want.items() for value in values}
+    chosen = []
+    while todo and len(chosen) < max_shapes:
+        def gain(item):
+            """Sort key: most uncovered pairs first, cheapest mission on a tie."""
+            return (-len([p for p in item[0] if p in todo]), item[1][0])
+        sig, (obj, kind, name, des) = min(found.items(), key=gain)
+        new = [p for p in sig if p in todo]
+        if not new:
+            break
+        chosen.append((sig, obj, kind, name, des))
+        todo -= set(new)
+        del found[sig]
+    return chosen, todo, want
+
+
+def describe_signature(sig):
+    """One line naming the architecture a swept mission flies."""
+    d = dict(sig)
+    return " | ".join([
+        str(d["dest"]),
+        "beneficiated" if d["beneficiated"] else "raw",
+        "searched" if d["searched"] else "N = 1",
+        "aerocapture" if d["aero"] else "propulsive",
+        "ISRU" if d["isru"] else "propellant bought",
+        str(d["power"]),
+        str(d["apsis"]),
+        "electric" if d["electric"] else "chemical"])
+
+
+def ore_of(cell):
+    """The ore state the campaign recorded for one cell, or None.
+
+    The ledger is the only surviving statement of a run's `use_beneficiation`
+    for an archived row that declined to concentrate; see `run_setting`.
+    """
+    led = next((r for r in ledger_rows() if r["cell"] == cell), None)
+    if not led or not led.get("ore"):
+        return None
+    return led["ore"].strip().lower().startswith("benef")
+
+
+def sweep(args):
+    """Derive one mission per architecture on disk, and report the coverage.
+
+    🚨  THIS WAS A HAND-RUN RITUAL, WHICH IS TO SAY A CHECK THAT DID NOT
+    EXIST.  Every release of this document has been "VERIFIED on four mission
+    shapes", picked by whoever wrote the release note, rebuilt from the
+    previous note each time and thrown away after -- the habit `verify.py`'s
+    own header is a list of the cost of, and the one `--audit` closed for the
+    completeness question one release ago.  The shapes are FOUND now: every
+    architecture on disk, the cheapest mission flying each, and a cover of the
+    axis values between them.
+
+    ⚠️  A SHAPE NOTHING ON DISK FLIES IS REPORTED, NOT PASSED OVER.  The
+    interesting answer is usually the empty one -- a branch the renderer
+    carries that no run has ever exercised is the "unreachable branch is not a
+    verified branch" case exactly -- and a sweep that reported only what it
+    derived would look identical whether the space was covered or nearly bare.
+    """
+    found, about = sweep_candidates(args.max_sources)
+    if not found:
+        sys.exit("nothing to sweep: no Stage 4 catalog and no archived cell.")
+    chosen, uncovered, want = cover(dict(found), args.max_shapes)
+    print("  found     %d architecture(s) across %d axes"
+          % (len(found), len(want)))
+    print("  covering  %d mission(s)\n" % len(chosen))
+
+    bodies = catalog_bodies([des for _s, _o, _k, _n, des in chosen])
+    # One pass per SOURCE for the chosen rows; see `rows_for`.
+    per_source = {}
+    for _sig, _obj, _kind, name, des in chosen:
+        per_source.setdefault(name, []).append(des)
+    rows = {}
+    for name, wanted in per_source.items():
+        meta = about[name]
+        rows[name] = rows_for(meta["path"], wanted, population=meta["rows"])
+
+    failures, audited, refused = 0, 0, 0
+    for sig, obj, kind, name, des in chosen:
+        label = "%s  %s" % (name, des)
+        try:
+            told = ore_of(name) if kind == "cell" else None
+            out = build(rows[name][des], label, body=bodies[des],
+                        run_beneficiated=(told if told is not None
+                                          else about[name]["beneficiated"]))
+        except SystemExit as exc:
+            # ⚠️  A REFUSAL IS A RESULT.  `context` declines the shapes this
+            # cascade does not cover, by name, and finding out which those are
+            # is half of what a sweep is for -- so it is counted and reported
+            # rather than ending the run.
+            print("  %-52s REFUSED" % label)
+            print("      %s" % str(exc).splitlines()[0])
+            refused += 1
+            continue
+        c = out["check"]
+        # The scan said this row was one architecture; `row_shape` says what it
+        # is.  See `sweep_signature`: the scan is a fast path, not a second
+        # definition, and this is what keeps it honest.
+        seen = sweep_signature(rows[name][des])
+        if seen != sig:
+            print("  %-52s *** SCAN AND ROW DISAGREE ***" % label)
+            print("      scanned %s" % describe_signature(sig))
+            print("      row     %s" % describe_signature(seen))
+            failures += 1
+        note = ""
+        if args.audit:
+            import worked_calculation_doc
+            incomplete, typed = report_audit(
+                rows[name][des], worked_calculation_doc.document(out),
+                quiet=True)
+            audited += 1
+            note = ("  audit clean" if not (incomplete or typed)
+                    else "  *** audit: %d incomplete, %d typed ***"
+                    % (incomplete, typed))
+            if incomplete or typed:
+                failures += 1
+        if c["bad"]:
+            failures += 1
+        print("  %-52s %8.3fx  %d quantities, %d DIFFER%s"
+              % (label, obj, c["n"], len(c["bad"]), note))
+        print("      %s" % describe_signature(sig))
+        for nm, ours, theirs, rel in c["bad"]:
+            print("      ! %-28s derived %r  row %r  rel %.3e"
+                  % (nm, ours, theirs, rel))
+
+    print("\n  COVERAGE, over what is on disk")
+    for axis in SWEEP_AXES:
+        values = sorted(str(v) for v in want.get(axis, ()))
+        missing = sorted(str(v) for a, v in uncovered if a == axis)
+        print("    %-13s %-56s%s"
+              % (axis, ", ".join(values) or "-",
+                 "NOT DERIVED: " + ", ".join(missing) if missing else ""))
+    print("\n  %d derived, %d audited, %d refused, %d failure(s)"
+          % (len(chosen) - refused, audited, refused, failures))
+    if uncovered:
+        print("  %d axis value(s) on disk went underived; raise --max-shapes"
+              % len(uncovered))
+    return 1 if (failures or refused or uncovered) else 0
 
 
 def main():
@@ -3239,7 +3827,23 @@ def main():
                     help="also audit the rendered page for completeness")
     ap.add_argument("--out", default=os.path.join(CAMP, "worked_calculation"),
                     help="output path without an extension")
+    ap.add_argument("--sweep", action="store_true",
+                    help="derive one mission per architecture on disk and "
+                         "report the coverage; writes nothing")
+    ap.add_argument("--max-sources", type=int, default=4, metavar="N",
+                    dest="max_sources",
+                    help="Stage 4 outputs to scan for architectures "
+                         "(default: 4); each costs a streaming pass")
+    ap.add_argument("--max-shapes", type=int, default=10, metavar="N",
+                    dest="max_shapes",
+                    help="missions to derive in a sweep (default: 10)")
     args = ap.parse_args()
+
+    # A sweep answers a different question from a document and shares only the
+    # derivation, so it is dispatched before any of the source-picking below:
+    # there is no single subject to pick.
+    if args.sweep:
+        return sweep(args)
 
     # Where the row comes from, and nothing else, is what `--cell` changes.
     # With neither flag, every source on disk is compared and the single best
@@ -3251,7 +3855,26 @@ def main():
             sys.exit("nothing to document: no Stage 4 catalog at %s and no "
                      "completed campaign cell with an archive.\nRun Stage 4, "
                      "or pass --catalog." % args.catalog)
+        # 🚨  RANK WITHIN ONE RELEASE, NOT ACROSS THEM.  Naming the release
+        # on both lines was the previous fix and it was half of one: the
+        # ordering still put a calc 1.21.2 cell and a 1.22.0 catalog in one
+        # sort, and 4.5298x at the newer stamp came out "better" than 6.6622x
+        # at the older, which is a cheaper MODEL rather than a better mission.
+        # A reader who saw "best case" had no way to know the comparison was
+        # between two models.  The newest release present wins the tie by
+        # construction now, and every older one is named and set aside, which
+        # is this repo's standing rule about wall clocks applied to objectives:
+        # a figure is only ever true of the release it names.
+        newest = max(found, key=lambda f: _release_key(f[3]))[3]
+        aside = [f for f in found if f[3] != newest]
+        found = [f for f in found if f[3] == newest]
         best_obj, kind, name, release = found[0]
+        for older in sorted({f[3] for f in aside}, key=_release_key,
+                            reverse=True):
+            best_older = min(f[0] for f in aside if f[3] == older)
+            print("  set aside %d result(s) at calc %s (best %.4fx), which is "
+                  "a different model" % (sum(1 for f in aside if f[3] == older),
+                                         older, best_older))
         if len(found) > 1:
             # ⚠️  NAME THE RELEASE ON BOTH LINES.  The ledger is a
             # single-release artifact by design and the live catalog is
@@ -3263,11 +3886,14 @@ def main():
             # as what it is.  This repo's standing rule about wall clocks
             # applies unchanged to objectives: a figure is only ever true of
             # the release it names.
-            print("  compared  %d finished results; best is %s at %.4fx "
-                  "(calc %s)" % (len(found), name, best_obj, release))
+            print("  compared  %d finished result(s) at calc %s; best is %s "
+                  "at %.4fx" % (len(found), release, name, best_obj))
             runner = found[1]
             print("  runner-up %s at %.4fx (calc %s)"
                   % (runner[2], runner[0], runner[3]))
+        elif aside:
+            print("  compared  1 result at calc %s; best is %s at %.4fx"
+                  % (release, name, best_obj))
         missed = unseen_archives()
         if missed:
             print("  NOT compared: %d archive(s) under a release suffix, which"
@@ -3305,7 +3931,15 @@ def main():
             winner = hit.iloc[0]
         label = os.path.basename(args.catalog)
 
-    out = build(winner, label)
+    # ⚠️  THE LEDGER KNOWS WHAT THE ROW CANNOT SAY.  `--cell` names a cell
+    # whose ore state the campaign recorded, which is the one place the run's
+    # `use_beneficiation` survives for an archived row; see `run_setting`.
+    told = None
+    if args.cell:
+        led = next((r for r in ledger_rows() if r["cell"] == args.cell), None)
+        if led and led.get("ore"):
+            told = led["ore"].strip().lower().startswith("benef")
+    out = build(winner, label, run_beneficiated=told)
     terms = out["terms"]
     obj = float(winner["total_cost_usd"]) / float(winner["gross_value_usd"])
     print("  source    %s" % label)
