@@ -59,6 +59,8 @@ through. Skim for the section that names what you are about to change.
 - [An input read from the LIVE table is a term read from the wrong run](#an-input-read-from-the-live-table-is-a-term-read-from-the-wrong-run)
 - [A convenience path that bypasses the constructor loses what the constructor attached](#a-convenience-path-that-bypasses-the-constructor-loses-what-the-constructor-attached)
 - [Fixing the page can break the audit that was matching through the old rendering](#fixing-the-page-can-break-the-audit-that-was-matching-through-the-old-rendering)
+- [A cap on a list of two kinds of thing truncates the half you asked for](#a-cap-on-a-list-of-two-kinds-of-thing-truncates-the-half-you-asked-for)
+- [A binding constraint refuses loudly one way and lies quietly the other](#a-binding-constraint-refuses-loudly-one-way-and-lies-quietly-the-other)
 - [A refusal that names the wrong constraint sends the reader to the wrong file](#a-refusal-that-names-the-wrong-constraint-sends-the-reader-to-the-wrong-file)
 - [A column can describe the RUN rather than the mission](#a-column-can-describe-the-run-rather-than-the-mission)
 - [One section's identity, written down four times](#one-sections-identity-written-down-four-times)
@@ -2992,6 +2994,81 @@ weakens the audit. The audit's perturbation figure -- how many values still find
 a home after every one is moved by 31.7% -- is **unchanged at 7 of 94**, and the
 new scale accounted for exactly **one** column. **A scale that costs the matcher
 nothing is a unit; one that costs it something is a licence.**
+
+### A cap on a list of two kinds of thing truncates the half you asked for
+
+2026-09-18, found while building the `--source` cells that reach the renderer's
+optional-term prose. `sweep_sources` puts caller-named sources first and says so
+in a comment: *"NAMED SOURCES FIRST, because a caller who passes one is asking
+for exactly it."* `sweep_candidates` then did `sweep_sources(extra)[:max_sources]`.
+
+🚨  **SO `--max-sources 1` WITH FOUR `--source` ARGUMENTS SILENTLY SWEPT ONE OF
+THEM AND REPORTED A CLEAN COVER.** Not an error, not a warning: three files the
+caller had named were dropped, and the run printed a coverage table for a space
+it had never opened. **That is the only failure mode a coverage tool has that
+matters**, and it is the
+[checks that never ran](#a-skip-that-says-so-and-still-hides-that-it-is-permanent)
+family arriving in a *cap* rather than in a skip.
+
+⚠️  **The code stated the intent one line above the slice that defeated it.**
+This file already records that shape twice -- a module docstring denying what the
+function below it explains, a `cmd_check` docstring fixed while the module header
+carrying it twice more was not. **A comment is not a guard**, and a comment
+immediately above the code that contradicts it is the easiest of all to read past.
+
+✅  **The cap belongs on the tail the function CHOSE, never on the head the
+caller named**, and the fix pays for itself: `--max-sources 0` now means "the
+named sources and nothing else", which skips the pass over the 1.1 GB live
+catalog and every 350-500 MB archive. That turns the optional-term sweep from a
+half-hour job into a cheap one, and it is what made the insurance, `unbounded`
+and `single_mission` branches affordable to check at all.
+
+### A binding constraint refuses loudly one way and lies quietly the other
+
+The same pass, and it is the completion of
+[a refusal that names the wrong constraint](#a-refusal-that-names-the-wrong-constraint-sends-the-reader-to-the-wrong-file),
+which closed only the half anybody had seen.
+
+`max_mining_fraction` is read from the LIVE config, so a row written under a
+different one is re-derived under this one. Both directions are wrong and only
+one of them is loud:
+
+| the dial here is | what happens | what the reader sees |
+|---|---|---|
+| too **loose** | the derivation over-digs, the launch stack fails against the vehicle | a REFUSAL, with a hint naming the dial |
+| too **tight** | the mission still closes, smaller | a confident document about a **different mission** |
+
+🚨  **MEASURED: 53 COLUMNS DIFFER AND EVERY MASS AGREES TO 5.7e-05.** On a
+158-row insurance cell swept with `--max-mining-fraction 0.05` against rows run
+at 1.0, 2017 KJ5 came out with `feed_processed_kg` 117,405 against 209,809,
+`fleet_ships` 3 against 5, and the NRE off by exactly the ratio of two programme
+sizes. **Masses agreeing to five decimal places under fifty differing columns is
+the signature of a SEARCH that landed elsewhere, not of arithmetic that went
+wrong**, and it is worth learning to read: a defect in the cascade moves the
+masses first.
+
+✅  **The test that settles it is one-sided and airtight in that direction.** An
+allowance ABOVE the row's feed proves nothing -- a cap that does not bind is
+supposed to sit above it, which is why the refusal uses that only as a hint after
+something else has already failed. An allowance BELOW it is different in kind:
+**the run being documented actually dug that much, so its own cap permitted it**,
+and a cap permitting less is provably not the one that run used.
+
+🚨  **AND THE FIRST VERSION OF THE TEST COMPARED A FEED AGAINST A PAYLOAD, SO IT
+NEVER FIRED ON THE CASE IT WAS WRITTEN FOR.** The allowance limits what may be
+DUG; `archived_payload` is what comes HOME, and on a raw mission those differ by
+orders of magnitude. The numbers were 117,405 against 39,546 where the comparison
+that matters was 117,405 against a feed of 209,809. **The diagnosis was right and
+the test was wrong**, which is the more embarrassing of the two and the harder to
+notice, because a test that never fires looks exactly like a clean result -- this
+file's own standing lesson, earned again. It was caught only by planting the
+failing case and finding that nothing was printed.
+
+⚠️  **ONE OVERRIDE, EVERY SOURCE.** `--max-mining-fraction` replaces the field on
+the live config, so **a sweep mixing archived cells with cells built at the
+current default cannot be right for both at once.** There is no per-source form
+of the flag and this note is the compensation: it names the row the dial is wrong
+for, rather than leaving fifty differing columns to be read as a defect.
 
 ### A refusal that names the wrong constraint sends the reader to the wrong file
 
