@@ -53,6 +53,8 @@ through. Skim for the section that names what you are about to change.
 - [The corrections the model accumulated](#the-corrections-the-model-accumulated)
 - [A check that the numbers are right is not a check that the page is complete](#a-check-that-the-numbers-are-right-is-not-a-check-that-the-page-is-complete)
 - [A page that derives every FIGURE can still type a FACT](#a-page-that-derives-every-figure-can-still-type-a-fact)
+- [Four shapes chosen by hand is a sample; the shapes are found now](#four-shapes-chosen-by-hand-is-a-sample-the-shapes-are-found-now)
+- [A column can describe the RUN rather than the mission](#a-column-can-describe-the-run-rather-than-the-mission)
 - [One section's identity, written down four times](#one-sections-identity-written-down-four-times)
 - [A flipped default breaks every reader that infers a run from the config](#a-flipped-default-breaks-every-reader-that-infers-a-run-from-the-config)
 - [A fixed point that carries its last pass makes the STOPPING TEST an answer](#a-fixed-point-that-carries-its-last-pass-makes-the-stopping-test-an-answer)
@@ -2681,6 +2683,136 @@ standing rule here for anything that prints a clean line: with an empty
 register it flags thirteen tokens, with the register none; planting one stale
 sentence takes the docs harness to exit 1 and names the number, the line and
 the file. A check nobody has seen fail is a check nobody has seen.
+
+### Four shapes chosen by hand is a sample; the shapes are found now
+
+2026-09-17, on `campaign/worked_calculation.py`, and it is the fourth entry
+about that document because it is the only artifact here whose whole claim is
+that nothing in it is typed.
+
+Every release of it has been "VERIFIED on four mission shapes" -- beneficiated
+searched, beneficiated at N = 1, raw at N = 1, and an aerocaptured
+`earth_surface` programme. Those four were picked by whoever wrote the release
+note, rebuilt from the previous note each time, and thrown away after. That is
+the habit `verify.py`'s own header is a list of the cost of, and `--audit`
+closed the same habit for the completeness question one release earlier.
+
+✅  **`--sweep` FINDS THEM INSTEAD.** Every Stage 4 output on disk is streamed
+once, the cheapest mission of each distinct ARCHITECTURE is kept, and a greedy
+cover over the axis values picks the missions to derive. The axes are
+`row_shape`'s, so they are the ones the renderer branches on by construction
+rather than by memory.
+
+```bash
+py campaign/worked_calculation.py --sweep            # derive one per architecture
+py campaign/worked_calculation.py --sweep --audit    # and audit each page
+```
+
+⚠️  **A COVER, NOT A SAMPLE, AND THE DIFFERENCE IS THE POINT.** Deriving
+every architecture on disk is hundreds of documents; deriving one per axis
+VALUE answers "has this cascade ever run on an RTG mission at all", which four
+hand-picked shapes could not answer and never claimed to. What is NOT on disk
+is printed too, because a branch nothing exercises is the
+[unreachable branch](#the-older-matrices-and-the-claims-they-retired) case and
+a sweep that reported only what it derived would look identical whether the
+space was covered or nearly bare.
+
+🚨  **IT FOUND A DEFECT ON ITS FIRST RUN, AND THE DEFECT IS THE REUSABLE
+HALF.** `best_phase_usd_per_kg` came out **61% low** on an RTG, ISRU, chemical,
+raw mission -- 2021 TN102, an architecture no document had ever been rendered
+for, because a document's subject is always the best case and the best case is
+never any of those things.
+
+⚠️  **A SWEEP HAS TO BE AFFORDABLE OR IT IS ANOTHER RITUAL, AND THE FIRST
+ONE WAS NOT.** Two passes made it minutes-per-source instead of seconds: the
+scan read every FIELD of every row in Python to look at eight of them, and the
+row fetch then re-streamed the whole source once PER MISSION -- a 350-500 MB
+archive, or the 1.1 GB live catalog, for each of a dozen missions. It reads
+only the columns the axes need, in pandas chunks, and fetches the chosen rows
+in ONE pass per source.
+
+✅  **The rewrite was proved against the implementation it replaced**, on a
+real 299 MB archive: same 9 architectures, same winning body and objective for
+every one, same answer to "was this a beneficiated run". A rewrite proved
+against nothing is a rewrite whose bugs look like data, and the old
+implementation is kept as `_sig_from_cells`, which is what the comparison ran
+against.
+
+🚨  **AND THE SAME FILE WAS BEING READ TWICE ON EVERY ORDINARY RUN.**
+`candidate_sources` reads the live catalog to rank the sources and `main` then
+reads the same 1.1 GB file again to fetch the subject it just chose. One memo,
+keyed on path, size and mtime so a rewritten catalog is re-read rather than
+answered from a stale frame.
+
+🚨  **AND THE AUDITED SWEEP FOUND THAT THE AUDIT HAD ONLY EVER BEEN CLEAN
+AT ONE DESTINATION.** `--sweep --audit` renders and audits every mission it
+derives. On the first run: **cislunar clean, and findings at all six others**,
+which is precisely the shape of a check whose subject was chosen by hand for
+three releases.
+
+| what | where it showed | what it was |
+|---|---|---|
+| `leo` REFUSED outright | the assertion that closes `delivery_chain` | **an empty chain is not a missing one**: `earth_surface` maps to `None` and avoids no launch, `leo` maps to `[]` and avoids the whole LEO launch price. `if C["legs"]` read them as the same thing, so the derivation returned 0 $/kg where Module 2 returns 4,253 -- and the renderer dropped the section explaining the largest term in every price it printed |
+| 3 columns and 3 rates hidden | any RTG page | `solar_w_per_kg_bare`, `array_oversize_factor` and `dark_period_h` are properties of the BODY and the model writes them on every row. A page flying nuclear heat showed none of them, so it hid **the alternative its own choice was made against** |
+| `return_volume_m3` | any in-space destination | printed at two DECIMAL places, so a 0.0151 m3 hold rendered as "0.02" -- the two-significant-figures defect again, in a formatter rather than in a cost line |
+| the power-processing rate | any chemical mission | READ and unusable: no electric stage is sized, so no page shows it. A rate is only a rate for a page whose branch can use it, which is the `comp_group` rule -- share the page's condition, never exempt the row |
+| the ISRU feed ratio | any water-fed ISRU mission | the page printed the feed MASS and the ratio the cascade uses, and never the Module 3 rate both come from: kg of water per kg of propellant, which is what a reader would have to look up |
+| a body's `name` | any NUMBERED asteroid | the header prints the designation, and a numbered body carries a real name the page dropped. Shown now when it says something the designation does not, which is `group_restates_type`'s rule again |
+
+✅  **Every one is fixed and the same command says so**, which is the
+difference between a check and a ritual: the evidence is a command anyone can
+re-run rather than a sentence in a release note.
+
+🚨  **AND THE SWEEP FOUND ONE DEFECT IN ITSELF, WHICH IS THE SUBTLEST OF
+THEM: `RATE_LOG` IS PER DOCUMENT AND A SWEEP RENDERS SEVEN.** Left to
+accumulate, mission two was audited against every rate mission one had read as
+well as its own, so it reported a complete page incomplete. **The tell was two
+runs of the same check disagreeing** -- a single `--audit` of a row came back
+clean while the sweep's audit of the same row named six missing rates -- and
+that disagreement is the only thing that could have shown it, because both
+lines are plausible on their own. Any state that belongs to ONE artifact has to
+be reset per artifact, and a batch runner is what turns that from a latent bug
+into a visible one.
+
+⚠️  **A regression was caught the same way, on the next run.** Fixing the
+empty-versus-missing chain made `earth_surface` price its non-existent chain at
+the LEO rate, because `context` had already flattened its `None` into `[]` with
+an `or []`. One sweep, one line, named the destination and the disagreement.
+
+### A column can describe the RUN rather than the mission
+
+The mechanism behind it, and it generalises past this column. calc writes the
+purity bound as
+
+```python
+best_phase_value = (asteroid_best_phase_usd_per_kg(row, minerals)
+                    if config.use_beneficiation else bulk_value)
+```
+
+The condition is the **RUN's flag**, not the winning candidate's. The
+derivation read the row's own `beneficiation` column, which is the same thing
+on every row except the ones that declined to concentrate inside a beneficiated
+run -- **15.8% of bodies**, and never the winner.
+
+🚨  **AND THE RUN'S FLAG IS NOT RECOVERABLE FROM THE ROW. MEASURED, NOT
+ASSUMED.** The same body run raw, and run beneficiated-but-declining, produces
+rows identical in **142 of 143 columns**; the only one that differs is
+`best_phase_usd_per_kg` itself. Inferring the flag from that column would be
+deciding the answer from the answer, which is the check-that-cannot-fail shape
+this file now records twice.
+
+✅  **THE FILE ANSWERS WHAT THE ROW CANNOT.** A raw run's catalog contains no
+concentrating row anywhere; a beneficiated one is mostly concentrating rows. So
+`run_setting` asks, in order: the row (settled if it concentrated), the caller
+(`--cell` reads the ledger's own `ore` column, the campaign's record of that
+run), then the FILE, and only last the live config, which describes this
+process rather than the run that wrote the file. The compared column is the
+guard either way.
+
+⚠️  **The general question to ask of any derived column that disagrees: is
+the model's condition on the CONFIG or on the ROW?** They read identically at
+the top of a distribution and diverge in its tail, which is exactly where a
+document about the best case never looks.
 
 ### One section's identity, written down four times
 

@@ -380,6 +380,21 @@ def group_restates_type(comp_group, spectral_type):
             == str(spectral_type or "").lower())
 
 
+def named_as(out):
+    """The body's name, when the catalog holds one the designation does not.
+
+    ⚠️  THE SAME RULE AS `group_restates_type`, AND FOR THE SAME
+    REASON: this is a condition the page and the audit have to share, or the
+    next edit to either pulls them apart.  A provisional designation appears in
+    `name` as its own text on most rows, and printing "2021 CX5 2021 CX5"
+    reads as two facts where there is one.
+    """
+    name = str(out["archived"].get("name") or "").strip()
+    if not name or name in str(out["designation"]):
+        return ""
+    return " " + esc(name)
+
+
 def s_header(out):
     """Title block: what this document is about and how it was produced."""
     a = architecture(out)
@@ -389,8 +404,15 @@ def s_header(out):
         # ⚠️  THE GROUP ONLY WHEN IT SAYS SOMETHING THE LETTER DOES NOT.  On
         # most bodies `comp_group` is the spectral type with "-type" after it,
         # and printing "D, D-type" reads as two facts where there is one.
-        ("body", "%s  (%s%s)"
-         % (body, esc(out["archived"].get("spectral_type", "type unknown")),
+        # ⚠️  A NAMED BODY IS NAMED.  `name` is an output column
+        # and most rows carry a provisional designation in it, which repeats
+        # the heading; a numbered asteroid carries a real name that the page
+        # dropped, and `--audit` reported it missing at `mars_surface` on the
+        # first run that documented one.  Shown when it says something the
+        # designation does not, which is the `comp_group` rule again.
+        ("body", "%s%s  (%s%s)"
+         % (body, named_as(out),
+            esc(out["archived"].get("spectral_type", "type unknown")),
             "" if group_restates_type(
                 C.get("comp_group"),
                 out["archived"].get("spectral_type", ""))
@@ -851,16 +873,27 @@ def s_composition(out):
     # half are engineering judgements and are the softest assumption in the
     # whole pipeline, which is the strongest reason to show the chain rather
     # than the answer.
-    if C["legs"]:
+    # 🚨  AN EMPTY CHAIN IS NOT A MISSING ONE.  `earth_surface`
+    # has no chain at all (None) and avoids no launch; `leo` has an EMPTY one
+    # ([]) because nothing flies above LEO, and it avoids the launch to LEO in
+    # full.  `if C["legs"]` read those as the same thing, so a `leo` page
+    # dropped the section explaining the largest term in every price it
+    # printed.  Same defect as the derivation's, in the file next door.
+    if C["legs"] is not None:
         out_html.append(h(3, "Why a kilogram is worth that much HERE"))
         out_html.append(para(
             "None of the prices above is a terrestrial quote. At an in-space "
             "destination a kilogram is worth what it fetches on Earth "
             "<strong>plus</strong> the launch cost it saves, and that saving "
-            "is the cost of putting a kilogram there from Earth instead. The "
-            "chain is walked backwards from the payload, stage by stage, "
-            "because collapsing it into one burn throws away staging and "
-            "overstates the destination."))
+            "is the cost of putting a kilogram there from Earth instead. "
+            + ("The chain is walked backwards from the payload, stage by "
+               "stage, because collapsing it into one burn throws away "
+               "staging and overstates the destination."
+               if C["legs"] else
+               "Here the chain is empty, and that is the answer rather than "
+               "the absence of one: this destination IS low Earth orbit, so "
+               "nothing has to be flown above the launch vehicle and a "
+               "kilogram mined out here avoids the whole LEO launch price.")))
         # 🚨  THE CHAIN, NOT THE ANSWER.  `p_L` is the largest term in every
         # delivered price in the table above, so a page that printed it as one
         # figure would be asking to be trusted about the number the rest of the
@@ -1579,10 +1612,25 @@ def s_cascade(out):
             "drop out is the empty return <strong>tank</strong> -- you can "
             "make propellant out there, not a pressure vessel -- so %s kg of "
             "tankage is still launched from Earth. The saving is paid for in "
-            "rock: %s kg of extra feed the same rig has to dig before any ore, "
-            "which is the cost a flat dollar-per-kilogram charge left out."
+            "rock: %s kg of extra feed the same rig has to dig before any "
+            "ore. The propellant needs %s, and this rock is %s, so the rig "
+            "digs %s kg of it for every kilogram made -- which is the cost a "
+            "flat dollar-per-kilogram charge left out."
             % (fmt(M["m_rprop"], 1), fmt(M["m_tank_ret"], 1),
-               fmt(M["isru_feed"], 0))))
+               fmt(M["isru_feed"], 0),
+               # ⚠️  TWO RATIOS, AND THE TABLE'S IS THE FIRST.
+               # A water-fed propellant reads kg of WATER per kg made straight
+               # off Module 3; what the rig has to dig for it is that over the
+               # body's ice fraction, which is a different number and the one
+               # the mass cascade uses.  Printing only the second left the
+               # Module 3 rate unreproducible from the page.
+               ("%s kg of water per kg, at %s ice"
+                % (prec(C["isru_water_per_kg_prop"], 6),
+                   pct(C["ice_frac"], 2)))
+               if C["isru_water_per_kg_prop"] > 0 else
+               "%s kg of regolith per kg" % prec(C["isru_feed_per_kg_prop"], 6),
+               "water ice" if C["isru_water_per_kg_prop"] > 0 else "regolith",
+               prec(C["isru_feed_per_kg_prop"], 6))))
     if a["aero"]:
         html_out.append(note(
             "key",
@@ -1609,14 +1657,73 @@ def s_cascade(out):
         # cap was reported as bounded by the mass budget, which is the one
         # sentence this paragraph exists to get right.  The cap is a mass in
         # the cascade, so the test is against the mass it produced.
+        # ⚠️  SIGNIFICANT FIGURES, NOT DECIMAL PLACES.  Two
+        # decimals renders a 0.0151 m3 hold as "0.02", which is the same
+        # defect as the cost lines that printed to two significant figures --
+        # a number on the page that cannot be checked against the column it
+        # came from.  A dense concentrate at an in-space destination is a small
+        # volume, so this is the normal case rather than a corner.
         html_out.append(para(
             "The returned cargo occupies %s m3 against a %s m3 allowance, a "
             "quarter of the %s m3 fairing, so the %s bound the payload."
-            % (fmt(M["ret_vol"], 2), fmt(0.25 * C["fairing_m3"], 1),
+            % (prec(M["ret_vol"], 4), fmt(0.25 * C["fairing_m3"], 1),
                fmt(C["fairing_m3"], 1),
                "volume cap" if M["m_pay"] >= M["vol_cap"] * 0.999999
                else "mass budget rather than the volume cap")))
     return "".join(html_out)
+
+
+def solar_plant_terms(C, name="w_plant"):
+    """The array's specific power on this body, term by term.
+
+    🚨  ONE DERIVATION, THREE CALLERS, AND AN RTG PAGE IS ONE OF
+    THEM.  `solar_w_per_kg_bare`, `array_oversize_factor` and `dark_period_h`
+    are properties of the BODY and the model writes them on every row,
+    radioisotope missions included.  A page that flew nuclear heat showed none
+    of them -- so it hid the alternative its own choice was made against, and
+    hid the two storage rates behind it, which `--sweep --audit` found at `geo`
+    on the first run that ever rendered such a page.
+
+    `name` is the label of the last row: an array that IS the plant, or one
+    that would have been.  Everything above it is the same arithmetic either
+    way, which is why this is a function rather than a third copy.
+    """
+    excess = max(0.0, C["dark_h"] - max(0.0, C["baseline_dark_h"]))
+    kg_per_w = 1.0 / C["w_plant"] if C["w_plant"] else 0.0
+    return [
+        ("w_bare", "= w_1AU / a^2 = %s / %s^2 = %s W/kg"
+         % (prec(C["w_1au"], 6), prec(C["a_au"], 12), prec(C["w_bare"], 12)),
+         "sunlight falls off as the square of the distance"),
+        ("oversize", "= ((1 - f) + f / eta) / (1 - f)"),
+        ("", "= ((1 - %s) + %s / %s) / (1 - %s) = %s"
+         % (prec(C["dark_frac"], 4), prec(C["dark_frac"], 4),
+            prec(C["storage_eff"], 4), prec(C["dark_frac"], 4),
+            prec(C["oversize"], 12)),
+         "the sunlit hours run the load AND recharge the store"),
+        ("dark_h", "= min(P_rot / 2, %s) = min(%s, %s) = %s h"
+         % (prec(C["max_dark_h"], 6), prec(C["rot_h"] / 2.0, 8),
+            prec(C["max_dark_h"], 6), prec(C["dark_h"], 8)),
+         "the night, %s"
+         % ("CLAMPED: this body turns too slowly to size a store for"
+            if C.get("dark_clamped") else
+            "half a rotation, under the ceiling" if C.get("rot_measured") else
+            "half a rotation; none is measured, so the catalog median is "
+            "used")),
+        ("excess_h", "= max(0, dark_h - baseline) = max(0, %s - %s) = %s h"
+         % (prec(C["dark_h"], 6), prec(C["baseline_dark_h"], 6),
+            prec(excess, 12)),
+         "only the storage ABOVE what the 1 AU rating already buys is new "
+         "mass"),
+        ("kg/W", "= oversize / w_bare + excess_h / e_storage"),
+        ("", "= %s / %s + %s / %s = %s"
+         % (prec(C["oversize"], 12), prec(C["w_bare"], 12),
+            prec(excess, 12), prec(C["storage_wh_per_kg"], 6),
+            prec(kg_per_w, 12))),
+        (name, "= 1 / (kg/W) = %s W/kg" % prec(C["w_plant"], 12),
+         "against a bare %s: the night side costs a factor of %s"
+         % (prec(C["w_bare"], 6),
+            prec(C["w_bare"] / C["w_plant"] if C["w_plant"] else 0.0, 4))),
+    ]
 
 
 def s_power(out):
@@ -1636,48 +1743,15 @@ def s_power(out):
             ("P", "= 0 W", "nothing to excavate above the ore, nothing to "
                            "separate and no ice to bake out"),
         ]
-        if a["power"] != "rtg":
-            # 🚨  AND THE COUNTERFACTUAL HAS TO BE DERIVED TOO, OR IT IS JUST
-            # A NUMBER.  This branch was given `w_bare` and `dark_h` when a
-            # column audit found them missing, and the audit could not then
-            # see that `w_plant` below is a function of three MORE terms --
-            # the oversize factor, the storage's specific energy and the
-            # baseline dark period the 1 AU rating already pays for -- none of
-            # which is an output column.  So the fix landed on the half that
-            # had been measured and the other half stayed hidden for a
-            # release, which is this repo's most-repeated defect and is now
-            # caught by `--audit`'s rate half rather than by reading.
-            excess = max(0.0, C["dark_h"] - max(0.0, C["baseline_dark_h"]))
-            kg_per_w = 1.0 / C["w_plant"] if C["w_plant"] else 0.0
-            rate += [
-                ("w_bare", "= w_1AU / a^2 = %s / %s^2 = %s W/kg"
-                 % (prec(C["w_1au"], 6), prec(C["a_au"], 12),
-                    prec(C["w_bare"], 12))),
-                ("oversize", "= ((1 - f) + f / eta) / (1 - f) = "
-                             "((1 - %s) + %s / %s) / (1 - %s) = %s"
-                 % (prec(C["dark_frac"], 4), prec(C["dark_frac"], 4),
-                    prec(C["storage_eff"], 4), prec(C["dark_frac"], 4),
-                    prec(C["oversize"], 12)),
-                 "the sunlit hours would have to run the load AND recharge "
-                 "the store"),
-                ("dark_h", "= min(P_rot / 2, %s) = %s h"
-                 % (prec(C["max_dark_h"], 6), prec(C["dark_h"], 8)),
-                 "CLAMPED" if C.get("dark_clamped") else
-                 "half a rotation" if C.get("rot_measured") else
-                 "half a rotation; none is measured, so the catalog median "
-                 "is used"),
-                ("excess_h", "= max(0, dark_h - baseline) = max(0, %s - %s) "
-                             "= %s h"
-                 % (prec(C["dark_h"], 6), prec(C["baseline_dark_h"], 6),
-                    prec(excess, 12)),
-                 "only the storage ABOVE what the 1 AU rating already buys "
-                 "would be new mass"),
-                ("kg/W", "= oversize / w_bare + excess_h / e_storage = "
-                         "%s / %s + %s / %s = %s"
-                 % (prec(C["oversize"], 12), prec(C["w_bare"], 12),
-                    prec(excess, 12), prec(C["storage_wh_per_kg"], 6),
-                    prec(kg_per_w, 12))),
-            ]
+        if a["power"] == "rtg":
+            # 🚨  THE ALTERNATIVE IS PART OF THE ANSWER.  A
+            # radioisotope source was chosen over an array on this body, and
+            # the array's numbers are output columns the model fills in
+            # anyway; a page that omits them asks the reader to take the
+            # choice on trust.  See `solar_plant_terms`.
+            rate += solar_plant_terms(C, name="w_solar")
+        else:
+            rate += solar_plant_terms(C)
         rate.append(
             ("w_plant",
              "= %s W/kg" % prec(C["plant_w_per_kg"], 12)
@@ -1763,45 +1837,10 @@ def s_power(out):
              "flat: a radioisotope source takes neither the 1/r^2 nor the "
              "night-side penalty"),
         ]
+        # The array it was chosen over, same arithmetic, on the same body.
+        plant_terms += solar_plant_terms(C, name="w_solar")
     else:
-        f_dark, eta_s = C["dark_frac"], C["storage_eff"]
-        excess = max(0.0, C["dark_h"] - max(0.0, C["baseline_dark_h"]))
-        kg_per_w = 1.0 / C["w_plant"] if C["w_plant"] else 0.0
-        plant_terms = [
-            ("w_bare", "= w_1AU / a^2 = %s / %s^2 = %s W/kg"
-             % (prec(C["w_1au"], 6), prec(C["a_au"], 12),
-                prec(C["w_bare"], 12)),
-             "sunlight falls off as the square of the distance"),
-            ("oversize", "= ((1 - f) + f / eta) / (1 - f)"),
-            ("", "= ((1 - %s) + %s / %s) / (1 - %s) = %s"
-             % (prec(f_dark, 4), prec(f_dark, 4), prec(eta_s, 4),
-                prec(f_dark, 4), prec(C["oversize"], 12)),
-             "the sunlit hours run the load AND recharge the store"),
-            ("dark_h", "= min(P_rot / 2, %s) = min(%s, %s) = %s h"
-             % (prec(C["max_dark_h"], 6), prec(C["rot_h"] / 2.0, 8),
-                prec(C["max_dark_h"], 6), prec(C["dark_h"], 8)),
-             "the night, %s"
-             % ("CLAMPED: this body turns too slowly to size a store for"
-                if C.get("dark_clamped") else
-                "half a rotation, under the ceiling"
-                if C.get("rot_measured") else
-                "half a rotation; none is measured, so the catalog median is "
-                "used")),
-            ("excess_h", "= max(0, dark_h - baseline) = max(0, %s - %s) = %s h"
-             % (prec(C["dark_h"], 6), prec(C["baseline_dark_h"], 6),
-                prec(excess, 12)),
-             "only the storage ABOVE what the 1 AU rating already buys is new "
-             "mass"),
-            ("kg/W", "= oversize / w_bare + excess_h / e_storage"),
-            ("", "= %s / %s + %s / %s = %s"
-             % (prec(C["oversize"], 12), prec(C["w_bare"], 12),
-                prec(excess, 12), prec(C["storage_wh_per_kg"], 6),
-                prec(kg_per_w, 12))),
-            ("w_plant", "= 1 / (kg/W) = %s W/kg" % prec(C["w_plant"], 12),
-             "against a bare %s: the night side costs a factor of %s"
-             % (prec(C["w_bare"], 6),
-                prec(C["w_bare"] / C["w_plant"] if C["w_plant"] else 0.0, 4))),
-        ]
+        plant_terms = solar_plant_terms(C)
     plant_terms.append(
         ("m_plant", "= P / w_plant = %s / %s = %s kg"
          % (prec(M["draw"], 12), prec(C["plant_w_per_kg"], 12),
