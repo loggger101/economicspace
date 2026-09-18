@@ -265,3 +265,6 @@ queue: 28 cells | done: 13 | to run: 15
 ==============================================================================
 
 queue finished in 47.14 h
+
+===== detached (no console) start: run_cislunar_1230.py =====
+      pid 30368
