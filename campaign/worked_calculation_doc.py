@@ -1770,6 +1770,15 @@ def s_power(out):
                  "still costs time, which is what bounds the payload; it just "
                  "does not cost watts."),
             deriv(rate),
+            # ⚠️  THE COUNTERFACTUAL NEEDS ITS PRICE TOO.  The
+            # branch exists to say what a plant on this body WOULD have cost,
+            # and it gave the watts per kilogram and not the dollars per watt
+            # -- which is the half a reader would have to look up.  Found by
+            # the rate audit on a mission that flies no plant at all.
+            kv([("plant specific power",
+                 fmt(C["plant_w_per_kg"], 3, "W/kg")),
+                ("plant price, had one been flown",
+                 usd(C["plant_usd_per_w"], 2) + " /W")]),
             para("Everything under the draw is a property of the body "
                  "rather than of the mission, and the model reports it on "
                  "every row. It is what a concentrating mission to the same "
@@ -2590,12 +2599,18 @@ def s_cost(out):
         "plant": "%s W x %s%s"
                  % (fmt(M["draw"], 1), usd(C["plant_usd_per_w"], 0) + "/W",
                     lc_note),
-        "ep": "%s W x %s/W + %s kW x %s/kW%s"
-              % (fmt(M["ep"]["power"], 1),
-                 usd(C["val"]("Power system (solar + battery)"), 0),
-                 fmt(M["ep"]["power"] / 1000.0, 2),
-                 usd(C["val"]("Electric propulsion system recurring cost"), 0),
-                 lc_note),
+        # ⚠️  BUILT ONLY WHEN THERE IS A STAGE TO PRICE.  `C["val"]`
+        # RECORDS the rate it hands out, and the audit then expects the page to
+        # show it -- so composing this string for a chemical mission, whose
+        # zero-cost row is then dropped from the table, reported the page
+        # incomplete for two rates no chemical page can print.  Reading a rate
+        # is what makes it a rate; see `val`.
+        "ep": ("%s W x %s/W + %s kW x %s/kW%s"
+               % (fmt(M["ep"]["power"], 1),
+                  usd(C["val"]("Power system (solar + battery)"), 0),
+                  fmt(M["ep"]["power"] / 1000.0, 2),
+                  usd(C["val"]("Electric propulsion system recurring cost"), 0),
+                  lc_note)) if M["ep"]["power"] > 0 else "",
         "tank": "%s kg x %s%s"
                 % (fmt(M["m_tank_ret"] + M["m_tank_out"], 1),
                    usd(C["val"]("Propellant tank recurring cost"), 0) + "/kg",

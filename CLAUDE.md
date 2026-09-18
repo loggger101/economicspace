@@ -54,6 +54,8 @@ through. Skim for the section that names what you are about to change.
 - [A check that the numbers are right is not a check that the page is complete](#a-check-that-the-numbers-are-right-is-not-a-check-that-the-page-is-complete)
 - [A page that derives every FIGURE can still type a FACT](#a-page-that-derives-every-figure-can-still-type-a-fact)
 - [Four shapes chosen by hand is a sample; the shapes are found now](#four-shapes-chosen-by-hand-is-a-sample-the-shapes-are-found-now)
+- [The page is code, and its branches are the prose](#the-page-is-code-and-its-branches-are-the-prose)
+- [A refusal that names the wrong constraint sends the reader to the wrong file](#a-refusal-that-names-the-wrong-constraint-sends-the-reader-to-the-wrong-file)
 - [A column can describe the RUN rather than the mission](#a-column-can-describe-the-run-rather-than-the-mission)
 - [One section's identity, written down four times](#one-sections-identity-written-down-four-times)
 - [A flipped default breaks every reader that infers a run from the config](#a-flipped-default-breaks-every-reader-that-infers-a-run-from-the-config)
@@ -2778,6 +2780,77 @@ into a visible one.
 empty-versus-missing chain made `earth_surface` price its non-existent chain at
 the LEO rate, because `context` had already flattened its `None` into `[]` with
 an `or []`. One sweep, one line, named the destination and the disagreement.
+
+### The page is code, and its branches are the prose
+
+2026-09-18, the sweep's second pass. `--sweep` proved the DERIVATION covers
+every architecture on disk. Nothing said which of the RENDERER's branches had
+ever executed -- and the `leo` chain branch sat wrong for exactly as long as it
+sat unrendered.
+
+✅  **The sweep traces the renderer now.** Every page it builds runs under
+`settrace`, and the report names the functions whose lines no swept mission
+reached. The denominator is the renderer's own code objects, so a blank, a
+comment or a module-level constant is never counted as a branch nobody took.
+
+🚨  **THE FIRST RUN SAID 141 LINES HAD NEVER RENDERED, AND THE FIRST TWO
+NUMBERS WERE THE MEASUREMENT'S OWN SHAPE.** Module-level lines and every `def`
+run at import, before any tracer exists; a function's `def` line carries its
+RESUME since Python 3.11 and no line event ever reports it. Both would have
+been findings forever. **Read a coverage report's zero cases before its
+findings** -- a measurement that counts what it cannot observe is a measurement
+that will be ignored.
+
+⚠️  **AND THE REPORT MOVED WHEN NOTHING MOVED.** Two sweeps that both
+satisfied every architectural axis covered different halves of the sale
+section, because the market MODEL, whether a ceiling bound the load and whether
+the surplus sold are not architecture. A coverage number that changes between
+identical runs is one nobody can act on, so `market` is an axis now, with
+`plant`, `capture` and `terms`: four branches the cover had no way to ask for.
+
+🚨  **AND THE THIRD OF THOSE FOUND THAT THE PAGE'S OPTIONAL-TERM SECTIONS
+HAD NEVER RENDERED AT ALL.** Insurance has a paragraph, a cost line and a rate
+of its own; reliability, the learning curve and the cost of capital have their
+own prose. **Every cell on disk has all four switched off**, so no sweep over
+`cells/` could reach any of them, and none ever had. `--source` takes a Stage 4
+output built with a term ON -- a 400-row cell into a scratch directory, about a
+minute -- and the sweep scans it ahead of everything else. The insurance
+section, the `unbounded` market model and the `single_mission` one have now
+been rendered and audited for the first time; all three came out clean.
+
+⚠️  **`--source` ALSO EXPOSED A COLLISION IN THE SWEEP.** Every Stage 4
+output is called `profitability_catalog.csv`, and sources were keyed by
+BASENAME: the live catalog and all three scratch cells collapsed into one
+entry, rows were fetched from whichever path won, and the architectures the
+cells had been passed in FOR were silently answered from the wrong file. The
+tell was two swept missions reporting the same body at the same objective.
+Keyed by path now, labelled by parent directory.
+
+### A refusal that names the wrong constraint sends the reader to the wrong file
+
+The same pass. The derivation refused two bodies with **"no concentration ratio
+closes a mission on this body"**, on rows that are RAW -- no ratio is involved
+at all. What actually refused was the launch stack against the vehicle's
+capacity, nine `return None` sites away from the message.
+
+🚨  **AND THE CAUSE WAS A DIAL, NOT A BODY.** `max_mining_fraction` went
+0.05 to 1.0 in calc 1.23.0 and is read from the LIVE config, so a row written
+before that is re-derived with a haul up to twenty times the one its run took,
+and the stack it then builds fails against the vehicle. Every cell on disk was
+run at 0.05; the live default is 1.0.
+
+✅  **The refusal names the guard now, and does the arithmetic that points at
+the dial**: it prints what this derivation allows to be mined against what the
+row hauled, and the flag that settles it. With `--max-mining-fraction 0.05`
+both bodies derive with **0 DIFFER and a clean audit**. The general rule is the
+one this file keeps arriving at: **a guard that returns a bare None is a guard
+that cannot explain itself**, and nine of them shared one message that belonged
+to none.
+
+⚠️  **A refused mission covered nothing, and the coverage table said
+otherwise.** The cover claims an axis value the moment it picks a mission for
+it, so a refusal left the table reporting a value whose page never rendered.
+Only what derived counts now.
 
 ### A column can describe the RUN rather than the mission
 

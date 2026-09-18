@@ -200,6 +200,31 @@ py campaign/worked_calculation.py --sweep           # one mission per architectu
 py campaign/worked_calculation.py --sweep --audit   # and audit every page it renders
 ```
 
+  ✅  AND THE PAGE'S OWN BRANCHES ARE MEASURED WITH IT. Every document the
+  sweep builds is rendered under a tracer, and the report names the renderer
+  functions whose lines no swept mission reached. That is the coverage question
+  one level in: `--audit` asks whether ONE page shows everything it computed,
+  and this asks how much of the space of PAGES has ever been rendered at all.
+
+  ⚠️  EVERY STAGE 4 OUTPUT IS CALLED `profitability_catalog.csv`, so a
+  source is keyed by its PATH and labelled by its parent directory. Keying by
+  name merged the live catalog with every `--source` cell into one entry and
+  answered their rows out of the wrong file.
+
+  ⚠️  A BRANCH NOTHING ON DISK CAN REACH IS STILL UNVERIFIED. Three of the
+  renderer's sections belong to terms every archived cell has switched off --
+  insurance, and the `unbounded` and `single_mission` market models -- so no
+  sweep over `cells/` will ever render them. `--source` takes a Stage 4 output
+  built with those terms ON, which is a 400-row cell written into a scratch
+  directory in about a minute, and the sweep scans it ahead of everything else.
+
+  🚨  EVERY CELL ON DISK WAS RUN AT `max_mining_fraction` 0.05 AND THE LIVE
+  DEFAULT IS 1.0, so a sweep over archived cells wants
+  `--max-mining-fraction 0.05`. Without it the derivation re-derives a haul up
+  to twenty times the one the run took, the launch stack then fails against the
+  vehicle, and the refusal used to blame the concentration ladder. It names the
+  guard now and prints the arithmetic that points at the dial.
+
   🚨  ON ITS FIRST AUDITED RUN THE PAGE WAS CLEAN AT CISLUNAR AND AT NO
   OTHER DESTINATION. `leo` refused outright -- the derivation read an EMPTY
   delivery chain (`[]`, nothing above LEO) as a MISSING one (`None`,
