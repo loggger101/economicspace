@@ -2888,3 +2888,13 @@ Set `derive_diameter_from_h = False` for a measured-only catalog of ~149,600.
 Pre-git module copies, the original Colab notebook, and the parallel-repo
 divergence that made `1.0.6` / `1.1.4` / `1.3.6` each mean two different things:
 [Repository history](versions.md#repository-history).
+
+## License
+
+MIT, see [`LICENSE`](LICENSE). That covers the code. It does not cover the
+upstream data the pipeline fetches at run time or the third-party code adapted
+into it, and [`CITATIONS.md`](CITATIONS.md) is the license position for both.
+Two sources require citation as a condition of use, not as a courtesy, and
+those citations travel with any published figure derived from this pipeline.
+The adapted routines in `research/starred-repos/orbital.py` are MIT,
+Copyright (c) 2013-2018 Brandon Rhodes.
