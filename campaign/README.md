@@ -154,9 +154,30 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       value and confirms the check goes red, because a matcher nobody has
       seen fail is a matcher nobody has seen.
 
+      ✅  AND EVERY INPUT IS ASSERTED TO NAME AN ORIGIN A READER COULD
+      FOLLOW, not merely to have one.  A citation naming a file and then a
+      sentence is a file you can open and a value you then have to hunt for,
+      so the check refuses an origin with no row, column or field in it --
+      which is how the nine module constants that cited
+      `worked_calculation.py` without naming `G0`, `R_MOON` or
+      `TAU_CRUISE_FIT_YR_PER_M_S` were found.  82 of 82 name one.
+
+      🚨  IT IS SET FOR PAPER, AND THE PAGE COUNT IS SET BY THE TABLE FONT
+      RATHER THAN THE BODY FONT.  The first version came out at 49 pages,
+      which is a document nobody prints and therefore nobody checks by hand
+      -- the one use it was written for.  One line per step instead of four,
+      the origin flowing beside the value rather than stacked under it, and
+      the row-level Stage 1 provenance stated once instead of on all seven
+      body inputs: **13 pages, with nothing removed**.  Raising the BODY
+      font from 7.4pt to 8.6pt left the count unchanged, because almost
+      every line is inside a table; raising the TABLE font took it from 12
+      to 17.  Measured: 6.8 -> 12, 7.0 -> 13, 7.2 -> 13, 7.4 -> 14,
+      8.0 -> 16, 8.6 -> 17.  `--font` takes the trade.
+
 ```
-py campaign/verification_sheet.py --check    # evaluate every line, write nothing
-py campaign/verification_sheet.py --pdf      # and render it
+py campaign/verification_sheet.py --check       # every line and every origin, writes nothing
+py campaign/verification_sheet.py --pdf         # and render it, 13 pages
+py campaign/verification_sheet.py --pdf --font 8.6   # larger type, 17 pages
 ```
 
   `worked_calculation_doc.py`  the renderer that script writes through.  It

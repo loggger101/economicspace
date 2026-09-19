@@ -304,25 +304,58 @@ def cite_body(C, column, what=""):
     those are the difference between a measurement and an inference: a
     diameter out of a thermal fit and one out of an assumed albedo are the
     same column and not the same claim.
+
+    ONLY THE PROVENANCE THAT BEARS ON THIS COLUMN.  The first version printed
+    all five on every body input, so the diameter's provenance, the
+    taxonomy's, the assumed albedo, whether the density was measured and the
+    composition group appeared seven times over -- about half a page of
+    repetition saying nothing new after the first. The row-level stamp moved
+    to a single line at the head of part 1 for the same reason.
     """
     body = C["body"]
-    bits = ["<b>asteroid_catalog.csv</b>, row <i>%s</i>, column <i>%s</i>"
+    bits = ["<b>asteroid_catalog.csv</b> &middot; row <i>%s</i> &middot; "
+            "column <i>%s</i>"
             % (D.esc(body.get("designation")), D.esc(column))]
     if what:
         bits.append(what)
-    for field, label in (("diameter_source", "diameter provenance"),
-                         ("spectral_type_source", "taxonomy provenance"),
-                         ("albedo_assumed_for_diameter", "albedo assumed"),
-                         ("density_measured", "density measured"),
-                         ("comp_group", "composition group")):
+    bears_on = (
+        ("albedo", ("diameter_source", "albedo_assumed_for_diameter")),
+        ("diameter", ("diameter_source",)),
+        ("density", ("density_measured",)),
+        ("comp_", ("comp_group", "spectral_type", "spectral_type_source")),
+    )
+    fields = ()
+    for prefix, names in bears_on:
+        if column.startswith(prefix):
+            fields = names
+            break
+    for field in fields:
         value = body.get(field)
         if value is None or (isinstance(value, float) and pd.isna(value)):
             continue
-        bits.append("%s: %s" % (label, D.esc(value)))
+        bits.append("%s %s" % (field, D.esc(value)))
+    return ".  ".join(bits)
+
+
+def body_stamp(C):
+    """The row-level provenance every Stage 1 input on this page shares."""
+    body = C["body"]
+    bits = []
+    for field in ("source_jpl", "source_ssodnet", "diameter_source",
+                  "spectral_type_source", "density_measured",
+                  "derived_diameter_is_estimate"):
+        value = body.get(field)
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            continue
+        bits.append("<i>%s</i> %s" % (D.esc(field), D.esc(value)))
     where = stamp(body)
     if where:
         bits.append(where)
-    return ".  ".join(bits)
+    return ("Every Stage 1 input below is column <i>&lt;named&gt;</i> of row "
+            "<b>%s</b> in <b>asteroid_catalog.csv</b>, whose row-level "
+            "provenance is %s.  Only the provenance bearing on each column "
+            "is repeated beside it."
+            % (D.esc(body.get("designation")), ", ".join(bits)))
 
 
 _FIELD_DOCS = {}
@@ -375,9 +408,17 @@ def ops_row_read(*candidates):
     return candidates[0]
 
 
-def cite_here(what):
-    """Cite a constant this derivation fixes in its own source."""
-    return "<b>campaign/worked_calculation.py</b>.  %s" % D.esc(what)
+def cite_here(name, what=""):
+    """Cite a constant this derivation fixes in its own source, BY NAME.
+
+    The name is the whole point, and the first version left it in prose: a
+    citation reading "campaign/worked_calculation.py" and then a sentence is
+    a file a reader can open and a value they then have to hunt for.  The
+    origin check refuses that now, which is how these nine were found.
+    """
+    where = ("<b>campaign/worked_calculation.py</b> &middot; constant "
+             "<i>%s</i>" % D.esc(name))
+    return "%s.  <span class='src'>%s</span>" % (where, D.esc(what)) if what         else where
 
 
 def phase_price_keys(S, C, only=None):
@@ -407,7 +448,8 @@ def part_body(S, out):
     S.part("1. The body",
            "Everything downstream is sized against this rock.  Two of the "
            "three numbers behind its mass are assumptions rather than "
-           "measurements, and the citations below say which.")
+           "measurements, and the citations below say which.  "
+           + body_stamp(C))
     k = S.put("k_D", "k_D", "H-to-diameter constant", 1329.0, "km",
               "<b>modules/catalog.py</b>, <i>_H_DIAMETER_CONSTANT</i>.  "
               "<span class='src'>D_km = (1329 / sqrt(p_V)) * 10 ** (-H / 5), "
@@ -653,29 +695,32 @@ def part_constants(S, out):
            "introduces a number without a tag.  A reader checking one line "
            "in isolation can find every operand in it.")
     S.put("g0", "g_0", "standard gravity", W.G0, "m/s2",
-          cite_here("G0, the CODATA standard gravity; the same constant "
-                    "spacecost exports as G0_M_S2."))
+          cite_here("G0", "The CODATA standard gravity, exact by "
+                    "definition; the same constant spacecost exports as "
+                    "G0_M_S2."))
     S.put("mu_E", "mu_E", "Earth gravitational parameter", W.MU_EARTH,
-          "km3/s2", cite_here("MU_EARTH."))
+          "km3/s2", cite_here("MU_EARTH"))
     S.put("v_E", "v_E", "Earth mean orbital velocity", W.V_EARTH, "km/s",
-          cite_here("V_EARTH.  The canonical unit the transfer is worked "
-                    "in: speeds are carried as multiples of it and "
+          cite_here("V_EARTH", "The canonical unit the transfer is "
+                    "worked in: speeds are carried as multiples of it and "
                     "converted once."))
     S.put("r_LEO", "r_LEO", "parking-orbit radius", W.R_LEO, "km",
-          cite_here("R_LEO = 6,378.14 km of Earth radius plus a 200 km "
-                    "parking orbit."))
+          cite_here("R_LEO", "6,378.14 km of Earth radius plus a "
+                    "200 km parking orbit."))
     S.put("tau", "tau_fit", "cruise-time fit", W.TAU_CRUISE_FIT_YR_PER_M_S,
           "yr per m/s",
-          cite_here("TAU_CRUISE_FIT_YR_PER_M_S.  A linear fit of transfer "
-                    "time against delta-v, floored at half a year."))
+          cite_here("TAU_CRUISE_FIT_YR_PER_M_S", "A linear fit of "
+                    "transfer time against delta-v, floored at half a "
+                    "year."))
     if C["destination"] == "cislunar":
         S.put("R_M", "R_M", "lunar orbital radius", W.R_MOON, "km",
-              cite_here("R_MOON."))
+              cite_here("R_MOON"))
         S.put("dv_NRHO", "dv_NRHO", "NRHO insertion increment", W.DV_NRHO,
               "km/s",
-              cite_here("DV_NRHO.  Capture BINDS the orbit at low perigee "
-                        "and takes the Oberth benefit there; this is the "
-                        "increment that finishes the job at the depot."))
+              cite_here("DV_NRHO", "Capture BINDS the orbit at low "
+                        "perigee and takes the Oberth benefit there; this "
+                        "is the increment that finishes the job at the "
+                        "depot."))
 
 
 # ------------------------------------------------- 3. getting there and back
@@ -800,10 +845,10 @@ def part_transfer(S, out):
                                C["pro"].raw("name"),
                                ("dv_penalty_factor", "thrust_scaling")))
     S.put("floor_out", "floor_out", "outbound delta-v floor", DV["floor_out"],
-          "m/s", cite_here("the outbound floor in `derive_dv`, mirroring "
-                           "the model's own."))
+          "m/s", cite_here("derive_dv", "the outbound floor, mirroring the "
+                           "model's own."))
     S.put("floor_ret", "floor_ret", "return delta-v floor", DV["floor_ret"],
-          "m/s", cite_here("the return floor in `derive_dv`."))
+          "m/s", cite_here("derive_dv", "the return floor."))
     S.put("dv_ceil", "dv_max", "delta-v ceiling", DV["ceiling"], "m/s",
           cite_config("max_dv_outbound_m_s"))
     S.step("dv_out", "dv_out", "outbound delta-v, as flown",
@@ -1084,8 +1129,11 @@ def part_settled(S, out):
 
     if C["beneficiated"]:
         S.put("ratio", "r", "concentration ratio", out["ratio"], "-",
-              "Decided by the sweep in part 12, not assumed.  It is an "
-              "economic choice: grade saturates while the costs do not.")
+              "<b>Derived on this page</b>, by the sweep in part 12; not a "
+              "setting.  Grade saturates while the costs do not, so the "
+              "optimum is interior and is found by pricing the rungs.  The "
+              "run records it as <b>profitability_catalog</b> &middot; "
+              "column <i>concentration_ratio</i>.")
         S.step("feed", "feed", "rock dug and processed",
                "max(min(m_pay * r, throughput, mineable), m_pay)",
                "max(min(%s * %s, %s, %s), %s)"
@@ -1491,10 +1539,18 @@ def part_market(S, out):
            "fleet delivers more often, so each delivery gets a shorter "
            "slice of the market's annual capacity.")
     S.put("N", "N", "programme size", n, "missions",
-          "Decided by the ladder in part 12, not assumed.")
-    S.put("F", "F", "fleet", f, "ships", "Decided by the ladder in part 12.")
+          "<b>Derived on this page</b>, by the ladder in part 12; the run "
+          "records it as <b>profitability_catalog</b> &middot; column "
+          "<i>programme_missions</i>.")
+    S.put("F", "F", "fleet", f, "ships",
+          "<b>Derived on this page</b>, by the ladder in part 12; recorded "
+          "as <b>profitability_catalog</b> &middot; column "
+          "<i>fleet_ships</i>.")
     S.put("Wc", "W", "campaigns per ship", w, "-",
-          "Decided by the ladder in part 12, bounded by trips.")
+          "<b>Derived on this page</b>, by the ladder in part 12 and "
+          "bounded by the rig's trips; recorded as "
+          "<b>profitability_catalog</b> &middot; column "
+          "<i>missions_per_ship</i>.")
     S.step("window", "omega", "how long one delivery's market accumulates",
            "(T_miss + (N - 1) * T_cad / F) / N",
            "(%s + (%s - 1) * %s / %s) / %s"
@@ -1983,6 +2039,44 @@ def check_substitutions(sheet, tol=1e-9):
     return checked, unchecked, bad
 
 
+def origins(sheet):
+    """(inputs with an origin, inputs without one).
+
+    THE ONE PROMISE THE PAGE MAKES THAT NOTHING ELSE CHECKS.  Every input is
+    supposed to say where it came from, and an input that arrives with an
+    empty citation reads exactly like one that arrives with a good one:
+    the cell is just blank, in a table of two hundred rows nobody scans.
+    Condensing the sheet is precisely the edit that could drop one, so the
+    promise is asserted rather than trusted.
+
+    A bare file name is not an origin either.  A citation has to name the
+    ROW or the FIELD the number sits in, or a reader cannot go and look, so
+    an origin with no `row`, `column`, `field` or `<i>` in it is a finding.
+    """
+    good, bad = [], []
+    for part in sheet.parts:
+        for row in part["rows"]:
+            if row[0] != "input":
+                continue
+            tag, symbol, source = row[1], row[2], row[6] or ""
+            enough = ("<i>" in source
+                      or "Derived on this page" in source)
+            (good if source.strip() and enough else bad).append((tag, symbol))
+    return good, bad
+
+
+def report_origins(sheet, quiet=False):
+    """Print the origin check, and return the number of inputs without one."""
+    good, bad = origins(sheet)
+    if not quiet:
+        print("  origins    %d of %d inputs name a file and a row or field, "
+              "%d do NOT" % (len(good), len(good) + len(bad), len(bad)))
+        for tag, symbol in bad:
+            print("     ! %-5s %s has no origin a reader could follow"
+                  % (tag, symbol))
+    return len(bad)
+
+
 def report_substitutions(sheet, quiet=False):
     """Print the substitution check, and return the number of bad rows.
 
@@ -2075,67 +2169,105 @@ def part_checks(S, out):
 
 # ------------------------------------------------------------------- render
 CSS = """
-:root{--ink:#16181d;--mute:#5d6470;--rule:#d8dce3;--bg:#fff;
-      --tint:#f5f7fa;--key:#0b5cad;--warn:#8a4b00;--ok:#0a6b3d;}
+/* PRINT IS THE TARGET, NOT THE SCREEN.  The first version of this sheet came
+   out at 49 pages, which is a document nobody prints and therefore nobody
+   checks by hand -- the one use it was written for.  Everything below is set
+   for paper: one line per step wherever a step fits on one, the origin
+   flowing beside the value rather than stacked under it, and the page
+   furniture cut to what a reader navigating on paper actually uses. */
+:root{--ink:#16181d;--mute:#545b66;--rule:#dcdfe5;--bg:#fff;
+      --tint:#f4f6f9;--key:#0b5cad;--warn:#8a4b00;--ok:#0a6b3d;}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
-     font:14px/1.55 "Iowan Old Style",Palatino,Georgia,serif;}
-.wrap{max-width:60rem;margin:0 auto;padding:2.2rem 1.1rem 5rem;}
-h1{font-size:1.9rem;line-height:1.2;margin:0 0 .2rem;}
-h2{font-size:1.18rem;margin:2.6rem 0 .5rem;padding-bottom:.28rem;
-   border-bottom:2px solid var(--ink);}
-.sub{color:var(--mute);margin:0 0 1.4rem;font-size:.95rem;}
-p{margin:.55rem 0;}
-.blurb{color:var(--mute);margin:.2rem 0 1rem;}
+     font:13px/1.35 "Iowan Old Style",Palatino,Georgia,serif;}
+.wrap{max-width:62rem;margin:0 auto;padding:1.2rem .8rem 3rem;}
+h1{font-size:1.5rem;line-height:1.15;margin:0 0 .1rem;}
+h2{font-size:1rem;margin:1rem 0 .2rem;padding-bottom:.12rem;
+   border-bottom:1.5px solid var(--ink);}
+.sub{color:var(--mute);margin:0 0 .5rem;font-size:.86rem;}
+p{margin:.25rem 0;}
+.blurb{color:var(--mute);margin:.1rem 0 .3rem;font-size:.84rem;}
 code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;}
-table{border-collapse:collapse;width:100%;font-size:.84rem;margin:.5rem 0 1rem;}
-th,td{text-align:left;vertical-align:top;padding:.3rem .45rem;
-      border-bottom:1px solid var(--rule);}
-th{font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;
+table{border-collapse:collapse;width:100%%;font-size:.8rem;margin:.2rem 0 .5rem;}
+th,td{text-align:left;vertical-align:top;padding:.1rem .3rem;
+      border-bottom:.5px solid var(--rule);}
+th{font-size:.68rem;text-transform:uppercase;letter-spacing:.03em;
    color:var(--mute);border-bottom:1px solid var(--ink);font-weight:600;}
 .tw{overflow-x:auto;}
-.sheet td{border-bottom:1px solid var(--rule);}
 .sheet tr.in td{background:var(--tint);}
-.tag{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.76rem;
-     color:var(--key);white-space:nowrap;font-weight:600;width:3.1rem;}
-.sym{white-space:nowrap;font-weight:600;}
-.qty{display:block;font-weight:400;color:var(--mute);font-size:.78rem;}
-.work{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;
+.tag{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;
+     color:var(--key);white-space:nowrap;font-weight:600;}
+.sym{font-weight:600;overflow-wrap:anywhere;}
+/* INLINE, NOT STACKED.  The name under the symbol and the substitution under
+   the formula were a line each on all 231 rows; run together with a
+   separator they cost nothing and save about a third of the document. */
+.qty{font-weight:400;color:var(--mute);}
+.work{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;
       overflow-wrap:anywhere;}
-/* The citation column is the widest thing on the page and must not be
-   allowed to push the VALUE off the edge: a worksheet whose answers have
-   scrolled out of view is a worksheet nobody can check. */
-.sheet col.c1{width:3.4rem} .sheet col.c2{width:11rem}
-.sheet col.c4{width:9.5rem}
-.sub2{display:block;color:var(--ink);margin-top:.15rem;
-      word-break:break-word;}
-.uses{display:block;color:var(--mute);font-size:.72rem;margin-top:.15rem;
-      font-family:inherit;}
+.sheet col.c1{width:2.7rem} .sheet col.c2{width:9.5rem}
+.sheet col.c4{width:8.6rem}
+.sub2{color:var(--ink);}
+.uses{color:var(--key);font-size:.7rem;font-family:inherit;}
 .val{font-family:ui-monospace,Menlo,Consolas,monospace;text-align:right;
-     white-space:nowrap;font-weight:600;}
+     white-space:nowrap;font-weight:600;font-size:.76rem;}
 .unit{color:var(--mute);font-weight:400;}
 .src{color:var(--mute);font-style:italic;}
-.note{display:block;color:var(--warn);font-size:.76rem;margin-top:.2rem;}
-.prose{color:var(--ink);}
-.card{border:1px solid var(--rule);background:var(--tint);
-      padding:.8rem 1rem;margin:1rem 0 1.6rem;}
-.card table{margin:0;font-size:.82rem;}
-.card td{border:0;padding:.14rem .5rem .14rem 0;}
-.big{font-size:1.5rem;font-weight:700;}
-.foot{margin-top:2.5rem;padding-top:.8rem;border-top:2px solid var(--ink);
-      color:var(--mute);font-size:.84rem;}
+.org{font-family:inherit;font-size:.74rem;}
+.note{color:var(--warn);font-size:.72rem;font-family:inherit;}
+.prose{color:var(--ink);font-size:.8rem;}
+.card{border:.5px solid var(--rule);background:var(--tint);
+      padding:.35rem .55rem;margin:.4rem 0 .5rem;}
+.card table{margin:0;font-size:.76rem;}
+.card td{border:0;padding:.03rem .5rem .03rem 0;}
+.toc{font-size:.76rem;color:var(--mute);margin:0 0 .5rem;}
+.foot{margin-top:.8rem;padding-top:.3rem;border-top:1.5px solid var(--ink);
+      color:var(--mute);font-size:.76rem;}
+.foot p{margin:.2rem 0;}
 .ok{color:var(--ok);font-weight:600;}
 @media print{
-  body{font-size:10.5pt;} .wrap{max-width:none;padding:0;}
+  body{font-size:%(prose).1fpt;line-height:1.26;}
+  .wrap{max-width:none;padding:0;}
+  h1{font-size:13pt} h2{font-size:%(prose).1fpt;margin:.42rem 0 .12rem}
+  table{font-size:%(t).1fpt} th{font-size:%(th).1fpt}
+  th,td{padding:.4pt 2.2pt}
+  .work{font-size:%(work).1fpt} .val{font-size:%(t).1fpt}
+  .org{font-size:%(org).1fpt} .uses{font-size:%(uses).1fpt}
+  .note{font-size:%(note).1fpt}
   h2{page-break-after:avoid;} tr{page-break-inside:avoid;}
   .tw{overflow:visible;}
+  a{color:inherit;text-decoration:none;}
 }
-@page{margin:14mm 12mm;}
+@page{margin:8mm 7mm;}
 """
 
 
+# THE PAGE COUNT IS SET BY THE TABLE, NOT BY THE BODY TEXT.  Almost every
+# line of this document is inside a table, so raising the base font from
+# 7.4pt to 8.6pt left the count at twelve pages and raising the TABLE from
+# 6.8 to 8.6 took it from twelve to seventeen.  Measured, because the
+# opposite was the obvious guess: 6.8 -> 12, 7.0 -> 13, 7.2 -> 13, 7.4 -> 14,
+# 8.0 -> 16, 8.6 -> 17.  7.2 is the default because it is the larger of the
+# two sizes that still fit thirteen, and legibility is free up to the point
+# where a page turns over.
+DEFAULT_PT = 7.2
+
+
+def stylesheet(pt=DEFAULT_PT):
+    """The stylesheet, with the print sizes scaled off one table size."""
+    return CSS % {"t": pt, "th": pt - 0.9, "work": pt - 0.2,
+                  "org": pt - 0.3, "uses": pt - 0.6, "note": pt - 0.5,
+                  "prose": pt + 1.4}
+
+
 def render_row(row):
-    """One row of the sheet: an input, a step, a prose line or a block."""
+    """One row of the sheet: an input, a step, a prose line or a block.
+
+    EVERYTHING THAT CAN SHARE A LINE DOES.  A step used to occupy four: the
+    name under the symbol, the substitution under the formula, the cited tags
+    under that, and the note under that.  None of the four needed its own
+    line, and 231 rows times three wasted lines is most of a document nobody
+    would print.  The separators carry the structure instead.
+    """
     kind = row[0]
     if kind == "prose":
         return ('<tr><td class="tag"></td><td class="prose" colspan="3">%s'
@@ -2146,8 +2278,8 @@ def render_row(row):
     if kind == "input":
         _k, tag, symbol, quantity, value, unit, source = row
         return ('<tr class="in"><td class="tag">%s</td>'
-                '<td class="sym">%s<span class="qty">%s</span></td>'
-                '<td class="work"><span class="uses">%s</span></td>'
+                '<td class="sym">%s <span class="qty">%s</span></td>'
+                '<td class="org">%s</td>'
                 '<td class="val">%s <span class="unit">%s</span></td></tr>'
                 % (tag, D.esc(symbol), D.esc(quantity), source,
                    P(value, 12) if isinstance(value, (int, float))
@@ -2155,14 +2287,14 @@ def render_row(row):
     (_k, tag, symbol, quantity, formula, substitution, value, unit, tags,
      note) = row
     return ('<tr><td class="tag">%s</td>'
-            '<td class="sym">%s<span class="qty">%s</span></td>'
-            '<td class="work">%s<span class="sub2">= %s</span>%s%s</td>'
+            '<td class="sym">%s <span class="qty">%s</span></td>'
+            '<td class="work">%s <span class="sub2">= %s</span>%s%s</td>'
             '<td class="val">%s <span class="unit">%s</span></td></tr>'
             % (tag, D.esc(symbol), D.esc(quantity), D.esc(formula),
                D.esc(substitution),
-               '<span class="uses">from %s</span>' % ", ".join(tags)
+               ' <span class="uses">[%s]</span>' % ", ".join(tags)
                if tags else "",
-               '<span class="note">%s</span>' % note if note else "",
+               ' <span class="note">%s</span>' % note if note else "",
                P(value, 12) if isinstance(value, (int, float))
                else D.esc(value), D.esc(unit)))
 
@@ -2227,6 +2359,15 @@ def footer(out, sheet):
                     % "; ".join("<code>%s</code> (%s)"
                                 % (D.esc(name), D.esc(why))
                                 for name, why in out["borrows"]))
+    good, missing = origins(sheet)
+    bits.append("<p>Every input is cited to the file and the row or field it "
+                "came from, and that is asserted rather than claimed: "
+                "<span class='ok'>%d of %d</span> name one%s.</p>"
+                % (len(good), len(good) + len(missing),
+                   "" if not missing else
+                   ", and %d DO NOT: %s"
+                   % (len(missing),
+                      D.esc(", ".join(t for t, _s in missing)))))
     loose_in, loose_step = sheet.unspent()
     bits.append("<p>%d inputs and %d steps.  %s  %d steps are cited by "
                 "nothing further, which is what a result or a diagnostic "
@@ -2259,7 +2400,7 @@ def build_sheet(out):
     return sheet
 
 
-def document(out, sheet=None):
+def document(out, sheet=None, pt=DEFAULT_PT):
     """Assemble the whole worksheet as one HTML page."""
     sheet = build_sheet(out) if sheet is None else sheet
     body = [header(out)]
@@ -2286,7 +2427,8 @@ def document(out, sheet=None):
         "<p class='sub'>Every number behind %s x, with its source, in the "
         "order the model works them out.</p>%s<p class='blurb'>%s</p>"
         "%s%s</div></body></html>"
-        % (D.esc(out["designation"]), CSS, D.esc(out["designation"]),
+        % (D.esc(out["designation"]), stylesheet(pt),
+           D.esc(out["designation"]),
            P(out["P"]["obj"], 6), header(out),
            " &middot; ".join(contents),
            "".join(body[1:]), footer(out, sheet)))
@@ -2306,6 +2448,10 @@ def main(argv=None):
         help="output path, without an extension")
     ap.add_argument("--pdf", action="store_true",
                     help="also render the HTML with headless Chrome")
+    ap.add_argument("--font", type=float, default=DEFAULT_PT, metavar="PT",
+                    help="print size of the tables, which is what sets the "
+                         "page count: 6.8 gives 12 pages, 7.2 (the default) "
+                         "13, 7.4 gives 14, 8.6 gives 17")
     ap.add_argument("--check", action="store_true",
                     help="evaluate every substitution and write nothing")
     ap.add_argument("--self-test", action="store_true",
@@ -2340,17 +2486,18 @@ def main(argv=None):
         print("\n*** THE DERIVATION AND THE MODEL DISAGREE ***")
         return 1
     sheet = build_sheet(out)
-    bad = report_substitutions(sheet)
+    bad = report_substitutions(sheet) + report_origins(sheet)
     if args.self_test and self_test(sheet):
         return 1
     if bad:
         print("")
-        print("*** A SUBSTITUTION DOES NOT PRODUCE ITS OWN RESULT ***")
+        print("*** THE PAGE DOES NOT HOLD UP: see the lines marked ! ***")
         return 1
     if args.check:
-        print("  OK  every substitution reproduces the value beside it")
+        print("  OK  every substitution reproduces the value beside it, "
+              "and every input names where it came from")
         return 0
-    html = document(out, sheet)
+    html = document(out, sheet, args.font)
     html_path = args.out + ".html"
     with open(html_path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(html)
