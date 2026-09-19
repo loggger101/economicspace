@@ -176,6 +176,20 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       7.2 -> 15, 7.4 -> 16, 8.0 -> 18, 8.6 -> 19.  `--font` takes
       the trade.
 
+      ✅  AND IT PRINTS IN BLACK.  Every colour on a printed page is a
+      cost, and two kinds of it were being spent for nothing: a fill is ink
+      over the whole area rather than over the glyphs, and a grey that is
+      not NEUTRAL is mixed from three cartridges on an inkjet instead of
+      being struck in black -- the secondary text was `#545b66`, which is a
+      blue.  The row shading, the card fill, the blue tags and the brown
+      notes are gone; two neutral levels are left, and an input row is
+      marked by a rule down its edge rather than by a fill.  `monochrome()`
+      holds it there: a hex must satisfy R = G = B and the only fill
+      allowed is the page itself.  Proved by planting a blue and a fill,
+      and confirmed against what the BROWSER resolved rather than what the
+      stylesheet says -- 10 distinct rendered colours, 0 non-neutral, 0
+      fills.
+
       ⚠️  THE PROSE IS CUT TO WHAT A READER WORKING ON PAPER NEEDS.  A
       sentence earns its place only if a number cannot be reproduced
       without it: a formula a table depends on stays, an ordering rule
