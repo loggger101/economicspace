@@ -56,6 +56,7 @@ through. Skim for the section that names what you are about to change.
 - [Four shapes chosen by hand is a sample; the shapes are found now](#four-shapes-chosen-by-hand-is-a-sample-the-shapes-are-found-now)
 - [The page is code, and its branches are the prose](#the-page-is-code-and-its-branches-are-the-prose)
 - [A page that derives every FIGURE can still type a CLAIM ABOUT ITSELF](#a-page-that-derives-every-figure-can-still-type-a-claim-about-itself)
+- [A derivation that agrees with the model can still print a line nobody can check](#a-derivation-that-agrees-with-the-model-can-still-print-a-line-nobody-can-check)
 - [An input read from the LIVE table is a term read from the wrong run](#an-input-read-from-the-live-table-is-a-term-read-from-the-wrong-run)
 - [A convenience path that bypasses the constructor loses what the constructor attached](#a-convenience-path-that-bypasses-the-constructor-loses-what-the-constructor-attached)
 - [Fixing the page can break the audit that was matching through the old rendering](#fixing-the-page-can-break-the-audit-that-was-matching-through-the-old-rendering)
@@ -2887,6 +2888,44 @@ ABOVE A DERIVED LIST OF THREE NAMES.** A count in prose disagreeing with the
 list beside it, in the paragraph written to stop exactly that, caught only by
 reading the rendered page. **Name the list; do not state its length** -- and
 render the thing you just made derive before believing it reads right.
+
+### A derivation that agrees with the model can still print a line nobody can check
+
+2026-09-19, on `campaign/verification_sheet.py`, a second renderer over
+`worked_calculation.py`'s derivation that states it as a pen-and-paper
+worksheet: every input tagged and cited to a file, a row and a column, every
+step naming the tags it consumes, nothing elided.
+
+🚨  **THE POINT IS THE CHECK IT CARRIES, AND THE CHECK FOUND FOUR DEFECTS ON
+ITS FIRST RUN OF A PAGE THAT WAS ALREADY CORRECT.** `worked_calculation.py`
+compares 88 derived quantities against the row column by column and they
+agree; that says the ARITHMETIC is right. It says nothing about whether the
+substitution printed beside a result actually produces it, and those are
+different claims. `--check` parses every substitution, evaluates it, and holds
+it to the value on the same line.
+
+| what was wrong | why the column comparison could not see it |
+|---|---|
+| three sums printed their operands at 6 or 8 significant figures | the operands are display, the result is derived; only the result is compared |
+| `budget - m_at` cancels five leading digits | twelve figures in leaves seven out, and both operands were correct |
+
+⚠️  **THE CANCELLATION IS THE ONE WORTH REMEMBERING, because no precision
+policy fixes it.** Twelve significant figures is right everywhere else on the
+page and wrong there, so the operands are printed at full double precision and
+the line says so. **A subtraction of two nearly equal numbers is a place where
+"print enough digits" has to be decided per line**, and the only thing that
+finds those lines is evaluating them.
+
+✅  **The general rule: a page that shows its working makes a SECOND claim,
+and the model's own check cannot see it.** The first claim is that the numbers
+are right, and this repo checks that in several ways. The second is that a
+reader who retypes the line gets the number back. Nothing checked it, on a
+document whose entire purpose is to be checked.
+
+⚠️  **Two lines are prose rather than arithmetic and are NAMED rather than
+skipped**, because a checker that quietly covers most of a page is this file's
+most-catalogued failure. And it was proved by being fed a wrong answer:
+`--self-test` perturbs one printed value and the check goes red on it.
 
 ### An input read from the LIVE table is a term read from the wrong run
 

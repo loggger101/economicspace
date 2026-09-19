@@ -124,6 +124,41 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       headless Chrome, `--cell` and `--designation` override the choice.  It is the only script here that imports `master`,
       and the only campaign output that is gitignored rather than committed,
       because it is generated from the run it describes.
+  `verification_sheet.py`  a SECOND renderer over the same derivation, for a
+      reader who wants to reproduce the answer on paper rather than read
+      about it.  The narrative document explains the model; this one tags
+      every input, cites the file, row and column it came from, names the
+      tags each step consumes, and elides nothing.  It computes no model
+      quantity of its own either: both renderers read one `build()`, so they
+      cannot disagree.
+
+      The citations are derived rather than listed.  CITATIONS.md's section 7
+      says this repo does not duplicate sources, it says where they are, so
+      the sheet reads them: the `notes` and `reference_year` of each
+      `spacecost` row, the price-source columns of the Module 2 catalog, the
+      provenance columns Stage 1 writes, and the config comment `ui_meta`
+      already scrapes for the dashboard's help text.
+
+      🚨  IT CARRIES A CHECK NOTHING ELSE IN THE REPO MAKES, AND THE CHECK
+      FOUND FOUR DEFECTS ON ITS FIRST RUN.  `--check` parses every
+      substitution on the page, evaluates it, and holds it to the value
+      printed beside it.  That is a question about the PAGE rather than the
+      model: a substitution can omit a term or round an operand past the
+      point where it reproduces its own answer while every derived quantity
+      is still exactly right, and the column-by-column comparison cannot see
+      it.  Four lines did exactly that, three by truncating operands and one
+      -- `budget - m_at` -- because the subtraction cancels five leading
+      digits, so twelve significant figures in leaves seven out.  147 of 147
+      match now; the two that are prose rather than arithmetic are named in
+      the footer rather than passed over.  `--self-test` perturbs a printed
+      value and confirms the check goes red, because a matcher nobody has
+      seen fail is a matcher nobody has seen.
+
+```
+py campaign/verification_sheet.py --check    # evaluate every line, write nothing
+py campaign/verification_sheet.py --pdf      # and render it
+```
+
   `worked_calculation_doc.py`  the renderer that script writes through.  It
       decides what to say and in what order and computes no model quantity of
       its own; the prose branches on the derived shape, so a raw

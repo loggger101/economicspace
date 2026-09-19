@@ -194,7 +194,14 @@ CAMPAIGN_PY = ["campaign/analyse.py", "campaign/extra_checks.py",
                # nothing checks is clean until it is not, which is the whole
                # argument this list is built on.
                "campaign/worked_calculation.py",
-               "campaign/worked_calculation_doc.py"]
+               "campaign/worked_calculation_doc.py",
+               # The second renderer over the same derivation: it states the
+               # same numbers as a step-by-step worksheet and cites where
+               # each input came from.  On this list from its first commit,
+               # because "a file nothing checks is clean until it is not" is
+               # the argument the list is built on and a file added later is
+               # a file that spent time outside it.
+               "campaign/verification_sheet.py"]
 
 MODULES = {
     "catalog":   "modules/catalog.py",

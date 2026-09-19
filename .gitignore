@@ -48,3 +48,8 @@ Thumbs.db
 # would put a second copy of every measurement in the tree.
 campaign/worked_calculation.html
 campaign/worked_calculation.pdf
+# Same argument for the worksheet beside it: a second renderer over the
+# same derivation is still generated, and committing it would put a THIRD
+# copy of every measurement in the tree.
+campaign/verification_sheet.html
+campaign/verification_sheet.pdf
