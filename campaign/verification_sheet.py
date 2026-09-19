@@ -2514,6 +2514,14 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.03em;
       margin:.4rem 0 .5rem;}
 .card table{margin:0;font-size:.76rem;}
 .card td{border:0;padding:.03rem .5rem .03rem 0;}
+/* `D.h` attaches a self-link to every anchored heading.  It is useful on
+   screen and is furniture on paper, so it fades in on hover and is removed
+   outright from the print rules -- which the narrative document next door
+   does and this stylesheet did not, so a pilcrow printed beside all
+   seventeen headings. */
+h2 a.anchor{color:var(--mute);text-decoration:none;opacity:0;
+            margin-left:.3em;font-weight:400;}
+h2:hover a.anchor{opacity:1;}
 .toc{font-size:.76rem;color:var(--mute);margin:0 0 .5rem;}
 .foot{margin-top:.8rem;padding-top:.3rem;border-top:1.5px solid var(--ink);
       color:var(--mute);font-size:.76rem;}
@@ -2529,6 +2537,7 @@ a{color:inherit;}
   .work{font-size:%(work).1fpt} .val{font-size:%(t).1fpt}
   .org{font-size:%(org).1fpt} .uses{font-size:%(uses).1fpt}
   .note{font-size:%(note).1fpt}
+  h2 a.anchor{display:none;}
   h2{page-break-after:avoid;} tr{page-break-inside:avoid;}
   .tw{overflow:visible;}
   a{color:inherit;text-decoration:none;}
@@ -2796,6 +2805,50 @@ def monochrome(css):
     return bad
 
 
+FURNITURE = ("&#182;", "¶")
+
+
+def print_furniture(css, html):
+    """Screen furniture that would print, as findings.
+
+    A SELF-LINK IS USEFUL ON SCREEN AND IS A SMUDGE ON PAPER.  `D.h` gives
+    every anchored heading a pilcrow so the section can be linked to; the
+    narrative document next door hides it in its print rules and this
+    stylesheet did not, so a paragraph mark printed beside all seventeen
+    headings and nobody noticed until it was on paper.
+
+    The rule cannot be "hide everything decorative", because nothing in the
+    markup says which elements those are.  What CAN be checked is the other
+    direction: any element carrying one of a short list of furniture
+    GLYPHS -- characters that are never data here -- has to be hidden by
+    the print block.  The list is short and explicit on purpose; a glyph
+    that is data somewhere else does not belong on it.
+    """
+    block = css[css.find("@media print{"):]
+    bad = []
+    for glyph in FURNITURE:
+        for match in re.finditer(r'<(\w+)[^>]*class="([^"]+)"[^>]*>'
+                                 + re.escape(glyph), html):
+            tag, klass = match.group(1), match.group(2).split()[0]
+            hidden = re.search(r"\.%s[^{]*\{[^}]*display\s*:\s*none"
+                               % re.escape(klass), block)
+            if not hidden:
+                bad.append((klass, "<%s> carries %s and the print rules do "
+                                   "not hide it" % (tag, glyph)))
+    return bad
+
+
+def report_furniture(css, html, quiet=False):
+    """Print the furniture check, and return the number of findings."""
+    bad = print_furniture(css, html)
+    if not quiet:
+        print("  furniture  %d screen-only element(s) that would print"
+              % len(bad))
+        for klass, why in bad:
+            print("     ! .%-10s %s" % (klass, why))
+    return len(bad)
+
+
 def report_monochrome(quiet=False):
     """Print the ink check, and return the number of findings."""
     bad = monochrome(CSS)
@@ -2888,7 +2941,8 @@ def main(argv=None):
     sheet = build_sheet(out)
     html = document(out, sheet, args.font)
     bad = (report_substitutions(sheet) + report_origins(sheet)
-           + report_untraced(sheet, html) + report_monochrome())
+           + report_untraced(sheet, html) + report_monochrome()
+           + report_furniture(stylesheet(args.font), html))
     if args.self_test and self_test(sheet):
         return 1
     if bad:
