@@ -2464,8 +2464,13 @@ CSS = """
    for paper: one line per step wherever a step fits on one, the origin
    flowing beside the value rather than stacked under it, and the page
    furniture cut to what a reader navigating on paper actually uses. */
-:root{--ink:#16181d;--mute:#545b66;--rule:#dcdfe5;--bg:#fff;
-      --tint:#f4f6f9;--key:#0b5cad;--warn:#8a4b00;--ok:#0a6b3d;}
+/* BLACK AND WHITE, AND NEUTRAL GREY AT THAT.  This is printed, so every
+   colour costs money: a page fill is ink over the whole sheet, and a grey
+   that is not NEUTRAL -- the old --mute was #545b66, a blue -- is mixed
+   from three cartridges on an inkjet rather than struck in black.  Two
+   levels only, both with R = G = B, and nothing is distinguished by hue:
+   an input row is marked by a rule down its edge, not by a fill. */
+:root{--ink:#000;--mute:#555;--rule:#bbb;--bg:#fff;}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
      font:13px/1.35 "Iowan Old Style",Palatino,Georgia,serif;}
@@ -2483,9 +2488,9 @@ th,td{text-align:left;vertical-align:top;padding:.1rem .3rem;
 th{font-size:.68rem;text-transform:uppercase;letter-spacing:.03em;
    color:var(--mute);border-bottom:1px solid var(--ink);font-weight:600;}
 .tw{overflow-x:auto;}
-.sheet tr.in td{background:var(--tint);}
+.sheet tr.in td:first-child{border-left:2px solid var(--ink);}
 .tag{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;
-     color:var(--key);white-space:nowrap;font-weight:600;}
+     color:var(--ink);white-space:nowrap;font-weight:600;}
 .sym{font-weight:600;overflow-wrap:anywhere;}
 /* INLINE, NOT STACKED.  The name under the symbol and the substitution under
    the formula were a line each on all 231 rows; run together with a
@@ -2496,23 +2501,25 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.03em;
 .sheet col.c1{width:2.7rem} .sheet col.c2{width:9.5rem}
 .sheet col.c4{width:8.6rem}
 .sub2{color:var(--ink);}
-.uses{color:var(--key);font-size:.7rem;font-family:inherit;}
+.uses{color:var(--mute);font-size:.7rem;font-family:inherit;}
 .val{font-family:ui-monospace,Menlo,Consolas,monospace;text-align:right;
      white-space:nowrap;font-weight:600;font-size:.76rem;}
 .unit{color:var(--mute);font-weight:400;}
 .src{color:var(--mute);font-style:italic;}
 .org{font-family:inherit;font-size:.74rem;}
-.note{color:var(--warn);font-size:.72rem;font-family:inherit;}
+.note{color:var(--mute);font-size:.72rem;font-family:inherit;
+      font-style:italic;}
 .prose{color:var(--ink);font-size:.8rem;}
-.card{border:.5px solid var(--rule);background:var(--tint);
-      padding:.35rem .55rem;margin:.4rem 0 .5rem;}
+.card{border:.5px solid var(--ink);padding:.35rem .55rem;
+      margin:.4rem 0 .5rem;}
 .card table{margin:0;font-size:.76rem;}
 .card td{border:0;padding:.03rem .5rem .03rem 0;}
 .toc{font-size:.76rem;color:var(--mute);margin:0 0 .5rem;}
 .foot{margin-top:.8rem;padding-top:.3rem;border-top:1.5px solid var(--ink);
       color:var(--mute);font-size:.76rem;}
 .foot p{margin:.2rem 0;}
-.ok{color:var(--ok);font-weight:600;}
+.ok{font-weight:600;}
+a{color:inherit;}
 @media print{
   body{font-size:%(prose).1fpt;line-height:1.26;}
   .wrap{max-width:none;padding:0;}
@@ -2752,6 +2759,55 @@ def document(out, sheet=None, pt=DEFAULT_PT):
            "".join(body[1:]), footer(out, sheet)))
 
 
+_HEX = re.compile("#([0-9a-fA-F]{3,8})")
+# The stylesheet explains the trap by NAMING the colour it
+# replaced, so the scan reads the rules and not the prose
+# about them; a comment cannot reach a printer.
+_CSS_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+_FILL = re.compile("background(?:-color)?[ ]*:[ ]*([^;}]+)")
+
+
+def monochrome(css):
+    """Colours in `css` that would cost more than black ink, as findings.
+
+    THE PAGE IS PRINTED, SO EVERY COLOUR IS A COST.  A fill is ink over the
+    whole area rather than over the glyphs, and a grey that is not NEUTRAL
+    is mixed from three cartridges on an inkjet instead of struck in black:
+    the old secondary text was #545b66, which is a blue.  So a hex has to
+    satisfy R = G = B, and the only fill allowed is the page itself, which
+    is white and therefore no ink at all.
+    """
+    css = _CSS_COMMENT.sub(" ", css)
+    bad = []
+    for hexcode in _HEX.findall(css):
+        h = hexcode[:6] if len(hexcode) in (6, 8) else hexcode[:3]
+        if len(h) == 3:
+            rgb = [int(c * 2, 16) for c in h]
+        else:
+            rgb = [int(h[i:i + 2], 16) for i in (0, 2, 4)]
+        if len(set(rgb)) != 1:
+            bad.append(("#" + hexcode, "not a neutral grey: R G B = %s"
+                        % " ".join(str(v) for v in rgb)))
+    for fill in _FILL.findall(css):
+        fill = fill.strip()
+        if fill not in ("var(--bg)", "#fff", "#ffffff", "white", "none",
+                        "transparent"):
+            bad.append((fill, "a fill is ink over the whole area"))
+    return bad
+
+
+def report_monochrome(quiet=False):
+    """Print the ink check, and return the number of findings."""
+    bad = monochrome(CSS)
+    if not quiet:
+        print("  ink        %d colour(s) in the stylesheet, %d that would "
+              "cost more than black" % (len(set(_HEX.findall(_CSS_COMMENT.sub(" ", CSS)))),
+                 len(bad)))
+        for what, why in bad:
+            print("     ! %-12s %s" % (what, why))
+    return len(bad)
+
+
 def print_variant(html):
     """The same page with the PRINT rules applied unconditionally.
 
@@ -2832,7 +2888,7 @@ def main(argv=None):
     sheet = build_sheet(out)
     html = document(out, sheet, args.font)
     bad = (report_substitutions(sheet) + report_origins(sheet)
-           + report_untraced(sheet, html))
+           + report_untraced(sheet, html) + report_monochrome())
     if args.self_test and self_test(sheet):
         return 1
     if bad:
@@ -2841,8 +2897,8 @@ def main(argv=None):
         return 1
     if args.check:
         print("  OK  every substitution reproduces the value beside it, "
-              "every input names where it came from, and every number on "
-              "the page comes from one of them")
+              "every input names where it came from, every number on the "
+              "page comes from one of them, and it prints in black")
         return 0
     html_path = args.out + ".html"
     with open(html_path, "w", encoding="utf-8", newline="\n") as fh:
