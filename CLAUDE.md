@@ -2927,6 +2927,66 @@ skipped**, because a checker that quietly covers most of a page is this file's
 most-catalogued failure. And it was proved by being fed a wrong answer:
 `--self-test` perturbs one printed value and the check goes red on it.
 
+🚨  **AND THE SECOND PASS OVER IT FOUND THE OTHER WAY A NUMBER FAILS TO REACH
+THE READER: THE PAGE'S OWN FORMATTER WAS CUTTING CITATIONS AT 320
+CHARACTERS.** Thirty of them, ending in an ellipsis. A reference note is where
+the numbers behind a number live -- *"Reference $150k/kg = ~$4,700/oz; gold ran
+from $3,335 (May 2025) to $4,732 (May 2026)"* is the entire provenance of the
+gold price -- so **a citation that stops mid-sentence is not a shorter
+citation, it is a missing one**, and nothing on the page tells the reader
+which they are looking at. The limit is gone; the text wraps instead, which
+costs vertical space the page has and not information it does not.
+
+✅  **What reaches the paper is measured rather than assumed, and it needs the
+PRINT stylesheet to be measured at all.** The screen and print rules here
+differ by about a third in every font size, so a layout checked on screen says
+nothing. `--print-test` lifts the `@media print` block out of its query, which
+gives a page a browser lays out exactly as the printer does: at A4's 741 x 1062
+CSS px of content, **0 elements past the right edge and 0 rows taller than a
+sheet**, with the tables still not overflowing when squeezed to 500px.
+
+⚠️  **A page-count curve is only true of the content it was taken on.** The
+one recorded for `--font` was measured before the citations stopped being
+truncated and was two pages low at every point within the hour. Re-measured,
+and the comment beside the constant says which document it belongs to.
+
+🚨  **AND THE THIRD PASS FOUND THE GAP BETWEEN THE FIRST TWO CHECKS, WHICH IS
+WHERE NINETY-TWO NUMBERS WERE LIVING.** `origins` asks whether every INPUT
+names a source; the arithmetic check asks whether every STEP reproduces its
+own result. **Neither notices a number that is neither** -- a table cell the
+renderer computed on the way past, a factor quoted in a note, a ratio in a
+caption. Two green checks, and a ninth of the page unsourced.
+
+✅  **The fix generalises past this file: a TABLE ROW is a step laid out in
+columns, so it should be registered like one.** `claim()` takes the row's
+working and its value, the working goes in a visible column, and the same
+pair goes through the arithmetic check. Every computed cell on the page has
+one now, and the two substitutions that were prose became arithmetic.
+
+⚠️  **The honest residue is five tables that are the WHOLE DOCUMENT re-run at
+another setting** -- the fixed point's earlier passes, the concentration
+ladder, the programme ladders. There is no one-line substitution for a row
+that is parts 6 to 15 evaluated again, and inventing one would be worse than
+naming what it is. They are excused **by name, on the page and in the count**:
+each says so directly above itself, and the run prints what it excused beside
+what it checked, so a register that quietly grew would be visible.
+
+⚠️  **Two traps in the checker itself, both of which made it cry wolf.** It
+read the sheet's own cross-references -- `I10`, `S22` -- as numbers, which is
+over a hundred findings of the page pointing at itself; and it held
+`4.78e-12` to a relative 1e-6 when the page prints it to three significant
+figures, which is **asking a rendering to be a measurement**. A token's
+tolerance is the precision it was printed at, and nothing tighter.
+
+🚨  **A residual of two nearly equal numbers cannot be shown with rounded
+operands at all.** The cross-checks subtract quantities that agree to twelve
+digits, and even seventeen significant figures left the printed operands
+giving a different answer in the fourth digit of the residual. Those operands
+are `repr(float)` now -- the shortest decimal that reads back as the *same
+double* -- so a reader retyping them gets the model's float and the model's
+difference. **Reach for repr, not for more digits, wherever a subtraction
+cancels.**
+
 ### An input read from the LIVE table is a term read from the wrong run
 
 The same pass, and it is the sharpest instance here of a rule this file already
