@@ -110,6 +110,7 @@ is the list; its length is deliberately not spelled out beside it:
 | [`CITATIONS.md`](CITATIONS.md) | where every source, dataset and borrowed line came from, and what each obliges | references and attribution |
 | [`CLAUDE.md`](CLAUDE.md) | the traps, the invariants, and the reasoning behind decisions that look wrong | how to edit it safely |
 | the [`spacecost`](https://github.com/loggger101/spacecost) repo | Stage 3's reference tables, their citations, and their release history | every launch, propellant, delta-v, operational and storage row |
+| the [`General_Research`](https://github.com/loggger101/General_Research) repo | the peer-reviewed and tiered-authoritative sources behind the model's weakest-sourced cells, with one extracted-data CSV per source | what backs a number, and how strongly |
 
 ### Stage 3's tables live in another repository
 
