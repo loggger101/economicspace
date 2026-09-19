@@ -176,6 +176,16 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       7.2 -> 15, 7.4 -> 16, 8.0 -> 18, 8.6 -> 19.  `--font` takes
       the trade.
 
+      ⚠️  AND SCREEN FURNITURE MUST NOT PRINT.  `D.h` gives every anchored
+      heading a pilcrow self-link, which is useful on screen and a smudge
+      on paper; the narrative document hides it in its print rules and this
+      stylesheet did not, so a paragraph mark printed beside all seventeen
+      headings.  `print_furniture()` checks the other direction, because
+      nothing in the markup says which elements are decorative: any element
+      carrying one of a short list of glyphs that are never data here has
+      to be hidden by the print block.  Confirmed the way the printer sees
+      it -- 17 pilcrows in the markup, **0 painted**.
+
       ✅  AND IT PRINTS IN BLACK.  Every colour on a printed page is a
       cost, and two kinds of it were being spent for nothing: a fill is ink
       over the whole area rather than over the glyphs, and a grey that is
