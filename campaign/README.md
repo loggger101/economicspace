@@ -168,13 +168,22 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       -- the one use it was written for.  One line per step instead of four,
       the origin flowing beside the value rather than stacked under it, and
       the row-level Stage 1 provenance stated once instead of on all seven
-      body inputs: **17 pages, with nothing removed and every calculation shown**.  Raising the BODY
+      body inputs: **16 pages, with nothing removed and every calculation shown**.  Raising the BODY
       font from 7.4pt to 8.6pt left the count unchanged, because almost
       every line is inside a table; raising the TABLE font moves it five
       pages across the same span.  Measured on the FINAL, untruncated document, because the
       curve moves when the content does: 6.8 -> 14, 7.0 -> 15,
       7.2 -> 15, 7.4 -> 16, 8.0 -> 18, 8.6 -> 19.  `--font` takes
       the trade.
+
+      ⚠️  THE PROSE IS CUT TO WHAT A READER WORKING ON PAPER NEEDS.  A
+      sentence earns its place only if a number cannot be reproduced
+      without it: a formula a table depends on stays, an ordering rule
+      stays, a warning about a value that will not reproduce stays.  Scene-
+      setting, motivation and anything the heading already says goes --
+      12,627 characters of it became 8,894, and the part 1 blurb went from
+      a paragraph reciting the whole Stage 1 row provenance to two clauses,
+      because every input beneath it already cites its own column.
 
       🚨  AND NOTHING IS TRUNCATED, WHICH COST TWO PAGES AND IS WORTH THEM.
       The citation formatter cut free text at 320 characters, which had
@@ -226,7 +235,7 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
 
 ```
 py campaign/verification_sheet.py --check       # every line, every origin, every number
-py campaign/verification_sheet.py --pdf         # and render it, 17 pages
+py campaign/verification_sheet.py --pdf         # and render it, 16 pages
 py campaign/verification_sheet.py --pdf --font 8.6   # larger type, more pages
 py campaign/verification_sheet.py --print-test  # the page as the printer lays it out
 ```
