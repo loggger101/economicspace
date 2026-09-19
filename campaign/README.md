@@ -168,7 +168,7 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       -- the one use it was written for.  One line per step instead of four,
       the origin flowing beside the value rather than stacked under it, and
       the row-level Stage 1 provenance stated once instead of on all seven
-      body inputs: **15 pages, with nothing removed**.  Raising the BODY
+      body inputs: **17 pages, with nothing removed and every calculation shown**.  Raising the BODY
       font from 7.4pt to 8.6pt left the count unchanged, because almost
       every line is inside a table; raising the TABLE font moves it five
       pages across the same span.  Measured on the FINAL, untruncated document, because the
@@ -195,9 +195,38 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       still do not overflow when squeezed to 500px, so a printer enforcing
       wider margins has room to spare.
 
+      🚨  AND THE THIRD CHECK IS THE ONE THAT TIES THE OTHER TWO TOGETHER:
+      EVERY NUMBER ON THE PAGE, BACK TO WHERE IT CAME FROM.  `origins` says
+      every INPUT names a file and a row; the arithmetic check says every
+      STEP reproduces its own result; neither notices a number that is
+      neither -- a table cell the renderer computed on the way past, a
+      factor quoted in a note, a ratio in a caption.  Those are exactly the
+      numbers a reader cannot follow, because there is nothing to follow
+      them to.  A number is TRACED when it is a correct rounding, at the
+      precision it is printed to, of a tagged input, a step's value, an
+      operand inside a substitution, or a table claim.  **343 of 343.**
+
+      It found ninety-two on its first honest run, and closing them is most
+      of what this pass was: a `claim()` so a TABLE ROW is checked exactly
+      like a step, and then working columns on the phase table, the element
+      yields, the knapsack walk, the market allowances, the tiered sale and
+      both ladders -- every one of which used to print a computed number
+      with nothing beside it.  237 substitutions became 240, and the two
+      that were prose became arithmetic: the alloy price is written out
+      term by term, and the apsis choice states its factor.
+
+      ⚠️  FIVE TABLES ARE THIS DOCUMENT RE-RUN AT ANOTHER SETTING and are
+      excused BY NAME, on the page and in the count.  The fixed point's
+      earlier passes, the concentration ladder and the programme ladders
+      are not one-line substitutions and never can be: each row is parts 6
+      to 15 evaluated again at that row's hardware, ratio or fleet, which
+      is a true answer and the only true one.  Each says so directly above
+      itself, and the run prints how many it excused beside how many it
+      checked, so a register that quietly grew would be visible.
+
 ```
-py campaign/verification_sheet.py --check       # every line and every origin, writes nothing
-py campaign/verification_sheet.py --pdf         # and render it, 15 pages
+py campaign/verification_sheet.py --check       # every line, every origin, every number
+py campaign/verification_sheet.py --pdf         # and render it, 17 pages
 py campaign/verification_sheet.py --pdf --font 8.6   # larger type, more pages
 py campaign/verification_sheet.py --print-test  # the page as the printer lays it out
 ```

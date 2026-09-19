@@ -64,6 +64,20 @@ import worked_calculation_doc as D
 P = D.prec
 
 
+def exact(value):
+    """The shortest decimal that reads back as the SAME double.
+
+    For a subtraction that cancels there is no precision of rounded
+    decimal that will do.  The cross-check residuals subtract two numbers
+    equal to twelve digits, so seventeen significant figures still left
+    the printed operands giving a different answer from the model's, in
+    the fourth digit of the residual.  Python's repr is the shortest
+    string that round-trips, so a reader retyping it gets the model's own
+    float and therefore the model's own difference.
+    """
+    return repr(float(value))
+
+
 # ------------------------------------------------------------------ the sheet
 class Worksheet(object):
     """The ordered register of inputs and steps a reader checks by hand.
@@ -82,6 +96,7 @@ class Worksheet(object):
         self.tag = {}
         self.value = {}
         self.used = set()
+        self.claims = []
         self.n_input = 0
         self.n_step = 0
 
@@ -93,8 +108,21 @@ class Worksheet(object):
         """A line of explanation between steps, spanning the table."""
         self.parts[-1]["rows"].append(("prose", text))
 
-    def block(self, html):
-        """Raw HTML between steps: a table the step form cannot carry."""
+    def block(self, html, rerun=""):
+        """Raw HTML between steps: a table the step form cannot carry.
+
+        `rerun` marks a table whose every row is THIS WHOLE DOCUMENT
+        evaluated at a different setting -- the fixed point's earlier
+        passes, the concentration ladder, the programme ladder.  Those
+        numbers have a source and it is not a one-line substitution: it is
+        parts 6 to 15 run again at that row's setting, which is a true
+        answer and the only true one.  Saying so on the page, and marking
+        it so the traceability check can count what it excused and why, is
+        honest where inventing a substitution for them would not be.
+        """
+        if rerun:
+            html = ('<div class="rerun"><p class="prose">' + rerun
+                    + '</p>' + html + '<!--rerun-end--></div>')
         self.parts[-1]["rows"].append(("block", html))
 
     def _claim(self, key, kind):
@@ -148,6 +176,22 @@ class Worksheet(object):
              unit, tags, note))
         return value
 
+    def claim(self, work, value, what=""):
+        """Register a checkable arithmetic claim a BLOCK TABLE makes.
+
+        A table row is a step that happens to be laid out in columns, and
+        until this existed it was the one place the page produced a number
+        without showing where it came from: the knapsack's supply, the
+        alloy's per-element contribution, each rung's objective.  The
+        working goes in a column of the table so the reader sees it, and
+        the same (work, value) pair is registered here so the arithmetic
+        check and the traceability check treat it exactly as they treat a
+        step.  Returns the working, so a caller can put it straight in a
+        cell.
+        """
+        self.claims.append((work, value, what))
+        return D.esc(work)
+
     def unspent(self):
         """(inputs nothing cited, steps nothing cited), which differ in kind.
 
@@ -192,6 +236,18 @@ def trim(text, limit=None):
     if text in ("", "nan", "None"):
         return ""
     return D.esc(text)
+
+
+def cited(html):
+    """Mark a citation so the traceability check knows it is QUOTED text.
+
+    A number inside a citation is the source, not a claim: "$1,400/oz" in
+    the platinum note is what the exchange said, and asking the page to
+    derive it would be asking it to derive the outside world.  The check
+    strips these and audits what is left, which is the set of numbers the
+    page itself asserts.
+    """
+    return '<span class="cite">%s</span>' % html
 
 
 def spacecost_pin():
@@ -452,6 +508,37 @@ def phase_price_keys(S, C, only=None):
     return keys
 
 
+RERUN_PASS = (
+    "<b>Every row below is the closed form and the hardware sizings of "
+    "parts 6 and 7, run again at the hardware in its own first column.</b>  "
+    "The last row is the one the mission is built on and every number in it "
+    "is substituted in full below; the rows above are the same arithmetic on "
+    "the way to it, so their source is this document re-evaluated at their "
+    "own hardware rather than a line of their own.")
+
+RERUN_SWEEP = (
+    "<b>Every row below is the whole of parts 6 to 15 re-evaluated at that "
+    "concentration ratio</b> -- a different feed, payload, plant, hold and "
+    "sale -- so its source is this document run again at that ratio, not a "
+    "substitution.  The winning rung is the one every other part of this "
+    "page substitutes in full, and the objective column is reproducible "
+    "here from the two beside it.")
+
+RERUN_FLEET = (
+    "<b>Every row below is parts 11 and 14 re-evaluated at that fleet</b>: "
+    "a different accumulation window, so a different sale, so a different "
+    "cost per mission.  The objective column IS reproducible from the two "
+    "columns beside it, and the window and the clearing fraction are that "
+    "row's own run of part 11 rather than a line of their own.")
+
+RERUN_LADDER = (
+    "<b>Every cell below is the whole cost and revenue cascade re-evaluated "
+    "at that (F, W)</b>, so its source is this document run again at that "
+    "programme size.  The fleet table further down carries the cost and the "
+    "expected revenue behind each objective, so those rows are reproducible "
+    "from their own columns.")
+
+
 # ------------------------------------------------------------ 1. the body
 def part_body(S, out):
     """Diameter, volume and mass, and the bound the body puts on one mission."""
@@ -460,7 +547,7 @@ def part_body(S, out):
            "Everything downstream is sized against this rock.  Two of the "
            "three numbers behind its mass are assumptions rather than "
            "measurements, and the citations below say which.  "
-           + body_stamp(C))
+           + cited(body_stamp(C)))
     k = S.put("k_D", "k_D", "H-to-diameter constant", 1329.0, "km",
               "<b>modules/catalog.py</b>, <i>_H_DIAMETER_CONSTANT</i>.  "
               "<span class='src'>D_km = (1329 / sqrt(p_V)) * 10 ** (-H / 5), "
@@ -508,10 +595,13 @@ def part_body(S, out):
            "%s * %s" % (P(phi), P(B["mass"])), B["mineable"], "kg",
            ["phi", "m"],
            "one of the four caps on the payload; see part 5")
-    S.prose("D scales as p_V to the power -1/2 and m as D cubed, so m scales "
-            "as p_V to the power -3/2: a factor-two albedo error moves the "
-            "mass by 2 ** 1.5 = 2.828.  Neither assumption reaches the "
-            "answer on this body, because the mineable bound does not bind.")
+    S.step("albedo_lever", "dm/m", "what a factor-two albedo error does to "
+           "the mass", "2 ^ 1.5, because D goes as 1 / sqrt(p_V) and m as "
+           "D cubed, so m goes as p_V to the power of minus one and a half",
+           "2 ^ 1.5", 2.0 ** 1.5, "x", ["pV", "m"],
+           "both inputs to that chain are assumptions rather than "
+           "measurements, and neither reaches the answer on this body: the "
+           "mineable bound does not bind and nor does the volume cap")
 
 
 # -------------------------------------------- 2. what a kilogram is worth
@@ -643,6 +733,12 @@ def part_prices(S, out):
         S.put("kappa", "kappa", "platinum-group enrichment", C["kappa"], "x",
               cite_body(C, "comp_pgm_enrichment",
                         "follows the taxonomy class"))
+        S.prose("Two numbers per row and both are worked out here.  The "
+                "element's delivered price is the same rule as every other "
+                "commodity, <b>p + u P_L - c_ref</b> when it is used in "
+                "space and <b>max(0, p - c_down)</b> when it is flown home; "
+                "its contribution to the alloy is "
+                "<b>yield / 1e6 x enrichment x price</b>.")
         rows, total = [], 0.0
         for element, fraction in C["yields"].items():
             if element not in C["element_price"]:
@@ -653,17 +749,44 @@ def part_prices(S, out):
                 share *= C["kappa"]
             price = float(C["element_price"][element])
             total += share * price
+            pp = C["price_parts"].get(element)
+            if pp is None:
+                price_work = "-"
+            elif pp["route"] == "used in space":
+                price_work = S.claim(
+                    "%s + %s * %s - %s"
+                    % (P(pp["terrestrial"]), P(pp["utility"]), P(C["p_l"]),
+                       P(pp["refining"])), price, "%s price" % element)
+            else:
+                price_work = S.claim(
+                    "max(0, %s - %s)"
+                    % (P(pp["terrestrial"]), P(pp["downleg"])), price,
+                    "%s price" % element)
+            contrib = S.claim(
+                "%s / 1e6 * %s * %s"
+                % (P(float(fraction) * 1e6), P(C["kappa"] if rare else 1.0),
+                   P(price)), share * price, "%s contribution" % element)
             rows.append([D.esc(element), P(float(fraction) * 1e6, 8),
                          ("x " + P(C["kappa"])) if rare else "-",
-                         "$" + P(price, 10), "$" + P(share * price, 10),
-                         cite_mineral(C, element)])
-        S.block(D.table(["element", "yield (ppm of alloy)", "enrichment",
-                         "$/kg delivered", "contribution $/kg", "source"],
-                        rows, "wide"))
+                         price_work, "$" + P(price, 10),
+                         contrib, "$" + P(share * price, 10),
+                         cited(cite_mineral(C, element))])
+        S.block(D.table(["element", "yield (ppm)", "enrich",
+                         "price worked out", "$/kg delivered",
+                         "contribution worked out", "contribution $/kg",
+                         "source of the terrestrial quote"], rows, "wide"))
+        terms = []
+        for element, fraction in C["yields"].items():
+            if element not in C["element_price"]:
+                continue
+            share = float(fraction)
+            if element in C["rare_metals"]:
+                share *= C["kappa"]
+            terms.append(P(share * float(C["element_price"][element])))
         S.step("P_alloy", "P_Fe-Ni", "nickel-iron blended price",
-               "sum over elements of yield * enrichment * price",
-               "the column above, added",
-               C["alloy"], "$/kg", ["kappa", "P_L"])
+               "sum over elements of yield / 1e6 * enrichment * price",
+               " + ".join(terms), C["alloy"], "$/kg", ["kappa", "P_L"],
+               "the contribution column above, added term by term")
 
     S.prose("The phase table is what the hold is filled from.  Module 1's "
             "taxonomy fractions never sum to one; the remainder is carried "
@@ -671,17 +794,17 @@ def part_prices(S, out):
             "discarded, which is why the table below totals one.")
     rows = []
     for name, frac, price in C["phases"]:
-        short = ("nickel_iron" if name == "nickel-iron"
-                 else ("silicates" if name.startswith("other")
-                       else name.replace(" ", "_").replace("-", "_")))
-        column = ("the residual, 1 - sum of the four fractions"
+        column = ("the residual: 1 - sum of the four taxonomy fractions"
                   if name.startswith("other")
                   else cite_body(C, "comp_%s_fraction"
                                  % {"nickel-iron": "metal",
                                     "water": "ice"}.get(name, name)))
-        rows.append([D.esc(name), D.pct(frac, 3), "$" + P(price, 10),
-                     "$" + P(frac * price, 10), column])
-    S.block(D.table(["phase", "mass fraction", "$/kg", "contribution $/kg",
+        work = S.claim("%s * %s" % (P(frac), P(price)), frac * price,
+                       "%s contribution" % name)
+        rows.append([D.esc(name), P(frac, 8), "$" + P(price, 10), work,
+                     "$" + P(frac * price, 10), cited(column)])
+    S.block(D.table(["phase", "mass fraction f_c", "$/kg P_c",
+                     "contribution worked out", "contribution $/kg",
                      "where the fraction comes from"], rows, "wide"))
     S.step("bulk", "V_bulk", "value of a kilogram of run-of-mine ore",
            "sum over phases of f_c * P_c",
@@ -756,14 +879,23 @@ def part_transfer(S, out):
     S.step("q", "q", "perihelion", "a (1 - e)",
            "%s * (1 - %s)" % (P(a), P(e)), DV["q_au"], "AU", ["a", "e"])
     S.step("r_t", "r_t", "the apsis this transfer meets the target at",
-           "the searched apsis: %s" % D.esc(DV["apsis"]),
-           "%s costs %s km/s round trip against %s for the other"
+           "%s, which the search chose" % ("Q" if DV["apsis"] == "aphelion"
+                                           else "q"),
+           P(DV["r_target"]), DV["r_target"], "AU", ["Q", "q"],
+           "priced both ways rather than ruled: %s costs %s km/s round "
+           "trip against %s for the other, a factor of %s, and which wins "
+           "depends on a and e together"
            % (D.esc(DV["apsis"]),
               P(DV["aph_round"] if DV["apsis"] == "aphelion"
                 else DV["peri_round"], 8),
               P(DV["peri_round"] if DV["apsis"] == "aphelion"
-                else DV["aph_round"], 8)),
-           DV["r_target"], "AU", ["Q", "q"])
+                else DV["aph_round"], 8),
+              P(max(DV["aph_round"], DV["peri_round"])
+                / min(DV["aph_round"], DV["peri_round"]), 4)))
+    S.claim("%s / %s" % (P(max(DV["aph_round"], DV["peri_round"])),
+                         P(min(DV["aph_round"], DV["peri_round"]))),
+            max(DV["aph_round"], DV["peri_round"])
+            / min(DV["aph_round"], DV["peri_round"]), "the apsis factor")
     S.step("a_t", "a_t", "transfer-ellipse semi-major axis", "(1 + r_t) / 2",
            "(1 + %s) / 2" % P(DV["r_target"]), leg["a_t"], "AU", ["r_t"],
            "1 AU out to r_t")
@@ -1015,8 +1147,12 @@ def part_plant_rating(S, out):
            kg_per_w, "kg/W", ["oversize", "w_bare", "excess_h", "e_store"])
     S.step("w_plant", "w_plant", "plant specific power", "1 / (kg/W)",
            "1 / %s" % P(kg_per_w), C["w_plant"], "W/kg", ["kg_per_w"],
-           "against a bare %s W/kg: the night side costs a factor of %s"
-           % (P(C["w_bare"], 6), P(C["w_bare"] / C["w_plant"], 3)))
+           "against a bare %s W/kg; the night side costs a factor of %s, "
+           "which is %s / %s"
+           % (P(C["w_bare"], 6), P(C["w_bare"] / C["w_plant"], 3),
+              P(C["w_bare"]), P(C["w_plant"])))
+    S.claim("%s / %s" % (P(C["w_bare"]), P(C["w_plant"])),
+            C["w_bare"] / C["w_plant"], "the night-side factor")
 
 
 # ------------------------------------------------------ 6. the fixed point
@@ -1045,14 +1181,22 @@ def part_fixed_point(S, out):
 
     S.prose("Each pass solves the closed form at the PREVIOUS pass's "
             "hardware mass and containment fraction, then re-sizes both on "
-            "the payload that came out.  The loop is run until they stop "
-            "moving.")
+            "the payload that came out.  The loop runs until they stop "
+            "moving.  <b>Every column is one of the formulae worked out "
+            "below, evaluated at that row's own hardware and f</b>: the "
+            "payload by the closed form (coef, denom, bracket, m_pay), the "
+            "EP stage by the three masses in part 7, the plant by P / "
+            "w_plant, the feed by its own min().  The last row is the one "
+            "carried forward and every one of its numbers is substituted "
+            "in full below; the earlier rows are the same arithmetic at "
+            "the hardware in their own first column.")
     rows = [[str(p["n"]), P(p["hw_in"], 10), P(p["f_used"], 10),
              P(p["m_pay"], 10), P(p["ep"], 8), P(p["plant"], 8),
              P(p["feed"], 8), P(p["dig"], 6)] for p in M["passes"]]
     S.block(D.table(["pass", "hardware in (kg)", "structure frac",
                      "payload out (kg)", "EP stage (kg)", "plant (kg)",
-                     "feed (kg)", "dig (yr)"], rows, "wide"))
+                     "feed (kg)", "dig (yr)"], rows, "wide"),
+            rerun=RERUN_PASS)
     S.prose("<b>The cascade is not re-solved once the loop converges.</b>  "
             "The payload carried forward is the last one solved INSIDE the "
             "loop, at the previous pass's hardware, and that is the model's "
@@ -1197,8 +1341,14 @@ def part_settled(S, out):
     S.step("hrs", "hours", "the dig, in hours", "(t_dig * 365.25) * 24",
            "(%s * 365.25) * 24" % P(M["dig_yr"]),
            W.hours(M["dig_yr"]), "h", ["t_dig"],
-           "associated exactly as the model associates it: y * 365.25 * 24 "
-           "is not y * 8766, and the difference reaches the last bit")
+           "associated exactly as the model associates it.  365.25 * 24 "
+           "is 8,766 and y * 365.25 * 24 is NOT y * 8,766: float "
+           "multiplication does not associate, the first rounds twice and "
+           "the second once, and they differ in the last bit "
+           + cited("on about 28% of the durations this model produces, "
+                   "measured in <b>campaign/worked_calculation.py</b> "
+                   "&middot; <i>hours</i>"))
+    S.claim("365.25 * 24", 8766.0, "hours in a year, pre-multiplied")
 
     hrs = W.hours(M["dig_yr"])
     S.put("e_dig", "e_dig", "excavation energy", C["dig_wh"], "Wh/kg dug",
@@ -1372,10 +1522,11 @@ def part_stack(S, out):
     short = R["budget"] - M["m_at"]
     S.step("short", "budget - m_at", "how far under the budget the flown "
            "stack arrives", "budget - m_at",
-           "%s - %s" % (P(R["budget"], 17), P(M["m_at"], 17)), short, "kg",
+           "%s - %s" % (exact(R["budget"]), exact(M["m_at"])), short, "kg",
            ["budget", "m_at"],
-           "the only subtraction on the page that CANCELS: five leading "
-           "digits go, so both operands are given to full double precision "
+           "a subtraction that CANCELS: five leading digits go, so both "
+           "operands are given as the shortest decimal that reads back as "
+           "the same double, "
            "and a reader working from the rounded values in part 4 and "
            "part 8 will land about three digits short of this")
     S.step("spare", "M_LEO - m_launch", "spare capacity",
@@ -1389,18 +1540,19 @@ def part_stack(S, out):
     S.prose("Four ceilings stand over the payload and only the smallest is "
             "the answer.  Naming which one binds is the difference between "
             "a result about this body and a result about the rig.")
-    caps = [("mineable", "%s of the body" % D.pct(C["cfg"].max_mining_fraction),
-             B["mineable"]),
-            ("throughput", "%s kg/yr over %s yr" % (P(C["rate_kg_yr"], 8),
-                                                    P(M["dig_yr"], 4)),
-             M["throughput"]),
-            ("volume", "a quarter of the fairing at %s kg/L" % P(C["rho"]),
-             M["vol_cap"]),
-            ("rocket equation", "the closed form in part 6", M["m_pay"])]
-    low = min(v for _n, _w, v in caps)
-    S.block(D.table(["cap", "what it is", "kg"],
-                    [[n, w, P(v, 10) + (" <b>binds</b>" if v == low else "")]
-                     for n, w, v in caps]))
+    caps = [("mineable", "phi_min x m, the whole body if phi_min is 1",
+             B["mineable"], "m_min"),
+            ("throughput", "rate x t_dig,max, all the rig can move in a stay",
+             M["throughput"], "throughput"),
+            ("volume", "a quarter of the fairing at the ore's bulk density",
+             M["vol_cap"], "vol_cap"),
+            ("rocket equation", "bracket / denom, the closed form",
+             M["m_pay"], "m_pay")]
+    low = min(v for _n, _w, v, _t in caps)
+    S.block(D.table(["cap", "what it is", "kg", "worked out at"],
+                    [[n, w, P(v, 10) + (" <b>binds</b>" if v == low else ""),
+                      '<span class="uses">%s</span>' % S.tag.get(t, "-")]
+                     for n, w, v, t in caps]))
 
 
 # ------------------------------------------------------------ 9. the clock
@@ -1503,17 +1655,24 @@ def part_hold(S, out):
         S.prose("Each phase can supply <b>feed * f_c * eps_rec</b> and no "
                 "more.  The walk takes the lesser of that supply and the "
                 "hold still empty, in descending price order.")
+        frac = dict((n, f) for n, f, _p in C["phases"])
         rows = []
         for n, w in enumerate(M["load"]["walk"], 1):
+            supply = S.claim("%s * %s * %s"
+                             % (P(M["feed"]), P(frac[w["phase"]]),
+                                P(C["recovery"])), w["supply"],
+                             "%s supply" % w["phase"])
+            take = S.claim("min(%s, %s)" % (P(w["supply"]), P(w["hold"])),
+                           w["take"], "%s taken" % w["phase"])
             rows.append([str(n), D.esc(w["phase"]), "$" + P(w["price"], 10),
-                         P(w["supply"], 10), P(w["hold"], 10),
-                         P(w["take"], 10),
+                         P(frac[w["phase"]], 8), supply, P(w["supply"], 10),
+                         P(w["hold"], 10), take, P(w["take"], 10),
                          "hold full" if w["take"] <= 0
                          else ("hold ran out" if w["take"] < w["supply"]
                                else "all the feed had")])
-        S.block(D.table(["#", "phase", "$/kg", "supply (kg)",
-                         "hold left (kg)", "taken (kg)", "what stopped it"],
-                        rows, "wide"))
+        S.block(D.table(["#", "phase", "$/kg", "f_c", "supply worked out",
+                         "supply (kg)", "hold left (kg)", "taken worked out",
+                         "taken (kg)", "what stopped it"], rows, "wide"))
     else:
         S.prose("Run-of-mine ore is not sorted: the hold carries the body's "
                 "own blend, phase by phase in its own proportions.")
@@ -1530,8 +1689,12 @@ def part_hold(S, out):
            "V_hold / m_pay",
            "%s / %s" % (P(M["load"]["value"]), P(M["m_pay"])),
            M["load"]["usd_per_kg"], "$/kg", ["hold_value", "m_pay"],
-           "against %s for the body's own blend, a factor of %s"
-           % (P(C["bulk"], 8), P(M["load"]["usd_per_kg"] / C["bulk"], 4)))
+           "against %s for the body's own blend, a factor of %s, which is "
+           "%s / %s"
+           % (P(C["bulk"], 8), P(M["load"]["usd_per_kg"] / C["bulk"], 4),
+              P(M["load"]["usd_per_kg"]), P(C["bulk"])))
+    S.claim("%s / %s" % (P(M["load"]["usd_per_kg"]), P(C["bulk"])),
+            M["load"]["usd_per_kg"] / C["bulk"], "the enrichment factor")
     S.step("ret_vol", "V_ret", "volume the cargo occupies",
            "m_pay / rho / 1000",
            "%s / %s / 1000" % (P(M["m_pay"]), P(C["rho"])),
@@ -1570,26 +1733,48 @@ def part_market(S, out):
     rows = []
     for market, allow in sorted(rev["allow"].items()):
         cap = C["market_kg"].get(market)
-        rows.append([D.esc(market), P(cap, 10),
-                     "%s * %s" % (P(cap, 10), P(rev["window"])),
-                     P(allow, 10), cite_mineral(C, market)])
-    S.block(D.table(["market", "ceiling (kg/yr)", "x omega", "allowance (kg)",
-                     "source of the ceiling"], rows, "wide"))
+        S.put("cap_%s" % market.replace(" ", "_").replace("-", "_"),
+              "Cap_%s" % market, "%s absorption ceiling" % market, cap,
+              "kg/yr",
+              "<b>mineral_value_catalog.csv</b> &middot; row <i>%s</i> "
+              "&middot; column <i>annual_market_kg</i>, which Module 2 "
+              "ROUTES: a commodity sold at the depot is bounded by that "
+              "depot's import budget and one flown home by world annual "
+              "production.  " % D.esc(market)
+              + cite_mineral(C, market))
+        work = S.claim("%s * %s" % (P(cap), P(rev["window"])), allow,
+                       "%s allowance" % market)
+        rows.append([D.esc(market), P(cap, 10), work, P(allow, 10)])
+    S.block(D.table(["market", "ceiling (kg/yr)", "allowance worked out",
+                     "allowance (kg)"], rows))
     S.prose("A concentrated load is RESHAPED rather than clipped: the "
             "ceilings go into the knapsack, so space a capped phase does "
             "not get stays available to the next phase down the price "
             "order.  That is why a bounded hold can still fly full.")
     rows = []
+    surplus_frac = rev["surplus_frac"]
     for i, step in enumerate(rev["capped"]["walk"], 1):
+        if step["full"]:
+            price_work = "the full price"
+        else:
+            price_work = S.claim(
+                "%s * %s" % (P(step["price"] / surplus_frac),
+                             P(surplus_frac)), step["price"],
+                "%s surplus price" % step["phase"])
+        value = S.claim("%s * %s" % (P(step["take"]), P(step["price"])),
+                        step["take"] * step["price"],
+                        "%s tier %d value" % (step["phase"], i))
         rows.append([str(i), D.esc(step["phase"]),
                      "full" if step["full"] else "surplus",
-                     "$" + P(step["price"], 10), P(step["supply"], 10),
+                     price_work, "$" + P(step["price"], 10),
+                     P(step["supply"], 10),
                      "-" if step["allowance"] is None
                      else P(step["allowance"], 10),
-                     P(step["take"], 10),
+                     P(step["take"], 10), value,
                      "$" + P(step["take"] * step["price"], 10)])
-    S.block(D.table(["#", "phase", "tier", "$/kg", "supply (kg)",
-                     "allowance (kg)", "sold (kg)", "value"], rows, "wide"))
+    S.block(D.table(["#", "phase", "tier", "price worked out", "$/kg",
+                     "supply (kg)", "allowance (kg)", "sold (kg)",
+                     "value worked out", "value"], rows, "wide"))
     S.step("Rev", "Rev", "what one delivery sells",
            "sum over tiers of sold * price",
            " + ".join("%s * %s" % (P(t["take"]), P(t["price"]))
@@ -1630,19 +1815,33 @@ def part_searches(S, out):
                "%s ^ (1 / %s)"
                % (P(sweep["r_max"]), P(C["cfg"].concentration_search_steps - 1)),
                sweep["step"], "-", ["r_max"])
+        S.prose("Every rung below is the WHOLE of parts 6 to 11 re-run at "
+                "that concentration ratio: a different feed, a different "
+                "payload, a different plant and a different sale.  The "
+                "columns are those quantities at that rung, and the last "
+                "is C_tot / E[Rev] computed exactly as part 15 computes "
+                "it.  The winning rung's numbers are the ones substituted "
+                "in full everywhere else on this page.")
         rows = []
         for kind, ratio, won in sweep["rungs"]:
             mark = " <b>argmin</b>" if (kind, ratio) == (
                 sweep["winner"][0], sweep["winner"][1]) else ""
+            best = won["ladder"]["best"]
+            obj = S.claim("%s / %s" % (P(best["cost"]["total"]),
+                                       P(best["expected"])), best["obj"],
+                          "objective at ratio %s" % P(ratio, 6))
             rows.append([kind, P(ratio, 8), P(won["M"]["m_pay"], 8),
                          P(won["M"]["feed"], 8),
-                         "$" + P(won["ladder"]["best"]["rev"]["delivered"], 8),
-                         "(%d, %d)" % (won["ladder"]["best"]["f"],
-                                       won["ladder"]["best"]["w"]),
-                         P(won["ladder"]["best"]["obj"], 8) + mark])
+                         "$" + P(best["rev"]["delivered"], 8),
+                         "(%d, %d)" % (best["f"], best["w"]),
+                         P(best["cost"]["total"], 12),
+                         P(best["expected"], 12), obj,
+                         P(best["obj"], 8) + mark])
         S.block(D.table(["rung", "ratio", "payload (kg)", "feed (kg)",
-                         "delivered $/kg", "best (F, W)", "cost / revenue"],
-                        rows, "wide"))
+                         "delivered $/kg", "best (F, W)", "total cost $",
+                         "expected revenue $", "objective worked out",
+                         "cost / revenue"], rows, "wide"),
+                rerun=RERUN_SWEEP)
     S.prose("Programme size is searched jointly with everything else.  A "
             "larger programme amortises the non-recurring costs over more "
             "missions; a larger fleet delivers more often and each delivery "
@@ -1655,16 +1854,24 @@ def part_searches(S, out):
     for f in fleets:
         rows.append([str(f)] + [P(grid[(f, w)], 7) if (f, w) in grid else "-"
                                 for w in ws])
-    S.block(D.table(["fleet F"] + ["W = %d" % w for w in ws], rows, "wide"))
+    S.block(D.table(["fleet F"] + ["W = %d" % w for w in ws], rows, "wide"),
+            rerun=RERUN_LADDER)
     S.prose("One refinement pass then runs around the coarse winner at its "
             "own W, which is what makes the search non-exhaustive: it "
             "explores the neighbourhood of the rung that won and no other.")
     if L["refine"]:
-        rows = [[P(r["n"], 6), str(r["f"]), str(r["w"]),
-                 D.musd(r["cost"]["total"]), D.musd(r["expected"]),
-                 P(r["obj"], 7)] for r in L["refine"]]
-        S.block(D.table(["N", "ships", "campaigns/ship", "cost",
-                         "expected revenue", "cost / revenue"], rows, "wide"))
+        rows = []
+        for r in L["refine"]:
+            obj = S.claim("%s / %s" % (P(r["cost"]["total"]),
+                                       P(r["expected"])), r["obj"],
+                          "refined objective at N = %d" % r["n"])
+            rows.append([P(r["n"], 6), str(r["f"]), str(r["w"]),
+                         P(r["cost"]["total"], 12), P(r["expected"], 12),
+                         obj, P(r["obj"], 7)])
+        S.block(D.table(["N", "ships", "campaigns/ship", "total cost $",
+                         "expected revenue $", "objective worked out",
+                         "cost / revenue"], rows, "wide"),
+                rerun=RERUN_FLEET)
     S.prose("Every row below is at the winner's own W, so only the fleet "
             "moves.  Cost falls all the way: a bigger programme always "
             "amortises the non-recurring lines better.  What stops it is "
@@ -1674,13 +1881,18 @@ def part_searches(S, out):
                    if r["w"] == out["P"]["w"]), key=lambda r: r["f"])
     for r in at_w:
         mark = " <b>argmin</b>" if r["f"] == out["P"]["f"] else ""
+        obj = S.claim("%s / %s" % (P(r["cost"]["total"]), P(r["expected"])),
+                      r["obj"], "objective at F = %d" % r["f"])
         rows.append([str(r["f"]), P(r["n"], 6), P(r["rev"]["window"], 7),
                      P(r["rev"]["clearing"], 7),
                      P(r["rev"]["surplus"] + r["rev"]["unsold"], 6),
-                     D.musd(r["cost"]["total"]), P(r["obj"], 7) + mark])
+                     P(r["cost"]["total"], 12), P(r["expected"], 12),
+                     obj, P(r["obj"], 7) + mark])
     S.block(D.table(["fleet F", "N", "omega (yr)", "clearing",
-                     "past the ceiling (kg)", "cost", "cost / revenue"],
-                    rows, "wide"))
+                     "past the ceiling (kg)", "total cost $",
+                     "expected revenue $", "objective worked out",
+                     "cost / revenue"], rows, "wide"),
+            rerun=RERUN_FLEET)
 
 
 # ------------------------------------------------------- 13. the reliability
@@ -2029,24 +2241,26 @@ def check_substitutions(sheet, tol=1e-9):
     cannot survive.
     """
     checked, unchecked, bad = 0, [], []
-    for part in sheet.parts:
-        for row in part["rows"]:
-            if row[0] != "step":
-                continue
-            tag, symbol, substitution, value = row[1], row[2], row[5], row[6]
-            expr = evaluable(substitution)
-            if expr is None:
-                unchecked.append((tag, symbol, substitution))
-                continue
-            try:
-                got = eval(expr, {"__builtins__": {}}, dict(_ALLOWED))
-            except Exception as exc:
-                bad.append((tag, symbol, substitution, "%s" % exc, value))
-                continue
-            checked += 1
-            scale = max(abs(float(value)), abs(float(got)), 1e-30)
-            if abs(float(got) - float(value)) / scale > tol:
-                bad.append((tag, symbol, substitution, got, value))
+    rows = [(row[1], row[2], row[5], row[6])
+            for part in sheet.parts for row in part["rows"]
+            if row[0] == "step"]
+    # A TABLE ROW IS A STEP LAID OUT IN COLUMNS and is checked as one.
+    rows += [("table", what or "row", work, value)
+             for work, value, what in sheet.claims]
+    for tag, symbol, substitution, value in rows:
+        expr = evaluable(substitution)
+        if expr is None:
+            unchecked.append((tag, symbol, substitution))
+            continue
+        try:
+            got = eval(expr, {"__builtins__": {}}, dict(_ALLOWED))
+        except Exception as exc:
+            bad.append((tag, symbol, substitution, "%s" % exc, value))
+            continue
+        checked += 1
+        scale = max(abs(float(value)), abs(float(got)), 1e-30)
+        if abs(float(got) - float(value)) / scale > tol:
+            bad.append((tag, symbol, substitution, got, value))
     return checked, unchecked, bad
 
 
@@ -2109,6 +2323,138 @@ def report_substitutions(sheet, quiet=False):
                   % (tag, symbol, sub[:70]))
     return len(bad)
 
+
+# ------------------------------------ every number, back to where it came from
+# THE PROMISE THIS DOCUMENT MAKES IS THAT NOTHING ON IT IS UNSOURCED, and the
+# two checks above each cover half of it: `origins` says every INPUT names a
+# file and a row, `check_substitutions` says every STEP reproduces its own
+# result.  Neither notices a number that is on the page without being either
+# -- a table cell the renderer computed on the way past, a factor quoted in a
+# note, a ratio in a caption.  Those are precisely the numbers a reader cannot
+# follow, because there is nothing to follow them to.
+#
+# A number is TRACED when it is a correct rounding, at the precision it is
+# printed to, of something the sheet registered: an input's value, a step's
+# value, an operand inside a step's substitution, or a table claim and its
+# operands.  Anything else is a finding.
+_SCALES = (1.0, 1e6, 1e-6, 1e3, 1e-3, 1e2, 1e-2, 1e9, 1e-9)
+# Citations are QUOTED source; the tag column and the cited-tag spans are
+# the page's own cross-references.  "I10" and "S22" are labels that happen to
+# contain digits, and reading them as numbers reported well over a hundred
+# findings that were nothing but the sheet pointing at itself.
+_CITE = re.compile(r'<(span|td)[^>]*class="[^"]*\b(?:cite|tag|uses)\b[^"]*"'
+                   r'[^>]*>.*?</\1>', re.S)
+# A table whose rows are the whole cascade at another setting.  Excluded and
+# COUNTED, never excluded quietly: the number it excused is printed beside
+# the number it checked, so a register that quietly grew would be visible.
+_RERUN = re.compile(r'<div class="rerun">.*?<!--rerun-end-->', re.S)
+
+
+def sheet_numbers(sheet):
+    """Every value and every operand the sheet registered, as floats."""
+    out = []
+    for part in sheet.parts:
+        for row in part["rows"]:
+            if row[0] == "input" and isinstance(row[4], (int, float)):
+                out.append(float(row[4]))
+            elif row[0] == "step":
+                if isinstance(row[6], (int, float)):
+                    out.append(float(row[6]))
+                for field in (row[4], row[5]):
+                    out.extend(v for v, _d in map(as_number,
+                                                  NUMBER.findall(field))
+                               if v is not None)
+    for work, value, _what in sheet.claims:
+        out.append(float(value))
+        out.extend(v for v, _d in map(as_number, NUMBER.findall(work))
+                   if v is not None)
+    return out
+
+
+NUMBER = re.compile(r"-?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?")
+
+
+def as_number(token):
+    """(value, decimals shown) for a rendered token, or (None, None)."""
+    clean = token.replace(",", "")
+    try:
+        value = float(clean)
+    except ValueError:
+        return None, None
+    if "e" in clean or "E" in clean:
+        return value, None
+    return value, len(clean.split(".")[1]) if "." in clean else 0
+
+
+def is_traced(value, decimals, known):
+    """Is `value` a correct rounding of something in `known`?
+
+    The tolerance is the printing, not a fudge: a number shown to three
+    decimals is traced by anything that rounds to it at three decimals, and
+    a number shown whole has to match exactly.  The scale list is there
+    because the page renders the same quantity in dollars and in millions.
+    """
+    for scale in _SCALES:
+        target = value * scale
+        for k in known:
+            if decimals is None:
+                # A token like 4.78e-12 is printed to three significant
+                # figures, so it is traced by anything that ROUNDS to it at
+                # three.  Holding it to 1e-6 relative asked a rendering to
+                # be a measurement and reported the one number on the page
+                # that is deliberately shown short.
+                if k and abs(target - k) <= abs(k) * 5e-3:
+                    return True
+            elif abs(target - k) <= 0.5 * 10 ** (-decimals) * scale * 1.000001:
+                return True
+    return False
+
+
+def untraced(sheet, html):
+    """Numbers the page asserts with nothing behind them.
+
+    Scoped to the numbered PARTS, and to what the page CLAIMS rather than
+    what it quotes.  A number inside a citation is the source itself --
+    "$1,400/oz" in the platinum note is what the exchange said -- so
+    citations are stripped, and the header card and footer are document
+    furniture rather than model output.
+    """
+    body = html
+    head = body.find('<h2 id="p1"')
+    foot = body.find('<div class="foot">')
+    if head > 0:
+        body = body[head:foot if foot > head else len(body)]
+    body = _CITE.sub(" ", body)
+    reruns = len(_RERUN.findall(body))
+    body = _RERUN.sub(" ", body)
+    text = D.html.unescape(re.sub(r"<[^>]+>", " ", body))
+    known = sheet_numbers(sheet)
+    seen, bad = set(), []
+    for token in NUMBER.findall(text):
+        if token in seen:
+            continue
+        seen.add(token)
+        value, decimals = as_number(token)
+        if value is None or value == 0:
+            continue
+        if not is_traced(value, decimals, known):
+            i = text.find(token)
+            bad.append((token, " ".join(text[max(0, i - 60):i + 30].split())))
+    return len(seen), bad, reruns
+
+
+def report_untraced(sheet, html, quiet=False):
+    """Print the traceability check, and return the number of findings."""
+    seen, bad, reruns = untraced(sheet, html)
+    if not quiet:
+        print("  traced     %d of %d numbers the page ASSERTS come from a "
+              "tagged input, a step or a table claim, %d do NOT; %d table(s)"
+              " are this document re-run at another setting and say so"
+              % (seen - len(bad), seen, len(bad), reruns))
+        for token, where in bad:
+            print("     ! %-18s ... %s" % (token, where))
+    return len(bad)
+
 # ------------------------------------------------------- 16. the cross-checks
 def part_checks(S, out):
     """Identities that must hold, for a reader to catch their own slips.
@@ -2128,8 +2474,11 @@ def part_checks(S, out):
 
     def ident(what, left_label, left, right_label, right, tags):
         """One identity: two routes to one number, and their difference."""
+        gap = S.claim("abs(%s - %s)" % (exact(left), exact(right)),
+                      abs(left - right), "%s residual" % what)
         rows.append([what, left_label, P(left, 12), right_label,
-                     P(right, 12), P(abs(left - right), 3), tags])
+                     P(right, 12), gap, P(abs(left - right), 3),
+                     '<span class="uses">%s</span>' % tags])
 
     ident("the hardware ledger",
           "m_hw", M["hw"],
@@ -2169,7 +2518,8 @@ def part_checks(S, out):
           "obj", P_["obj"], "C_tot / E[Rev]", K["total"] / P_["expected"],
           "S: obj")
     S.block(D.table(["identity", "one route", "value", "the other route",
-                     "value", "difference", "tags"], rows, "wide"))
+                     "value", "difference worked out", "difference", "tags"],
+                    rows, "wide"))
     S.prose("Two structural bounds that are inequalities rather than "
             "identities: <b>W = %s must not exceed trips = %s</b>, because a "
             "rig cannot fly more campaigns than it survives; and "
@@ -2291,7 +2641,7 @@ def render_row(row):
         _k, tag, symbol, quantity, value, unit, source = row
         return ('<tr class="in"><td class="tag">%s</td>'
                 '<td class="sym">%s <span class="qty">%s</span></td>'
-                '<td class="org">%s</td>'
+                '<td class="org cite">%s</td>'
                 '<td class="val">%s <span class="unit">%s</span></td></tr>'
                 % (tag, D.esc(symbol), D.esc(quantity), source,
                    P(value, 12) if isinstance(value, (int, float))
@@ -2371,6 +2721,23 @@ def footer(out, sheet):
                     % "; ".join("<code>%s</code> (%s)"
                                 % (D.esc(name), D.esc(why))
                                 for name, why in out["borrows"]))
+    seen, loose, reruns = untraced(sheet, _PAGE.get("html", ""))
+    if seen:
+        bits.append(
+            "<p>And every number the page ASSERTS is one of those: "
+            "<span class='ok'>%d of %d</span> are a tagged input, a step's "
+            "own value, an operand inside a substitution, or a table claim "
+            "checked the same way%s.  %d table(s) are this whole document "
+            "re-evaluated at another setting -- the fixed point's earlier "
+            "passes, the concentration ladder, the programme ladder -- "
+            "which each say so above themselves, because inventing a "
+            "one-line substitution for a row that is a whole cascade would "
+            "be a worse answer than naming what it is.</p>"
+            % (seen - len(loose), seen,
+               "" if not loose else
+               ", and %d DO NOT: %s"
+               % (len(loose), D.esc(", ".join(t for t, _w in loose))),
+               reruns))
     good, missing = origins(sheet)
     bits.append("<p>Every input is cited to the file and the row or field it "
                 "came from, and that is asserted rather than claimed: "
@@ -2412,6 +2779,14 @@ def build_sheet(out):
     return sheet
 
 
+# THE FOOTER REPORTS ON THE PAGE IT IS PART OF, which is circular: the
+# traceability check reads the rendered HTML, and the footer is in it.  The
+# page is therefore rendered once without the footer, checked, and then
+# rendered again with it -- and the second pass adds no number the first did
+# not already carry, because the footer only ever counts.
+_PAGE = {}
+
+
 def document(out, sheet=None, pt=DEFAULT_PT):
     """Assemble the whole worksheet as one HTML page."""
     sheet = build_sheet(out) if sheet is None else sheet
@@ -2431,6 +2806,9 @@ def document(out, sheet=None, pt=DEFAULT_PT):
                     '<tbody>')
         body.extend(render_row(r) for r in part["rows"])
         body.append("</tbody></table></div>")
+    # The parts, rendered once, are what the traceability check reads; the
+    # footer is then written against that and appended.  See `_PAGE`.
+    _PAGE["html"] = "".join(body[1:])
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -2524,7 +2902,9 @@ def main(argv=None):
         print("\n*** THE DERIVATION AND THE MODEL DISAGREE ***")
         return 1
     sheet = build_sheet(out)
-    bad = report_substitutions(sheet) + report_origins(sheet)
+    html = document(out, sheet, args.font)
+    bad = (report_substitutions(sheet) + report_origins(sheet)
+           + report_untraced(sheet, html))
     if args.self_test and self_test(sheet):
         return 1
     if bad:
@@ -2533,9 +2913,9 @@ def main(argv=None):
         return 1
     if args.check:
         print("  OK  every substitution reproduces the value beside it, "
-              "and every input names where it came from")
+              "every input names where it came from, and every number on "
+              "the page comes from one of them")
         return 0
-    html = document(out, sheet, args.font)
     html_path = args.out + ".html"
     with open(html_path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(html)
