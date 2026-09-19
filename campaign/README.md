@@ -168,16 +168,38 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       -- the one use it was written for.  One line per step instead of four,
       the origin flowing beside the value rather than stacked under it, and
       the row-level Stage 1 provenance stated once instead of on all seven
-      body inputs: **13 pages, with nothing removed**.  Raising the BODY
+      body inputs: **15 pages, with nothing removed**.  Raising the BODY
       font from 7.4pt to 8.6pt left the count unchanged, because almost
-      every line is inside a table; raising the TABLE font took it from 12
-      to 17.  Measured: 6.8 -> 12, 7.0 -> 13, 7.2 -> 13, 7.4 -> 14,
-      8.0 -> 16, 8.6 -> 17.  `--font` takes the trade.
+      every line is inside a table; raising the TABLE font moves it five
+      pages across the same span.  Measured on the FINAL, untruncated document, because the
+      curve moves when the content does: 6.8 -> 14, 7.0 -> 15,
+      7.2 -> 15, 7.4 -> 16, 8.0 -> 18, 8.6 -> 19.  `--font` takes
+      the trade.
+
+      🚨  AND NOTHING IS TRUNCATED, WHICH COST TWO PAGES AND IS WORTH THEM.
+      The citation formatter cut free text at 320 characters, which had
+      quietly clipped THIRTY citations -- and a reference note is where the
+      numbers behind a number live: "Reference $150k/kg = ~$4,700/oz; gold
+      ran from $3,335 (May 2025) to $4,732 (May 2026)" is the whole
+      provenance of the gold price and it was ending in an ellipsis.  A
+      citation that stops mid-sentence is not a shorter citation, it is a
+      missing one, and the reader cannot tell which.  15 pages, 0 markers.
+
+      ✅  WHAT REACHES THE PAPER IS MEASURED, NOT ASSUMED.  `--print-test`
+      writes the same page with the print rules lifted out of their
+      `@media` query, so a browser lays it out exactly as the printer does
+      and the two clipping questions can be asked directly.  A4 at this
+      file's 8mm/7mm margins is 196 x 281mm of content = 741 x 1062 CSS px.
+      Measured there: **0 elements past the right edge, 0 rows taller than a
+      sheet**, tallest single block 524px (half a page), and the tables
+      still do not overflow when squeezed to 500px, so a printer enforcing
+      wider margins has room to spare.
 
 ```
 py campaign/verification_sheet.py --check       # every line and every origin, writes nothing
-py campaign/verification_sheet.py --pdf         # and render it, 13 pages
-py campaign/verification_sheet.py --pdf --font 8.6   # larger type, 17 pages
+py campaign/verification_sheet.py --pdf         # and render it, 15 pages
+py campaign/verification_sheet.py --pdf --font 8.6   # larger type, more pages
+py campaign/verification_sheet.py --print-test  # the page as the printer lays it out
 ```
 
   `worked_calculation_doc.py`  the renderer that script writes through.  It

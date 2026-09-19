@@ -171,15 +171,26 @@ class Worksheet(object):
 # and the provenance columns Stage 1 writes.  A hand-maintained list of
 # citations here would be a second copy of all of it, and would go stale the
 # first time a row was re-anchored.
-def trim(text, limit=320):
-    """One field of free text, HTML-safe and cut to a readable length."""
+def trim(text, limit=None):
+    """One field of free text, HTML-safe, whitespace collapsed, ENTIRE.
+
+    🚨  IT USED TO TRUNCATE AT 320 CHARACTERS AND THAT CUT THIRTY CITATIONS,
+    which is the one thing a worksheet must not do: a reference note is where
+    the numbers behind a number live -- "Reference $150k/kg = ~$4,700/oz;
+    gold ran from $3,335 (May 2025) to $4,732 (May 2026)" is the whole
+    provenance of the gold price, and it was ending in an ellipsis.  A
+    citation that stops mid-sentence is not a shorter citation, it is a
+    missing one, and the reader has no way to tell which.
+
+    `limit` is kept so the call sites read the same and is deliberately
+    ignored; the text wraps instead.  Wrapping costs vertical space, which
+    the page has, where truncation costs information, which it does not.
+    """
     if text is None:
         return ""
     text = " ".join(str(text).split())
     if text in ("", "nan", "None"):
         return ""
-    if len(text) > limit:
-        text = text[:limit].rsplit(" ", 1)[0] + " ..."
     return D.esc(text)
 
 
@@ -2242,13 +2253,14 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.03em;
 
 
 # THE PAGE COUNT IS SET BY THE TABLE, NOT BY THE BODY TEXT.  Almost every
-# line of this document is inside a table, so raising the base font from
-# 7.4pt to 8.6pt left the count at twelve pages and raising the TABLE from
-# 6.8 to 8.6 took it from twelve to seventeen.  Measured, because the
-# opposite was the obvious guess: 6.8 -> 12, 7.0 -> 13, 7.2 -> 13, 7.4 -> 14,
-# 8.0 -> 16, 8.6 -> 17.  7.2 is the default because it is the larger of the
-# two sizes that still fit thirteen, and legibility is free up to the point
-# where a page turns over.
+# line of this document is inside a table, so raising the BASE font from
+# 7.4pt to 8.6pt left the count where it was, and raising the TABLE font
+# across the same span moved it five pages.  Measured, because the opposite
+# was the obvious guess, and re-measured after the citations stopped being
+# truncated, because a curve is only true of the content it was taken on:
+# 6.8 -> 14, 7.0 -> 15, 7.2 -> 15, 7.4 -> 16, 8.0 -> 18, 8.6 -> 19.
+# 7.2 is the default because it is the larger of the two sizes that still
+# fit fifteen, and legibility is free up to the point where a page turns.
 DEFAULT_PT = 7.2
 
 
@@ -2434,6 +2446,28 @@ def document(out, sheet=None, pt=DEFAULT_PT):
            "".join(body[1:]), footer(out, sheet)))
 
 
+def print_variant(html):
+    """The same page with the PRINT rules applied unconditionally.
+
+    WHAT GETS ONTO PAPER CANNOT BE MEASURED ON THE SCREEN STYLESHEET, and
+    the two differ by about a third in every font size here.  Lifting the
+    `@media print` block out of its query gives a page a browser will lay
+    out exactly as the printer does, so the one question that matters --
+    does anything run off the edge, is any single row taller than a sheet --
+    can be asked with a viewport and four lines of JavaScript instead of
+    guessed at.
+
+    A4 at this file's own 8mm/7mm margins is 196 x 281mm of content, which
+    is 741 x 1062 CSS px.  Measured at that size on 2026-09-19: zero
+    elements overflow, zero rows exceed a page, and the tallest single block
+    is 524px, half a sheet.  The tables still do not overflow at 500px, so
+    the margin against a printer that enforces wider margins is large.
+    """
+    i = html.index("@media print{")
+    j = html.index(chr(125) + chr(10) + "@page", i)
+    return html[:i] + html[i + len("@media print{"):j] + html[j + 1:]
+
+
 def main(argv=None):
     """Pick the mission, derive it, and write the worksheet."""
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -2450,8 +2484,12 @@ def main(argv=None):
                     help="also render the HTML with headless Chrome")
     ap.add_argument("--font", type=float, default=DEFAULT_PT, metavar="PT",
                     help="print size of the tables, which is what sets the "
-                         "page count: 6.8 gives 12 pages, 7.2 (the default) "
-                         "13, 7.4 gives 14, 8.6 gives 17")
+                         "page count: 6.8 gives 14 pages, 7.2 (the default) "
+                         "15, 7.4 gives 16, 8.6 gives 19")
+    ap.add_argument("--print-test", action="store_true",
+                    help="also write <out>.print.html, the same page with "
+                         "the print rules always on, for measuring what "
+                         "actually reaches the paper")
     ap.add_argument("--check", action="store_true",
                     help="evaluate every substitution and write nothing")
     ap.add_argument("--self-test", action="store_true",
@@ -2502,6 +2540,13 @@ def main(argv=None):
     with open(html_path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(html)
     print("  wrote     %s  (%d chars)" % (html_path, len(html)))
+    if args.print_test:
+        test_path = args.out + ".print.html"
+        with open(test_path, "w", encoding="utf-8",
+                  newline=chr(10)) as fh:
+            fh.write(print_variant(html))
+        print("  wrote     %s  (open at 741x1062 to measure the page)"
+              % test_path)
     if args.pdf and W.render_pdf(html_path, args.out + ".pdf"):
         print("  wrote     %s" % (args.out + ".pdf"))
     return 0
