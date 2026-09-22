@@ -28,13 +28,27 @@ Nothing here opens a socket.  This is the same reasoning catalog 1.1.1 used
 when it verified `enrich_composition` in-process rather than by re-running the
 stage.
 
-TWO CLASSES OF CHECK, AND THE SPLIT IS DELIBERATE.
+🚨  THE BUILDER ITSELF IS NOT IN THIS REPOSITORY ANY MORE.  It is
+`asteroid_catalog`, pinned to a tagged git ref, and `modules/catalog.py` is the
+adapter that drives it.  Everything below reaches the package THROUGH that
+adapter, which is deliberate: the adapter's surface is what the rest of the
+pipeline and the Colab paste actually use, so checking the package directly
+would test something nobody runs.
 
+THREE CLASSES OF CHECK, AND THE SPLIT IS DELIBERATE.
+
+    9        THE SEAM.  Is the installed package the revision this repo pins?
+             It is numbered last and RUN FIRST, because every other check
+             below describes whatever `import asteroid_catalog` reached, and
+             none of them can tell you which revision that was.
     1 to 5   PURE.  No catalog, no network, no baseline.  These are the
              documented traps, executed.  They run anywhere, including CI,
              where the catalog is gitignored and absent by construction.
     6 to 8   AGAINST THE CATALOG ON DISK.  These skip, loudly and with a
              reason, when it is not there.
+
+⚠️  The numbering is historical rather than an order: 1 to 8 predate the split
+and keep their numbers so a release note that names one still points at it.
 
 ⚠️  That split is what stops this becoming a harness that never runs.  A check
 that skips on 100% of runs is a check that does not exist -- `verify_stage3.py`
@@ -55,6 +69,8 @@ from __future__ import annotations
 
 import contextlib
 import io
+import re
+import json
 import os
 import sys
 
@@ -604,11 +620,104 @@ def check_provenance(c, df) -> bool:
     return not bad
 
 
+def _pinned_tag():
+    """The `asteroid_catalog` ref `requirements.txt` pins, or None."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "requirements.txt")
+    if not os.path.exists(path):
+        return None
+    m = re.search(r"github\.com/loggger101/AsteroidCatalog@(\S+)",
+                  io.open(path, encoding="utf-8").read())
+    return m.group(1).strip().rstrip("\"'`,") if m else None
+
+
+def _installed_revision():
+    """What revision pip actually installed, from the wheel's own metadata.
+
+    `direct_url.json` is written by pip for anything installed from a URL
+    (PEP 610) and records both the revision ASKED FOR and the commit it
+    RESOLVED TO.  Returns `(requested, commit)`, either of which may be None,
+    or None entirely when the distribution was not installed from a direct URL
+    -- an editable checkout, a local path, or one day PyPI.
+    """
+    try:
+        import importlib.metadata as md
+        raw = md.distribution("asteroid-catalog").read_text("direct_url.json")
+    except Exception:                                      # noqa: BLE001
+        return None
+    if not raw:
+        return None
+    try:
+        info = json.loads(raw).get("vcs_info") or {}
+    except ValueError:
+        return None
+    return info.get("requested_revision"), info.get("commit_id")
+
+
+def check_pinned_revision() -> bool:
+    """The package being driven is the one `requirements.txt` pins.
+
+    🚨  THIS IS THE PRECONDITION FOR EVERY OTHER CHECK IN THIS FILE, and it is
+    the one thing none of them can see.  Checks 1 to 8 all describe whatever
+    `import asteroid_catalog` happens to reach, through an adapter that
+    re-exports it.  Nothing asks whether that is the revision this repo pins,
+    and the answer is not inferable from anything they compare: `__version__`
+    moves only on a release, the data contract identifies the SCHEMA rather
+    than the commit, and both are mirrored here precisely so they agree.
+
+    So `pip install -e ../AsteroidCatalog` at a checkout ten commits past the
+    tag passes all eight while the pipeline runs code this repo does not pin.
+    That is the parallel-repo divergence with a package manager in front of it:
+    `1.0.6`, `1.1.4` and `1.3.6` each shipped as two different things the last
+    time this project had two sources of one truth, and what made it expensive
+    was that nothing checked.
+
+    Three outcomes, kept apart.  Installed from the pinned tag is a pass and
+    names the commit.  A DIFFERENT revision is a failure.  Something with no
+    VCS metadata at all -- editable, a local path, a future PyPI release -- is
+    also a failure while `requirements.txt` pins a git ref, because a
+    git-pinned requirement that produced a non-git install means something
+    other than that pin put it there.
+    """
+    tag = _pinned_tag()
+    if not tag:
+        print("9. revision      *** the pinned ref could not be read from "
+              "requirements.txt ***")
+        return False
+
+    rev = _installed_revision()
+    launcher = "py" if os.name == "nt" else os.path.basename(sys.executable)
+    if rev is None:
+        print("9. revision      *** NOT INSTALLED FROM THE PINNED REF *** "
+              "(no VCS metadata)")
+        print("     requirements.txt pins %s, and the installed "
+              "asteroid_catalog carries" % tag)
+        print("     no direct_url.json, so it came from an editable checkout,")
+        print("     a local path or a release.  Whatever is being driven, it")
+        print("     is not this pin -- and every check above describes IT.")
+        print("     Reinstall:  %s -m pip install -r requirements.txt"
+              % launcher)
+        return False
+
+    requested, commit = rev
+    if requested != tag:
+        print("9. revision      *** INSTALLED REVISION IS NOT THE PINNED ONE ***")
+        print("     requirements.txt pins %s, pip installed %s (%s)"
+              % (tag, requested, (commit or "unknown commit")[:12]))
+        print("     Reinstall:  %s -m pip install -r requirements.txt"
+              % launcher)
+        return False
+
+    print("9. revision      the pinned %s is what is installed (%s)"
+          % (tag, (commit or "unknown commit")[:12]))
+    return True
+
+
 def main() -> int:
     """Run every check and return the process exit code.
 
-    Checks 1 to 5 always run.  Checks 6 to 8 need the catalog and say what
-    would make them run when it is absent, which on CI is always, because
+    Checks 1 to 5 and 9 always run.  Checks 6 to 8 need the catalog and say
+    what would make them run when it is absent, which on CI is always, because
     `asteroid_pipeline/` is gitignored in full.
     """
     print("=" * 70)
@@ -619,7 +728,8 @@ def main() -> int:
     print("  catalog module pipeline_version %s" % c.CONFIG.pipeline_version)
     print("-" * 70)
 
-    results = [tree_ok, check_designations(c), check_taxonomy(c), check_pgm(c),
+    results = [tree_ok, check_pinned_revision(),
+               check_designations(c), check_taxonomy(c), check_pgm(c),
                check_by_distinct(c), check_lookup(c)]
 
     df, missing = read_catalog()

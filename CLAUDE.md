@@ -78,6 +78,8 @@ through. Skim for the section that names what you are about to change.
 - [Derive what agrees, type what does not, and ASSERT the difference](#derive-what-agrees-type-what-does-not-and-assert-the-difference)
 - [A guard on one door is not a guard on the room](#a-guard-on-one-door-is-not-a-guard-on-the-room)
 - [Running `verify.py` used to overwrite the live Stage 4 catalog](#running-verifypy-used-to-overwrite-the-live-stage-4-catalog)
+- [Stage 1 lives in another repository now too](#stage-1-lives-in-another-repository-now-too)
+- [A mechanical pass over every instance assumes the instances are one thing](#a-mechanical-pass-over-every-instance-assumes-the-instances-are-one-thing)
 - [Stage 3 lives in another repository now, and so does part of Stage 2](#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)
 - [Config discipline](#config-discipline)
 - [Correctness invariants that were expensive to find](#correctness-invariants-that-were-expensive-to-find)
@@ -3882,6 +3884,50 @@ this file has a dozen entries proving that. What was actually measured is that
 **this host cannot resolve a 1.4x ratio on a 155-row cell**, and that is what
 the release note says.
 
+### A mechanical pass over every instance assumes the instances are one thing
+
+2026-09-22, extracting Stage 1 into `asteroid_catalog`, and it is the sibling
+of the ASCII conversion's lesson that **a mechanical rewrite of prose needs a
+check on what it LEAVES**. This is the same failure in CODE, and it is worse,
+because what it left behind was correct-looking and silent.
+
+All 114 `print` calls in the builder became the package's opt-in `say()`. That
+is right for a library and it was right for 104 of them. The other ten are
+diagnostics, and the worst is the alert that fires when a supplement fetched
+rows and matched **none** of the backbone -- the one thing that catches a
+fetcher contributing nothing while its own fetch summary reads 183,408, which
+is the NEOWISE defect this file records as costing four releases.
+
+| | |
+|---|---|
+| what the transform asked | "is `print` the wrong call in a library?" |
+| what it should have asked | "are these 114 calls ONE KIND OF THING?" |
+| what a silenced alert looks like | a clean run |
+
+🚨  **THE SET WAS NOT HOMOGENEOUS AND NOTHING ABOUT ITS SHAPE SAID SO.** Every
+one of the 114 is a `print` with a string in it. The property that separates
+them -- does this report a DEFECT IN THIS CODE, or an external condition the
+design tolerates -- is not in the syntax, and no test could have found it,
+because the package behaves identically either way until the day a fetcher
+breaks.
+
+✅  **What found it was comparing the CONSOLE OUTPUT of the old module and the
+new adapter, byte for byte.** Not the values, which were already proved
+identical 107,521 ways; the output. Two lines were missing, and chasing those
+two turned up the other eight.
+
+⚠️  **A blanket answer is wrong in BOTH directions, which is why this is a
+judgement and lives in a table rather than a rule.** All-quiet hides the
+defect; all-loud makes the common case noisy enough that nobody reads either,
+and MP3C is unreachable often enough to prove it.
+
+✅  **The general form, and it is not about printing: when you transform every
+instance of something, the risk is not that the transform is wrong. It is that
+the SET was a category you invented.** Ask what property the members are
+assumed to share, then go looking for the member that does not share it --
+and, where the artifact has one, diff its OUTPUT rather than its values,
+because a category error does not move a number.
+
 ### A change can be numerically negligible and still destroy the evidence
 
 This project's releases are argued from **bit-identity**, so an
@@ -4847,6 +4893,92 @@ on skipping silently. **Somebody had the right thought one line too deep.**
 That is this file's "fixing one half of a defect class" rule, written by the
 person who fixed the other half.
 
+## Stage 1 lives in another repository now too
+
+`modules/catalog.py` is an adapter. Every fetcher, the cross-match, the
+H-derivation, the validator and the Bus-DeMeo composition table are in
+[`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog),
+pinned to tag `v0.1.1`. **Do not state the table's length here**; the ready
+banner prints it on every import, and the "76 classes" figure that circulates
+in this file is the number of distinct `spectral_type` VALUES in a built
+catalog, which is a different thing and roughly twice the table's 32 rows.
+
+🚨  **THIS SPLIT COULD NOT BE VERIFIED THE WAY STAGE 3's WAS, AND THE
+DIFFERENCE IS THE REUSABLE PART.** `spacecost` proved itself by building its
+CSVs through both paths and asserting them byte-identical. **Stage 1 cannot be
+re-run at all**: JPL adds bodies daily, so a rebuilt catalog is a different
+length and comparable with nothing already measured, and the file it would
+overwrite is the 862 MB input every other stage reads. So the extraction was
+proved *in process* instead, which is the same reasoning catalog `1.1.1` used
+when it verified `enrich_composition` against the catalog on disk rather than
+by re-running the stage.
+
+| what was compared | how |
+|---|---|
+| every reference table | leaf by leaf, at full `repr` **and** raw IEEE bit pattern, with dict **key order** included -- a reordered table moves a CSV column order without moving a number |
+| every pure function | both ways over a stride sample of the real 1,555,667-row catalog, cell by cell on bit patterns rather than with a tolerance |
+| all 24 function bodies | as **source text**, against this module's own line ranges |
+| the config surface | field set and every default except the documented adaptations |
+
+**25 checks, 107,521 values, 0 differing**, and the probe was then fed a wrong
+answer -- one PGM factor moved 2.0 to 2.5 -- and went red on both the table and
+the function that reads it. It is kept as `tools/extraction_probe.py` in the
+package, and it needs the pre-split module out of this repo's history to run.
+
+✅  **NOTHING WAS RE-TYPED.** The package was built by slicing source line
+ranges, 2,953 of this module's 3,338 lines, and so was the adapter: the config
+dataclass and the RUN & PREVIEW block are the original text. That is not
+tidiness, it is what makes the probe mean anything -- a split argued from "I
+was careful" is worth nothing.
+
+⚠️  **THE CONFIG COMMENTS ARE UI COPY.** `ui_meta.scrape_field_docs` reads a
+field's comment block as the dashboard's help text for that dial, so the
+dataclass had to stay here AND had to stay verbatim. Re-wording a comment there
+silently re-words the dashboard.
+
+🚨  **AND THE ADAPTER'S STARTUP BANNER IS BYTE-IDENTICAL TO THE PRE-SPLIT
+MODULE'S, WHICH IS WHAT FOUND THE ONE REAL DEFECT IN THE MOVE.** All 114
+`print` calls became the package's `say()`, which is silent unless a caller
+asks for output -- right for a library, and it silenced the **zero-match
+alert**, the one diagnostic that catches a fetcher contributing nothing while
+its own fetch summary reads 183,408. Ten messages are `warn()` now and print
+regardless. **A defect in the code, or a fatal abort, is loud; an external
+condition the design tolerates is progress output.** This file already records
+that a diagnostic which has gone quiet reads exactly like a clean result; a
+blanket mechanical pass is how that happens.
+
+⚠️  **Two module-level prints could never fire in the package at all**, because
+verbosity is always set after import. They were stage banner text, so they live
+in the adapter now -- the package's `v0.1.1`, and the reason the banner
+comparison is worth running rather than assuming.
+
+⚠️  **THE `asteroid_catalog` PIN IS TYPED IN SIX PLACES**, and a repin that
+misses one is the parallel-repo divergence in miniature. Three carry it as a URL:
+`requirements.txt`, `_MASTER_PIP_SPEC` in `build_master.py`, and `_PIP_SPEC` in
+this module (**what a standalone module run installs from**). Three carry it as
+PROSE: README's sentence naming the tag, this paragraph, and `CITATIONS.md`.
+`verify_docs.py` check 7 holds all six to each other, and the count above is
+spelled out only because that check enforces it.
+
+🚨  **CHECK 7 DID NOT COVER ANY OF THEM UNTIL THIS SPLIT LANDED.** Every
+pattern in it named `spacecost`, so the six copies above would have been typed
+with nothing comparing them -- the first split's own defect, arriving inside
+the check written to prevent it, which is this file's "a check that reads one
+row of a table is a check on that row" for the third time. The package is a
+parameter there now, so a third split joins by adding one row.
+
+⚠️  **`pipeline_version` is the PACKAGE's data contract**, mirrored here, and
+`_check_data_contract()` raises at import if the two disagree. It moves when
+the package's moves and at no other time.
+
+⚠️  **The two collision-proof names are load-bearing.** The adapter imports
+`build_catalog_table` and `lookup_body`, never `build_catalog`,
+`lookup_asteroid` or `CONFIG`, because `word_replace` rewrites all three on the
+way into `master.py` and an aliased local name does not help -- the IMPORTED
+name is still a bare word. Same trap that cost the Stage 3 split a release, and
+the package's `tests/test_consumer_contract.py` runs this repo's real regex
+against every name the adapter imports.
+
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
@@ -5653,9 +5785,9 @@ first three import master".
 | `ui.py` | yes | Streamlit dashboard |
 | `verify.py` | yes | the release checks; count them in its own header rather than quoting a number here |
 | `tree_check.py` | no | **does the disk hold what git says it holds**: every tracked file hashed through `git hash-object` against the index, with `git status` used to tell an edit from a Drive stale or absent read. Every harness below calls it FIRST and refuses on a finding; also runnable alone. No network, no baseline, 0.43 s |
-| `verify_stage1.py` | no | **Stage 1's derivation chain**, and the only harness the stage has ever had. Never fetches: the pure checks run against synthetic frames and the rest against the catalog on disk, because re-running Stage 1 fetches a catalog of a different length |
+| `verify_stage1.py` | no | **Stage 1's derivation chain, and since master v1.31.0 its seam too**: the adapter against the `asteroid_catalog` package it drives, including whether the INSTALLED revision is the pinned one, which nothing else can see. Never fetches: the pure checks run against synthetic frames and the rest against the catalog on disk, because re-running Stage 1 fetches a catalog of a different length |
 | `verify_stage3.py` | no | the Stage 3 seam: this repo's adapter against the `spacecost` package it drives. Builds into a temp dir, needs no baseline and no network. Its last check drives `validate()` rather than comparing bytes, and is the only coverage Stage 3's behaviour has |
-| `.github/workflows/verify.yml` | no | CI: the build-sync check, the docs checks, the Stage 3 seam, and `platform_check.py` as a report. **Not `verify.py`**, which needs inputs no clone has |
+| `.github/workflows/verify.yml` | no | CI: the build-sync check, the docs checks, **both** package seams (Stage 1's and Stage 3's), and `platform_check.py` as a report. **Not `verify.py`**, which needs inputs no clone has |
 | `verify_docs.py` | no | the **docs** checks; it imports master and the four configs for checks 8 and 9, but never builds a stage. Count them in its own docstring rather than quoting a number here |
 | `run.bat` | no | Windows launcher: a terminal menu over `run_pipeline.py`, `verify.py`, `build_master.py` and the dashboard. No model behaviour of its own |
 | `_START HERE.vbs` | no | double-click entry point, starts the dashboard with no console, ever |

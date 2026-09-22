@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.31.0](#master-v1310)
 - [master v1.30.0](#master-v1300)
 - [transportation v1.15.0 / master v1.29.0](#transportation-v1150--master-v1290)
 - [calc v1.23.0](#calc-v1230)
@@ -80,11 +81,11 @@ one that does not say is not to be used.
 
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
-| 1 | `modules/catalog.py` | **1.2.0** | v1.2.0, orbit quality, a total NEOWISE sort, the element epoch |
+| 1 | `modules/catalog.py` | **1.2.0** | v1.2.0, orbit quality, a total NEOWISE sort, the element epoch. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract, which owns it since master v1.31.0 |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.15.0** | v1.15.0, the `environments` table: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.23.0** | v1.23.0, the 5% depletion cap comes off: a mission may take the whole body |
-| - | `master.py` | **1.30.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.31.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -156,6 +157,138 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.31.0
+
+**Stage 1's builder moves to
+[`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog), pinned to
+tag `v0.1.1`. No module stamp moved, and no number moved.** `modules/catalog.py`
+is an adapter, 628 lines against 3,338, and `master.py` is 2,753 lines smaller.
+The catalog contract stays at **1.2.0**, because it is the PACKAGE's data
+contract now, mirrored here and asserted equal at import.
+
+Second split of this kind, after Stage 3 to `spacecost` at master v1.25.0, and
+the same argument: nothing in the schema of four survey fetchers, a
+cross-match and a Bus-DeMeo composition table knows what a mine is. A merged
+catalog with honest provenance is useful to anyone doing population
+statistics, survey planning or target selection.
+
+### This one could not be verified the way Stage 3's was
+
+🚨  **AND THE DIFFERENCE IS THE REUSABLE PART.** `spacecost` proved itself by
+building its CSVs through both paths and asserting them byte-identical.
+**Stage 1 cannot be re-run at all.** JPL adds bodies daily, so a rebuilt
+catalog is a different length and comparable with nothing already measured,
+and the file it would overwrite is the 862 MB input every other stage reads.
+There is no "run it both ways" available.
+
+So the extraction was proved **in process**, which is the reasoning catalog
+`1.1.1` used when it verified `enrich_composition` against the catalog on disk
+rather than by re-running the stage:
+
+| what | how it was compared | result |
+|---|---|---|
+| the reference tables | leaf by leaf, at full `repr` **and** raw IEEE bit pattern, dict **key order** included | identical |
+| every pure function | both ways over a stride sample of the real 1,555,667-row catalog, cell by cell on bit patterns | identical |
+| all 24 function bodies | as **source text**, against the module's own line ranges | identical |
+| the config surface | field set, and every default but the documented adaptations | identical |
+
+**25 checks, 107,521 values, 0 differing.** The probe was then fed a wrong
+answer, one PGM factor moved 2.0 to 2.5, and went red on both the table and
+the function that reads it, which is what makes the clean run worth quoting.
+It is kept as `tools/extraction_probe.py` in the package and needs the
+pre-split module out of this repo's history to run.
+
+✅  **AND `verify_stage1.py` CHECK 7 IS THE STRONGER RESULT, because it is not
+a sample.** It re-derives seven composition columns over all **1,555,667
+rows** through the adapter and reports **0 differing**, along with the
+literature spot-check and the full provenance census. The probe says the code
+is the same code; check 7 says the whole catalog comes out the same.
+
+### Nothing was re-typed, and that is what makes any of it mean something
+
+The package was built by slicing source line ranges, **2,953 of the module's
+3,338 lines**, and so was the adapter: the config dataclass and the
+`RUN & PREVIEW` block are the original text.
+
+⚠️  **The dataclass had to stay here AND had to stay verbatim.**
+`ui_meta.scrape_field_docs` reads a field's comment block as the dashboard's
+help text for that dial, so those comments are UI copy. Re-wording one
+silently re-words the dashboard, which no test would have caught.
+
+### The one real defect in the move, and how it surfaced
+
+🚨  **A BLANKET `print` -> `say` PASS SILENCED THE ZERO-MATCH ALERT.** All 114
+prints became the package's opt-in output, which is right for a library and
+wrong for ten of them: the alert that fires when a supplement fetched rows and
+matched NONE of the backbone is the one diagnostic that catches a fetcher
+contributing nothing while its own fetch summary reads 183,408 -- the failure
+that cost NEOWISE four releases. Silenced, it reads exactly like a clean
+result.
+
+✅  Ten messages are `warn()` now and print regardless of verbosity. **A defect
+in the code, or a fatal abort, is loud; an external condition the design
+tolerates -- MP3C unreachable, a retried TAP timeout -- is progress output.** A
+blanket answer is wrong in both directions: all-loud makes the common case
+noisy enough that nobody reads either.
+
+⚠️  **What found it was comparing the adapter's startup banner with the
+pre-split module's, byte for byte.** Two lines were missing, and chasing them
+turned up something else: they were module-level prints that **could never
+fire in a library**, because verbosity is always set after import. They were
+stage banner text, so they live in the adapter now. That is package `v0.1.1`,
+and the reason to run a banner comparison rather than assume one.
+
+### What the split had to be taught about this repo
+
+⚠️  **Two collision-proof names, and they are load-bearing.** The adapter
+imports `build_catalog_table` and `lookup_body`, never `build_catalog`,
+`lookup_asteroid` or `CONFIG`: `word_replace` rewrites all three on the way
+into `master.py`, and aliasing the LOCAL name does not help because the
+IMPORTED name is still a bare word. Same trap that cost the Stage 3 split a
+release. The package's `tests/test_consumer_contract.py` runs this repo's real
+regex against every name the adapter imports, and asserts the naive names
+really would be rewritten, so the guard cannot go vacuous.
+
+⚠️  **`_check_config_surface` collided with the Stage 3 adapter's**, and the
+build's AST scan said so. Renamed to `_check_catalog_config_surface` rather
+than added to `_EXPECTED_DUPES`: the two are not interchangeable copies, they
+check different dataclasses against different packages.
+
+🚨  **`verify_docs.py` CHECK 7 COVERED NEITHER PIN, AND IT IS THE CHECK
+WRITTEN TO PREVENT EXACTLY THIS.** Every pattern in it spelled `spacecost`, so
+the six places that type the new pin would have had nothing comparing them.
+That is this repo's "a check that reads one row of a table is a check on that
+row", committed a third time, inside the check written against it. The package
+is a parameter there now, so a third split joins by adding one row, and a
+prose claim is attributed to a package by proximity because prose carries no
+URL.
+
+⚠️  **It also could not compare `asteroid-catalog` with `asteroid_catalog`.** A
+DISTRIBUTION name and an IMPORT name are not the same string; for every
+package here until now they coincided, so the comparison was a bare string
+match. It normalises per PEP 503 now, and deliberately does **not** carry a
+general alias table: a package whose import name genuinely differs from its
+distribution name should still fail there, because then the two lists really
+do need separate entries.
+
+✅  **`verify_stage1.py` gains check 9, the seam.** Is the installed package
+the revision `requirements.txt` pins? Checks 1 to 8 all describe whatever
+`import asteroid_catalog` reached, and none of them can tell you which
+revision that was -- `__version__` moves only on a release and the data
+contract identifies the schema rather than the commit. `pip install -e` at a
+checkout ten commits past the tag passes all eight. That is the parallel-repo
+divergence with a package manager in front of it.
+
+### What did not change
+
+- **No number.** Stage 4's four cell hashes reproduce against the `1.23.0`
+  baseline; Stage 1 writes no CSV in this release and the catalog on disk was
+  never touched.
+- **The catalog stamp**, 1.2.0. It identifies the DATA; the data did not move.
+- **Stage 1's console output**, byte for byte, which is what the adapter
+  turning verbosity on buys.
+- **Stage 3.** `verify_stage3.py` passes unchanged, all six checks.
 
 ## master v1.30.0
 

@@ -175,6 +175,42 @@ pick up a different table with nothing here moving, and a repin of one copy
 alone is the same divergence in miniature -- `verify_docs.py` check 7 scans
 every first-party file for the URL and fails when they disagree.
 
+### Stage 1's builder is a package too
+
+`modules/catalog.py` is an adapter as well. The four survey fetchers, the
+cross-match, the diameter derivation, the validator and the Bus-DeMeo
+composition table are in
+[`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog), because
+nothing in their schema knows what a mine is: a merged catalog with honest
+provenance is useful to anyone doing population statistics, survey planning or
+target selection.
+
+**asteroid_catalog is pinned to a tagged release**, `v0.1.1`, in all six places
+that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
+`build_master.py` and in `_PIP_SPEC` in `modules/catalog.py` (what a standalone
+module run installs from); and in prose here, in [CLAUDE.md](CLAUDE.md) and in
+[CITATIONS.md](CITATIONS.md).
+
+🚨  **This split could not be proved the way Stage 3's was, and the reason is
+worth knowing.** `spacecost` built its CSVs through both paths and asserted
+them byte-identical. **Stage 1 cannot be re-run at all** -- JPL adds bodies
+daily, so a rebuilt catalog is a different length and comparable with nothing
+already measured, and the file it would overwrite is the 862 MB input every
+other stage reads. So the extraction was proved in process instead: every
+reference table leaf by leaf at raw IEEE bit patterns, every pure function over
+a stride sample of the real 1,555,667-row catalog, and all 24 function bodies
+against the original's source text. **25 checks, 107,521 values, 0 differing**,
+and the probe was fed a wrong answer to confirm it could fail.
+
+**Nothing was re-typed.** The package was sliced out of that module's line
+ranges -- 2,953 of 3,338 -- and so was the adapter, which keeps the config
+dataclass verbatim because the dashboard scrapes its comments as help text. The
+adapter's startup banner is byte-identical to the pre-split module's.
+
+```bash
+py verify_stage1.py
+```
+
 `run.bat`, `run_pipeline.py`, `ui.py` and `ui_meta.py` sit at the root rather
 than in `modules/` on purpose:
 `build_master.py` concatenates everything in that directory into `master.py`
@@ -188,7 +224,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
-| 1 | `modules/catalog.py` | 1.2.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors |
+| 1 | `modules/catalog.py` | 1.2.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors. An **adapter** over the [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) package since master v1.31.0 |
 | 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.15.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read |
 | 4 | `modules/calc.py` | 1.23.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |

@@ -936,13 +936,32 @@ def check_manifests() -> bool:
         # manifest format it is checking.
         req = [r.split("@", 1)[0].strip() for r in req]
         req = [re.split(r"[<>=!~;\[]", r)[0].strip() for r in req]
+
+        # ⚠️  A DISTRIBUTION NAME AND AN IMPORT NAME ARE NOT THE SAME STRING.
+        # `_MASTER_REQUIRED` lists IMPORT names, because it drives
+        # `__import__`; requirements.txt lists DISTRIBUTION names, because it
+        # drives pip.  For every package here until 2026-09-22 those happened
+        # to coincide, so the comparison could be a bare string match and was.
+        # `asteroid-catalog` imports as `asteroid_catalog` and broke it.
+        #
+        # PEP 503 says the two are equivalent under this normalisation, so it
+        # is applied to both sides rather than either name being bent to suit
+        # the check.  ✅  It is deliberately NOT a general alias table: a
+        # package whose import name is genuinely different from its
+        # distribution name -- `yaml` from `PyYAML` -- SHOULD still fail here,
+        # because then the two lists really do need separate entries and a
+        # reader needs to be told.
+        def _norm(name):
+            """A distribution name in PEP 503's normalised form."""
+            return re.sub(r"[-_.]+", "-", name).lower()
+
         m = re.search(r"_MASTER_REQUIRED\s*=\s*\[(.*?)\]", read(bm_p), re.S)
         if m is None:
             bad.append("build_master.py: no _MASTER_REQUIRED list found")
         else:
             master = re.findall(r'"([^"]+)"', m.group(1))
             n += 1
-            if sorted(req) != sorted(master):
+            if sorted(map(_norm, req)) != sorted(map(_norm, master)):
                 bad.append("requirements.txt %s != _MASTER_REQUIRED %s"
                            % (sorted(req), sorted(master)))
 
@@ -992,93 +1011,122 @@ def check_manifests() -> bool:
     # both documents tell the story of a checkout that sat two commits past it
     # -- and pinning those to the live tag would rewrite an account of what
     # happened. README's one live claim is matched explicitly instead.
-    pin_re = re.compile(r"github\.com/loggger101/spacecost@(\S+?)[\"'\s,)]")
-    pins: Dict[str, List[str]] = {}
-    for rel in sorted(set(FIRST_PARTY_PY + DOCS + ["requirements.txt"])):
-        path = os.path.join(REPO, rel)
-        if not os.path.exists(path):
-            continue                      # absent() covers first-party files
-        for ref in pin_re.findall(read(path) + "\n"):
-            pins.setdefault(ref.rstrip("\"'`,"), []).append(rel)
-    # THE PROSE COPIES, and there are three of them.
+    # 🚨  THIS READ ONE PACKAGE UNTIL 2026-09-22, AND THERE ARE TWO NOW.
+    # Stage 1's builder moved out to `asteroid_catalog` that day, on the same
+    # arrangement Stage 3 uses, and its pin is typed in six files. Every
+    # pattern below named `spacecost`, so not one of those six was compared
+    # with any other -- the check was written against the place somebody was
+    # last burned, which is this repo's own "a check that reads one row of a
+    # table is a check on that row", committed a second time inside the check
+    # written to prevent exactly that. The package is a parameter now, so a
+    # third split joins by adding one row.
     #
-    # ⚠️  THIS READ ONE SENTENCE IN ONE FILE UNTIL 2026-09-22, and the two it
-    # did not read had gone a release stale with nothing looking at them:
-    # CLAUDE.md and CITATIONS.md both still said `v0.3.0` after the repin to
-    # `v0.3.1`.  The URL form is found rather than listed, so a fifth code
-    # copy joins by existing -- but prose does not carry a URL, so every prose
-    # claim had to be named, and only one was.  That is this repo's own "a
-    # check that reads one row of a table is a check on that row", committed
-    # inside the check written to prevent the same thing.
-    #
-    # Only the LIVE claim form counts, the two phrasings that assert what the
-    # pin IS.  A bare `v0.1.1` elsewhere in prose is history -- both documents
-    # tell the story of a checkout that sat two commits past it -- and pinning
-    # those to the live tag would rewrite an account of what happened.
-    live_claim = re.compile(
-        r"pinned to (?:tag|a tagged release\*\*,) `(v[0-9][^`]*)`")
-    for rel in ("README.md", "CLAUDE.md", "CITATIONS.md"):
-        path = os.path.join(REPO, rel)
-        if not os.path.exists(path):
-            continue                      # absent() covers first-party files
-        found = live_claim.findall(read(path))
-        n += 1
-        if not found:
-            # Not a skip.  Each of these three asserts the pin in prose, and a
-            # rewording that this pattern stops matching is how the check
-            # quietly goes back to reading one row.
-            bad.append("%s no longer states the pinned spacecost tag in a form "
-                       "check 7 can read; reword it back or teach the pattern"
-                       % rel)
-        for ref in found:
-            pins.setdefault(ref, []).append("%s (prose)" % rel)
-    # THE SPELLED COUNT, held to the copies actually found.
-    #
-    # This repo's standing rule is that a count nothing checks is a number
-    # waiting to rot, and the fix is a checker or a deletion.  Here it rotted
-    # in the usual way: README said SEVEN while CLAUDE.md said FIVE and listed
-    # five, two current-claiming files disagreeing about one number.  Deleting
-    # the count is the wrong remedy for this one, because "how many places
-    # type the pin" is exactly what a repinner needs to know before starting.
-    # So it is enforced instead, which is the same exemption the version table
-    # gets from check 2.
-    total = sum(len(v) for v in pins.values())
-    words = {"three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
-             "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
-    spelled = re.compile(r"pin is typed in (\w+) places|in all (\w+) places",
-                         re.I)
-    for rel in ("README.md", "CLAUDE.md"):
-        path = os.path.join(REPO, rel)
-        if not os.path.exists(path):
-            continue
-        hits = [(a or b) for a, b in spelled.findall(read(path))]
-        n += 1
-        if not hits:
-            bad.append("%s no longer spells how many places type the pin in a "
-                       "form check 7 can read" % rel)
-        for word in hits:
-            got = words.get(word.lower())
-            if got is None:
-                bad.append("%s spells the pin count as %r, which is not a "
-                           "number word this check knows" % (rel, word))
-            elif got != total:
-                bad.append("%s says the pin is typed in %s (%d) places and %d "
-                           "copies were found: %s"
-                           % (rel, word, got, total,
-                              "; ".join(sorted(f for v in pins.values() for f in v))))
+    # ⚠️  A PROSE CLAIM IS ATTRIBUTED BY PROXIMITY, because prose carries no
+    # URL and one phrasing has to serve both packages without either borrowing
+    # the other's tag: the package or its repository must be named within the
+    # 200 characters before the claim. A claim no pattern matches is still a
+    # FINDING rather than a silent pass.
+    for _pkg, _repo in (("spacecost", "spacecost"),
+                        ("asteroid_catalog", "AsteroidCatalog")):
 
-    n += 1
-    if not pins:
-        # Not a skip. The pin is supposed to be typed in several places, and
-        # all of them going missing is the drift rather than a reason to pass.
-        bad.append("no pinned spacecost ref found anywhere in the first-party "
-                   "files -- it is typed in at least requirements.txt, "
-                   "build_master.py and modules/transportation.py")
-    elif len(pins) > 1:
-        bad.append("the pinned spacecost ref disagrees across %d copies: %s"
-                   % (sum(len(v) for v in pins.values()),
-                      "; ".join("%s in %s" % (ref, ", ".join(sorted(files)))
-                                for ref, files in sorted(pins.items()))))
+        def _mine(_text, _at, _pkg=_pkg, _repo=_repo):
+            """Is the claim at `_at` about THIS package?"""
+            _window = _text[max(0, _at - 200):_at]
+            return _pkg in _window or _repo in _window
+
+        pin_re = re.compile(r"github\.com/loggger101/%s@(\S+?)[\"'\s,)]"
+                            % re.escape(_repo))
+        pins: Dict[str, List[str]] = {}
+        for rel in sorted(set(FIRST_PARTY_PY + DOCS + ["requirements.txt"])):
+            path = os.path.join(REPO, rel)
+            if not os.path.exists(path):
+                continue                      # absent() covers first-party files
+            for ref in pin_re.findall(read(path) + "\n"):
+                pins.setdefault(ref.rstrip("\"'`,"), []).append(rel)
+        # THE PROSE COPIES, and there are three of them.
+        #
+        # ⚠️  THIS READ ONE SENTENCE IN ONE FILE UNTIL 2026-09-22, and the two it
+        # did not read had gone a release stale with nothing looking at them:
+        # CLAUDE.md and CITATIONS.md both still said `v0.3.0` after the repin to
+        # `v0.3.1`.  The URL form is found rather than listed, so a fifth code
+        # copy joins by existing -- but prose does not carry a URL, so every prose
+        # claim had to be named, and only one was.  That is this repo's own "a
+        # check that reads one row of a table is a check on that row", committed
+        # inside the check written to prevent the same thing.
+        #
+        # Only the LIVE claim form counts, the two phrasings that assert what the
+        # pin IS.  A bare `v0.1.1` elsewhere in prose is history -- both documents
+        # tell the story of a checkout that sat two commits past it -- and pinning
+        # those to the live tag would rewrite an account of what happened.
+        live_claim = re.compile(
+            r"pinned to (?:tag|a tagged release\*\*,) `(v[0-9][^`]*)`")
+        for rel in ("README.md", "CLAUDE.md", "CITATIONS.md"):
+            path = os.path.join(REPO, rel)
+            if not os.path.exists(path):
+                continue                      # absent() covers first-party files
+            _text = read(path)
+            found = [_m.group(1) for _m in live_claim.finditer(_text)
+                     if _mine(_text, _m.start())]
+            n += 1
+            if not found:
+                # Not a skip.  Each of these three asserts the pin in prose, and a
+                # rewording that this pattern stops matching is how the check
+                # quietly goes back to reading one row.
+                bad.append("%s no longer states the pinned %s tag in a form "
+                           "check 7 can read; reword it back or teach the "
+                           "pattern" % (rel, _pkg))
+            for ref in found:
+                pins.setdefault(ref, []).append("%s (prose)" % rel)
+        # THE SPELLED COUNT, held to the copies actually found.
+        #
+        # This repo's standing rule is that a count nothing checks is a number
+        # waiting to rot, and the fix is a checker or a deletion.  Here it rotted
+        # in the usual way: README said SEVEN while CLAUDE.md said FIVE and listed
+        # five, two current-claiming files disagreeing about one number.  Deleting
+        # the count is the wrong remedy for this one, because "how many places
+        # type the pin" is exactly what a repinner needs to know before starting.
+        # So it is enforced instead, which is the same exemption the version table
+        # gets from check 2.
+        total = sum(len(v) for v in pins.values())
+        words = {"three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+                 "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+        spelled = re.compile(r"pin is typed in (\w+) places|in all (\w+) places",
+                             re.I)
+        for rel in ("README.md", "CLAUDE.md"):
+            path = os.path.join(REPO, rel)
+            if not os.path.exists(path):
+                continue
+            _text = read(path)
+            hits = [(_m.group(1) or _m.group(2))
+                    for _m in spelled.finditer(_text)
+                    if _mine(_text, _m.start())]
+            n += 1
+            if not hits:
+                bad.append("%s no longer spells how many places type the "
+                           "%s pin in a form check 7 can read" % (rel, _pkg))
+            for word in hits:
+                got = words.get(word.lower())
+                if got is None:
+                    bad.append("%s spells the pin count as %r, which is not a "
+                               "number word this check knows" % (rel, word))
+                elif got != total:
+                    bad.append("%s says the pin is typed in %s (%d) places and %d "
+                               "copies were found: %s"
+                               % (rel, word, got, total,
+                                  "; ".join(sorted(f for v in pins.values() for f in v))))
+
+        n += 1
+        if not pins:
+            # Not a skip. The pin is supposed to be typed in several places, and
+            # all of them going missing is the drift rather than a reason to pass.
+            bad.append("no pinned %s ref found anywhere in the first-party "
+                       "files; it is typed in at least requirements.txt, "
+                       "build_master.py and a stage module" % _pkg)
+        elif len(pins) > 1:
+            bad.append("the pinned %s ref disagrees across %d copies: %s"
+                       % (_pkg, sum(len(v) for v in pins.values()),
+                          "; ".join("%s in %s" % (ref, ", ".join(sorted(files)))
+                                    for ref, files in sorted(pins.items()))))
 
     # README's `./run.sh` block <-> the words run.sh's dispatcher accepts.
     # Same check as the one above and for the same reason: `run.bat help`
