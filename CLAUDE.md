@@ -83,6 +83,7 @@ through. Skim for the section that names what you are about to change.
 - [Correctness invariants that were expensive to find](#correctness-invariants-that-were-expensive-to-find)
 - [Data sources fail softly by design](#data-sources-fail-softly-by-design)
 - [Google Drive makes the tree look dirty: run the hooks](#google-drive-makes-the-tree-look-dirty-run-the-hooks)
+- [A Drive revert is a silent `git checkout --` of work you have not committed](#a-drive-revert-is-a-silent-git-checkout----of-work-you-have-not-committed)
 - [Environment](#environment)
 
 ## master.py is generated: never edit it
@@ -5368,7 +5369,15 @@ not hold is not worth the minutes it costs:
 py tree_check.py     # standalone; the same check every harness runs first
 ```
 
-🚨  **THE ONE GAP, AND IT IS NOT CLOSED: A HARNESS'S OWN SOURCE IS COMPILED
+🚨  **TWO GAPS, AND NEITHER IS CLOSED. THE SECOND IS THE BIGGER ONE AND HAS
+ITS OWN SECTION:**
+[a Drive revert is a silent `git checkout --`](#a-drive-revert-is-a-silent-git-checkout----of-work-you-have-not-committed)
+of work you have not committed. Reverting an UNCOMMITTED edit puts the file
+back to exactly what the index holds, so this check's question is answered
+truthfully **yes** and it stays green through the whole thing. It guards
+committed state; work in progress is its blind spot.
+
+🚨  **THE FIRST GAP: A HARNESS'S OWN SOURCE IS COMPILED
 BEFORE ANY OF ITS CODE RUNS.** A stale import is already loaded by the time the
 check executes. It is caught **in practice** because the mount served stale
 bytes for a whole PROCESS rather than for a single read, so the later re-read
@@ -5376,6 +5385,85 @@ still sees them and the hash still moves; it is **not caught in principle**,
 because a materialisation landing between the import and the call would hide it.
 Every file a harness reads AFTER that point is fully covered. Do not read the
 green line as proof the harness itself is current.
+
+### A Drive revert is a silent `git checkout --` of work you have not committed
+
+2026-09-22, three times in one session, and it is the failure mode the two
+above do not cover. Those are about a file reading as ABSENT or as STALE, and
+`tree_check.py` closes both. This one is different in kind: the mount resolves
+a sync conflict by putting a file BACK to an older version and dropping the
+newer content beside it as `<name>-DESKTOP-<HOSTNAME>.<ext>`. The file is
+present, readable and current-looking. Its content has simply gone backwards.
+
+| what reverted | what it cost |
+|---|---|
+| four root documents in one go | an hour of uncommitted editing, recovered from the conflict copies |
+| the ENTIRE sibling `spacecost` checkout, refs included | rolled back behind three pushed commits; recovered from the remote |
+| one campaign script | **committed backwards by `git add -A`** |
+
+🚨  **`tree_check.py` CANNOT SEE THIS, AND THE REASON IS STRUCTURAL RATHER THAN
+A BUG IN IT.** It asks *does the disk hold what git says it holds*, by hashing
+each tracked file against the INDEX. Revert an UNCOMMITTED edit and the file
+goes back to exactly what the index holds, so content and index agree and the
+answer is a truthful **yes**. The guard covers committed state; **work in
+progress is precisely its blind spot**, and that is where a session's value
+sits. Do not read a green tree check as "nothing has moved under me".
+
+🚨  **AND `git add -A` COMMITS THE REVERT, WHICH LOOKS EXACTLY LIKE A FILE YOU
+DID NOT TOUCH.** The third instance staged two wrongs at once: an earlier fix
+in `campaign/verification_sheet.py` silently undone, AND the conflict copy
+added as a brand new tracked path, a full duplicate of the module. Neither is
+visible in `git status`, which reports one ordinary `M` and one ordinary `??`.
+
+✅  **WHAT CAUGHT IT IS ONE HABIT: READ `git show --stat` AFTER EVERY COMMIT,
+BEFORE PUSHING.** A file you did not edit appearing in the list, or a path with
+`-DESKTOP-` in it, is the whole diagnosis. It was caught before the push and
+amended; nothing reached the remote.
+
+⚠️  **A `-DESKTOP-<HOSTNAME>` FILE IS EVIDENCE, NOT JUNK, AND IT IS USUALLY THE
+NEWER SIDE.** Every one of them here held the content the live file had lost.
+**Diff it before deleting it**, and restore from it rather than redoing the
+work. For a tracked file the stronger source is git: `git show origin/main:<path>`
+is authoritative where a conflict copy is merely probable.
+
+✅  **TO CONFIRM WORK LANDED, AUDIT THE REMOTE, NEVER THE WORKING TREE.** A
+`grep` of the disk can pass on a file the mount is about to revert, or fail on
+one it is briefly refusing to serve. Two checks settle it and neither reads the
+working copy:
+
+```bash
+git show origin/main:<path> | grep -c "<a marker from your edit>"
+git rev-parse <branch-tip>^{tree} <merge-commit>^{tree}   # equal = it landed whole
+```
+
+The tree-hash comparison is the decisive one after a squash merge: identical
+trees mean the merged commit is byte for byte the thing that was verified.
+
+Three smaller traps from the same day, each of which reads like lost work and
+is not:
+
+- ⚠️  **`git stash -u` can half-succeed.** A permission error on an untracked
+  directory left the stash commit created and the working tree NOT reset, so
+  the changes sat in both places and `git status` looked unchanged. Nothing was
+  lost, and the state is alarming. `git diff stash@{0}` returning empty is what
+  says the two agree before you drop either.
+- ⚠️  **`.git/index` can go unmappable**, `fatal: .git/index: unable to map
+  index file: Invalid argument`, while the mount is busy. **Wait rather than
+  deleting it**; it cleared on its own in about eighty seconds. Reaching for
+  `rm .git/index` during a sync is how a half-written index becomes a real
+  problem.
+- ⚠️  **Refs revert too, and leave `main-DESKTOP-<HOSTNAME>` branches.** Check
+  `git merge-base --is-ancestor` before deleting one, then delete it: a stray
+  branch at an old commit is the second-checkout divergence hazard the next
+  paragraph is about, wearing a machine name.
+
+🚨  **THE GENERAL RULE, AND IT IS NOT ABOUT DRIVE: A GUARD WRITTEN AGAINST
+COMMITTED STATE SAYS NOTHING ABOUT UNCOMMITTED STATE.** `tree_check.py` is
+correct, fast and clean on every one of these reverts, because the question it
+asks is genuinely answered yes. This file already records checks that read one
+row of a table, skips that fire on every run, and matchers that accept
+everything. **A guard whose question is narrower than the harm is the same
+family**, and the tell is the same: it was green while the damage happened.
 
 ⚠️  **More than one working copy of this repo is the documented divergence
 hazard, not a convenience.** The project was once developed in two places at
