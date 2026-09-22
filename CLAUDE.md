@@ -4849,7 +4849,7 @@ person who fixed the other half.
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
-[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.3.0`.
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.3.2`.
 **Do not state the row count here**; the adapter's ready banner prints it on
 every import, and this sentence carried "all 141 of them" into a release that
 added a whole table.

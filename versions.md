@@ -311,7 +311,30 @@ a table is a check on that row* -- and the reason it was worth writing is the
 same one: this repo has already had the "cheapest destination" claim stand in
 five files while the ledger disproving it sat in the repo.
 
-### The pin is typed in FIVE places now
+### The pin is typed in SEVEN places, and two of them were a release stale
+
+🚨  **CORRECTED AT THE v0.3.2 REPIN.** This section said FIVE, and five is the
+number of copies that carry the tag as a **URL**. Three more carry it as
+PROSE -- README's own sentence, CLAUDE.md's Stage 3 heading paragraph and
+CITATIONS.md's licence note -- and only README's was read. Both of the others
+sat at `v0.3.0` through the `v0.3.1` repin with nothing looking at them.
+
+⚠️  **The reason the URL half was safe and the prose half was not is the whole
+lesson.** Check 7 FINDS the URL by scanning every first-party file for it, so
+a new code copy joins by existing, and that property paid the day
+`modules/mineral_value.py` gained its own `_PIP_SPEC`. Prose carries no URL,
+so each claim has to be NAMED -- and naming one is a check that reads one row
+of a table. The same sentence this repo wrote for check 9, committed inside
+the check written to prevent it.
+
+✅  Check 7 reads all three now, on the two phrasings that assert what the pin
+IS (`pinned to tag` and `pinned to a tagged release**,`), and **a file whose
+claim it cannot find is a finding rather than a silent pass** -- so a rewording
+cannot quietly take a copy back out of scope. It went from 4 manifests to 7,
+and was proved by staling a prose copy, staling a URL copy, and rewording a
+claim out of the pattern's reach.
+
+### The pin is typed in SEVEN places now
 
 `modules/mineral_value.py` has its own `_PIP_SPEC`, because a standalone
 `py modules/mineral_value.py` has to be able to install what it imports.

@@ -52,7 +52,7 @@ _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 # name in the install list would resolve to nothing.  The tag is typed in
 # FIVE places in this repo now; verify_docs check 7 holds them together.
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.1",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.2",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
