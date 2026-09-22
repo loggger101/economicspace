@@ -1000,12 +1000,38 @@ def check_manifests() -> bool:
             continue                      # absent() covers first-party files
         for ref in pin_re.findall(read(path) + "\n"):
             pins.setdefault(ref.rstrip("\"'`,"), []).append(rel)
-    # README says the tag in prose, beside the sentence that explains it.
-    if os.path.exists(readme_p):
-        m = re.search(r"spacecost is pinned to a tagged release\*\*, `([^`]+)`",
-                      read(readme_p))
-        if m:
-            pins.setdefault(m.group(1), []).append("README.md (prose)")
+    # THE PROSE COPIES, and there are three of them.
+    #
+    # ⚠️  THIS READ ONE SENTENCE IN ONE FILE UNTIL 2026-09-22, and the two it
+    # did not read had gone a release stale with nothing looking at them:
+    # CLAUDE.md and CITATIONS.md both still said `v0.3.0` after the repin to
+    # `v0.3.1`.  The URL form is found rather than listed, so a fifth code
+    # copy joins by existing -- but prose does not carry a URL, so every prose
+    # claim had to be named, and only one was.  That is this repo's own "a
+    # check that reads one row of a table is a check on that row", committed
+    # inside the check written to prevent the same thing.
+    #
+    # Only the LIVE claim form counts, the two phrasings that assert what the
+    # pin IS.  A bare `v0.1.1` elsewhere in prose is history -- both documents
+    # tell the story of a checkout that sat two commits past it -- and pinning
+    # those to the live tag would rewrite an account of what happened.
+    live_claim = re.compile(
+        r"pinned to (?:tag|a tagged release\*\*,) `(v[0-9][^`]*)`")
+    for rel in ("README.md", "CLAUDE.md", "CITATIONS.md"):
+        path = os.path.join(REPO, rel)
+        if not os.path.exists(path):
+            continue                      # absent() covers first-party files
+        found = live_claim.findall(read(path))
+        n += 1
+        if not found:
+            # Not a skip.  Each of these three asserts the pin in prose, and a
+            # rewording that this pattern stops matching is how the check
+            # quietly goes back to reading one row.
+            bad.append("%s no longer states the pinned spacecost tag in a form "
+                       "check 7 can read; reword it back or teach the pattern"
+                       % rel)
+        for ref in found:
+            pins.setdefault(ref, []).append("%s (prose)" % rel)
     n += 1
     if not pins:
         # Not a skip. The pin is supposed to be typed in several places, and

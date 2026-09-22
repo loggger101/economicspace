@@ -121,7 +121,7 @@ _MASTER_REQUIRED = [
 # requirements.txt
 # and delete this dict; nothing else here changes.
 _MASTER_PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.1",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.2",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
