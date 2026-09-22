@@ -185,7 +185,7 @@ nothing in their schema knows what a mine is: a merged catalog with honest
 provenance is useful to anyone doing population statistics, survey planning or
 target selection.
 
-**asteroid_catalog is pinned to a tagged release**, `v0.1.1`, in all six places
+**asteroid_catalog is pinned to a tagged release**, `v0.1.3`, in all six places
 that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
 `build_master.py` and in `_PIP_SPEC` in `modules/catalog.py` (what a standalone
 module run installs from); and in prose here, in [CLAUDE.md](CLAUDE.md) and in
