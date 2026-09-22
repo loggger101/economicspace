@@ -157,11 +157,20 @@ compared byte for byte. **The invariants, and what fails when each breaks, are
 in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)**, which is
 where the editing rules live.
 
-**spacecost is pinned to a tagged release**, `v0.3.1`, in all five places that
-type it: `requirements.txt`, `_MASTER_PIP_SPEC` in `build_master.py`,
-`_PIP_SPEC` in `modules/transportation.py` and the same in
+**spacecost is pinned to a tagged release**, `v0.3.2`, in all seven places
+that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
+`build_master.py`, and in `_PIP_SPEC` in both `modules/transportation.py` and
 `modules/mineral_value.py` (what a standalone module run installs from, and
-Stage 2 reaches the package directly now) and this sentence. An untagged URL would let a fresh install
+Stage 2 reaches the package directly now); and in prose here, in
+[CLAUDE.md](CLAUDE.md) and in [CITATIONS.md](CITATIONS.md).
+
+⚠️  **It was FIVE until the v0.3.2 repin, and the two it missed are the two in
+prose.** Check 7 read the URL form everywhere and one named sentence in this
+file, so the copies in CLAUDE.md and CITATIONS.md sat a release behind with
+nothing looking at them -- the "a check that reads one row of a table is a
+check on that row" failure, in the check written to stop exactly this. It
+reads all three prose claims now, and a file whose claim it cannot find is a
+finding rather than a silent pass. An untagged URL would let a fresh install
 pick up a different table with nothing here moving, and a repin of one copy
 alone is the same divergence in miniature -- `verify_docs.py` check 7 scans
 every first-party file for the URL and fails when they disagree.
