@@ -75,6 +75,7 @@ through. Skim for the section that names what you are about to change.
 - [Durable lessons from the release history](#durable-lessons-from-the-release-history)
 - [The verification harness is committed now](#the-verification-harness-is-committed-now)
 - [A comment explaining a duplicate is not a reason it still has to exist](#a-comment-explaining-a-duplicate-is-not-a-reason-it-still-has-to-exist)
+- [Derive what agrees, type what does not, and ASSERT the difference](#derive-what-agrees-type-what-does-not-and-assert-the-difference)
 - [A guard on one door is not a guard on the room](#a-guard-on-one-door-is-not-a-guard-on-the-room)
 - [Running `verify.py` used to overwrite the live Stage 4 catalog](#running-verifypy-used-to-overwrite-the-live-stage-4-catalog)
 - [Stage 3 lives in another repository now, and so does part of Stage 2](#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)
@@ -4487,6 +4488,79 @@ Arrow-backed string dtype this file has a whole harness-bug row about. Nothing
 announced it. **Use `--no-deps` when repinning spacecost**, and run
 `py platform_check.py` afterwards; it reported all 18 probes matching again
 once numpy and pandas were pinned back off `requirements-lock.txt`.
+
+### Derive what agrees, type what does not, and ASSERT the difference
+
+2026-09-21, the literal-by-literal audit of `spacecost.delivery` after the
+move. The move derived the nine chain Delta-v and left everything else typed;
+the audit is what the first pass should have been, and it found three things
+worth keeping.
+
+🚨  **`TUG_ISP_S` IS 465 s AND THE PROPELLANT TABLE'S HYDROLOX ROW SAYS 452,
+AND IT HAD BEEN THAT WAY SINCE STAGE 2 v1.2.0.** The comment beside it always
+said "Module 3 PROPELLANTS: LH2/LOX, 450-465 s vacuum", so it named a BAND and
+took the top of it while the table carries a single figure at the bottom. Both
+are defensible -- 465 is an upper STAGE, 452 is the RS-25 / RL-10 datasheet --
+and they are not the same number.
+
+| | |
+|---|---|
+| what deriving it costs | **+2.96% cislunar to +5.21% lunar_surface** on the delivered price |
+| what that reaches | every in-space price in the model |
+| so it is | a release with a re-measurement, not a refactor |
+
+⚠️  **A COMMENT THAT CITES A RANGE IS THE PLACE THIS HIDES.** "450-465 s
+vacuum" is true, so nothing about the sentence reads wrong; what it conceals
+is that the table is not a range and the code picked an end. **When a comment
+justifies a number with an interval, check which end the table actually
+holds** -- and if the answer is "neither, it holds one value", the number is
+not derived from that table however much the comment implies it.
+
+✅  **THE FIX IS NOT TO DERIVE IT AND NOT TO LEAVE IT ALONE EITHER. IT IS TO
+ASSERT THE GAP.** `delivery.py` now raises at import if the hydrolox row stops
+being 452, naming both figures. The discrepancy is the same size it always
+was; what changed is that the row can no longer move under the comment
+describing it. **A discrepancy that is documented is a sentence; a discrepancy
+that is asserted cannot go stale.** Same treatment for the GEO deorbit burn,
+1,490 m/s against a row of 1,488.
+
+⚠️  **AND THE BLANKET EXCEPTION WAS WRONG.** The move typed all six downleg
+burns on the argument that two of them had no row. Four of them do. Deriving
+what agrees and typing what does not is the rule; **exempting a whole
+category because part of it qualifies is how a register stops being a
+decision**, which is the same failure this file records for allowlists nobody
+prunes.
+
+🚨  **AND NO TEST OF THE OUTPUTS CAN SEE ANY OF THIS, WHICH IS THE REUSABLE
+HALF.** A hardcoded 3,600 and a looked-up 3,600 produce identical numbers and
+identical hashes, right up until the row moves and only one follows. The
+271-value bit-exactness probe that guards the whole move **would have passed a
+module with every lookup converted back to a literal.** A derivation claim is
+a claim about SOURCE, so only something reading the source can hold it.
+
+✅  So `tests/test_delivery.py` walks the module's AST and requires every
+numeric literal to be algebra (`0` and `1`) or to carry a row on a `TYPED`
+register naming the table that cannot supply it. Third register in this
+project under the both-halves rule, after `TYPED_OK` and `BORROWED`: a literal
+with no row is a value that stopped being derived, a row with no literal is a
+permission still granted for a number that has gone.
+
+⚠️  **Proving it needed a THIRD probe nobody would think to write.** Planting
+a changed value fires the import assertions first, so it never reaches the
+register; planting a stale row tests only the second half. What tests the
+register itself is **a literal that changes no value at all** -- a new unused
+constant -- because that is the only case every other guard is blind to.
+**When a new check sits behind older ones, the case that exercises it is the
+one the older ones cannot fail on.**
+
+✅  **The third copy was README's, and it is `verify_docs.py` check 17 now.**
+Seven rows of typed markdown restating the derivation -- price, kg-in-LEO
+ratio, and every Delta-v in the chain column -- read by nothing. 23 claims
+pinned to `master.DELIVERY_DESTINATIONS`, including that a Delta-v quoted in a
+row's prose is a burn in THAT destination's chain. It is check 9's lesson on a
+second table, and worth the effort for the reason check 9 exists: this repo
+has already had a destination claim stand in five files while the ledger
+disproving it sat in the tree.
 
 ### A guard on one door is not a guard on the room
 

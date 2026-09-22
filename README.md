@@ -157,7 +157,7 @@ compared byte for byte. **The invariants, and what fails when each breaks, are
 in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)**, which is
 where the editing rules live.
 
-**spacecost is pinned to a tagged release**, `v0.3.0`, in all five places that
+**spacecost is pinned to a tagged release**, `v0.3.1`, in all five places that
 type it: `requirements.txt`, `_MASTER_PIP_SPEC` in `build_master.py`,
 `_PIP_SPEC` in `modules/transportation.py` and the same in
 `modules/mineral_value.py` (what a standalone module run installs from, and

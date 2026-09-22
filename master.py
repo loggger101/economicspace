@@ -121,7 +121,7 @@ _MASTER_REQUIRED = [
 # requirements.txt
 # and delete this dict; nothing else here changes.
 _MASTER_PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.1",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -3631,30 +3631,82 @@ delivered_cost_usd_per_kg = spacecost.delivered_cost_usd_per_kg
 _EARTH_SURFACE_WATER_USD_PER_KG = 0.001
 
 
-_DESTINATION_NOTES = {
-    "leo":           "Falcon 9 reusable $/kg-to-LEO, straight off Module 3.",
-    "geo":           "LEO -> GTO (2,455 m/s), then an apogee burn of 1,836 "
-                     "m/s that circularises and removes 28.5 deg of "
-                     "inclination at once.  Coplanar that burn would be "
-                     "1,478, so 358 m/s of this price is the latitude of the "
-                     "launch site.  Dearer per kilogram than a cislunar "
-                     "depot, and a far narrower market once it arrives.",
-    "cislunar":      "TLI + NRHO insertion (3,600 m/s) on one cryo stage.",
-    "lunar_surface": "TLI + LOI (4,050 m/s) on a cryo stage, then powered "
-                     "descent (1,870 m/s) on a lander.  No atmosphere, so "
-                     "every metre per second is propulsive — the Moon is the "
-                     "nearest destination and among the dearest to land on.",
-    "mars_orbit":    "TMI (3,600 m/s), then 900 m/s of capture into the "
-                     "250 x 33,793 km 1-sol staging orbit (NASA DRA 5.0).  "
-                     "Binding an ellipse is far cheaper than circularising: "
-                     "the same arrival costs 2,100 m/s into a 200-km orbit.  "
-                     "Nothing enters the atmosphere, so unlike mars_surface "
-                     "there is no entry-survival fraction on top.",
-    "mars_surface":  "TMI (3,600 m/s), then aeroentry surviving 30% of entry "
-                     "mass (MSL / Perseverance measured), then 800 m/s of "
-                     "retropropulsion.  Mars is far but its atmosphere does "
-                     "most of the braking for free.",
-}
+# ─── THE PROSE THAT GOES IN THE CSV, AND WHY IT IS FORMATTED ────────────────
+# 🚨  THESE STRINGS ARE OUTPUT.  They are written into the `notes` column of
+# `mineral_value_catalog.csv`, so a number typed here is a number shipped to a
+# reader, and it rots exactly like any other copy.  Every delta-v, mass
+# fraction and percentage below is therefore INTERPOLATED FROM THE CHAIN the
+# sentence is describing, not retyped beside it: if a `DELTA_V_REFERENCE` row
+# moves, the chain moves and the sentence moves with it.
+#
+# ⚠️  The four figures that are NOT the chain are named constants with their
+# citations, rather than digits buried mid-sentence, so a reader can see at a
+# glance which numbers this table asserts and which it derives.  They are
+# comparisons and context, not terms in the price.
+_GEO_COPLANAR_GTO_BURN_M_S = 1_478.0   # the same apogee burn with no plane change
+_PARKING_INCLINATION_DEG   = 28.5      # Cape Canaveral, the latitude GTO starts at
+_MARS_200KM_CAPTURE_M_S    = 2_100.0   # circularising instead of binding an ellipse
+_MARS_1SOL_ORBIT_KM        = (250, 33_793)   # NASA DRA 5.0 staging orbit, altitudes
+
+
+def _burns(key) -> list:
+    """The burn delta-v of a destination's chain, in flight order, m/s."""
+    return [l[1] for l in (_DELIVERY_LEGS.get(key) or []) if l[0] == "burn"]
+
+
+def _entry_survival_pct(key) -> float:
+    """The `edl` leg's surviving mass fraction as a percentage, or 0.0."""
+    for leg in (_DELIVERY_LEGS.get(key) or []):
+        if leg[0] == "edl":
+            return float(leg[1]) * 100.0
+    return 0.0
+
+
+def _build_destination_notes() -> Dict[str, str]:
+    """The per-destination sentence, with every chain figure interpolated."""
+    geo, cis = _burns("geo"), _burns("cislunar")
+    lun, m_o, m_s = _burns("lunar_surface"), _burns("mars_orbit"), _burns("mars_surface")
+    plane_change = geo[1] - _GEO_COPLANAR_GTO_BURN_M_S
+    return {
+        "leo":           "Falcon 9 reusable $/kg-to-LEO, straight off Module 3.",
+        "geo":           f"LEO -> GTO ({geo[0]:,.0f} m/s), then an apogee burn "
+                         f"of {geo[1]:,.0f} m/s that circularises and removes "
+                         f"{_PARKING_INCLINATION_DEG:.1f} deg of "
+                         "inclination at once.  Coplanar that burn would be "
+                         f"{_GEO_COPLANAR_GTO_BURN_M_S:,.0f}, so "
+                         f"{plane_change:,.0f} m/s of this price is the "
+                         "latitude of the launch site.  Dearer per kilogram "
+                         "than a cislunar depot, and a far narrower market "
+                         "once it arrives.",
+        "cislunar":      f"TLI + NRHO insertion ({cis[0]:,.0f} m/s) on one "
+                         "cryo stage.",
+        "lunar_surface": f"TLI + LOI ({lun[0]:,.0f} m/s) on a cryo stage, then "
+                         f"powered descent ({lun[1]:,.0f} m/s) on a lander.  "
+                         "No atmosphere, so "
+                         "every metre per second is propulsive — the Moon is "
+                         "the nearest destination and among the dearest to "
+                         "land on.",
+        "mars_orbit":    f"TMI ({m_o[0]:,.0f} m/s), then {m_o[1]:,.0f} m/s of "
+                         "capture into the "
+                         f"{_MARS_1SOL_ORBIT_KM[0]:,d} x "
+                         f"{_MARS_1SOL_ORBIT_KM[1]:,d} km 1-sol staging orbit "
+                         "(NASA DRA 5.0).  "
+                         "Binding an ellipse is far cheaper than "
+                         "circularising: the same arrival costs "
+                         f"{_MARS_200KM_CAPTURE_M_S:,.0f} m/s into a 200-km "
+                         "orbit.  Nothing enters the atmosphere, so unlike "
+                         "mars_surface there is no entry-survival fraction "
+                         "on top.",
+        "mars_surface":  f"TMI ({m_s[0]:,.0f} m/s), then aeroentry surviving "
+                         f"{_entry_survival_pct('mars_surface'):.0f}% of entry "
+                         "mass (MSL / Perseverance measured), then "
+                         f"{m_s[1]:,.0f} m/s of "
+                         "retropropulsion.  Mars is far but its atmosphere "
+                         "does most of the braking for free.",
+    }
+
+
+_DESTINATION_NOTES = _build_destination_notes()
 
 
 def _build_destination_table() -> Dict[str, dict]:
