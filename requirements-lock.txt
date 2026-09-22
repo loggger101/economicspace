@@ -18,21 +18,53 @@
 # reproduces the reference arithmetic; a matching version list is necessary
 # and NOT sufficient, because the C library underneath is not pip's to pin.
 #
+# TWO LINES POSTDATE THAT RECORDING AND EACH SAYS SO WHERE IT SITS: `requests`
+# for a CVE, `tzdata` because the pin had gone stale against the host it claims
+# to describe.  Neither can reach an arithmetic result, which is the ONLY test
+# a line here passes to move.  The first sentence of this file is therefore
+# still true of every version that produced a number, and the way to keep it
+# true is to refuse the upgrade rather than to amend the sentence: a lock file
+# that has been talked into a bump once is not a measurement any more.
+#
 #     python -m pip install -r requirements-lock.txt
 #     python platform_check.py
 
 # --- the pipeline itself -----------------------------------------------------
+# A LINE HERE MOVES ONLY IF IT CANNOT REACH A FLOAT.  numpy, pandas and pyarrow
+# all can, so they stay at the measured versions even while newer releases sit
+# there clean: numpy 2.5.3, pandas 3.0.6 and pyarrow 25.0.1 were all available
+# and all declined on 2026-09-21.  pandas 3.0 would also flip
+# platform_reference.json's `pandas.str_dtype` from `object` to `str`, which is
+# the Arrow-backed dtype behind the harness bug in verify.py's header.
 numpy==2.2.6
 pandas==2.3.3
 pyarrow==24.0.0
-requests==2.32.5
+# 2.32.5 -> 2.34.2 on 2026-09-21, for CVE-2026-25645: insecure temp file reuse
+# in `extract_zipped_paths()`, fixed in 2.33.0.  Nothing in this repo calls that
+# function, so the exposure was nil; it moved anyway because a reproducible
+# environment naming a version with a known CVE is a thing every reader and
+# every scanner has to re-litigate.  It is safe to move because requests is an
+# HTTP client -- it fetches the bytes Stages 1-3 write and touches no
+# arithmetic -- and it was proved rather than argued: all 18 platform_check
+# probes match across it, and it resolved with no transitive dependency moving.
+requests==2.34.2
 tqdm==4.67.1
 yfinance==1.4.1
 
 # --- pandas' own runtime deps, pinned because a date parser is not inert ------
+# tzdata read 2025.2 here while the reference host has carried 2026.4 since
+# some later install pulled it in, so the pin was describing a machine that no
+# longer exists.  Corrected UP to what the host actually runs rather than
+# pinned back down, because this repo does no timezone-aware work at all -- the
+# only use of `timezone` anywhere is `datetime.now(timezone.utc)`, which is
+# stdlib and reads no database -- and every probe matches across a year of tz
+# releases, which is the evidence that it is inert here.
+# WARNING: NOTHING CHECKS THESE LINES AGAINST THE HOST.  platform_check.py
+# records only numpy and pandas in its `host` block, so the other nine pins can
+# drift for a year, as this one did, with every probe still reporting `match`.
 python-dateutil==2.9.0.post0
 pytz==2025.2
-tzdata==2025.2
+tzdata==2026.4
 
 # --- the dashboard, which no headless run needs ------------------------------
 streamlit==1.61.1
