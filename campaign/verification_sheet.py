@@ -595,7 +595,9 @@ def part_prices(S, out):
            "No price here is a terrestrial quote.")
     c_leo = S.put("c_LEO", "c_LEO", "reusable launch price to LEO",
                   C["leo_usd_per_kg"], "$/kg",
-                  "<b>modules/mineral_value.py</b>, <i>_LEO_USD_PER_KG</i>.  "
+                  "<b>spacecost/delivery.py</b>, <i>LEO_LAUNCH_USD_PER_KG</i>, "
+                  "re-exported by <b>modules/mineral_value.py</b> as "
+                  "<i>_LEO_USD_PER_KG</i>.  "
                   "<span class='src'>Falcon 9 reusable $/kg to LEO, from "
                   "Module 3's launch-vehicle table ($74M / 17.4 t).  It is "
                   "the cheapest operational figure in that table, so every "
@@ -614,17 +616,18 @@ def part_prices(S, out):
             continue
         dv, isp, dry = leg["dv"], leg["isp"], leg["dry"]
         S.put("dv%d" % n, "dv_%d" % n, "leg %d delta-v" % n, dv, "m/s",
-              "<b>modules/mineral_value.py</b>, <i>_DELIVERY_LEGS</i> for "
-              "%s.  <span class='src'>The chain is walked backwards from the "
+              "<b>spacecost/delivery.py</b>, <i>DELIVERY_CHAINS</i> for "
+              "%s, re-exported as Module 2's <i>_DELIVERY_LEGS</i>.  "
+              "<span class='src'>The chain is walked backwards from the "
               "payload, stage by stage: collapsing it into one burn throws "
               "away staging and overstates the destination.</span>"
               % D.esc(C["destination"]))
         S.put("isp%d" % n, "I_sp,%d" % n, "leg %d stage Isp" % n, isp, "s",
-              "<b>modules/mineral_value.py</b>, <i>_DELIVERY_LEGS</i>.  "
+              "<b>spacecost/delivery.py</b>, <i>DELIVERY_CHAINS</i>.  "
               "The upper stage this leg is flown on.")
         S.put("dry%d" % n, "delta_%d" % n, "leg %d dry-mass fraction" % n,
-              dry, "-", "<b>modules/mineral_value.py</b>, "
-                        "<i>_DELIVERY_LEGS</i>.  Stage dry mass as a "
+              dry, "-", "<b>spacecost/delivery.py</b>, "
+                        "<i>DELIVERY_CHAINS</i>.  Stage dry mass as a "
                         "fraction of its propellant load.")
         S.step("ve%d" % n, "v_e,%d" % n, "leg %d exhaust velocity" % n,
                "I_sp * g_0", "%s * %s" % (P(isp), P(W.G0)), leg["ve"], "m/s",

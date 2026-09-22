@@ -74,9 +74,10 @@ through. Skim for the section that names what you are about to change.
 - [A bit-identical WINNER is not a bit-identical CELL](#a-bit-identical-winner-is-not-a-bit-identical-cell)
 - [Durable lessons from the release history](#durable-lessons-from-the-release-history)
 - [The verification harness is committed now](#the-verification-harness-is-committed-now)
+- [A comment explaining a duplicate is not a reason it still has to exist](#a-comment-explaining-a-duplicate-is-not-a-reason-it-still-has-to-exist)
 - [A guard on one door is not a guard on the room](#a-guard-on-one-door-is-not-a-guard-on-the-room)
 - [Running `verify.py` used to overwrite the live Stage 4 catalog](#running-verifypy-used-to-overwrite-the-live-stage-4-catalog)
-- [Stage 3 lives in another repository now](#stage-3-lives-in-another-repository-now)
+- [Stage 3 lives in another repository now, and so does part of Stage 2](#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)
 - [Config discipline](#config-discipline)
 - [Correctness invariants that were expensive to find](#correctness-invariants-that-were-expensive-to-find)
 - [Data sources fail softly by design](#data-sources-fail-softly-by-design)
@@ -195,7 +196,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.15.0`,
-calc `1.23.0`, master `1.29.0` (the master version is a literal in
+calc `1.23.0`, master `1.30.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -4407,6 +4408,86 @@ name their release now. **This file's standing rule about wall clocks applies
 unchanged to objectives, and to any other quantity a chooser sorts on: a
 figure is only ever true of the release it names.**
 
+### A comment explaining a duplicate is not a reason it still has to exist
+
+2026-09-21, master `1.30.0`, and it is the longest-lived instance in this file
+of a defect that was **documented, correct, and dead** at the same time.
+
+`modules/mineral_value.py` carried the delivery-leg chains and the downleg
+under this header:
+
+> Constants below are cross-referenced to Module 3. They are duplicated
+> rather than imported because Module 2 runs BEFORE Module 3 in the pipeline
+> order (and in the concatenated master.py), so the tables are not in scope.
+> **If you change one of these, change it in Module 3 too.**
+
+Thirteen numbers retyped by hand -- nine Delta-v off `DELTA_V_REFERENCE`, a
+launch price off `LAUNCH_VEHICLES_REFERENCE`, three cost lines off
+`OPERATIONAL_COSTS_REFERENCE` -- held together by a sentence asking the next
+reader to sync them.
+
+🚨  **THE JUSTIFICATION EXPIRED AT THE STAGE 3 SPLIT AND STOOD FOR TWO MORE
+RELEASES.** Concatenation order was the whole argument, and a pip-installed
+package has no position in a pipeline: `master.py` installs `spacecost` in its
+header, before any stage's code runs. The comment was true when written, went
+false at master `1.25.0`, and nothing re-read it.
+
+⚠️  **THE TELL IS THAT IT WAS ADDRESSED TO A READER RATHER THAN TO A
+CHECKER**, which is this file's standing rule about counts arriving at
+DUPLICATES. "If you change one of these, change it in Module 3 too" is the
+same shape as a spelled-out count: a promise a human keeps, so it holds until
+the day somebody does not, and nothing goes red in between. **A comment that
+says two copies must agree is a request for a checker.** The fix here is the
+one this file prescribes for a count: not a correction, but removing the
+second copy.
+
+✅  **AND THE SECOND HALF, WHICH IS THE PART THAT GENERALISES: A REASON CAN
+GO STALE WHILE THE FACT IT EXPLAINS STAYS TRUE.** The duplication was real on
+the day it was found, so everything looked consistent; only the *because*
+clause had rotted. This file greps for stale NUMBERS after every change. It
+has no habit for stale REASONS, and a reason has no digits in it, so no check
+here can see one. **When you change the architecture, grep for the comments
+that justify a workaround against it** -- "because Module 2 runs before Module
+3" was a sentence about a pipeline that had stopped existing.
+
+✅  **What made the move safe is worth copying, and it is not a test suite.**
+Every value the two blocks can produce was captured from the pre-move code at
+full `repr` AND as its raw IEEE bit pattern, then re-captured after: **271
+leaf values, zero differences**, covering the notes STRINGS and the dict KEY
+ORDER as well as the floats. Both of those can move a CSV byte without moving
+a number, and the destination table's iteration order is a column order
+downstream. ⚠️  **A probe that compares only the floats would have passed a
+reordered dict.**
+
+⚠️  **DERIVE WHAT AGREES; TYPE WHAT DOES NOT, AND SAY WHICH.** All nine chain
+Delta-v matched a table row exactly, so they are lookups now. Of the six
+downleg departure burns, two have no row at all and a third disagrees with its
+row by 2 m/s. Deriving all six uniformly is the tidy-looking change and it
+would have **moved two published prices inside a release whose whole claim is
+that it moves none**. They stay as literals with the mismatch tabulated beside
+them. The general rule is the one under
+[a change can be numerically negligible](#a-change-can-be-numerically-negligible-and-still-destroy-the-evidence):
+a de-duplication is only an improvement while it still lands on the numbers the
+published results were computed from.
+
+🚨  **AND THE WARNING COMMENT ABOUT NOT SPELLING REWRITTEN WORDS SPELLED
+ONE.** The replacement block opened with "NEVER SPELL A WORD THE BUILD
+REWRITES" and then named `merge_sources` as an example, so in `master.py` the
+warning came out naming the RENAMED word and read as nonsense. Third time this
+file has recorded that exact shape, and the first time inside the paragraph
+warning about it. Caught by reading the built file, which is the only way it
+can be caught. **Name the list's location, never its members.**
+
+⚠️  **ONE THING WENT WRONG THAT HAS NOTHING TO DO WITH THE MOVE, AND IT IS THE
+MORE DANGEROUS HABIT.** Verifying the new tag with
+`pip install --force-reinstall git+...@v0.3.0` upgraded the TRANSITIVE
+dependencies too: numpy `2.2.6` -> `2.5.3` and pandas `2.3.3` -> `3.0.6`, i.e.
+straight off `platform_reference.json`'s recorded host and onto the pandas 3.0
+Arrow-backed string dtype this file has a whole harness-bug row about. Nothing
+announced it. **Use `--no-deps` when repinning spacecost**, and run
+`py platform_check.py` afterwards; it reported all 18 probes matching again
+once numpy and pandas were pinned back off `requirements-lock.txt`.
+
 ### A guard on one door is not a guard on the room
 
 2026-09-17, and it is the third member of the family above rather than a new
@@ -4691,18 +4772,35 @@ on skipping silently. **Somebody had the right thought one line too deep.**
 That is this file's "fixing one half of a defect class" rule, written by the
 person who fixed the other half.
 
-## Stage 3 lives in another repository now
+## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
-[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.2.0`.
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.3.0`.
 **Do not state the row count here**; the adapter's ready banner prints it on
 every import, and this sentence carried "all 141 of them" into a release that
 added a whole table.
 
-⚠️  **THE PIN IS TYPED IN FOUR PLACES**, and a repin that misses one is the
+🚨  **TWO STAGES IMPORT THE PACKAGE NOW, AND STAGE 2 IS THE FIRST TO REACH
+IT.** master `1.30.0` moved `modules/mineral_value.py`'s delivery chains and
+its downleg into `spacecost.delivery`; the module re-exports `_DELIVERY_LEGS`,
+`_LEO_USD_PER_KG`, `delivered_cost_usd_per_kg` and `downleg_cost_usd_per_kg`
+so every existing reader keeps working. **A name dropped from the package now
+fails a PRICING stage that runs before the adapter does**, and the traceback
+will not say Stage 3. The four names are grouped and labelled as Stage 2's in
+spacecost's `tests/test_consumer_contract.py`, which is the only thing that
+will say so out loud.
+
+⚠️  **THE PIN IS TYPED IN FIVE PLACES**, and a repin that misses one is the
 parallel-repo divergence in miniature: `requirements.txt`, `_MASTER_PIP_SPEC`
-in `build_master.py`, `_PIP_SPEC` in this module (**what a standalone module
-run installs from**) and README's sentence naming the tag.
+in `build_master.py`, `_PIP_SPEC` in this module, the same in
+`modules/mineral_value.py` (**both are what a standalone module run installs
+from**) and README's sentence naming the tag.
+
+✅  **The fifth copy joined `verify_docs.py` check 7 with no edit**, which is
+that check's own design being exercised for the first time: it scans every
+first-party file for the URL rather than reading a list of filenames, and its
+comment says a fifth copy would join by existing. It did. **When you write a
+check, prefer finding over listing, and then wait for the day it pays.**
 
 🚨  **THIS PROJECT HAS ALREADY BEEN BURNED BY A SPLIT, AND THE LESSON WAS NOT
 "DO NOT SPLIT".** It was developed in two places at once and `1.0.6` / `1.1.4` /

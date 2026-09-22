@@ -276,7 +276,7 @@ rights reserved, so that failure runs in the dangerous direction.
 
 ## 6. Software this pipeline depends on
 
-⚠️  **spacecost** is this project's own, extracted from Stage 3 and MIT licensed; it is pinned to tag `v0.1.0` and carries every launch, propellant, Delta-v, operational and storage row, with the citations for them.
+⚠️  **spacecost** is this project's own, extracted from Stage 3 and MIT licensed; it is pinned to tag `v0.3.0` and carries every launch, propellant, Delta-v, operational and storage row, with the citations for them, and since `v0.3.0` the delivery chains Stage 2 prices through.
 
 Runtime, from `requirements.txt`: **requests**, **pandas**, **numpy**,
 **yfinance**, **tqdm**, **pyarrow**. Dashboard, from `requirements-ui.txt`:
@@ -294,6 +294,7 @@ This file does not duplicate them. It says where they are.
 | launch vehicles, propellants, storage systems, Delta-v segments, operational costs | the `notes` field of each row in the [`spacecost`](https://github.com/loggger101/spacecost) package, with `reference_year` tagging staleness. They left `modules/transportation.py` at master v1.25.0; that repo's `CITATIONS.md` is their bibliography now |
 | commodity prices and market depths | per-commodity in `modules/mineral_value.py` |
 | taxonomy to composition | `TAXONOMY_COMPOSITION` in `modules/catalog.py` |
+| the delivery LEG CHAINS and the downleg (tug and lander dry-mass fractions, the Mars entry survival fraction) | `spacecost/delivery.py`, since master v1.30.0; `modules/mineral_value.py` re-exports them and cites nothing itself |
 | delivery architectures and utility factors | `modules/mineral_value.py` and `modules/calc.py`; these are **engineering judgements**, not measurements, and README says so |
 
 ⚠️  **The utility factors are the softest assumption in the pipeline** and have
