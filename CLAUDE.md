@@ -79,6 +79,8 @@ through. Skim for the section that names what you are about to change.
 - [A guard on one door is not a guard on the room](#a-guard-on-one-door-is-not-a-guard-on-the-room)
 - [Running `verify.py` used to overwrite the live Stage 4 catalog](#running-verifypy-used-to-overwrite-the-live-stage-4-catalog)
 - [Stage 1 lives in another repository now too](#stage-1-lives-in-another-repository-now-too)
+- [A split leaves a helper behind wherever it moves only the USERS](#a-split-leaves-a-helper-behind-wherever-it-moves-only-the-users)
+- [A regex repin will rewrite HISTORY, and check 7 says so before you do it](#a-regex-repin-will-rewrite-history-and-check-7-says-so-before-you-do-it)
 - [A mechanical pass over every instance assumes the instances are one thing](#a-mechanical-pass-over-every-instance-assumes-the-instances-are-one-thing)
 - [Stage 3 lives in another repository now, and so does part of Stage 2](#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)
 - [Config discipline](#config-discipline)
@@ -3884,6 +3886,72 @@ this file has a dozen entries proving that. What was actually measured is that
 **this host cannot resolve a 1.4x ratio on a 155-row cell**, and that is what
 the release note says.
 
+### A split leaves a helper behind wherever it moves only the USERS
+
+2026-09-22, auditing the Stage 1 split for redundancy the day it landed. Two
+questions were asked of every top-level name the pre-split module bound -- is
+it still reachable, and is it now defined more than once -- and the answers
+came out **63 names carried, 0 dropped**, with two defined twice.
+
+The two are the same defect seen from opposite ends:
+
+| | dead in | live in |
+|---|---|---|
+| `_PY` | the **adapter** | the package, for a fetcher's hint |
+| `_fmt_limit` | the **package** | the adapter, for its banner |
+
+A split moves a helper's USERS without moving the helper, or the helper
+without its users, and what is left behind still imports, still parses, and is
+called by nothing. **Neither is visible to any test**, because dead code
+passes everything.
+
+⚠️  **A DEAD-CODE SWEEP HAS TO BE RUN ON BOTH SIDES OF THE SEAM AND ITS
+CORPUS IS THE HARD PART.** The first sweep here found `_fmt_limit` and MISSED
+`_PY`, because it asked "is this name mentioned anywhere in the repo" and four
+other modules define a `_PY` of their own. A name-based corpus check is
+defeated by a name that is common; the question has to be asked per file.
+
+🚨  **AND CLOSING THE SECOND ONE OPENED A NEW TRAP.** Making the adapter reach
+`asteroid_catalog.config._fmt_limit` rather than keep a copy leaves a
+**private name consumed across a repository boundary**: underscore-prefixed,
+absent from `__all__`, called by nothing in its own repo. A sweep run there
+flags it, and one did, the same hour. Deleting it breaks the consumer's first
+banner.
+
+✅  **The fix is a tested contract, not a comment**, and the precedent was
+already here: `spacecost` pins the private names Stage 2 reaches the same way.
+The package now carries `PRIVATE_CONSUMER_SURFACE` -- each name, and the
+reason it is reached -- proved by deleting one and watching the suite name it.
+**When you make one repo depend on another's private name, the guard belongs
+in the repo that could delete it.**
+
+### A regex repin will rewrite HISTORY, and check 7 says so before you do it
+
+The same pass, ten minutes later, and it is worth recording because the
+warning already existed and was walked into anyway.
+
+Repinning `v0.1.1` to `v0.1.2` with a blind `` `v0\.1\.1` `` substitution over
+the three prose files changed **six** mentions where only **three** are the
+live pin. The other three were accounts of things that happened:
+
+- two about **spacecost's** own `v0.1.1`, in a paragraph explaining that the
+  sibling checkout once sat two commits past it,
+- one recording which `asteroid_catalog` release moved the banner prints.
+
+All three came out asserting something untrue, and every one of them would
+have read perfectly.
+
+⚠️  **`verify_docs.py` check 7's own comment states this in as many words**:
+*"A bare `v0.1.1` in prose is usually history ... and pinning those to the live
+tag would rewrite an account of what happened."* That is why the check matches
+the **live-claim FORM** rather than the digits, and it is also why it cannot
+catch this: a falsified history sentence is not a pin, so nothing compares it.
+
+✅  **What caught it was reading the diff, line by line, before committing** --
+the same habit this file already prescribes for `git show --stat` after a
+commit. **A version string in prose is either a pin or a date; decide which
+for each one, and never sed them together.**
+
 ### A mechanical pass over every instance assumes the instances are one thing
 
 2026-09-22, extracting Stage 1 into `asteroid_catalog`, and it is the sibling
@@ -4898,7 +4966,7 @@ person who fixed the other half.
 `modules/catalog.py` is an adapter. Every fetcher, the cross-match, the
 H-derivation, the validator and the Bus-DeMeo composition table are in
 [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog),
-pinned to tag `v0.1.1`. **Do not state the table's length here**; the ready
+pinned to tag `v0.1.3`. **Do not state the table's length here**; the ready
 banner prints it on every import, and the "76 classes" figure that circulates
 in this file is the number of distinct `spectral_type` VALUES in a built
 catalog, which is a different thing and roughly twice the table's 32 rows.

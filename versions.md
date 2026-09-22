@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.32.0](#master-v1320)
 - [master v1.31.0](#master-v1310)
 - [master v1.30.0](#master-v1300)
 - [transportation v1.15.0 / master v1.29.0](#transportation-v1150--master-v1290)
@@ -85,7 +86,7 @@ one that does not say is not to be used.
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.15.0** | v1.15.0, the `environments` table: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.23.0** | v1.23.0, the 5% depletion cap comes off: a mission may take the whole body |
-| - | `master.py` | **1.31.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.32.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -157,6 +158,65 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.32.0
+
+**asteroid_catalog v0.1.1 -> v0.1.3, and the redundancies the split left.
+No module stamp moved, and no number moved.** The catalog contract stays at
+**1.2.0**.
+
+A redundancy audit the day after the split asked two questions of every
+top-level name the pre-split module bound: is it still reachable, and is it
+now defined more than once. **63 names carried, 0 dropped.** Two were defined
+twice, and they are the same defect from opposite ends:
+
+| | dead in | live in |
+|---|---|---|
+| `_PY` | the **adapter** | the package, for `fetch_ssodnet`'s pyarrow hint |
+| `_fmt_limit` | the **package** | the adapter, for its startup banner |
+
+A split moves a helper's USERS without moving the helper, or the other way
+round, and what is left behind still imports, still parses, and is called by
+nothing. The adapter dropped its `_PY` and reaches the package's `_fmt_limit`
+rather than keeping a copy.
+
+⚠️  **The sweep that found them had to be run on both sides, and its corpus was
+the hard part.** The first attempt found `_fmt_limit` and MISSED `_PY`, because
+it asked whether the name appears anywhere in the repo and four other modules
+define a `_PY` of their own. A name-based corpus check is defeated by a common
+name.
+
+🚨  **Closing the second one opened a new trap, and it is the reusable half.**
+`_fmt_limit` is now a private name consumed across a repository boundary:
+underscore-prefixed, absent from `__all__`, called by nothing in its own repo,
+so a dead-code sweep run there flags it -- and one did, the same hour.
+Deleting it breaks this repo's first Stage 1 banner. The package carries
+`PRIVATE_CONSUMER_SURFACE` now, a tested contract naming each private name and
+the reason it is reached, proved by deleting one and watching the suite name
+it. Same arrangement `spacecost` uses for the private names Stage 2 reaches.
+
+✅  **A third redundancy was inside the package rather than across the
+seam**, and it is the shape this project has a rule for: `requirements.txt`
+there listed the same five dependencies `pyproject.toml` declares, by hand,
+with nothing holding the two to each other -- under its own comment saying
+*"pyproject.toml is the authority"*. A comment that says two copies must agree
+is a request for a checker. Nothing referenced the file and it was never
+packaged, so it is gone rather than checked (`v0.1.3`).
+
+⚠️  **And the repin itself nearly falsified three sentences.** A blind
+`` `v0.1.1` `` substitution over the three prose files hit **six** mentions
+where only **three** are the live pin; the others were accounts of things that
+happened, two about spacecost's own `v0.1.1`. `verify_docs.py` check 7 warns
+about exactly this in its own comment and cannot catch it, because a falsified
+history sentence is not a pin and nothing compares it. Reading the diff line
+by line is what caught it.
+
+### What did not change
+
+- **No number.** All four Stage 4 cells reproduce the `1.23.0` baseline.
+- **Stage 1's console output**, byte for byte against the pre-split module --
+  which is how the `_fmt_limit` re-export was confirmed to be equivalent.
+- The catalog stamp, 1.2.0.
 
 ## master v1.31.0
 

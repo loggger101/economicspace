@@ -281,7 +281,7 @@ rights reserved, so that failure runs in the dangerous direction.
 ⚠️  **spacecost** is this project's own, extracted from Stage 3 and MIT licensed; it is pinned to tag `v0.3.2` and carries every launch, propellant, Delta-v, operational and storage row, with the citations for them, and since `v0.3.0` the delivery chains Stage 2 prices through.
 
 ⚠️  **asteroid_catalog** is this project's own too, extracted from Stage 1 and
-MIT licensed; it is pinned to tag `v0.1.1` and carries the four survey
+MIT licensed; it is pinned to tag `v0.1.3` and carries the four survey
 fetchers, the cross-match, the H-derivation and the Bus-DeMeo composition
 table. **The upstream citations travel with it**: its own `CITATIONS.md`
 carries the SsODNet and NEOWISE requests in full, and section 1 above remains
