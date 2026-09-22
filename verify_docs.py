@@ -48,6 +48,12 @@ counts-in-prose failure this file was written to catch:
                      the footer's claim about what it borrows is derived from
                      that scan rather than typed, because it was typed once and
                      was false in four places
+   17. dest table    README's destination table -- the price, the kg-in-LEO
+                     ratio and every delta-v its chain column quotes -- against
+                     `master.DELIVERY_DESTINATIONS`.  Check 9 on a different
+                     table: seven rows of typed markdown restating a
+                     derivation, which is the third copy of the in-space
+                     prices and the one nothing read
 
     py verify_docs.py                       # every check except 10
     py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 10
@@ -1961,6 +1967,120 @@ def check_model_borrows() -> bool:
     return not findings
 
 
+def check_destination_table() -> bool:
+    """README's destination table, against `master.DELIVERY_DESTINATIONS`.
+
+    The same argument as check 9, on a different table, and found the same way.
+    Every in-space price in the model comes out of one derivation; README then
+    tabulates all of it -- the price, the kg-in-LEO ratio and each chain's
+    delta-v -- as seven rows of typed markdown that nothing read.  That is a
+    third copy of numbers this repo has now twice caught rotting: once in the
+    wall clocks, and once in the "cheapest destination" claim that five files
+    carried while the ledger disproving it sat in the repo.
+
+    ⚠️  IT READS EVERY ROW AND EVERY COLUMN, deliberately.  The lesson from
+    check 9 is that a check reading one row is a check on that row, so this
+    one fails if any of the three numeric columns disagrees for any
+    destination, and also if the table gains or loses a destination the model
+    does not have.
+
+    The chain column is prose, so what is pinned there is every delta-v it
+    quotes: each `N,NNN m/s` in a row must be a burn in that destination's own
+    chain.  A number in that column belonging to a different destination, or
+    to no chain at all, is the failure this catches.
+    """
+    n = bad = 0
+    problems: List[str] = []
+    try:
+        sys.path.insert(0, REPO)
+        with contextlib.redirect_stdout(io.StringIO()):
+            import master as _m
+    except SyntaxError as exc:
+        print("17. dest table SyntaxError in this repo's own source: %s" % exc)
+        return False
+    except Exception as exc:                       # no inputs, no pandas, ...
+        print("17. dest table SKIPPED (%s: %s)" % (type(exc).__name__, exc))
+        return True
+
+    readme_p = os.path.join(REPO, "README.md")
+    if not os.path.exists(readme_p):
+        print("17. dest table README.md is not on disk")
+        return False
+    text = read(readme_p)
+    header = "| Destination | Launch cost avoided | kg in LEO per kg | Chain |"
+    if header not in text:
+        # Not a skip: the table is supposed to be there, and its heading
+        # being reworded is exactly how a check quietly stops checking.
+        print("17. dest table the destination table's header has moved; "
+              "check 17 cannot find it")
+        return False
+
+    rows = {}
+    for line in text.split(header, 1)[1].splitlines():
+        if not line.startswith("|"):
+            if rows:
+                break
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) != 4 or set(cells[0]) <= set("-: "):
+            continue
+        key = re.sub(r"[^a-z_]", "", cells[0].split("`")[1] if "`" in cells[0] else "")
+        if key:
+            rows[key] = cells
+
+    model = _m.DELIVERY_DESTINATIONS
+    missing = sorted(set(model) - set(rows))
+    extra = sorted(set(rows) - set(model))
+    n += 1
+    for k in missing:
+        problems.append("README's destination table has no row for %r" % k)
+    for k in extra:
+        problems.append("README tabulates %r and the model has no such "
+                        "destination" % k)
+
+    for key, cells in sorted(rows.items()):
+        if key not in model:
+            continue
+        usd = model[key]["usd_per_kg"]
+        # earth_surface is the one row that is legitimately a dash: it avoids
+        # no launch, so a price and a ratio would both be lies.
+        if usd == 0.0:
+            n += 1
+            if cells[1].strip("* ") != "-" or cells[2].strip("* ") != "-":
+                problems.append("%s avoids no launch, so README should show "
+                                "'-' for both numbers, not %r / %r"
+                                % (key, cells[1], cells[2]))
+            continue
+        n += 1
+        want_usd = "$%s/kg" % format(round(usd), ",d")
+        if want_usd not in cells[1]:
+            problems.append("%s: README says %s, the model derives %s"
+                            % (key, cells[1], want_usd))
+        n += 1
+        want_ratio = "%.2f" % (usd / _m._LEO_USD_PER_KG)
+        if want_ratio not in cells[2]:
+            problems.append("%s: README says %s kg in LEO per kg, the model "
+                            "derives %s" % (key, cells[2], want_ratio))
+        # Every delta-v quoted in the chain prose must be in THIS chain.
+        chain = {float(l[1]) for l in (_m._DELIVERY_LEGS.get(key) or [])
+                 if l[0] == "burn"}
+        for quoted in re.findall(r"([\d,]+)\s*m/s", cells[3]):
+            n += 1
+            val = float(quoted.replace(",", ""))
+            if val not in chain:
+                problems.append("%s: README's chain quotes %s m/s, which is "
+                                "not a burn in that chain (%s)"
+                                % (key, quoted,
+                                   ", ".join("%.0f" % d for d in sorted(chain))))
+
+    bad = len(problems)
+    print("17. dest table %d claims checked against the model, %d wrong"
+          % (n, bad))
+    for pr in problems:
+        print("     ! " + pr)
+    return bad == 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run every check except 10, plus 10 if `--before` names a snapshot.
 
@@ -1998,7 +2118,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                check_harness_scope,
                check_prose_numbers,
                check_overwrite_guards,
-               check_model_borrows):
+               check_model_borrows,
+               check_destination_table):
         ok = fn() and ok
     if args.before:
         if len(args.before) < 2:

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.29.0)
+"""Master Asteroid Profitability Pipeline (1.30.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -121,7 +121,7 @@ _MASTER_REQUIRED = [
 # requirements.txt
 # and delete this dict; nothing else here changes.
 _MASTER_PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.2.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.1",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -3302,7 +3302,6 @@ print("    filter_by_spectral_group(catalog, 'X-complex')  # metallic")
 # IMPORTS & CONFIGURATION
 # ─────────────────────────────────────────────────────────────────────────────
 import json
-import math
 import os
 import warnings
 from dataclasses import dataclass
@@ -3311,6 +3310,8 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+import spacecost
 import requests
 
 for _cat in (DeprecationWarning, FutureWarning, UserWarning):
@@ -3561,134 +3562,67 @@ _REF_PRICE_DATE = "2026-05-29"
 # not asserted here; it is derived from the rocket equation, from the Δv
 # ladder in Module 3's DELTA_V_REFERENCE, and from a real launch price.
 #
-# Constants below are cross-referenced to Module 3.  They are duplicated
-# rather than imported because Module 2 runs BEFORE Module 3 in the pipeline
-# order (and in the concatenated master.py), so the tables are not in scope.
-# If you change one of these, change it in Module 3 too.
-
-G0_M_S2 = 9.806_65                 # standard gravity, exact by definition
-
-# Falcon 9 reusable $/kg-to-LEO, Module 3 LAUNCH_VEHICLES ($74M / 17.4 t).
-# This is the cheapest operational figure in that table, so every in-space
-# price derived from it is a LOWER bound on the launch cost avoided.
-_LEO_USD_PER_KG = 4_253.0
-
-# The stages that would have carried the payload up if you had launched it.
-# Isp 465 s = hydrolox upper stage (Module 3 PROPELLANTS: LH2/LOX, 450-465 s
-# vacuum).  Dry-mass fraction 0.10 is mid-range for a cryogenic upper stage
-# (Centaur V ~0.08, DCSS ~0.11), stage dry mass / (dry + propellant).
-_TUG_ISP_S            = 465.0
-_TUG_DRY_MASS_FRAC    = 0.10
-# A LANDER is structurally much heavier than a tug for the same propellant
-# load: throttleable engines, landing legs, terminal-guidance sensors.
-# Apollo LM descent stage flew 2,134 kg dry on 8,200 kg of propellant = 0.21.
-_LANDER_DRY_MASS_FRAC = 0.20
-
-# Fraction of Mars ENTRY mass that survives to be useful payload on the
-# surface.  Aeroshell, backshell, parachute and descent stage are all
-# discarded.  Measured, not assumed:
-#     MSL           entry 3,257 kg  ->  rover   899 kg  = 27.6%
-#     Perseverance  entry 3,440 kg  ->  rover 1,025 kg  = 29.8%
-# 0.30 takes the better of the two and is generous to Mars; larger entry
-# vehicles should scale better than MSL's sky-crane, but nothing that size
-# has flown.
-_MARS_LANDED_MASS_FRACTION = 0.30
-
-# ─── DELIVERY LEG CHAINS ─────────────────────────────────────────────────────
-# Each destination is a SEQUENCE of legs above LEO, flown by real stages, and
-# the mass ratios chain.  Modelling it leg-by-leg rather than as one big Δv
-# matters: staging is worth a great deal, and a single-stage lunar lander
-# burning 5,920 m/s would come out roughly twice as expensive as the two-stage
-# chain that would actually be flown.
+# 🚨  EVERY CONSTANT AND EVERY LEG THAT USED TO BE HERE IS IN
+# `spacecost.delivery` NOW, AND THE SENTENCE THAT STOOD HERE IS WHY:
 #
-# Every Δv here appears in Module 3's DELTA_V_REFERENCE.
-#   ("burn", Δv m/s, Isp s, dry fraction)  - a propulsive leg
-#   ("edl",  surviving mass fraction)      - atmospheric entry, descent, landing
-_DELIVERY_LEGS: Dict[str, Optional[List[tuple]]] = {
-    "earth_surface": None,                       # already at the market
-    "leo": [],                                   # nothing above LEO
-    # v1.9.0.  Two stages, because that is how a GEO delivery is actually
-    # flown: an upper stage to GTO, then an apogee burn that circularises AND
-    # removes the 28.5 deg parking inclination in one go.  Staging is worth
-    # 5.3% here (2.945 kg in LEO per kg against 3.101), which is smaller than
-    # the lunar chain's 2x but is the same argument.
-    "geo": [
-        ("burn", 2_455.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # LEO -> GTO
-        ("burn", 1_836.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # GTO -> GEO + plane change
-    ],
-    "cislunar": [
-        ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TLI + NRHO insertion
-    ],
-    "lunar_surface": [
-        ("burn", 4_050.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TLI + LOI
-        ("burn", 1_870.0, _TUG_ISP_S, _LANDER_DRY_MASS_FRAC),   # powered descent
-    ],
-    # v1.8.0.  The 1-sol elliptical staging orbit (250 x 33,793 km), Module 3
-    # "LEO -> Mars 1-sol orbit depot".  Capture BINDS the orbit instead of
-    # circularising it, so MOI is 900 m/s where a 200-km orbit costs 2,100 at
-    # the same arrival energy; the same trade NRHO wins on at the Moon.
-    # Nothing lands, so there is no `edl` leg and no 30% survival fraction.
-    "mars_orbit": [
-        ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TMI
-        ("burn",   900.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # MOI, 1-sol capture
-    ],
-    "mars_surface": [
-        ("burn", 3_600.0, _TUG_ISP_S, _TUG_DRY_MASS_FRAC),      # TMI
-        ("edl",  _MARS_LANDED_MASS_FRACTION),                   # aeroentry + landing
-        ("burn",   800.0, _TUG_ISP_S, _LANDER_DRY_MASS_FRAC),   # retropropulsion
-    ],
-}
+#     Constants below are cross-referenced to Module 3.  They are duplicated
+#     rather than imported because Module 2 runs BEFORE Module 3 in the
+#     pipeline order (and in the concatenated master.py), so the tables are
+#     not in scope.  If you change one of these, change it in Module 3 too.
+#
+# Nine delta-v retyped by hand, a launch price retyped by hand, three cost
+# lines retyped by hand, and a manual-sync instruction holding them together.
+#
+# ⚠️  THE JUSTIFICATION DIED WHEN STAGE 3 BECAME A PIP PACKAGE, AND IT TOOK
+# TWO RELEASES TO NOTICE.  A package has no position in a pipeline: master.py
+# installs spacecost in its header, before any stage's code runs, so this
+# module imports it exactly as Module 4 does, and a standalone `py
+# modules/mineral_value.py` fetches it from the install block at the top of
+# this file.  Concatenation order was the whole argument, and concatenation
+# order stopped applying.  The general lesson is the one this repo keeps
+# paying for: a comment explaining why two copies exist is not a reason they
+# still have to.
+#
+# ⚠️  THE NAMES BELOW STAY BOUND ON PURPOSE, they are not leftovers.
+# `campaign/worked_calculation.py` reaches `master._DELIVERY_LEGS`,
+# `master._LEO_USD_PER_KG` and `master.delivered_cost_usd_per_kg`, and carries
+# all three on its `BORROWED` register.  Re-exporting is what keeps that
+# reader working, so deleting an alias here is a breaking change for it rather
+# than a tidy-up.
+#
+# ⚠️  NEVER SPELL A WORD THE BUILD REWRITES.  `build_master.py` renames three
+# of this module's top-level names on the way into master.py -- the config
+# global, the source-merge helper and the sanity-check function -- as WHOLE
+# WORDS over the entire file text, comments and string literals included.
+# They are deliberately not spelled out in this paragraph: an earlier draft
+# named one, and in master.py the warning came out naming the RENAMED word
+# instead, which is the same comment-rewriting trap arriving inside the
+# comment about it.  `build_master.py` is the list.  Reach the package
+# through `spacecost.`, and read the built master.py rather than this file,
+# because they are not the same text.
+#
+# WHAT MOVED AND WHAT IS STILL TYPED is documented in spacecost/delivery.py.
+# The short version: every chain delta-v is a DELTA_V_REFERENCE lookup now, so
+# the table is the one authority; the six downleg departure burns are NOT,
+# because two of them have no row at all and a third disagrees with its row by
+# 2 m/s, and deriving all six uniformly would have moved two published prices
+# under a change that moves none.
 
+G0_M_S2 = spacecost.G0_M_S2        # standard gravity, exact by definition
 
-def _stage_mass_ratio(dv_m_s: float, isp_s: float, dry_mass_frac: float) -> float:
-    """Initial mass needed per kg of payload for one propulsive leg.
+# Falcon 9 reusable $/kg-to-LEO, off `LAUNCH_VEHICLES_REFERENCE` rather than
+# typed.  The cheapest operational figure in that table, so every in-space
+# price derived from it is a LOWER bound on the launch cost avoided.
+_LEO_USD_PER_KG = spacecost.LEO_LAUNCH_USD_PER_KG
 
-        R  = exp(Δv / (Isp·g0))                        rocket equation
-        p  = (R − 1)(1 + d)                            propellant per kg payload
-        δ  = d / (d + p)   ⇒   d = δ(R−1) / (1 − δR)   stage dry mass
-        m0 = R (1 + d)                                 total mass to start with
+# The leg chains.  ⚠️  `None` and `[]` are DIFFERENT and both are used:
+# `earth_surface` has no chain and avoids no launch, `leo` has an EMPTY chain
+# and avoids the whole LEO price.  `_build_destination_table` below tests
+# `is None` for exactly that reason, and a truthiness test there would price
+# Earth's surface at 4,253 $/kg.
+_DELIVERY_LEGS = spacecost.DELIVERY_CHAINS
 
-    Returns inf when δ·R ≥ 1; the tank cannot close on that Δv and no amount
-    of propellant will fix it.
-    """
-    if dv_m_s <= 0:
-        return 1.0
-    r = math.exp(float(dv_m_s) / (isp_s * G0_M_S2))
-    if dry_mass_frac * r >= 1.0:
-        return float("inf")
-    d = dry_mass_frac * (r - 1.0) / (1.0 - dry_mass_frac * r)
-    return r * (1.0 + d)
-
-
-def delivered_cost_usd_per_kg(
-    destination:    str,
-    leo_usd_per_kg: float = _LEO_USD_PER_KG,
-) -> float:
-    """Cost of putting 1 kg of payload at `destination`, launched from Earth.
-
-    This is the "launch cost avoided" that gives asteroid material its
-    in-space value.  Derived, not tabulated: walk the destination's leg chain
-    BACKWARDS from the payload, multiplying up the mass each leg demands, then
-    charge the whole stack at the LEO launch price.
-
-    An `edl` leg divides rather than multiplies; surviving 30% of entry mass
-    means you must arrive with 1/0.30 = 3.33 kg for every kg that lands.
-    """
-    legs = _DELIVERY_LEGS.get(str(destination or "").strip().lower())
-    if legs is None:
-        return 0.0                       # earth_surface avoids no launch at all
-
-    mass = 1.0                           # kg that must exist at the start of the chain
-    for leg in reversed(legs):
-        if leg[0] == "edl":
-            frac = float(leg[1])
-            mass = mass / frac if frac > 0 else float("inf")
-        else:
-            _, dv, isp, dry = leg
-            mass *= _stage_mass_ratio(dv, isp, dry)
-        if not math.isfinite(mass):
-            return float("inf")
-    return float(leo_usd_per_kg) * mass
+delivered_cost_usd_per_kg = spacecost.delivered_cost_usd_per_kg
 
 
 # Terrestrial bulk-industrial water, for the earth_surface case.  Municipal /
@@ -3697,30 +3631,82 @@ def delivered_cost_usd_per_kg(
 _EARTH_SURFACE_WATER_USD_PER_KG = 0.001
 
 
-_DESTINATION_NOTES = {
-    "leo":           "Falcon 9 reusable $/kg-to-LEO, straight off Module 3.",
-    "geo":           "LEO -> GTO (2,455 m/s), then an apogee burn of 1,836 "
-                     "m/s that circularises and removes 28.5 deg of "
-                     "inclination at once.  Coplanar that burn would be "
-                     "1,478, so 358 m/s of this price is the latitude of the "
-                     "launch site.  Dearer per kilogram than a cislunar "
-                     "depot, and a far narrower market once it arrives.",
-    "cislunar":      "TLI + NRHO insertion (3,600 m/s) on one cryo stage.",
-    "lunar_surface": "TLI + LOI (4,050 m/s) on a cryo stage, then powered "
-                     "descent (1,870 m/s) on a lander.  No atmosphere, so "
-                     "every metre per second is propulsive — the Moon is the "
-                     "nearest destination and among the dearest to land on.",
-    "mars_orbit":    "TMI (3,600 m/s), then 900 m/s of capture into the "
-                     "250 x 33,793 km 1-sol staging orbit (NASA DRA 5.0).  "
-                     "Binding an ellipse is far cheaper than circularising: "
-                     "the same arrival costs 2,100 m/s into a 200-km orbit.  "
-                     "Nothing enters the atmosphere, so unlike mars_surface "
-                     "there is no entry-survival fraction on top.",
-    "mars_surface":  "TMI (3,600 m/s), then aeroentry surviving 30% of entry "
-                     "mass (MSL / Perseverance measured), then 800 m/s of "
-                     "retropropulsion.  Mars is far but its atmosphere does "
-                     "most of the braking for free.",
-}
+# ─── THE PROSE THAT GOES IN THE CSV, AND WHY IT IS FORMATTED ────────────────
+# 🚨  THESE STRINGS ARE OUTPUT.  They are written into the `notes` column of
+# `mineral_value_catalog.csv`, so a number typed here is a number shipped to a
+# reader, and it rots exactly like any other copy.  Every delta-v, mass
+# fraction and percentage below is therefore INTERPOLATED FROM THE CHAIN the
+# sentence is describing, not retyped beside it: if a `DELTA_V_REFERENCE` row
+# moves, the chain moves and the sentence moves with it.
+#
+# ⚠️  The four figures that are NOT the chain are named constants with their
+# citations, rather than digits buried mid-sentence, so a reader can see at a
+# glance which numbers this table asserts and which it derives.  They are
+# comparisons and context, not terms in the price.
+_GEO_COPLANAR_GTO_BURN_M_S = 1_478.0   # the same apogee burn with no plane change
+_PARKING_INCLINATION_DEG   = 28.5      # Cape Canaveral, the latitude GTO starts at
+_MARS_200KM_CAPTURE_M_S    = 2_100.0   # circularising instead of binding an ellipse
+_MARS_1SOL_ORBIT_KM        = (250, 33_793)   # NASA DRA 5.0 staging orbit, altitudes
+
+
+def _burns(key) -> list:
+    """The burn delta-v of a destination's chain, in flight order, m/s."""
+    return [l[1] for l in (_DELIVERY_LEGS.get(key) or []) if l[0] == "burn"]
+
+
+def _entry_survival_pct(key) -> float:
+    """The `edl` leg's surviving mass fraction as a percentage, or 0.0."""
+    for leg in (_DELIVERY_LEGS.get(key) or []):
+        if leg[0] == "edl":
+            return float(leg[1]) * 100.0
+    return 0.0
+
+
+def _build_destination_notes() -> Dict[str, str]:
+    """The per-destination sentence, with every chain figure interpolated."""
+    geo, cis = _burns("geo"), _burns("cislunar")
+    lun, m_o, m_s = _burns("lunar_surface"), _burns("mars_orbit"), _burns("mars_surface")
+    plane_change = geo[1] - _GEO_COPLANAR_GTO_BURN_M_S
+    return {
+        "leo":           "Falcon 9 reusable $/kg-to-LEO, straight off Module 3.",
+        "geo":           f"LEO -> GTO ({geo[0]:,.0f} m/s), then an apogee burn "
+                         f"of {geo[1]:,.0f} m/s that circularises and removes "
+                         f"{_PARKING_INCLINATION_DEG:.1f} deg of "
+                         "inclination at once.  Coplanar that burn would be "
+                         f"{_GEO_COPLANAR_GTO_BURN_M_S:,.0f}, so "
+                         f"{plane_change:,.0f} m/s of this price is the "
+                         "latitude of the launch site.  Dearer per kilogram "
+                         "than a cislunar depot, and a far narrower market "
+                         "once it arrives.",
+        "cislunar":      f"TLI + NRHO insertion ({cis[0]:,.0f} m/s) on one "
+                         "cryo stage.",
+        "lunar_surface": f"TLI + LOI ({lun[0]:,.0f} m/s) on a cryo stage, then "
+                         f"powered descent ({lun[1]:,.0f} m/s) on a lander.  "
+                         "No atmosphere, so "
+                         "every metre per second is propulsive — the Moon is "
+                         "the nearest destination and among the dearest to "
+                         "land on.",
+        "mars_orbit":    f"TMI ({m_o[0]:,.0f} m/s), then {m_o[1]:,.0f} m/s of "
+                         "capture into the "
+                         f"{_MARS_1SOL_ORBIT_KM[0]:,d} x "
+                         f"{_MARS_1SOL_ORBIT_KM[1]:,d} km 1-sol staging orbit "
+                         "(NASA DRA 5.0).  "
+                         "Binding an ellipse is far cheaper than "
+                         "circularising: the same arrival costs "
+                         f"{_MARS_200KM_CAPTURE_M_S:,.0f} m/s into a 200-km "
+                         "orbit.  Nothing enters the atmosphere, so unlike "
+                         "mars_surface there is no entry-survival fraction "
+                         "on top.",
+        "mars_surface":  f"TMI ({m_s[0]:,.0f} m/s), then aeroentry surviving "
+                         f"{_entry_survival_pct('mars_surface'):.0f}% of entry "
+                         "mass (MSL / Perseverance measured), then "
+                         f"{m_s[1]:,.0f} m/s of "
+                         "retropropulsion.  Mars is far but its atmosphere "
+                         "does most of the braking for free.",
+    }
+
+
+_DESTINATION_NOTES = _build_destination_notes()
 
 
 def _build_destination_table() -> Dict[str, dict]:
@@ -3764,77 +3750,17 @@ DELIVERY_DESTINATIONS: Dict[str, dict] = _build_destination_table()
 # down.  Someone has to pay that leg; the miner selling at the depot eats it
 # in the price.
 #
-# Derived from the same Module 3 rates Module 4 charges for an Earth-return
-# mission, so the two sides of the pipeline cannot drift apart:
+# Moved to `spacecost.delivery` with the delivery chains above, and for the
+# same reason: the capsule, TPS and recovery lines were three more
+# hand-retyped copies of `OPERATIONAL_COSTS_REFERENCE` rows, and they are read
+# off that table now.
 #
-#   capsule dry mass  0.10 x payload             @ $150,000/kg   (Module 3
-#                                                 "Return capsule recurring")
-#   TPS               0.15 x (payload + capsule) @  $50,000/kg   (Module 3
-#                                                 "Heat shield / TPS", and
-#                                                 0.15 is Module 4's
-#                                                 heat_shield_frac_of_payload)
-#   recovery campaign $15,000,000 over a nominal 10 t batch       (Module 3
-#                                                 "Sample recovery operations")
-#   departure burn    rocket-equation mass penalty for leaving the depot
-#
-# Coming down is far cheaper than going up; you need a heat shield, not a
-# launch vehicle, which is why these numbers are a fraction of the
-# launch-cost-avoided figures above.
-_DOWNLEG_CAPSULE_DRY_FRAC   = 0.10
-_DOWNLEG_TPS_FRAC           = 0.15
-_DOWNLEG_CAPSULE_USD_PER_KG = 150_000.0
-_DOWNLEG_TPS_USD_PER_KG     =  50_000.0
-_DOWNLEG_RECOVERY_USD       = 15_000_000.0
-_DOWNLEG_BATCH_KG           = 10_000.0
-# Δv to leave the destination onto an Earth-return trajectory, entering
-# directly.  All from Module 3's DELTA_V_REFERENCE.
-#   leo           - deorbit burn, ~120 m/s
-#   geo           - deorbit from GEO into the atmosphere, ~1,490 m/s
-#   cislunar      - NRHO departure, ~450 m/s (symmetric with insertion)
-#   lunar_surface: ascent to LLO (1,870) + trans-Earth injection (~850)
-#   mars_orbit    - TEI at periapsis, ~900 m/s, symmetric with the capture
-#   mars_surface  - Mars ascent (4,100) + TEI from LMO (2,100)
 # The surface cases are punishing, and correctly so: hauling material back UP
 # out of a gravity well you just landed in is close to the worst thing you can
 # do with it.  Mars in particular ends up costing more to ship home than any
 # commodity in this catalog is worth, which is the honest answer; you do not
 # mine asteroids to deliver platinum to Mars and then fly it back.
-_DOWNLEG_DEPARTURE_DV_M_S = {
-    "leo":            120.0,
-    # v1.9.0.  Twelve times the LEO figure and three times cislunar's, which
-    # is the price of GEO being a long way up a well it is expensive to fall
-    # back down.  Lowering perigee from the 3.075 km/s circular speed to an
-    # entry ellipse's 1.587 km/s apogee speed.
-    "geo":          1_490.0,
-    "cislunar":       450.0,
-    "lunar_surface": 2_720.0,
-    # v1.8.0.  A seventh of the surface figure, and it is the single largest
-    # behavioural difference between the two Mars destinations: a commodity
-    # with no in-space market is valued by FLYING IT HOME, and from the
-    # surface that route costs $96,394/kg, more than any price in the catalog,
-    # so the PGMs are worth nothing at a Mars base.  From orbit the same
-    # kilogram routes home for $30,150 and they are worth something again.
-    "mars_orbit":      900.0,
-    "mars_surface":  6_200.0,
-}
-
-
-def downleg_cost_usd_per_kg(destination: str) -> float:
-    """Cost of moving 1 kg from an in-space depot to the terrestrial market.
-
-    Returns 0.0 for earth_surface; the material is already there.
-    """
-    key = str(destination or "").strip().lower()
-    if key not in _DOWNLEG_DEPARTURE_DV_M_S:
-        return 0.0
-    capsule_kg = _DOWNLEG_CAPSULE_DRY_FRAC
-    tps_kg     = _DOWNLEG_TPS_FRAC * (1.0 + capsule_kg)
-    hardware   = (capsule_kg * _DOWNLEG_CAPSULE_USD_PER_KG
-                  + tps_kg * _DOWNLEG_TPS_USD_PER_KG)
-    recovery   = _DOWNLEG_RECOVERY_USD / _DOWNLEG_BATCH_KG
-    # Departure burn shows up as extra mass to be built and flown.
-    r = math.exp(_DOWNLEG_DEPARTURE_DV_M_S[key] / (_TUG_ISP_S * G0_M_S2))
-    return (hardware + recovery) * r
+downleg_cost_usd_per_kg = spacecost.downleg_cost_usd_per_kg
 
 
 # ─── IN-SPACE UTILITY BY COMMODITY ───────────────────────────────────────────
@@ -15039,7 +14965,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.29.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.30.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
