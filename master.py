@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.31.0)
+"""Master Asteroid Profitability Pipeline (1.32.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -124,7 +124,7 @@ _MASTER_REQUIRED = [
 _MASTER_PIP_SPEC = {
     "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.2",
     "asteroid_catalog":
-        "git+https://github.com/loggger101/AsteroidCatalog@v0.1.1",
+        "git+https://github.com/loggger101/AsteroidCatalog@v0.1.3",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -185,10 +185,13 @@ import asteroid_catalog
 from asteroid_catalog import build_catalog_table as _pkg_build_catalog
 from asteroid_catalog import lookup_body as _pkg_lookup_body
 
-# The launcher to name in a printed instruction.  `py` is the Windows launcher
-# and exists nowhere else, so a hint that says it is wrong advice on the host
-# that most needs the hint.
-_PY = "py" if os.name == "nt" else os.path.basename(sys.executable)
+# NO `_PY` HERE ANY MORE.  Every other stage module defines one -- the launcher
+# to name in a printed instruction, because `py` is the Windows launcher and
+# exists nowhere else -- and so did this one, for the hint messages the
+# fetchers print.  Those fetchers are in the package now and it carries its own
+# copy, so the constant here was defined, shadowed nothing, and was read by
+# nothing.  A split leaves this behind whenever it moves a helper's USERS
+# without moving the helper.
 
 # Silence the chronic noise the data libraries emit during a typical run, but
 # DON'T globally suppress everything, real RuntimeWarnings (e.g. divide-by-zero
@@ -474,6 +477,12 @@ filter_by_spectral_group     = asteroid_catalog.filter_by_spectral_group
 _extract_canonical_designation = asteroid_catalog._extract_canonical_designation
 _by_distinct                 = asteroid_catalog.taxonomy._by_distinct
 _resolve_cache_dir           = asteroid_catalog.config._resolve_cache_dir
+# The banner's row-cap formatter.  RE-EXPORTED RATHER THAN RE-DEFINED: it came
+# out of the same config block as `_resolve_cache_dir`, so the package has it,
+# and a three-line copy here would be two definitions of one thing -- with the
+# package's copy then read by nothing, which is how a helper quietly becomes
+# dead on one side of a seam.
+_fmt_limit                   = asteroid_catalog.config._fmt_limit
 
 
 def lookup_asteroid_catalog(catalog: pd.DataFrame, query: str) -> pd.DataFrame:
@@ -510,11 +519,6 @@ os.makedirs(_resolve_cache_dir(CATALOG_CONFIG), exist_ok=True)
 print(f"OK  Configuration loaded - output dir: {CATALOG_CONFIG.output_dir}")
 print(f"    Active sources  : "
       f"{', '.join(s for s, on in (('JPL', CATALOG_CONFIG.use_jpl), ('MP3C', CATALOG_CONFIG.use_mp3c), ('SsODNet', CATALOG_CONFIG.use_ssodnet), ('NEOWISE', CATALOG_CONFIG.use_neowise)) if on)}")
-def _fmt_limit(n: int) -> str:
-    """Render a row cap for the banner; 0 is unlimited, not zero rows."""
-    return "unlimited" if not n else f"{n:,}"
-
-
 print(f"    Fetch limits    : "
       f"JPL {_fmt_limit(CATALOG_CONFIG.jpl_limit)}  |  "
       f"SsODNet {_fmt_limit(CATALOG_CONFIG.ssodnet_limit)}  |  "
@@ -12213,7 +12217,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.31.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.32.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

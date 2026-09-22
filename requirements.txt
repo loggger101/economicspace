@@ -20,4 +20,4 @@ yfinance
 tqdm
 pyarrow
 spacecost @ git+https://github.com/loggger101/spacecost@v0.3.2
-asteroid-catalog @ git+https://github.com/loggger101/AsteroidCatalog@v0.1.1
+asteroid-catalog @ git+https://github.com/loggger101/AsteroidCatalog@v0.1.3
