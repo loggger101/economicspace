@@ -33,7 +33,9 @@ Fetched at run time by Stages 1 to 3. None is vendored.
 ### 🔔 IMCCE SsODNet / ssoBFT
 
 Best-of-literature compilation: diameter, albedo, mass, density, rotation and
-taxonomy. Fetched as a bulk parquet by `fetch_ssodnet` in `modules/catalog.py`.
+taxonomy. Fetched as a bulk parquet by `fetch_ssodnet`, which lives in the
+[`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) package
+since master v1.31.0; `modules/catalog.py` is the adapter that drives it.
 
 > Berthier, J., Carry, B., Vachier, F., et al. (2023). *Astronomy &
 > Astrophysics.* SsODNet: Solar system Open Database Network.
@@ -278,6 +280,13 @@ rights reserved, so that failure runs in the dangerous direction.
 
 ⚠️  **spacecost** is this project's own, extracted from Stage 3 and MIT licensed; it is pinned to tag `v0.3.2` and carries every launch, propellant, Delta-v, operational and storage row, with the citations for them, and since `v0.3.0` the delivery chains Stage 2 prices through.
 
+⚠️  **asteroid_catalog** is this project's own too, extracted from Stage 1 and
+MIT licensed; it is pinned to tag `v0.1.1` and carries the four survey
+fetchers, the cross-match, the H-derivation and the Bus-DeMeo composition
+table. **The upstream citations travel with it**: its own `CITATIONS.md`
+carries the SsODNet and NEOWISE requests in full, and section 1 above remains
+this repository's statement of what it owes them.
+
 Runtime, from `requirements.txt`: **requests**, **pandas**, **numpy**,
 **yfinance**, **tqdm**, **pyarrow**. Dashboard, from `requirements-ui.txt`:
 **streamlit**, **psutil**. Exact pins are in `requirements-lock.txt`; do not
@@ -293,7 +302,7 @@ This file does not duplicate them. It says where they are.
 |---|---|
 | launch vehicles, propellants, storage systems, Delta-v segments, operational costs | the `notes` field of each row in the [`spacecost`](https://github.com/loggger101/spacecost) package, with `reference_year` tagging staleness. They left `modules/transportation.py` at master v1.25.0; that repo's `CITATIONS.md` is their bibliography now |
 | commodity prices and market depths | per-commodity in `modules/mineral_value.py` |
-| taxonomy to composition | `TAXONOMY_COMPOSITION` in `modules/catalog.py` |
+| taxonomy to composition | `TAXONOMY_COMPOSITION` in `asteroid_catalog/taxonomy.py`, re-exported by `modules/catalog.py` |
 | the delivery LEG CHAINS and the downleg (tug and lander dry-mass fractions, the Mars entry survival fraction) | `spacecost/delivery.py`, since master v1.30.0; `modules/mineral_value.py` re-exports them and cites nothing itself |
 | delivery architectures and utility factors | `modules/mineral_value.py` and `modules/calc.py`; these are **engineering judgements**, not measurements, and README says so |
 

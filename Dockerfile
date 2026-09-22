@@ -49,13 +49,18 @@ WORKDIR /work
 # Requirements copied on their own first so a source edit does not invalidate
 # the pip layer; the install is the slow half on aarch64, where a wheel that is
 # missing has to be built rather than downloaded.
-# requirements.txt comes along because spacecost is NOT in the lock file and
-# cannot be: it is a tagged git URL rather than a wheel pin. Installing only
-# the lock leaves an image with no Stage 3, and the failure is invisible on a
+# requirements.txt comes along because the git-pinned packages are NOT in the
+# lock file and cannot be: each is a tagged git URL rather than a wheel pin.
+# There are two now -- `spacecost` for Stage 3's reference tables and
+# `asteroid_catalog` for Stage 1's builder -- so installing only the lock
+# leaves an image with neither stage, and the failure is invisible on a
 # networked host because master.py pip-installs what is missing at import --
 # which means a git fetch at run time, inside the image that exists to BE the
-# reproducible environment. Both are resolved together so the `==` pins win
-# and spacecost still arrives at the tag requirements.txt names.
+# reproducible environment. Both files are resolved together so the `==` pins
+# win and each package still arrives at the tag requirements.txt names.
+#
+# ⚠️  This needs no edit per package, which is the point of naming them in one
+# manifest: a third split joins by appearing in requirements.txt.
 COPY requirements-lock.txt requirements.txt ./
 RUN python -m pip install --no-cache-dir --upgrade pip \
  && python -m pip install --no-cache-dir -r requirements-lock.txt \
