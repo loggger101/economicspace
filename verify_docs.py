@@ -1032,6 +1032,41 @@ def check_manifests() -> bool:
                        % rel)
         for ref in found:
             pins.setdefault(ref, []).append("%s (prose)" % rel)
+    # THE SPELLED COUNT, held to the copies actually found.
+    #
+    # This repo's standing rule is that a count nothing checks is a number
+    # waiting to rot, and the fix is a checker or a deletion.  Here it rotted
+    # in the usual way: README said SEVEN while CLAUDE.md said FIVE and listed
+    # five, two current-claiming files disagreeing about one number.  Deleting
+    # the count is the wrong remedy for this one, because "how many places
+    # type the pin" is exactly what a repinner needs to know before starting.
+    # So it is enforced instead, which is the same exemption the version table
+    # gets from check 2.
+    total = sum(len(v) for v in pins.values())
+    words = {"three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+             "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+    spelled = re.compile(r"pin is typed in (\w+) places|in all (\w+) places",
+                         re.I)
+    for rel in ("README.md", "CLAUDE.md"):
+        path = os.path.join(REPO, rel)
+        if not os.path.exists(path):
+            continue
+        hits = [(a or b) for a, b in spelled.findall(read(path))]
+        n += 1
+        if not hits:
+            bad.append("%s no longer spells how many places type the pin in a "
+                       "form check 7 can read" % rel)
+        for word in hits:
+            got = words.get(word.lower())
+            if got is None:
+                bad.append("%s spells the pin count as %r, which is not a "
+                           "number word this check knows" % (rel, word))
+            elif got != total:
+                bad.append("%s says the pin is typed in %s (%d) places and %d "
+                           "copies were found: %s"
+                           % (rel, word, got, total,
+                              "; ".join(sorted(f for v in pins.values() for f in v))))
+
     n += 1
     if not pins:
         # Not a skip. The pin is supposed to be typed in several places, and

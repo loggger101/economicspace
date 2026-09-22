@@ -4864,17 +4864,32 @@ will not say Stage 3. The four names are grouped and labelled as Stage 2's in
 spacecost's `tests/test_consumer_contract.py`, which is the only thing that
 will say so out loud.
 
-⚠️  **THE PIN IS TYPED IN FIVE PLACES**, and a repin that misses one is the
-parallel-repo divergence in miniature: `requirements.txt`, `_MASTER_PIP_SPEC`
-in `build_master.py`, `_PIP_SPEC` in this module, the same in
-`modules/mineral_value.py` (**both are what a standalone module run installs
-from**) and README's sentence naming the tag.
+⚠️  **THE PIN IS TYPED IN SEVEN PLACES**, and a repin that misses one is the
+parallel-repo divergence in miniature. Four carry it as a URL:
+`requirements.txt`, `_MASTER_PIP_SPEC` in `build_master.py`, and `_PIP_SPEC`
+in this module and in `modules/mineral_value.py` (**both are what a standalone
+module run installs from**). Three carry it as PROSE: README's sentence naming
+the tag, the paragraph you are reading, and `CITATIONS.md`.
 
 ✅  **The fifth copy joined `verify_docs.py` check 7 with no edit**, which is
 that check's own design being exercised for the first time: it scans every
 first-party file for the URL rather than reading a list of filenames, and its
 comment says a fifth copy would join by existing. It did. **When you write a
 check, prefer finding over listing, and then wait for the day it pays.**
+
+🚨  **AND THE SIXTH AND SEVENTH DID NOT, BECAUSE PROSE CARRIES NO URL.** This
+paragraph said FIVE and listed five while README said seven, and both
+`CITATIONS.md` and this file sat at `v0.3.0` through the `v0.3.1` repin with
+nothing reading them. Finding beats listing only where there is something to
+find; a prose claim has to be NAMED, and naming one of three is *a check that
+reads one row of a table*. Check 7 reads all three now, on the two phrasings
+that assert what the pin IS, and **a file whose claim it cannot find is a
+finding rather than a silent pass.**
+
+⚠️  **The count above is spelled out, and that is only safe because check 7
+now enforces it**, the same exemption the version-table count gets from check
+2. It is not licence to spell one elsewhere: this very paragraph disagreed
+with README for a release, which is the third count in this file to rot.
 
 🚨  **THIS PROJECT HAS ALREADY BEEN BURNED BY A SPLIT, AND THE LESSON WAS NOT
 "DO NOT SPLIT".** It was developed in two places at once and `1.0.6` / `1.1.4` /
