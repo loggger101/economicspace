@@ -161,21 +161,37 @@ cmd_setup() {
     # reading of what the pinned set is for: a locally compiled extension is
     # not the artefact the numbers were measured against, so if the wheel is
     # not there, the pin has already failed and the loose set is the answer.
-    # spacecost is NOT in the lock file and cannot be: it is a tagged git
-    # URL, which --only-binary refuses by construction. So the lock install
-    # alone produces a venv where `import transportation` fails, and the only
-    # reason that has never been seen is that master.py auto-installs whatever
-    # is missing at import -- a git fetch, at run time, inside the environment
-    # whose whole purpose is to be the one the numbers were measured on. It is
-    # installed here instead, from the line requirements.txt already carries,
-    # so the tag is still pinned in exactly one place.
+    # The git-pinned packages are NOT in the lock file and cannot be: each is
+    # a tagged git URL, which --only-binary refuses by construction. So the
+    # lock install alone produces a venv where `import transportation` and
+    # `import catalog` both fail, and the only reason that has never been seen
+    # is that master.py auto-installs whatever is missing at import -- a git
+    # fetch, at run time, inside the environment whose whole purpose is to be
+    # the one the numbers were measured on. They are installed here instead,
+    # from the lines requirements.txt already carries, so each tag is still
+    # pinned in exactly one place.
+    #
+    # ⚠️  EVERY DIRECT REFERENCE IS TAKEN, NOT A NAMED ONE. This grepped for
+    # `^spacecost` until Stage 1's builder moved out to `asteroid_catalog` as
+    # well, at which point a named grep would have installed one of two and
+    # left a strict setup unable to run Stage 1 -- the same "a check that reads
+    # one row of a table" shape this repo keeps recording, in a shell script.
+    # A PEP 508 direct reference is `name @ url`, so the form is the test.
     if "$vpy" -m pip install --only-binary=:all: -r requirements-lock.txt; then
-      spec=$(grep -E '^spacecost[[:space:]]*@' requirements.txt || true)
-      if [ -n "$spec" ]; then
-        "$vpy" -m pip install "$spec" || {
-          echo "  spacecost did not install; Stage 3 will not run." >&2; exit 1; }
+      specs=$(grep -E '^[A-Za-z0-9._-]+[[:space:]]*@[[:space:]]*[a-z+]+:' \
+              requirements.txt || true)
+      if [ -n "$specs" ]; then
+        # One pip call per line: the names carry no version specifiers, so
+        # there is nothing to resolve between them, and a failure then names
+        # the package that failed rather than the whole set.
+        echo "$specs" | while IFS= read -r spec; do
+          [ -n "$spec" ] || continue
+          "$vpy" -m pip install "$spec" || {
+            echo "  ${spec%%[[:space:]]*} did not install; the stage that" >&2
+            echo "  needs it will not run." >&2; exit 1; }
+        done || exit 1
       else
-        echo "  WARNING: no spacecost line in requirements.txt." >&2
+        echo "  WARNING: no git-pinned lines in requirements.txt." >&2
       fi
     else
       echo
@@ -214,10 +230,14 @@ cmd_campaign() {
 }
 
 cmd_verify() {
-  # Stage 3's tables live in the `spacecost` package, so the seam between this
-  # repo and that one gets checked first: it needs no baseline, writes nothing
-  # outside a temp dir, and takes seconds.  It runs before the exec below,
+  # TWO stages are packages now -- Stage 1's builder is `asteroid_catalog` and
+  # Stage 3's tables are `spacecost` -- so both seams get checked first:
+  # neither needs a baseline, neither fetches, neither writes outside a temp
+  # dir, and together they take seconds.  They run before the exec below,
   # which never returns.
+  echo "  Stage 1 seam (this repo against the asteroid_catalog package):"
+  "$PY" verify_stage1.py || return 1
+  echo
   echo "  Stage 3 seam (this repo against the spacecost package):"
   "$PY" verify_stage3.py || return 1
   echo

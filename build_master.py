@@ -180,13 +180,14 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # -----------------------------------------------------------------------------
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.30.0)
+"""Master Asteroid Profitability Pipeline (1.31.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom - the orchestrator at the bottom executes everything.
 
-    Stage 1  ->  Asteroid Catalog        (modules/catalog.py 1.1.1)
+    Stage 1  ->  Asteroid Catalog        (modules/catalog.py 1.2.0,
+                 an adapter over the `asteroid_catalog` package)
                 JPL SBDB + MP3C + SsODNet + NEOWISE
                 + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
     Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.9.0)
@@ -292,17 +293,19 @@ import subprocess as _subprocess
 
 _MASTER_REQUIRED = [
     "requests", "pandas", "numpy", "yfinance", "tqdm", "pyarrow", "spacecost",
+    "asteroid_catalog",
 ]
-# import-name -> pip argument, for the packages where those differ.  Only
-# `spacecost` does: it holds Stage 3's reference tables and is not on PyPI yet,
-# so it installs from a TAGGED git ref rather than by name.  The tag is pinned
-# rather than tracking main, because an untagged URL would silently change what
-# a Colab paste installs.
-# IF SPACECOST IS EVER PUBLISHED: put a pinned "spacecost==<version>" in
-# requirements.txt
-# and delete this dict; nothing else here changes.
+# import-name -> pip argument, for the packages where those differ.  TWO do:
+# `spacecost` holds Stage 3's reference tables and `asteroid_catalog` holds
+# Stage 1's builder, and neither is on PyPI yet, so both install from a TAGGED
+# git ref rather than by name.  The tags are pinned rather than tracking main,
+# because an untagged URL would silently change what a Colab paste installs.
+# IF EITHER IS EVER PUBLISHED: put a pinned "<name>==<version>" in
+# requirements.txt and drop its entry here; nothing else changes.
 _MASTER_PIP_SPEC = {
     "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.2",
+    "asteroid_catalog":
+        "git+https://github.com/loggger101/AsteroidCatalog@v0.1.1",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -477,7 +480,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.30.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.31.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
