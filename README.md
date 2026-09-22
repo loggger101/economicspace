@@ -109,7 +109,7 @@ is the list; its length is deliberately not spelled out beside it:
 | [`versions.md`](versions.md) | what changed in which release, what every number used to be, and the per-module changelogs | the measurement history |
 | [`CITATIONS.md`](CITATIONS.md) | where every source, dataset and borrowed line came from, and what each obliges | references and attribution |
 | [`CLAUDE.md`](CLAUDE.md) | the traps, the invariants, and the reasoning behind decisions that look wrong | how to edit it safely |
-| the [`spacecost`](https://github.com/loggger101/spacecost) repo | Stage 3's reference tables, their citations, and their release history | every launch, propellant, delta-v, operational and storage row |
+| the [`spacecost`](https://github.com/loggger101/spacecost) repo | Stage 3's reference tables, their citations, their release history, and the delivery chains Stage 2 prices through | every launch, propellant, delta-v, operational and storage row, and what a kilogram costs to deliver or return |
 | the [`General_Research`](https://github.com/loggger101/General_Research) repo | the peer-reviewed and tiered-authoritative sources behind the model's weakest-sourced cells, with one extracted-data CSV per source | what backs a number, and how strongly |
 
 ### Stage 3's tables live in another repository
@@ -120,6 +120,16 @@ classes and derived tankage, the Δv segments, the operational costs and the
 storage systems, each with its inline citation. `modules/transportation.py` is
 now a thin adapter that drives it, where two thirds of what it used to hold
 was reference data.
+
+**It holds the delivery chains too, as of spacecost `v0.3.0`, and those are
+Stage 2's.** `delivered_cost_usd_per_kg` and `downleg_cost_usd_per_kg` moved
+out of `modules/mineral_value.py`, where their own comment had said they were
+*"duplicated rather than imported because Module 2 runs BEFORE Module 3 in the
+pipeline order"*: nine Δv, a launch price and three cost lines retyped by
+hand under a manual-sync instruction. A pip-installed package has no position
+in a pipeline, so that reason expired at the split and nobody noticed for two
+releases. **Stage 2 is now the first stage to reach the package**, which is
+worth knowing when an import fails: the traceback will not mention Stage 3.
 
 They left because nothing in their schema knew what an asteroid was, and a
 launch price is useful to anyone costing a mission. This pipeline is that
@@ -144,13 +154,14 @@ made that expensive was that nothing checked it, so this one is arranged so that
 drift cannot be committed rather than merely being unlikely: the data is
 single-sourced, the ten config dials are compared at import, and the output is
 compared byte for byte. **The invariants, and what fails when each breaks, are
-in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now)**, which is
+in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)**, which is
 where the editing rules live.
 
-**spacecost is pinned to a tagged release**, `v0.2.0`, in all four places that
+**spacecost is pinned to a tagged release**, `v0.3.1`, in all five places that
 type it: `requirements.txt`, `_MASTER_PIP_SPEC` in `build_master.py`,
-`_PIP_SPEC` in `modules/transportation.py` (what a standalone module run
-installs from) and this sentence. An untagged URL would let a fresh install
+`_PIP_SPEC` in `modules/transportation.py` and the same in
+`modules/mineral_value.py` (what a standalone module run installs from, and
+Stage 2 reaches the package directly now) and this sentence. An untagged URL would let a fresh install
 pick up a different table with nothing here moving, and a repin of one copy
 alone is the same divergence in miniature -- `verify_docs.py` check 7 scans
 every first-party file for the URL and fails when they disagree.
@@ -1316,7 +1327,9 @@ let that pass quietly.
 In-space prices are the launch cost avoided, **derived** rather than
 tabulated: Falcon 9 reusable $/kg-to-LEO, carried further by walking a chain
 of real stages backwards from the payload (`delivered_cost_usd_per_kg` over
-`_DELIVERY_LEGS`). Staging is modelled leg-by-leg because it matters, a
+`_DELIVERY_LEGS`, both re-exported here from `spacecost.delivery`, where every
+leg's Δv is a lookup into the same table Stage 3 reads). Staging is modelled
+leg-by-leg because it matters, a
 single stage flying the whole 5,920 m/s to the lunar surface needs 10.96 kg
 in LEO per kg landed against 4.99 kg for the tug-plus-lander pair that would
 actually be flown.

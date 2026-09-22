@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.30.0](#master-v1300)
 - [transportation v1.15.0 / master v1.29.0](#transportation-v1150--master-v1290)
 - [calc v1.23.0](#calc-v1230)
 - [calc v1.22.0](#calc-v1220)
@@ -83,7 +84,7 @@ one that does not say is not to be used.
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.15.0** | v1.15.0, the `environments` table: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.23.0** | v1.23.0, the 5% depletion cap comes off: a mission may take the whole body |
-| - | `master.py` | **1.29.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.30.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -155,6 +156,183 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.30.0
+
+**spacecost v0.2.0 -> v0.3.0. No module stamp moved, and no number moved.**
+The data contract stays at **1.15.0**, because the package gained a module and
+not a table: `build_catalog()` writes the same seven CSVs byte for byte, so
+`verify_stage3.py` check 3 passes unchanged and **Stage 3 did not have to be
+re-run**, which is the whole reason this shape was chosen. A restamp would
+have obliged a re-run, and a Stage 3 re-run re-fetches live prices.
+
+### What moved, and why it should never have been here
+
+`modules/mineral_value.py`'s delivery-leg chain and its downleg, together
+about 190 lines, are `spacecost.delivery` now. The block opened by stating
+what it was:
+
+> Constants below are cross-referenced to Module 3. They are duplicated
+> rather than imported because Module 2 runs BEFORE Module 3 in the pipeline
+> order (and in the concatenated master.py), so the tables are not in scope.
+> **If you change one of these, change it in Module 3 too.**
+
+Thirteen numbers retyped by hand under a manual-sync instruction: nine Δv, a
+launch price, and three downleg cost lines.
+
+| what | where it came from | how it was held |
+|---|---|---|
+| 9 chain Δv | `DELTA_V_REFERENCE` | retyped |
+| `_LEO_USD_PER_KG` 4,253 | `LAUNCH_VEHICLES_REFERENCE`, Falcon 9 reusable | retyped |
+| capsule, TPS, recovery | `OPERATIONAL_COSTS_REFERENCE` | retyped |
+
+🚨  **THE JUSTIFICATION EXPIRED AT THE STAGE 3 SPLIT AND STOOD FOR TWO MORE
+RELEASES.** Concatenation order was the entire argument, and a pip-installed
+package has no position in a pipeline: `master.py` installs spacecost in its
+header, before any stage's code runs. The reason was true when written, went
+false when master v1.25.0 made Stage 3 a package, and nothing re-read it.
+**A comment explaining why two copies exist is not a reason they still have
+to**, and the tell is that it was addressed to a reader rather than to a
+checker.
+
+### Derived where the table agrees, typed where it does not
+
+Every chain Δv is a `DELTA_V_REFERENCE` lookup now. The six downleg departure
+burns are **not**, and that is the decision worth recording:
+
+| destination | value | the row | agrees |
+|---|---|---|---|
+| `leo` | 120 | *(no row: a LEO deorbit burn is not tabulated)* | - |
+| `geo` | 1,490 | `GEO -> Earth (deorbit to entry)` 1,488 | **NO, by 2 m/s** |
+| `cislunar` | 450 | `TLI -> NRHO insertion` 450 | yes |
+| `lunar_surface` | 2,720 | 1,870 ascent + ~850 TEI, which has no row | partial |
+| `mars_orbit` | 900 | `1-sol Mars orbit -> Earth (TEI)` 900 | yes |
+| `mars_surface` | 6,200 | 4,100 + 2,100 | yes, as a sum |
+
+Deriving all six uniformly is the tidy-looking change and it would have moved
+**two published prices** -- what a kilogram of platinum is worth at GEO and in
+LEO -- inside a release whose entire claim is that it moves none. They stay as
+literals with the mismatch tabulated beside them. ⚠️  **Reconciling those two
+is a real question and a separate release.**
+
+### What says no number moved
+
+Not an argument: a probe. Every value the two blocks can produce was captured
+from the pre-move code at full `repr` **and as its raw IEEE bit pattern**, and
+re-captured after: **271 leaf values, zero differences**, covering the seven
+delivered prices, the seven downlegs, `DELIVERY_DESTINATIONS` (its `basis` and
+`notes` strings included, and its key ORDER), `delivered_cost_usd_per_kg` at
+three launch prices, and a 48-point sweep of the stage-mass-ratio kernel
+including the two edges where the tank cannot close.
+
+⚠️  **`math.exp`, not `np.exp`, and the package now carries both.**
+`rocket.py` is the vectorised entry point and `delivery.py` is the scalar one;
+they are not interchangeable here, because the two libraries are free to round
+the last bit differently and this repo argues its releases from bit-identity.
+`spacecost/delivery.py` says so where the exponential is.
+
+⚠️  **`None` and `[]` still mean different things**, and the move preserved
+it: `earth_surface` has no chain and avoids no launch, `leo` has an EMPTY
+chain and avoids the whole LEO price. `spacecost`'s test suite now pins that
+distinction, which is the first time it has been checked anywhere.
+
+### The derivation audit: what is derived, what is stated, and the gap
+
+The first pass derived the nine chain Delta-v and left everything else typed.
+A literal-by-literal audit of the moved module then found three things.
+
+✅  **Four of the six downleg burns ARE rows, so they are lookups now.**
+`cislunar` off `TLI -> NRHO insertion`, `mars_orbit` off `1-sol Mars orbit ->
+Earth (TEI)`, `mars_surface` off the ascent-plus-TEI pair, and
+`lunar_surface`'s 1,870 m/s ascent off the descent row it is symmetric with.
+Typing all six because two could not be derived was **a blanket exception**,
+and a blanket exception is how a register stops being a decision.
+
+🚨  **`TUG_ISP_S` IS 465 s AND THE PACKAGE'S OWN HYDROLOX ROW SAYS 452.** This
+is the one number in the chain that looks derivable and is not, and it had
+been quietly inconsistent since Stage 2 v1.2.0. 465 is the top of the
+450-465 s band a cryogenic UPPER STAGE is quoted over, which is the right
+figure for a tug; 452 is the RS-25 / RL-10 datasheet figure the propellant
+table carries. Both are defensible and they are not the same number.
+
+⚠️  **DERIVING IT IS A MODEL CHANGE AND THE MAGNITUDE IS NOT SMALL:**
+
+| destination | at 465 s | at the table's 452 s | change |
+|---|---|---|---|
+| `leo` | $4,253 | $4,253 | +0.00% |
+| `cislunar` | $10,809.93 | $11,130.38 | **+2.96%** |
+| `geo` | $12,526.34 | $12,938.14 | **+3.29%** |
+| `mars_orbit` | $13,495.71 | $13,985.91 | **+3.63%** |
+| `mars_surface` | $45,105.39 | $46,751.40 | **+3.65%** |
+| `lunar_surface` | $21,209.96 | $22,315.54 | **+5.21%** |
+
+Every in-space price in the model is one of those, so this is a release with a
+re-measurement behind it, not a tidy-up. **Left at 465 and the discrepancy is
+ASSERTED at import** against the table's 452, so the row cannot move under the
+comment describing it. Same treatment for the GEO deorbit burn, 1,490 m/s
+against a row of 1,488.
+
+✅  **THE GENERAL RULE THIS SETTLES: DERIVE WHAT AGREES, TYPE WHAT DOES NOT,
+AND ASSERT THE DIFFERENCE.** A discrepancy that is documented is a sentence;
+a discrepancy that is asserted cannot go stale, because the thing it compares
+against raises when it moves. This file is full of the first kind.
+
+### A derivation claim decays one literal at a time, and no output test sees it
+
+`tests/test_delivery.py` reads the module's SOURCE and requires every numeric
+literal to be either algebra (`0` and `1`) or a row on a `TYPED` register
+naming the table that cannot supply it.
+
+🚨  **NO TEST OF THE OUTPUTS COULD DO THIS.** A hardcoded 3,600 and a
+looked-up 3,600 produce identical numbers and identical hashes, right up until
+the row moves and only one of them follows. The bit-exactness probe that
+guards this whole change would have passed a module with every lookup
+converted back to a literal.
+
+⚠️  **Both halves are findings**, the third register in this project under that
+rule after `TYPED_OK` and `BORROWED`: a literal with no row is a value that
+stopped being derived, and a row with no literal is a permission still being
+granted for a number that has gone. Proved by planting one of each -- and by
+planting a literal that changes **no value at all**, which is the case the
+import assertions cannot reach and therefore the only one that tests the
+register itself.
+
+### README's destination table was the third copy, and `verify_docs` check 17 reads it
+
+Seven rows of typed markdown restating the derivation: the price, the
+kg-in-LEO ratio and every Delta-v in the chain column. Nothing read any of it.
+Check 17 holds all 23 claims to `master.DELIVERY_DESTINATIONS`, including that
+a Delta-v quoted in a row's prose is a burn in **that** destination's chain.
+Proved able to fail on a stale price, a rotted ratio, a wrong Delta-v and a
+dropped destination.
+
+⚠️  It is check 9's lesson on a second table -- *a check that reads one row of
+a table is a check on that row* -- and the reason it was worth writing is the
+same one: this repo has already had the "cheapest destination" claim stand in
+five files while the ledger disproving it sat in the repo.
+
+### The pin is typed in FIVE places now
+
+`modules/mineral_value.py` has its own `_PIP_SPEC`, because a standalone
+`py modules/mineral_value.py` has to be able to install what it imports.
+`verify_docs.py` check 7 picked it up with no edit, which is that check's own
+design working: it scans every first-party file for the URL rather than
+reading a list of files, precisely so a fifth copy joins the comparison by
+existing. **That is the first time that property has actually been exercised.**
+
+⚠️  **Stage 2 is the first stage to reach the package now.** A name dropped
+from spacecost fails a PRICING stage that runs before the Stage 3 adapter
+does, and the traceback will not mention Stage 3. The four names are on
+spacecost's `tests/test_consumer_contract.py`, in their own group, saying so.
+
+### What did not change
+
+- every module `pipeline_version`; only `master.py` moved, 1.29.0 -> 1.30.0
+- `build_catalog()`'s seven CSVs, byte for byte (`verify_stage3.py` check 3)
+- the data contract, 1.15.0 both sides (check 2)
+- every Stage 2 price, bit-exact (the 271-value probe above)
+- `campaign/worked_calculation.py`'s three borrowings, which still resolve
+  against `master` because the names are re-exported rather than deleted
 
 ## transportation v1.15.0 / master v1.29.0
 
@@ -273,6 +451,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.30.0](#master-v1300) | 2026-09-21 | **spacecost v0.3.0**: Stage 2's delivery chains move to the package, and the sentence explaining why they were duplicated had expired at the split |
 | [transportation v1.15.0 / master v1.29.0](#transportation-v1150--master-v1290) | 2026-09-17 | **spacecost v0.2.0**: a sixth reference table, and the guard a stage module run directly never had |
 | [calc v1.23.0](#calc-v1230) | 2026-09-17 | **the depletion cap comes off**: `max_mining_fraction` 0.05 -> 1.0, and a constraint that bound on 2% of bodies was sizing the mission on them |
 | [calc v1.22.0](#calc-v1220) | 2026-09-14 | **four defaults moved**: the surplus past a ceiling sells at half price, and reliability, the learning curve and the cost of capital come off |
