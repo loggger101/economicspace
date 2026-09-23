@@ -69,7 +69,7 @@ run_pipeline.py        Headless CLI the launcher drives (presets + flags)
 build_master.py        Build tool: assembles modules/ into master.py
 verify.py              Release verification: the checks every change runs
 verify_stage3.py       Stage 3 verification: this repo and spacecost agree
-verify_stage1.py       Stage 1 verification: the derivation chain, no fetching
+verify_stage1.py       Stage 1 verification: the pinned catalog release, installed
 verify_docs.py         Docs verification: the docs still describe the code
 tree_check.py          Does the disk hold what git says it holds? ~0.4 s
 platform_check.py      Can THIS host reproduce the committed numbers? ~10 s
@@ -175,37 +175,36 @@ pick up a different table with nothing here moving, and a repin of one copy
 alone is the same divergence in miniature -- `verify_docs.py` check 7 scans
 every first-party file for the URL and fails when they disagree.
 
-### Stage 1's builder is a package too
+### Stage 1 downloads the catalog; it does not build it
 
-`modules/catalog.py` is an adapter as well. The four survey fetchers, the
-cross-match, the diameter derivation, the validator and the Bus-DeMeo
-composition table are in
-[`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog), because
-nothing in their schema knows what a mine is: a merged catalog with honest
-provenance is useful to anyone doing population statistics, survey planning or
-target selection.
+`modules/catalog.py` builds nothing. The four survey fetchers, the cross-match,
+the diameter derivation, the validator and the Bus-DeMeo composition table are
+in [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog), and that
+repository **publishes** its builds: each `data-YYYY-MM-DD`
+[release](https://github.com/loggger101/AsteroidCatalog/releases) is one
+frozen catalog, gated before it is published (every source must have
+contributed, the stamps must be current, and it must not have shrunk) and
+checksummed.
 
-**asteroid_catalog is pinned to a tagged release**, `v0.2.0`, in all six places
-that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
-`build_master.py` and in `_PIP_SPEC` in `modules/catalog.py` (what a standalone
-module run installs from); and in prose here, in [CLAUDE.md](CLAUDE.md) and in
-[CITATIONS.md](CITATIONS.md).
+Stage 1 installs **one pinned release**. The pinned catalog release is `data-2026-09-23`,
+set by `CatalogConfig.catalog_release` in `modules/catalog.py`. Stage 1
+downloads the release's manifest, refuses it unless it is this pipeline's data
+contract (`CatalogConfig.pipeline_version`), downloads the gzipped catalog and
+the composition tables, checks every byte against the manifest's sha256s, and
+only then replaces what is on disk. With the pinned release already installed
+it downloads nothing.
 
-🚨  **This split could not be proved the way Stage 3's was, and the reason is
-worth knowing.** `spacecost` built its CSVs through both paths and asserted
-them byte-identical. **Stage 1 cannot be re-run at all** -- JPL adds bodies
-daily, so a rebuilt catalog is a different length and comparable with nothing
-already measured, and the file it would overwrite is the 862 MB input every
-other stage reads. So the extraction was proved in process instead: every
-reference table leaf by leaf at raw IEEE bit patterns, every pure function over
-a stride sample of the real 1,555,667-row catalog, and all 24 function bodies
-against the original's source text. **25 checks, 107,521 values, 0 differing**,
-and the probe was fed a wrong answer to confirm it could fail.
+**Why.** A build cannot be repeated: JPL adds bodies daily, so the catalog a
+build returns today is a different length from last week's and comparable with
+nothing already measured. While Stage 1 built its own, re-running it replaced
+the 862 MB input every committed number was measured on, with no way back. A
+pinned release is the same bytes on every host, so a fresh clone gets the
+catalog the numbers were measured on, and re-running Stage 1 is harmless.
 
-**Nothing was re-typed.** The package was sliced out of that module's line
-ranges -- 2,953 of 3,338 -- and so was the adapter, which keeps the config
-dataclass verbatim because the dashboard scrapes its comments as help text. The
-adapter's startup banner is byte-identical to the pre-split module's.
+**Moving to a newer catalog is a deliberate repin**: change `catalog_release`,
+run Stage 1, and record it in [versions.md](versions.md). It moves every number
+downstream, exactly as a rebuild did. Publishing a new catalog is done in the
+AsteroidCatalog repository (Actions > publish catalog > Run workflow).
 
 ```bash
 py verify_stage1.py
@@ -224,7 +223,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
-| 1 | `modules/catalog.py` | 1.3.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; re-key every body onto JPL's designation, merge, combine duplicates, validate, enrich with per-spectral-type PGM factors. An **adapter** over the [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) package since master v1.31.0 |
+| 1 | `modules/catalog.py` | 1.3.0 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition. Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
 | 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.15.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read |
 | 4 | `modules/calc.py` | 1.23.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
@@ -532,22 +531,16 @@ full `master.py` at least once, or run stages 1-3 individually first.
 
 ### What a first run costs
 
-> ⚠️  **These figures changed by more than an order of magnitude in catalog
-> v1.1.0.** Every row cap now defaults to unlimited, and the catalog went from
-> 89,367 asteroids to **1,554,400**. A default end-to-end run is no longer a
-> coffee break; budget an afternoon, and set the caps if you want the old
-> behaviour back.
+> ⚠️  **The catalog is ~1.57 M asteroids**, and a default end-to-end run is
+> not a coffee break; budget an afternoon, and cap Stage 4's rows for anything
+> interactive.
 
-- **Stage 1** takes **224 s** at the unlimited default and writes a **0.88 GB**
-  CSV (measured 2026-08-08, warm SsODNet cache, ~6 GB peak RAM). The JPL pull
-  alone is 1,554,321 asteroids / 401 MB / 24 s. Set `jpl_limit = 50_000` to
-  reproduce the pre-v1.1.0 couple-of-minutes, ~30-40 MB run.
-- SsODNet's ssoBFT table is a **~500 MB parquet bulk download** on first run.
-  It is cached and re-used for `cache_max_age_days` (7 by default). The cache
-  lives in the system temp directory, deliberately *not* under `output_dir`, 
-  on a Google Drive working copy that keeps half a gigabyte from re-syncing
-  every run. Point `CATALOG_CONFIG.cache_dir` somewhere else if you want it
-  co-located.
+- **Stage 1** downloads the pinned catalog release once: a **~290 MB** gzip
+  that decompresses to a **~1.2 GB** CSV (the `data-2026-09-23` release:
+  1,566,617 bodies, 95 columns), checksummed before it replaces anything.
+  Measured on a local mirror, the install takes ~40 s plus the download; a
+  re-run at the same pin downloads nothing and takes ~30 s, the checksum and
+  the CSV read.
 - **Stage 4 is the long pole by far**, because `eval_row_cap` defaults to `0`
   (evaluate everything), "everything" is 1.55 M rows, and both beneficiation
   and the programme search are on by default. The twenty-eight measured cells
@@ -558,15 +551,11 @@ full `master.py` at least once, or run stages 1-3 individually first.
   interactive: as of calc v1.13.0 a capped run is an evenly-spaced sample of
   the whole belt rather than the innermost N bodies, so it is actually
   representative.
-- **The two big dials, if a full run is more than you want:**
-  `catalog.jpl_limit` bounds how many asteroids exist, and
-  `catalog.derive_diameter_from_h = False` drops the catalog from ~1.55 M to
-  ~149,600 by keeping only bodies with a *measured* diameter.
-- Every source is failure-tolerant: an unreachable host returns empty and the
-  run continues on what it did get. MP3C in particular is often DNS-blocked
-  from Colab runtimes. You do not need to flip a source toggle just because a
-  host is down. (Until `asteroid_catalog` `v0.2.0`, MP3C contributed nothing
-  on any runtime: its service had moved and the fetcher was asking dead URLs.)
+- **The catalog's size is not a dial here any more.** Which bodies exist, which
+  surveys contributed and whether diameters are derived from H are decided
+  when a catalog release is built, in the AsteroidCatalog repository. To study
+  a subset -- measured diameters only, km-class bodies -- filter the catalog
+  (`derived_diameter_is_estimate`, `diameter_km`) rather than rebuilding it.
 
 ### Output location
 
@@ -596,14 +585,7 @@ that actually move the answer:
 | `.calc.mining_rate_kg_per_day_per_kg_rig` | `0.10` | Extraction throughput per kg of rig; caps payload and sets time at the asteroid |
 | `.calc.max_mining_duration_yr` | `3.0` | Ceiling on time at the asteroid, binds how much you can return |
 | `.calc.nre_recurring_overlap_fraction` | `0.30` | Development share already inside the per-kg recurring rate; `0.0` books both in full |
-| `.catalog.jpl_limit` | `0` | Asteroids fetched from JPL; `0` = all 1,554,321. The only source of orbital elements, so it bounds the catalog |
-| `.catalog.ssodnet_limit` / `neowise_limit` / `mp3c_limit` | `0` | Per-source caps, `0` = unlimited. One shared cap until v1.1.0, which made the catalog smaller than any single source |
-| `.catalog.derive_diameter_from_h` | `True` | Size bodies with no measured diameter from H + an assumed albedo. `False` → ~149,600 rows instead of ~1,554,400 |
-| `.catalog.min_derived_diameter_km` | `0.0` | Floor on *derived* diameters only. Trims the sub-km tail, where the albedo assumption hurts most |
-| `.catalog.min_diameter_km` | `0.001` | Size floor. Raise to `1.0` to study km-class bodies only |
-| `.catalog.require_spectral_type` | `False` | `True` drops untyped rows; fewer asteroids, but every one has a composition |
-| `.catalog.use_jpl` / `use_mp3c` / `use_ssodnet` / `use_neowise` | all `True` | Per-source toggles. Turning off SsODNet skips the 500 MB download |
-| `.catalog.use_mpc_identifications` | `True` | Re-key rows a source files under another designation onto JPL's, from the MPC's designation links (one cached ~180 MB file). `False` skips the download; ~5,000 rows then join nothing |
+| `.catalog.catalog_release` | `"data-2026-09-23"` | Which published catalog build Stage 1 installs. Changing it replaces the catalog every stage reads and moves every result; record a repin in versions.md. See [Stage 1 downloads the catalog](#stage-1-downloads-the-catalog-it-does-not-build-it) |
 | `.calc.eval_row_cap` | `0` | Stage-4 evaluation cap; `0` evaluates every row. Was `5_000`, which discarded 99.7% of a v1.1.0 catalog |
 | `.calc.eval_row_sampling` | `"stride"` | How a cap picks rows. `"stride"` samples the whole belt evenly; `"head"` is the pre-v1.13.0 innermost-N behaviour |
 | `.calc.parallel_workers` | `0` | Stage-4 worker processes. `0` picks a count from the CPU count and the amount of work; `1` forces the single-core path. See [Parallel evaluation](#parallel-evaluation) |
@@ -979,56 +961,54 @@ and CI does not become a third.
 
 ### Verifying Stage 1
 
-`verify.py` covers Stage 4 and `verify_stage3.py` the Stage 3 seam. Stage 1 was
-the last stage with no harness at all, which mattered more than it sounds:
-CLAUDE.md's [correctness invariants](CLAUDE.md#correctness-invariants-that-were-expensive-to-find)
-are almost entirely a Stage 1 list, and every one of them was a rule written in
-prose that nothing executed.
+Stage 1 builds nothing, so what is left to verify here is the seam: that the
+pin names a real release at this pipeline's data contract, and that the catalog
+on disk is that release, byte for byte. The builder's own traps -- the
+designation regex, the float-typed merge key, the distinct-value lookup -- are
+executed by the AsteroidCatalog repository's test suite, where the code is.
 
 ```bash
 py verify_stage1.py
 ```
 
-🚨  **It never fetches, and that is the design constraint rather than a
-nicety.** Stage 1 pulls from JPL, which adds bodies daily, so re-running Stage 1
-to test Stage 1 produces a catalog of a different length that is comparable with
-nothing already measured, and Stage 1's output is the ~868 MB input every other
-stage reads. So the checks split in two:
+It never writes the catalog; installing is Stage 1's job.
 
 | # | check | what it executes |
 |---|---|---|
-| 1 | designations | the surface-form table in `_extract_canonical_designation`'s own docstring, plus the float64 id that cost NEOWISE four releases |
-| 2 | taxonomy | every class has a residual; `Unknown` is the all-`None` sentinel; M-type has not been restored to a bare metal core |
-| 3 | pgm | the enrichment fallback: exact type, then root letter, then chondritic |
-| 4 | by_distinct | catalog 1.1.1's per-distinct-value optimisation still equals the per-row `.apply` it replaced, NaN keys included |
-| 5 | lookup | regex metacharacters do not cross-match or raise, and an `int64` designation column still resolves |
+| 1 | release | the pinned release exists, names itself, and is the data contract `CatalogConfig.pipeline_version` says |
+| 2 | taxonomy | in the release's `taxonomy.json`: every class has a residual; `Unknown` is the all-`None` sentinel; M-type has not been restored to a bare metal core |
+| 3 | bytes | the installed catalog and composition tables match the installed manifest's sha256s, and the manifest is the pinned release |
+| 4 | stamps | the rows' `pipeline_version`, `catalog_date` and count match the manifest |
+| 5 | pgm | the release's PGM table is positive multipliers, and the enrichment lookup falls back: exact type, then root letter, then chondritic |
 | 6 | literature | Ceres, Vesta, Pallas, Psyche and Eros against their published values, and all five `measured` |
 | 7 | rederive | every composition column recomputed from the taxonomy each row ended up with, over the whole catalog |
 | 8 | provenance | the two `*_source` domains are closed, and the census reproduces |
 
-Checks 1 to 5 need no catalog, no network and no baseline, so they run anywhere
-including CI. Checks 6 to 8 read the catalog already on disk and say what would
-make them run when it is absent.
+Checks 1, 2 and 5 read only the release's manifest and `taxonomy.json` over
+the network, so they run on CI. Checks 3, 4 and 6 to 8 read the catalog Stage 1
+installed, and say what would make them run when it is absent. A catalog built
+before Stage 1 downloaded releases carries no manifest and fails check 3:
+nothing says which build it is. The numbers 2 and 6 to 8 are the ones those
+checks had when this file verified the builder in place.
 
-✅  **Check 7 is Stage 1's analogue of a cell hash**: the committed catalog's
-derived columns, recomputed row for row. It reproduces exactly across a
-**version gap** (the file on disk is written by whichever catalog release last
-ran, which is older than the module), and reproducing across one is a stronger
-result than reproducing within one.
+✅  **Check 7 is Stage 1's analogue of a cell hash**: the installed catalog's
+derived columns, recomputed row for row from the tables the release shipped.
+On `data-2026-09-23` it reproduces all seven columns over 1,566,617 rows with
+0 differing, which also holds this file's copy of the PGM lookup rule to the
+package's.
 
 ⚠️  **It compares only the columns that are a pure lookup on the final
 taxonomy**, and the reason is worth knowing before you extend it. The catalog's
-`spectral_type` is *post-fill*: `enrich_composition` fills a missing type from
-Tholen, then from albedo, then from the albedo assumed when the diameter was
-derived. Feeding the filled column back makes all three fallbacks dead code and
+`spectral_type` is *post-fill*: the builder fills a missing type from Tholen,
+then from albedo, then from the albedo assumed when the diameter was derived.
+Feeding the filled column back makes all three fallbacks dead code and
 `spectral_type_source` then disagrees with the file everywhere it had been
 filled, which is an artefact of the fixture rather than a defect. The fallback
 chain is covered by check 8's census instead.
 
 ⚠️  **Check 8's counts are pinned to the catalog identity they came from**, not
-asserted outright. They are properties of one build; re-running Stage 1 is a
-legitimate act that necessarily moves every one of them, so a different build is
-reported rather than failed.
+asserted outright. They are properties of one build; a repin necessarily moves
+every one of them, so a different build is reported rather than failed.
 
 ### Verifying the docs
 
@@ -1047,7 +1027,7 @@ py verify_docs.py
 | 4 | links | a markdown anchor that does not resolve |
 | 5 | structure | unbalanced fences, ragged tables, heading-level jumps, duplicate h1/h2, in every markdown file in the repo |
 | 6 | dashes | an em- or en-dash creeping back into prose a reader sees, or a line left opening with a bare comma by the pass that removed them: the docs, the root scripts, the campaign scripts, and comments in `modules/` |
-| 7 | manifests | a list documented in one place drifting from the list defined in another: `requirements.txt` against `_MASTER_REQUIRED`, and the `run.bat` block above against run.bat's own dispatcher |
+| 7 | manifests | a list documented in one place drifting from the list defined in another: `requirements.txt` against `_MASTER_REQUIRED`, the pinned catalog release against every document that names it, and the `run.bat` block above against run.bat's own dispatcher |
 | 8 | help | a config dial the dashboard renders with no help text, because the UI scrapes its help from the field's own comment |
 | 9 | runtime | the **whole twenty-eight-cell** wall-clock table above drifting from `calc.MEASURED_DEST_SECONDS`; also CLAUDE.md's copy of the cislunar row, `calc.MEASURED_CELL_SECONDS` (the cislunar cells at the current release, which every banner and `--help` string derives its cost ratios from) against the `campaign/logs/` JSON that measured it, and every "N h at &lt;destination&gt;" in `run.bat`, `run.sh` and this file, which are typed because shell cannot import `master` |
 | 10 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
@@ -1196,9 +1176,10 @@ every file to CRLF.
 
 ```
 <output_dir>/
-    asteroid_catalog.csv               ← Stage 1 (~0.88 GB at the 1.55M default;
-                                          ~30-40 MB at jpl_limit = 50_000)
-    rejected_entries.csv               ← Stage 1 (validation rejects)
+    asteroid_catalog.csv               ← Stage 1 (~1.2 GB, the pinned release)
+    rejected_entries.csv               ← Stage 1 (the build's validation rejects)
+    catalog_manifest.json              ← Stage 1 (which release is installed)
+    catalog_taxonomy.json              ← Stage 1 (the build's composition tables)
     mineral_value_catalog.csv          ← Stage 2
     transportation/
         launch_vehicles.csv            ← Stage 3
@@ -2897,8 +2878,10 @@ geometric albedo with no free parameters:
 D_km = (1329 / sqrt(p_V)) * 10^(-H/5)          Fowler & Chillemi 1992
 ```
 
-so the only estimated quantity is `p_V`. With `derive_diameter_from_h` on (the
-default since v1.1.0) the catalog reaches **1,554,400 rows**. A measured
+so the only estimated quantity is `p_V`. With diameters derived from H (the
+builder's `derive_diameter_from_h`, on by default since catalog v1.1.0 and on
+in every published release) the catalog reached **1,554,400 rows** in the
+2026-08-11 build this section was measured on. A measured
 diameter is never overwritten, and `diameter_source` records which is which:
 
 | `diameter_source` | rows | what it means |
@@ -2943,7 +2926,8 @@ Three caveats, all of which run **optimistic**, and none of which should be
   sizes are overstated. That is 1.09% of the catalog, and they fail Stage 4 on
   Δv regardless.
 
-Set `derive_diameter_from_h = False` for a measured-only catalog of ~149,600.
+For a measured-only population, filter out `derived_diameter_is_estimate`: 149,740
+bodies in the `data-2026-09-23` release.
 
 ## History
 

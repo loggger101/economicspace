@@ -1,75 +1,49 @@
 # -*- coding: utf-8 -*-
-"""Stage 1 verification: the derivation chain still derives what it derived.
+"""Stage 1 verification: the catalog on disk is the pinned release, intact.
 
     py verify_stage1.py
 
-WHY THIS FILE EXISTS.  `verify.py`'s header says in as many words that Stage 1
-is not covered by it: "What is still NOT covered: Stage 3's validate(), and
-Stage 1's derivation chain.  A change there can pass everything here and still
-be wrong."  Stage 3's half became `verify_stage3.py` check 5.  This is the
-other half, and until 2026-09-15 it was the only stage with no harness at all.
+WHAT STAGE 1 IS NOW.  It does not build the catalog; it installs one published
+build of it, a `data-YYYY-MM-DD` release of the AsteroidCatalog repository
+pinned by `CatalogConfig.catalog_release`.  The builder, and the traps its own
+test suite executes (the designation regex, the float-typed merge key, the
+distinct-value lookup), live in that repository and are verified there.  What
+is left to verify HERE is the seam: that the pin names a real release written
+against this pipeline's data contract, and that the bytes on disk are that
+release's bytes.
 
-The gap mattered more than it looks.  CLAUDE.md's "Correctness invariants that
-were expensive to find" is almost entirely a Stage 1 list -- the designation
-regex, the float-typed merge key that cost NEOWISE four releases, the
-`str.contains` metacharacters, the `.astype(bool)` trap, the composition
-residual -- and every one of them was a rule written in prose that nothing
-executed.  A prose invariant is a comment nobody applied, which is this
-project's defect class 4.
+🚨  IT NEVER WRITES THE CATALOG.  Checks 1, 2 and 5 read the release's two small
+files (its manifest and `taxonomy.json`) over the network; everything else
+reads what Stage 1 installed.  Installing is Stage 1's job.
 
-🚨  IT NEVER FETCHES, AND THAT IS THE WHOLE DESIGN CONSTRAINT.  Stage 1 pulls
-from JPL, which adds bodies daily, so RE-RUNNING Stage 1 to test Stage 1 would
-produce a catalog of a different length that is comparable with nothing already
-measured -- and CLAUDE.md's "RUNNING STAGE 2 OR STAGE 3 DESTROYS EVERY BASELINE
-YOU HOLD" applies here with an extra edge, because Stage 1's output is the
-862 MB input every other stage reads.  So every check below either runs a PURE
-function against a synthetic frame, or reads the catalog already on disk.
-Nothing here opens a socket.  This is the same reasoning catalog 1.1.1 used
-when it verified `enrich_composition` in-process rather than by re-running the
-stage.
+THREE CLASSES OF CHECK.
 
-🚨  THE BUILDER ITSELF IS NOT IN THIS REPOSITORY ANY MORE.  It is
-`asteroid_catalog`, pinned to a tagged git ref, and `modules/catalog.py` is the
-adapter that drives it.  Everything below reaches the package THROUGH that
-adapter, which is deliberate: the adapter's surface is what the rest of the
-pipeline and the Colab paste actually use, so checking the package directly
-would test something nobody runs.
+    1        THE SEAM.  The pinned release exists, names itself, and is the
+             data contract this pipeline is written against.  Run first,
+             because every other check describes whatever release it names.
+    2, 5     THE RELEASE'S TABLES.  The composition tables the catalog was
+             built with, as the release ships them.  No catalog needed, so
+             these run on CI too.
+    3, 4,    AGAINST THE CATALOG ON DISK.  These skip, loudly and with a
+    6 to 8   reason, when no release is installed -- which on CI is always,
+             because `asteroid_pipeline/` is gitignored in full.
 
-THREE CLASSES OF CHECK, AND THE SPLIT IS DELIBERATE.
+⚠️  The numbering is historical rather than an order.  2, 6, 7 and 8 keep the
+numbers they had when this file verified the builder in place, so a release
+note that names one still points at the same check.  The old 1, 3, 4, 5 and 9
+tested the builder's internals and its installed revision; the builder's own
+suite runs those now.
 
-    9        THE SEAM.  Is the installed package the revision this repo pins?
-             It is numbered last and RUN FIRST, because every other check
-             below describes whatever `import asteroid_catalog` reached, and
-             none of them can tell you which revision that was.
-    1 to 5   PURE.  No catalog, no network, no baseline.  These are the
-             documented traps, executed.  They run anywhere, including CI,
-             where the catalog is gitignored and absent by construction.
-    6 to 8   AGAINST THE CATALOG ON DISK.  These skip, loudly and with a
-             reason, when it is not there.
-
-⚠️  The numbering is historical rather than an order: 1 to 8 predate the split
-and keep their numbers so a release note that names one still points at it.
-
-⚠️  That split is what stops this becoming a harness that never runs.  A check
-that skips on 100% of runs is a check that does not exist -- `verify_stage3.py`
-check 4 spent its whole life in that state -- so the half that carries the
-regression value is the half that needs no data.
-
-⚠️  THE CATALOG ON DISK IS USUALLY OLDER THAN THIS MODULE, AND THAT IS NOT A
-DEFECT.  It is stamped with the catalog `pipeline_version` that built it, and
-Stage 1 is the stage nobody re-runs, so a gap is the normal case: at the time
-of writing the file says 1.1.0 and the module says 1.2.0.  Check 7 reports the
-gap and still compares, because the composition columns are a pure lookup on
-the final taxonomy and must reproduce across releases that did not touch the
-table.  Reproducing ACROSS a version gap is a stronger result than reproducing
-within one, so it is printed rather than skipped.
+⚠️  A CATALOG BUILT BEFORE STAGE 1 DOWNLOADED RELEASES HAS NO MANIFEST, and
+check 3 fails on it by design: nothing says which build it is, so nothing can
+say it is the pinned one.  Run Stage 1 to install the pin.
 """
 
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
-import re
 import json
 import os
 import sys
@@ -82,9 +56,16 @@ import tree_check
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 
+# Where Stage 1 installs: ASTEROID_PIPELINE_OUTPUT_DIR when it is set, as
+# Stage 1 itself reads it, else ./asteroid_pipeline.  Read BEFORE load_stage1()
+# points that variable at a temp dir.  Nothing here writes to it.
+PIPELINE_DIR = (os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
+                or os.path.join(REPO, "asteroid_pipeline"))
+
+
 # The catalog every Stage 4 run reads.  Not regenerated here under any
 # circumstance; see the module docstring.
-CATALOG = os.path.join(REPO, "asteroid_pipeline", "asteroid_catalog.csv")
+CATALOG = os.path.join(PIPELINE_DIR, "asteroid_catalog.csv")
 
 # The four fields whose sum is the composition invariant.  `Unknown` leaves
 # every one of them None on purpose, which is the sentinel check 2 asserts.
@@ -161,7 +142,8 @@ def load_stage1():
     The module resolves its default output dir at IMPORT time, so the env var
     has to be set first or importing it would make `asteroid_pipeline/` as a
     side effect of a read-only check.  Its import banner goes to /dev/null: it
-    prints by design and this is not a run.
+    prints by design and this is not a run.  The installed files are then read
+    from PIPELINE_DIR, under the names the module's config declares.
     """
     os.environ.setdefault("ASTEROID_PIPELINE_OUTPUT_DIR",
                           os.environ.get("TEMP") or "/tmp")
@@ -172,52 +154,124 @@ def load_stage1():
     return catalog
 
 
-# -----------------------------------------------------------------------------
-# 1 to 5: PURE.  No catalog, no network.
-# -----------------------------------------------------------------------------
-def check_designations(c) -> bool:
-    """`_extract_canonical_designation` still matches its own spec table.
+def installed(c, name_field: str) -> str:
+    """The path Stage 1 installs one of its files to."""
+    return os.path.join(PIPELINE_DIR, getattr(c.CONFIG, name_field))
 
-    THE TRAP.  A naive `^\\d+` yields "2024" for "2024 BX1", which is not null,
-    not obviously wrong, and cross-matches an unrelated numbered body.  The
-    function's docstring carries the surface-form table verbatim, so the spec
-    is executable and this check is that docstring, run.
 
-    The empty and "None" cases matter as much as the interesting ones: they
-    must land on a missing value rather than on the STRING "None", which would
-    join to nothing and look like a source that returned no rows.
+def _sha256_bytes(data: bytes) -> str:
+    """sha256 of bytes already in memory."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def _sha256_file(path: str) -> str:
+    """sha256 of a file, read in 1 MB chunks."""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def pgm_for(pgm_table, spec_type) -> float:
+    """PGM multiplier for a type: exact match, then first letter, then 1.0.
+
+    ⚠️  A COPY OF `asteroid_catalog.pgm_enrichment_for_type`'s RULE, not an
+    import: this pipeline does not install the package.  Check 7 is what keeps
+    the copy honest -- it recomputes `comp_pgm_enrichment` for every row of the
+    catalog the package wrote, so a rule that drifted from the package's shows
+    up as rows that differ.
+    """
+    if spec_type is None or (isinstance(spec_type, float) and spec_type != spec_type):
+        return 1.0
+    s = str(spec_type).strip()
+    if not s:
+        return 1.0
+    if s in pgm_table:
+        return pgm_table[s]
+    return pgm_table.get(s[0], 1.0)
+
+
+def by_distinct(col, fn):
+    """`fn` over each distinct value of `col`, mapped back onto every row.
+
+    Missing values are one key, not many: `factorize` rather than `unique`,
+    because two NaNs are not equal and a lookup keyed on them would drop them.
     """
     import pandas as pd
+    codes, uniques = pd.factorize(col, use_na_sentinel=True)
+    table = [fn(u) for u in uniques]
+    na = fn(None)
+    return pd.Series([table[k] if k >= 0 else na for k in codes],
+                     index=col.index, dtype="object")
 
-    cases = [("1", "1"), ("00001", "1"), ("1 Ceres", "1"), ("433 Eros", "433"),
-             ("(1) Ceres", "1"), ("2024 BX1", "2024 BX1"),
-             ("1999 KW4", "1999 KW4"), ("Ceres", "Ceres"),
-             ("", None), ("None", None)]
-    got = c._extract_canonical_designation(pd.Series([a for a, _ in cases]))
+
+# -----------------------------------------------------------------------------
+# 1: THE SEAM.
+# -----------------------------------------------------------------------------
+def fetch_release(c):
+    """The pinned release's manifest and taxonomy tables, or (None, None, why).
+
+    Both are small.  The taxonomy is checked against the manifest's sha256
+    before it is returned, so checks 2 and 5 describe the tables the release
+    actually ships.
+    """
+    import requests
+
+    cfg = c.CONFIG
+    base = "%s/%s/" % (cfg.release_base_url.rstrip("/"), cfg.catalog_release)
+    try:
+        resp = requests.get(base + "manifest.json", timeout=60)
+        if resp.status_code == 404:
+            return None, None, "no release %r at %s" % (cfg.catalog_release, base)
+        resp.raise_for_status()
+        manifest = resp.json()
+        tax = requests.get(base + "taxonomy.json", timeout=60)
+        tax.raise_for_status()
+    except Exception as exc:                               # noqa: BLE001
+        return None, None, "could not reach the release: %s: %s" % (
+            type(exc).__name__, exc)
+    entry = (manifest.get("files") or {}).get("taxonomy.json")
+    if not entry or _sha256_bytes(tax.content) != entry.get("sha256"):
+        return manifest, None, "taxonomy.json does not match the manifest's sha256"
+    return manifest, json.loads(tax.content.decode("utf-8")), None
+
+
+def check_release(c, manifest, why) -> bool:
+    """The pin names a real release, which names itself, at our data contract.
+
+    🚨  THE PRECONDITION FOR EVERY OTHER CHECK.  A pin that names nothing, or
+    a release written against a different contract, makes every check below
+    describe the wrong thing -- and Stage 1 would refuse it anyway, but only
+    at run time.  This says so in a second, and on CI.
+    """
+    cfg = c.CONFIG
+    if manifest is None:
+        print("1. release       *** %s ***" % why)
+        return False
     bad = []
-    for (raw, want), g in zip(cases, list(got)):
-        g = None if pd.isna(g) else g
-        if g != want:
-            bad.append("%r -> %r, want %r" % (raw, g, want))
-
-    # The float-typed identifier, which is the same trap one column along: a
-    # numeric id pandas has typed float64 renders as "3.0", which is not null,
-    # not obviously wrong, and joins nothing.  It cost NEOWISE four releases of
-    # contributing zero rows.
-    f = c._extract_canonical_designation(pd.Series([1.0, 433.0, 69260.0],
-                                                   dtype="float64"))
-    for g in list(f):
-        if isinstance(g, str) and g.endswith(".0"):
-            bad.append("float64 id rendered as %r (the NEOWISE merge-key trap)"
-                       % g)
-
-    print("1. designations  %d surface forms + the float64 id, %d wrong"
-          % (len(cases) + 3, len(bad)))
+    if manifest.get("release_tag") != cfg.catalog_release:
+        bad.append("the manifest served for %s names itself %r"
+                   % (cfg.catalog_release, manifest.get("release_tag")))
+    if manifest.get("pipeline_version") != cfg.pipeline_version:
+        bad.append("release %s is data contract %s; this pipeline is written "
+                   "against %s" % (cfg.catalog_release,
+                                   manifest.get("pipeline_version"),
+                                   cfg.pipeline_version))
+    if why:
+        bad.append(why)
+    print("1. release       %s, built %s, contract %s, %s bodies, %d wrong"
+          % (cfg.catalog_release, manifest.get("catalog_date"),
+             manifest.get("pipeline_version"),
+             "{:,}".format(manifest.get("rows", 0)), len(bad)))
     for b in bad:
         print("     ! " + b)
     return not bad
 
 
+# -----------------------------------------------------------------------------
+# 2 and 5: THE RELEASE'S TABLES.
+# -----------------------------------------------------------------------------
 def check_taxonomy(c) -> bool:
     """The composition table's own invariants, which nothing had executed.
 
@@ -274,143 +328,111 @@ def check_taxonomy(c) -> bool:
     return not bad
 
 
-def check_pgm(c) -> bool:
-    """`pgm_enrichment_for_type` falls back by first character, then to 1.0.
+def check_pgm_table(t) -> bool:
+    """The PGM table is a set of positive multipliers, and the lookup falls back.
 
     The fallback is what keeps an unlisted sub-type ("Mq") inheriting its
     parent class rather than silently dropping to chondritic, and the default
     is 1.0 rather than 0.0 so an unknown body is priced as ordinary rather than
-    as worthless.
+    as worthless.  The lookup exercised is this file's copy of the package's
+    rule; check 7 holds that copy to the catalog the package wrote.
     """
     bad = []
-    parent = c.PGM_ENRICHMENT_BY_TYPE.get("M")
-    cases = [("M", parent), ("Mq", parent), ("Zz", 1.0), (None, 1.0),
-             ("", 1.0)]
-    for t, want in cases:
-        got = c.pgm_enrichment_for_type(t)
+    for k, v in t.PGM_ENRICHMENT_BY_TYPE.items():
+        if not (isinstance(v, (int, float)) and v > 0):
+            bad.append("%s -> %r is not a positive multiplier" % (k, v))
+    parent = t.PGM_ENRICHMENT_BY_TYPE.get("M")
+    if parent is None:
+        bad.append("no M row: the metal-rich class carries no enrichment")
+    cases = [("M", parent), ("Mq", parent), ("Zz", 1.0), (None, 1.0), ("", 1.0)]
+    for typ, want in cases:
+        got = t.pgm_enrichment_for_type(typ)
         if got != want:
-            bad.append("%r -> %r, want %r" % (t, got, want))
-    print("3. pgm           %d types, %d wrong" % (len(cases), len(bad)))
+            bad.append("%r -> %r, want %r" % (typ, got, want))
+    print("5. pgm           %d types, %d lookups, %d wrong"
+          % (len(t.PGM_ENRICHMENT_BY_TYPE), len(cases), len(bad)))
     for b in bad:
         print("     ! " + b)
     return not bad
 
 
-def check_by_distinct(c) -> bool:
-    """`_by_distinct` still equals the per-row `.apply` it replaced.
-
-    catalog 1.1.1 replaced twelve `.apply()` passes over 1.55 M rows with a
-    lookup over the ~76 distinct taxonomy classes, worth 9.09 s to 2.35 s, and
-    argued correctness from "all 12 derived columns identical" on one run.
-    That was a measurement of one catalog, not a property, and nothing has
-    re-checked it since.
-
-    ⚠️  THE NaN CASES ARE THE POINT.  Two NaNs are not equal, so a
-    distinct-value optimisation is exactly where a missing value falls through
-    a lookup that `nan != nan` would break, and this repo has the
-    `factorize`-not-`unique` rule written down for that reason.  The fixture
-    therefore carries None, a bare float NaN and a repeat.
-    """
-    import pandas as pd
-
-    # 🚨  THE LOOKUP MUST BE TOTAL, OR THIS CHECK CANNOT FAIL.  Written as
-    # `TAXONOMY_COMPOSITION.get(t, {}).get("group")` it returns None for an
-    # unknown key, so a `_by_distinct` that DROPS NaN keys and one that handles
-    # them agree on NaN -- both give a missing value -- and the very path this
-    # check exists for goes invisible.  Caught by reintroducing the defect and
-    # watching the check stay green.  The real derivation falls back to the
-    # `Unknown` entry, so the fixture does too, and a dropped NaN key then
-    # shows up as a missing value where a real one is owed.
-    def fn(t):
-        """The taxonomy group, falling back to Unknown as the real chain does."""
-        return (c.TAXONOMY_COMPOSITION.get(t)
-                or c.TAXONOMY_COMPOSITION["Unknown"]).get("group")
-    fixtures = [
-        ["C", "M", None, "V", "Cgh", float("nan"), "M"],
-        [None, None],
-        ["Zz", "Zz", "C"],
-        [],
-    ]
-    bad = []
-    for i, data in enumerate(fixtures):
-        s = pd.Series(data, dtype="object")
-        fast = list(c._by_distinct(s, fn).fillna("<NA>"))
-        slow = list(s.apply(fn).fillna("<NA>")) if len(s) else []
-        if fast != slow:
-            bad.append("fixture %d: %r != %r" % (i, fast, slow))
-    print("4. by_distinct   %d fixtures, %d differing from a per-row apply"
-          % (len(fixtures), len(bad)))
-    for b in bad:
-        print("     ! " + b)
-    return not bad
-
-
-def check_lookup(c) -> bool:
-    """`lookup_asteroid` survives regex metacharacters and an int64 column.
-
-    TWO TRAPS IN ONE FUNCTION.  Designations and names carry regex
-    metacharacters, so `str.contains` without `regex=False` made "(1) Ceres"
-    match "1 Ceres" and raised `re.PatternError` on an unbalanced bracket.  And
-    a numbered asteroid's designation looks like an integer, so a frame built
-    from a slice where every row happens to be numbered comes back `int64` and
-    a string comparison matches nothing -- "expected one row, found 0" about a
-    body that is right there in the file.
-
-    Both are the dtype-inferred-from-the-data shape: they work on the test
-    slice and fail on the one that matters.
-    """
-    import pandas as pd
-
-    def quiet(frame, query):
-        """lookup_asteroid with its own report suppressed.
-
-        It prints 'No entries found matching ...' on a miss, which is right
-        for somebody at a prompt and is noise inside a check whose EXPECTED
-        result on one probe is a miss.
-        """
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            return c.lookup_asteroid(frame, query)
-
-    bad = []
-    meta = pd.DataFrame({"designation": ["1", "2024 BX1"],
-                         "name": ["(1) Ceres", "z"]})
-    try:
-        n = len(quiet(meta, "(1) Ceres"))
-        if n != 1:
-            bad.append("'(1) Ceres' matched %d rows, want 1" % n)
-    except Exception as exc:                               # noqa: BLE001
-        bad.append("'(1) Ceres' raised %s: %s" % (type(exc).__name__, exc))
-    try:
-        # Must NOT cross-match: "1 Ceres" is a different surface form and the
-        # bracketed one is not a regex that matches it.
-        n = len(quiet(meta, "1 Ceres"))
-        if n != 0:
-            bad.append("'1 Ceres' cross-matched %d rows, want 0" % n)
-    except Exception as exc:                               # noqa: BLE001
-        bad.append("'1 Ceres' raised %s: %s" % (type(exc).__name__, exc))
-
-    ints = pd.DataFrame({"designation": pd.Series([1, 433, 69260],
-                                                  dtype="int64"),
-                         "name": ["Ceres", "Eros", "x"]})
-    try:
-        n = len(quiet(ints, "433"))
-        if n != 1:
-            bad.append("int64 designation column: '433' matched %d rows, "
-                       "want 1" % n)
-    except Exception as exc:                               # noqa: BLE001
-        bad.append("int64 designation column raised %s: %s"
-                   % (type(exc).__name__, exc))
-
-    print("5. lookup        3 probes, %d wrong" % len(bad))
-    for b in bad:
-        print("     ! " + b)
-    return not bad
+def tables(taxonomy: dict):
+    """The release's tables under the names checks 2, 5 and 7 read them by."""
+    import types
+    pgm = taxonomy["PGM_ENRICHMENT_BY_TYPE"]
+    return types.SimpleNamespace(
+        TAXONOMY_COMPOSITION=taxonomy["TAXONOMY_COMPOSITION"],
+        PGM_ENRICHMENT_BY_TYPE=pgm,
+        pgm_enrichment_for_type=lambda t: pgm_for(pgm, t),
+        _by_distinct=by_distinct,
+    )
 
 
 # -----------------------------------------------------------------------------
-# 6 to 8: AGAINST THE CATALOG ON DISK.
+# 3, 4 and 6 to 8: AGAINST THE CATALOG ON DISK.
 # -----------------------------------------------------------------------------
+def check_bytes(c, manifest) -> bool:
+    """What Stage 1 installed is the pinned release, byte for byte.
+
+    The CSV is hashed whole, a few seconds for ~1.2 GB, because a manifest
+    beside a catalog that has since been edited, truncated by a sync client or
+    copied in from another host would otherwise vouch for bytes it never saw.
+    """
+    cfg = c.CONFIG
+    if manifest is None:
+        print("3. bytes         *** NO MANIFEST: nothing says which build the "
+              "catalog on disk is ***")
+        print("     It predates Stage 1 installing releases, or was copied in")
+        print("     without %s.  Run Stage 1 to install %s."
+              % (cfg.manifest_filename, cfg.catalog_release))
+        return False
+    bad = []
+    if manifest.get("release_tag") != cfg.catalog_release:
+        bad.append("installed release is %s; the pin is %s -- run Stage 1"
+                   % (manifest.get("release_tag"), cfg.catalog_release))
+    want = [(installed(c, "catalog_filename"), manifest["catalog_csv"])]
+    tax_entry = (manifest.get("files") or {}).get("taxonomy.json")
+    if tax_entry:
+        want.append((installed(c, "taxonomy_filename"), tax_entry))
+    for path, entry in want:
+        name = os.path.basename(path)
+        if not os.path.isfile(path):
+            bad.append("%s is missing" % name)
+        elif os.path.getsize(path) != entry["bytes"]:
+            bad.append("%s is %d bytes, the manifest says %d"
+                       % (name, os.path.getsize(path), entry["bytes"]))
+        elif _sha256_file(path) != entry["sha256"]:
+            bad.append("%s does not match the manifest's sha256" % name)
+    print("3. bytes         %s, %d files hashed, %d wrong"
+          % (manifest.get("release_tag"), len(want), len(bad)))
+    for b in bad:
+        print("     ! " + b)
+    return not bad
+
+
+def check_stamps(df, manifest) -> bool:
+    """The rows say what the manifest says: one build date, one contract.
+
+    Stage 4's stamp check reads these columns, not the manifest, so they are
+    what has to agree with it.
+    """
+    stamp, date = catalog_identity(df)
+    bad = []
+    if stamp != manifest.get("pipeline_version"):
+        bad.append("pipeline_version %r; the manifest says %r"
+                   % (stamp, manifest.get("pipeline_version")))
+    if date != manifest.get("catalog_date"):
+        bad.append("catalog_date %r; the manifest says %r"
+                   % (date, manifest.get("catalog_date")))
+    if len(df) != manifest.get("rows"):
+        bad.append("%d rows; the manifest says %s" % (len(df), manifest.get("rows")))
+    print("4. stamps        catalog %s / %s, %s rows, %d wrong"
+          % (stamp, date, "{:,}".format(len(df)), len(bad)))
+    for b in bad:
+        print("     ! " + b)
+    return not bad
+
+
 def read_catalog():
     """The columns checks 6 to 8 need, or None when the catalog is absent.
 
@@ -620,133 +642,66 @@ def check_provenance(c, df) -> bool:
     return not bad
 
 
-def _pinned_tag():
-    """The `asteroid_catalog` ref `requirements.txt` pins, or None."""
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "requirements.txt")
-    if not os.path.exists(path):
-        return None
-    m = re.search(r"github\.com/loggger101/AsteroidCatalog@(\S+)",
-                  io.open(path, encoding="utf-8").read())
-    return m.group(1).strip().rstrip("\"'`,") if m else None
-
-
-def _installed_revision():
-    """What revision pip actually installed, from the wheel's own metadata.
-
-    `direct_url.json` is written by pip for anything installed from a URL
-    (PEP 610) and records both the revision ASKED FOR and the commit it
-    RESOLVED TO.  Returns `(requested, commit)`, either of which may be None,
-    or None entirely when the distribution was not installed from a direct URL
-    -- an editable checkout, a local path, or one day PyPI.
-    """
-    try:
-        import importlib.metadata as md
-        raw = md.distribution("asteroid-catalog").read_text("direct_url.json")
-    except Exception:                                      # noqa: BLE001
-        return None
-    if not raw:
-        return None
-    try:
-        info = json.loads(raw).get("vcs_info") or {}
-    except ValueError:
-        return None
-    return info.get("requested_revision"), info.get("commit_id")
-
-
-def check_pinned_revision() -> bool:
-    """The package being driven is the one `requirements.txt` pins.
-
-    🚨  THIS IS THE PRECONDITION FOR EVERY OTHER CHECK IN THIS FILE, and it is
-    the one thing none of them can see.  Checks 1 to 8 all describe whatever
-    `import asteroid_catalog` happens to reach, through an adapter that
-    re-exports it.  Nothing asks whether that is the revision this repo pins,
-    and the answer is not inferable from anything they compare: `__version__`
-    moves only on a release, the data contract identifies the SCHEMA rather
-    than the commit, and both are mirrored here precisely so they agree.
-
-    So `pip install -e ../AsteroidCatalog` at a checkout ten commits past the
-    tag passes all eight while the pipeline runs code this repo does not pin.
-    That is the parallel-repo divergence with a package manager in front of it:
-    `1.0.6`, `1.1.4` and `1.3.6` each shipped as two different things the last
-    time this project had two sources of one truth, and what made it expensive
-    was that nothing checked.
-
-    Three outcomes, kept apart.  Installed from the pinned tag is a pass and
-    names the commit.  A DIFFERENT revision is a failure.  Something with no
-    VCS metadata at all -- editable, a local path, a future PyPI release -- is
-    also a failure while `requirements.txt` pins a git ref, because a
-    git-pinned requirement that produced a non-git install means something
-    other than that pin put it there.
-    """
-    tag = _pinned_tag()
-    if not tag:
-        print("9. revision      *** the pinned ref could not be read from "
-              "requirements.txt ***")
-        return False
-
-    rev = _installed_revision()
-    launcher = "py" if os.name == "nt" else os.path.basename(sys.executable)
-    if rev is None:
-        print("9. revision      *** NOT INSTALLED FROM THE PINNED REF *** "
-              "(no VCS metadata)")
-        print("     requirements.txt pins %s, and the installed "
-              "asteroid_catalog carries" % tag)
-        print("     no direct_url.json, so it came from an editable checkout,")
-        print("     a local path or a release.  Whatever is being driven, it")
-        print("     is not this pin -- and every check above describes IT.")
-        print("     Reinstall:  %s -m pip install -r requirements.txt"
-              % launcher)
-        return False
-
-    requested, commit = rev
-    if requested != tag:
-        print("9. revision      *** INSTALLED REVISION IS NOT THE PINNED ONE ***")
-        print("     requirements.txt pins %s, pip installed %s (%s)"
-              % (tag, requested, (commit or "unknown commit")[:12]))
-        print("     Reinstall:  %s -m pip install -r requirements.txt"
-              % launcher)
-        return False
-
-    print("9. revision      the pinned %s is what is installed (%s)"
-          % (tag, (commit or "unknown commit")[:12]))
-    return True
-
-
 def main() -> int:
     """Run every check and return the process exit code.
 
-    Checks 1 to 5 and 9 always run.  Checks 6 to 8 need the catalog and say
-    what would make them run when it is absent, which on CI is always, because
+    Checks 1, 2 and 5 always run; they need the network, not the catalog.
+    Checks 3, 4 and 6 to 8 need an installed catalog and say what would make
+    them run when it is absent, which on CI is always, because
     `asteroid_pipeline/` is gitignored in full.
     """
     print("=" * 70)
-    print("  STAGE 1 VERIFICATION  -  the derivation chain, without fetching")
+    print("  STAGE 1 VERIFICATION  -  the pinned catalog release, installed")
     print("=" * 70)
     tree_ok = tree_check.assert_tree()
     c = load_stage1()
-    print("  catalog module pipeline_version %s" % c.CONFIG.pipeline_version)
+    print("  catalog_release %s, data contract %s"
+          % (c.CONFIG.catalog_release, c.CONFIG.pipeline_version))
     print("-" * 70)
 
-    results = [tree_ok, check_pinned_revision(),
-               check_designations(c), check_taxonomy(c), check_pgm(c),
-               check_by_distinct(c), check_lookup(c)]
-
-    df, missing = read_catalog()
-    if df is None:
-        print("6-8. catalog     SKIPPED, no catalog at")
-        print("       %s" % CATALOG)
-        print("     These three read the catalog already on disk. They do NOT")
-        print("     build one: Stage 1 fetches from JPL, which adds bodies")
-        print("     daily, so a rebuilt catalog is a different length and is")
-        print("     comparable with nothing already measured. Copy the file in")
-        print("     rather than regenerating it.")
+    manifest, taxonomy, why = fetch_release(c)
+    results = [tree_ok, check_release(c, manifest, why)]
+    if taxonomy is not None:
+        remote = tables(taxonomy)
+        results += [check_taxonomy(remote), check_pgm_table(remote)]
     else:
+        print("2,5. tables      NOT RUN: the release's taxonomy.json could not "
+              "be read (see 1)")
+        results.append(False)
+
+    if not os.path.isfile(CATALOG):
+        print("3-8. catalog     SKIPPED, no catalog at")
+        print("       %s" % CATALOG)
+        print("     These read the catalog Stage 1 installs.  Install it with")
+        print("       py run_pipeline.py --stages 1")
+        print("     which downloads the pinned release and checks its sha256.")
+    else:
+        mpath = installed(c, "manifest_filename")
+        local = None
+        if os.path.isfile(mpath):
+            with io.open(mpath, encoding="utf-8") as fh:
+                local = json.load(fh)
+        results.append(check_bytes(c, local))
+        df, missing = read_catalog()
         if missing:
             print("     (catalog predates %d column(s): %s)"
                   % (len(missing), ", ".join(missing)))
-        results += [check_literature(c, df), check_rederive(c, df),
-                    check_provenance(c, df)]
+        if local is not None:
+            results.append(check_stamps(df, local))
+        tpath = installed(c, "taxonomy_filename")
+        if os.path.isfile(tpath):
+            with io.open(tpath, encoding="utf-8") as fh:
+                on_disk = tables(json.load(fh))
+        else:
+            on_disk = None
+        results.append(check_literature(on_disk, df))
+        if on_disk is not None:
+            results.append(check_rederive(on_disk, df))
+        else:
+            print("7. rederive      NOT RUN: no %s beside the catalog"
+                  % c.CONFIG.taxonomy_filename)
+            results.append(False)
+        results.append(check_provenance(on_disk, df))
 
     print("-" * 70)
     if all(results):

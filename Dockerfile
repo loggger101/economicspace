@@ -51,13 +51,14 @@ WORKDIR /work
 # missing has to be built rather than downloaded.
 # requirements.txt comes along because the git-pinned packages are NOT in the
 # lock file and cannot be: each is a tagged git URL rather than a wheel pin.
-# There are two now -- `spacecost` for Stage 3's reference tables and
-# `asteroid_catalog` for Stage 1's builder -- so installing only the lock
-# leaves an image with neither stage, and the failure is invisible on a
-# networked host because master.py pip-installs what is missing at import --
-# which means a git fetch at run time, inside the image that exists to BE the
-# reproducible environment. Both files are resolved together so the `==` pins
-# win and each package still arrives at the tag requirements.txt names.
+# There is one -- `spacecost`, for Stage 3's reference tables -- so installing
+# only the lock leaves an image without that stage, and the failure is
+# invisible on a networked host because master.py pip-installs what is missing
+# at import -- which means a git fetch at run time, inside the image that
+# exists to BE the reproducible environment. Both files are resolved together
+# so the `==` pins win and the package still arrives at the tag
+# requirements.txt names.  (Stage 1 installs no package: it downloads a pinned
+# catalog release, which the `asteroid_pipeline` volume below keeps.)
 #
 # ⚠️  This needs no edit per package, which is the point of naming them in one
 # manifest: a third split joins by appearing in requirements.txt.

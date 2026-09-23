@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.34.0: Stage 1 installs a published catalog](#master-v1340-stage-1-installs-a-published-catalog)
 - [master v1.33.0 / catalog v1.3.0](#master-v1330--catalog-v130)
 - [master v1.32.0](#master-v1320)
 - [master v1.31.0](#master-v1310)
@@ -83,11 +84,11 @@ one that does not say is not to be used.
 
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
-| 1 | `modules/catalog.py` | **1.3.0** | v1.3.0, bodies joined across sources and every source validated against its service. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract, which owns it since master v1.31.0 |
+| 1 | `modules/catalog.py` | **1.3.0** | v1.3.0, bodies joined across sources and every source validated against its service. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.15.0** | v1.15.0, the `environments` table: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.23.0** | v1.23.0, the 5% depletion cap comes off: a mission may take the whole body |
-| - | `master.py` | **1.33.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.34.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -159,6 +160,73 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.34.0: Stage 1 installs a published catalog
+
+**Stage 1 stops building the catalog and installs a pinned, published build of
+it.** The AsteroidCatalog repository now publishes each build as a GitHub
+Release (`data-YYYY-MM-DD`: the gzipped CSV, a Parquet copy, the rejection log,
+the composition tables and a manifest of sha256s), gated before publishing:
+every source must have contributed above a floor, the stamps must be single and
+current, and the catalog must not have shrunk against the previous release.
+The pinned catalog release is `data-2026-09-23`.
+
+**Why.** A build cannot be repeated -- JPL adds bodies daily -- so re-running
+Stage 1 replaced the one input every committed number was measured on, with no
+way back, and two hosts that each ran Stage 1 were on different catalogs. A
+pinned release is the same bytes everywhere. Stage 1 is now idempotent: at an
+installed pin it downloads nothing.
+
+### What changes here
+
+- `modules/catalog.py` downloads the manifest, refuses a release that is not
+  this pipeline's data contract, downloads and sha256-checks the catalog
+  (gzipped and decompressed) and `taxonomy.json` in a staging directory, and
+  only then replaces what is on disk, writing `catalog_manifest.json` last.
+- **The `asteroid_catalog` package is no longer installed**: gone from
+  `requirements.txt`, `_MASTER_REQUIRED` / `_MASTER_PIP_SPEC`, and the module's
+  own install block, and with it the config mirror and the two import-time
+  drift checks (`STAGE 1 SETTINGS DRIFT`, `STAGE 1 CONTRACT DRIFT`). Nothing in
+  this repo can break at import when the package changes any more.
+- `TAXONOMY_COMPOSITION` and `PGM_ENRICHMENT_BY_TYPE` are read from the
+  installed release's tables, the ones its catalog was built with.
+- `run_pipeline.py` loses `--asteroids` and the presets' `asteroids` value (the
+  `quick` preset's 20,000-row catalog is gone: Stage 1 always installs the
+  whole release, and Stage 4's `--rows` is what makes a run quick). Its banner
+  names the catalog release; its overwrite question skips Stage 1 when the pin
+  is already installed.
+- The dashboard: a "Catalog" group with the one dial, the build dials gone from
+  "Run size", "Catalog population" and "Data sources", and Stage 1's time prior
+  a flat 1.5 min.
+- `verify_stage1.py` is rewritten around the seam; see
+  [README](README.md#verifying-stage-1). `verify_docs.py` check 7 now holds the
+  release pin to every document that names it, and no longer looks for a
+  package pin.
+- `build_master.py` no longer renames `lookup_asteroid` for Module 1, which no
+  longer defines one.
+
+### What it was tested against
+
+The `data-2026-09-23` catalog was built and packaged locally with the new
+gates (all passed: 1,566,617 bodies; JPL 1,566,617, SsODNet 1,563,644, MP3C
+1,335,046, NEOWISE 143,015; 149,740 measured diameters), served from a local
+mirror, and installed by the new Stage 1 into a scratch directory: 40 s cold,
+31 s at an installed pin. A tampered asset and a wrong data contract were both
+refused with nothing installed. `verify_stage1` passed 9 of 9 against it, check
+7 re-deriving all seven composition columns over every row with 0 differing,
+and the Parquet asset matched the CSV on all 95 columns.
+
+### What did not change
+
+- **No Stage 2, 3 or 4 code, and no number measured on the catalog on disk.**
+  This release changes where the catalog comes from, not what any stage does
+  with it.
+- **The catalog on disk, until Stage 1 is next run.** The 2026-08-11 catalog
+  (contract 1.1.0) has no manifest, is not a published release, and fails
+  `verify_stage1` check 3 by design. Installing `data-2026-09-23` over it
+  replaces the input the committed tables were measured on, exactly as a
+  rebuild would have: keep a copy first to reproduce any of them.
+- catalog `1.3.0`, mineral_value `1.9.0`, transportation `1.15.0`, calc `1.23.0`.
 
 ## master v1.33.0 / catalog v1.3.0
 
@@ -5113,6 +5181,22 @@ rotation period: `<stem>_provider`, `<stem>_n_sources`, `<stem>_spread`,
 column now always belongs to the source its value came from.
 `neowise_beaming_param` and `albedo_ir` are empty where NEOWISE assumed rather
 than fitted them.
+
+**`1.3.0` unchanged, installed rather than built (master v1.34.0).** No output
+column moves: Stage 1 installs a published `asteroid_catalog` release and the
+stamp is the release's. Full write-up:
+[master v1.34.0](#master-v1340-stage-1-installs-a-published-catalog).
+
+Config fields removed (they are build settings, chosen when a release is
+built): `use_jpl`, `use_mp3c`, `use_ssodnet`, `use_neowise`, `jpl_limit`,
+`ssodnet_limit`, `neowise_limit`, `mp3c_limit`, `neowise_use_async`,
+`neowise_async_max_wait_s`, `use_mpc_identifications`, `min_diameter_km`,
+`require_spectral_type`, `derive_diameter_from_h`, `min_derived_diameter_km`,
+`cache_dir`, `cache_max_age_days`.
+
+New config fields: `catalog_release` (str, the pin), `release_base_url` (str),
+`manifest_filename` (str, `catalog_manifest.json`), `taxonomy_filename` (str,
+`catalog_taxonomy.json`).
 
 ## Stage 2 changelog: `modules/mineral_value.py`
 

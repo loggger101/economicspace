@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.33.0)
+"""Master Asteroid Profitability Pipeline (1.34.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom - the orchestrator at the bottom executes everything.
 
-    Stage 1  ->  Asteroid Catalog        (modules/catalog.py 1.2.0,
-                 an adapter over the `asteroid_catalog` package)
-                JPL SBDB + MP3C + SsODNet + NEOWISE
-                + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
+    Stage 1  ->  Asteroid Catalog        (modules/catalog.py, data contract
+                 1.3.0) downloads a pinned, published release of the
+                 AsteroidCatalog build: JPL SBDB + MP3C + SsODNet + NEOWISE,
+                 cross-matched, with per-spectral-type composition
     Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.9.0)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
@@ -36,9 +36,10 @@ kilogram sells for; Stage 4 decides what it costs to put it there, and the
 answer is only meaningful when they agree.  Stage 4 checks and warns.
 
 Output tree (under MASTER_CONFIG.output_dir):
-    asteroid_catalog.csv               <- Stage 1 (~0.88 GB at the 1.55 M-row
-                                          default; set catalog.jpl_limit lower)
-    rejected_entries.csv               <- Stage 1 (validation rejects)
+    asteroid_catalog.csv               <- Stage 1 (~0.9 GB, the pinned release)
+    rejected_entries.csv               <- Stage 1 (the build's validation rejects)
+    catalog_manifest.json              <- Stage 1 (which release is installed)
+    catalog_taxonomy.json              <- Stage 1 (the build's composition tables)
     mineral_value_catalog.csv          <- Stage 2
     transportation/
         launch_vehicles.csv            <- Stage 3
@@ -55,7 +56,7 @@ ASTEROID_PIPELINE_OUTPUT_DIR or by setting MASTER_CONFIG.output_dir.
 Tuning:
     MASTER_CONFIG sits at the bottom of the master config section.  Edit:
         MASTER_CONFIG.output_dir                    (where everything lands)
-        MASTER_CONFIG.catalog.jpl_limit             (asteroid catalog size)
+        MASTER_CONFIG.catalog.catalog_release       (which catalog build)
         MASTER_CONFIG.calc.nre_amortization_missions (multi-mission NRE split)
         MASTER_CONFIG.calc.use_isru_return_propellant (make ISRU available)
         MASTER_CONFIG.calc.optimise_architecture_per_asteroid
@@ -112,19 +113,18 @@ import subprocess as _subprocess
 
 _MASTER_REQUIRED = [
     "requests", "pandas", "numpy", "yfinance", "tqdm", "pyarrow", "spacecost",
-    "asteroid_catalog",
 ]
-# import-name -> pip argument, for the packages where those differ.  TWO do:
-# `spacecost` holds Stage 3's reference tables and `asteroid_catalog` holds
-# Stage 1's builder, and neither is on PyPI yet, so both install from a TAGGED
-# git ref rather than by name.  The tags are pinned rather than tracking main,
-# because an untagged URL would silently change what a Colab paste installs.
-# IF EITHER IS EVER PUBLISHED: put a pinned "<name>==<version>" in
-# requirements.txt and drop its entry here; nothing else changes.
+# import-name -> pip argument, for the packages where those differ.  ONE does:
+# `spacecost` holds Stage 3's reference tables and is not on PyPI yet, so it
+# installs from a TAGGED git ref rather than by name.  The tag is pinned rather
+# than tracking main, because an untagged URL would silently change what a
+# Colab paste installs.  IF IT IS EVER PUBLISHED: put a pinned
+# "<name>==<version>" in requirements.txt and drop its entry here.
+#
+# Stage 1 installs no package: it downloads a pinned catalog RELEASE, which is
+# data, not code.  Its pin is `CatalogConfig.catalog_release`.
 _MASTER_PIP_SPEC = {
     "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.2",
-    "asteroid_catalog":
-        "git+https://github.com/loggger101/AsteroidCatalog@v0.2.0",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -153,45 +153,25 @@ else:
 # ──────────────────────────────────────────────────────────────────────────────
 # IMPORTS & CONFIGURATION
 # ──────────────────────────────────────────────────────────────────────────────
-import dataclasses
+import gzip
+import hashlib
 import json
 import os
+import shutil
 import warnings
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
-import numpy as np
 import pandas as pd
+import requests
+from tqdm.auto import tqdm
 
-import asteroid_catalog
-
-# NEVER SPELL A NAME THE BUILD REWRITES.  `build_master.py` concatenates the
-# four stage modules into `master.py` and resolves collisions with
-# `word_replace`, a whole-word regex over the ENTIRE file text -- comments and
-# string literals included, not only code.  For THIS module it rewrites three
-# words: `CATALOG_CONFIG`, `build_asteroid_catalog` and `lookup_asteroid_catalog`.
-#
-# ALIASING THE LOCAL NAME IS NOT ENOUGH, and that is the trap.  In
-# `from asteroid_catalog import X as _y` the imported name X is still a bare
-# word, so it is rewritten too and the import then fails against a package with
-# no such attribute.  That exact mistake cost the Stage 3 split a release.
-#
-# The package exports collision-proof second names for the two functions that
-# collide, and those are what is imported.  Everywhere else in this file, reach
-# the package through `asteroid_catalog.` -- and read the built master.py
-# rather than assuming, because this file and its concatenated copy are not the
-# same text.
-from asteroid_catalog import build_catalog_table as _pkg_build_catalog
-from asteroid_catalog import lookup_body as _pkg_lookup_body
-
-# NO `_PY` HERE ANY MORE.  Every other stage module defines one -- the launcher
-# to name in a printed instruction, because `py` is the Windows launcher and
-# exists nowhere else -- and so did this one, for the hint messages the
-# fetchers print.  Those fetchers are in the package now and it carries its own
-# copy, so the constant here was defined, shadowed nothing, and was read by
-# nothing.  A split leaves this behind whenever it moves a helper's USERS
-# without moving the helper.
+# NEVER SPELL A NAME THE BUILD REWRITES IN A WAY THAT MUST SURVIVE.
+# `build_master.py` concatenates the four stage modules into `master.py` and
+# rewrites two words of this one, `CATALOG_CONFIG` and `build_asteroid_catalog`, with a
+# whole-word regex over the ENTIRE file text -- comments and string literals
+# included.  Read the built master.py rather than assuming, because this file
+# and its concatenated copy are not the same text.
 
 # Silence the chronic noise the data libraries emit during a typical run, but
 # DON'T globally suppress everything, real RuntimeWarnings (e.g. divide-by-zero
@@ -242,106 +222,24 @@ _DEFAULT_OUTPUT_DIR = _default_output_dir()
 class CatalogConfig:
     """User-editable pipeline configuration.  See per-field comments below."""
 
-    # ─── SOURCE TOGGLES ───────────────────────────────────────────────────────
-    # Set any of these to False to skip that source.  An unreachable or empty
-    # source is silently tolerated by the pipeline; you don't need to flip the
-    # toggle just because a host is down.
-    use_jpl:      bool = True   # NASA JPL Small-Body Database     (orbital + physical)
-    use_mp3c:     bool = True   # MP3C @ Observatoire Côte d'Azur   (diameters, masses, families)
-    use_ssodnet:  bool = True   # SsODNet ssoBFT (IMCCE)            (mass, density, taxonomy, …)
-    use_neowise:  bool = True   # NEOWISE V2.0 via IRSA TAP         (IR diameters + albedos)
-    # To add a new catalog: write a fetch_<name>(config) function and add a
-    # matching `use_<name>: bool = True` line here.
+    # ─── THE PINNED CATALOG ──────────────────────────────────────────────────
+    # Which published build of the asteroid catalog this pipeline runs on: a
+    # `data-YYYY-MM-DD` release tag of the AsteroidCatalog repository.  Every
+    # host that runs Stage 1 at this pin gets the same bytes, checked against
+    # the release's sha256s.  Changing it replaces the catalog every stage
+    # reads, and moves every number downstream: record a repin in versions.md.
+    # The published tags are listed at
+    # https://github.com/loggger101/AsteroidCatalog/releases
+    catalog_release: str = "data-2026-09-23"
 
-    # ─── FETCH LIMITS & NETWORK ──────────────────────────────────────────────
-    # ONE CAP PER SOURCE, and 0 means "no cap, take the whole table".
-    #
-    # Until v1.1.0 `jpl_limit` was reused as the row cap for every source, which
-    # quietly made the catalog SMALLER than any single source.  Each fetcher
-    # takes its first N rows ordered by asteroid number, so four sources capped
-    # at the same N return substantially the SAME N bodies; the merge then
-    # collapses them and the union is ~N rather than 4N.  Raising the shared cap
-    # to reach further down one source dragged every other source along with it.
-    #
-    # Measured 2026-08-08 against the live APIs, which is what the defaults are
-    # sized from:
-    #     JPL SBDB      1,554,321 asteroids   (139,582 with a measured diameter)
-    #     SsODNet        ~1,200,000 rows      (~500 MB parquet, cached)
-    #     NEOWISE V2.0     183,412 rows       (143,318 unique bodies w/ diameter)
-    #     MP3C           1,335,502 bodies     (measured 2026-09-22; TAP at
-    #                                          dachs.oca.eu since it moved)
-    #
-    # 0 (unlimited) is the default because JPL is the only source of orbital
-    # elements, so a body it does not return cannot be evaluated no matter what
-    # the other sources know about it.  The full JPL pull is ~435 MB / ~80 s on
-    # a warm connection; NEOWISE unlimited is ~19 MB / ~30 s.  Set a cap if you
-    # want a fast interactive run: 50_000 reproduces the pre-v1.1.0 behaviour.
-    jpl_limit:       int = 0   # 0 = all 1.55 M asteroids (orbital elements)
-    ssodnet_limit:   int = 0   # 0 = whole cached ssoBFT table
-    neowise_limit:   int = 0   # 0 = all 183 k NEOWISE rows
+    # Where release assets are downloaded from; the tag and the asset name are
+    # appended.  Plumbing: change it only to point at a mirror.
+    release_base_url: str = ("https://github.com/loggger101/AsteroidCatalog"
+                             "/releases/download")
 
-    # Ask IRSA for the NEOWISE table as an asynchronous (IVOA UWS) job rather
-    # than a single synchronous request.  A sync query holds one connection
-    # open for the server-side query AND the ~19 MB transfer, so a proxy
-    # timeout anywhere in that window discards the whole result with nothing to
-    # retry; that is the 502 that made NEOWISE contribute 0 rows to the run
-    # behind the committed cislunar 2x2.  Async runs the job server-side and
-    # leaves the result at a stable, re-fetchable URL.  Falls back to the
-    # synchronous path on any failure, so turning this off only removes a way
-    # to succeed.  Same ADQL and same rows either way, verified byte-identical.
-    neowise_use_async: bool = True
-
-    # How long to poll an async NEOWISE job before giving up and falling back.
-    # The full table completes in well under a minute; this is a ceiling for a
-    # service under load, not an expected wait.
-    neowise_async_max_wait_s: int = 900
-    mp3c_limit:      int = 0   # 0 = whatever MP3C will serve
-    request_timeout: int = 300 # seconds per HTTP request before giving up (5 min)
-
-    # ─── CROSS-SOURCE IDENTITY  (v1.3.0) ─────────────────────────────────────
-    # The same body often sits under different designations in different
-    # sources (a provisional one in NEOWISE, JPL's number; or two provisional
-    # designations later linked).  The merge re-keys every supplement row onto
-    # JPL's designation, first from JPL's own numbers, provisional designations
-    # and names, then from the Minor Planet Center's designation links
-    # (mpcorb_extended.json.gz, ~180 MB, cached beside the SsODNet parquet for
-    # `cache_max_age_days`).  The MPC file places ~5,200 of the ~5,400 bodies
-    # the first step cannot on a full build.  False skips the download; those
-    # rows then join nothing, as before 1.3.0.
-    use_mpc_identifications: bool = True
-
-    # ─── QUALITY GATES  (enforced in validate_and_filter) ────────────────────
-    # `min_diameter_km` drops anything below this size.  Default 0.001 km =
-    # 1 metre (essentially "keep everything that has a positive diameter").
-    # Bump to e.g. 1.0 to focus on >=1-km bodies.
-    min_diameter_km: float = 0.001
-
-    # If True, asteroids with no spectral classification (Bus / Tholen) are
-    # rejected.  Useful for compositional studies; False keeps more rows.
-    require_spectral_type: bool = False
-
-    # ─── DERIVED DIAMETERS  (v1.1.0) ─────────────────────────────────────────
-    # validate_and_filter drops any body without a diameter, and only 139,582
-    # of JPL's 1,554,321 asteroids have one measured.  1,553,812 have an
-    # absolute magnitude H and a valid orbit, and diameter follows from H and
-    # the geometric albedo exactly:
-    #
-    #     D_km = (1329 / sqrt(p_V)) * 10**(-H/5)          (Fowler & Chillemi 1992)
-    #
-    # so the ONLY thing being estimated is p_V.  With this on, the evaluable
-    # population goes from ~139 k to ~1.55 M, an 11x larger catalog whose extra
-    # rows carry a diameter uncertain by roughly the square root of the albedo
-    # error, and a MASS uncertain by that cubed.  Every such row is tagged
-    # `diameter_source = "derived_h_*"`; a measured diameter always wins, and
-    # `derived_diameter_is_estimate` gives downstream code a single boolean to
-    # filter on.  Turn this off for a measured-only catalog.
-    derive_diameter_from_h: bool = True
-
-    # Floor on DERIVED diameters only (km).  Measured diameters are governed by
-    # `min_diameter_km` above and are never subject to this.  0.0 keeps every
-    # derived body; raise it to trim the sub-kilometre tail, which is most of
-    # the 1.4 M and is where the albedo assumption hurts most.
-    min_derived_diameter_km: float = 0.0
+    # Seconds to wait on any one HTTP request before giving up.  The catalog
+    # asset is a few hundred MB, but this bounds a stall, not the transfer.
+    request_timeout: int = 300
 
     # ─── OUTPUT  (where the CSVs land) ───────────────────────────────────────
     # `output_dir` is created at startup if it doesn't exist.  On Colab the
@@ -350,44 +248,22 @@ class CatalogConfig:
     output_dir:        str = _DEFAULT_OUTPUT_DIR
     catalog_filename:  str = "asteroid_catalog.csv"
     rejected_filename: str = "rejected_entries.csv"
-
-    # ─── BULK-DOWNLOAD CACHE  (SsODNet parquet & similar) ────────────────────
-    # SsODNet's ssoBFT is ~500 MB.  We cache it once per `cache_max_age_days`
-    # and re-use it between runs.  Bump max_age down to force a fresh pull.
-    #
-    # `cache_dir` controls WHERE the cache lives:
-    #   • Empty string (default) → system tmp directory (good for Drive users:
-    #                              the ~500 MB parquet does NOT round-trip
-    #                              through Drive sync on every run).
-    #   • Any absolute path      → that exact directory.
-    # If you want the cache co-located with the catalog CSV instead, set this
-    # to e.g. f"{output_dir}/_cache".
-    cache_dir:           str   = ""
-
-    # How long the ssoBFT parquet cache is reused before it is re-downloaded.
-    # That download is ~500 MB, so raise this for repeated offline runs.
-    cache_max_age_days:  float = 7.0
+    manifest_filename: str = "catalog_manifest.json"
+    taxonomy_filename: str = "catalog_taxonomy.json"
 
     # ─── PREVIEW & SUMMARY DISPLAY  (cosmetic, affects stdout only) ──────────
     preview_rows:           int = 10   # rows shown in CATALOG PREVIEW table
     top_n_spectral_types:   int = 20   # types listed in spectral-distribution bars
 
-    # ─── PIPELINE VERSION  (bump when changing the schema) ───────────────────
-    # Stamped into every output CSV, and the only way to tell which code
-    # produced a given catalog.  BUMP IT when a change moves any number a run
-    # produces.  The rule is ONE-DIRECTIONAL: changing a number means bumping,
-    # and a bump does NOT mean a number changed, which is why nothing may read
-    # a version as evidence that a result moved.
-    # THE CHANGELOG IS versions.md, NOT THIS COMMENT.  It used to be 155 lines
-    # of release notes sitting right here, a second copy of a record versions.md
-    # already held, which is the documentation form of the defect this project
-    # keeps cataloguing; it was also what the dashboard rendered as this field's
-    # help text, because ui_meta scrapes a field's comment block.  Moved out on
-    # 2026-09-02.  Two places to write, neither of them here:
-    #     versions.md > Releases            what the release did, and what it
-    #                                       measured to say so
-    #     versions.md > Module changelogs   this module's own stamp-by-stamp
-    #                                       record: Stage 1 changelog
+    # ─── DATA CONTRACT ───────────────────────────────────────────────────────
+    # The catalog schema this pipeline is written against: the
+    # `pipeline_version` asteroid_catalog stamps into every row.  Stage 1
+    # refuses a release whose manifest says otherwise, before anything on disk
+    # is touched, and Stage 4's stamp check compares the catalog on disk with
+    # it.  It moves only when a repin crosses a data-contract change, and then
+    # only after the stages that read the catalog have been checked against the
+    # new schema.  The record of what each contract changed is AsteroidCatalog's
+    # CHANGELOG.md; this pipeline's is versions.md > Stage 1 changelog.
     pipeline_version: str = "1.3.0"
 
 
@@ -397,161 +273,241 @@ class CatalogConfig:
 CATALOG_CONFIG = CatalogConfig()
 os.makedirs(CATALOG_CONFIG.output_dir, exist_ok=True)
 
-def _check_catalog_config_surface() -> None:
-    """Fail loudly if this module's dials and the package's have diverged.
-
-    NOT NAMED `_check_config_surface`, WHICH IS WHAT THE STAGE 3 ADAPTER
-    CALLS ITS EQUIVALENT.  `build_master.py` concatenates the four stage
-    modules into one namespace and the last definition of a shared name
-    wins, so two adapters with one name is a collision -- its AST scan
-    says so on every build.  The two are not interchangeable copies
-    (different dataclasses, different packages), so `_EXPECTED_DUPES` is
-    the wrong answer and a distinct name is the right one.
-    """
-    mine   = {f.name for f in dataclasses.fields(CatalogConfig)}
-    theirs = {f.name for f in dataclasses.fields(asteroid_catalog.CatalogConfig)}
-    if mine != theirs:
-        raise SystemExit(
-            "STAGE 1 SETTINGS DRIFT: modules/catalog.py and asteroid_catalog "
-            "no longer describe the same settings.\n"
-            f"    only here             : {sorted(mine - theirs)}\n"
-            f"    only asteroid_catalog : {sorted(theirs - mine)}\n"
-            "Add the field to whichever side lacks it, or this run is "
-            "configured by one and executed by the other."
-        )
-
-
-def _check_data_contract() -> None:
-    """The stamp written into every row is the package's, mirrored here.
-
-    A catalog stamped `1.2.0` has to mean one derivation chain.  If this
-    module and the package disagree about the number, every CSV this stage
-    writes is labelled with a version that describes different code.
-    """
-    if CATALOG_CONFIG.pipeline_version != asteroid_catalog.DATA_VERSION:
-        raise SystemExit(
-            "STAGE 1 CONTRACT DRIFT: this module stamps "
-            f"{CATALOG_CONFIG.pipeline_version!r} and asteroid_catalog "
-            f"{asteroid_catalog.DATA_VERSION!r}.\n"
-            "The stamp is the PACKAGE's; mirror it here, or repin the package."
-        )
-
-
-_check_catalog_config_surface()
-_check_data_contract()
-
-
-def _as_package_config(config: "CatalogConfig"):
-    """This module's dials as the package's, field for field.
-
-    Built from `dataclasses.fields` rather than by listing names, so a field
-    added on both sides carries over with no edit here.  `_check_catalog_config_surface`
-    above is what makes that safe.
-    """
-    return asteroid_catalog.CatalogConfig(**{
-        f.name: getattr(config, f.name) for f in dataclasses.fields(config)
-    })
-
 
 # ──────────────────────────────────────────────────────────────────────────────
-# THE BUILDER, RE-EXPORTED
+# THE RELEASE
 # ──────────────────────────────────────────────────────────────────────────────
-# The same objects, not copies.  They are re-exported rather than reached
-# through `asteroid_catalog.` because several things read them as attributes of
-# THIS module: `verify_stage1.py`, the Colab paste, and every doc that tells a
-# reader to call `catalog.enrich_composition`.  Re-exporting keeps every such
-# caller working unchanged.
-TAXONOMY_COMPOSITION         = asteroid_catalog.TAXONOMY_COMPOSITION
-PGM_ENRICHMENT_BY_TYPE       = asteroid_catalog.PGM_ENRICHMENT_BY_TYPE
-pgm_enrichment_for_type      = asteroid_catalog.pgm_enrichment_for_type
-
-ALBEDO_FALLBACK              = asteroid_catalog.ALBEDO_FALLBACK
-ALBEDO_BY_SPECTRAL_TYPE      = asteroid_catalog.ALBEDO_BY_SPECTRAL_TYPE
-ALBEDO_BY_SEMI_MAJOR_AXIS_AU = asteroid_catalog.ALBEDO_BY_SEMI_MAJOR_AXIS_AU
-
-# The fetchers.  Each returns an empty frame rather than raising when its
-# source is unreachable, which is the soft-failure contract Stage 1 has always
-# had; read the per-source MATCH counts, not the fetch counts.
-fetch_jpl_sbdb               = asteroid_catalog.fetch_jpl_sbdb
-fetch_ssodnet                = asteroid_catalog.fetch_ssodnet
-fetch_neowise                = asteroid_catalog.fetch_neowise
-fetch_mp3c                   = asteroid_catalog.fetch_mp3c
-
-# The chain.
-merge_sources                = asteroid_catalog.merge_sources
-deduplicate_catalog          = asteroid_catalog.deduplicate_catalog
-derive_missing_diameters     = asteroid_catalog.derive_missing_diameters
-validate_and_filter          = asteroid_catalog.validate_and_filter
-enrich_composition           = asteroid_catalog.enrich_composition
-
-# Query utilities, and the two internals `verify_stage1.py` drives directly.
-filter_by_region             = asteroid_catalog.filter_by_region
-filter_by_spectral_group     = asteroid_catalog.filter_by_spectral_group
-_extract_canonical_designation = asteroid_catalog._extract_canonical_designation
-_by_distinct                 = asteroid_catalog.taxonomy._by_distinct
-_resolve_cache_dir           = asteroid_catalog.config._resolve_cache_dir
-# The banner's row-cap formatter.  RE-EXPORTED RATHER THAN RE-DEFINED: it came
-# out of the same config block as `_resolve_cache_dir`, so the package has it,
-# and a three-line copy here would be two definitions of one thing -- with the
-# package's copy then read by nothing, which is how a helper quietly becomes
-# dead on one side of a seam.
-_fmt_limit                   = asteroid_catalog.config._fmt_limit
+# The asset names are the release's, fixed by asteroid_catalog's `release.py`.
+_ASSET_MANIFEST = "manifest.json"
+_ASSET_CATALOG = "asteroid_catalog.csv.gz"
+_ASSET_REJECTED = "rejected_entries.csv"
+_ASSET_TAXONOMY = "taxonomy.json"
 
 
-def lookup_asteroid_catalog(catalog: pd.DataFrame, query: str) -> pd.DataFrame:
-    """Find a body by designation, number or name.
+def _catalog_sha256(path: str) -> str:
+    """sha256 of a file, read in 1 MB chunks."""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
-    The package spells this `lookup_body` as well, and the second name is why
-    this one can keep its own: see the import block above.  Module 4 defines a
-    `lookup_asteroid_catalog` of its own over a different frame, so the build renames
-    this one to `lookup_asteroid_catalog` in master.py.
+
+def _asset_url(config: "CatalogConfig", asset: str) -> str:
+    """Where one asset of the pinned release is served."""
+    return "%s/%s/%s" % (config.release_base_url.rstrip("/"),
+                         config.catalog_release, asset)
+
+
+def _download_asset(config: "CatalogConfig", asset: str, dest: str) -> None:
+    """Stream one release asset to `dest`, with a byte progress bar."""
+    url = _asset_url(config, asset)
+    with requests.get(url, stream=True, timeout=config.request_timeout) as resp:
+        if resp.status_code == 404:
+            raise SystemExit(
+                "FAIL  %s has no asset %s.\n"
+                "      %s\n"
+                "      Check `catalog_release` against the published tags at\n"
+                "      https://github.com/loggger101/AsteroidCatalog/releases"
+                % (config.catalog_release, asset, url))
+        resp.raise_for_status()
+        total = int(resp.headers.get("content-length") or 0) or None
+        with open(dest, "wb") as fh, tqdm(
+                total=total, desc="     %s" % asset, unit="B",
+                unit_scale=True, unit_divisor=1024, mininterval=0.3) as bar:
+            for chunk in resp.iter_content(chunk_size=1 << 20):
+                if chunk:
+                    fh.write(chunk)
+                    bar.update(len(chunk))
+
+
+def _check_asset(path: str, entry: dict, what: str) -> None:
+    """Refuse a file whose size or sha256 is not the manifest's."""
+    size = os.path.getsize(path)
+    if size != entry["bytes"]:
+        raise SystemExit("FAIL  %s is %d bytes; the manifest says %d.  "
+                         "Nothing was installed." % (what, size, entry["bytes"]))
+    digest = _catalog_sha256(path)
+    if digest != entry["sha256"]:
+        raise SystemExit("FAIL  %s has sha256 %s; the manifest says %s.  "
+                         "Nothing was installed." % (what, digest, entry["sha256"]))
+
+
+def _fetch_manifest(config: "CatalogConfig") -> dict:
+    """The pinned release's manifest, checked against the pin and the contract."""
+    resp = requests.get(_asset_url(config, _ASSET_MANIFEST),
+                        timeout=config.request_timeout)
+    if resp.status_code == 404:
+        raise SystemExit(
+            "FAIL  no catalog release %r.\n"
+            "      Check `catalog_release` against the published tags at\n"
+            "      https://github.com/loggger101/AsteroidCatalog/releases"
+            % config.catalog_release)
+    resp.raise_for_status()
+    manifest = resp.json()
+    if manifest.get("release_tag") != config.catalog_release:
+        raise SystemExit("FAIL  the manifest served for %r names itself %r."
+                         % (config.catalog_release, manifest.get("release_tag")))
+    if manifest.get("pipeline_version") != config.pipeline_version:
+        raise SystemExit(
+            "FAIL  STAGE 1 CONTRACT MISMATCH: release %s is data contract %s,\n"
+            "      and this pipeline is written against %s.  Nothing was\n"
+            "      downloaded.  Pin a release at %s, or move\n"
+            "      CatalogConfig.pipeline_version once Stages 2-4 have been\n"
+            "      checked against the new schema."
+            % (config.catalog_release, manifest.get("pipeline_version"),
+               config.pipeline_version, config.pipeline_version))
+    return manifest
+
+
+def installed_manifest(config: "CatalogConfig" = CATALOG_CONFIG) -> Optional[dict]:
+    """The manifest of the release on disk, or None when there is none."""
+    path = os.path.join(config.output_dir, config.manifest_filename)
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def release_on_disk(config: "CatalogConfig" = CATALOG_CONFIG) -> bool:
+    """Is the pinned release what is installed, byte for byte?
+
+    Reads the whole catalog to hash it (a few seconds), because a manifest
+    beside a CSV that has since been edited or half-copied would otherwise
+    vouch for bytes it never saw.
     """
-    return _pkg_lookup_body(catalog, query)
+    manifest = installed_manifest(config)
+    catalog_path = os.path.join(config.output_dir, config.catalog_filename)
+    if (manifest is None or manifest.get("release_tag") != config.catalog_release
+            or not os.path.isfile(catalog_path)):
+        return False
+    entry = manifest["catalog_csv"]
+    return (os.path.getsize(catalog_path) == entry["bytes"]
+            and _catalog_sha256(catalog_path) == entry["sha256"])
+
+
+def _load_taxonomy(config: "CatalogConfig"):
+    """The composition tables the installed catalog was built with.
+
+    Empty when no release is installed yet.  Nothing in Stages 2-4 reads these
+    tables -- they read the `comp_*` columns the build already wrote -- so an
+    empty table is only visible to the tools that inspect it.
+    """
+    path = os.path.join(config.output_dir, config.taxonomy_filename)
+    if not os.path.isfile(path):
+        return {}, {}
+    with open(path, encoding="utf-8") as fh:
+        tables = json.load(fh)
+    return tables["TAXONOMY_COMPOSITION"], tables["PGM_ENRICHMENT_BY_TYPE"]
+
+
+# Updated IN PLACE after a download, so a caller holding a reference to either
+# dict sees the tables of the release that was just installed.
+TAXONOMY_COMPOSITION, PGM_ENRICHMENT_BY_TYPE = _load_taxonomy(CATALOG_CONFIG)
+
+
+def read_catalog(config: "CatalogConfig" = CATALOG_CONFIG) -> pd.DataFrame:
+    """The installed catalog, read the way every reader must.
+
+    `designation` MUST be read as a string: a numbered asteroid's designation
+    looks like an integer, so a slice in which every row happens to be numbered
+    infers int64 and every string comparison against it matches nothing.
+    """
+    return pd.read_csv(os.path.join(config.output_dir, config.catalog_filename),
+                       low_memory=False, dtype={"designation": str})
 
 
 def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFrame:
-    """Fetch every source, merge, derive, validate, enrich, and export.
+    """Install the pinned catalog release, verified, and return it.
 
-    Delegates to `asteroid_catalog.build_asteroid_catalog`, which is the same code this
-    file used to contain, sliced rather than re-typed.
-
-    VERBOSE IS TURNED ON HERE, AND THAT IS WHAT KEEPS STAGE 1's CONSOLE OUTPUT
-    UNCHANGED BY THE SPLIT.  The package is silent by default because a library
-    imported to read one taxonomy row has no business printing; a pipeline
-    stage that is also the program does.  Ten messages print either way --
-    those report a defect rather than a condition, and a diagnostic that has
-    gone quiet reads exactly like a clean result.
+    Nothing on disk changes until every downloaded byte has matched the
+    manifest: files are fetched into a staging directory, checked, and only
+    then moved over the installed copies.  When the pinned release is already
+    installed, nothing is downloaded at all.
     """
-    asteroid_catalog.set_verbose(True)
-    return _pkg_build_catalog(_as_package_config(config))
+    os.makedirs(config.output_dir, exist_ok=True)
+    catalog_path = os.path.join(config.output_dir, config.catalog_filename)
+
+    print("=" * 65)
+    print("    STAGE 1 - ASTEROID CATALOG  (release %s)" % config.catalog_release)
+    print("=" * 65)
+
+    if release_on_disk(config):
+        print("  OK  %s is already installed, and its sha256 matches."
+              % config.catalog_release)
+    else:
+        manifest = _fetch_manifest(config)
+        print("  Release   : %s, built %s, data contract %s"
+              % (manifest["release_tag"], manifest["catalog_date"],
+                 manifest["pipeline_version"]))
+        print("  Bodies    : {:,}".format(manifest["rows"]))
+
+        stage = os.path.join(config.output_dir, ".catalog_download")
+        shutil.rmtree(stage, ignore_errors=True)
+        os.makedirs(stage)
+        try:
+            files = manifest["files"]
+            for asset in (_ASSET_CATALOG, _ASSET_TAXONOMY, _ASSET_REJECTED):
+                if asset not in files:
+                    if asset == _ASSET_REJECTED:
+                        continue          # a build with no rejects ships none
+                    raise SystemExit("FAIL  the manifest lists no %s." % asset)
+                _download_asset(config, asset, os.path.join(stage, asset))
+                _check_asset(os.path.join(stage, asset), files[asset], asset)
+
+            print("  Decompressing ...")
+            csv_stage = os.path.join(stage, config.catalog_filename)
+            with gzip.open(os.path.join(stage, _ASSET_CATALOG), "rb") as fin, \
+                    open(csv_stage, "wb") as fout:
+                shutil.copyfileobj(fin, fout, 1 << 20)
+            _check_asset(csv_stage, manifest["catalog_csv"], config.catalog_filename)
+
+            # Every byte checked.  Install: the catalog last but one, and the
+            # manifest LAST, so an interrupted install never leaves a manifest
+            # vouching for files that are not there.
+            moves = [(os.path.join(stage, _ASSET_TAXONOMY),
+                      os.path.join(config.output_dir, config.taxonomy_filename))]
+            if _ASSET_REJECTED in files:
+                moves.append((os.path.join(stage, _ASSET_REJECTED),
+                              os.path.join(config.output_dir,
+                                           config.rejected_filename)))
+            moves.append((csv_stage, catalog_path))
+            manifest_path = os.path.join(config.output_dir,
+                                         config.manifest_filename)
+            if os.path.exists(manifest_path):
+                os.remove(manifest_path)
+            for src, dst in moves:
+                os.replace(src, dst)
+            with open(manifest_path, "w", encoding="utf-8", newline="\n") as fh:
+                json.dump(manifest, fh, indent=2)
+                fh.write("\n")
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)
+        print("  OK  installed %s -> %s" % (config.catalog_release, catalog_path))
+
+    taxonomy, pgm = _load_taxonomy(config)
+    TAXONOMY_COMPOSITION.clear()
+    TAXONOMY_COMPOSITION.update(taxonomy)
+    PGM_ENRICHMENT_BY_TYPE.clear()
+    PGM_ENRICHMENT_BY_TYPE.update(pgm)
+
+    catalog = read_catalog(config)
+    print("  OK  %s rows x %d columns" % ("{:,}".format(len(catalog)),
+                                         len(catalog.columns)))
+    return catalog
 
 
-# Eagerly create the default cache dir so first-run prints reflect the real path
-os.makedirs(_resolve_cache_dir(CATALOG_CONFIG), exist_ok=True)
-
+_catalog_on_disk = installed_manifest(CATALOG_CONFIG)
 print(f"OK  Configuration loaded - output dir: {CATALOG_CONFIG.output_dir}")
-print(f"    Active sources  : "
-      f"{', '.join(s for s, on in (('JPL', CATALOG_CONFIG.use_jpl), ('MP3C', CATALOG_CONFIG.use_mp3c), ('SsODNet', CATALOG_CONFIG.use_ssodnet), ('NEOWISE', CATALOG_CONFIG.use_neowise)) if on)}")
-print(f"    Fetch limits    : "
-      f"JPL {_fmt_limit(CATALOG_CONFIG.jpl_limit)}  |  "
-      f"SsODNet {_fmt_limit(CATALOG_CONFIG.ssodnet_limit)}  |  "
-      f"NEOWISE {_fmt_limit(CATALOG_CONFIG.neowise_limit)}  |  "
-      f"MP3C {_fmt_limit(CATALOG_CONFIG.mp3c_limit)}")
-print(f"    Min diameter    : {CATALOG_CONFIG.min_diameter_km} km")
-print(f"    Strict taxonomy : {CATALOG_CONFIG.require_spectral_type}")
-print(f"    H-derived diam. : "
-      f"{'on - bodies with no measured diameter are sized from H + albedo' if CATALOG_CONFIG.derive_diameter_from_h else 'off - measured diameters only'}")
-
-print(f"OK  Taxonomy lookup ready - {len(TAXONOMY_COMPOSITION)} spectral types defined")
-print(f"OK  PGM enrichment table ready - "
-      f"{len(PGM_ENRICHMENT_BY_TYPE)} non-baseline spectral types "
-      f"(M / Xe = 2.0x, V = 0.2x, A / R / O = 0.5x, others 1.0x)")
-
-
-print("\nOK  Helper utilities available:")
-print("    lookup_asteroid_catalog(catalog, 'Ceres')")
-print("    filter_by_region(catalog, 2.0, 3.3)   # main-belt slice")
-print("    filter_by_spectral_group(catalog, 'X-complex')  # metallic")
+print(f"    Catalog release : {CATALOG_CONFIG.catalog_release} "
+      f"(data contract {CATALOG_CONFIG.pipeline_version})")
+print("    On disk         : "
+      + ("nothing installed yet" if _catalog_on_disk is None else
+         "%s, built %s" % (_catalog_on_disk.get("release_tag"),
+                           _catalog_on_disk.get("catalog_date"))))
+if _catalog_on_disk is not None and _catalog_on_disk.get("release_tag") != CATALOG_CONFIG.catalog_release:
+    print("    WARN  the catalog on disk is not the pinned release; "
+          "run Stage 1 to install it.")
 
 
 
@@ -12095,7 +12051,7 @@ from dataclasses import dataclass as _master_dataclass
 class MasterConfig:
     """Composes the four module configs.  Edit sub-configs directly:
 
-        MASTER_CONFIG.catalog.jpl_limit = 10_000
+        MASTER_CONFIG.catalog.catalog_release = "data-YYYY-MM-DD"
         MASTER_CONFIG.calc.use_isru_return_propellant = True
 
     One exception: set the delivery destination HERE, not on a sub-config -
@@ -12157,7 +12113,7 @@ print()
 print("=" * 75)
 print("     MASTER CONFIG READY")
 print(f"      Pipeline output  : {MASTER_CONFIG.output_dir}")
-print(f"      JPL limit        : {MASTER_CONFIG.catalog.jpl_limit:,} asteroids")
+print(f"      Catalog release  : {MASTER_CONFIG.catalog.catalog_release}")
 print(f"      Eval row cap     : {MASTER_CONFIG.calc.eval_row_cap:,}")
 print(f"      Delivery dest    : {MASTER_CONFIG.delivery_destination}")
 print(f"      ISRU return      : {'available where the rock supplies the propellant' if MASTER_CONFIG.calc.use_isru_return_propellant else 'off'}")
@@ -12230,7 +12186,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.33.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.34.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
