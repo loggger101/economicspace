@@ -82,6 +82,7 @@ through. Skim for the section that names what you are about to change.
 - [A split leaves a helper behind wherever it moves only the USERS](#a-split-leaves-a-helper-behind-wherever-it-moves-only-the-users)
 - [A regex repin will rewrite HISTORY, and check 7 says so before you do it](#a-regex-repin-will-rewrite-history-and-check-7-says-so-before-you-do-it)
 - [A mechanical pass over every instance assumes the instances are one thing](#a-mechanical-pass-over-every-instance-assumes-the-instances-are-one-thing)
+- [What the v0.2.0 source audit taught (catalog `1.3.0`)](#what-the-v020-source-audit-taught-catalog-130)
 - [Stage 3 lives in another repository now, and so does part of Stage 2](#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)
 - [Config discipline](#config-discipline)
 - [Correctness invariants that were expensive to find](#correctness-invariants-that-were-expensive-to-find)
@@ -201,8 +202,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.2.0`, mineral_value `1.9.0`, transportation `1.15.0`,
-calc `1.23.0`, master `1.30.0` (the master version is a literal in
+Current: catalog `1.3.0`, mineral_value `1.9.0`, transportation `1.15.0`,
+calc `1.23.0`, master `1.33.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -4966,7 +4967,7 @@ person who fixed the other half.
 `modules/catalog.py` is an adapter. Every fetcher, the cross-match, the
 H-derivation, the validator and the Bus-DeMeo composition table are in
 [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog),
-pinned to tag `v0.1.3`. **Do not state the table's length here**; the ready
+pinned to tag `v0.2.0`. **Do not state the table's length here**; the ready
 banner prints it on every import, and the "76 classes" figure that circulates
 in this file is the number of distinct `spectral_type` VALUES in a built
 catalog, which is a different thing and roughly twice the table's 32 rows.
@@ -5009,8 +5010,9 @@ MODULE'S, WHICH IS WHAT FOUND THE ONE REAL DEFECT IN THE MOVE.** All 114
 `print` calls became the package's `say()`, which is silent unless a caller
 asks for output -- right for a library, and it silenced the **zero-match
 alert**, the one diagnostic that catches a fetcher contributing nothing while
-its own fetch summary reads 183,408. Ten messages are `warn()` now and print
-regardless. **A defect in the code, or a fatal abort, is loud; an external
+its own fetch summary reads 183,408. Ten messages became `warn()` at the split,
+thirteen as of package `v0.2.0`, and they print regardless. **A defect in the
+code, or a fatal abort, is loud; an external
 condition the design tolerates is progress output.** This file already records
 that a diagnostic which has gone quiet reads exactly like a clean result; a
 blanket mechanical pass is how that happens.
@@ -5046,6 +5048,44 @@ way into `master.py` and an aliased local name does not help -- the IMPORTED
 name is still a bare word. Same trap that cost the Stage 3 split a release, and
 the package's `tests/test_consumer_contract.py` runs this repo's real regex
 against every name the adapter imports.
+
+### What the v0.2.0 source audit taught (catalog `1.3.0`)
+
+Every source was pulled in full and joined back to JPL by hand, and every
+defect it found had passed every build.  The full record is the package's
+`CHANGELOG.md`; these are the parts that generalise.
+
+🚨  **A TOLERATED FAILURE HIDES A WRONG ADDRESS EXACTLY AS WELL AS AN OUTAGE.**
+MP3C was documented here as "regularly unreachable" for releases.  The host was
+up the whole time; every URL the fetcher tried answered 404, because the TAP
+service had moved to `dachs.oca.eu`.  A source allowed to fail soft needs its
+failure *reason* read, not just tolerated: "not reachable" and "404 from a
+live host" are different findings.
+
+🚨  **A SOURCE'S PLACEHOLDER IS A NUMBER, AND IT PASSES EVERY RANGE CHECK THAT
+ISN'T LOOKING FOR IT.**  MP3C writes H = 0 and H = 99.99 for "no value";
+NEOWISE writes -0.999, and keeps printing the beaming parameter it ASSUMED in
+every fit slot marked `-`.  Twenty-six bodies with no JPL H took MP3C's H = 0
+and were sized at 5,000-5,600 km, larger than Pluto.  What caught it was
+comparing each source's value with JPL's for the same body, not a range check.
+
+⚠️  **ONE BODY HAS SEVERAL DESIGNATIONS, AND A RAW-STRING JOIN LOSES OR
+DUPLICATES IT.**  7.4% of NEOWISE bodies joined nothing (numbered since, a
+secondary designation, or NEOWISE's own `"1996 GQ0"`), and SsODNet rows under a
+secondary designation survived validation as duplicates, because they carry
+their own orbit.  The package now re-keys every supplement row onto JPL's
+designation before joining, from JPL's own aliases and the MPC's
+`Other_desigs`.
+
+⚠️  **JPL'S SINGLE-OBJECT API IS NOT A BULK RESOLVER.**  Sequential lookups at
+~5 per second drew HTTP 403 for the whole IP within about a thousand requests,
+and that block covers the bulk query every Stage 1 run starts with.  Use the
+MPC's `mpcorb_extended.json.gz` for designation links.
+
+⚠️  **`name` is an IAU name again, and a Stage 4 output inherits that.**
+ssoBFT had filled it with provisional designations for 1.5 M unnamed bodies.
+`calc` passes `name` through to its results, so after the next Stage 1 build an
+unnamed winner shows no name; its identity is `designation`, as it always was.
 
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
@@ -5385,6 +5425,11 @@ Unreachable or empty sources are tolerated and the run continues. MP3C is
 regularly DNS-blocked from Colab. Do not "fix" an empty source by flipping its
 toggle off; the toggle is for deliberately excluding a source, not for
 routing around an outage.
+
+⚠️  **Read the failure reason before calling it an outage.** Until package
+`v0.2.0` every MP3C URL the fetcher tried answered 404 from a live host: the
+service had moved, and "unreachable" was a wrong address.  See [What the v0.2.0
+source audit taught](#what-the-v020-source-audit-taught-catalog-130).
 
 `metals.dev` defaults to the key `"DEMO"`, which makes the fetcher skip
 entirely. That is intentional; the demo endpoint is heavily rate-limited.
