@@ -10,7 +10,8 @@ Three things it does:
                 runtime so a new field appears without editing this file, with
                 the module's own explanatory comment attached as help text.
     Run         any subset of the four stages, reusing the CSVs already on disk
-                for the stages you skip. Stage 1 downloads ~500 MB and a full
+                for the stages you skip. Stage 1 installs the pinned catalog
+                release (a download the first time, a checksum after) and a full
                 Stage 4 runs 12 min to 1.6 h depending on two flags (see below),
                 so re-running Stage 4 alone against a cached catalog is the
                 normal working loop.
@@ -30,8 +31,8 @@ master, and its own run is behind an `if __name__` guard.
 ON MUTATING CONFIG INSTANCES. CLAUDE.md says to edit a field's default inside
 the dataclass rather than mutating the instance, because mutation defeats having
 one editable source of truth. A UI is the exception the MasterConfig docstring
-already carves out: it documents `MASTER_CONFIG.catalog.jpl_limit = 10_000` as
-the supported way to drive the orchestrator. What the UI must not do is let the
+already carves out: it documents setting a sub-config field on `MASTER_CONFIG`
+as the supported way to drive the orchestrator. What the UI must not do is let the
 two `delivery_destination` copies drift apart, so it renders one control and
 writes it through the `MASTER_CONFIG.delivery_destination` property, which sets
 both. Every run also drops a `ui_run_config.json` beside the outputs recording
@@ -577,26 +578,18 @@ def _stage_minutes(key: str) -> float:
     if key == "transport":
         return 0.01              # ~0.5 s: pure reference tables, no network
 
-    # Full size of the JPL asteroid table, measured 2026-08-08.  Needed as a
-    # literal because `jpl_limit = 0` means "unlimited" as of catalog v1.1.0,
-    # and `or 50_000` would have quietly estimated the largest possible run as
-    # the smallest one; the estimate would have said three minutes for
-    # something that takes an afternoon.
+    # Full size of the JPL asteroid table, measured 2026-08-08: the size of an
+    # uncapped Stage 4, below.  Needed as a literal because `eval_row_cap = 0`
+    # means "every row", and `or 50_000` would have quietly estimated the
+    # largest possible run as the smallest one.
     _JPL_FULL_ROWS = 1_554_321
 
     if key == "catalog":
-        limit = st.session_state.get("cfg::catalog::jpl_limit",
-                                     MASTER.catalog.jpl_limit)
-        limit = _JPL_FULL_ROWS if not limit else min(limit, _JPL_FULL_ROWS)
-        ssodnet = st.session_state.get("cfg::catalog::use_ssodnet",
-                                       MASTER.catalog.use_ssodnet)
-        # JPL, NEOWISE and the merge scale with the row cap; SsODNet is a flat
-        # ~500 MB parquet download that dwarfs all of them when enabled.
-        # Slope re-fitted on the v1.1.0 unlimited run: 1,554,321 rows end to end
-        # in 224 s with a warm SsODNet cache, i.e. ~2.4 min of scaling work plus
-        # the parquet.  The old 1.5 min per 50k over-charged by ~48x at full
-        # size, which mattered once "full size" became the default.
-        return 0.15 + limit / _JPL_FULL_ROWS * 2.4 + (5.0 if ssodnet else 0.0)
+        # Stage 1 installs a pinned release: a download of a few hundred MB,
+        # a decompress and two checksums the first time, and only a checksum
+        # and the CSV read after that.  Neither depends on any dial, so this is
+        # a flat prior for the cold case; the stage bar corrects it.
+        return 1.5
 
     # Stage 4 is the long pole. `eval_row_cap` is an upper bound rather than a
     # count, so this overestimates when the catalog is smaller than the cap;

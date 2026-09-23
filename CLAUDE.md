@@ -78,7 +78,7 @@ through. Skim for the section that names what you are about to change.
 - [Derive what agrees, type what does not, and ASSERT the difference](#derive-what-agrees-type-what-does-not-and-assert-the-difference)
 - [A guard on one door is not a guard on the room](#a-guard-on-one-door-is-not-a-guard-on-the-room)
 - [Running `verify.py` used to overwrite the live Stage 4 catalog](#running-verifypy-used-to-overwrite-the-live-stage-4-catalog)
-- [Stage 1 lives in another repository now too](#stage-1-lives-in-another-repository-now-too)
+- [Stage 1 downloads a published catalog; it does not build one](#stage-1-downloads-a-published-catalog-it-does-not-build-one)
 - [A split leaves a helper behind wherever it moves only the USERS](#a-split-leaves-a-helper-behind-wherever-it-moves-only-the-users)
 - [A regex repin will rewrite HISTORY, and check 7 says so before you do it](#a-regex-repin-will-rewrite-history-and-check-7-says-so-before-you-do-it)
 - [A mechanical pass over every instance assumes the instances are one thing](#a-mechanical-pass-over-every-instance-assumes-the-instances-are-one-thing)
@@ -130,7 +130,7 @@ ones via `word_replace()`:
 
 | Module | Renames |
 |--------|---------|
-| catalog | `CONFIG`→`CATALOG_CONFIG`, `build_catalog`→`build_asteroid_catalog`, `lookup_asteroid`→`lookup_asteroid_catalog` |
+| catalog | `CONFIG`→`CATALOG_CONFIG`, `build_catalog`→`build_asteroid_catalog` (and `lookup_asteroid`→`lookup_asteroid_catalog` until master v1.34.0, when Stage 1 stopped defining one) |
 | mineral_value | `CONFIG`→`MINERAL_CONFIG`, `merge_sources`→`merge_mineral_sources`, `validate`→`validate_minerals` |
 | transportation | `CONFIG`→`TRANSPORT_CONFIG`, `validate`→`validate_transport` |
 | calc | `CONFIG`→`CALC_CONFIG` |
@@ -203,7 +203,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.3.0`, mineral_value `1.9.0`, transportation `1.15.0`,
-calc `1.23.0`, master `1.33.0` (the master version is a literal in
+calc `1.23.0`, master `1.34.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -4962,12 +4962,65 @@ on skipping silently. **Somebody had the right thought one line too deep.**
 That is this file's "fixing one half of a defect class" rule, written by the
 person who fixed the other half.
 
-## Stage 1 lives in another repository now too
+## Stage 1 downloads a published catalog; it does not build one
 
-`modules/catalog.py` is an adapter. Every fetcher, the cross-match, the
-H-derivation, the validator and the Bus-DeMeo composition table are in
-[`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog),
-pinned to tag `v0.2.0`. **Do not state the table's length here**; the ready
+Since master v1.34.0 `modules/catalog.py` builds nothing and imports no
+package. The builder is
+[`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog), and that
+repository PUBLISHES its builds as GitHub Releases, one frozen catalog per
+`data-YYYY-MM-DD` tag, gated before publishing (every source contributed,
+stamps current, no shrink against the previous release). The pinned catalog release is `data-2026-09-23`,
+`CatalogConfig.catalog_release`.
+
+🚨  **A REPIN MOVES EVERY NUMBER, EXACTLY AS A REBUILD DID.** The pin is one
+string, which makes it look like a setting; it is the input every stage reads.
+Treat it like re-running Stage 1 used to be treated: baseline first, repin, run
+Stage 1, re-measure, and record the repin in versions.md with the release it
+moved from. A table in versions.md names its catalog by `catalog_date`; a
+release's `catalog_date` is its build date, so the two identify each other.
+
+✅  **What the release buys: Stage 1 is idempotent.** Same pin, same bytes, on
+every host, checked against the release's sha256s. With the pin already
+installed Stage 1 downloads nothing, `run_pipeline.py`'s overwrite question
+does not fire for it, and the module's own `_confirm_overwrite` is handed no
+paths. A fresh clone gets the catalog the committed numbers were measured on,
+rather than today's JPL. "Copy `asteroid_pipeline/` from the reference host"
+is still the advice for Stages 2 and 3, and no longer needed for Stage 1.
+
+⚠️  **`pipeline_version` IS CHECKED, NOT STAMPED.** It is the data contract
+this pipeline is written against. Stage 1 refuses a release whose manifest says
+otherwise, before downloading the catalog, and calc's `stamp_check` compares
+the catalog's rows with it. Moving it is a schema decision, made after Stages
+2-4 have been read against the new columns -- not a repin chore.
+
+⚠️  **NOTHING ON DISK CHANGES UNTIL EVERY BYTE HAS MATCHED.** Assets land in a
+`.catalog_download/` staging directory, are checked (gzip, then the
+decompressed CSV, then the taxonomy), and only then moved over the installed
+copies, with `catalog_manifest.json` written LAST so an interrupted install
+never leaves a manifest vouching for files that are not there. A tampered asset
+and a wrong contract were both tried against a local mirror: both refused,
+nothing installed, no staging left behind.
+
+⚠️  **A CATALOG FROM BEFORE v1.34.0 HAS NO MANIFEST** and `verify_stage1.py`
+check 3 fails on it by design: nothing says which build it is. That includes
+the 2026-08-11 catalog (data contract 1.1.0) most of the committed tables were
+measured on, which is not a published release. Keep a copy before the first
+install if you may want to reproduce a table measured on it.
+
+⚠️  **`TAXONOMY_COMPOSITION` NOW COMES FROM THE RELEASE**, `taxonomy.json`
+installed as `catalog_taxonomy.json`, and is EMPTY until Stage 1 has installed a
+release. Stages 2-4 do not read it (they read the `comp_*` columns the build
+wrote); the worked calculation does. The tables are the ones the catalog was
+BUILT with, which a locally installed package could not promise.
+
+⚠️  **Publishing a catalog is done in the other repository**: Actions >
+publish catalog > Run workflow. Nothing in this repo builds one.
+
+### How Stage 1 got here: the package split (master v1.31.0 to v1.33.0)
+
+Superseded by the release download above, and kept for what it taught. Until
+v1.34.0 `modules/catalog.py` was an adapter that installed the package and
+ran the build. **Do not state the table's length here**; the ready
 banner prints it on every import, and the "76 classes" figure that circulates
 in this file is the number of distinct `spectral_type` VALUES in a built
 catalog, which is a different thing and roughly twice the table's 32 rows.
@@ -5022,13 +5075,15 @@ verbosity is always set after import. They were stage banner text, so they live
 in the adapter now -- the package's `v0.1.1`, and the reason the banner
 comparison is worth running rather than assuming.
 
-⚠️  **THE `asteroid_catalog` PIN IS TYPED IN SIX PLACES**, and a repin that
-misses one is the parallel-repo divergence in miniature. Three carry it as a URL:
+⚠️  **THE `asteroid_catalog` PIN WAS TYPED IN SIX PLACES** while the package
+was installed, and a repin that missed one was the parallel-repo divergence in
+miniature. Three carried it as a URL:
 `requirements.txt`, `_MASTER_PIP_SPEC` in `build_master.py`, and `_PIP_SPEC` in
 this module (**what a standalone module run installs from**). Three carry it as
 PROSE: README's sentence naming the tag, this paragraph, and `CITATIONS.md`.
-`verify_docs.py` check 7 holds all six to each other, and the count above is
-spelled out only because that check enforces it.
+`verify_docs.py` check 7 held all six to each other. Since v1.34.0 the package
+is pinned nowhere, and check 7 holds the catalog RELEASE pin to every document
+that names it instead.
 
 🚨  **CHECK 7 DID NOT COVER ANY OF THEM UNTIL THIS SPLIT LANDED.** Every
 pattern in it named `spacecost`, so the six copies above would have been typed
@@ -5037,11 +5092,11 @@ the check written to prevent it, which is this file's "a check that reads one
 row of a table is a check on that row" for the third time. The package is a
 parameter there now, so a third split joins by adding one row.
 
-⚠️  **`pipeline_version` is the PACKAGE's data contract**, mirrored here, and
-`_check_data_contract()` raises at import if the two disagree. It moves when
-the package's moves and at no other time.
+⚠️  **`pipeline_version` was the PACKAGE's data contract**, mirrored here, and
+`_check_data_contract()` raised at import if the two disagreed. It is now
+checked against each release's manifest instead; see above.
 
-⚠️  **The two collision-proof names are load-bearing.** The adapter imports
+⚠️  **The two collision-proof names were load-bearing.** The adapter imported
 `build_catalog_table` and `lookup_body`, never `build_catalog`,
 `lookup_asteroid` or `CONFIG`, because `word_replace` rewrites all three on the
 way into `master.py` and an aliased local name does not help -- the IMPORTED
@@ -5898,9 +5953,9 @@ first three import master".
 | `ui.py` | yes | Streamlit dashboard |
 | `verify.py` | yes | the release checks; count them in its own header rather than quoting a number here |
 | `tree_check.py` | no | **does the disk hold what git says it holds**: every tracked file hashed through `git hash-object` against the index, with `git status` used to tell an edit from a Drive stale or absent read. Every harness below calls it FIRST and refuses on a finding; also runnable alone. No network, no baseline, 0.43 s |
-| `verify_stage1.py` | no | **Stage 1's derivation chain, and since master v1.31.0 its seam too**: the adapter against the `asteroid_catalog` package it drives, including whether the INSTALLED revision is the pinned one, which nothing else can see. Never fetches: the pure checks run against synthetic frames and the rest against the catalog on disk, because re-running Stage 1 fetches a catalog of a different length |
+| `verify_stage1.py` | no | **Stage 1's seam, since master v1.34.0**: the pinned catalog release exists at this pipeline's data contract (checks 1, 2 and 5 read its manifest and taxonomy over the network, so they run on CI), and the catalog on disk is that release byte for byte, re-derived row for row. Never writes the catalog |
 | `verify_stage3.py` | no | the Stage 3 seam: this repo's adapter against the `spacecost` package it drives. Builds into a temp dir, needs no baseline and no network. Its last check drives `validate()` rather than comparing bytes, and is the only coverage Stage 3's behaviour has |
-| `.github/workflows/verify.yml` | no | CI: the build-sync check, the docs checks, **both** package seams (Stage 1's and Stage 3's), and `platform_check.py` as a report. **Not `verify.py`**, which needs inputs no clone has |
+| `.github/workflows/verify.yml` | no | CI: the build-sync check, the docs checks, **both** seams (Stage 1's catalog release and Stage 3's package), and `platform_check.py` as a report. **Not `verify.py`**, which needs inputs no clone has |
 | `verify_docs.py` | no | the **docs** checks; it imports master and the four configs for checks 8 and 9, but never builds a stage. Count them in its own docstring rather than quoting a number here |
 | `run.bat` | no | Windows launcher: a terminal menu over `run_pipeline.py`, `verify.py`, `build_master.py` and the dashboard. No model behaviour of its own |
 | `_START HERE.vbs` | no | double-click entry point, starts the dashboard with no console, ever |

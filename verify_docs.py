@@ -1026,8 +1026,12 @@ def check_manifests() -> bool:
     # the other's tag: the package or its repository must be named within the
     # 200 characters before the claim. A claim no pattern matches is still a
     # FINDING rather than a silent pass.
-    for _pkg, _repo in (("spacecost", "spacecost"),
-                        ("asteroid_catalog", "AsteroidCatalog")):
+    #
+    # 2026-09-23: `asteroid_catalog` left this loop again.  Stage 1 stopped
+    # installing the package and started downloading a published catalog
+    # RELEASE, so the package is pinned nowhere; the release pin is held by its
+    # own block below the loop.  The parameterisation stays, for the next split.
+    for _pkg, _repo in (("spacecost", "spacecost"),):
 
         def _mine(_text, _at, _pkg=_pkg, _repo=_repo):
             """Is the claim at `_at` about THIS package?"""
@@ -1127,6 +1131,37 @@ def check_manifests() -> bool:
                        % (_pkg, sum(len(v) for v in pins.values()),
                           "; ".join("%s in %s" % (ref, ", ".join(sorted(files)))
                                     for ref, files in sorted(pins.items()))))
+
+    # THE CATALOG RELEASE PIN, `CatalogConfig.catalog_release`.  Typed once in
+    # code, and stated in prose wherever a reader is told which catalog the
+    # numbers are on.  Every prose claim of the form "the pinned catalog release
+    # is `data-...`" is held to the code's value, and README and CLAUDE.md must
+    # each make one: a repin that moves the code and not the documents would
+    # leave them naming a catalog nothing runs on.
+    cat_p = os.path.join(REPO, "modules", "catalog.py")
+    if os.path.exists(cat_p):
+        m_pin = re.search(r'^\s*catalog_release:\s*str\s*=\s*"([^"]+)"',
+                          read(cat_p), re.M)
+        n += 1
+        if not m_pin:
+            bad.append("modules/catalog.py declares no `catalog_release` "
+                       "default this check can read")
+        else:
+            pin = m_pin.group(1)
+            claim = re.compile(r"pinned catalog release is `(data-[^`]+)`")
+            for rel in ("README.md", "CLAUDE.md", "versions.md"):
+                path = os.path.join(REPO, rel)
+                if not os.path.exists(path):
+                    continue
+                found = claim.findall(read(path))
+                n += 1
+                if not found and rel != "versions.md":
+                    bad.append("%s does not state the pinned catalog release "
+                               "as \"pinned catalog release is `%s`\"" % (rel, pin))
+                for ref in found:
+                    if ref != pin:
+                        bad.append("%s says the pinned catalog release is %s; "
+                                   "modules/catalog.py pins %s" % (rel, ref, pin))
 
     # README's `./run.sh` block <-> the words run.sh's dispatcher accepts.
     # Same check as the one above and for the same reason: `run.bat help`

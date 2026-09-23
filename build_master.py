@@ -147,19 +147,12 @@ for label, after in (("catalog", m1), ("mineral_value", m2),
           f"{label}: module docstring survived the strip")
 
 # -- Rename per-module globals + functions to avoid collisions ----------------
-# Module 1: CONFIG -> CATALOG_CONFIG, build_catalog -> build_asteroid_catalog,
-#           lookup_asteroid -> lookup_asteroid_catalog
-# Modules 1 and 4 both define lookup_asteroid, and they are not the same
-# function: Module 1's searches the Stage-1 asteroid catalog, Module 4's
-# searches the Stage-4 profitability catalog.  Concatenated, Module 4's wins
-# and Module 1's is unreachable - while both modules' help text still tells
-# you to call `lookup_asteroid(catalog, ...)`.  Following Module 1's advice
-# therefore ran Module 4's function against the wrong frame.  Module 4 keeps
-# the plain name (the profitability catalog is the headline output); Module
-# 1's is renamed, and word_replace rewrites its help text to match.
+# Module 1: CONFIG -> CATALOG_CONFIG, build_catalog -> build_asteroid_catalog
+# Module 1 defined a `lookup_asteroid` of its own until master v1.34.0, when
+# Stage 1 stopped building the catalog and started downloading it; Module 4's
+# is now the only one, so it needs no rename.
 m1 = word_replace(m1, "CONFIG", "CATALOG_CONFIG")
 m1 = word_replace(m1, "build_catalog", "build_asteroid_catalog")
-m1 = word_replace(m1, "lookup_asteroid", "lookup_asteroid_catalog")
 
 # Module 2: CONFIG -> MINERAL_CONFIG, merge_sources -> merge_mineral_sources,
 #           validate -> validate_minerals
@@ -180,16 +173,16 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # -----------------------------------------------------------------------------
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.33.0)
+"""Master Asteroid Profitability Pipeline (1.34.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom - the orchestrator at the bottom executes everything.
 
-    Stage 1  ->  Asteroid Catalog        (modules/catalog.py 1.2.0,
-                 an adapter over the `asteroid_catalog` package)
-                JPL SBDB + MP3C + SsODNet + NEOWISE
-                + PGM_ENRICHMENT_BY_TYPE per-spectral-type factors
+    Stage 1  ->  Asteroid Catalog        (modules/catalog.py, data contract
+                 1.3.0) downloads a pinned, published release of the
+                 AsteroidCatalog build: JPL SBDB + MP3C + SsODNet + NEOWISE,
+                 cross-matched, with per-spectral-type composition
     Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.9.0)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
@@ -217,9 +210,10 @@ kilogram sells for; Stage 4 decides what it costs to put it there, and the
 answer is only meaningful when they agree.  Stage 4 checks and warns.
 
 Output tree (under MASTER_CONFIG.output_dir):
-    asteroid_catalog.csv               <- Stage 1 (~0.88 GB at the 1.55 M-row
-                                          default; set catalog.jpl_limit lower)
-    rejected_entries.csv               <- Stage 1 (validation rejects)
+    asteroid_catalog.csv               <- Stage 1 (~0.9 GB, the pinned release)
+    rejected_entries.csv               <- Stage 1 (the build's validation rejects)
+    catalog_manifest.json              <- Stage 1 (which release is installed)
+    catalog_taxonomy.json              <- Stage 1 (the build's composition tables)
     mineral_value_catalog.csv          <- Stage 2
     transportation/
         launch_vehicles.csv            <- Stage 3
@@ -236,7 +230,7 @@ ASTEROID_PIPELINE_OUTPUT_DIR or by setting MASTER_CONFIG.output_dir.
 Tuning:
     MASTER_CONFIG sits at the bottom of the master config section.  Edit:
         MASTER_CONFIG.output_dir                    (where everything lands)
-        MASTER_CONFIG.catalog.jpl_limit             (asteroid catalog size)
+        MASTER_CONFIG.catalog.catalog_release       (which catalog build)
         MASTER_CONFIG.calc.nre_amortization_missions (multi-mission NRE split)
         MASTER_CONFIG.calc.use_isru_return_propellant (make ISRU available)
         MASTER_CONFIG.calc.optimise_architecture_per_asteroid
@@ -293,19 +287,18 @@ import subprocess as _subprocess
 
 _MASTER_REQUIRED = [
     "requests", "pandas", "numpy", "yfinance", "tqdm", "pyarrow", "spacecost",
-    "asteroid_catalog",
 ]
-# import-name -> pip argument, for the packages where those differ.  TWO do:
-# `spacecost` holds Stage 3's reference tables and `asteroid_catalog` holds
-# Stage 1's builder, and neither is on PyPI yet, so both install from a TAGGED
-# git ref rather than by name.  The tags are pinned rather than tracking main,
-# because an untagged URL would silently change what a Colab paste installs.
-# IF EITHER IS EVER PUBLISHED: put a pinned "<name>==<version>" in
-# requirements.txt and drop its entry here; nothing else changes.
+# import-name -> pip argument, for the packages where those differ.  ONE does:
+# `spacecost` holds Stage 3's reference tables and is not on PyPI yet, so it
+# installs from a TAGGED git ref rather than by name.  The tag is pinned rather
+# than tracking main, because an untagged URL would silently change what a
+# Colab paste installs.  IF IT IS EVER PUBLISHED: put a pinned
+# "<name>==<version>" in requirements.txt and drop its entry here.
+#
+# Stage 1 installs no package: it downloads a pinned catalog RELEASE, which is
+# data, not code.  Its pin is `CatalogConfig.catalog_release`.
 _MASTER_PIP_SPEC = {
     "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.2",
-    "asteroid_catalog":
-        "git+https://github.com/loggger101/AsteroidCatalog@v0.2.0",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -345,7 +338,7 @@ from dataclasses import dataclass as _master_dataclass
 class MasterConfig:
     """Composes the four module configs.  Edit sub-configs directly:
 
-        MASTER_CONFIG.catalog.jpl_limit = 10_000
+        MASTER_CONFIG.catalog.catalog_release = "data-YYYY-MM-DD"
         MASTER_CONFIG.calc.use_isru_return_propellant = True
 
     One exception: set the delivery destination HERE, not on a sub-config -
@@ -407,7 +400,7 @@ print()
 print("=" * 75)
 print("     MASTER CONFIG READY")
 print(f"      Pipeline output  : {MASTER_CONFIG.output_dir}")
-print(f"      JPL limit        : {MASTER_CONFIG.catalog.jpl_limit:,} asteroids")
+print(f"      Catalog release  : {MASTER_CONFIG.catalog.catalog_release}")
 print(f"      Eval row cap     : {MASTER_CONFIG.calc.eval_row_cap:,}")
 print(f"      Delivery dest    : {MASTER_CONFIG.delivery_destination}")
 print(f"      ISRU return      : {'available where the rock supplies the propellant' if MASTER_CONFIG.calc.use_isru_return_propellant else 'off'}")
@@ -480,7 +473,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.33.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.34.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

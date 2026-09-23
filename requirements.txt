@@ -9,10 +9,9 @@
 # PyPI yet, so it is pinned to a TAGGED git ref; an untagged URL would change
 # what a fresh install gets without anything here moving.
 #
-# `asteroid_catalog` holds Stage 1's builder -- the four survey fetchers, the
-# cross-match, the H-derivation, the validator and the Bus-DeMeo composition
-# table -- which used to live in modules/catalog.py.  Same arrangement and same
-# reason: it is not on PyPI, so it is pinned to a TAGGED git ref.
+# Stage 1 installs no package.  It downloads a pinned, published build of the
+# asteroid catalog -- data, not code -- from the AsteroidCatalog repository's
+# releases; the pin is `CatalogConfig.catalog_release` in modules/catalog.py.
 requests
 pandas
 numpy
@@ -20,4 +19,3 @@ yfinance
 tqdm
 pyarrow
 spacecost @ git+https://github.com/loggger101/spacecost@v0.3.2
-asteroid-catalog @ git+https://github.com/loggger101/AsteroidCatalog@v0.2.0

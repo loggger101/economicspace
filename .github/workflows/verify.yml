@@ -5,8 +5,9 @@
 # out `verify.py`, whose checks 1-5 all build cells; it stays a local
 # pre-commit harness run against a `.verify` baseline.  What CI can prove is
 # everything that needs no catalog: that `master.py` still matches the modules
-# it is generated from, that the docs still describe the code, and that the
-# Stage 3 split has not drifted.  Those are exactly the three that were
+# it is generated from, that the docs still describe the code, that the
+# pinned catalog release exists at our data contract, and that the Stage 3
+# split has not drifted.  Those are exactly the three that were
 # hand-run until 2026-09-15 and therefore run only when somebody remembered.
 #
 # platform_check.py is deliberately NOT a gate.  A GitHub runner is glibc on
@@ -45,11 +46,11 @@ jobs:
           python-version: '3.13'
 
       # The lock pins the versions every committed number was measured on; it
-      # does NOT carry the two tagged git URLs -- spacecost for Stage 3's
-      # tables, asteroid_catalog for Stage 1's builder -- which live in the
-      # loose list.  Installing both files in ONE resolve means the `==` pins
-      # win and each package arrives at its pinned tag, with no version typed
-      # here.  A third split needs no edit to this step.
+      # does NOT carry the tagged git URL for spacecost (Stage 3's tables),
+      # which lives in the loose list.  Installing both files in ONE resolve
+      # means the `==` pins win and the package arrives at its pinned tag, with
+      # no version typed here.  A second split needs no edit to this step.
+      # Stage 1 installs no package: it downloads a pinned catalog release.
       - name: Install dependencies
         run: python -m pip install --upgrade pip
           && python -m pip install -r requirements-lock.txt -r requirements.txt
@@ -93,17 +94,13 @@ jobs:
       - name: Documentation checks
         run: python verify_docs.py
 
-      # Checks 1 to 5 are pure: the documented Stage 1 traps executed against
-      # synthetic frames, with no catalog, no network and no baseline. Checks
-      # 6 to 8 need the 868 MB catalog, which is gitignored, so they skip here
-      # and say so. That split is why this is worth gating on at all.
-      #
-      # Check 9 is the seam, and CI is where it is WORTH most: the install
-      # step above is the only thing that put asteroid_catalog here, so a
-      # green 9 says the pin in requirements.txt is what the other eight
-      # checks just described. On a developer's machine that is easy to
-      # break with one `pip install -e`.
-      - name: Stage 1 derivation chain
+      # Checks 1, 2 and 5 are the seam: the pinned catalog release exists, is
+      # this pipeline's data contract, and ships sound composition tables.
+      # They read only the release's manifest and taxonomy.json, so they run
+      # here and catch a pin that names nothing before anybody runs Stage 1.
+      # Checks 3, 4 and 6 to 8 need the installed ~1.2 GB catalog, which is
+      # gitignored, so they skip here and say so.
+      - name: Stage 1 catalog release
         run: python verify_stage1.py
 
       - name: Stage 3 seam
