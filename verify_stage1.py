@@ -115,6 +115,22 @@ LITERATURE = {
 # `spectral_type_source`.  Reading all three off one column is the obvious
 # misreading and it is why they are written out per column here.
 CENSUS = {
+    # The first published release, `data-2026-09-23`, as installed from GitHub.
+    ("1.3.0", "2026-09-23"): {
+        "rows": 1566618,
+        "diameter_source": {
+            "measured":                  149740,
+            "derived_h_taxonomy_albedo": 105873,
+            "derived_h_orbit_albedo":   1310985,
+            "derived_h_measured_albedo":     20,
+        },
+        "spectral_type_source": {
+            "source":         171108,
+            "albedo":          84501,
+            "albedo_assumed": 1310972,
+            "unknown":            37,
+        },
+    },
     ("1.1.0", "2026-08-11"): {
         "rows": 1555667,
         "diameter_source": {

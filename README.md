@@ -537,8 +537,8 @@ full `master.py` at least once, or run stages 1-3 individually first.
 
 - **Stage 1** downloads the pinned catalog release once: a **~290 MB** gzip
   that decompresses to a **~1.2 GB** CSV (the `data-2026-09-23` release:
-  1,566,617 bodies, 95 columns), checksummed before it replaces anything.
-  Measured on a local mirror, the install takes ~40 s plus the download; a
+  1,566,618 bodies, 95 columns), checksummed before it replaces anything.
+  Measured 2026-09-23, the install from GitHub took **48 s** end to end; a
   re-run at the same pin downloads nothing and takes ~30 s, the checksum and
   the CSV read.
 - **Stage 4 is the long pole by far**, because `eval_row_cap` defaults to `0`
@@ -993,7 +993,7 @@ checks had when this file verified the builder in place.
 
 ✅  **Check 7 is Stage 1's analogue of a cell hash**: the installed catalog's
 derived columns, recomputed row for row from the tables the release shipped.
-On `data-2026-09-23` it reproduces all seven columns over 1,566,617 rows with
+On `data-2026-09-23` it reproduces all seven columns over 1,566,618 rows with
 0 differing, which also holds this file's copy of the PGM lookup rule to the
 package's.
 

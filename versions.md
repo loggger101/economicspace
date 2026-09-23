@@ -207,14 +207,19 @@ installed pin it downloads nothing.
 
 ### What it was tested against
 
-The `data-2026-09-23` catalog was built and packaged locally with the new
-gates (all passed: 1,566,617 bodies; JPL 1,566,617, SsODNet 1,563,644, MP3C
-1,335,046, NEOWISE 143,015; 149,740 measured diameters), served from a local
-mirror, and installed by the new Stage 1 into a scratch directory: 40 s cold,
-31 s at an installed pin. A tampered asset and a wrong data contract were both
-refused with nothing installed. `verify_stage1` passed 9 of 9 against it, check
-7 re-deriving all seven composition columns over every row with 0 differing,
-and the Parquet asset matched the CSV on all 95 columns.
+Before publishing, a full local build (1,566,617 bodies) was packaged with the
+new gates, all passing, and served from a local mirror: Stage 1 installed it in
+40 s cold and 31 s at an installed pin, a tampered asset and a wrong data
+contract were both refused with nothing installed, and the Parquet asset
+matched the CSV on all 95 columns.
+
+**The published `data-2026-09-23`** was then built by AsteroidCatalog's publish
+workflow from its `v0.3.0` merge commit (`692036a`), one body larger than the
+local build hours earlier: **1,566,618 bodies**; JPL 1,566,618, SsODNet
+1,563,644, MP3C 1,335,046, NEOWISE 143,015; 149,740 measured diameters. Stage 1
+installed it from GitHub in 48 s, and `verify_stage1` passed 9 of 9 against it,
+check 7 re-deriving all seven composition columns over every row with 0
+differing. Its provenance census is pinned in check 8.
 
 ### What did not change
 
