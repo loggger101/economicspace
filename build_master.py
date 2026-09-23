@@ -180,7 +180,7 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # -----------------------------------------------------------------------------
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.32.0)
+"""Master Asteroid Profitability Pipeline (1.33.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -305,7 +305,7 @@ _MASTER_REQUIRED = [
 _MASTER_PIP_SPEC = {
     "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.2",
     "asteroid_catalog":
-        "git+https://github.com/loggger101/AsteroidCatalog@v0.1.3",
+        "git+https://github.com/loggger101/AsteroidCatalog@v0.2.0",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -480,7 +480,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.32.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.33.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
