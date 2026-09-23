@@ -119,23 +119,23 @@ def _surplus_default():
 
 PRESETS = {
     "quick": dict(
-        rows=400, raw=True, search=False, asteroids=20_000,
+        rows=400, raw=True, search=False,
         blurb="400-row stride sample, run-of-mine ore, single mission "
-              "(minutes once the catalog is cached)",
+              "(minutes once the catalog is installed)",
     ),
     "standard": dict(
-        rows=20_000, raw=True, search=False, asteroids=0,
+        rows=20_000, raw=True, search=False,
         blurb="20,000-row stride sample of the full catalog, run-of-mine ore, "
               "single mission (tens of minutes)",
     ),
     "full": dict(
-        rows=0, raw=False, search=True, asteroids=0,
+        rows=0, raw=False, search=True,
         blurb="THE PIPELINE DEFAULTS -- every row, beneficiated, programme "
               "search on",
     ),
 }
 
-# `full` is the one preset that overrides nothing: its four values are the
+# `full` is the one preset that overrides nothing: its three values are the
 # dataclass defaults verbatim, which is what makes it the slow one. Asserted
 # at startup against the dataclasses rather than trusted, so that a default
 # flipped in a module cannot leave this claim standing while it stops being
@@ -148,7 +148,7 @@ PRESETS = {
 PIPELINE_DEFAULTS_PRESET = "full"
 
 STAGE_NAMES = {
-    1: "catalog (downloads ~500 MB on a cold run)",
+    1: "catalog (installs the pinned release; a few hundred MB the first time)",
     2: "mineral value",
     3: "transportation costs",
     4: "profitability (the long one)",
@@ -354,8 +354,6 @@ def build_parser(destinations) -> argparse.ArgumentParser:
     p.add_argument("--rows", type=nonneg_int,
                    help="Stage 4 row cap, 0 = every row (stride-sampled "
                         "across the whole catalog, not the first N)")
-    p.add_argument("--asteroids", type=nonneg_int,
-                   help="Stage 1 fetch cap per source, 0 = all 1.55 M")
     p.add_argument("--workers", type=nonneg_int,
                    help="worker processes for Stage 4, 0 = auto")
     p.add_argument("--output",
@@ -451,7 +449,7 @@ def resolve(args) -> dict:
     """Preset first, then any explicit flag laid on top of it."""
     settings = dict(PRESETS[args.preset])
     settings.pop("blurb")
-    for key in ("rows", "asteroids", "raw", "search"):
+    for key in ("rows", "raw", "search"):
         if getattr(args, key) is not None:
             settings[key] = getattr(args, key)
     return settings
@@ -478,7 +476,7 @@ def declared_default(config_obj, field_name):
 def apply_preset(cfg, settings: dict) -> None:
     """Write one resolved preset onto the live config objects.
 
-    The four assignments below are the WHOLE meaning of a preset, and they used
+    The three assignments below are the WHOLE meaning of a preset, and they used
     to sit inline in `main()` where only this file could reach them.  The
     dashboard offers the same three presets, so a second copy of this mapping
     would be two definitions of "quick" waiting to disagree, which is the
@@ -490,7 +488,6 @@ def apply_preset(cfg, settings: dict) -> None:
     the upgrade.  Nothing here touches the destination: that is not a preset
     question, and `MasterConfig` owns writing both of its copies.
     """
-    cfg.catalog.jpl_limit = settings["asteroids"]
     cfg.calc.eval_row_cap = settings["rows"]
     cfg.calc.use_beneficiation = not settings["raw"]
     cfg.calc.optimise_programme_scale = settings["search"]
@@ -506,7 +503,6 @@ def check_defaults_preset(cfg) -> None:
     """
     expected = {
         "rows":      declared_default(cfg.calc,    "eval_row_cap"),
-        "asteroids": declared_default(cfg.catalog, "jpl_limit"),
         "raw":   not declared_default(cfg.calc,    "use_beneficiation"),
         "search":    declared_default(cfg.calc,    "optimise_programme_scale"),
     }
@@ -567,10 +563,11 @@ def report_inputs(cfg, stages) -> int:
     the important half; this is the half that answers the question BEFORE a
     campaign is queued, and prints the sizes so a copy can be checked.
 
-    Regenerating them instead of copying them is not equivalent and the
-    difference is silent: Stage 1 re-fetches from JPL, which adds bodies daily,
-    so the catalog comes back a different length and nothing produced from it
-    is comparable with any committed number.
+    Regenerating them instead of copying them is not equivalent for Stages 2
+    and 3, and the difference is silent: they re-fetch live prices, so nothing
+    produced from them is comparable with any committed number. Stage 1 is the
+    exception: it installs the pinned catalog release, the same bytes on every
+    host.
 
     Returns the process exit code: 0 everything present, 2 something missing.
     """
@@ -602,9 +599,10 @@ def report_inputs(cfg, stages) -> int:
     print("      rsync -avP <reference-host>:<repo>/asteroid_pipeline/ \\")
     print("            %s/" % cfg.calc.input_dir)
     print()
-    print("  Re-running Stages 1-3 to make them instead re-fetches live data:")
-    print("  a different JPL catalog and different metal prices, so the result")
-    print("  is valid and NOT comparable with anything already measured.")
+    print("  Re-running Stages 2-3 to make them instead re-fetches live prices,")
+    print("  so the result is valid and NOT comparable with anything already")
+    print("  measured. Stage 1 is safe to run: it installs the pinned catalog")
+    print("  release, the same bytes on every host.")
     print()
     return 2
 
@@ -733,25 +731,20 @@ def print_banner(args, settings, cfg, stages) -> None:
     two being confused.
     """
     rows      = settings["rows"]
-    asteroids = settings["asteroids"]
 
     d_rows   = declared_default(cfg.calc,    "eval_row_cap")
-    d_ast    = declared_default(cfg.catalog, "jpl_limit")
+    d_rel    = declared_default(cfg.catalog, "catalog_release")
     d_benef  = declared_default(cfg.calc,    "use_beneficiation")
     d_search = declared_default(cfg.calc,    "optimise_programme_scale")
     d_dest   = declared_default(cfg.mineral, "delivery_destination")
     d_market = declared_default(cfg.calc,    "market_model")
 
-    # The four banner formatters. Each renders ONE setting as the banner shows
-    # it, and the first two exist mostly to say what 0 MEANS: it is "no cap" in
-    # both, and would otherwise print as "0 rows" and "0 asteroids".
+    # The banner formatters. Each renders ONE setting as the banner shows it;
+    # `fmt_rows` exists mostly to say what 0 MEANS: "no cap", which would
+    # otherwise print as "0 rows".
     def fmt_rows(n):
         """The row cap as the banner shows it. 0 is no cap, not no rows."""
         return "every row" if not n else "{:,} (stride sample)".format(n)
-
-    def fmt_ast(n):
-        """The per-source fetch limit. 0 is unlimited, i.e. the whole catalog."""
-        return "all (1.55 M)" if not n else "{:,} per source".format(n)
 
     # Ratios come from master.MEASURED_CELL_SECONDS, never typed here: these
     # two labels printed the superseded 1.16.0 figures for three releases.
@@ -809,8 +802,8 @@ def print_banner(args, settings, cfg, stages) -> None:
     lines = [
         ("Destination",  cfg.delivery_destination,
          mark(cfg.delivery_destination, d_dest, str)),
-        ("Asteroids",    fmt_ast(asteroids),
-         mark(asteroids, d_ast, fmt_ast)),
+        ("Catalog",      cfg.catalog.catalog_release,
+         mark(cfg.catalog.catalog_release, d_rel, str)),
         ("Stage 4 rows", fmt_rows(rows),
          mark(rows, d_rows, fmt_rows)),
         ("Ore",          fmt_ore(settings["raw"]),
@@ -841,10 +834,12 @@ def print_banner(args, settings, cfg, stages) -> None:
 
 
 # Stage -> (what it re-fetches, the file it overwrites). Stage 4 is absent
-# because it fetches nothing: it reads the CSVs the others wrote.
+# because it fetches nothing: it reads the CSVs the others wrote. Stage 1 is
+# at risk only when the pinned catalog release is not the one installed; see
+# `overwrite_warning`.
 _FETCHING_STAGES = {
-    1: ("the JPL catalog and its supplements (~500 MB; JPL adds bodies daily, "
-        "so the population itself changes)", "asteroid_catalog_file"),
+    1: ("the asteroid catalog, replaced by the pinned release",
+        "asteroid_catalog_file"),
     2: ("live metal prices", "mineral_catalog_file"),
     3: ("live commodity prices", None),
 }
@@ -875,6 +870,14 @@ def overwrite_warning(cfg, stages) -> list:
         if stage not in _FETCHING_STAGES:
             continue
         what, attr = _FETCHING_STAGES[stage]
+        # Stage 1 downloads a pinned release: when that release is already
+        # installed it changes nothing, so there is nothing to ask about.
+        if stage == 1:
+            installed = _installed_catalog_release(cfg)
+            if installed == cfg.catalog.catalog_release:
+                continue
+            what = "%s %s (installed: %s)" % (what, cfg.catalog.catalog_release,
+                                              installed or "no manifest")
         path = None
         if attr:
             path = os.path.join(cfg.calc.input_dir, getattr(cfg.calc, attr))
@@ -896,6 +899,21 @@ def overwrite_warning(cfg, stages) -> list:
         "compare against them.",
     ]
     return lines
+
+
+def _installed_catalog_release(cfg):
+    """The catalog release tag Stage 1 last installed, or None.
+
+    Read from the manifest Stage 1 writes beside the catalog. A catalog built
+    before Stage 1 downloaded releases has no manifest, and returns None.
+    """
+    import json
+    path = os.path.join(cfg.catalog.output_dir, cfg.catalog.manifest_filename)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh).get("release_tag")
+    except (OSError, ValueError):
+        return None
 
 
 def confirm_overwrite(cfg, stages) -> bool:
