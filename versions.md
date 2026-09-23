@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.33.0 / catalog v1.3.0](#master-v1330--catalog-v130)
 - [master v1.32.0](#master-v1320)
 - [master v1.31.0](#master-v1310)
 - [master v1.30.0](#master-v1300)
@@ -82,11 +83,11 @@ one that does not say is not to be used.
 
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
-| 1 | `modules/catalog.py` | **1.2.0** | v1.2.0, orbit quality, a total NEOWISE sort, the element epoch. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract, which owns it since master v1.31.0 |
+| 1 | `modules/catalog.py` | **1.3.0** | v1.3.0, bodies joined across sources and every source validated against its service. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract, which owns it since master v1.31.0 |
 | 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
 | 3 | `modules/transportation.py` | **1.15.0** | v1.15.0, the `environments` table: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.23.0** | v1.23.0, the 5% depletion cap comes off: a mission may take the whole body |
-| - | `master.py` | **1.32.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.33.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -158,6 +159,52 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.33.0 / catalog v1.3.0
+
+**asteroid_catalog v0.1.3 -> v0.2.0, which moves the catalog contract to
+1.3.0.** The package's
+[`CHANGELOG.md`](https://github.com/loggger101/AsteroidCatalog/blob/main/CHANGELOG.md)
+is the authority for what changed in Stage 1 and the measurements behind it;
+this note records what it means here.
+
+Every source was pulled in full on 2026-09-22/23 and joined back to JPL by
+hand. Each defect it found had passed every build:
+
+| defect | measured |
+|---|---|
+| MP3C never contributed: every URL the fetcher tried answered 404, the service having moved to `dachs.oca.eu` | 0 rows on every build; 1,335,502 bodies now |
+| NEOWISE bodies joined nothing when filed under another designation, or NEOWISE's own `"1996 GQ0"` | 10,627 of 143,318 bodies (7.4%) |
+| SsODNet rows under a secondary designation survived as duplicates | 182 in the 2026-08-11 build |
+| duplicates culled rather than combined; a sigma could sit beside another source's value | 27,864 NEOWISE bodies with repeat fits |
+| `orbital_period_yr` was in DAYS, from both JPL and SsODNet | Ceres read 1679.85 |
+| `name` held provisional designations | 1,537,189 unnamed bodies |
+| source placeholders read as data: MP3C H = 0 and 99.99, NEOWISE's assumed fit values and -0.999 | 26 bodies sized at 5,000-5,600 km |
+
+**Same-day A/B on the full sources** (package tests, not this repo's harness):
+all 1,566,600 bodies the old code accepted are kept, plus 16; rejected for no
+orbit 10,632 -> 210; **not one measured diameter changed value**.
+
+### What changes here
+
+- The pin, in all six places, and `_check_data_contract` now expects `1.3.0`.
+- `CatalogConfig` gains `use_mpc_identifications`, copied verbatim from the
+  package (its comment is the dashboard's help text), and it is listed in the
+  dashboard's "Data sources" group.
+- **After the next Stage 1 build**, a Stage 4 result's `name` is empty for an
+  unnamed body rather than its provisional designation; `designation` is its
+  identity, as before.
+
+### What did not change
+
+- **The catalog on disk.** Stage 1 was not re-run; it is still stamped
+  `1.1.0`, so `stamp_check()` keeps reporting it as stale, which is the
+  deliberate-lag case it cannot tell from a failed write.
+- **No Stage 2, 3 or 4 number.** All four Stage 4 cells reproduce the `1.23.0`
+  baseline, 143/143 columns identical, and `verify_stage1` (10 checks, check 7
+  re-deriving the composition columns over the catalog on disk through the new
+  package), `verify_stage3`, `verify_docs` and `platform_check` all pass.
+- mineral_value `1.9.0`, transportation `1.15.0`, calc `1.23.0`.
 
 ## master v1.32.0
 
@@ -5045,6 +5092,27 @@ catalog on disk is still `1.1.1`, so `stamp_check()` will report it as stale on
 every Stage 4 run until Stage 1 is next run. That is the deliberate-lag case
 the check explicitly cannot distinguish from a failed write; it is correct to
 fire and means nothing by it here.
+
+**`1.3.0`  bodies joined across sources, and every source validated against
+its service.** Full write-up:
+[master v1.33.0 / catalog v1.3.0](#master-v1330--catalog-v130), and the
+package's `CHANGELOG.md` (`asteroid_catalog` `v0.2.0`).
+
+New config field: `use_mpc_identifications` (bool, default `True`).
+
+New output columns: `provisional_designation`, `absolute_magnitude_h_sigma`,
+`albedo_sigma`, `estimated_mass_sigma_kg`, `neowise_n_fits`, `family`,
+`proper_semi_major_axis_au`, `proper_eccentricity`, `proper_inclination_deg`,
+`n_sources`, `sources`, and for each of diameter, albedo, H (`h_`), mass and
+rotation period: `<stem>_provider`, `<stem>_n_sources`, `<stem>_spread`,
+`<stem>_sources_agree`.
+
+⚠️  **Three columns change meaning, not just value**, so a `1.2.0` CSV and a
+`1.3.0` CSV do not compare on them: `orbital_period_yr` is years (it was days);
+`name` is an IAU name or empty (it held provisional designations); a sigma
+column now always belongs to the source its value came from.
+`neowise_beaming_param` and `albedo_ir` are empty where NEOWISE assumed rather
+than fitted them.
 
 ## Stage 2 changelog: `modules/mineral_value.py`
 

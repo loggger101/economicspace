@@ -185,7 +185,7 @@ nothing in their schema knows what a mine is: a merged catalog with honest
 provenance is useful to anyone doing population statistics, survey planning or
 target selection.
 
-**asteroid_catalog is pinned to a tagged release**, `v0.1.3`, in all six places
+**asteroid_catalog is pinned to a tagged release**, `v0.2.0`, in all six places
 that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
 `build_master.py` and in `_PIP_SPEC` in `modules/catalog.py` (what a standalone
 module run installs from); and in prose here, in [CLAUDE.md](CLAUDE.md) and in
@@ -224,7 +224,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
-| 1 | `modules/catalog.py` | 1.2.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; merge, dedupe, validate, enrich with per-spectral-type PGM factors. An **adapter** over the [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) package since master v1.31.0 |
+| 1 | `modules/catalog.py` | 1.3.0 | JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE; re-key every body onto JPL's designation, merge, combine duplicates, validate, enrich with per-spectral-type PGM factors. An **adapter** over the [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) package since master v1.31.0 |
 | 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.15.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read |
 | 4 | `modules/calc.py` | 1.23.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
@@ -565,7 +565,8 @@ full `master.py` at least once, or run stages 1-3 individually first.
 - Every source is failure-tolerant: an unreachable host returns empty and the
   run continues on what it did get. MP3C in particular is often DNS-blocked
   from Colab runtimes. You do not need to flip a source toggle just because a
-  host is down.
+  host is down. (Until `asteroid_catalog` `v0.2.0`, MP3C contributed nothing
+  on any runtime: its service had moved and the fetcher was asking dead URLs.)
 
 ### Output location
 
@@ -602,6 +603,7 @@ that actually move the answer:
 | `.catalog.min_diameter_km` | `0.001` | Size floor. Raise to `1.0` to study km-class bodies only |
 | `.catalog.require_spectral_type` | `False` | `True` drops untyped rows; fewer asteroids, but every one has a composition |
 | `.catalog.use_jpl` / `use_mp3c` / `use_ssodnet` / `use_neowise` | all `True` | Per-source toggles. Turning off SsODNet skips the 500 MB download |
+| `.catalog.use_mpc_identifications` | `True` | Re-key rows a source files under another designation onto JPL's, from the MPC's designation links (one cached ~180 MB file). `False` skips the download; ~5,000 rows then join nothing |
 | `.calc.eval_row_cap` | `0` | Stage-4 evaluation cap; `0` evaluates every row. Was `5_000`, which discarded 99.7% of a v1.1.0 catalog |
 | `.calc.eval_row_sampling` | `"stride"` | How a cap picks rows. `"stride"` samples the whole belt evenly; `"head"` is the pre-v1.13.0 innermost-N behaviour |
 | `.calc.parallel_workers` | `0` | Stage-4 worker processes. `0` picks a count from the CPU count and the amount of work; `1` forces the single-core path. See [Parallel evaluation](#parallel-evaluation) |

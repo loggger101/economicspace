@@ -424,6 +424,7 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
             ("catalog", "use_mp3c"),
             ("catalog", "use_ssodnet"),
             ("catalog", "use_neowise"),
+            ("catalog", "use_mpc_identifications"),
             ("mineral", "use_yfinance"),
             ("mineral", "use_metals_api"),
         ],
