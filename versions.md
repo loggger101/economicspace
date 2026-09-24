@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160)
 - [master v1.34.0: Stage 1 installs a published catalog](#master-v1340-stage-1-installs-a-published-catalog)
 - [master v1.33.0 / catalog v1.3.0](#master-v1330--catalog-v130)
 - [master v1.32.0](#master-v1320)
@@ -85,10 +86,10 @@ one that does not say is not to be used.
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.3.0** | v1.3.0, bodies joined across sources and every source validated against its service. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
-| 2 | `modules/mineral_value.py` | **1.9.0** | v1.9.0, `geo` priced: a seventh delivery destination |
-| 3 | `modules/transportation.py` | **1.15.0** | v1.15.0, the `environments` table: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 2 | `modules/mineral_value.py` | **1.10.0** | v1.10.0, every in-space price moves with spacecost v0.4.0's delivered-price model |
+| 3 | `modules/transportation.py` | **1.16.0** | v1.16.0, the launch table re-audited, 36 rows to 76: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.23.0** | v1.23.0, the 5% depletion cap comes off: a mission may take the whole body |
-| - | `master.py` | **1.34.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.35.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -160,6 +161,118 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0
+
+**spacecost v0.3.2 -> v0.4.0, and the data contract 1.15.0 -> 1.16.0. The
+first repin since the Stage 3 split that moves VALUES, and it moves them in
+Stage 2 and Stage 3 at once.** Nothing measured in this repository has been
+re-run under it, so no table in this file, README or CLAUDE.md is a v0.4.0
+measurement unless it says so. The package's own record is
+[spacecost's CHANGELOG](https://github.com/loggger101/spacecost/blob/main/CHANGELOG.md).
+
+### What moved
+
+- **Stage 3, the launch table: 36 rows to 76**, every row re-verified, with
+  errors fixed in existing ones. The three that reach this model hardest:
+  SLS Block 1B (Cargo) is `concept` (it never flew), Falcon Heavy (reusable
+  side cores) carries 30 t to LEO rather than an unsourced 57 t, and a ranged
+  price or payload is now the geometric centre of its band. Twenty columns are
+  appended; none that Stage 4 reads moved position.
+- **Stage 4's search grid: 17 operational vehicles to 48.** Stage 4 flies
+  every `operational` row, so each asteroid is now priced against 1,008
+  vehicle x propellant combinations rather than 357, and most of the new
+  vehicles are Chinese and Russian ones spacecost marks `restricted`. No
+  `availability` filter exists in Stage 4; restricted vehicles were already
+  eligible (Long March 5 always was), there are simply more of them now.
+- **Stage 2, the delivered-price model.** The LEO anchor is Falcon Heavy
+  (expendable) at $2,414/kg, chosen by a rule spacecost asserts at import,
+  where it was Falcon 9 (reusable) at $4,253. And every stage a chain expends
+  is charged for being BUILT as well as launched:
+
+| destination | 0.3.x | 0.4.0 | of which stage hardware |
+|---|---:|---:|---:|
+| `leo` | 4,253 | 2,414 | 0 |
+| `geo` | 12,526 | 8,046 | 937 |
+| `cislunar` | 10,810 | 6,878 | 742 |
+| `mars_orbit` | 13,496 | 8,706 | 1,046 |
+| `lunar_surface` | 21,210 | 42,635 | 30,596 |
+| `mars_surface` | 45,105 | 184,811 | 159,209 |
+
+  The downleg did not move. mineral_value moves to `1.10.0` because every
+  in-space price it writes moved; its output notes now name the anchor vehicle
+  off `spacecost.LEO_LAUNCH_VEHICLE` rather than typing "Falcon 9 reusable",
+  and give the kg-in-LEO ratio off `delivery_mass_ratio` plus the hardware
+  share, since the price is no longer the ratio times the LEO $/kg.
+
+### What it is worth, on a sample
+
+The same 300-row stride sample of the cislunar catalog, run on the default
+configuration (beneficiated, programme search on) against the transportation
+`1.15.0` CSVs with the frozen 2026-09-09 Stage 2 prices, and against the
+tables Stages 2 and 3 build on `v0.4.0`, both in a scratch directory:
+
+| | 0.3.x tables | 0.4.0 tables |
+|---|---|---|
+| evaluable rows | 121 | 118 |
+| median objective | 13.939 | 19.422 |
+| best row | 5.7085, 2026 MT, Vulcan Centaur VC6 | 9.0965, 2026 MT, **Angara A5** |
+| commonest vehicle | Falcon Heavy (reusable side cores) | Falcon Heavy (expendable) |
+| paired new / old, median | | **1.580x** (0.737 to 4.041) |
+
+⚠️  **A sample, so read [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule)
+before quoting it for the full catalog**, and the runtime of the two runs is
+deliberately not quoted: a wider grid costs more per row, and a 300-row cell is
+the construction this project has four times failed to budget from. The best
+row flying a vehicle a Western buyer cannot book is the finding in that table
+worth a decision; it is not a defect in the tables.
+
+### What was changed here to follow it
+
+- The pin, in all seven places.
+- `campaign/worked_calculation.py` walks the chain with the stage-hardware
+  term and **chooses the pricing model off the Stage 2 table's own stamp**,
+  holding the choice to every `used in space` price in that table. Without it
+  every archived cell would have been refused the moment the pin moved. See
+  [A pricing MODEL can change under an archived row](CLAUDE.md#a-pricing-model-can-change-under-an-archived-row-not-only-a-price).
+  `worked_calculation_doc.py` and `verification_sheet.py` show the per-leg
+  build cost; the sheet's `m_LEO` substitution also stops dropping the Mars
+  entry leg, which printed `1 / 1.0` where the value divided by 0.30.
+- `verify_docs.py` check 17 reads the kg-in-LEO ratio off
+  `delivery_mass_ratio` and pins the hardware share README now prints; check
+  3 pins README's two grid sentences where it used to pin three
+  `modules/calc.py` comments that spelled "seventeen".
+- README's destination table, commodity price table and launch-table section;
+  two of the four claims under the price table reversed (water is now worth
+  more at Mars than at the Moon, and olivine at the Moon is compared against
+  cislunar rather than LEO).
+
+### What was verified
+
+- All seven destinations, both models: the derivation's chain walk equals
+  `delivered_cost_usd_per_kg` exactly, and the 0.3.x model reproduces every
+  published 0.3.x price.
+- An archived `mars_surface` cell (legacy prices, an entry leg) and a fresh
+  `v0.4.0` cislunar row both derive with **0 differing**; the `v0.4.0` page's
+  audit shows every non-zero column and all 34 rates. Forcing the wrong model
+  on the archived cell is refused.
+- The verification sheet's parts 0-2 on both: every substitution evaluates to
+  its printed value, and its self-test fails when perturbed.
+- Stages 2, 3 and 4 run end to end on `v0.4.0` into a scratch directory; the
+  live `asteroid_pipeline/` was not written.
+
+### What did not change
+
+- **No Stage 4 code**, and calc stays `1.23.0`: three comments stopped spelling
+  a vehicle count. catalog `1.3.0`.
+- **The CSVs on disk.** `asteroid_pipeline/` still holds the transportation
+  `1.15.0` tables and a Stage 2 catalog stamped `1.9.0`, and `stamp_check()`
+  says so on every Stage 4 run until Stages 2 and 3 are re-run. Re-running them
+  is what adopts this release, and it replaces the inputs every `.verify`
+  baseline and every archived cell was measured on; copy `asteroid_pipeline/`
+  first.
+- **The campaign.** `campaign/stage2/` stays frozen at 0.3.x prices on
+  purpose, and no cell under `campaign/cells/` compares with a `v0.4.0` run.
 
 ## master v1.34.0: Stage 1 installs a published catalog
 
@@ -787,6 +900,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160) | 2026-09-23 | **spacecost v0.4.0**: the launch table re-audited and the delivered-price model changed, so Stages 2 and 3 both re-price |
 | [master v1.30.0](#master-v1300) | 2026-09-21 | **spacecost v0.3.0**: Stage 2's delivery chains move to the package, and the sentence explaining why they were duplicated had expired at the split |
 | [transportation v1.15.0 / master v1.29.0](#transportation-v1150--master-v1290) | 2026-09-17 | **spacecost v0.2.0**: a sixth reference table, and the guard a stage module run directly never had |
 | [calc v1.23.0](#calc-v1230) | 2026-09-17 | **the depletion cap comes off**: `max_mining_fraction` 0.05 -> 1.0, and a constraint that bound on 2% of bodies was sizing the mission on them |
@@ -5487,6 +5601,17 @@ market in the table and the only one anchored on hardware that exists.
 `_DOWNLEG_DEPARTURE_DV_M_S` gains **1,490 m/s**, twelve times the LEO figure.
 
 The six existing destinations reprice to the cent, and no exported value moves.
+
+**`1.10.0`  spacecost v0.4.0's delivered-price model.** Full write-up:
+[master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160).
+No config field and no output column is added or removed. Every in-space
+`price_usd_per_kg` moves, because `delivered_cost_usd_per_kg` now anchors on
+Falcon Heavy (expendable) and charges for building the stages a chain expends;
+the downleg does not move. The destination `notes` string changes wording: it
+names `spacecost.LEO_LAUNCH_VEHICLE`, and gives the kg-in-LEO ratio from
+`delivery_mass_ratio` with the stage-hardware $/kg beside it. **A Stage 2
+table stamped below `1.10.0` was priced by the 0.3.x model**, and
+`campaign/worked_calculation.py` keys on exactly that.
 
 ## Stage 3 changelog: `modules/transportation.py`
 

@@ -85,6 +85,8 @@ import subprocess
 import sys
 
 import pandas as pd
+import spacecost
+import spacecost.delivery as _sd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CAMP = os.path.join(ROOT, "campaign")
@@ -1301,6 +1303,72 @@ def eclipse_derate(w_bare, dark_h, dark_fraction, storage_wh_per_kg,
 
 
 # ------------------------------------------------------------------ context
+# 🚨  WHICH DELIVERED-PRICE MODEL PRICED THIS ROW'S STAGE 2 TABLE.  spacecost
+# v0.4.0 changed it twice at once: the LEO anchor moved from Falcon 9
+# (reusable) to whatever the package's rule selects, and every stage a chain
+# expends is now charged for being BUILT as well as launched.  A Stage 2 table
+# stamped before mineral_value 1.10.0 was priced by the old model, and every
+# campaign cell on disk reads one of those, so deriving its page with today's
+# `delivered_cost_usd_per_kg` would print a launch cost the run never used.
+# This is "an input read from the LIVE table is a term read from the wrong
+# run", arriving for a whole pricing MODEL rather than one reference price.
+#
+# ⚠️  THE STAMP CHOOSES AND THE TABLE CHECKS.  `delivered_cost_usd_per_kg(dest,
+# 4253.0, stage_hardware=False)` is spacecost's own documented way to reproduce
+# a pre-v0.4.0 price bit for bit, so the legacy anchor is typed here; what keeps
+# it honest is `check_delivery_pricing` below, which holds the chosen P_L to
+# every `used in space` price the table actually carries and refuses on a miss.
+_PRE_V040_LEO_USD_PER_KG = 4253.0      # Falcon 9 (reusable), spacecost 0.3.x
+_FIRST_HARDWARE_STAGE2 = (1, 10, 0)    # mineral_value, the spacecost 0.4.0 repin
+
+
+def delivery_pricing(minerals):
+    """`(c_LEO, stage_hardware, label)` for the model that priced `minerals`."""
+    import master
+    stamp = None
+    if "pipeline_version" in minerals.columns and len(minerals):
+        stamp = str(minerals["pipeline_version"].iloc[0]).strip()
+    try:
+        key = tuple(int(x) for x in stamp.split("."))
+    except (AttributeError, ValueError):
+        key = None
+    if key is not None and key < _FIRST_HARDWARE_STAGE2:
+        return (_PRE_V040_LEO_USD_PER_KG, False,
+                "Stage 2 %s, priced before spacecost 0.4.0: Falcon 9 "
+                "(reusable) to LEO, and no charge for building the stages "
+                "the chain expends" % stamp)
+    return (float(master._LEO_USD_PER_KG), True,
+            "Stage 2 %s, priced by spacecost %s: %s to LEO, plus what the "
+            "stages the chain expends cost to build"
+            % (stamp or "(unstamped)", spacecost.__version__,
+               spacecost.LEO_LAUNCH_VEHICLE))
+
+
+def check_delivery_pricing(C):
+    """Hold the chosen P_L to every `used in space` price the table carries.
+
+    Stage 2 writes `terrestrial + utility * P_L - refining` for each commodity
+    used at the destination, so the table itself says which launch cost it was
+    priced at.  A model chosen by stamp that does not reproduce it is the wrong
+    model, and a page derived on it would be about a different run.
+    """
+    for name, part in C["price_parts"].items():
+        # A mineral priced off its element yields has no quote of its own
+        # (NaN), and its price is not this formula; the elements carry it.
+        if (not part["route"].startswith("used") or part["utility"] <= 0
+                or not math.isfinite(part["terrestrial"])):
+            continue
+        implied = max(0.0, part["terrestrial"] + part["utility"] * C["p_l"]
+                      - part["refining"])
+        if abs(implied - part["delivered"]) > 1e-9 * max(1.0, part["delivered"]):
+            sys.exit("the Stage 2 table was not priced at P_L = %.6f $/kg.\n"
+                     "  %s: the table says %.6f $/kg, and %s gives %.6f.\n"
+                     "  model chosen: %s"
+                     % (C["p_l"], name, part["delivered"],
+                        "terrestrial + utility * P_L - refining", implied,
+                        C["pricing_label"]))
+
+
 def context(body, archived, tables):
     """Everything about this body and architecture that no search varies.
 
@@ -1494,7 +1562,7 @@ def context(body, archived, tables):
     # HERE.  Module 2 keys on identity: `earth_surface` maps to None and avoids
     # no launch at all, `leo` maps to `[]` and avoids the whole LEO price with
     # nothing to fly above it.  Flattening the first into the second made the
-    # Earth's surface price its non-existent chain at 4,253 $/kg, which is what
+    # Earth's surface price its non-existent chain at the LEO $/kg, which is what
     # `delivery_chain` and the renderer both test with `is not None`.
     legs = master._DELIVERY_LEGS.get(cfg.delivery_destination)
     # 🚨  THE FOUR COLUMNS BEHIND EVERY PRICE IN THE PHASE TABLE, so the page
@@ -1518,6 +1586,7 @@ def context(body, archived, tables):
               "downleg_cost_usd_per_kg", "in_space_processing_usd_per_kg",
               "value_route", "price_usd_per_kg")
     price_parts = {}
+    pricing = delivery_pricing(tables["minerals"])
     if all(column in tables["minerals"].columns for column in needed):
         for _i, m in tables["minerals"].iterrows():
             price_parts[str(m["name"])] = {
@@ -1532,8 +1601,13 @@ def context(body, archived, tables):
         cfg=cfg, body=body, veh=veh, pro=pro, ops=ops, val=val,
         minerals=tables["minerals"], legs=legs, price_parts=price_parts,
         physics=PHYSICS,
-        leo_usd_per_kg=master._LEO_USD_PER_KG,
-        p_l=master.delivered_cost_usd_per_kg(cfg.delivery_destination),
+        leo_usd_per_kg=pricing[0], stage_hardware=pricing[1],
+        pricing_label=pricing[2],
+        hw_rates=dict(stage=dict(_sd.STAGE_HARDWARE_USD_PER_KG),
+                      propellant=_sd.TUG_PROPELLANT_USD_PER_KG,
+                      entry=_sd.ENTRY_SYSTEM_USD_PER_KG),
+        p_l=master.delivered_cost_usd_per_kg(
+            cfg.delivery_destination, pricing[0], stage_hardware=pricing[1]),
         a_au=a_au, e=float(body["eccentricity"]),
         inc=float(body["inclination_deg"]),
         rho=float(body["density_gcm3"]),
@@ -1724,31 +1798,46 @@ def delivery_chain(C):
     `earth_surface` maps to None and avoids no launch at all, while `leo` maps
     to `[]` -- nothing to fly ABOVE LEO, and the launch TO LEO avoided in full.
     Walking an empty chain leaves the mass at 1.0, so the price is the
-    LEO $/kg itself, which is why Module 2 returns 4,253 where this returned
-    zero.  Found by `--sweep`, on the first `leo` mission this derivation had
+    LEO $/kg itself, which is why Module 2 returned the whole LEO price where
+    this returned zero.  Found by `--sweep`, on the first `leo` mission this derivation had
     ever been pointed at: it is the model's most-used in-space destination and
     the assertion at the end of `build` refused every one of them.
     """
-    mass, steps = 1.0, []
+    hw_on, rates = C.get("stage_hardware", False), C.get("hw_rates") or {}
+    mass, hardware, steps = 1.0, 0.0, []
     for leg in reversed(C["legs"] or []):
         before = mass
         if leg[0] == "edl":
             frac = float(leg[1])
             mass = mass / frac if frac > 0 else float("inf")
+            hw = (mass - before) * rates["entry"] if hw_on else 0.0
+            hardware += hw
             steps.append({"kind": "edl", "surviving": frac, "before": before,
-                          "after": mass})
+                          "after": mass, "hw": hw})
             continue
         _kind, dv, isp, dry = leg
         r = math.exp(float(dv) / (float(isp) * G0))
         d = dry * (r - 1.0) / (1.0 - dry * r) if dry * r < 1.0 else float("inf")
         m0 = r * (1.0 + d)
+        # v0.4.0: what the expended stage costs to BUILD, as spacecost's
+        # `delivery_hardware_usd_per_kg` charges it, term for term and in the
+        # same order, so the sum agrees to the last bit rather than to 1e-16.
+        stage_dry = m0 / r - 1.0
+        propellant = m0 - 1.0 - stage_dry
+        hw = (before * (stage_dry * rates["stage"][dry]
+                        + propellant * rates["propellant"])
+              if hw_on else 0.0)
+        hardware += hw
         mass *= m0
         steps.append({"kind": "burn", "dv": float(dv), "isp": float(isp),
                       "dry": float(dry), "ve": float(isp) * G0, "R": r, "d": d,
-                      "m0": m0, "before": before, "after": mass})
-    return {"steps": steps, "kg_in_leo": mass,
-            "usd_per_kg": (C["leo_usd_per_kg"] * mass
-                           if C["legs"] is not None else 0.0)}
+                      "m0": m0, "before": before, "after": mass,
+                      "stage_dry": stage_dry, "propellant": propellant,
+                      "hw": hw})
+    launch = C["leo_usd_per_kg"] * mass if C["legs"] is not None else 0.0
+    return {"steps": steps, "kg_in_leo": mass, "launch_usd_per_kg": launch,
+            "hardware_usd_per_kg": hardware,
+            "usd_per_kg": launch + hardware if hw_on else launch}
 
 
 def derive_body(C):
@@ -3200,6 +3289,7 @@ def build(archived, label, body=None, run_beneficiated=None):
                  "Module 2 gives %.10f; the leg walk has drifted from "
                  "`delivered_cost_usd_per_kg`."
                  % (C["chain"]["usd_per_kg"], C["p_l"]))
+    check_delivery_pricing(C)
     B = derive_body(C)
     DV = derive_dv(C)
     DV.update(derive_periods(C))

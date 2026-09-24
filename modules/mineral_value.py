@@ -50,9 +50,9 @@ import subprocess, sys
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 # spacecost is not on PyPI, so it installs from a TAGGED git ref and a bare
 # name in the install list would resolve to nothing.  The tag is typed in
-# FIVE places in this repo now; verify_docs check 7 holds them together.
+# several places in this repo; verify_docs check 7 finds and holds them all.
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.2",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.4.0",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -150,11 +150,11 @@ class MineralValueConfig:
     #                     metal-rich M / X types.
     #   "leo"           - delivered to and sold in low Earth orbit.  Every
     #                     commodity with in-space utility is worth the launch
-    #                     cost it avoids ($4,253/kg); precious metals are
+    #                     cost it avoids ($2,414/kg); precious metals are
     #                     worth nothing, because no orbital market for them
     #                     exists.  Favours water- and metal-rich bulk.
     #   "geo"           - sold at a geostationary servicing depot
-    #                     ($12,526/kg).  The only destination in this model
+    #                     ($8,046/kg).  The only destination in this model
     #                     with a paying customer TODAY: ~550 active
     #                     satellites, and MEV-1 / MEV-2 have already docked
     #                     with commercial GEO spacecraft.  A narrow market
@@ -162,23 +162,26 @@ class MineralValueConfig:
     #                     it is the only destination that discounts the
     #                     METALS rather than the volatiles.
     #   "cislunar"      - sold at a lunar-vicinity (NRHO) depot, worth the
-    #                     larger launch cost avoided ($10,810/kg, derived).
+    #                     larger launch cost avoided ($6,878/kg, derived).
     #                     Also the CHEAPEST of the orbital options to reach
     #                     from an asteroid; see Module 4's return-Δv model.
-    #   "lunar_surface", sold at a Moon base.  $21,210/kg: nearest
+    #   "lunar_surface", sold at a Moon base.  $42,635/kg: nearest
     #                     destination, but airless, so all 5,920 m/s from LEO
-    #                     is propulsive.
-    #   "mars_orbit"    - sold at a 1-sol Mars-orbit depot ($13,496/kg).  The
+    #                     is propulsive, and the tug and lander that do it
+    #                     are thrown away (72% of the price is that hardware).
+    #   "mars_orbit"    - sold at a 1-sol Mars-orbit depot ($8,706/kg).  The
     #                     Mars destination that nothing lands on, so it pays
     #                     no entry-survival fraction and, crucially, competes
     #                     with EARTH freight rather than with the Martian
     #                     crust; see IN_SPACE_UTILITY_BY_DESTINATION.
-    #   "mars_surface"  - sold at a Mars base.  $45,105/kg: far in Δv, but the
-    #                     atmosphere brakes most of the arrival for free.
+    #   "mars_surface"  - sold at a Mars base.  $184,811/kg: the atmosphere
+    #                     brakes most of the arrival, but the tug, aeroshell and
+    #                     lander are all expended (86% of the price).
     #
     # ⚠️  The two surface figures are MARGINAL-TRANSPORT LOWER BOUNDS.  They
-    # price the propellant and stages needed to move a kilogram, on a reusable
-    # Falcon 9 LEO price, with no first-of-kind development, no programme
+    # price the propellant and stages needed to move a kilogram, on the
+    # cheapest LEO price a buyer can book today (Falcon Heavy expendable,
+    # spacecost v0.4.0), with no first-of-kind development, no programme
     # overhead and no launch-cadence limit.  Real delivered cost today is far
     # higher; CLPS lunar landers run on the order of $1M/kg for ~100 kg
     # payloads.  Treat these as "what it could cost at industrial scale", not
@@ -224,7 +227,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.9.0"
+    pipeline_version: str = "1.10.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -314,9 +317,9 @@ _REF_PRICE_DATE = "2026-05-29"
 #                   overstates it once you account for the fact that nobody
 #                   needs it.  This is what a sample-return architecture
 #                   actually delivers.
-#   leo           - worth the launch cost it avoids.  $4,250/kg matches the
-#                   Falcon 9 reusable $/kg-to-LEO in Module 3, so the two
-#                   modules stay consistent by construction.
+#   leo           - worth the launch cost it avoids, which is Module 3's LEO
+#                   anchor read straight off spacecost, so the two modules
+#                   stay consistent by construction.
 #   cislunar      - worth the cost of lifting it to lunar vicinity.  Roughly
 #                   3× the LEO figure, tracking the Δv difference between LEO
 #                   and a TLI/NRHO depot.
@@ -383,16 +386,20 @@ _REF_PRICE_DATE = "2026-05-29"
 
 G0_M_S2 = spacecost.G0_M_S2        # standard gravity, exact by definition
 
-# Falcon 9 reusable $/kg-to-LEO, off `LAUNCH_VEHICLES_REFERENCE` rather than
-# typed.  The cheapest operational figure in that table, so every in-space
-# price derived from it is a LOWER bound on the launch cost avoided.
+# The LEO anchor, off `LAUNCH_VEHICLES_REFERENCE` rather than typed.  Since
+# spacecost v0.4.0 it is whatever vehicle the package's stated rule selects
+# (operational, open to any buyer, priced by the launcher itself, cheapest
+# headline $/kg) and asserts at import: Falcon Heavy (expendable).  Until
+# v0.4.0 it was Falcon 9 (reusable), called "the cheapest operational
+# figure", which it never was.  The name is `spacecost.LEO_LAUNCH_VEHICLE`,
+# and the output notes read it rather than typing it.
 _LEO_USD_PER_KG = spacecost.LEO_LAUNCH_USD_PER_KG
 
 # The leg chains.  ⚠️  `None` and `[]` are DIFFERENT and both are used:
 # `earth_surface` has no chain and avoids no launch, `leo` has an EMPTY chain
 # and avoids the whole LEO price.  `_build_destination_table` below tests
 # `is None` for exactly that reason, and a truthiness test there would price
-# Earth's surface at 4,253 $/kg.
+# Earth's surface at the whole LEO price.
 _DELIVERY_LEGS = spacecost.DELIVERY_CHAINS
 
 delivered_cost_usd_per_kg = spacecost.delivered_cost_usd_per_kg
@@ -441,7 +448,8 @@ def _build_destination_notes() -> Dict[str, str]:
     lun, m_o, m_s = _burns("lunar_surface"), _burns("mars_orbit"), _burns("mars_surface")
     plane_change = geo[1] - _GEO_COPLANAR_GTO_BURN_M_S
     return {
-        "leo":           "Falcon 9 reusable $/kg-to-LEO, straight off Module 3.",
+        "leo":           f"{spacecost.LEO_LAUNCH_VEHICLE} $/kg-to-LEO, "
+                         "straight off Module 3.",
         "geo":           f"LEO -> GTO ({geo[0]:,.0f} m/s), then an apogee burn "
                          f"of {geo[1]:,.0f} m/s that circularises and removes "
                          f"{_PARKING_INCLINATION_DEG:.1f} deg of "
@@ -498,6 +506,7 @@ def _build_destination_table() -> Dict[str, dict]:
             continue
         dv_total = sum(l[1] for l in legs if l[0] == "burn")
         cost     = delivered_cost_usd_per_kg(key)
+        hardware = spacecost.delivery_hardware_usd_per_kg(key)
         out[key] = {
             "usd_per_kg": cost,
             "dv_above_leo_m_s": dv_total,
@@ -506,10 +515,12 @@ def _build_destination_table() -> Dict[str, dict]:
                            + (" + entry" if any(l[0] == "edl" for l in legs) else "")
                            + ")"),
             "notes": (f"Derived from ${_LEO_USD_PER_KG:,.0f}/kg to LEO "
-                      f"(Falcon 9 reusable, Module 3): "
+                      f"({spacecost.LEO_LAUNCH_VEHICLE}, Module 3): "
                       + _DESTINATION_NOTES.get(key, "")
-                      + f"  Needs {cost / _LEO_USD_PER_KG:,.2f} kg in LEO per "
-                        f"kg delivered."),
+                      + f"  Needs {spacecost.delivery_mass_ratio(key):,.2f} kg "
+                        f"in LEO per kg delivered"
+                      + (f", plus ${hardware:,.0f}/kg for the stages the "
+                         f"chain expends." if hardware else ".")),
         }
     return out
 
@@ -608,7 +619,7 @@ IN_SPACE_UTILITY_DEFAULT = 0.0
 #
 # So the correction runs mostly DOWNWARD, and hardest at the destination that
 # is furthest away, which inverts the naive reading of the price table above.
-# Mars has the dearest freight ($45,105/kg) AND the poorest market for bulk
+# Mars has the dearest freight ($184,811/kg) AND the poorest market for bulk
 # asteroid material, because a settlement with an atmosphere and a crust makes
 # its own water, carbon and rock.  Do not "fix" that by raising these back up:
 # the high delivered cost is what Earth would pay, and the low utility is the

@@ -48,8 +48,9 @@ counts-in-prose failure this file was written to catch:
                      the footer's claim about what it borrows is derived from
                      that scan rather than typed, because it was typed once and
                      was false in four places
-   17. dest table    README's destination table -- the price, the kg-in-LEO
-                     ratio and every delta-v its chain column quotes -- against
+   17. dest table    README's destination table -- the price, its stage-
+                     hardware share, the kg-in-LEO ratio and every delta-v its
+                     chain column quotes -- against
                      `master.DELIVERY_DESTINATIONS`.  Check 9 on a different
                      table: seven rows of typed markdown restating a
                      derivation, which is the third copy of the in-space
@@ -587,8 +588,11 @@ def check_row_counts(mods) -> bool:
     # measurement.
     #
     # Matched as a digit OR as the English word, because three of the calc
-    # comments spell it "seventeen" -- and a count spelled out in prose is
-    # exactly what this repo keeps finding stale.
+    # comments used to spell it "seventeen" -- and a count spelled out in prose
+    # is exactly what this repo keeps finding stale.  Those three stopped
+    # stating it at the spacecost v0.4.0 repin, which took the grid to 48;
+    # README's two sentences about the grid are the copies left, and they are
+    # the ones a reader budgets a run from.
     def _truthy(row, key, default):
         """A reference-table flag as a bool, with an explicit default if absent.
 
@@ -626,11 +630,9 @@ def check_row_counts(mods) -> bool:
          "usable propellants"),
         ("modules/calc.py", r"%s propellants' worth of answers" % NUM,
          "usable propellants"),
-        ("modules/calc.py", r"%s numbers that are fixed for" % NUM,
-         "operational vehicles"),
-        ("modules/calc.py", r"%s evaluations per propellant row" % NUM,
-         "operational vehicles"),
-        ("modules/calc.py", r"%s vehicles now share one" % NUM,
+        ("README.md", r"%s operational and Earth-based \(the default search\)"
+                      % NUM, "operational vehicles"),
+        ("README.md", r"took that from \d+ to %s" % NUM,
          "operational vehicles"),
     ]
     for gone in absent([r for r, _, _ in DERIVED_CLAIMS]):
@@ -2200,8 +2202,21 @@ def check_destination_table() -> bool:
         if want_usd not in cells[1]:
             problems.append("%s: README says %s, the model derives %s"
                             % (key, cells[1], want_usd))
+        # spacecost v0.4.0 charges what the expended stages cost to BUILD on
+        # top of launching their mass, so the price is no longer the LEO $/kg
+        # times the ratio and the ratio has to be asked for directly.  The
+        # hardware share is typed in the price cell, so it is pinned too.
+        import spacecost as _sc
+        hardware = _sc.delivery_hardware_usd_per_kg(key)
+        if hardware > 0.0:
+            n += 1
+            want_hw = "$%s of it" % format(round(hardware), ",d")
+            if want_hw not in cells[1]:
+                problems.append("%s: README's price cell should say %s stage "
+                                "hardware, and says %r"
+                                % (key, want_hw, cells[1]))
         n += 1
-        want_ratio = "%.2f" % (usd / _m._LEO_USD_PER_KG)
+        want_ratio = "%.2f" % _sc.delivery_mass_ratio(key)
         if want_ratio not in cells[2]:
             problems.append("%s: README says %s kg in LEO per kg, the model "
                             "derives %s" % (key, cells[2], want_ratio))
