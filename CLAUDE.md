@@ -59,6 +59,7 @@ through. Skim for the section that names what you are about to change.
 - [A derivation that agrees with the model can still print a line nobody can check](#a-derivation-that-agrees-with-the-model-can-still-print-a-line-nobody-can-check)
 - [An input read from the LIVE table is a term read from the wrong run](#an-input-read-from-the-live-table-is-a-term-read-from-the-wrong-run)
 - [A pricing MODEL can change under an archived row, not only a price](#a-pricing-model-can-change-under-an-archived-row-not-only-a-price)
+- [A live table is only evidence about a run that could have read it](#a-live-table-is-only-evidence-about-a-run-that-could-have-read-it)
 - [A convenience path that bypasses the constructor loses what the constructor attached](#a-convenience-path-that-bypasses-the-constructor-loses-what-the-constructor-attached)
 - [Fixing the page can break the audit that was matching through the old rendering](#fixing-the-page-can-break-the-audit-that-was-matching-through-the-old-rendering)
 - [A cap on a list of two kinds of thing truncates the half you asked for](#a-cap-on-a-list-of-two-kinds-of-thing-truncates-the-half-you-asked-for)
@@ -435,8 +436,11 @@ claims each cell retired.
 `1.35.0` REPINNED PAST.** spacecost `v0.4.0` re-audited the launch table and
 changed the delivered-price model, so Stage 2 and Stage 3 both re-price and no
 flag in this repo restores the old tables: reproducing a cell here needs the
-2026-09-09 inputs, the frozen `campaign/stage2/` prices and the transportation
-`1.15.0` CSVs. Two things below are now wrong about the MODEL rather than about
+2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
+tables now frozen under `campaign/stage3/`. ⚠️  **The live
+`asteroid_pipeline/` holds the `v0.4.0` tables and the `data-2026-09-23`
+catalog since 2026-09-24**, and `campaign/run_cell.py` refuses to run a
+campaign cell against them. Two things below are now wrong about the MODEL rather than about
 a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
 grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
 default configuration measured the repricing at a median **1.58x worse**
@@ -3094,12 +3098,62 @@ fresh `v0.4.0` cislunar row both derive with 0 differing.
 already on disk was computed by the OLD one?** A repin moves every reader that
 calls the function, and the archives were written by the function it replaced.
 
-⚠️  **The Stage 3 tables are the half this does NOT cover.** The derivation
-reads vehicles, propellants and ops off the live `asteroid_pipeline/` CSVs, and
-`v0.4.0` changed rows in them: Falcon Heavy (reusable side cores), the most
-flown vehicle in the campaign, lost an unsourced 57 t for 30 t. Re-run Stage 3
-and an archived cell flying it stops reproducing; there is no frozen Stage 3
-under `campaign/` the way there is a frozen Stage 2.
+✅  **The Stage 3 half is covered now, by `campaign/stage3/`.** This paragraph
+said it was not: the derivation read vehicles, propellants and ops off the live
+CSVs, and `v0.4.0` changed rows in them (Falcon Heavy (reusable side cores),
+the most flown vehicle in the campaign, lost an unsourced 57 t for 30 t). The
+spacecost 0.3.x vehicles, propellants and ops the campaign flew are committed
+there, and the derivation reaches for them exactly as it reaches for
+`campaign/stage2/`.
+
+### A live table is only evidence about a run that could have read it
+
+2026-09-24, adopting spacecost `v0.4.0` on disk, and it is the entry above
+arriving the moment the live tables actually moved. `mineral_catalog_for`
+used the live Stage 2 catalog whenever it was priced for the row's
+destination. That was right **by luck** for as long as the live catalog was the
+one every archived cell had been priced on. Re-running Stages 2 and 3 ended the
+luck, and nothing refused: the pricing MODEL is chosen off the table's own
+stamp, so a `v0.4.0` table checks out as internally consistent, and the page
+then describes a run that never happened.
+
+🚨  **MEASURED: 12 COLUMNS DIFFER, `gross_value_usd` BY 37%**, deriving the
+calc `1.23.0` default cell's winner against the new tables. With the fix it is
+**88 quantities, 0 DIFFER**, the same as before the tables moved. And the
+refusal's hint pointed at the wrong suspect ("a dial read from the LIVE
+config"), which is [a refusal that names the wrong constraint](#a-refusal-that-names-the-wrong-constraint-sends-the-reader-to-the-wrong-file)
+again. It names the tables it priced from now as well.
+
+✅  **CAUSALITY DECIDES IT, WITHOUT LOOKING AT THE ANSWER.** A Stage 4 row
+carries its run's `catalog_date`, and every stage table carries the date it
+was written: a run cannot have read a file written after it ended.
+`run_could_read` asks exactly that, for Stage 2, for Stage 3 and for Stage 1's
+manifest. Equal dates are read as "could have", which is the old behaviour, and
+the compared columns stay the guard there.
+
+⚠️  **Stage 1 has no frozen copy, so it is DISCLOSED rather than chosen.** The
+body is read from the installed catalog release, and a row older than it was
+measured on the 2026-08-11 build. Most bodies did not move -- the default
+cell's winner is the same float on both catalogs -- but some did: 2026 PR1's
+diameter moved 11.8%, and its page DIFFERs on 39 columns while saying why
+before it starts. A 1.1 GB catalog is not worth committing to make an archived
+non-winner reproduce.
+
+⚠️  **The frozen set is ONE epoch.** Re-run Stage 2 or 3 again and a `v0.4.0`
+archive written before that re-run will fall back to the 0.3.x tables, which
+are the wrong frozen set for it. The compared columns catch that, loudly; the
+fix, when it is needed, is to key the frozen sets by stamp.
+
+⚠️  **`campaign/run_cell.py` had the mirror image of this, and it was worse,
+because it WRITES.** It copies the frozen Stage 2 catalog over the live one
+before running a cell. Under `v0.4.0` that paired 0.3.x prices with the new
+launch table and the new Stage 2 model, archived under a campaign cell's name,
+and overwrote the live Stage 2 catalog doing it. It refuses before the copy now,
+whenever the frozen catalog's stamp is not the one the Stage 2 code writes.
+
+**The general question: which artefacts on disk were written by the run you are
+describing, and which merely sit beside it?** A destination match is not
+provenance, and neither is a file name.
 
 ### A convenience path that bypasses the constructor loses what the constructor attached
 
@@ -6124,8 +6178,10 @@ to read. It builds no stage and fetches nothing, so it cannot destroy a
 baseline.
 
 ⚠️  **It picks the Stage 2 PRICES off the row for the same reason**, from
-the live catalog when that catalog says it is the right one and from
-`campaign/stage2/` otherwise. See
+the live catalog when that catalog says it is the right one AND the row's run
+could have read it, and from `campaign/stage2/` otherwise; the Stage 3 tables
+the same way, from `campaign/stage3/`. See
+[a live table is only evidence about a run that could have read it](#a-live-table-is-only-evidence-about-a-run-that-could-have-read-it). See
 [a Stage 2 catalog is priced for ONE destination](#a-stage-2-catalog-is-priced-for-one-destination-and-so-are-its-ceilings);
 the ceilings are routed per destination as well as the prices, so the live
 catalog is wrong for an archived cell from anywhere else and nothing about it

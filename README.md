@@ -147,9 +147,13 @@ two stages at once: the launch table was re-audited (36 rows to 76, with
 corrected payloads and prices on existing rows), and the delivered-price model
 Stage 2 prices through now anchors on the cheapest LEO price a buyer can book
 and charges for building the stages a chain expends. The contract went
-`1.15.0` -> `1.16.0` and Stage 2 moved to `1.10.0`. **Nothing measured in this
-repository has been re-run under it**; see
-[master v1.35.0](versions.md#master-v1350--mineral_value-v1100--transportation-v1160).
+`1.15.0` -> `1.16.0` and Stage 2 moved to `1.10.0`. **The live
+`asteroid_pipeline/` adopted it on 2026-09-24** (Stages 2 and 3 re-run, the
+previous tables backed up, every harness green on the new inputs); the
+campaign's cells are still 0.3.x measurements, and the tables they flew are
+frozen under `campaign/stage2/` and `campaign/stage3/`. See
+[master v1.35.0](versions.md#master-v1350--mineral_value-v1100--transportation-v1160)
+and [the data on disk adopts it](versions.md#the-data-on-disk-adopts-it-2026-09-24).
 Two checks say the seam is sound, and both are cheap:
 
 ```bash
@@ -561,6 +565,17 @@ full `master.py` at least once, or run stages 1-3 individually first.
   interactive: as of calc v1.13.0 a capped run is an evenly-spaced sample of
   the whole belt rather than the innermost N bodies, so it is actually
   representative.
+
+  🚨  **Those wall clocks, and the ones the run banner derives from them, are
+  the 17-vehicle grid's.** spacecost `v0.4.0` widened Stage 4's search to 48
+  vehicles, 1,008 vehicle x propellant combinations per asteroid against 357.
+  The first full-catalog default cell on it ran its second 1% of rows in
+  **9.5 minutes**, where the same cell on the old grid averaged **1.7 minutes
+  per 1%** over its whole run. A slice of one run is not a budget
+  ([THE SAMPLING RULE](CLAUDE.md#the-sampling-rule)), but a factor of about
+  five is not rounding either: **do not budget a default run from the figures
+  above** until the cells are re-measured. See
+  [the data on disk adopts it](versions.md#the-data-on-disk-adopts-it-2026-09-24).
 - **The catalog's size is not a dial here any more.** Which bodies exist, which
   surveys contributed and whether diameters are derived from H are decided
   when a catalog release is built, in the AsteroidCatalog repository. To study
@@ -1928,12 +1943,14 @@ rather than a regression.
 
 ⚠️  **This table is a v1.22.0 measurement and calc v1.23.0 moved a
 default under it**: `max_mining_fraction` is 1.0 rather than 0.05, so a mission
-may take the whole body. **The full catalog has not been re-run.** On the
-400/150-row stride cells both BENEFICIATED cells, including the default one,
-come out **bit-identical**, and the raw N = 1 cell moves **+5.11%**; that is a
-sample, and [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) is about exactly
-this kind of extrapolation. Set `max_mining_fraction` to 0.05 to reproduce the
-four figures above. See [calc v1.23.0](versions.md#calc-v1230).
+may take the whole body. On the 400/150-row stride cells both BENEFICIATED
+cells, including the default one, come out **bit-identical**, and the raw N = 1
+cell moves **+5.11%**. **The default cell has since been re-run over the full
+catalog at v1.23.0** (2026-09-18): the winner is the same float, 3.1822x, on
+the same 660,253 evaluable rows, while 7,513 rows (1.14%) below it move; see
+[the full-catalog default cell](versions.md#the-full-catalog-default-cell-at-this-release-2026-09-18).
+The other three cells have not been, so set `max_mining_fraction` to 0.05 to
+reproduce their figures above. See [calc v1.23.0](versions.md#calc-v1230).
 
 ✅  **Both evaluable counts reproduce exactly**, 650,921 raw and 660,253
 beneficiated, on all four cells. That is the invariant worth reading: this
