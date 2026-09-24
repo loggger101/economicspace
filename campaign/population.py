@@ -137,8 +137,8 @@ def shares(series):
     wrong for the reason this repo keeps re-learning: a share below the cut is
     indistinguishable from a share of zero, and the docs carry a claim -- that
     ISRU tracks hydrolox to within 0.03 pp at every destination -- that is
-    decided exactly there.  The grid is 21 usable propellants and 17 operational
-    vehicles, so keeping all of them costs nothing.
+    decided exactly there.  The grid is a few dozen vehicles and propellants
+    at most, so keeping all of them costs nothing.
 
     Missing is dropped rather than counted: `propellant` is NaN on no row, but
     `thrust_scaling` is NaN on every chemical mission, and a share table that

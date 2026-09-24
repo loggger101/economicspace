@@ -7,8 +7,9 @@ independent package, and this module is the adapter that drives it:
     https://github.com/loggger101/spacecost
 
 Why they left.  Two thirds of this module was annotated reference data --
-36 launch vehicles, 41 propellants, 33 delta-v segments, 44 operational costs
-and 20 storage systems, every row cited -- and nothing in its schema knew what
+36 launch vehicles (76 since spacecost v0.4.0), 41 propellants, 33 delta-v
+segments, 44 operational costs and 20 storage systems, every row cited -- and
+nothing in its schema knew what
 an asteroid was.  A launch price is useful to anyone costing a mission, so the
 tables became a package other projects can cite, and this pipeline became its
 first consumer.
@@ -44,6 +45,16 @@ equal -- so it moves when the package's moves and at no other time.  v0.1.1 ->
 v0.2.0 took it 1.14.0 -> 1.15.0 for the sixth table.  No pre-existing VALUE
 moved: the five inherited tables are byte-identical to the 1.14.0 build once
 the two provenance columns are stripped.
+
+🚨  v0.4.0 TOOK IT 1.15.0 -> 1.16.0 AND VALUES DID MOVE, which is the first
+repin since the split that re-prices anything.  The launch table was
+re-audited from 36 rows to 76, SLS Block 1B went `concept`, Falcon Heavy
+(reusable)'s unsourced 57 t became 30 t, and every ranged figure is now the
+geometric centre of its band.  Stage 4 searches every `operational` row, so its
+grid went from 17 vehicles to 48.  The paragraph below still holds for a stamp
+that moves alone; this one moved rows, so adopting it means re-running Stage 3,
+and that is a decision about the baselines rather than a chore.  See
+[master v1.35.0](../versions.md#master-v1350--mineral_value-v1100--transportation-v1160).
 
 RE-RUN STAGE 3 WHEN A ROW CHANGES, NOT WHEN A STAMP DOES.  A repin does not
 require a restamp: Stage 4 reads no column this contract moved, so leaving the
@@ -99,7 +110,7 @@ import subprocess, sys
 # the two to each other.
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.3.2",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.4.0",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -243,7 +254,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.15.0"
+    pipeline_version: str = "1.16.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 CONFIG = TransportConfig()

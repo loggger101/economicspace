@@ -593,24 +593,55 @@ def part_prices(S, out):
     C = out["C"]
     S.part("2. What a kilogram is worth at the destination",
            "No price here is a terrestrial quote.")
-    c_leo = S.put("c_LEO", "c_LEO", "reusable launch price to LEO",
+    hw_on = bool(C.get("stage_hardware"))
+    c_leo = S.put("c_LEO", "c_LEO", "launch price to LEO",
                   C["leo_usd_per_kg"], "$/kg",
-                  "<b>spacecost/delivery.py</b>, <i>LEO_LAUNCH_USD_PER_KG</i>, "
-                  "re-exported by <b>modules/mineral_value.py</b> as "
-                  "<i>_LEO_USD_PER_KG</i>.  "
-                  "<span class='src'>Falcon 9 reusable $/kg to LEO, from "
-                  "Module 3's launch-vehicle table ($74M / 17.4 t).  It is "
-                  "the cheapest operational figure in that table, so every "
-                  "in-space price derived from it is a LOWER bound on the "
-                  "launch cost avoided.</span>")
+                  ("<b>spacecost/delivery.py</b>, <i>LEO_LAUNCH_USD_PER_KG</i>, "
+                   "re-exported by <b>modules/mineral_value.py</b> as "
+                   "<i>_LEO_USD_PER_KG</i>.  "
+                   if hw_on else
+                   "<b>campaign/worked_calculation.py</b>, "
+                   "<i>_PRE_V040_LEO_USD_PER_KG</i>, spacecost 0.3.x's anchor, "
+                   "which this row's Stage 2 table was priced at.  ")
+                  + "<span class='src'>%s.  Chosen by the Stage 2 table's "
+                    "own stamp, and held to every <i>used in space</i> price "
+                    "that table carries.</span>"
+                  % D.esc(C["pricing_label"]))
+    if hw_on:
+        rates = C["hw_rates"]
+        for dry, rate in sorted(rates["stage"].items()):
+            S.put("h_st%d" % round(dry * 100), "h_stage,%s" % P(dry),
+                  "build cost of an expended stage at dry fraction %s"
+                  % P(dry), rate, "$/kg of stage dry mass",
+                  "<b>spacecost/delivery.py</b>, "
+                  "<i>STAGE_HARDWARE_USD_PER_KG</i>, off the operational-cost "
+                  "table: the tug rate is <i>Expendable upper stage recurring "
+                  "cost</i>, the lander rate <i>Surface lander recurring "
+                  "cost</i>.")
+        S.put("h_prop", "h_prop", "the tug's propellant", rates["propellant"],
+              "$/kg", "<b>spacecost/delivery.py</b>, "
+                      "<i>TUG_PROPELLANT_USD_PER_KG</i>: the hydrolox row's "
+                      "reference price.")
+        S.put("h_edl", "h_edl", "the entry system an edl leg discards",
+              rates["entry"], "$/kg", "<b>spacecost/delivery.py</b>, "
+                                      "<i>ENTRY_SYSTEM_USD_PER_KG</i>: the TPS "
+                                      "row, the nearest priced article.")
     chain = C["chain"]
     prior = 1.0
     keys = ["c_LEO"]
+    hw_keys = []
     for n, leg in enumerate(chain["steps"], 1):
         if leg["kind"] != "burn":
             S.step("leg%d" % n, "leg %d" % n, "surviving-mass fraction",
-                   "1 / f_survive", "1 / %s" % P(leg.get("frac", 1.0)),
+                   "1 / f_survive", "1 / %s" % P(leg["surviving"]),
                    leg["after"] / max(leg["before"], 1e-30), "kg/kg", keys[-1:])
+            if hw_on:
+                S.step("H%d" % n, "H_%d" % n, "leg %d entry system" % n,
+                       "(m_after - m_before) h_edl",
+                       "(%s - %s) * %s" % (P(leg["after"]), P(leg["before"]),
+                                           P(C["hw_rates"]["entry"])),
+                       leg["hw"], "$/kg", ["leg%d" % n, "h_edl"])
+                hw_keys.append("H%d" % n)
             prior = leg["after"]
             keys.append("leg%d" % n)
             continue
@@ -644,18 +675,41 @@ def part_prices(S, out):
         S.step("m0_%d" % n, "m0_%d" % n, "leg %d start mass" % n,
                "R (1 + d)", "%s * (1 + %s)" % (P(leg["R"]), P(leg["d"])),
                leg["m0"], "kg per kg delivered", ["R%d" % n, "d%d" % n])
+        if hw_on:
+            rate = C["hw_rates"]["stage"][dry]
+            S.step("H%d" % n, "H_%d" % n, "leg %d stage build cost" % n,
+                   "m_before ((m0 / R - 1) h_stage + (m0 - m0 / R) h_prop)",
+                   "%s * ((%s / %s - 1) * %s + (%s - 1 - (%s / %s - 1)) * %s)"
+                   % (P(leg["before"]), P(leg["m0"]), P(leg["R"]), P(rate),
+                      P(leg["m0"]), P(leg["m0"]), P(leg["R"]),
+                      P(C["hw_rates"]["propellant"])),
+                   leg["hw"], "$/kg",
+                   ["m0_%d" % n, "R%d" % n, "h_st%d" % round(dry * 100),
+                    "h_prop"])
+            hw_keys.append("H%d" % n)
         prior = leg["after"]
         keys.append("m0_%d" % n)
     S.step("m_LEO", "m_LEO", "kilograms in LEO per kilogram delivered",
            "product of every leg",
-           " * ".join(P(s["m0"]) for s in chain["steps"] if s["kind"] == "burn")
+           " * ".join(P(s["m0"]) if s["kind"] == "burn"
+                      else "(1 / %s)" % P(s["surviving"])
+                      for s in chain["steps"])
            or "1 (no chain: the destination is the launch site)",
            chain["kg_in_leo"], "kg/kg", keys[1:] or ["c_LEO"])
-    p_l = S.step("P_L", "P_L", "launch cost a mined kilogram avoids",
-                 "c_LEO * m_LEO",
-                 "%s * %s" % (P(c_leo), P(chain["kg_in_leo"])),
-                 C["p_l"], "$/kg", ["c_LEO", "m_LEO"],
-                 "held to Module 2's own delivered_cost_usd_per_kg")
+    if hw_on and hw_keys:
+        p_l = S.step("P_L", "P_L", "launch cost a mined kilogram avoids",
+                     "c_LEO * m_LEO + sum of H",
+                     "%s * %s + %s" % (
+                         P(c_leo), P(chain["kg_in_leo"]),
+                         " + ".join(P(s["hw"]) for s in chain["steps"])),
+                     C["p_l"], "$/kg", ["c_LEO", "m_LEO"] + hw_keys,
+                     "held to Module 2's own delivered_cost_usd_per_kg")
+    else:
+        p_l = S.step("P_L", "P_L", "launch cost a mined kilogram avoids",
+                     "c_LEO * m_LEO",
+                     "%s * %s" % (P(c_leo), P(chain["kg_in_leo"])),
+                     C["p_l"], "$/kg", ["c_LEO", "m_LEO"],
+                     "held to Module 2's own delivered_cost_usd_per_kg")
 
     S.prose("Used at the destination: <b>p + u P_L - c_ref</b>.  Shipped "
             "home: <b>max(0, p - c_down)</b>.  Which one applies is Module "

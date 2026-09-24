@@ -58,6 +58,7 @@ through. Skim for the section that names what you are about to change.
 - [A page that derives every FIGURE can still type a CLAIM ABOUT ITSELF](#a-page-that-derives-every-figure-can-still-type-a-claim-about-itself)
 - [A derivation that agrees with the model can still print a line nobody can check](#a-derivation-that-agrees-with-the-model-can-still-print-a-line-nobody-can-check)
 - [An input read from the LIVE table is a term read from the wrong run](#an-input-read-from-the-live-table-is-a-term-read-from-the-wrong-run)
+- [A pricing MODEL can change under an archived row, not only a price](#a-pricing-model-can-change-under-an-archived-row-not-only-a-price)
 - [A convenience path that bypasses the constructor loses what the constructor attached](#a-convenience-path-that-bypasses-the-constructor-loses-what-the-constructor-attached)
 - [Fixing the page can break the audit that was matching through the old rendering](#fixing-the-page-can-break-the-audit-that-was-matching-through-the-old-rendering)
 - [A cap on a list of two kinds of thing truncates the half you asked for](#a-cap-on-a-list-of-two-kinds-of-thing-truncates-the-half-you-asked-for)
@@ -202,15 +203,16 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.3.0`, mineral_value `1.9.0`, transportation `1.15.0`,
-calc `1.23.0`, master `1.34.0` (the master version is a literal in
+Current: catalog `1.3.0`, mineral_value `1.10.0`, transportation `1.16.0`,
+calc `1.23.0`, master `1.35.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
 number this repo owns, and `verify_stage3.py` check 2 asserts the two are
 equal. It stayed at `1.14.0` through the split because the data did not move;
 it moved to `1.15.0` when the package gained a sixth table (`environments`,
-spacecost v0.2.0). **So it follows a repin, and a repin follows it: the two
+spacecost v0.2.0), and to `1.16.0` when the launch table was re-audited and
+the delivered-price model changed (spacecost v0.4.0). **So it follows a repin, and a repin follows it: the two
 are one number in two repositories.**
 
 ℹ️  **TWENTY-ONE stamps so far do NOT mean the numbers moved.** The rule
@@ -429,6 +431,19 @@ claims each cell retired.
 
 ### ✅ THE COMPLETE 28-CELL MATRIX IS MEASURED (calc `1.21.2`, 2026-09-11/13)
 
+🚨  **AND EVERY CELL BELOW WAS PRICED ON spacecost 0.3.x, WHICH master
+`1.35.0` REPINNED PAST.** spacecost `v0.4.0` re-audited the launch table and
+changed the delivered-price model, so Stage 2 and Stage 3 both re-price and no
+flag in this repo restores the old tables: reproducing a cell here needs the
+2026-09-09 inputs, the frozen `campaign/stage2/` prices and the transportation
+`1.15.0` CSVs. Two things below are now wrong about the MODEL rather than about
+a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
+grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
+default configuration measured the repricing at a median **1.58x worse**
+objective on the same bodies, best row 5.71x to 9.10x; that is a sample, and
+[THE SAMPLING RULE](#the-sampling-rule) applies to it. See
+[master v1.35.0](versions.md#master-v1350--mineral_value-v1100--transportation-v1160).
+
 🚨  **AND AS OF calc `1.22.0` IT IS NO LONGER WHAT A CONFIGURE-NOTHING RUN
 ANSWERS.** Four defaults moved on 2026-09-14 and every cell below predates
 them: the surplus past a market ceiling was **abandoned** rather than sold at
@@ -574,7 +589,8 @@ every propellant-share claim is a statement about a configuration rather than
 about the model; that caution now reaches **which destination is best**.
 
 The mechanism is the utility table and not delivery cost: `geo` is priced at
-$12,526/kg, *above* cislunar, and still loses at N = 1, because it is the first
+$12,526/kg on spacecost 0.3.x (and $8,046 on `v0.4.0`, still), *above*
+cislunar, and still loses at N = 1, because it is the first
 destination whose overrides run downward on **metals and rock** rather than
 volatiles. Concentrating is therefore worth more at `geo` (-58.3%) than
 anywhere else measured, which extends rather than contradicts this file's
@@ -1504,7 +1520,7 @@ it.
 | what | why it rots | where |
 |---|---|---|
 | the size of the two "moved without moving a number" tables, against the count spelled beside each | a release that says "No number" has to be added by hand, and `1.17.8` was not | check 2 |
-| **21** usable propellants and **17** operational vehicles, the search GRID rather than a table length | a one-word edit to a row's `status` moves both, in README *and* in three `modules/calc.py` comments | check 3 |
+| **21** usable propellants and **48** operational vehicles, the search GRID rather than a table length | a one-word edit to a row's `status` moves both, in README; the three `modules/calc.py` comments that spelled "seventeen" stopped stating it at the spacecost `v0.4.0` repin, which took it to 48 | check 3 |
 | whether `campaign/` obeys the em-dash ratchet and the structure rules at all | it did not, for the whole 20-cell campaign | checks 5, 6 |
 | whether every module, class and function carries a docstring | 87 carried neither that nor a leading comment, most of them in `ui.py` and `launch_ui.py` | check 11 |
 | whether a measurement is quoted in BOTH this file and README off the register below | the register is maintained by hand, and it had missed the project's four headline numbers since it was written | check 12 |
@@ -1845,7 +1861,8 @@ v1.3.0). At an in-space destination a kilogram is worth its terrestrial price
 **plus** `in_space_utility × launch-cost-avoided`, less the cost of refining
 it on site. The *plus* is the point, v1.3.0 briefly replaced the terrestrial
 price instead of adding to it, which quietly threw the material itself away.
-Bulk iron goes from $0.50/kg to ~$2,747/kg in LEO. The in-space prices are
+Bulk iron goes from $0.50/kg to ~$1,460/kg in LEO (~$2,747 before spacecost
+`v0.4.0` moved the LEO anchor). The in-space prices are
 derived through the rocket equation in `delivered_cost_usd_per_kg()`, not
 tabulated, but the utility factors are *engineering judgements*, and they
 are the softest assumption in the whole pipeline. Treat them as a dial, not a
@@ -1882,7 +1899,10 @@ raising a utility is precisely how this table becomes a way to manufacture
 viability. And **prices still rise with distance**; Mars freight is 10.6
 kg-in-LEO per kg delivered and that dominates; they just no longer rise as
 fast as the freight does, and the volatiles that carried the Mars result rise
-least. Water at Mars is 2.7× its LEO price now against 11× before.
+least. Water at Mars was 2.7× its LEO price after Stage 2 v1.7.0 against 11×
+before; spacecost `v0.4.0` took it to **21×**, because charging for the
+expended aeroshell and lander put Mars freight at 77× the LEO price rather than
+10.6×. The downward overrides are what keep that from being 77×.
 
 A settlement catalyst market for the PGMs (utility 0.05 at the two surfaces)
 was **considered and rejected**, and the reason generalises: this module
@@ -1936,15 +1956,24 @@ carries a measured surviving-mass fraction (MSL 27.6%, Perseverance 29.8%),
 not a Delta-v.
 
 **The two surface prices are marginal-transport LOWER BOUNDS.** No NRE, no
-programme overhead, no cadence limit, on a reusable Falcon 9 LEO price. Real
-CLPS lunar delivery is ~$1M/kg today at ~100 kg scale against this model's
-$21,210/kg. They answer "what could this cost at industrial scale", and the
-whole Mars result rests on that framing.
+programme overhead, no cadence limit, on the cheapest LEO price a buyer can
+book (Falcon Heavy expendable since spacecost `v0.4.0`, which also started
+charging for BUILDING the stages a chain expends, not only for launching
+them). Real CLPS lunar delivery is ~$1M/kg today at ~100 kg scale against this
+model's $42,635/kg ($21,210 before `v0.4.0`). They answer "what could this cost
+at industrial scale", and the whole Mars result rests on that framing.
+
+🚨  **Do not "fix" the surfaces rising while every orbit fell under `v0.4.0`.**
+The orbital prices fell about a third because the LEO anchor fell 43%; the
+surfaces rose two- and fourfold because a $200k/kg lander and a $50k/kg
+aeroshell had been thrown away for free. Building the expended stages is 72%
+of the lunar price and 86% of the Mars one.
 
 **A commodity with no in-space market is not worth zero at a depot.** It is
 worth its terrestrial price *minus* the downleg (`downleg_cost_usd_per_kg`: 
 capsule + TPS + recovery + departure burn, ~$25,400/kg from LEO). Platinum at
-a depot is ~$31,300/kg, not $0. Conversely, launch-cost-avoided is **additive**
+a depot is ~$33,600/kg at the 2026-09-09 quote, not $0. Conversely,
+launch-cost-avoided is **additive**
 to the terrestrial price, not a replacement for it. `value_route` records
 which fate each commodity took.
 
@@ -3035,6 +3064,42 @@ for**.
 ✅  **And a substituted input SAYS SO**, naming the propellant, both prices and
 what the difference means. A derivation quietly using a different input from the
 one its reader can look up is the quietest kind of wrong.
+
+### A pricing MODEL can change under an archived row, not only a price
+
+2026-09-23, the spacecost `v0.4.0` repin, and it is the entry above one level
+up. That entry is about one reference price read from the live table; this is
+about the FUNCTION that turns the table into a price.
+
+`campaign/worked_calculation.py` walks the delivery chain itself and holds the
+result to Module 2's `delivered_cost_usd_per_kg`. Under `v0.4.0` that function
+adds what the expended stages cost to BUILD and anchors on a different LEO
+vehicle, so the moment the pin moved every archived cell would have been
+refused: the derivation still printed launch-only P_L, Module 2 returned the
+new model, and neither was what the archived row's Stage 2 table had actually
+been priced at.
+
+✅  **The stamp chooses and the table checks.** The Stage 2 table carries its
+own `pipeline_version`; below mineral_value `1.10.0` it was priced by the old
+model, which spacecost documents how to reproduce bit for bit
+(`delivered_cost_usd_per_kg(dest, 4253.0, stage_hardware=False)`). The choice
+is then held to every `used in space` price the table carries, since each is
+`terrestrial + utility * P_L - refining`, so a wrong model is a refusal naming
+the commodity rather than a page about a different run. Proved by forcing the
+wrong model on an archived Mars cell: refused, on cobalt. Both models reproduce
+spacecost exactly on all seven destinations, and an archived Mars cell and a
+fresh `v0.4.0` cislunar row both derive with 0 differing.
+
+⚠️  **The general question: when a dependency's function changes, what
+already on disk was computed by the OLD one?** A repin moves every reader that
+calls the function, and the archives were written by the function it replaced.
+
+⚠️  **The Stage 3 tables are the half this does NOT cover.** The derivation
+reads vehicles, propellants and ops off the live `asteroid_pipeline/` CSVs, and
+`v0.4.0` changed rows in them: Falcon Heavy (reusable side cores), the most
+flown vehicle in the campaign, lost an unsourced 57 t for 30 t. Re-run Stage 3
+and an archived cell flying it stops reproducing; there is no frozen Stage 3
+under `campaign/` the way there is a frozen Stage 2.
 
 ### A convenience path that bypasses the constructor loses what the constructor attached
 
@@ -5145,7 +5210,7 @@ unnamed winner shows no name; its identity is `designation`, as it always was.
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
-[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.3.2`.
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.4.0`.
 **Do not state the row count here**; the adapter's ready banner prints it on
 every import, and this sentence carried "all 141 of them" into a release that
 added a whole table.

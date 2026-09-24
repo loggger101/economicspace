@@ -4371,7 +4371,7 @@ def _vehicle_consts(vehicle: Row) -> Tuple[float, float, bool]:
     or 0)` was written out in THREE places: the search's combo loop, the
     pre-filter probe, and `_evaluate_combo_at_ratio`, and the first of those
     ran it once per (vehicle × propellant) for every asteroid in the catalog:
-    142,800 derivations per 400 rows, of seventeen numbers that are fixed for
+    142,800 derivations per 400 rows, of one number per vehicle, fixed for
     the whole run.  Same shape as the fairing volume beside it, and the same
     fix: derived once in `candidate_combos`, stashed on the row so it crosses
     the worker boundary.
@@ -4431,7 +4431,7 @@ def _combo_close_terms(
     function of (propellant × Δv × ISRU).
 
     That matters because the combo grid is vehicle-major, so the question was
-    asked once per vehicle: seventeen evaluations per propellant row per
+    asked once per vehicle: one evaluation per vehicle per propellant row per
     asteroid, computing the same two exponentials, the same boil-off inflation
     and the same tankage closure, and differing only in the last line.
 
@@ -8587,7 +8587,7 @@ def evaluate_asteroid(
     prop_cache: Dict[int, Tuple[List[bool], Any, Any, int]] = {}
     # And the vehicle-independent half of the pre-filter, for the same reason
     # (v1.14.2).  Keyed by (propellant identity × Δv option × ISRU), which is
-    # everything `_combo_close_terms` reads, so seventeen vehicles now share one
+    # everything `_combo_close_terms` reads, so every vehicle now shares one
     # evaluation instead of recomputing it each.  `dv_options` is this asteroid's
     # own list, so the index is a stable key within this call.
     close_terms_cache: Dict[Tuple[int, int, bool],
