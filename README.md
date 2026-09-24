@@ -115,7 +115,7 @@ is the list; its length is deliberately not spelled out beside it:
 ### Stage 3's tables live in another repository
 
 **[`spacecost`](https://github.com/loggger101/spacecost)** holds every Stage 3
-reference row: the 36 launch vehicles, the 41 propellants with their storage
+reference row: the 76 launch vehicles, the 41 propellants with their storage
 classes and derived tankage, the Δv segments, the operational costs and the
 storage systems, each with its inline citation. `modules/transportation.py` is
 now a thin adapter that drives it, where two thirds of what it used to hold
@@ -140,7 +140,17 @@ followed it. The tables Stage 4 reads are byte identical through either path,
 and all four Stage 4 cells reproduce their committed hashes. What the repin
 moved is the stamp: `pipeline_version` is spacecost's DATA CONTRACT, mirrored
 here and asserted equal, and it went `1.14.0` -> `1.15.0` when the package
-gained a sixth table. Two checks say so and both are cheap:
+gained a sixth table.
+
+🚨  **`v0.4.0` is the first repin that moves values**, and it moves them in
+two stages at once: the launch table was re-audited (36 rows to 76, with
+corrected payloads and prices on existing rows), and the delivered-price model
+Stage 2 prices through now anchors on the cheapest LEO price a buyer can book
+and charges for building the stages a chain expends. The contract went
+`1.15.0` -> `1.16.0` and Stage 2 moved to `1.10.0`. **Nothing measured in this
+repository has been re-run under it**; see
+[master v1.35.0](versions.md#master-v1350--mineral_value-v1100--transportation-v1160).
+Two checks say the seam is sound, and both are cheap:
 
 ```bash
 py verify_stage3.py
@@ -157,7 +167,7 @@ compared byte for byte. **The invariants, and what fails when each breaks, are
 in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)**, which is
 where the editing rules live.
 
-**spacecost is pinned to a tagged release**, `v0.3.2`, in all seven places
+**spacecost is pinned to a tagged release**, `v0.4.0`, in all seven places
 that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
 `build_master.py`, and in `_PIP_SPEC` in both `modules/transportation.py` and
 `modules/mineral_value.py` (what a standalone module run installs from, and
@@ -224,8 +234,8 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.3.0 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition. Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
-| 2 | `modules/mineral_value.py` | 1.9.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.15.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 36 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read |
+| 2 | `modules/mineral_value.py` | 1.10.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
+| 3 | `modules/transportation.py` | 1.16.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): 76 launch vehicles (incl. non-rocket concepts), 41 propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read |
 | 4 | `modules/calc.py` | 1.23.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
@@ -1353,8 +1363,9 @@ let that pass quietly.
 ### What a kilogram is worth
 
 In-space prices are the launch cost avoided, **derived** rather than
-tabulated: Falcon 9 reusable $/kg-to-LEO, carried further by walking a chain
-of real stages backwards from the payload (`delivered_cost_usd_per_kg` over
+tabulated: the cheapest LEO price a buyer can book today (Falcon Heavy
+expendable, chosen by a rule spacecost asserts at import), carried further by
+walking a chain of real stages backwards from the payload (`delivered_cost_usd_per_kg` over
 `_DELIVERY_LEGS`, both re-exported here from `spacecost.delivery`, where every
 leg's Δv is a lookup into the same table Stage 3 reads). Staging is modelled
 leg-by-leg because it matters, a
@@ -1365,12 +1376,12 @@ actually be flown.
 | Destination | Launch cost avoided | kg in LEO per kg | Chain |
 |-------------|--------------------|------------------|-------|
 | `earth_surface` *(default)* | - | - | Terrestrial commodity prices |
-| `leo` | $4,253/kg | 1.00 | Falcon 9 reusable $/kg-to-LEO |
-| `geo` | $12,526/kg | 2.95 | LEO to GTO (2,455 m/s), then 1,836 m/s to circularise and remove 28.5 deg |
-| `cislunar` | $10,810/kg | 2.54 | TLI + NRHO insertion (3,600 m/s), cryo tug |
-| `lunar_surface` | $21,210/kg | 4.99 | TLI + LOI (4,050 m/s) tug, then 1,870 m/s lander |
-| `mars_orbit` | $13,496/kg | 3.17 | TMI (3,600 m/s) + MOI (900 m/s) into the 1-sol staging orbit |
-| `mars_surface` | $45,105/kg | 10.61 | TMI (3,600 m/s), aeroentry at 30% surviving mass, 800 m/s retroprop |
+| `leo` | $2,414/kg | 1.00 | Falcon Heavy (expendable) $/kg-to-LEO |
+| `geo` | $8,046/kg ($937 of it stage hardware) | 2.95 | LEO to GTO (2,455 m/s), then 1,836 m/s to circularise and remove 28.5 deg |
+| `cislunar` | $6,878/kg ($742 of it stage hardware) | 2.54 | TLI + NRHO insertion (3,600 m/s), cryo tug |
+| `lunar_surface` | $42,635/kg ($30,596 of it stage hardware) | 4.99 | TLI + LOI (4,050 m/s) tug, then 1,870 m/s lander |
+| `mars_orbit` | $8,706/kg ($1,046 of it stage hardware) | 3.17 | TMI (3,600 m/s) + MOI (900 m/s) into the 1-sol staging orbit |
+| `mars_surface` | $184,811/kg ($159,209 of it stage hardware) | 10.61 | TMI (3,600 m/s), aeroentry at 30% surviving mass, 800 m/s retroprop |
 
 `geo` is a geostationary servicing depot, and it is the only destination in
 this model with a **paying customer today**: roughly 550 active satellites,
@@ -1407,11 +1418,19 @@ lander dry-mass fraction of 0.20 is the Apollo LM descent stage (2,134 kg dry
 on 8,200 kg of propellant).
 
 ⚠️ **The two surface figures are marginal-transport lower bounds.** They price
-propellant and stages on a reusable Falcon 9 LEO price, with no first-of-kind
-development, no programme overhead and no cadence limit. Real delivered cost
-today is far higher; CLPS lunar landers run on the order of $1M/kg at ~100 kg
-scale. Read them as "what it could cost at industrial scale", not "what it
-costs now".
+the propellant, the launch of every stage and, since spacecost `v0.4.0`, what
+building the expended stages costs, on the cheapest LEO price a buyer can book,
+with no first-of-kind development, no programme overhead and no cadence limit.
+Real delivered cost today is far higher; CLPS lunar landers run on the order of
+$1M/kg at ~100 kg scale. Read them as "what it could cost at industrial scale",
+not "what it costs now".
+
+🚨  **The hardware charge is why both surfaces rose while every orbit fell.**
+Until `v0.4.0` a chain paid to LAUNCH the tug, lander and aeroshell it throws
+away and nothing to BUILD them, so a $200k/kg lander and a $50k/kg aeroshell
+were free. Building them is now 72% of the lunar price and 86% of the Mars
+one; at the orbital destinations it is 11-12%, and the cheaper LEO anchor
+dominates.
 
 A kilogram sitting at a depot is worth **the better of its two fates**, and
 the pipeline picks per commodity:
@@ -1432,29 +1451,36 @@ so it is priced by shipping it home rather than written off:
 
 | Commodity | `earth_surface` | `leo` | `cislunar` | `lunar_surface` | `mars_surface` | Route |
 |-----------|----------------|-------|------------|-----------------|----------------|-------|
-| water | $0.001/kg | $4,050 | $10,607 | $12,523 | $11,073 | used in space |
-| iron | $0.50/kg | $2,747 | $7,337 | $9,315 | $17,812 | used in space |
-| nickel | $16.50/kg | $2,763 | $7,353 | $14,633 | $31,360 | used in space |
-| platinum | $55,692/kg | $30,282 | $28,375 | $10,753 | $0 | shipped down |
-| gold | $137,959/kg | $112,549 | $110,642 | $93,020 | $41,565 | shipped down |
+| water | $0.001/kg | $2,211 | $6,675 | $25,378 | $46,000 | used in space |
+| iron | $0.50/kg | $1,460 | $4,585 | $18,956 | $73,694 | used in space |
+| nickel | $16.50/kg | $1,476 | $4,601 | $29,631 | $129,154 | used in space |
+| platinum | $59,038/kg | $33,628 | $31,721 | $14,099 | $0 | shipped down |
+| gold | $142,206/kg | $116,796 | $114,889 | $97,267 | $45,812 | shipped down |
 | rhodium | $320,000/kg | $294,590 | $292,683 | $275,061 | $223,606 | shipped down |
-| olivine | $0.05/kg | $857 | $2,496 | $430 | $696 | used in space |
-| carbon | $0.20/kg | $1,489 | $4,112 | $8,272 | $690 | used in space |
+| olivine | $0.05/kg | $397 | $1,513 | $1,073 | $3,490 | used in space |
+| carbon | $0.20/kg | $754 | $2,539 | $16,842 | $3,484 | used in space |
 
-Precious-metal rows carry a live spot quote, so they move between runs; the
-rest are reference prices. Four things in that table are worth reading twice:
+Computed on spacecost `v0.4.0` from the 2026-09-09 terrestrial quotes frozen
+under `campaign/stage2/`. Precious-metal rows carry a live spot quote, so they
+move between runs; the rest are reference prices. Four things in that table
+are worth reading twice:
 
 - **Cislunar is worse than LEO for anything shipped down**: it is further from
-  the customer, and the downleg is what sets the price.
+  the customer, and the downleg is what sets the price. The downleg did not
+  move in `v0.4.0`, which is why the three shipped-down rows only move with
+  their quotes.
 - **Platinum at Mars is exactly $0.** The $96,394/kg downleg from Mars exceeds
   every terrestrial price in the catalog, and there is no Martian buyer. That
   is the correct answer, not a bug.
-- **Water is worth more on the lunar surface than on Mars** ($12,523 vs
-  $11,073) despite Mars costing 2.1× as much to reach, because Mars has its own
-  ice and the Moon's is in permanently shadowed craters.
-- **Olivine is worth less on the Moon than in LEO** ($430 vs $857) even though
-  the Moon costs 5× as much to reach. Shipping rock to a body made of rock is
-  not a business.
+- **Water at Mars captures a quarter of its freight, and at the Moon three
+  fifths**: $46,000 of $184,811 against $25,378 of $42,635, because Mars has
+  its own ground ice and the Moon's is in permanently shadowed craters.
+  ⚠️  Until `v0.4.0` this line said water was worth MORE on the Moon than on
+  Mars; charging for the expended aeroshell and lander put Mars' freight up
+  fourfold, and the ranking reversed with it.
+- **Olivine is worth less on the Moon than at a cislunar depot** ($1,073 vs
+  $1,513) even though the surface costs over six times as much to reach.
+  Shipping rock to a body made of rock is not a business.
 
 The `value_route` column records which fate was chosen for every row.
 
@@ -1619,11 +1645,22 @@ the whole point of putting volume in the model.
 | supercritical gas, 30 MPa | cold gas N2 (0.25 kg/L) | 46% |
 | deep cryogen, neat | LH2 for NTP (0.0708 kg/L) | 53% |
 
-### Launch vehicles: 36 rows
+### Launch vehicles: 76 rows
 
-17 operational and Earth-based (the default search), plus development vehicles
-(Neutron, Terran R, Nova, Eclipse, Zhuque-3, Tianlong-3, Long March 9 and 10,
-Starship), two retired, and eight **non-rocket** concepts.
+48 operational and Earth-based (the default search), twelve in development
+(Starship, New Glenn 9x4, Neutron, Terran R, Nova, Eclipse, Tianlong-3, Long
+March 9 and 10, Soyuz-5, Epsilon S, Hyperbola-3), seven retired benchmarks, and
+nine concepts: eight **non-rocket** ones plus SLS Block 1B, which never flew.
+Since spacecost `v0.4.0` every row also says who can buy it (`availability`)
+and carries a low/high band on its price and payload, with the headline at the
+band's geometric centre.
+
+⚠️  **The default search is nearly three times wider than it was.** Stage 4
+flies every `operational` row, and spacecost `v0.4.0` took that from 17 to 48,
+most of the new ones Chinese and Russian vehicles a Western buyer cannot book.
+They were eligible before too (Long March 5 was always in the grid); what moved
+is how many there are. No cell has been run on the wider grid, so every wall
+clock in this file is a measurement of the 17-vehicle one.
 
 On the non-rocket rows, read `max_accel_g` before the price. SpinLaunch is
 ~10,000 g and a light-gas gun ~30,000 g: that passes propellant, water and
@@ -1966,7 +2003,8 @@ cheaper to deliver to Mars than to Earth.
 
 **`geo` is the worst in-space destination raw and the third best
 beneficiated.** 45.6819× at N = 1 despite 705,030 evaluable bodies and a
-delivered price of $12,526/kg, *above* cislunar's. The objective is not a
+delivered price of $12,526/kg, *above* cislunar's (spacecost 0.3.x, which the
+campaign ran on; `v0.4.0` prices it at $8,046, still above cislunar's $6,878). The objective is not a
 delivery-cost problem, it is the utility table: `geo` is the first destination
 whose overrides run downward on **metals and rock** rather than volatiles, iron
 0.15 against cislunar's 0.70, olivine and carbon 0.05. Nobody launches copper to

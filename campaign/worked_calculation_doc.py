@@ -659,7 +659,7 @@ def s_nomenclature(out):
                            % ref("searches"),
                            prec(out["ratio"], 10), "-", "D"])
     value_rows += [
-        ["c_LEO", "reusable launch price to LEO",
+        ["c_LEO", "launch price to LEO (%s)" % esc(C["pricing_label"]),
          prec(C["leo_usd_per_kg"], 8), "$/kg", "K"],
         ["u_c", "in-space utility, by commodity",
          ", ".join("%s %s" % (esc(n), prec(C["price_parts"][n]["utility"], 3))
@@ -940,6 +940,14 @@ def s_composition(out):
                      "%s of the arriving mass survives"
                      % pct(step["surviving"], 1)),
                 ]
+                if C.get("stage_hardware"):
+                    steps.append(
+                        ("H_%d" % i, "= (%s - %s) * %s = %s $/kg"
+                         % (prec(step["after"], 12), prec(step["before"], 12),
+                            prec(C["hw_rates"]["entry"], 8),
+                            prec(step["hw"], 12)),
+                         "the entry system this leg discards, at the TPS "
+                         "rate"))
                 continue
             steps += [
                 ("leg %d" % i, "%s m/s on an Isp %s s stage, %s dry"
@@ -954,11 +962,34 @@ def s_composition(out):
                  % (prec(step["R"], 12), prec(1.0 + step["d"], 12),
                     prec(step["m0"], 12)), "kg at the start of the leg"),
             ]
+            if C.get("stage_hardware"):
+                steps.append(
+                    ("H_%d" % i, "= %s * (%s * %s + %s * %s) = %s $/kg"
+                     % (prec(step["before"], 12), prec(step["stage_dry"], 12),
+                        prec(C["hw_rates"]["stage"][step["dry"]], 8),
+                        prec(step["propellant"], 12),
+                        prec(C["hw_rates"]["propellant"], 8),
+                        prec(step["hw"], 12)),
+                     "building the stage this leg expends, and its "
+                     "propellant: stage dry mass is m0 / R - 1"))
         steps += [
             ("m_LEO", "= %s kg in LEO per kg delivered"
              % prec(chain["kg_in_leo"], 12)),
-            ("P_L", "= c_LEO * m_LEO = %s * %s"
-             % (prec(C["leo_usd_per_kg"], 8), prec(chain["kg_in_leo"], 12))),
+        ]
+        if C.get("stage_hardware"):
+            steps += [
+                ("P_L", "= c_LEO * m_LEO + sum H = %s * %s + %s"
+                 % (prec(C["leo_usd_per_kg"], 8),
+                    prec(chain["kg_in_leo"], 12),
+                    prec(chain["hardware_usd_per_kg"], 12))),
+            ]
+        else:
+            steps += [
+                ("P_L", "= c_LEO * m_LEO = %s * %s"
+                 % (prec(C["leo_usd_per_kg"], 8),
+                    prec(chain["kg_in_leo"], 12))),
+            ]
+        steps += [
             ("", "= %s $/kg" % prec(chain["usd_per_kg"], 12),
              "the launch cost a kilogram mined out there avoids"),
         ]

@@ -278,7 +278,7 @@ rights reserved, so that failure runs in the dangerous direction.
 
 ## 6. Software this pipeline depends on
 
-⚠️  **spacecost** is this project's own, extracted from Stage 3 and MIT licensed; it is pinned to tag `v0.3.2` and carries every launch, propellant, Delta-v, operational and storage row, with the citations for them, and since `v0.3.0` the delivery chains Stage 2 prices through.
+⚠️  **spacecost** is this project's own, extracted from Stage 3 and MIT licensed; it is pinned to tag `v0.4.0` and carries every launch, propellant, Delta-v, operational and storage row, with the citations for them, and since `v0.3.0` the delivery chains Stage 2 prices through.
 
 ⚠️  **asteroid_catalog** is this project's own too, extracted from Stage 1 and
 MIT licensed. It carries the four survey fetchers, the cross-match, the
