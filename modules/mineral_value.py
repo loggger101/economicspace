@@ -1889,21 +1889,35 @@ def validate(catalog: pd.DataFrame) -> pd.DataFrame:
     # leaving a value in USD/oz) shows up as an out-of-band magnitude here.
     # Bounds: 0.001 USD/kg (cheap bulk gravel) up to 1e7 USD/kg (well above
     # rhodium); anything outside is almost certainly a unit-conversion bug.
+    #
+    # An exact 0.0 in price_usd_per_kg on a "shipped to Earth" row is NOT a
+    # unit bug: it is the freight floor, a commodity worth less than the
+    # downleg that carries it home, and destination pricing has already
+    # counted those rows ("N worth less than the freight").  Until 2026-09-24
+    # this band flagged them on every run as "possible unit-conversion bug",
+    # six rows at cislunar, beside an "OK" line saying the opposite.  A check
+    # that cries wolf on every run trains its reader to skip the one run it
+    # is right, so the floor is named here and the band keeps its teeth.
     PRICE_COLS = ["price_usd_per_kg", "live_price_usd_per_kg", "ref_price_usd_per_kg"]
+    unit_ok = True
     for col in PRICE_COLS:
         if col not in catalog.columns:
             continue
         vals = pd.to_numeric(catalog[col], errors="coerce")
-        suspicious = catalog[
-            vals.notna() & ((vals < 1e-3) | (vals > 1e7))
-        ]
+        out_of_band = vals.notna() & ((vals < 1e-3) | (vals > 1e7))
+        if col == "price_usd_per_kg" and "value_route" in catalog.columns:
+            freight_floor = vals.eq(0.0) & catalog["value_route"].eq("shipped to Earth")
+            out_of_band &= ~freight_floor
+        suspicious = catalog[out_of_band]
         if not suspicious.empty:
+            unit_ok = False
             print(f"     WARN  {len(suspicious)} rows in {col} outside USD/kg sanity band "
                   f"[0.001, 1e7] - possible unit-conversion bug:")
             for _, r in suspicious.iterrows():
                 print(f"          {r['name']}: {r[col]}")
-    print(f"     OK  Unit check: all price columns are USD/kg "
-          f"(checked {', '.join(c for c in PRICE_COLS if c in catalog.columns)})")
+    if unit_ok:
+        print(f"     OK  Unit check: all price columns are USD/kg "
+              f"(checked {', '.join(c for c in PRICE_COLS if c in catalog.columns)})")
 
     # Density should be positive and physically plausible (< 25 g/cm³, the
     # densest stable elements top out around osmium / iridium at ~22.6).

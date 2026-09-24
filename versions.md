@@ -265,14 +265,133 @@ worth a decision; it is not a defect in the tables.
 
 - **No Stage 4 code**, and calc stays `1.23.0`: three comments stopped spelling
   a vehicle count. catalog `1.3.0`.
-- **The CSVs on disk.** `asteroid_pipeline/` still holds the transportation
-  `1.15.0` tables and a Stage 2 catalog stamped `1.9.0`, and `stamp_check()`
-  says so on every Stage 4 run until Stages 2 and 3 are re-run. Re-running them
-  is what adopts this release, and it replaces the inputs every `.verify`
-  baseline and every archived cell was measured on; copy `asteroid_pipeline/`
-  first.
+- **The CSVs on disk**, at the time of this release: `asteroid_pipeline/`
+  still held the transportation `1.15.0` tables and a Stage 2 catalog stamped
+  `1.9.0`. They were adopted on 2026-09-24; see
+  [the data on disk adopts it](#the-data-on-disk-adopts-it-2026-09-24).
 - **The campaign.** `campaign/stage2/` stays frozen at 0.3.x prices on
   purpose, and no cell under `campaign/cells/` compares with a `v0.4.0` run.
+
+### The data on disk adopts it (2026-09-24)
+
+No module stamp moves here: this is the release above arriving on disk, plus
+what that exposed. The live `asteroid_pipeline/` now holds the
+`data-2026-09-23` catalog (installed 2026-09-23), Stage 2 at mineral_value
+`1.10.0` and Stage 3 at transportation `1.16.0`, and a Stage 4 run no longer
+reports a stale stamp.
+
+**The order it was done in, because each step replaces something.** The Stage
+2 and 3 tables then on disk (0.3.x, refetched 2026-09-23) were copied to
+`asteroid_pipeline/_inputs_backup_2026-09-23_pre-v0.4.0/` with their sha256s,
+together with the full-catalog Stage 4 output they had produced. Then
+`run_pipeline.py --stages 23 --destination cislunar --yes`: live quotes of
+2026-09-23 for the five metals and three fuels, 76 vehicles, 84,132 summary
+rows, a few seconds.
+
+| harness | result on the new inputs |
+|---|---|
+| `tree_check.py` | clean |
+| `verify_stage1.py` | 9 checks, `data-2026-09-23` byte for byte, 7 composition columns re-derived over 1,566,618 rows with 0 differing |
+| `verify_stage3.py` | 6 checks, spacecost `0.4.0` at `e83124547a21`, contract `1.16.0` |
+| `verify_docs.py` | clean |
+| `platform_check.py` | every probe matches the reference host |
+| `verify.py check` | **ALL CHECKS PASSED**, including prune on/off on the 1,008-combination grid |
+
+The last row is the one that was not a formality. The pre-filter is proved
+against the unpruned search on each grid it runs over, and this grid is 48
+operational vehicles rather than 17; it keeps **17.6%** of candidates on the
+full catalog's 200-row probe and agrees with the full search on all four cells,
+143 of 143 columns. A new baseline, `.verify/baseline-1.23.0-v0.4.0`, is the
+one to compare the next release against:
+
+| cell | rows | sha16 |
+|---|---|---|
+| raw | 157 | `6a24f7958a99df1d` |
+| raw + search | 157 | `8e40a96d717bbab9` |
+| benef | 62 | `5a15b9a52cf1c522` |
+| benef + search | 62 | `4ccafdfe888f5d81` |
+
+Never-worse on those cells: beneficiated <= raw on 157 pairs with 8 declining,
+median +53.1%; search <= N = 1 on 157 and 161 pairs, medians +37.6% and +36.8%;
+zero exceptions anywhere, and no ceiling ever beat the unbounded case.
+
+#### The catalog, measured on its own first
+
+Two full-catalog default cells were run on 2026-09-23 between the catalog
+install and this adoption, and never written down. The first isolates the
+catalog: the same code, the same frozen 2026-09-09 Stage 2 prices (verified
+byte-identical to `campaign/stage2/mineral_value_catalog.cislunar.csv`) and the
+same 2026-09-17 Stage 3 tables as
+[the calc 1.23.0 default cell](#the-full-catalog-default-cell-at-this-release-2026-09-18),
+on `data-2026-09-23` rather than the 2026-08-11 build.
+
+| | 2026-08-11 catalog | **`data-2026-09-23`** |
+|---|---|---|
+| catalog rows | 1,555,667 | 1,566,618 |
+| evaluable | 660,253 | **665,191** |
+| winner | 2021 CX5, 3.182208152479452 | **2021 CX5, 3.182208152479452** |
+| next four | 678927, 2012 ER14, 2018 DT, 2014 WE121 | the same, at the same objectives |
+| median objective | 16.6311 | 16.6102 |
+| wall clock, Stage 4 | 12,000 s | 10,249 s |
+
+Paired on `designation`: 660,079 bodies in both, **630,195 with an identical
+objective** and 29,884 moved, over a range of 0.020x to 46.0x with a median of
+exactly 1. 174 bodies left the evaluable set and 5,112 joined it. Only 175
+of the paired bodies changed diameter at all, so most of the movement comes
+from other columns (composition, density, orbit), which this comparison does
+not break down.
+**The catalog release moves the tail and not the headline**, which is the
+bit-identical-winner lesson from the calc 1.23.0 cell arriving from Stage 1.
+
+⚠️  The wall clocks are two runs on two days and are not offered as a ratio.
+
+The second cell re-fetched Stages 2 and 3 on 2026-09-23 under the 0.3.x code
+before running, so against the first it measures one day of live quotes: every
+one of the 665,191 bodies within 1.0000x at four decimals, the winner moving
+**2.6e-7** relative (3.18220896721522). Metal and fuel quotes moving by a few
+percent are invisible next to the epoch changes this file records.
+
+#### The wider grid costs runtime, and the priors do not know it yet
+
+The full-catalog default cell on these inputs was started on 2026-09-24 at
+00:19 and is not recorded here, because it had not finished when this was
+written. What it had measured by then: on the 1,008-combination grid it ran
+its **second 1% of rows (15,616 bodies) in 9.5 minutes**, uncontended. The
+data-2026-09-23 cell above, on the same catalog and the 357-combination grid,
+averaged **102 s per 1%** over its whole 10,249 s.
+
+⚠️  **That is one slice of one run, not a budget**, and
+[THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) is about exactly this
+extrapolation: the per-row cost varies along the catalog's order, and nobody
+has measured how. What it does establish is that the wall clocks in
+`MEASURED_CELL_SECONDS` and `MEASURED_DEST_SECONDS`, and every banner, help
+string and dashboard prior derived from them, describe the 17-vehicle grid and
+read LOW now, by something nearer five times than 10%. They stay as they are,
+pinned by `verify_docs.py` check 9 to the logs the runs wrote, until a
+re-measured campaign replaces them; a wall clock is only ever true of the
+release it names.
+
+#### What adopting it exposed
+
+- **`worked_calculation.py` would have derived every archived cell against the
+  new tables**, silently in the pricing-model sense: the model is chosen off
+  the table's stamp, so the table checked out, and the page came out 12
+  columns DIFFER, `gross_value_usd` 37% out, on the calc 1.23.0 cell's winner.
+  It now uses a live table only when the row's run could have read it
+  (`catalog_date` against the table's), and otherwise `campaign/stage2/` and
+  the newly committed `campaign/stage3/`: **88 quantities, 0 DIFFER**, as
+  before. Stage 1 has no frozen copy and is disclosed instead. See
+  [a live table is only evidence about a run that could have read it](CLAUDE.md#a-live-table-is-only-evidence-about-a-run-that-could-have-read-it).
+- **`campaign/run_cell.py` would have overwritten the live Stage 2 catalog**
+  with a 0.3.x one and run a hybrid cell under a campaign cell's name. It
+  refuses before the copy now.
+- **Stage 2's unit-sanity band warned on every run** that six commodities
+  might be a unit-conversion bug. They were the freight floor, priced at
+  exactly zero because each is worth less than the downleg home, and the same
+  run counted them one line earlier. It warned in every committed Stage 2 log,
+  beside an `OK` line claiming the opposite. The band exempts that floor now,
+  prints its `OK` only when nothing is out of band, and still flags a planted
+  zero on a `used in space` row. Console text only: no CSV byte moves.
 
 ## master v1.34.0: Stage 1 installs a published catalog
 
@@ -901,6 +1020,10 @@ moved in that release.
 | release | date | what it was |
 |---|---|---|
 | [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160) | 2026-09-23 | **spacecost v0.4.0**: the launch table re-audited and the delivered-price model changed, so Stages 2 and 3 both re-price |
+| [master v1.34.0](#master-v1340-stage-1-installs-a-published-catalog) | 2026-09-23 | **Stage 1 installs a published catalog** rather than building one: one pinned `data-YYYY-MM-DD` release, sha256-checked, the same bytes on every host |
+| [master v1.33.0 / catalog v1.3.0](#master-v1330--catalog-v130) | 2026-09-23 | **asteroid_catalog v0.2.0**: bodies joined across sources, and every source validated against its service |
+| [master v1.32.0](#master-v1320) | 2026-09-22 | the redundancies the Stage 1 split left, closed from both sides of the seam |
+| [master v1.31.0](#master-v1310) | 2026-09-22 | **Stage 1's builder moves to `asteroid_catalog`**, proved in process on 107,521 values because Stage 1 cannot be re-run |
 | [master v1.30.0](#master-v1300) | 2026-09-21 | **spacecost v0.3.0**: Stage 2's delivery chains move to the package, and the sentence explaining why they were duplicated had expired at the split |
 | [transportation v1.15.0 / master v1.29.0](#transportation-v1150--master-v1290) | 2026-09-17 | **spacecost v0.2.0**: a sixth reference table, and the guard a stage module run directly never had |
 | [calc v1.23.0](#calc-v1230) | 2026-09-17 | **the depletion cap comes off**: `max_mining_fraction` 0.05 -> 1.0, and a constraint that bound on 2% of bodies was sizing the mission on them |

@@ -779,7 +779,53 @@ def _lines(header, rows):
     return io.StringIO(header + "".join(rows))
 
 
-def mineral_catalog_for(dest):
+def _table_date(path):
+    """The `catalog_date` a stage stamped into a table, or None.
+
+    A CSV carries it on every row; Stage 1's `catalog_manifest.json` carries it
+    once, as the release's build date.
+    """
+    if path.endswith(".json"):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return json.load(fh).get("catalog_date")
+        except (OSError, ValueError):
+            return None
+    try:
+        head = pd.read_csv(path, nrows=1)
+    except (OSError, ValueError):
+        return None
+    if "catalog_date" not in head or pd.isna(head["catalog_date"].iloc[0]):
+        return None
+    return str(head["catalog_date"].iloc[0])
+
+
+def run_could_read(archived, path):
+    """False when the row's run finished before this table was written.
+
+    🚨  A LIVE TABLE IS ONLY EVIDENCE ABOUT A RUN THAT COULD HAVE READ IT.
+    Until 2026-09-24 the live Stage 2 and Stage 3 tables were the ones every
+    archived cell had been priced on, so "the live table, when it is for the
+    right destination" was right by luck.  Adopting spacecost v0.4.0 rebuilt
+    both, and from then on every archived cell was being derived against
+    prices and a launch table it never saw: the pricing-model choice follows
+    the TABLE's stamp, so nothing refused, and the page simply stopped being
+    about the run it named.
+
+    ✅  Causality answers it without looking at the answer.  A Stage 4 row
+    carries the date its run ended (`catalog_date`), and a stage table carries
+    the date it was written; a run cannot have read a file written after it
+    finished.  Equal dates are ambiguous and are read as "could have", which is
+    the old behaviour, and the compared columns remain the guard there.
+    """
+    row_date = archived.get("catalog_date") if archived is not None else None
+    table_date = _table_date(path)
+    if row_date is None or pd.isna(row_date) or table_date is None:
+        return True
+    return str(row_date) >= table_date
+
+
+def mineral_catalog_for(dest, archived=None):
     """The Stage 2 catalog priced for `dest`, and a note saying where it came from.
 
     🚨  A STAGE 2 CATALOG IS PRICED FOR ONE DESTINATION AND IS WRONG FOR EVERY
@@ -792,8 +838,9 @@ def mineral_catalog_for(dest):
     `geo` cell would price martian-depot ore at cislunar rates and bound it
     against cislunar ceilings, and nothing would raise.
 
-    The live catalog is used when it says it is the right one, because that is
-    the normal case for "the run I just did".  Otherwise the campaign's frozen
+    The live catalog is used when it says it is the right one AND the row's
+    run could have read it (see `run_could_read`), because that is the normal
+    case for "the run I just did".  Otherwise the campaign's frozen
     per-destination catalogs are the authority, and they are the ones the
     archived cells were actually measured against.  A destination with neither
     is a refusal rather than a substitution.
@@ -804,33 +851,80 @@ def mineral_catalog_for(dest):
     if os.path.exists(live):
         head = pd.read_csv(live, nrows=1)
         if ("delivery_destination" in head
-                and str(head["delivery_destination"].iloc[0]) == dest):
+                and str(head["delivery_destination"].iloc[0]) == dest
+                and run_could_read(archived, live)):
             return live, "the live Stage 2 catalog"
     frozen = os.path.join(CAMP, "stage2",
                           "mineral_value_catalog.%s.csv" % dest)
     if os.path.exists(frozen):
         return frozen, "campaign/stage2, frozen 2026-09-09"
     sys.exit("no Stage 2 catalog priced for %r.\n"
-             "  the live catalog is priced for another destination and there "
-             "is no frozen one at\n  %s\n"
+             "  the live catalog is priced for another destination, or was "
+             "written after this run,\n  and there is no frozen one at\n  %s\n"
              "Run Stage 2 for that destination, or document a cell whose "
              "prices are on disk." % (dest, frozen))
 
 
-def reference_tables(dest):
+def transport_tables_for(archived=None):
+    """The directory holding the Module 3 tables this row's run read.
+
+    ⚠️  THE HALF CLAUDE.md SAID NOTHING COVERED.  The Stage 3 tables are not
+    per destination, so they never needed choosing -- until spacecost v0.4.0
+    re-audited the launch table and Falcon Heavy (reusable side cores), the
+    commonest vehicle in the campaign, went from 57 t to LEO to 30 t.  A run
+    older than the live tables is derived against `campaign/stage3/`, the
+    spacecost 0.3.x vehicles, propellants and ops the campaign flew; see
+    `run_could_read`.  Three propellant prices in that set are the 2026-09-17
+    refetch, which does not matter: the outbound price is recovered from the
+    row anyway (`run_propellant_price`).
+    """
+    import master
+    cfg = master.CALC_CONFIG
+    live = os.path.join(ROOT, "asteroid_pipeline", cfg.transportation_subdir)
+    if run_could_read(archived, os.path.join(live, cfg.launch_vehicles_file)):
+        return live, "the live Stage 3 tables"
+    frozen = os.path.join(CAMP, "stage3")
+    if os.path.exists(os.path.join(frozen, cfg.launch_vehicles_file)):
+        return frozen, "campaign/stage3, frozen spacecost 0.3.x"
+    sys.exit("the live Stage 3 tables were written after this run ended, and "
+             "there is no frozen set at\n  %s" % frozen)
+
+
+def reference_tables(dest, archived=None):
     """Module 2's mineral catalog and Module 3's four tables, as loaded.
 
     Read through `master`'s own loader so the dtypes and the list-column
     parsing are the pipeline's, not a second opinion about them.  The mineral
-    catalog is chosen by DESTINATION; see `mineral_catalog_for`.
+    catalog is chosen by DESTINATION; see `mineral_catalog_for`.  Both it and
+    the Module 3 tables are chosen by what the ROW's run could have read; see
+    `run_could_read`.
     """
     import master
     cfg = master.CALC_CONFIG
     cfg.input_dir = os.path.join(ROOT, "asteroid_pipeline")
-    tdir = os.path.join(cfg.input_dir, cfg.transportation_subdir)
-    minerals_path, minerals_from = mineral_catalog_for(dest)
+    tdir, transport_from = transport_tables_for(archived)
+    minerals_path, minerals_from = mineral_catalog_for(dest, archived)
+    for what, src in (("Stage 2", minerals_from), ("Stage 3", transport_from)):
+        if "frozen" in src:
+            print("  %s     %s: this run ended before the live tables were "
+                  "written" % (what, src))
+    # ⚠️  STAGE 1 HAS NO FROZEN COPY, so it is disclosed rather than chosen.
+    # The body is read out of the installed catalog release, and an archived
+    # row from before that release was measured on a different catalog: the
+    # 2026-08-11 build under every 2026-09 cell.  Most bodies did not move
+    # (the default cell's winner is the same float on both), but some did, and
+    # a derivation of one of those DIFFERs on its body columns.  Saying so here
+    # is what stops that reading as a defect in the cascade.
+    manifest = os.path.join(cfg.input_dir, "catalog_manifest.json")
+    if os.path.exists(manifest) and not run_could_read(archived, manifest):
+        with open(manifest, encoding="utf-8") as fh:
+            release = json.load(fh).get("release_tag", "?")
+        print("  Stage 1     %s was installed after this run ended: the body is "
+              "read from it, and a body that moved between catalogs will "
+              "DIFFER on its own columns" % release)
     return {
         "minerals_from": minerals_from,
+        "transport_from": transport_from,
         "minerals": master._load_csv(minerals_path, "M2"),
         "vehicles": master._load_csv(
             os.path.join(tdir, cfg.launch_vehicles_file), "M3 vehicles"),
@@ -3249,8 +3343,10 @@ def build(archived, label, body=None, run_beneficiated=None):
     # The prices have to be chosen before anything is derived, and they are
     # chosen by the ROW's destination rather than by the config, for the same
     # reason the legs are.  See `mineral_catalog_for`.
-    tables = reference_tables(row_destination(archived))
+    tables = reference_tables(row_destination(archived), archived)
     C = context(body, archived, tables)
+    # Which Stage 2 and Stage 3 tables priced this page; see `run_could_read`.
+    C["inputs_from"] = (tables["minerals_from"], tables["transport_from"])
     # Before anything is derived: what the ROW charges decides what the
     # derivation charges.  See `terms_in_force`.
     C["terms"] = terms_in_force(archived, C["cfg"])
@@ -4812,6 +4908,11 @@ def main():
         print("    from the LIVE config may disagree with the run that made")
         print("    this row.  See the table in `terms_in_force` for which")
         print("    dials those are and which column catches each.")
+        # The second suspect, and the one a price-shaped DIFFER points at: the
+        # tables.  Named, because the choice between live and frozen is made
+        # off a date, and an equal date is read as "could have read the live".
+        print("    Or the inputs: priced from %s (Stage 2) and %s (Stage 3)."
+              % out["C"].get("inputs_from", ("?", "?")))
         # One of those dials can be RULED IN rather than merely suspected, so
         # it is named outright instead of leaving the reader the whole table.
         note = mining_cap_note(out["C"], out["B"])

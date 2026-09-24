@@ -184,6 +184,33 @@ def extract(path, dest, ore, search):
     return stats
 
 
+def frozen_stage2_stamp(path):
+    """The `pipeline_version` a frozen Stage 2 catalog was written at."""
+    with open(path, newline="", encoding="utf-8") as fh:
+        row = next(csv.DictReader(fh), {})
+    return (row.get("pipeline_version") or "").strip()
+
+
+def stage2_code_stamp():
+    """mineral_value's `pipeline_version`, read off its config dataclass.
+
+    🚨  THE CAMPAIGN'S FROZEN PRICES ARE ONE EPOCH, AND THE CODE MOVED ON.
+    master v1.35.0 repinned spacecost to v0.4.0, which changed Stage 2's
+    delivered-price model and Stage 3's launch table at once.  Copying a
+    spacecost 0.3.x catalog into place under that code does not reproduce the
+    campaign: Stage 4 would read old prices beside a new launch table, and the
+    archive would be named as one of the campaign's own cells.  The dataclass
+    is the authority for the stamp (versions.md says so), and it is read as
+    text because this harness never imports the pipeline.
+    """
+    src = os.path.join(ROOT, "modules", "mineral_value.py")
+    with open(src, encoding="utf-8") as fh:
+        for line in fh:
+            if line.strip().startswith("pipeline_version:"):
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
+    sys.exit(f"no pipeline_version field in {src}")
+
+
 def main():
     """Copy the frozen Stage 2 catalog into place, run Stage 4, archive, record.
 
@@ -202,6 +229,19 @@ def main():
     src2 = os.path.join(CAMP, "stage2", f"mineral_value_catalog.{dest}.csv")
     if not os.path.exists(src2):
         sys.exit(f"missing frozen Stage 2 catalog: {src2}")
+    frozen, code = frozen_stage2_stamp(src2), stage2_code_stamp()
+    if frozen != code:
+        # Checked BEFORE the copy, because the copy overwrites the live
+        # Stage 2 catalog, which is the one input a refetch cannot give back.
+        sys.exit(
+            f"the frozen Stage 2 catalog was priced by mineral_value {frozen},"
+            f" and the code here is {code}.\n"
+            f"  A cell run now would pair those prices with today's Stage 3"
+            f" tables and today's Stage 2 model:\n"
+            f"  a hybrid of two epochs, archived as though it were this"
+            f" campaign's cell.\n"
+            f"  Re-freeze campaign/stage2/ at {code} for a NEW campaign, or run"
+            f" run_pipeline.py --stages 4 directly.")
     shutil.copyfile(src2, STAGE2_LIVE)
 
     cmd = [

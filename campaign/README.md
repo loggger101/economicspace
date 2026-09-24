@@ -89,9 +89,18 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
 ## Layout
 
   `stage2/mineral_value_catalog.<dest>.csv`  the seven frozen price catalogs
+  `stage3/{launch_vehicles,propellants,operational_costs}.csv`  the spacecost
+      0.3.x Module 3 tables this campaign flew, frozen on 2026-09-24 when the
+      live ones moved to spacecost v0.4.0.  Read by `worked_calculation.py`
+      for any row whose run ended before the live tables were written; three
+      propellant prices in them are the 2026-09-17 refetch, and the outbound
+      price is recovered from the row regardless.
   `run_cell.py <dest> <raw|benef> <off|on>`  one cell: copy Stage 2, run
       `--stages 4` only, time it, archive the output gzipped to `cells/`,
-      append one row to `results.csv`
+      append one row to `results.csv`.  REFUSES, before copying anything,
+      when the frozen Stage 2 stamp is not the one the Stage 2 code writes:
+      since master v1.35.0 a cell would pair 0.3.x prices with the v0.4.0
+      launch table and archive the hybrid under this campaign's name.
   `run_queue.py`   runs everything outstanding, resumable: it skips any cell
       already in `results.csv` with `rc == 0`.  Kill and restart freely.
   `analyse.py <dest>`  the 2x2 table plus the never-worse, mass-ledger and
