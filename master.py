@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.35.0)
+"""Master Asteroid Profitability Pipeline (1.36.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -112,8 +112,13 @@ if _os.environ.get("ASTEROID_PIPELINE_WORKER") == "1":
 import subprocess as _subprocess
 
 _MASTER_REQUIRED = [
-    "requests", "pandas", "numpy", "yfinance", "tqdm", "pyarrow", "spacecost",
+    "requests", "pandas", "numpy", "yfinance", "tqdm", "spacecost",
 ]
+# `pyarrow` left this list at master v1.36.0.  Its one reader was Stage 1's
+# ssoBFT parquet read, which left with the builder at v1.31.0; nothing here
+# imports it, and a Colab paste need not install it.  requirements-lock.txt
+# still pins it, because the measured environment had it installed and pandas
+# consults it when present.
 # import-name -> pip argument, for the packages where those differ.  ONE does:
 # `spacecost` holds Stage 3's reference tables and is not on PyPI yet, so it
 # installs from a TAGGED git ref rather than by name.  The tag is pinned rather
@@ -230,7 +235,7 @@ class CatalogConfig:
     # reads, and moves every number downstream: record a repin in versions.md.
     # The published tags are listed at
     # https://github.com/loggger101/AsteroidCatalog/releases
-    catalog_release: str = "data-2026-09-23"
+    catalog_release: str = "data-2026-09-25"
 
     # Where release assets are downloaded from; the tag and the asset name are
     # appended.  Plumbing: change it only to point at a mirror.
@@ -264,7 +269,7 @@ class CatalogConfig:
     # only after the stages that read the catalog have been checked against the
     # new schema.  The record of what each contract changed is AsteroidCatalog's
     # CHANGELOG.md; this pipeline's is versions.md > Stage 1 changelog.
-    pipeline_version: str = "1.3.0"
+    pipeline_version: str = "1.4.0"
 
 
 # Instantiate and create the output dir.  Edit CATALOG_CONFIG values above this line
@@ -2213,7 +2218,7 @@ def apply_delivery_destination(
         terrestrial price less the downleg.  ~$31,700/kg in LEO against
         $57,074 on the ground, a real discount, not a wipeout.
 
-    Applied after merge_mineral_sources so it overrides live quotes as well as
+    Applied after merge_sources so it overrides live quotes as well as
     reference ones.
     """
     dest_key = str(config.delivery_destination or "").strip().lower()
@@ -2271,7 +2276,7 @@ def apply_delivery_destination(
 # ─────────────────────────────────────────────────────────────────────────────
 # MERGE
 # ─────────────────────────────────────────────────────────────────────────────
-def merge_mineral_sources(
+def merge_sources(
     reference: pd.DataFrame,
     live_frames: List[pd.DataFrame],
 ) -> pd.DataFrame:
@@ -2434,7 +2439,7 @@ def build_mineral_value_catalog(
         return pd.DataFrame()
 
     # ── Step 3, Merge ───────────────────────────────────────────────────────
-    catalog = merge_mineral_sources(reference, live_frames)
+    catalog = merge_sources(reference, live_frames)
 
     # ── Step 3b; Reprice for the delivery destination ───────────────────────
     # Must follow the merge: at an in-space destination this overrides live
@@ -2614,7 +2619,12 @@ def _default_output_dir() -> str:
     env = os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
     if env:
         return env
-    if os.path.isdir("/content") and _sys.platform != "win32":
+    # Colab detection.  os.path.isdir("/content") alone is not enough: on
+    # Windows a leading "/" is drive-relative, so it tests C:\content -- a
+    # directory an earlier run of the pre-fix code may itself have created,
+    # which would route output straight back to the path this function
+    # exists to avoid.  Require a POSIX platform as well.
+    if os.name == "posix" and os.path.isdir("/content"):
         return "/content/asteroid_pipeline"
     return os.path.join(os.getcwd(), "asteroid_pipeline")
 
@@ -2636,9 +2646,9 @@ class TransportConfig:
 
     # ─── OUTPUT ──────────────────────────────────────────────────────────────
     output_dir:       str = _DEFAULT_OUTPUT_DIR
-    # Five sub-files land in `<output_dir>/transportation/`:
+    # Six reference tables land in `<output_dir>/transportation/`:
     #     launch_vehicles.csv, propellants.csv, delta_v_segments.csv,
-    #     operational_costs.csv, storage_systems.csv   (the last new in v1.9.0)
+    #     operational_costs.csv, storage_systems.csv, environments.csv
     # plus one composite summary file (vehicle × segment × propellant):
     #     transportation_summary.csv
     subdir:           str = "transportation"
@@ -2735,40 +2745,23 @@ def _as_spacecost(config: "TransportConfig"):
 # THE REFERENCE TABLES, RE-EXPORTED
 # ─────────────────────────────────────────────────────────────────────────────
 # The same objects, not copies.  They are re-exported rather than reached
-# through `spacecost.` because several things read them as attributes of THIS
-# module: `verify_docs.py` check 3 holds README's row counts to them, and the
-# dashboard renders them.  Re-exporting keeps every such caller working
-# unchanged.
+# through `spacecost.` because things read them as attributes of THIS module:
+# `verify_docs.py` check 3 holds README's row counts to them, Stage 2 and
+# Stage 4 read the delta-v, launch and storage rows in master.py, and the
+# banner below counts all six.
+#
+# ⚠️  ONLY WHAT SOMETHING READS.  Until master v1.36.0 this block mirrored the
+# package's whole surface -- unit constants, every loader, the rocket-equation
+# and query helpers -- "so that a consumer never re-derives what it cannot
+# see".  Nothing here or in master.py read eleven of them; they were a second
+# listing of spacecost's `__all__`, which is the one to read.  Reach anything
+# else through `spacecost.`, and add a line here only for a reader.
 LAUNCH_VEHICLES_REFERENCE   = spacecost.LAUNCH_VEHICLES_REFERENCE
 PROPELLANTS_REFERENCE       = spacecost.PROPELLANTS_REFERENCE
 DELTA_V_REFERENCE           = spacecost.DELTA_V_REFERENCE
 OPERATIONAL_COSTS_REFERENCE = spacecost.OPERATIONAL_COSTS_REFERENCE
 STORAGE_REFERENCE           = spacecost.STORAGE_REFERENCE
-# The sixth, new in the v1.15.0 contract.  Nothing in Stage 4 reads it yet; it
-# is re-exported on the same terms as the other five so that this module's
-# surface is the package's surface rather than the subset somebody needed on
-# the day.
 ENVIRONMENTS_REFERENCE      = spacecost.ENVIRONMENTS_REFERENCE
-
-# Physical constants and unit helpers, likewise.
-G0_M_S2                     = spacecost.G0_M_S2
-LITRES_PER_GAL              = spacecost.LITRES_PER_GAL
-LITRES_PER_BBL              = spacecost.LITRES_PER_BBL
-COMMODITY_DENSITY_KG_PER_L  = spacecost.COMMODITY_DENSITY_KG_PER_L
-
-# Loaders, rocket-equation helpers and the query utilities.
-load_launch_vehicles         = spacecost.load_launch_vehicles
-load_propellants             = spacecost.load_propellants
-load_delta_v                 = spacecost.load_delta_v
-load_operational_costs       = spacecost.load_operational_costs
-load_storage                 = spacecost.load_storage
-load_environments            = spacecost.load_environments
-propellant_mass_for_dv       = spacecost.propellant_mass_for_dv
-cost_per_dv_usd_per_kg       = spacecost.cost_per_dv_usd_per_kg
-build_transportation_summary = spacecost.build_transportation_summary
-cheapest_launch_to           = spacecost.cheapest_launch_to
-cheapest_propellant_for      = spacecost.cheapest_propellant_for
-mission_cost_breakdown       = spacecost.mission_cost_breakdown
 
 
 # Sanity bands over the loaded tables; prints warnings and never raises.  An
@@ -4517,9 +4510,11 @@ def stamp_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
     print("        -> This may be DELIBERATE. Several releases changed no CSV "
           "byte and chose not to re-run their stage; read the release note in "
           "versions.md before acting on this.")
-    print("        -> If you do re-run Stage 1, 2 or 3, it REFETCHES and "
-          "overwrites the only copy of its CSV, and every verify.py baseline "
-          "stops reproducing. Copy asteroid_pipeline/*.csv first.")
+    print("        -> If you do re-run Stage 2 or 3, it REFETCHES live prices "
+          "and overwrites the only copy of its CSV, and every verify.py "
+          "baseline stops reproducing. Copy asteroid_pipeline/*.csv first. "
+          "Stage 1 installs the pinned catalog release; it is a no-op when "
+          "that release is already installed.")
     return False
 
 
@@ -4669,9 +4664,16 @@ FRACTION_TO_MINERAL: Dict[str, str] = {
 # `asteroid_bulk_value_usd_per_kg`, `asteroid_phase_table` and
 # `asteroid_best_phase_usd_per_kg` read exactly five values off the row, the
 # PGM enrichment and the four taxonomy fractions, and nothing else.  All five
-# come out of Module 1's `enrich_composition`, which derives them from
-# `spectral_type` alone: 76 distinct types across 1,555,667 rows, collapsing to
-# ~25 distinct composition tuples (11 in a 4,000-row stride).
+# come out of the catalog builder's `enrich_composition`: 76 distinct types
+# across 1,555,667 rows, collapsing to ~25 distinct composition tuples (11 in a
+# 4,000-row stride).
+#
+# ⚠️  KEYED ON THE FIVE VALUES, NOT ON `spectral_type`, AND SINCE CATALOG DATA
+# CONTRACT 1.4.0 THAT IS LOAD-BEARING.  The builder now gives every body past
+# 5.5 AU a D-type composition whatever class a source reported, so the tuple is
+# no longer a function of the type column alone (30 rows in `data-2026-09-25`).
+# A memo keyed on the type would price those bodies as the rock their colour
+# class names.
 #
 # So `evaluate_asteroid` was walking `FRACTION_TO_MINERAL` three times per
 # asteroid, with a `pd.isna` on a scalar per entry, at ~1 us each, to
@@ -7106,6 +7108,15 @@ def _sizing_propellant_consts(
     )
 
 
+# The fairing volume assumed for a vehicle whose Module 3 row has none.
+# ⚠️  NOT A RARE CASE SINCE spacecost v0.4.0: 37 of its 76 rows carry no
+# `fairing_volume_m3`, among them SLS Block 1 and Proton-M, which win 332 and 6
+# rows of a default cislunar sample.  Named here, rather than typed inline as
+# it was, so the worked calculation can say which figure the model used
+# instead of printing the blank cell it read.  The value is unchanged.
+DEFAULT_FAIRING_VOLUME_M3 = 100.0
+
+
 def _vehicle_consts(vehicle: Row) -> Tuple[float, float, bool]:
     """`(usable fairing m³, LEO capacity kg, capacity is usable)` for one vehicle.
 
@@ -7126,7 +7137,8 @@ def _vehicle_consts(vehicle: Row) -> Tuple[float, float, bool]:
     """
     fairing_m3 = vehicle.get("fairing_volume_m3")
     fairing = (float(fairing_m3)
-               if fairing_m3 is not None and not pd.isna(fairing_m3) else 100.0)
+               if fairing_m3 is not None and not pd.isna(fairing_m3)
+               else DEFAULT_FAIRING_VOLUME_M3)
     leo_cap = float(vehicle.get("payload_leo_kg", 0) or 0)
     return fairing, leo_cap, (math.isfinite(leo_cap) and leo_cap > 0)
 
@@ -12211,7 +12223,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.35.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.36.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

@@ -287,10 +287,11 @@ if defined TAG (
   echo       py verify.py baseline --tag mytag
 )
 echo.
-echo   TWO stages are packages now: Stage 1's builder is asteroid_catalog
-echo   and Stage 3's tables are spacecost, so both seams are checked
-echo   first. Neither needs a baseline, neither fetches, and together
-echo   they take seconds.
+echo   Two stages come from other repositories: Stage 1 installs a
+echo   published AsteroidCatalog release and Stage 3's tables are the
+echo   spacecost package, so both seams are checked first. Neither needs
+echo   a baseline or writes anything; Stage 1's reads the release's small
+echo   manifest over the network. Together they take seconds.
 echo.
 %PY% verify_stage1.py
 echo.

@@ -24,15 +24,28 @@ THREE CLASSES OF CHECK.
     2, 5     THE RELEASE'S TABLES.  The composition tables the catalog was
              built with, as the release ships them.  No catalog needed, so
              these run on CI too.
-    3, 4,    AGAINST THE CATALOG ON DISK.  These skip, loudly and with a
-    6 to 8   reason, when no release is installed -- which on CI is always,
+    3, 4, 8  AGAINST THE CATALOG ON DISK.  These skip, loudly and with a
+             reason, when no release is installed -- which on CI is always,
              because `asteroid_pipeline/` is gitignored in full.
 
-⚠️  The numbering is historical rather than an order.  2, 6, 7 and 8 keep the
+⚠️  The numbering is historical rather than an order.  2 and 8 keep the
 numbers they had when this file verified the builder in place, so a release
 note that names one still points at the same check.  The old 1, 3, 4, 5 and 9
 tested the builder's internals and its installed revision; the builder's own
 suite runs those now.
+
+⚠️  CHECKS 6 AND 7 ARE RETIRED (master v1.36.0), AND THE REASON IS THE SAME.
+6 held five bodies to literature values and 7 re-derived the composition
+columns from `spectral_type` with a copy of the builder's lookup.  Both
+re-tested the BUILD, which AsteroidCatalog now gates before it publishes
+anything (`release.physical_problems`, `tools/audit_catalog.py`, and its test
+suite), and check 3 already proves the bytes on disk are that published
+build.  Both also went red on the first data-contract change, for correct
+reasons: 1.4.0 pairs each mass with its own source's diameter, so the
+literature diameters moved, and it types every body past 5.5 AU as D, so
+composition stopped being a function of `spectral_type` alone.  A check that a
+correct upstream release fails is a copy of the upstream's rules, not a guard.
+The reference bodies are listed by `tools/audit_catalog.py` now.
 
 ⚠️  A CATALOG BUILT BEFORE STAGE 1 DOWNLOADED RELEASES HAS NO MANIFEST, and
 check 3 fails on it by design: nothing says which build it is, so nothing can
@@ -72,34 +85,6 @@ CATALOG = os.path.join(PIPELINE_DIR, "asteroid_catalog.csv")
 FRACTIONS = ("metal_fraction", "silicate_fraction", "carbon_fraction",
              "ice_fraction")
 
-# The composition columns that are a PURE LOOKUP on the final `spectral_type`,
-# mapped to the table field each comes from.  `spectral_type_source` is
-# deliberately NOT here: see check 7.
-DERIVED_FROM_TAXONOMY = {
-    "comp_group":             "group",
-    "comp_density_est_gcm3":  "density_est_gcm3",
-    "comp_metal_fraction":    "metal_fraction",
-    "comp_silicate_fraction": "silicate_fraction",
-    "comp_carbon_fraction":   "carbon_fraction",
-    "comp_ice_fraction":      "ice_fraction",
-}
-
-# The standing literature spot-check, from CLAUDE.md's "Spot-check against
-# literature rather than trusting row counts".  Values are quoted there to
-# three decimals, so they are compared at three decimals: a comparator
-# stricter than the artefact it compares reports failures that do not exist.
-#
-# ⚠️  CLAUDE.md prints "-" for Eros's diameter and density.  That means those
-# two were not quoted in the table, NOT that the body lacks them; it carries
-# 16.84 km and 2.342581 g/cm3, and it is `measured` like the other four.
-LITERATURE = {
-    "1":   ("Ceres",  939.400, 2.162, 9.074, "C"),
-    "4":   ("Vesta",  522.770, 3.411, 5.342, "V"),
-    "2":   ("Pallas", 513.000, 2.911, 7.813, "B"),
-    "16":  ("Psyche", 222.000, 4.143, 4.196, "X"),
-    "433": ("Eros",    16.840, 2.343, 5.270, "S"),
-}
-
 # The provenance census, pinned to the catalog IDENTITY that produced it.
 #
 # 🚨  PINNED BY IDENTITY RATHER THAN ASSERTED OUTRIGHT, and that is the
@@ -115,6 +100,24 @@ LITERATURE = {
 # `spectral_type_source`.  Reading all three off one column is the obvious
 # misreading and it is why they are written out per column here.
 CENSUS = {
+    # The first release at data contract 1.4.0.  `derived_mass` and `orbit`
+    # are that contract's two new labels.
+    ("1.4.0", "2026-09-25"): {
+        "rows": 1567469,
+        "diameter_source": {
+            "measured":                  149718,
+            "derived_h_taxonomy_albedo": 105885,
+            "derived_h_orbit_albedo":   1311819,
+            "derived_h_measured_albedo":     31,
+            "derived_mass":                  16,
+        },
+        "spectral_type_source": {
+            "source":         171109,
+            "albedo":          83405,
+            "albedo_assumed": 1289645,
+            "orbit":           23310,
+        },
+    },
     # The first published release, `data-2026-09-23`, as installed from GitHub.
     ("1.3.0", "2026-09-23"): {
         "rows": 1566618,
@@ -187,39 +190,6 @@ def _sha256_file(path: str) -> str:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
-
-
-def pgm_for(pgm_table, spec_type) -> float:
-    """PGM multiplier for a type: exact match, then first letter, then 1.0.
-
-    ⚠️  A COPY OF `asteroid_catalog.pgm_enrichment_for_type`'s RULE, not an
-    import: this pipeline does not install the package.  Check 7 is what keeps
-    the copy honest -- it recomputes `comp_pgm_enrichment` for every row of the
-    catalog the package wrote, so a rule that drifted from the package's shows
-    up as rows that differ.
-    """
-    if spec_type is None or (isinstance(spec_type, float) and spec_type != spec_type):
-        return 1.0
-    s = str(spec_type).strip()
-    if not s:
-        return 1.0
-    if s in pgm_table:
-        return pgm_table[s]
-    return pgm_table.get(s[0], 1.0)
-
-
-def by_distinct(col, fn):
-    """`fn` over each distinct value of `col`, mapped back onto every row.
-
-    Missing values are one key, not many: `factorize` rather than `unique`,
-    because two NaNs are not equal and a lookup keyed on them would drop them.
-    """
-    import pandas as pd
-    codes, uniques = pd.factorize(col, use_na_sentinel=True)
-    table = [fn(u) for u in uniques]
-    na = fn(None)
-    return pd.Series([table[k] if k >= 0 else na for k in codes],
-                     index=col.index, dtype="object")
 
 
 # -----------------------------------------------------------------------------
@@ -350,8 +320,8 @@ def check_pgm_table(t) -> bool:
     The fallback is what keeps an unlisted sub-type ("Mq") inheriting its
     parent class rather than silently dropping to chondritic, and the default
     is 1.0 rather than 0.0 so an unknown body is priced as ordinary rather than
-    as worthless.  The lookup exercised is this file's copy of the package's
-    rule; check 7 holds that copy to the catalog the package wrote.
+    as worthless.  Those are properties of the TABLE the release ships; the
+    lookup rule itself is the builder's, and its own suite tests it.
     """
     bad = []
     for k, v in t.PGM_ENRICHMENT_BY_TYPE.items():
@@ -360,32 +330,24 @@ def check_pgm_table(t) -> bool:
     parent = t.PGM_ENRICHMENT_BY_TYPE.get("M")
     if parent is None:
         bad.append("no M row: the metal-rich class carries no enrichment")
-    cases = [("M", parent), ("Mq", parent), ("Zz", 1.0), (None, 1.0), ("", 1.0)]
-    for typ, want in cases:
-        got = t.pgm_enrichment_for_type(typ)
-        if got != want:
-            bad.append("%r -> %r, want %r" % (typ, got, want))
-    print("5. pgm           %d types, %d lookups, %d wrong"
-          % (len(t.PGM_ENRICHMENT_BY_TYPE), len(cases), len(bad)))
+    print("5. pgm           %d types, %d wrong"
+          % (len(t.PGM_ENRICHMENT_BY_TYPE), len(bad)))
     for b in bad:
         print("     ! " + b)
     return not bad
 
 
 def tables(taxonomy: dict):
-    """The release's tables under the names checks 2, 5 and 7 read them by."""
+    """The release's tables under the names checks 2 and 5 read them by."""
     import types
-    pgm = taxonomy["PGM_ENRICHMENT_BY_TYPE"]
     return types.SimpleNamespace(
         TAXONOMY_COMPOSITION=taxonomy["TAXONOMY_COMPOSITION"],
-        PGM_ENRICHMENT_BY_TYPE=pgm,
-        pgm_enrichment_for_type=lambda t: pgm_for(pgm, t),
-        _by_distinct=by_distinct,
+        PGM_ENRICHMENT_BY_TYPE=taxonomy["PGM_ENRICHMENT_BY_TYPE"],
     )
 
 
 # -----------------------------------------------------------------------------
-# 3, 4 and 6 to 8: AGAINST THE CATALOG ON DISK.
+# 3, 4 and 8: AGAINST THE CATALOG ON DISK.
 # -----------------------------------------------------------------------------
 def check_bytes(c, manifest) -> bool:
     """What Stage 1 installed is the pinned release, byte for byte.
@@ -450,7 +412,7 @@ def check_stamps(df, manifest) -> bool:
 
 
 def read_catalog():
-    """The columns checks 6 to 8 need, or None when the catalog is absent.
+    """The columns checks 4 and 8 need, or None when the catalog is absent.
 
     ⚠️  `usecols` RAISES on a column the file does not have, which matters the
     moment this reads anything a recent Stage 1 added: no catalog built before
@@ -469,10 +431,8 @@ def read_catalog():
 
     if not os.path.isfile(CATALOG):
         return None, []
-    want = (["designation", "name", "diameter_km", "density_gcm3",
-             "rotation_period_h", "spectral_type", "diameter_source",
-             "spectral_type_source", "pipeline_version", "catalog_date"]
-            + list(DERIVED_FROM_TAXONOMY) + ["comp_pgm_enrichment"])
+    want = ["diameter_source", "spectral_type_source", "pipeline_version",
+            "catalog_date"]
     header = pd.read_csv(CATALOG, nrows=0).columns
     have = [col for col in want if col in header]
     missing = [col for col in want if col not in header]
@@ -492,120 +452,17 @@ def catalog_identity(df):
     return one("pipeline_version"), one("catalog_date")
 
 
-def check_literature(c, df) -> bool:
-    """The five standing bodies still reproduce their literature values.
-
-    This is the check that says the merge and the derivation chain did not
-    quietly degrade, and it is the one a row count cannot make: the SsODNet
-    outage that was not an outage returned 50,000 rows with no designation, and
-    the tell was that V-types went to 3,988 because taxonomy was being guessed
-    from albedo.
-
-    ⚠️  `diameter_source == "measured"` on all five is the half a value
-    comparison cannot see: it is what says H-derivation is not overwriting a
-    measurement.
-    """
-    import pandas as pd
-
-    bad = []
-    for des, (nm, dia, dens, rot, typ) in LITERATURE.items():
-        row = df[df["designation"] == des]
-        if row.empty:
-            bad.append("%s (%s) is not in the catalog" % (nm, des))
-            continue
-        row = row.iloc[0]
-        for col, want, dp in (("diameter_km", dia, 3),
-                              ("density_gcm3", dens, 3),
-                              ("rotation_period_h", rot, 3)):
-            if col not in df.columns:
-                continue
-            got = row[col]
-            if pd.isna(got) or round(float(got), dp) != round(want, dp):
-                bad.append("%s %s = %r, want %s to %d dp"
-                           % (nm, col, got, want, dp))
-        if "spectral_type" in df.columns and str(row["spectral_type"]) != typ:
-            bad.append("%s spectral_type = %r, want %r"
-                       % (nm, row["spectral_type"], typ))
-        if ("diameter_source" in df.columns
-                and str(row["diameter_source"]) != "measured"):
-            bad.append("%s diameter_source = %r, want 'measured': "
-                       "H-derivation is overwriting a measurement"
-                       % (nm, row["diameter_source"]))
-    print("6. literature    %d bodies, %d wrong" % (len(LITERATURE), len(bad)))
-    for b in bad:
-        print("     ! " + b)
-    return not bad
-
-
-def check_rederive(c, df) -> bool:
-    """The composition columns re-derive from the taxonomy each row ended up
-    with, exactly.
-
-    THIS IS STAGE 1's ANALOGUE OF A CELL HASH, and it is the strongest thing
-    this file does: the committed catalog's derived columns, recomputed by
-    today's table, row for row.
-
-    ⚠️  ONLY THE PURE-LOOKUP COLUMNS, AND THE REASON IS SUBTLE.  The catalog's
-    `spectral_type` is POST-FILL: `enrich_composition` fills a missing type
-    from Tholen, then from albedo, then from the albedo assumed when the
-    diameter was derived.  Feeding the filled column back would make all three
-    fallbacks dead code, and `spectral_type_source` would come back "source"
-    on every row and disagree with the file everywhere it had been filled --
-    a failure that is an artefact of the fixture rather than a defect.  So the
-    fallback chain is out of scope here and is covered by check 8's census
-    instead, and what is compared is the part that IS a function of the final
-    type.
-
-    ✅  It reproduces across a version gap, which is a stronger result than
-    reproducing within one: the file is written by whichever catalog release
-    last ran, and the composition table has not moved under it.
-    """
-    import numpy as np
-    import pandas as pd
-
-    tax = c.TAXONOMY_COMPOSITION
-
-    def look(t, field):
-        """The table entry for a type, by exact match then root letter."""
-        entry = tax.get(t) or tax.get(str(t)[:1]) or tax["Unknown"]
-        return entry.get(field)
-
-    bad, checked = [], 0
-    pairs = list(DERIVED_FROM_TAXONOMY.items()) + [("comp_pgm_enrichment", None)]
-    for col, field in pairs:
-        if col not in df.columns or "spectral_type" not in df.columns:
-            continue
-        checked += 1
-        if field is None:
-            want = c._by_distinct(df["spectral_type"], c.pgm_enrichment_for_type)
-        else:
-            want = c._by_distinct(df["spectral_type"],
-                                  lambda t, _f=field: look(t, _f))
-        got = df[col]
-        if got.dtype.kind in "fc":
-            # Both-NaN counts as agreement; a float column cannot be compared
-            # with != without turning every missing value into a difference.
-            agree = (got.isna() & want.isna()) | np.isclose(
-                got.fillna(-9.0), pd.to_numeric(want, errors="coerce").fillna(-9.0))
-        else:
-            agree = got.fillna("<NA>").astype(str) == want.fillna("<NA>").astype(str)
-        n = int((~agree).sum())
-        if n:
-            bad.append("%s differs on %d of %d rows" % (col, n, len(df)))
-    print("7. rederive      %d composition columns over %d rows, %d differing"
-          % (checked, len(df), len(bad)))
-    for b in bad:
-        print("     ! " + b)
-    return not bad
-
-
-def check_provenance(c, df) -> bool:
+def check_provenance(df) -> bool:
     """The provenance columns' domains are closed, and the census still holds.
 
-    A soft failure does not shrink the catalog, it INFLATES it with guessed
-    taxonomy, so the row count says nothing and the provenance columns say
-    everything.  An unexpected label is the tell that a fetcher or a fallback
-    has started writing something nobody reads.
+    WHY THIS ONE SURVIVED WHEN 6 AND 7 DID NOT.  Whether the build is right is
+    AsteroidCatalog's question, gated before it publishes.  Whether THIS
+    pipeline can read what the build wrote is ours: the worked calculation
+    branches on `diameter_source` to decide which derivation to print, and the
+    dashboard's provenance panel sorts `spectral_type_source` into measured
+    and inferred.  A label neither knows is a body both would describe wrongly,
+    and nothing else here would notice.  Data contract 1.4.0 added two:
+    `derived_mass` and `orbit`.
 
     The counts are compared only against the catalog identity they were taken
     from; see `CENSUS`.  A different build is reported, not failed, because
@@ -615,9 +472,10 @@ def check_provenance(c, df) -> bool:
     domains = {
         "diameter_source": {"measured", "derived_h_measured_albedo",
                             "derived_h_taxonomy_albedo",
-                            "derived_h_orbit_albedo", "none"},
+                            "derived_h_orbit_albedo", "derived_mass",
+                            "none"},
         "spectral_type_source": {"source", "tholen", "albedo",
-                                 "albedo_assumed", "unknown"},
+                                 "albedo_assumed", "orbit", "unknown"},
     }
     bad = []
     for col, allowed in domains.items():
@@ -631,8 +489,14 @@ def check_provenance(c, df) -> bool:
     stamp, date = catalog_identity(df)
     expect = CENSUS.get((stamp, date))
     if expect is None:
-        print("8. provenance    domains clean; census NOT compared, this is "
-              "catalog %s / %s" % (stamp, date))
+        # 🚨  The domain findings are printed HERE too.  This branch used to
+        # announce "domains clean" whatever `bad` held and return the failure
+        # silently, so a new label failed the run without saying why.
+        print("8. provenance    domains %s; census NOT compared, this is "
+              "catalog %s / %s"
+              % ("clean" if not bad else "%d wrong" % len(bad), stamp, date))
+        for b in bad:
+            print("     ! " + b)
         for col in domains:
             if col in df.columns:
                 counts = df[col].value_counts(dropna=False)
@@ -662,7 +526,7 @@ def main() -> int:
     """Run every check and return the process exit code.
 
     Checks 1, 2 and 5 always run; they need the network, not the catalog.
-    Checks 3, 4 and 6 to 8 need an installed catalog and say what would make
+    Checks 3, 4 and 8 need an installed catalog and say what would make
     them run when it is absent, which on CI is always, because
     `asteroid_pipeline/` is gitignored in full.
     """
@@ -686,7 +550,7 @@ def main() -> int:
         results.append(False)
 
     if not os.path.isfile(CATALOG):
-        print("3-8. catalog     SKIPPED, no catalog at")
+        print("3,4,8. catalog   SKIPPED, no catalog at")
         print("       %s" % CATALOG)
         print("     These read the catalog Stage 1 installs.  Install it with")
         print("       py run_pipeline.py --stages 1")
@@ -704,20 +568,7 @@ def main() -> int:
                   % (len(missing), ", ".join(missing)))
         if local is not None:
             results.append(check_stamps(df, local))
-        tpath = installed(c, "taxonomy_filename")
-        if os.path.isfile(tpath):
-            with io.open(tpath, encoding="utf-8") as fh:
-                on_disk = tables(json.load(fh))
-        else:
-            on_disk = None
-        results.append(check_literature(on_disk, df))
-        if on_disk is not None:
-            results.append(check_rederive(on_disk, df))
-        else:
-            print("7. rederive      NOT RUN: no %s beside the catalog"
-                  % c.CONFIG.taxonomy_filename)
-            results.append(False)
-        results.append(check_provenance(on_disk, df))
+        results.append(check_provenance(df))
 
     print("-" * 70)
     if all(results):

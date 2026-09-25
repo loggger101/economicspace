@@ -28,14 +28,18 @@ is published, those citations travel with it.
 
 ## 1. Upstream data sources
 
-Fetched at run time by Stages 1 to 3. None is vendored.
+The four asteroid surveys reach this pipeline inside a published
+[AsteroidCatalog](https://github.com/loggger101/AsteroidCatalog) release,
+which Stage 1 installs; nothing here fetches them. Their endpoints, table names
+and fetch details are in that repository's `CITATIONS.md`, which is the
+authority for them and is not restated here. What stays here is what a figure
+from THIS pipeline owes them. The commodity prices below are fetched by
+Stages 2 and 3 at run time. None is vendored.
 
 ### 🔔 IMCCE SsODNet / ssoBFT
 
 Best-of-literature compilation: diameter, albedo, mass, density, rotation and
-taxonomy. Fetched as a bulk parquet by `fetch_ssodnet` in the
-[`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) package,
-whose published catalog releases Stage 1 installs since master v1.34.0.
+taxonomy, and since catalog data contract 1.4.0 the first source for mass.
 
 > Berthier, J., Carry, B., Vachier, F., et al. (2023). *Astronomy &
 > Astrophysics.* SsODNet: Solar system Open Database Network.
@@ -45,30 +49,19 @@ of the article: Berthier et al., 2023." It further asks that, where possible,
 the bibliographic references of the underlying articles be published too, since
 ssoBFT is a compilation of other people's measurements.
 
-- API: `https://ssp.imcce.fr/webservices/ssodnet/api/ssobft`
-- Bulk file: `https://ssp.imcce.fr/data/ssoBFT-latest_Asteroid.parquet`
-
 ### 🔔 NEOWISE Diameters and Albedos V2.0
 
-Infrared diameters and albedos for ~150,000 asteroids. Fetched over IPAC IRSA's
-TAP service by `fetch_neowise`.
+Infrared diameters and albedos for ~150,000 asteroids.
 
 > Mainzer, A., Bauer, J., Cutri, R., Grav, T., Kramer, E., Masiero, J.,
 > Sonnett, S., and Wright, E., Eds. (2019). *NEOWISE Diameters and Albedos
 > V2.0*, urn:nasa:pds:neowise_diameters_albedos::2.0. NASA Planetary Data
 > System. https://doi.org/10.26033/18S3-2Z54
 
-- TAP endpoint: `https://irsa.ipac.caltech.edu/TAP` (table `neowisesbpropv2`)
-- Dataset landing page: `https://sbn.psi.edu/pds/resource/doi/neowise_2.0.html`
-
 ### NASA JPL Small-Body Database (SBDB)
 
 The orbital and physical backbone: designations, elements, H, diameter, albedo,
-taxonomy and, since catalog `1.2.0`, the element epoch and orbit-quality
-fields.
-
-- Query API: `https://ssd-api.jpl.nasa.gov/sbdb_query.api`
-- Field discovery: `https://ssd-api.jpl.nasa.gov/sbdb_query.api?info=field`
+taxonomy, the element epoch and the orbit-quality fields.
 
 ⚠️  `condition_code` is the **MPC orbit uncertainty parameter U**, and its
 definition belongs to the Minor Planet Center rather than to JPL. It runs 0
@@ -78,9 +71,9 @@ pipeline's ranking is in
 
 ### MP3C (Observatoire de la Cote d'Azur)
 
-Physical-properties compilation, used as a supplement.
-
-- `https://mp3c.oca.eu/` (REST and TAP interfaces; both are tried)
+Physical-properties compilation, used as a supplement. MP3C asks to be
+acknowledged by name rather than through a single paper
+(`https://mp3c.oca.eu/citations/`).
 
 ### Commodity prices
 
@@ -285,12 +278,12 @@ MIT licensed. It carries the four survey fetchers, the cross-match, the
 H-derivation and the Bus-DeMeo composition table, and it is not installed
 here: Stage 1 downloads one of its published catalog releases (data, not
 code), pinned by `CatalogConfig.catalog_release`. **The upstream citations
-travel with it**: its own `CITATIONS.md` carries the SsODNet and NEOWISE
-requests in full, each release's notes repeat them, and section 1 above
-remains this repository's statement of what it owes them.
+travel with it**: its own `CITATIONS.md` carries every survey's endpoint and
+citation in full, each release's notes repeat them, and section 1 above is
+this repository's statement of what it owes them.
 
 Runtime, from `requirements.txt`: **requests**, **pandas**, **numpy**,
-**yfinance**, **tqdm**, **pyarrow**. Dashboard, from `requirements-ui.txt`:
+**yfinance**, **tqdm**, and **spacecost**. Dashboard, from `requirements-ui.txt`:
 **streamlit**, **psutil**. Exact pins are in `requirements-lock.txt`; do not
 restate them here.
 

@@ -9,7 +9,10 @@ file that reproduces it. The per-repository inventory, with licences and the
 specific files worth reading, is in [`SOURCES.md`](SOURCES.md).
 
 ✅  **APPLIED 2026-09-03 as catalog `1.2.0` / master `1.23.0`.** F5 and the
-NEOWISE async patch are in `modules/catalog.py`; F3's gap is closed by
+NEOWISE async patch landed in `modules/catalog.py`, and moved with the
+builder to [AsteroidCatalog](https://github.com/loggger101/AsteroidCatalog)
+at master `1.31.0` (`neowise_use_async`, `epoch` in `_JPL_FIELDS`); the patch
+file itself was deleted at master `1.36.0`.  F3's gap is closed by
 `probe_pandas_dtypes` in `platform_check.py`; F3's stale prose is corrected in
 CLAUDE.md; F4's headline is now a documented limitation in README. See
 [versions.md > catalog v1.2.0](../../versions.md#catalog-v120).
@@ -428,7 +431,7 @@ optimum is epoch-independent. The epoch matters the moment anyone wants a
    `mean_anomaly_deg` is dead weight in every CSV the pipeline has ever
    written. Doing it now means the next Stage 1 run captures it; doing it later
    means another full refetch.
-5. **Apply the async-TAP NEOWISE fetcher** ([`patch_neowise_async.py`](patch_neowise_async.py)),
+5. **Apply the async-TAP NEOWISE fetcher** (the patch file, since applied and deleted),
    which falls back to the current sync path, so its worst case is today's
    behaviour. Measured byte-identical output against the live service.
 6. 🚨  **Do NOT ship F1 on its own.** F4 measures it against an external truth

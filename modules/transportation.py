@@ -7,10 +7,9 @@ independent package, and this module is the adapter that drives it:
     https://github.com/loggger101/spacecost
 
 Why they left.  Two thirds of this module was annotated reference data --
-36 launch vehicles (76 since spacecost v0.4.0), 41 propellants, 33 delta-v
-segments, 44 operational costs and 20 storage systems, every row cited -- and
-nothing in its schema knew what
-an asteroid was.  A launch price is useful to anyone costing a mission, so the
+launch vehicles, propellants, delta-v segments, operational costs and storage
+systems, every row cited -- and nothing in its schema knew what an asteroid
+was.  The table sizes are not spelled here; the ready banner prints them.  A launch price is useful to anyone costing a mission, so the
 tables became a package other projects can cite, and this pipeline became its
 first consumer.
 
@@ -63,13 +62,10 @@ re-running re-fetches live fuel prices over the only copy of the tables every
 committed measurement and every `.verify` baseline was taken against.  The
 campaign's inputs are frozen at 2026-09-09 on purpose.
 
-🚨  THE FILES ON DISK ARE AT 1.15.0 ALL THE SAME, dated 2026-09-17, because
-this module was run directly while somebody smoke-tested the repin -- before
-the guard below existed.  Three live-priced propellant rows moved with it.  The
-frozen values are recorded in
-[transportation v1.15.0](../versions.md#transportation-v1150--master-v1290);
-they were recoverable only because an archived Stage 4 cell had been priced
-with them.
+The files on the reference host were re-run at 1.16.0 on 2026-09-24, when
+master v1.35.0 adopted spacecost v0.4.0 on disk.  The 2026-09-09 tables the
+28-cell campaign flew are frozen under `campaign/stage3/`; see
+[the data on disk adopts it](../versions.md#the-data-on-disk-adopts-it-2026-09-24).
 
     to re-check that claim:   py verify_stage3.py
 
@@ -187,7 +183,12 @@ def _default_output_dir() -> str:
     env = os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
     if env:
         return env
-    if os.path.isdir("/content") and _sys.platform != "win32":
+    # Colab detection.  os.path.isdir("/content") alone is not enough: on
+    # Windows a leading "/" is drive-relative, so it tests C:\content -- a
+    # directory an earlier run of the pre-fix code may itself have created,
+    # which would route output straight back to the path this function
+    # exists to avoid.  Require a POSIX platform as well.
+    if os.name == "posix" and os.path.isdir("/content"):
         return "/content/asteroid_pipeline"
     return os.path.join(os.getcwd(), "asteroid_pipeline")
 
@@ -209,9 +210,9 @@ class TransportConfig:
 
     # ─── OUTPUT ──────────────────────────────────────────────────────────────
     output_dir:       str = _DEFAULT_OUTPUT_DIR
-    # Five sub-files land in `<output_dir>/transportation/`:
+    # Six reference tables land in `<output_dir>/transportation/`:
     #     launch_vehicles.csv, propellants.csv, delta_v_segments.csv,
-    #     operational_costs.csv, storage_systems.csv   (the last new in v1.9.0)
+    #     operational_costs.csv, storage_systems.csv, environments.csv
     # plus one composite summary file (vehicle × segment × propellant):
     #     transportation_summary.csv
     subdir:           str = "transportation"
@@ -308,40 +309,23 @@ def _as_spacecost(config: "TransportConfig"):
 # THE REFERENCE TABLES, RE-EXPORTED
 # ─────────────────────────────────────────────────────────────────────────────
 # The same objects, not copies.  They are re-exported rather than reached
-# through `spacecost.` because several things read them as attributes of THIS
-# module: `verify_docs.py` check 3 holds README's row counts to them, and the
-# dashboard renders them.  Re-exporting keeps every such caller working
-# unchanged.
+# through `spacecost.` because things read them as attributes of THIS module:
+# `verify_docs.py` check 3 holds README's row counts to them, Stage 2 and
+# Stage 4 read the delta-v, launch and storage rows in master.py, and the
+# banner below counts all six.
+#
+# ⚠️  ONLY WHAT SOMETHING READS.  Until master v1.36.0 this block mirrored the
+# package's whole surface -- unit constants, every loader, the rocket-equation
+# and query helpers -- "so that a consumer never re-derives what it cannot
+# see".  Nothing here or in master.py read eleven of them; they were a second
+# listing of spacecost's `__all__`, which is the one to read.  Reach anything
+# else through `spacecost.`, and add a line here only for a reader.
 LAUNCH_VEHICLES_REFERENCE   = spacecost.LAUNCH_VEHICLES_REFERENCE
 PROPELLANTS_REFERENCE       = spacecost.PROPELLANTS_REFERENCE
 DELTA_V_REFERENCE           = spacecost.DELTA_V_REFERENCE
 OPERATIONAL_COSTS_REFERENCE = spacecost.OPERATIONAL_COSTS_REFERENCE
 STORAGE_REFERENCE           = spacecost.STORAGE_REFERENCE
-# The sixth, new in the v1.15.0 contract.  Nothing in Stage 4 reads it yet; it
-# is re-exported on the same terms as the other five so that this module's
-# surface is the package's surface rather than the subset somebody needed on
-# the day.
 ENVIRONMENTS_REFERENCE      = spacecost.ENVIRONMENTS_REFERENCE
-
-# Physical constants and unit helpers, likewise.
-G0_M_S2                     = spacecost.G0_M_S2
-LITRES_PER_GAL              = spacecost.LITRES_PER_GAL
-LITRES_PER_BBL              = spacecost.LITRES_PER_BBL
-COMMODITY_DENSITY_KG_PER_L  = spacecost.COMMODITY_DENSITY_KG_PER_L
-
-# Loaders, rocket-equation helpers and the query utilities.
-load_launch_vehicles         = spacecost.load_launch_vehicles
-load_propellants             = spacecost.load_propellants
-load_delta_v                 = spacecost.load_delta_v
-load_operational_costs       = spacecost.load_operational_costs
-load_storage                 = spacecost.load_storage
-load_environments            = spacecost.load_environments
-propellant_mass_for_dv       = spacecost.propellant_mass_for_dv
-cost_per_dv_usd_per_kg       = spacecost.cost_per_dv_usd_per_kg
-build_transportation_summary = spacecost.build_transportation_summary
-cheapest_launch_to           = spacecost.cheapest_launch_to
-cheapest_propellant_for      = spacecost.cheapest_propellant_for
-mission_cost_breakdown       = spacecost.mission_cost_breakdown
 
 
 # Sanity bands over the loaded tables; prints warnings and never raises.  An
@@ -481,4 +465,5 @@ if __name__ == "__main__":
         print("    PROPELLANT COST PER kg OF PAYLOAD - at dv = 6 500 m/s "
               "(median NEA)")
         print(f"{'='*75}")
-        print(cheapest_propellant_for(catalog, 6_500).to_string(index=False))
+        print(spacecost.cheapest_propellant_for(catalog, 6_500)
+              .to_string(index=False))

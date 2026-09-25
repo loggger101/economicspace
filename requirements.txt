@@ -3,11 +3,11 @@
 # time if they are missing (Colab-friendly).  verify_docs.py check 7 holds the
 # two lists to each other.
 #
-# `spacecost` holds Stage 3's reference tables -- 76 launch vehicles, 41
-# propellants, the delta-v segments, the operational costs and the storage
-# systems -- which used to live in modules/transportation.py.  It is not on
-# PyPI yet, so it is pinned to a TAGGED git ref; an untagged URL would change
-# what a fresh install gets without anything here moving.
+# `spacecost` holds Stage 3's reference tables, which used to live in
+# modules/transportation.py, and Stage 2's delivery chains.  It is not on PyPI
+# yet, so it is pinned to a TAGGED git ref; an untagged URL would change what a
+# fresh install gets without anything here moving.  Its table sizes are not
+# spelled here: the Stage 3 banner prints them.
 #
 # Stage 1 installs no package.  It downloads a pinned, published build of the
 # asteroid catalog -- data, not code -- from the AsteroidCatalog repository's
@@ -17,5 +17,4 @@ pandas
 numpy
 yfinance
 tqdm
-pyarrow
 spacecost @ git+https://github.com/loggger101/spacecost@v0.4.0

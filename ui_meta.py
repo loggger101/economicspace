@@ -473,8 +473,8 @@ def _trailing_comments(src: str) -> Dict[int, str]:
     value is allowed to contain one.  This exists because several fields carry
     their whole description as a TRAILING comment and nothing else:
 
-        use_mp3c:     bool = True   # MP3C @ Observatoire Cote d'Azur
-        ssodnet_limit: int = 0      # 0 = whole cached ssoBFT table
+        use_yfinance:        bool = True   # live commodity fuel prices
+        request_timeout: int = 60   # seconds per HTTP call; a timeout is a soft failure
 
     Reading only the block ABOVE a field showed those as having no help at all,
     while the text was sitting on the same line.

@@ -20,9 +20,17 @@ which read them off the archive's own .lbl files.
 Note pds4_tools does NOT read this archive: it is PDS3, that library is PDS4.
 A fixed-width read needs no dependency at all.
 
-This script READS ONLY.  It parses `TAXONOMY_COMPOSITION` out of
-modules/catalog.py as text rather than importing it, because importing that
-module fires its INSTALLATION block.  It writes nothing to `asteroid_pipeline/`.
+This script READS ONLY.  It reads `TAXONOMY_COMPOSITION` from
+`asteroid_pipeline/catalog_taxonomy.json`, the tables the installed catalog
+release was BUILT with, which Stage 1 installs beside the catalog.  Until
+master v1.36.0 it parsed the table out of modules/catalog.py as text, which
+stopped working at master v1.34.0 when Stage 1 stopped carrying the table.
+It writes nothing to `asteroid_pipeline/`.
+
+⚠️  `entry_for` is the builder's lookup by spectral type.  Since catalog data
+contract 1.4.0 the builder also gives every body past 5.5 AU a D-type
+composition whatever its class; the SDSS table is numbered main-belt bodies,
+so this probe never meets one, but it is not a general re-derivation.
 
 Usage:
     py research/starred-repos/probe_taxonomy.py
@@ -30,9 +38,8 @@ Usage:
 """
 
 import argparse
-import ast
+import json
 import os
-import re
 
 import numpy as np
 import pandas as pd
@@ -48,20 +55,20 @@ AST_COLSPECS = [
 
 
 def load_taxonomy_table(repo):
-    """Parse TAXONOMY_COMPOSITION out of modules/catalog.py without importing it."""
-    src = open(os.path.join(repo, "modules", "catalog.py"), encoding="utf-8").read()
-    m = re.search(r"^TAXONOMY_COMPOSITION: Dict\[str, dict\] = (\{.*?^\})\s*$",
-                  src, re.S | re.M)
-    if not m:
-        raise SystemExit("could not locate TAXONOMY_COMPOSITION in modules/catalog.py")
-    return ast.literal_eval(m.group(1))
+    """TAXONOMY_COMPOSITION as the installed catalog release shipped it."""
+    path = os.path.join(repo, "asteroid_pipeline", "catalog_taxonomy.json")
+    if not os.path.isfile(path):
+        raise SystemExit("no %s: install the catalog release with "
+                         "`py run_pipeline.py --stages 1`" % path)
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)["TAXONOMY_COMPOSITION"]
 
 
 def entry_for(tax, spectral_type):
     """Resolve a spectral type to its TAXONOMY_COMPOSITION entry, longest root first.
 
-    Mirrors the fallback in `enrich_composition`: exact match, then a two-letter
-    root, then a one-letter root, then Unknown.
+    The builder's fallback by type: exact match, then a two-letter root, then a
+    one-letter root, then Unknown.
     """
     if spectral_type is None:
         return None

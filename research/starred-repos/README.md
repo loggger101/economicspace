@@ -36,7 +36,6 @@ py research/starred-repos/probe_nhats.py --asterank
 | `probe_lambert.py` | the closed-form estimator against a real optimised transfer (F4) | ~10 min at n=400 |
 | `probe_nhats.py` | the shipped estimator against two oracles built by other people: JPL's NHATS and the Shoemaker-Helin closed form (F6). Reproduces the docstring first, and prices BOTH apsides, which the plane-change probe deliberately does not | ~30 s |
 | `orbital.py` | Kepler solver, elements to state vectors, and a validated Izzo Lambert solver. Imported by `probe_lambert.py`; not a probe itself | - |
-| `patch_neowise_async.py` | a **patch candidate**, not live code: an async-TAP `fetch_neowise` that survives the 502 outage CLAUDE.md records. `py patch_neowise_async.py` runs a capped comparison against the live service | ~15 s |
 
 ## Data
 

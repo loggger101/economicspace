@@ -221,8 +221,9 @@ _DEST_LO, _DEST_HI = master.dest_cost_span(True, True)   # the default cell
 
 STAGES = [
     Stage("catalog",   1, "Asteroid catalog",
-          "JPL SBDB + MP3C + SsODNet + NEOWISE. Downloads ~500 MB; slowest to "
-          "re-run and the one you most want cached."),
+          "Installs the pinned AsteroidCatalog release (JPL SBDB, SsODNet, "
+          "NEOWISE and MP3C, merged and gated upstream): a ~290 MB download, "
+          "sha256-checked, and nothing at all once that release is installed."),
     Stage("mineral",   2, "Mineral value",
           "Live prices + mineralogy, priced FOR THE CHOSEN DESTINATION. Must "
           "be re-run whenever the destination changes."),
@@ -1058,14 +1059,25 @@ def _taxonomy_counts(path: str, mtime: float) -> Dict[str, int]:
             .value_counts().to_dict())
 
 
-def render_provenance() -> None:
-    """How much of this catalog's taxonomy was MEASURED rather than guessed.
+# `spectral_type_source` labels that rest on a spectrum.  Everything else the
+# catalog writes -- `albedo`, `albedo_assumed`, `orbit` (new in data contract
+# 1.4.0: an untyped body from the Trojans out is typed D) and `unknown` -- is
+# an INFERENCE, and counting any of them as measured is what this panel did
+# with `albedo_assumed` until master v1.36.0: it reported ~95% of the taxonomy
+# measured when ~11% is.
+_TAXONOMY_MEASURED = ("source", "tholen")
 
-    The documented failure mode here is a source that fails soft: an outage does
-    not shrink the catalog, it inflates it with taxonomy inferred from albedo, so
-    two runs stop being comparable with nothing in the log saying so. The SsODNet
-    regression was invisible for exactly this reason. Row counts cannot detect
-    it; `spectral_type_source` can.
+
+def render_provenance() -> None:
+    """How much of this catalog's taxonomy was MEASURED rather than inferred.
+
+    Most of it is inferred, on every full catalog: a spectrum exists for about
+    one body in nine, and the rest take a class from albedo or from orbit.
+    That is a property of the population, not a fault, so the panel reports it
+    rather than raising an alarm.  The alarm this used to carry, for a source
+    that failed soft and inflated the catalog with guesses, is the catalog
+    builder's to raise now: an AsteroidCatalog release that lost a source is
+    refused before it is published, and Stage 1 installs nothing else.
     """
     path = os.path.join(MASTER.output_dir, MASTER.catalog.catalog_filename)
     if not os.path.exists(path):
@@ -1075,31 +1087,22 @@ def render_provenance() -> None:
         return
 
     total = sum(counts.values()) or 1
-    guessed = (counts.get("albedo", 0) + counts.get("unknown", 0)) / total
-    alarming = guessed > 0.75
+    measured = sum(counts.get(k, 0) for k in _TAXONOMY_MEASURED) / total
 
-    with st.expander(f"Catalog provenance: {1 - guessed:.0%} of taxonomy "
-                     f"measured, {guessed:.0%} guessed", expanded=alarming):
+    with st.expander(f"Catalog provenance: {measured:.0%} of taxonomy "
+                     f"measured, {1 - measured:.0%} inferred"):
         st.dataframe(
             pd.DataFrame(sorted(counts.items(), key=lambda kv: -kv[1]),
                          columns=["spectral_type_source", "asteroids"]),
             use_container_width=True, hide_index=True,
         )
         st.caption(
-            "`source` and `tholen` are measured; `albedo` is inferred and "
-            "`unknown` is neither. A data source that fails soft does not "
-            "shrink the catalog, it inflates it with guessed taxonomy, which is "
-            "why row counts cannot detect the problem and this can."
+            "`source` and `tholen` rest on a spectrum. `albedo` and "
+            "`albedo_assumed` infer a class from brightness, `orbit` types a "
+            "body from the Trojans outward as D, and `unknown` is neither. "
+            "Filter on `spectral_type_source` before treating a class as a "
+            "measurement."
         )
-        if alarming:
-            st.warning(
-                f"**{guessed:.0%} of this catalog's taxonomy is guessed from "
-                "albedo.** That is the signature of a small run or a source "
-                "outage, since SsODNet carries most of the measured taxonomy. "
-                "Do not compare these numbers to a committed result: the "
-                "population is not the same one.",
-                icon="⚠️",
-            )
 
 
 HEADLINE_COLUMNS = [
@@ -2030,8 +2033,8 @@ def render_sidebar() -> None:
     # spells this out in run_pipeline.py's refusal, and the front door should
     # not be the quieter of the two.
     _FETCHES = {
-        "catalog":   "re-downloads the JPL catalog (~500 MB; JPL adds bodies "
-                     "daily, so the population itself changes)",
+        "catalog":   "installs the pinned catalog release over the one on disk "
+                     "(a no-op when that release is already installed)",
         "mineral":   "re-fetches live metal prices",
         "transport": "re-fetches live commodity prices",
     }
