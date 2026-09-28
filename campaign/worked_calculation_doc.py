@@ -382,6 +382,34 @@ def english(items):
 
 
 # ───────────────────────────────────────────────────────────────── sections
+# The `diameter_source` labels whose diameter is a CATALOG INPUT rather than
+# the output of the H-and-albedo relation.  `derived_mass` arrived with data
+# contract 1.4.0: a measured mass at the class density, which puts no assumed
+# albedo on the row, so the H chain has nothing to substitute.
+_DIAMETER_NOT_FROM_H = {
+    "measured": "a measured diameter",
+    "derived_mass": "derived by Stage 1 from the body's MEASURED mass at its "
+                    "class density",
+}
+
+
+def diameter_from_h(body):
+    """Was this body's diameter sized from H and an albedo?
+
+    ONE DEFINITION, TWO RENDERERS.  This page and `verification_sheet.py`
+    both branch on it, and a label the two read differently is a body the two
+    documents describe differently.
+    """
+    return str(body.get("diameter_source") or "unknown") \
+        not in _DIAMETER_NOT_FROM_H
+
+
+def diameter_provenance(body):
+    """A reader's phrase for where a diameter NOT sized from H came from."""
+    return _DIAMETER_NOT_FROM_H.get(str(body.get("diameter_source") or ""),
+                                    "sized from H and an albedo")
+
+
 def group_restates_type(comp_group, spectral_type):
     """True when the taxonomy GROUP adds nothing to the spectral LETTER.
 
@@ -538,22 +566,30 @@ def s_nomenclature(out):
     C, M, B = out["C"], out["M"], out["B"]
     cfg, val, a = C["cfg"], C["val"], architecture(out)
     P, ph, terms = out["P"], C["physics"], out["terms"]
-    measured = str(B.get("diameter_source") or "") == "measured"
+    measured = not diameter_from_h(B)
 
     body_rows = [
         ["H", "absolute magnitude", prec(C["H"], 6), "mag", "K"],
-        ["p_V", "geometric albedo (measured)" if measured
-         else "geometric albedo (taxonomy default)",
-         prec(C["albedo_measured"] if measured else C["albedo"], 6), "-",
-         "K" if measured else "A"],
+    ]
+    # A diameter derived from a measured mass carries no albedo at all, and a
+    # row printing "None" as a given is worse than no row.
+    if not measured or C.get("albedo_measured") is not None:
+        body_rows.append(
+            ["p_V", "geometric albedo (measured)" if measured
+             else "geometric albedo (taxonomy default)",
+             prec(C["albedo_measured"] if measured else C["albedo"], 6), "-",
+             "K" if measured else "A"])
+    body_rows += [
         ["rho", "bulk density", prec(C["rho"], 6), "g/cm3", "A"],
         ["a", "semi-major axis", prec(C["a_au"], 12), "AU", "K"],
         ["e", "eccentricity", prec(C["e"], 12), "-", "K"],
         ["i", "inclination", prec(C["inc"], 8), "deg", "K"],
     ]
     if measured:
-        body_rows.append(["D", "diameter (measured)", prec(B["d_km"], 8),
-                          "km", "K"])
+        body_rows.append(["D", "diameter (%s)"
+                          % ("measured" if B.get("diameter_source") == "measured"
+                             else "from the measured mass"),
+                          prec(B["d_km"], 8), "km", "K"])
     body_rows += [
         ["f_c", "composition fractions (%s)"
          % ", ".join(esc(n) for n, _f, _p in C["phases"]),
@@ -583,7 +619,10 @@ def s_nomenclature(out):
     vehicle_rows = [
         ["M_LEO", "%s payload to LEO" % esc(str(C["veh"]["name"])),
          prec(C["leo_cap"], 8), "kg", "K"],
-        ["V_fair", "fairing volume", prec(C["fairing_m3"], 6), "m3", "K"],
+        ["V_fair", "fairing volume (the model's default: the vehicle's row "
+         "gives none)" if C.get("fairing_assumed") else "fairing volume",
+         prec(C["fairing_m3"], 6), "m3",
+         "A" if C.get("fairing_assumed") else "K"],
         ["c_veh", "launch price",
          prec(float(C["veh"]["usd_per_kg_to_leo"]), 8), "$/kg to LEO", "K"],
         ["I_sp", "%s specific impulse" % esc(str(C["pro"]["name"])),
@@ -770,14 +809,16 @@ def s_body(out):
     """
     B, C = out["B"], out["C"]
     source = str(B.get("diameter_source") or "unknown")
-    from_h = source != "measured"
+    from_h = diameter_from_h(B)
     # The assumed albedo is the one the derivation would have used; the
     # measured one is the only one a measured body has.  Neither is invented
     # here: both are catalog columns, and exactly one of them is populated.
     albedo = C["albedo"] if from_h else C.get("albedo_measured")
     pairs = [
         ("absolute magnitude H", fmt(C["H"], 3)),
-        ("geometric albedo%s" % ("" if from_h else " (measured)"),
+        ("geometric albedo%s" % ("" if from_h else
+                                 " (measured)" if albedo is not None
+                                 else " (none on this row)"),
          fmt(albedo, 4)),
         ("diameter", fmt(B["d_km"], 6, "km")),
         ("diameter provenance", esc(source)),
@@ -786,8 +827,9 @@ def s_body(out):
     lead = ("This body has no measured diameter, so Stage 1 sized it from its "
             "absolute magnitude and an albedo, and that is the figure below."
             if from_h else
-            "This body has a measured diameter, so no sizing from H is done "
-            "and none is shown: the catalog figure is used as it stands.")
+            "This body's diameter is %s, so no sizing from H is done and "
+            "none is shown: the catalog figure is used as it stands."
+            % diameter_provenance(B))
     steps = []
     if from_h:
         # 1329 / sqrt(p_V) is the standard photometric diameter relation, and
