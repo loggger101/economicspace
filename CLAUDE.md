@@ -84,7 +84,6 @@ through. Skim for the section that names what you are about to change.
 - [A split leaves a helper behind wherever it moves only the USERS](#a-split-leaves-a-helper-behind-wherever-it-moves-only-the-users)
 - [A regex repin will rewrite HISTORY, and check 7 says so before you do it](#a-regex-repin-will-rewrite-history-and-check-7-says-so-before-you-do-it)
 - [A mechanical pass over every instance assumes the instances are one thing](#a-mechanical-pass-over-every-instance-assumes-the-instances-are-one-thing)
-- [What the v0.2.0 source audit taught (catalog `1.3.0`)](#what-the-v020-source-audit-taught-catalog-130)
 - [Stage 3 lives in another repository now, and so does part of Stage 2](#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)
 - [Config discipline](#config-discipline)
 - [Correctness invariants that were expensive to find](#correctness-invariants-that-were-expensive-to-find)
@@ -204,8 +203,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.3.0`, mineral_value `1.10.0`, transportation `1.16.0`,
-calc `1.23.0`, master `1.35.0` (the master version is a literal in
+Current: catalog `1.4.0`, mineral_value `1.10.0`, transportation `1.16.0`,
+calc `1.23.0`, master `1.36.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -438,9 +437,9 @@ changed the delivered-price model, so Stage 2 and Stage 3 both re-price and no
 flag in this repo restores the old tables: reproducing a cell here needs the
 2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
 tables now frozen under `campaign/stage3/`. ⚠️  **The live
-`asteroid_pipeline/` holds the `v0.4.0` tables and the `data-2026-09-23`
-catalog since 2026-09-24**, and `campaign/run_cell.py` refuses to run a
-campaign cell against them. Two things below are now wrong about the MODEL rather than about
+`asteroid_pipeline/` has held the `v0.4.0` tables since 2026-09-24**, and the
+`data-2026-09-25` catalog once Stage 1 has installed master v1.36.0's pin, and
+`campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
 a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
 grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
 default configuration measured the repricing at a median **1.58x worse**
@@ -3069,6 +3068,18 @@ for**.
 what the difference means. A derivation quietly using a different input from the
 one its reader can look up is the quietest kind of wrong.
 
+🚨  **A BLANK CELL IS AN INPUT TOO, AND THE MODEL MAY BE FILLING IT
+SILENTLY.** Stage 4 flies a vehicle whose row has no `fairing_volume_m3` at a
+100 m3 default, and the derivation read the blank: its volume cap and the
+sheet's substitution came out NaN while all 88 compared columns agreed,
+because the cap is not a column. Harmless while every row had a fairing;
+spacecost `v0.4.0` left 37 of 76 without one, SLS Block 1 and Proton-M among
+the vehicles that win. Found by the verification sheet naming the line "not
+arithmetic", on a row nobody had asked about. **Where the model defaults a
+missing value, name the default (`DEFAULT_FAIRING_VOLUME_M3`) and have the
+derivation read the name**, so the page can say the figure is assumed rather
+than print what the table left out.
+
 ### A pricing MODEL can change under an archived row, not only a price
 
 2026-09-23, the spacecost `v0.4.0` repin, and it is the entry above one level
@@ -4045,6 +4056,13 @@ reason it is reached -- proved by deleting one and watching the suite name it.
 **When you make one repo depend on another's private name, the guard belongs
 in the repo that could delete it.**
 
+⚠️  **AND THE GUARD HAS TO BE RETIRED FROM THE REPO THAT STOPPED DEPENDING.**
+This repo stopped importing the package two releases later (master v1.34.0),
+and the contract outlived the dependency: AsteroidCatalog kept pinning names
+nobody reached until its 0.5.0 (master v1.36.0). A guard for a consumer that
+has gone passes forever, which is exactly why nobody deletes it; the seam
+change is the moment to sweep for it, on both sides.
+
 ### A regex repin will rewrite HISTORY, and check 7 says so before you do it
 
 The same pass, ten minutes later, and it is worth recording because the
@@ -4481,8 +4499,8 @@ deliberately does **not** sort columns: sorting would be tidier and would
 silently make every hash it prints incomparable with the eight already in this
 file.
 
-⚠️  **It does not re-run Stages 1-3, deliberately.** A Stage 1 run fetches a
-different catalog (JPL adds bodies daily) and a Stage 3 run re-fetches live
+⚠️  **It does not re-run Stages 1-3, deliberately.** A Stage 1 run at a moved
+pin installs a different catalog, and a Stage 2 or 3 run re-fetches live
 prices; either moves the inputs underneath the comparison. This is the same
 reasoning catalog `1.1.1` used when it verified `enrich_composition` in-process
 against the on-disk catalog rather than by re-running Stage 1.
@@ -5088,8 +5106,16 @@ package. The builder is
 [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog), and that
 repository PUBLISHES its builds as GitHub Releases, one frozen catalog per
 `data-YYYY-MM-DD` tag, gated before publishing (every source contributed,
-stamps current, no shrink against the previous release). The pinned catalog release is `data-2026-09-23`,
-`CatalogConfig.catalog_release`.
+stamps current, no shrink against the previous release). The pinned catalog release is `data-2026-09-25`,
+`CatalogConfig.catalog_release`, at data contract 1.4.0.
+
+✅  **A CONTRACT CHANGE IS ADOPTED BY ASKING WHO READS THE LABELS.** 1.4.0 added
+no column this pipeline reads and removed none, and still needed code here:
+`diameter_source = "derived_mass"` and `spectral_type_source = "orbit"` are new
+VALUES, and two readers branch on those columns -- the worked calculation
+(which derivation of the diameter to print) and the dashboard's provenance
+panel (measured or inferred). `verify_stage1.py` check 8 fails on a label
+neither knows, which is what makes the question askable at the next repin.
 
 🚨  **A REPIN MOVES EVERY NUMBER, EXACTLY AS A REBUILD DID.** The pin is one
 string, which makes it look like a setting; it is the input every stage reads.
@@ -5135,131 +5161,24 @@ BUILT with, which a locally installed package could not promise.
 ⚠️  **Publishing a catalog is done in the other repository**: Actions >
 publish catalog > Run workflow. Nothing in this repo builds one.
 
-### How Stage 1 got here: the package split (master v1.31.0 to v1.33.0)
+### How Stage 1 got here, and what its builder taught
 
-Superseded by the release download above, and kept for what it taught. Until
-v1.34.0 `modules/catalog.py` was an adapter that installed the package and
-ran the build. **Do not state the table's length here**; the ready
-banner prints it on every import, and the "76 classes" figure that circulates
-in this file is the number of distinct `spectral_type` VALUES in a built
-catalog, which is a different thing and roughly twice the table's 32 rows.
+The package split (master v1.31.0 to v1.33.0), how it was proved in process on
+107,521 values because Stage 1 cannot be re-run, and what the v0.2.0 source
+audit found are history now, and live in
+[versions.md > Stage 1 when it built the catalog](versions.md#stage-1-when-it-built-the-catalog).
+The builder's traps are executed by AsteroidCatalog's test suite and its
+release gate, where the code is. What stays here is the one lesson that is
+about THIS repo's side of the seam:
 
-🚨  **THIS SPLIT COULD NOT BE VERIFIED THE WAY STAGE 3's WAS, AND THE
-DIFFERENCE IS THE REUSABLE PART.** `spacecost` proved itself by building its
-CSVs through both paths and asserting them byte-identical. **Stage 1 cannot be
-re-run at all**: JPL adds bodies daily, so a rebuilt catalog is a different
-length and comparable with nothing already measured, and the file it would
-overwrite is the 862 MB input every other stage reads. So the extraction was
-proved *in process* instead, which is the same reasoning catalog `1.1.1` used
-when it verified `enrich_composition` against the catalog on disk rather than
-by re-running the stage.
-
-| what was compared | how |
-|---|---|
-| every reference table | leaf by leaf, at full `repr` **and** raw IEEE bit pattern, with dict **key order** included -- a reordered table moves a CSV column order without moving a number |
-| every pure function | both ways over a stride sample of the real 1,555,667-row catalog, cell by cell on bit patterns rather than with a tolerance |
-| all 24 function bodies | as **source text**, against this module's own line ranges |
-| the config surface | field set and every default except the documented adaptations |
-
-**25 checks, 107,521 values, 0 differing**, and the probe was then fed a wrong
-answer -- one PGM factor moved 2.0 to 2.5 -- and went red on both the table and
-the function that reads it. It is kept as `tools/extraction_probe.py` in the
-package, and it needs the pre-split module out of this repo's history to run.
-
-✅  **NOTHING WAS RE-TYPED.** The package was built by slicing source line
-ranges, 2,953 of this module's 3,338 lines, and so was the adapter: the config
-dataclass and the RUN & PREVIEW block are the original text. That is not
-tidiness, it is what makes the probe mean anything -- a split argued from "I
-was careful" is worth nothing.
-
-⚠️  **THE CONFIG COMMENTS ARE UI COPY.** `ui_meta.scrape_field_docs` reads a
-field's comment block as the dashboard's help text for that dial, so the
-dataclass had to stay here AND had to stay verbatim. Re-wording a comment there
-silently re-words the dashboard.
-
-🚨  **AND THE ADAPTER'S STARTUP BANNER IS BYTE-IDENTICAL TO THE PRE-SPLIT
-MODULE'S, WHICH IS WHAT FOUND THE ONE REAL DEFECT IN THE MOVE.** All 114
-`print` calls became the package's `say()`, which is silent unless a caller
-asks for output -- right for a library, and it silenced the **zero-match
-alert**, the one diagnostic that catches a fetcher contributing nothing while
-its own fetch summary reads 183,408. Ten messages became `warn()` at the split,
-thirteen as of package `v0.2.0`, and they print regardless. **A defect in the
-code, or a fatal abort, is loud; an external
-condition the design tolerates is progress output.** This file already records
-that a diagnostic which has gone quiet reads exactly like a clean result; a
-blanket mechanical pass is how that happens.
-
-⚠️  **Two module-level prints could never fire in the package at all**, because
-verbosity is always set after import. They were stage banner text, so they live
-in the adapter now -- the package's `v0.1.1`, and the reason the banner
-comparison is worth running rather than assuming.
-
-⚠️  **THE `asteroid_catalog` PIN WAS TYPED IN SIX PLACES** while the package
-was installed, and a repin that missed one was the parallel-repo divergence in
-miniature. Three carried it as a URL:
-`requirements.txt`, `_MASTER_PIP_SPEC` in `build_master.py`, and `_PIP_SPEC` in
-this module (**what a standalone module run installs from**). Three carry it as
-PROSE: README's sentence naming the tag, this paragraph, and `CITATIONS.md`.
-`verify_docs.py` check 7 held all six to each other. Since v1.34.0 the package
-is pinned nowhere, and check 7 holds the catalog RELEASE pin to every document
-that names it instead.
-
-🚨  **CHECK 7 DID NOT COVER ANY OF THEM UNTIL THIS SPLIT LANDED.** Every
-pattern in it named `spacecost`, so the six copies above would have been typed
-with nothing comparing them -- the first split's own defect, arriving inside
-the check written to prevent it, which is this file's "a check that reads one
-row of a table is a check on that row" for the third time. The package is a
-parameter there now, so a third split joins by adding one row.
-
-⚠️  **`pipeline_version` was the PACKAGE's data contract**, mirrored here, and
-`_check_data_contract()` raised at import if the two disagreed. It is now
-checked against each release's manifest instead; see above.
-
-⚠️  **The two collision-proof names were load-bearing.** The adapter imported
-`build_catalog_table` and `lookup_body`, never `build_catalog`,
-`lookup_asteroid` or `CONFIG`, because `word_replace` rewrites all three on the
-way into `master.py` and an aliased local name does not help -- the IMPORTED
-name is still a bare word. Same trap that cost the Stage 3 split a release, and
-the package's `tests/test_consumer_contract.py` runs this repo's real regex
-against every name the adapter imports.
-
-### What the v0.2.0 source audit taught (catalog `1.3.0`)
-
-Every source was pulled in full and joined back to JPL by hand, and every
-defect it found had passed every build.  The full record is the package's
-`CHANGELOG.md`; these are the parts that generalise.
-
-🚨  **A TOLERATED FAILURE HIDES A WRONG ADDRESS EXACTLY AS WELL AS AN OUTAGE.**
-MP3C was documented here as "regularly unreachable" for releases.  The host was
-up the whole time; every URL the fetcher tried answered 404, because the TAP
-service had moved to `dachs.oca.eu`.  A source allowed to fail soft needs its
-failure *reason* read, not just tolerated: "not reachable" and "404 from a
-live host" are different findings.
-
-🚨  **A SOURCE'S PLACEHOLDER IS A NUMBER, AND IT PASSES EVERY RANGE CHECK THAT
-ISN'T LOOKING FOR IT.**  MP3C writes H = 0 and H = 99.99 for "no value";
-NEOWISE writes -0.999, and keeps printing the beaming parameter it ASSUMED in
-every fit slot marked `-`.  Twenty-six bodies with no JPL H took MP3C's H = 0
-and were sized at 5,000-5,600 km, larger than Pluto.  What caught it was
-comparing each source's value with JPL's for the same body, not a range check.
-
-⚠️  **ONE BODY HAS SEVERAL DESIGNATIONS, AND A RAW-STRING JOIN LOSES OR
-DUPLICATES IT.**  7.4% of NEOWISE bodies joined nothing (numbered since, a
-secondary designation, or NEOWISE's own `"1996 GQ0"`), and SsODNet rows under a
-secondary designation survived validation as duplicates, because they carry
-their own orbit.  The package now re-keys every supplement row onto JPL's
-designation before joining, from JPL's own aliases and the MPC's
-`Other_desigs`.
-
-⚠️  **JPL'S SINGLE-OBJECT API IS NOT A BULK RESOLVER.**  Sequential lookups at
-~5 per second drew HTTP 403 for the whole IP within about a thousand requests,
-and that block covers the bulk query every Stage 1 run starts with.  Use the
-MPC's `mpcorb_extended.json.gz` for designation links.
-
-⚠️  **`name` is an IAU name again, and a Stage 4 output inherits that.**
-ssoBFT had filled it with provisional designations for 1.5 M unnamed bodies.
-`calc` passes `name` through to its results, so after the next Stage 1 build an
-unnamed winner shows no name; its identity is `designation`, as it always was.
+⚠️  **A contract with a consumer that has gone is a second copy of nothing.**
+At master v1.34.0 this repo stopped importing the package, and the other side
+kept the contract for it -- two collision-proof aliases, a private-surface
+test, a helper only the old adapter called -- for two more releases, and this
+repo kept two checks (the old `verify_stage1.py` 6 and 7) that re-tested the
+build it now only downloads. Both went at master v1.36.0. **When a seam
+changes shape, sweep both sides for guards of the OLD shape**: they keep
+passing, which is exactly why nobody deletes them.
 
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
@@ -5275,7 +5194,7 @@ its downleg into `spacecost.delivery`; the module re-exports `_DELIVERY_LEGS`,
 `_LEO_USD_PER_KG`, `delivered_cost_usd_per_kg` and `downleg_cost_usd_per_kg`
 so every existing reader keeps working. **A name dropped from the package now
 fails a PRICING stage that runs before the adapter does**, and the traceback
-will not say Stage 3. The four names are grouped and labelled as Stage 2's in
+will not say Stage 3. The names Stage 2 reads are grouped and labelled as Stage 2's in
 spacecost's `tests/test_consumer_contract.py`, which is the only thing that
 will say so out loud.
 
@@ -5412,9 +5331,6 @@ docs check goes red before anyone opens the dashboard.
 
 Undoing any of these silently corrupts the output:
 
-- **Designation extraction** must not use a naive `^\d+` regex. For
-  `"2024 BX1"` that yields `"2024"`, which cross-matches unrelated bodies.
-  See `_extract_canonical_designation` in `catalog.py`.
 - **Never build a merge key by stringifying a float column.** A numeric
   identifier that pandas has typed `float64` renders as `"3.0"`, which is not
   null, not obviously wrong, and joins nothing. Go through `Int64` first. This
@@ -5476,8 +5392,6 @@ Undoing any of these silently corrupts the output:
   not. **Check the invariant, not the figure that happened to satisfy it.**
   `Unknown` is the deliberate exception, all four fractions `None`, so the
   residual is the whole body.
-- Do not globally suppress warnings in `catalog.py`, real `RuntimeWarning`s
-  (divide-by-zero in the derived physical columns) need to stay visible.
 - **Never use `.astype(bool)` on a flag that arrives through a CSV.** It reads
   the *string* `"False"` as `True` and `NaN` as `True`. It happens to be
   correct today only because every propellant row states `restartable` and
@@ -5595,121 +5509,24 @@ Undoing any of these silently corrupts the output:
 
 ## Data sources fail softly by design
 
-Unreachable or empty sources are tolerated and the run continues. MP3C is
-regularly DNS-blocked from Colab. Do not "fix" an empty source by flipping its
-toggle off; the toggle is for deliberately excluding a source, not for
-routing around an outage.
+Unreachable or empty sources are tolerated and the run continues. Since master
+v1.34.0 that is a statement about **Stages 2 and 3**, the two that fetch: the
+four asteroid surveys reach this repo inside a published catalog release, and
+AsteroidCatalog refuses to publish a build that lost a source. How a soft
+failure once hid inside Stage 1 for releases at a time, and the SsODNet outage
+that was not an outage, are in
+[versions.md > Stage 1 when it built the catalog](versions.md#stage-1-when-it-built-the-catalog).
 
-⚠️  **Read the failure reason before calling it an outage.** Until package
-`v0.2.0` every MP3C URL the fetcher tried answered 404 from a live host: the
-service had moved, and "unreachable" was a wrong address.  See [What the v0.2.0
-source audit taught](#what-the-v020-source-audit-taught-catalog-130).
+🚨  **A soft price failure changes the answer without saying so in the
+number.** When yfinance is unreachable, Stage 2 prices every metal off its
+USGS/LME reference row and Stage 3 prices RP-1 and methane off the table, and
+the run reports success. A paired comparison where both sides saw the same
+fallback is still valid; a LEVEL compared with a committed number is not.
+Read the `FAIL` / `WARN` lines Stage 2 and 3 print per ticker before quoting a
+level, and treat "yfinance returned no usable rows" as a different run.
 
 `metals.dev` defaults to the key `"DEMO"`, which makes the fetcher skip
 entirely. That is intentional; the demo endpoint is heavily rate-limited.
-
-**But a soft failure silently changes the population you are measuring, and
-that will invalidate a comparison without warning.** Missing spectral types
-are backfilled by inferring a coarse type from albedo, so an outage does not
-shrink the catalog; it *inflates* it with guessed taxonomy.
-
-Check `spectral_type_source` (`source` / `tholen` / `albedo` / `albedo_assumed`
-/ `unknown`) before comparing any run to a committed number. The startup
-banner's "Active sources" line lists what was *enabled*, not what answered; 
-read the `Source summary: {...}` dict instead.
-
-⚠️  **`Source summary` reports what was FETCHED, not what was USED, and the gap
-between those is where NEOWISE hid for four releases.** It printed 183,408 on
-runs where the source contributed zero rows, because the failure was in the
-merge key rather than the fetch. Since v1.1.0 `merge_sources` also reports how
-many of each supplement's designations **matched the backbone**, and shouts
-when that number is zero or when a source loses every row to keying. Read the
-`Merged <source>: N supplement records (M matched the backbone, +K new
-entries)` line, `M = 0` on a source that fetched rows is always a bug in that
-fetcher, never an empty upstream table.
-
-The corresponding check on the output CSV is one line, and it is worth running
-against any catalog you did not watch being built:
-
-```bash
-py -c "import pandas as pd; d=pd.read_csv('asteroid_pipeline/asteroid_catalog.csv',low_memory=False); print({c:int(d[c].notna().sum()) for c in d.columns if c.startswith('source_')})"
-```
-
-A `source_*` column sitting at 0 while its fetcher reported success is the
-signature.
-
-⚠️  **Two upstream sources fetched ZERO rows on the run that produced the
-committed cislunar 2x2, and it did not matter, but check before assuming that
-of the next one.** IRSA (NEOWISE) returned `502 Proxy Error` all evening and
-MP3C contributed nothing, so `Source summary` read
-`{'JPL SBDB': 1555569, 'SsODNet': 1552868, 'NEOWISE': 0, 'MP3C': 0}`. The
-catalog was unharmed, and **the provenance columns are what say so rather than
-the row count**: measured diameters 149,590, taxonomy from a source 171,007,
-taxonomy-albedo derivations 105,905, all three identical to the committed
-v1.1.0 figures.
-
-✅  **That outage also quantified what NEOWISE is worth here, which nobody had
-measured.** `diameter_source = derived_h_measured_albedo` is **20 rows of
-1,555,667**. A body with a measured albedo almost always has a measured
-diameter too, both falling out of the same thermal-IR fit, so the `albedo`
-column NEOWISE fills is nearly never the one `_albedo_for_derivation` reads.
-The v1.1.0 note that NEOWISE recovers IR albedo "for 132,691 bodies that had
-none" is about **columns**, and it reads as though those 132,691 rows were
-sized off it. They are not; 20 are.
-
-### The SsODNet outage that wasn't an outage (fixed in v1.0.9)
-
-This one is worth reading in full, because nothing about it looked wrong.
-
-ssoBFT renamed its identity columns; `sso_number`/`sso_name`/`sso_id` became
-`number`/`name`/`id`. The column projection tolerated the loss, so
-`fetch_ssodnet` cheerfully returned 50,000 rows with no `designation`, and
-`merge_sources` dropped the entire source behind one ⚠️ line. A ~500 MB
-download, and every literature diameter, density, rotation and taxonomy in it,
-went in the bin on every run. The damage:
-
-| | before | after |
-|---|---|---|
-| taxonomy measured | 1,854 | **24,675** |
-| taxonomy guessed from albedo | 33,235 | **11,131** |
-| density measured | 0 | **438** |
-| V-type bodies | 3,988 | 2,614 |
-
-**Every number committed before v1.0.9 was measured on the degraded catalog**,
-roughly 1,900 real-taxonomy bodies instead of ~24,700. The V-type count is
-the tell: V-types are rare, and 3,988 of them was an artefact of guessing
-taxonomy from albedo.
-
-Three separate things kept it quiet, and each is a trap worth not rebuilding:
-
-- **The drift warning only fired when fewer than 5 of 24 columns matched.**
-  Fourteen still matched, so losing every merge key read as healthy. A
-  projection that tolerates missing columns must still *assert* the ones it
-  cannot work without; that is what `_SSODNET_REQUIRED` is for now.
-- **The row-cap sort key sat behind an `if in df.columns` guard**, so
-  truncation silently stopped sorting and took an arbitrary 50,000 rows
-  starting near asteroid 367488 instead of Ceres. A guard that turns a wrong
-  answer into a quiet one is worse than no guard.
-- **`pq.ParquetFile.schema` is the PHYSICAL parquet schema**, which names a
-  nested list column by its inner path, so `spins.period.value` read as
-  absent. Test membership against `schema_arrow`; that is what
-  `read(columns=…)` accepts.
-
-**Spot-check against literature rather than trusting row counts.** These five
-are the standing check, and they reproduced exactly on the full 1,554,400-row
-catalog after the v1.1.0 rebuild:
-
-| body | diameter km | density g/cm³ | rotation h | type |
-|---|---|---|---|---|
-| Ceres | 939.400 | 2.162 | 9.074 | C |
-| Vesta | 522.770 | 3.411 | 5.342 | V |
-| Pallas | 513.000 | 2.911 | 7.813 | B |
-| Psyche | 222.000 | 4.143 | 4.196 | X |
-| Eros | - | - | 5.270 | S |
-
-⚠️  All five must also report `diameter_source = measured`. That is the check
-that H-derivation is not overwriting a measurement, and it is the half a
-row-count comparison cannot see.
 
 ## Google Drive makes the tree look dirty: run the hooks
 
@@ -6035,8 +5852,9 @@ code, the frozen Stage 2 prices under `campaign/stage2/`, and none of the
 ~868 MB Stage 4 reads. `preflight()` refuses that run in a second rather than
 dying inside the loader, and `run_pipeline.py --check-inputs` (`./run.sh
 inputs`) answers it before a campaign is queued. **Copy them; do not regenerate
-them.** Stage 1 re-fetches from JPL, which adds bodies daily, so a rebuilt
-catalog is a different length and comparable with nothing already measured.
+them.** Stage 1 is the exception now: it installs the pinned catalog release,
+the same bytes on every host. Stages 2 and 3 re-fetch live prices, so a
+regenerated Stage 2 or 3 table is comparable with nothing already measured.
 
 ⚠️  **BIT-IDENTITY IS NOT PROMISED ACROSS HOSTS AND CANNOT BE MADE SO.**
 `math.exp`, `math.log` and `math.cos` are the platform libm and numpy picks SIMD
@@ -6072,7 +5890,7 @@ first three import master".
 | `ui.py` | yes | Streamlit dashboard |
 | `verify.py` | yes | the release checks; count them in its own header rather than quoting a number here |
 | `tree_check.py` | no | **does the disk hold what git says it holds**: every tracked file hashed through `git hash-object` against the index, with `git status` used to tell an edit from a Drive stale or absent read. Every harness below calls it FIRST and refuses on a finding; also runnable alone. No network, no baseline, 0.43 s |
-| `verify_stage1.py` | no | **Stage 1's seam, since master v1.34.0**: the pinned catalog release exists at this pipeline's data contract (checks 1, 2 and 5 read its manifest and taxonomy over the network, so they run on CI), and the catalog on disk is that release byte for byte, re-derived row for row. Never writes the catalog |
+| `verify_stage1.py` | no | **Stage 1's seam, since master v1.34.0**: the pinned catalog release exists at this pipeline's data contract (checks 1, 2 and 5 read its manifest and taxonomy over the network, so they run on CI), and the catalog on disk is that release byte for byte, with provenance labels this pipeline's readers know. Never writes the catalog |
 | `verify_stage3.py` | no | the Stage 3 seam: this repo's adapter against the `spacecost` package it drives. Builds into a temp dir, needs no baseline and no network. Its last check drives `validate()` rather than comparing bytes, and is the only coverage Stage 3's behaviour has |
 | `.github/workflows/verify.yml` | no | CI: the build-sync check, the docs checks, **both** seams (Stage 1's catalog release and Stage 3's package), and `platform_check.py` as a report. **Not `verify.py`**, which needs inputs no clone has |
 | `verify_docs.py` | no | the **docs** checks; it imports master and the four configs for checks 8 and 9, but never builds a stage. Count them in its own docstring rather than quoting a number here |

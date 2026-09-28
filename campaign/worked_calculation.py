@@ -1755,7 +1755,13 @@ def context(body, archived, tables):
         prop_usd_per_kg=prop_usd_per_kg, prop_moved=prop_moved,
         tank_frac=tank_frac,
         leo_cap=float(veh["payload_leo_kg"]),
-        fairing_m3=float(veh["fairing_volume_m3"]),
+        # A vehicle row with no fairing volume is flown at the model's
+        # default, and the page has to say so rather than print a blank:
+        # 37 of spacecost v0.4.0's 76 rows carry none.
+        fairing_m3=(master.DEFAULT_FAIRING_VOLUME_M3
+                    if pd.isna(veh["fairing_volume_m3"])
+                    else float(veh["fairing_volume_m3"])),
+        fairing_assumed=bool(pd.isna(veh["fairing_volume_m3"])),
         thruster_eff=float(pro["thruster_efficiency"]),
         thruster_kg_per_n=float(pro["thruster_kg_per_n"]),
         ppu_kg_per_kw=val("Power processing unit specific mass",
@@ -3804,6 +3810,8 @@ def not_shown(row):
 # -- the same rule `TYPED_OK` is under.
 BORROWED = {
     "CALC_CONFIG": ("data", "the run's own config"),
+    "DEFAULT_FAIRING_VOLUME_M3": (
+        "data", "the fairing the model flies when a vehicle row gives none"),
     "DELIVERY_ARCHITECTURES": ("data", "the destination table"),
     "FRACTION_TO_MINERAL": ("data", "composition column -> mineral name"),
     "RARE_METAL_ELEMENTS": ("data", "which elements price as rare metals"),

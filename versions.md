@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.36.0 / catalog v1.4.0](#master-v1360--catalog-v140)
 - [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160)
 - [master v1.34.0: Stage 1 installs a published catalog](#master-v1340-stage-1-installs-a-published-catalog)
 - [master v1.33.0 / catalog v1.3.0](#master-v1330--catalog-v130)
@@ -65,6 +66,7 @@ one that does not say is not to be used.
 - [calc v1.10.1](#calc-v1101)
 - [calc v1.10.0](#calc-v1100)
 - [Earlier releases](#earlier-releases)
+- [Stage 1 when it built the catalog](#stage-1-when-it-built-the-catalog)
 - [Stage 1 changelog: `modules/catalog.py`](#stage-1-changelog-modulescatalogpy)
 - [Stage 2 changelog: `modules/mineral_value.py`](#stage-2-changelog-modulesmineral_valuepy)
 - [Stage 3 changelog: `modules/transportation.py`](#stage-3-changelog-modulestransportationpy)
@@ -85,11 +87,11 @@ one that does not say is not to be used.
 
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
-| 1 | `modules/catalog.py` | **1.3.0** | v1.3.0, bodies joined across sources and every source validated against its service. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
+| 1 | `modules/catalog.py` | **1.4.0** | v1.4.0, nothing physically impossible is published: each mass beside its own source's diameter, class density limits, icy bodies typed D. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.10.0** | v1.10.0, every in-space price moves with spacecost v0.4.0's delivered-price model |
 | 3 | `modules/transportation.py` | **1.16.0** | v1.16.0, the launch table re-audited, 36 rows to 76: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.23.0** | v1.23.0, the 5% depletion cap comes off: a mission may take the whole body |
-| - | `master.py` | **1.35.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.36.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -161,6 +163,131 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.36.0 / catalog v1.4.0
+
+**Stage 1 repins to `data-2026-09-25`, AsteroidCatalog's first release at data
+contract 1.4.0, and the redundancies three repositories had accumulated around
+the Stage 1 and Stage 3 seams are removed from all three at once.**
+
+### What the new catalog is
+
+1,567,469 bodies (851 more), 99 columns (four new, none removed): the
+`*_screened_out` columns naming each source value the builder refused. Its
+builder now refuses what no body can be -- densities outside the class
+limits, one-figure JPL masses, masses beside another catalog's diameter,
+albedos at a fit's ceiling, spins past breakup -- and pairs every measured mass
+with its own source's diameter. Two provenance VALUES are new:
+`diameter_source = "derived_mass"` (16 bodies, sized from a measured mass at the
+class density) and `spectral_type_source = "orbit"` (23,310 untyped bodies from
+the Trojans outward, typed D). The full list is AsteroidCatalog's CHANGELOG
+0.4.0.
+
+### What changes here
+
+- `CatalogConfig.catalog_release` `data-2026-09-23` to `data-2026-09-25`, and
+  `pipeline_version` `1.3.0` to `1.4.0`, together, since Stage 1 refuses a
+  release at any other contract.
+- **The two readers of the provenance labels learn the new ones.** The worked
+  calculation and the verification sheet choose which diameter derivation to
+  print from `diameter_source`; a `derived_mass` body carries no albedo at all,
+  so the H chain would have printed NaN and an equation the body never went
+  through. Both now share `diameter_from_h()` and cite the catalog's diameter as
+  an input instead. The dashboard's provenance panel counted only `albedo` and
+  `unknown` as inferred, so it reported ~95% of taxonomy measured on every full
+  catalog when ~11% is (`albedo_assumed`, 1.3 M rows, was being counted as
+  measured); it classifies every label now, `orbit` included, and drops an
+  alarm that the catalog's release gate raises upstream.
+- **`verify_stage1.py` retires checks 6 and 7** and keeps 1 to 5 and 8. Both
+  re-tested the BUILD, which AsteroidCatalog gates before publishing, and both
+  went red on this release for correct reasons: Vesta, Pallas, Psyche and Eros
+  carry their mass source's diameter (525.400, 512.588, 223.143, 17.600 km),
+  and 30 bodies past 5.5 AU have a D-type composition whatever their class, so
+  composition is no longer a function of `spectral_type`. Check 5 loses its
+  copy of the builder's PGM lookup for the same reason. Check 8 learns the two
+  labels, gains this release's census, and now PRINTS a domain failure: its
+  no-census branch said "domains clean" whatever it had found and returned the
+  failure silently.
+- A comment in `modules/calc.py` that called composition a function of the
+  type alone now says why its memo is keyed on the five values instead.
+- **A fairing default the worked calculation could not see, exposed by
+  spacecost v0.4.0 rather than by this catalog.** Stage 4 flies a vehicle
+  whose row has no `fairing_volume_m3` at 100 m3, a literal typed inline; 37 of
+  v0.4.0's 76 rows have none, SLS Block 1 and Proton-M among them. The worked
+  calculation read the blank cell, so its volume cap and the verification
+  sheet's substitution came out NaN on any such mission while the compared
+  columns all agreed, because the cap is not a column. The default is
+  `DEFAULT_FAIRING_VOLUME_M3` now, same value, and both documents read it and
+  say the figure is assumed.
+
+### What it is worth, on a sample
+
+Stages 2 and 3 were built once for cislunar and shared by both catalogs, so the
+only input that differs is the catalog. ⚠️  **Yahoo was unreachable, so every
+price is the reference-table fallback**: the comparison is paired and valid,
+and no level here is comparable with a committed number. Both catalogs were cut
+to the same **3,134** bodies (every 500th designation of `data-2026-09-23`
+present in both), byte for byte from their CSVs:
+
+| cell | evaluable | winner | rows that move |
+|---|---|---|---|
+| raw, N = 1 | 1,284 to 1,283 | 223456 at **13.927085**, bit-identical | 4 of 1,283 |
+| default (beneficiated, searched) | 1,301 to 1,301 | 223456 at **6.459634**, bit-identical | 6 of 1,301 |
+
+**The mass of 1,184 of the 3,134 bodies changed and the objective of 0.3-0.5%
+did**, which is the campaign's finding about the winner and the population run
+the other way: the dig rate, the hold and the rocket equation bound a mission
+long before the body does, now that a mission may take the whole body. The rows
+that do move are the new rules at work: 2016 UW222, typed D by orbit and
+darker, leaves the raw evaluable set and gets 9.3x worse on the default cell;
+2026 ES125 (210 AU) and two V-to-S retypings move 2-26%. That is a sample, and
+[THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) applies to it.
+
+### The redundancies removed
+
+| where | what | why it could go |
+|---|---|---|
+| this repo | `research/starred-repos/patch_neowise_async.py` | applied at catalog 1.2.0, and shipped by AsteroidCatalog (`neowise_use_async`) since the split |
+| this repo | `probe_taxonomy.py` parsing a table out of `modules/catalog.py` | that table left at master v1.34.0; it reads the installed release's `catalog_taxonomy.json` now, and runs again |
+| this repo | `pyarrow` in `requirements.txt` and `_MASTER_REQUIRED` | its one reader was the builder's parquet read; `requirements-lock.txt` still pins it |
+| this repo | the `merge_sources` rename in `build_master.py` | its collision partner left with the builder |
+| this repo | eleven unused re-exports in the Stage 3 adapter | nothing here read the unit constants, five of the loaders, or the rocket-equation and query helpers |
+| this repo | the Stage 3 adapter's own `_default_output_dir` | the only one of four copies that differed, under a build note saying all four were identical |
+| this repo | the builder's history in CLAUDE.md and README | moved to [Stage 1 when it built the catalog](#stage-1-when-it-built-the-catalog); the pointers that replace it say what still applies |
+| this repo | the Stage 1 source endpoints in CITATIONS.md | AsteroidCatalog's CITATIONS.md is their authority; the MP3C address here had been wrong since that package's v0.2.0 |
+| AsteroidCatalog 0.5.0 | `build_catalog_table`, `lookup_body`, `tests/test_consumer_contract.py`, `config._fmt_limit` | a contract with a consumer that stopped importing the package at master v1.34.0 |
+| spacecost (tests) | nine names in `CONSUMER_SURFACE` | nothing in economicspace reads them; the list gained the four Stage 2 does read and had missed |
+
+Stale text that described Stage 1 as re-fetching from JPL, and the Stage 3
+adapter's description of files on disk at 1.15.0, are corrected where they
+stood: the dashboard, the `stamp_check` message, `verify.py`, `run.bat`,
+`run.sh`, README, SPARK_SETUP.md and CLAUDE.md.
+
+### What was verified
+
+| harness | result |
+|---|---|
+| `verify_stage1.py`, new release installed | 7 checks, 0 wrong; census reproduces |
+| `verify_stage1.py`, old release installed | refuses, naming the pin, as it should |
+| check 8 fed a planted label | fails and names it |
+| `verify_stage3.py` | 6 checks against spacecost v0.4.0 |
+| `verify_docs.py` | every check |
+| AsteroidCatalog `pytest` | 160 passed, 1 skipped |
+| spacecost `pytest` | 217 passed, 1 skipped |
+| `probe_taxonomy.py` end to end | runs again against `data-2026-09-25` |
+| `verify.py invariants`, new-catalog inputs | mass ledger 0 kg on all four cells, never-worse 0 exceptions, ceilings 0 |
+| worked calculation, default-cell winner | 88 quantities, 0 DIFFER, audit clean; the sheet 224 of 224 substitutions |
+| `--sweep --audit` over both sample outputs | 5 architectures derived and audited, 0 DIFFER, 0 refused |
+| a measured body relabelled `derived_mass`, flying Proton-M | both documents 0 DIFFER; the sheet 222 of 222, 0 "not arithmetic" (it had one: the NaN fairing) |
+
+### What did not change
+
+- mineral_value `1.10.0`, transportation `1.16.0`, calc `1.23.0`: no Stage 2, 3
+  or 4 computation moved. The catalog under them did, so a run at this pin is
+  not comparable with one at `data-2026-09-23` without saying so.
+- spacecost stays at `v0.4.0`; its change is to tests alone.
+- The catalog on a host that has not re-run Stage 1: `verify_stage1.py` check 3
+  says so until it has.
 
 ## master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0
 
@@ -401,7 +528,7 @@ Release (`data-YYYY-MM-DD`: the gzipped CSV, a Parquet copy, the rejection log,
 the composition tables and a manifest of sha256s), gated before publishing:
 every source must have contributed above a floor, the stamps must be single and
 current, and the catalog must not have shrunk against the previous release.
-The pinned catalog release is `data-2026-09-23`.
+The release it pinned was `data-2026-09-23`.
 
 **Why.** A build cannot be repeated -- JPL adds bodies daily -- so re-running
 Stage 1 replaced the one input every committed number was measured on, with no
@@ -1019,6 +1146,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.36.0 / catalog v1.4.0](#master-v1360--catalog-v140) | 2026-09-25 | **Stage 1 repins to `data-2026-09-25`**, data contract 1.4.0, and the redundancies around the Stage 1 and Stage 3 seams go from all three repositories |
 | [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160) | 2026-09-23 | **spacecost v0.4.0**: the launch table re-audited and the delivered-price model changed, so Stages 2 and 3 both re-price |
 | [master v1.34.0](#master-v1340-stage-1-installs-a-published-catalog) | 2026-09-23 | **Stage 1 installs a published catalog** rather than building one: one pinned `data-YYYY-MM-DD` release, sha256-checked, the same bytes on every host |
 | [master v1.33.0 / catalog v1.3.0](#master-v1330--catalog-v130) | 2026-09-23 | **asteroid_catalog v0.2.0**: bodies joined across sources, and every source validated against its service |
@@ -4824,7 +4952,7 @@ searching for the best rock in a bag holding 5.7% of the rocks.
    union is ~N rather than 4N. One cap per source now, `0` = unlimited.
 3. **Only 9% of asteroids have a measured diameter**, and validation drops the
    rest. That is the real ceiling; see
-   [Diameters, and the 9% problem](README.md#diameters-and-the-9-problem).
+   [Diameters, and the 9% problem](#diameters-and-the-9-problem).
 
 🚨 **A row cap was never a sample, and that is a third silent failure.** JPL
 returns rows in SPK-ID order and numbered bodies come first, so at any cap below
@@ -5177,7 +5305,7 @@ genuinely rare and 3,988 of them was an artefact of guessing taxonomy from
 albedo. ⚠️  **Every figure committed before v1.0.9 was measured on that
 degraded catalog.** Full account, including the three separate things that kept
 it quiet:
-[the SsODNet outage that wasn't an outage](CLAUDE.md#the-ssodnet-outage-that-wasnt-an-outage-fixed-in-v109).
+[the SsODNet outage that wasn't an outage](#the-ssodnet-outage-that-wasnt-an-outage-fixed-in-v109).
 
 **calc v1.9.0, reliability growth.** Duane/AMSAA, `q(n) = q_first · n^(−0.30)`,
 capped at 0.95 and reported as the mean over missions 1..N rather than the
@@ -5256,6 +5384,379 @@ each entry having been appended wherever the writer's cursor happened to be.
 Reading those in file order gave the wrong history, which is its own argument
 for the move.
 
+## Stage 1 when it built the catalog
+
+Moved here from CLAUDE.md and README.md at master v1.36.0. Until master v1.34.0
+Stage 1 BUILT the catalog, from four surveys, in this repo; since then it
+installs a published AsteroidCatalog release and the builder's traps are
+executed there. What follows is the record of the build era: how the builder
+left, what its source audit found, how a source that failed soft once hid for
+releases at a time, and what the diameter derivation looked like on the
+2026-08-11 catalog. Every figure names the catalog it was measured on, and none
+is current. The current catalog is described under
+[README > What the catalog's provenance columns say](README.md#what-the-catalogs-provenance-columns-say).
+
+### How Stage 1 got here: the package split (master v1.31.0 to v1.33.0)
+
+Superseded by the release download above, and kept for what it taught. Until
+v1.34.0 `modules/catalog.py` was an adapter that installed the package and
+ran the build. **Do not state the table's length here**; the ready
+banner prints it on every import, and the "76 classes" figure that circulates
+in this file is the number of distinct `spectral_type` VALUES in a built
+catalog, which is a different thing and roughly twice the table's 32 rows.
+
+🚨  **THIS SPLIT COULD NOT BE VERIFIED THE WAY STAGE 3's WAS, AND THE
+DIFFERENCE IS THE REUSABLE PART.** `spacecost` proved itself by building its
+CSVs through both paths and asserting them byte-identical. **Stage 1 cannot be
+re-run at all**: JPL adds bodies daily, so a rebuilt catalog is a different
+length and comparable with nothing already measured, and the file it would
+overwrite is the 862 MB input every other stage reads. So the extraction was
+proved *in process* instead, which is the same reasoning catalog `1.1.1` used
+when it verified `enrich_composition` against the catalog on disk rather than
+by re-running the stage.
+
+| what was compared | how |
+|---|---|
+| every reference table | leaf by leaf, at full `repr` **and** raw IEEE bit pattern, with dict **key order** included -- a reordered table moves a CSV column order without moving a number |
+| every pure function | both ways over a stride sample of the real 1,555,667-row catalog, cell by cell on bit patterns rather than with a tolerance |
+| all 24 function bodies | as **source text**, against this module's own line ranges |
+| the config surface | field set and every default except the documented adaptations |
+
+**25 checks, 107,521 values, 0 differing**, and the probe was then fed a wrong
+answer -- one PGM factor moved 2.0 to 2.5 -- and went red on both the table and
+the function that reads it. It is kept as `tools/extraction_probe.py` in the
+package, and it needs the pre-split module out of this repo's history to run.
+
+✅  **NOTHING WAS RE-TYPED.** The package was built by slicing source line
+ranges, 2,953 of this module's 3,338 lines, and so was the adapter: the config
+dataclass and the RUN & PREVIEW block are the original text. That is not
+tidiness, it is what makes the probe mean anything -- a split argued from "I
+was careful" is worth nothing.
+
+⚠️  **THE CONFIG COMMENTS ARE UI COPY.** `ui_meta.scrape_field_docs` reads a
+field's comment block as the dashboard's help text for that dial, so the
+dataclass had to stay here AND had to stay verbatim. Re-wording a comment there
+silently re-words the dashboard.
+
+🚨  **AND THE ADAPTER'S STARTUP BANNER IS BYTE-IDENTICAL TO THE PRE-SPLIT
+MODULE'S, WHICH IS WHAT FOUND THE ONE REAL DEFECT IN THE MOVE.** All 114
+`print` calls became the package's `say()`, which is silent unless a caller
+asks for output -- right for a library, and it silenced the **zero-match
+alert**, the one diagnostic that catches a fetcher contributing nothing while
+its own fetch summary reads 183,408. Ten messages became `warn()` at the split,
+thirteen as of package `v0.2.0`, and they print regardless. **A defect in the
+code, or a fatal abort, is loud; an external
+condition the design tolerates is progress output.** This file already records
+that a diagnostic which has gone quiet reads exactly like a clean result; a
+blanket mechanical pass is how that happens.
+
+⚠️  **Two module-level prints could never fire in the package at all**, because
+verbosity is always set after import. They were stage banner text, so they live
+in the adapter now -- the package's `v0.1.1`, and the reason the banner
+comparison is worth running rather than assuming.
+
+⚠️  **THE `asteroid_catalog` PIN WAS TYPED IN SIX PLACES** while the package
+was installed, and a repin that missed one was the parallel-repo divergence in
+miniature. Three carried it as a URL:
+`requirements.txt`, `_MASTER_PIP_SPEC` in `build_master.py`, and `_PIP_SPEC` in
+this module (**what a standalone module run installs from**). Three carry it as
+PROSE: README's sentence naming the tag, this paragraph, and `CITATIONS.md`.
+`verify_docs.py` check 7 held all six to each other. Since v1.34.0 the package
+is pinned nowhere, and check 7 holds the catalog RELEASE pin to every document
+that names it instead.
+
+🚨  **CHECK 7 DID NOT COVER ANY OF THEM UNTIL THIS SPLIT LANDED.** Every
+pattern in it named `spacecost`, so the six copies above would have been typed
+with nothing comparing them -- the first split's own defect, arriving inside
+the check written to prevent it, which is this file's "a check that reads one
+row of a table is a check on that row" for the third time. The package is a
+parameter there now, so a third split joins by adding one row.
+
+⚠️  **`pipeline_version` was the PACKAGE's data contract**, mirrored here, and
+`_check_data_contract()` raised at import if the two disagreed. It is now
+checked against each release's manifest instead; see above.
+
+⚠️  **The two collision-proof names were load-bearing.** The adapter imported
+`build_catalog_table` and `lookup_body`, never `build_catalog`,
+`lookup_asteroid` or `CONFIG`, because `word_replace` rewrites all three on the
+way into `master.py` and an aliased local name does not help -- the IMPORTED
+name is still a bare word. Same trap that cost the Stage 3 split a release, and
+the package's `tests/test_consumer_contract.py` runs this repo's real regex
+against every name the adapter imports. (Retired, with both names, in the
+package's 0.5.0: see [master v1.36.0](#master-v1360--catalog-v140).)
+
+### What the v0.2.0 source audit taught (catalog `1.3.0`)
+
+Every source was pulled in full and joined back to JPL by hand, and every
+defect it found had passed every build.  The full record is the package's
+`CHANGELOG.md`; these are the parts that generalise.
+
+🚨  **A TOLERATED FAILURE HIDES A WRONG ADDRESS EXACTLY AS WELL AS AN OUTAGE.**
+MP3C was documented here as "regularly unreachable" for releases.  The host was
+up the whole time; every URL the fetcher tried answered 404, because the TAP
+service had moved to `dachs.oca.eu`.  A source allowed to fail soft needs its
+failure *reason* read, not just tolerated: "not reachable" and "404 from a
+live host" are different findings.
+
+🚨  **A SOURCE'S PLACEHOLDER IS A NUMBER, AND IT PASSES EVERY RANGE CHECK THAT
+ISN'T LOOKING FOR IT.**  MP3C writes H = 0 and H = 99.99 for "no value";
+NEOWISE writes -0.999, and keeps printing the beaming parameter it ASSUMED in
+every fit slot marked `-`.  Twenty-six bodies with no JPL H took MP3C's H = 0
+and were sized at 5,000-5,600 km, larger than Pluto.  What caught it was
+comparing each source's value with JPL's for the same body, not a range check.
+
+⚠️  **ONE BODY HAS SEVERAL DESIGNATIONS, AND A RAW-STRING JOIN LOSES OR
+DUPLICATES IT.**  7.4% of NEOWISE bodies joined nothing (numbered since, a
+secondary designation, or NEOWISE's own `"1996 GQ0"`), and SsODNet rows under a
+secondary designation survived validation as duplicates, because they carry
+their own orbit.  The package now re-keys every supplement row onto JPL's
+designation before joining, from JPL's own aliases and the MPC's
+`Other_desigs`.
+
+⚠️  **JPL'S SINGLE-OBJECT API IS NOT A BULK RESOLVER.**  Sequential lookups at
+~5 per second drew HTTP 403 for the whole IP within about a thousand requests,
+and that block covers the bulk query every Stage 1 run starts with.  Use the
+MPC's `mpcorb_extended.json.gz` for designation links.
+
+⚠️  **`name` is an IAU name again, and a Stage 4 output inherits that.**
+ssoBFT had filled it with provisional designations for 1.5 M unnamed bodies.
+`calc` passes `name` through to its results, so after the next Stage 1 build an
+unnamed winner shows no name; its identity is `designation`, as it always was.
+
+### Data sources fail softly by design
+
+Unreachable or empty sources are tolerated and the run continues. MP3C is
+regularly DNS-blocked from Colab. Do not "fix" an empty source by flipping its
+toggle off; the toggle is for deliberately excluding a source, not for
+routing around an outage.
+
+⚠️  **Read the failure reason before calling it an outage.** Until package
+`v0.2.0` every MP3C URL the fetcher tried answered 404 from a live host: the
+service had moved, and "unreachable" was a wrong address.  See [What the v0.2.0
+source audit taught](#what-the-v020-source-audit-taught-catalog-130).
+
+`metals.dev` defaults to the key `"DEMO"`, which makes the fetcher skip
+entirely. That is intentional; the demo endpoint is heavily rate-limited.
+
+**But a soft failure silently changes the population you are measuring, and
+that will invalidate a comparison without warning.** Missing spectral types
+are backfilled by inferring a coarse type from albedo, so an outage does not
+shrink the catalog; it *inflates* it with guessed taxonomy.
+
+Check `spectral_type_source` (`source` / `tholen` / `albedo` / `albedo_assumed`
+/ `unknown`) before comparing any run to a committed number. The startup
+banner's "Active sources" line lists what was *enabled*, not what answered; 
+read the `Source summary: {...}` dict instead.
+
+⚠️  **`Source summary` reports what was FETCHED, not what was USED, and the gap
+between those is where NEOWISE hid for four releases.** It printed 183,408 on
+runs where the source contributed zero rows, because the failure was in the
+merge key rather than the fetch. Since v1.1.0 `merge_sources` also reports how
+many of each supplement's designations **matched the backbone**, and shouts
+when that number is zero or when a source loses every row to keying. Read the
+`Merged <source>: N supplement records (M matched the backbone, +K new
+entries)` line, `M = 0` on a source that fetched rows is always a bug in that
+fetcher, never an empty upstream table.
+
+The corresponding check on the output CSV is one line, and it is worth running
+against any catalog you did not watch being built:
+
+```bash
+py -c "import pandas as pd; d=pd.read_csv('asteroid_pipeline/asteroid_catalog.csv',low_memory=False); print({c:int(d[c].notna().sum()) for c in d.columns if c.startswith('source_')})"
+```
+
+A `source_*` column sitting at 0 while its fetcher reported success is the
+signature.
+
+⚠️  **Two upstream sources fetched ZERO rows on the run that produced the
+committed cislunar 2x2, and it did not matter, but check before assuming that
+of the next one.** IRSA (NEOWISE) returned `502 Proxy Error` all evening and
+MP3C contributed nothing, so `Source summary` read
+`{'JPL SBDB': 1555569, 'SsODNet': 1552868, 'NEOWISE': 0, 'MP3C': 0}`. The
+catalog was unharmed, and **the provenance columns are what say so rather than
+the row count**: measured diameters 149,590, taxonomy from a source 171,007,
+taxonomy-albedo derivations 105,905, all three identical to the committed
+v1.1.0 figures.
+
+✅  **That outage also quantified what NEOWISE is worth here, which nobody had
+measured.** `diameter_source = derived_h_measured_albedo` is **20 rows of
+1,555,667**. A body with a measured albedo almost always has a measured
+diameter too, both falling out of the same thermal-IR fit, so the `albedo`
+column NEOWISE fills is nearly never the one `_albedo_for_derivation` reads.
+The v1.1.0 note that NEOWISE recovers IR albedo "for 132,691 bodies that had
+none" is about **columns**, and it reads as though those 132,691 rows were
+sized off it. They are not; 20 are.
+
+#### The SsODNet outage that wasn't an outage (fixed in v1.0.9)
+
+This one is worth reading in full, because nothing about it looked wrong.
+
+ssoBFT renamed its identity columns; `sso_number`/`sso_name`/`sso_id` became
+`number`/`name`/`id`. The column projection tolerated the loss, so
+`fetch_ssodnet` cheerfully returned 50,000 rows with no `designation`, and
+`merge_sources` dropped the entire source behind one ⚠️ line. A ~500 MB
+download, and every literature diameter, density, rotation and taxonomy in it,
+went in the bin on every run. The damage:
+
+| | before | after |
+|---|---|---|
+| taxonomy measured | 1,854 | **24,675** |
+| taxonomy guessed from albedo | 33,235 | **11,131** |
+| density measured | 0 | **438** |
+| V-type bodies | 3,988 | 2,614 |
+
+**Every number committed before v1.0.9 was measured on the degraded catalog**,
+roughly 1,900 real-taxonomy bodies instead of ~24,700. The V-type count is
+the tell: V-types are rare, and 3,988 of them was an artefact of guessing
+taxonomy from albedo.
+
+Three separate things kept it quiet, and each is a trap worth not rebuilding:
+
+- **The drift warning only fired when fewer than 5 of 24 columns matched.**
+  Fourteen still matched, so losing every merge key read as healthy. A
+  projection that tolerates missing columns must still *assert* the ones it
+  cannot work without; that is what `_SSODNET_REQUIRED` is for now.
+- **The row-cap sort key sat behind an `if in df.columns` guard**, so
+  truncation silently stopped sorting and took an arbitrary 50,000 rows
+  starting near asteroid 367488 instead of Ceres. A guard that turns a wrong
+  answer into a quiet one is worse than no guard.
+- **`pq.ParquetFile.schema` is the PHYSICAL parquet schema**, which names a
+  nested list column by its inner path, so `spins.period.value` read as
+  absent. Test membership against `schema_arrow`; that is what
+  `read(columns=…)` accepts.
+
+**Spot-check against literature rather than trusting row counts.** These five
+are the standing check, and they reproduced exactly on the full 1,554,400-row
+catalog after the v1.1.0 rebuild:
+
+| body | diameter km | density g/cm³ | rotation h | type |
+|---|---|---|---|---|
+| Ceres | 939.400 | 2.162 | 9.074 | C |
+| Vesta | 522.770 | 3.411 | 5.342 | V |
+| Pallas | 513.000 | 2.911 | 7.813 | B |
+| Psyche | 222.000 | 4.143 | 4.196 | X |
+| Eros | - | - | 5.270 | S |
+
+⚠️  All five must also report `diameter_source = measured`. That is the check
+that H-derivation is not overwriting a measurement, and it is the half a
+row-count comparison cannot see.
+
+### Two builder invariants, from CLAUDE.md's correctness list
+
+- **Designation extraction** must not use a naive `^\d+` regex. For
+  `"2024 BX1"` that yields `"2024"`, which cross-matches unrelated bodies.
+  It is `_extract_canonical_designation` in `asteroid_catalog/designations.py`
+  now, and AsteroidCatalog's `tests/test_traps.py` executes it.
+- Do not globally suppress warnings in the builder, real `RuntimeWarning`s
+  (divide-by-zero in the derived physical columns) need to stay visible.
+
+#### Source outages change the population, not just the coverage
+
+Sources fail soft by design, an unreachable host returns empty and the run
+continues. What that hides is that **the number of asteroids evaluated, and
+their taxonomy mix, can change by an order of magnitude between runs.**
+
+Where a spectral type cannot be sourced, Stage 1 infers a coarse one from
+geometric albedo and records that in `spectral_type_source`
+(`source` / `tholen` / `albedo` / `albedo_assumed` / `unknown`).
+
+This is not hypothetical: **two sources have been silently contributing
+nothing, each for several releases.** SsODNet was downloaded in full (~500 MB)
+and discarded at merge time on every run until catalog v1.0.9, which is why
+measured taxonomy jumped from 1,854 bodies to **24,675** when it was fixed;
+NEOWISE matched zero rows until catalog v1.1.0 because a float-typed
+identifier stringified to `"3.0"` instead of `"3"`. Both printed a successful
+fetch throughout. The mechanisms, and the three separate things that kept the
+SsODNet one quiet, are in
+[the section above](#the-ssodnet-outage-that-wasnt-an-outage-fixed-in-v109);
+what each was worth is in
+[versions.md](#catalog-v110--calc-v1130).
+
+⚠️  **Every figure committed before catalog v1.0.9 was measured on that
+degraded catalog**, which is why the oldest of them quote "across 1,959
+asteroids".
+
+**So check `spectral_type_source` before comparing a run against a committed
+number.** The run banner reporting a source as "Active" only means it was
+*enabled*, not that it returned anything; read the `Source summary: {...}`
+dict and the `Spectral type inferred from albedo for N entries` line instead.
+
+And note what `Source summary` does **not** tell you: it counts rows *fetched*,
+which is exactly the number NEOWISE reported on the runs where it contributed
+nothing. Since v1.1.0 the merge also prints how many of each supplement's keys
+**matched the backbone**, and shouts when that is zero. The equivalent check on
+a CSV you did not watch being built is one line, a `source_*` column at zero
+whose fetcher reported success is the signature:
+
+```bash
+py -c "import pandas as pd; d=pd.read_csv('asteroid_pipeline/asteroid_catalog.csv',low_memory=False); print({c:int(d[c].notna().sum()) for c in d.columns if c.startswith('source_')})"
+```
+
+#### Diameters, and the 9% problem
+
+Stage 1 drops any body without a diameter, and that single rule set the size of
+this catalog for its whole history. Of JPL's **1,554,321** asteroids only
+**139,582 have a measured diameter**: 9.0%. Across every source the union is
+**149,590**.
+
+**1,553,817 have an absolute magnitude H**, and diameter follows from H and the
+geometric albedo with no free parameters:
+
+```
+D_km = (1329 / sqrt(p_V)) * 10^(-H/5)          Fowler & Chillemi 1992
+```
+
+so the only estimated quantity is `p_V`. With diameters derived from H (the
+builder's `derive_diameter_from_h`, on by default since catalog v1.1.0 and on
+in every published release) the catalog reached **1,554,400 rows** in the
+2026-08-11 build this section was measured on. A measured
+diameter is never overwritten, and `diameter_source` records which is which:
+
+| `diameter_source` | rows | what it means |
+|---|---|---|
+| `measured` | 149,590 | a real measurement, from any source |
+| `derived_h_orbit_albedo` | 1,298,885 | albedo from the belt's albedo/distance gradient |
+| `derived_h_taxonomy_albedo` | 105,905 | albedo from the body's spectral class |
+| `derived_h_measured_albedo` | 20 | had an albedo but no diameter |
+
+Both albedo tables are **medians over the 138,437 bodies with a measured
+albedo**, computed rather than taken from literature, with per-entry sample
+sizes in the source. The spectral-type table covers 28 classes with n >= 5
+(S 0.2439 at n = 534, C 0.0540 at n = 195, V 0.3880 at n = 36); the orbital
+gradient is strong enough to be worth binning for, 0.2885 at 1.3-2.0 AU
+against 0.0660 in the outer belt.
+
+⚠️  **The orbital table is what actually sizes the catalog, not the taxonomy
+one.** A body with a taxonomy almost always has a diameter too, so the taxonomy
+branch fires on 105,905 rows against the orbital gradient's 1,298,885.
+⚠️  The derived albedo also sets the **composition**, deliberately: assuming
+p_V = 0.066 for an outer-belt body *is* assuming it is carbonaceous, so the
+assumed albedo is read as the last spectral-type fallback. Without that, 1.4 M
+derived bodies would land on an `Unknown` composition with `None` fractions and
+get no mass at all. Note the direction: **one assumption produces two outputs.**
+Inferring the class first and reading an albedo back off it would launder one
+guess into two apparently independent columns, and *that* would be circular.
+
+Three caveats, all of which run **optimistic**, and none of which should be
+"fixed" by editing the tables:
+
+- **Mass is the exposed quantity.** D scales as `p_V^-0.5` but mass as
+  `p_V^-1.5`, and mass is what the ranking runs on. A factor-2 albedo error is
+  a factor-2.8 mass error. Filter on `derived_diameter_is_estimate` before
+  treating a derived row as comparable to a measured one.
+- **The albedo sample is biased dark.** Those measurements are overwhelmingly
+  NEOWISE, a thermal-IR survey; at fixed H a darker body is larger and easier
+  to detect thermally. A median that is too low gives diameters that are too
+  large.
+- **Beyond 5.2 AU it is weakest.** The outer bin comes from 1,228 bodies
+  dominated by dark Centaurs and Trojans, applied to genuinely icy TNOs. 5,656
+  derived bodies exceed 100 km and the largest is 1,219 km; real TNOs whose
+  sizes are overstated. That is 1.09% of the catalog, and they fail Stage 4 on
+  Δv regardless.
+
+For a measured-only population, filter out `derived_diameter_is_estimate`: 149,740
+bodies in the `data-2026-09-23` release.
+
 ## Stage 1 changelog: `modules/catalog.py`
 
 **`1.0.3`  initial release**, with NEOWISE and SsODNet integration.
@@ -5309,7 +5810,7 @@ Lowers M-type bulk value and raises nothing.
 
 **`1.0.9`  SsODNet was being fetched and then thrown away.** The full account,
 including the three separate things that kept it quiet, is
-[the SsODNet outage that wasn't an outage](CLAUDE.md#the-ssodnet-outage-that-wasnt-an-outage-fixed-in-v109);
+[the SsODNet outage that wasn't an outage](#the-ssodnet-outage-that-wasnt-an-outage-fixed-in-v109);
 the summary is in [Earlier releases](#earlier-releases). ssoBFT renamed its
 identity columns (`sso_number` / `sso_name` / `sso_id` became `number` / `name`
 / `id`), and these had drifted with them:
@@ -5351,7 +5852,7 @@ diameter uncertainties for ~**132,700** bodies that had none. ⚠️  Read that
 against what the 2026-08 IRSA outage later measured NEOWISE to be worth: those
 132,700 rows are *columns*, and only 20 bodies in 1,555,667 are actually SIZED
 off the albedo it fills. See
-[Data sources fail softly by design](CLAUDE.md#data-sources-fail-softly-by-design).
+[Data sources fail softly by design](#data-sources-fail-softly-by-design).
 
 New config: one fetch limit per source, `derive_diameter_from_h`,
 `min_derived_diameter_km`.
@@ -5439,6 +5940,20 @@ built): `use_jpl`, `use_mp3c`, `use_ssodnet`, `use_neowise`, `jpl_limit`,
 New config fields: `catalog_release` (str, the pin), `release_base_url` (str),
 `manifest_filename` (str, `catalog_manifest.json`), `taxonomy_filename` (str,
 `catalog_taxonomy.json`).
+
+**`1.4.0` installed, `data-2026-09-25` (master v1.36.0).** AsteroidCatalog's
+data contract 1.4.0: nothing physically impossible is published. Full
+write-up: [master v1.36.0](#master-v1360--catalog-v140).
+
+New output columns: `albedo_screened_out`, `mass_screened_out`,
+`rotation_period_screened_out`, `diameter_screened_out`. New values:
+`diameter_source = "derived_mass"`, `spectral_type_source = "orbit"`.
+Meanings that moved: `density_measured` is True only for a density resting on
+measurements alone, and `diameter_provider` for a body with a measured mass is
+the mass's source. ⚠️  Composition is no longer a function of `spectral_type`
+alone: a body past 5.5 AU takes D's.
+
+No config field moved.
 
 ## Stage 2 changelog: `modules/mineral_value.py`
 

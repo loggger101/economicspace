@@ -30,20 +30,19 @@ Other entry points:
 
 SCOPE.  Checks 1-5 and 7 cover STAGE 4; check 6 covers STAGE 2's judgement
 TABLES.
-Nothing here ever re-runs Stages 1-3 -- deliberately, because a Stage 1 run
-fetches a different catalog (JPL adds bodies daily) and a Stage 3 run re-fetches
-live prices, either of which moves the inputs underneath the comparison.  Check
+Nothing here ever re-runs Stages 1-3 -- deliberately, because a Stage 2 or 3
+run re-fetches live prices and a Stage 1 run at a moved pin installs a
+different catalog, either of which moves the inputs underneath the comparison.  Check
 6 works around that by recomputing the pure table functions against the values
 already stored in the on-disk Stage 2 catalog, which needs no network.
 
 Both of those now have harnesses of their own, and this file is still not
 their evidence.  Stage 3's validate() is `verify_stage3.py` check 5;
 transportation 1.12.1's propellant-flag fix lives there, and had been checked
-once by hand under `-W error::FutureWarning`.  Stage 1's derivation chain is
-`verify_stage1.py`, which never fetches: it runs the pure functions against
-synthetic frames and the rest against the catalog already on disk, because
-re-running Stage 1 to test Stage 1 would fetch a catalog of a different length
-that is comparable with nothing already measured.  If you change Stage 1 or
+once by hand under `-W error::FutureWarning`.  Stage 1 is `verify_stage1.py`,
+which checks the pinned catalog release against this pipeline's data contract
+and the catalog on disk against that release's bytes; the build itself is
+verified in AsteroidCatalog before it is published.  If you change Stage 1 or
 Stage 3, run those.
 
 BUDGET.  A full `check` builds ~20 cells and takes roughly HALF AN HOUR on the

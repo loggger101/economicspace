@@ -13,8 +13,9 @@ to each module so they coexist in one file without name collisions:
   * Rename each module's `CONFIG` global to a unique name
     (CATALOG_CONFIG, MINERAL_CONFIG, TRANSPORT_CONFIG, CALC_CONFIG) so
     each module's `def build_X(config = CONFIG)` default keeps working.
-  * Rename function-name collisions between modules (merge_sources,
-    validate, build_catalog).
+  * Rename function-name collisions between modules (`validate`, defined by
+    Modules 2 and 3), and Module 1's `build_catalog` to the name the
+    orchestrator calls.
 
 Paths are resolved relative to this file, so the repo can live anywhere.
 
@@ -154,10 +155,10 @@ for label, after in (("catalog", m1), ("mineral_value", m2),
 m1 = word_replace(m1, "CONFIG", "CATALOG_CONFIG")
 m1 = word_replace(m1, "build_catalog", "build_asteroid_catalog")
 
-# Module 2: CONFIG -> MINERAL_CONFIG, merge_sources -> merge_mineral_sources,
-#           validate -> validate_minerals
+# Module 2: CONFIG -> MINERAL_CONFIG, validate -> validate_minerals.
+# Its `merge_sources` was renamed too until master v1.36.0; the collision was
+# with Module 1's, which left with the catalog builder at v1.31.0.
 m2 = word_replace(m2, "CONFIG", "MINERAL_CONFIG")
-m2 = word_replace(m2, "merge_sources", "merge_mineral_sources")
 m2 = word_replace(m2, "validate",      "validate_minerals")
 
 # Module 3: CONFIG -> TRANSPORT_CONFIG, validate -> validate_transport
@@ -173,7 +174,7 @@ m4 = word_replace(m4, "CONFIG", "CALC_CONFIG")
 # -----------------------------------------------------------------------------
 
 MASTER_HEADER = '''# -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.35.0)
+"""Master Asteroid Profitability Pipeline (1.36.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -286,8 +287,13 @@ if _os.environ.get("ASTEROID_PIPELINE_WORKER") == "1":
 import subprocess as _subprocess
 
 _MASTER_REQUIRED = [
-    "requests", "pandas", "numpy", "yfinance", "tqdm", "pyarrow", "spacecost",
+    "requests", "pandas", "numpy", "yfinance", "tqdm", "spacecost",
 ]
+# `pyarrow` left this list at master v1.36.0.  Its one reader was Stage 1's
+# ssoBFT parquet read, which left with the builder at v1.31.0; nothing here
+# imports it, and a Colab paste need not install it.  requirements-lock.txt
+# still pins it, because the measured environment had it installed and pandas
+# consults it when present.
 # import-name -> pip argument, for the packages where those differ.  ONE does:
 # `spacecost` holds Stage 3's reference tables and is not on PyPI yet, so it
 # installs from a TAGGED git ref rather than by name.  The tag is pinned rather
@@ -473,7 +479,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.35.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.36.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
@@ -589,9 +595,11 @@ import ast as _ast
 from collections import defaultdict as _defaultdict
 
 _EXPECTED_DUPES = {
-    # every module resolves its own default output dir when run alone
+    # every module resolves its own default output dir when run alone, with
+    # the same body in all four
     "_default_output_dir", "_DEFAULT_OUTPUT_DIR",
-    # standard gravity: Module 3 defines it, Module 4 repeats it verbatim
+    # standard gravity: Module 2 takes spacecost's, and Module 4, which
+    # imports no package, repeats the exact value
     "G0_M_S2",
 }
 

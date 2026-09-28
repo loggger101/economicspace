@@ -532,19 +532,32 @@ def part_body(S, out):
     S.part("1. The body",
            "Two of the three inputs to the mass are assumptions, not "
            "measurements; the citations say which.  " + cited(body_stamp(C)))
-    k = S.put("k_D", "k_D", "H-to-diameter constant", 1329.0, "km",
-              "<b>modules/catalog.py</b>, <i>_H_DIAMETER_CONSTANT</i>.  "
-              "<span class='src'>D_km = (1329 / sqrt(p_V)) * 10 ** (-H / 5), "
-              "Fowler and Chillemi 1992; the constant is 2 AU_km * "
-              "10 ** (-V_sun / 5) with the Sun's V = -26.762, and is the "
-              "same one JPL and the MPC use.</span>")
-    H = S.put("H", "H", "absolute magnitude", C["H"], "mag",
-              cite_body(C, "absolute_magnitude_h"))
-    pv = S.put("pV", "p_V", "geometric albedo", C["albedo"], "-",
-               cite_body(C, "albedo_assumed_for_diameter",
-                         "measured albedo" if C["albedo_measured"]
-                         else "NOT measured: the taxonomy default for this "
-                              "class, so the diameter is an inference"))
+    # ⚠️  ONLY AN H-DERIVED DIAMETER HAS AN EQUATION TO SHOW.  A measured one,
+    # and since data contract 1.4.0 one derived from a MEASURED MASS at the
+    # class density (`diameter_source = "derived_mass"`), is a catalog input:
+    # its row carries no assumed albedo, so the H chain would print NaN and a
+    # derivation the body never went through.
+    from_h = D.diameter_from_h(C["body"])
+    if from_h:
+        k = S.put("k_D", "k_D", "H-to-diameter constant", 1329.0, "km",
+                  "<b>asteroid_catalog/derive.py</b> in AsteroidCatalog, "
+                  "<i>_H_DIAMETER_CONSTANT</i>.  "
+                  "<span class='src'>D_km = (1329 / sqrt(p_V)) * 10 ** (-H / 5), "
+                  "Fowler and Chillemi 1992; the constant is 2 AU_km * "
+                  "10 ** (-V_sun / 5) with the Sun's V = -26.762, and is the "
+                  "same one JPL and the MPC use.</span>")
+        H = S.put("H", "H", "absolute magnitude", C["H"], "mag",
+                  cite_body(C, "absolute_magnitude_h"))
+        pv = S.put("pV", "p_V", "geometric albedo", C["albedo"], "-",
+                   cite_body(C, "albedo_assumed_for_diameter",
+                             "measured albedo" if C["albedo_measured"]
+                             else "NOT measured: the taxonomy default for this "
+                                  "class, so the diameter is an inference"))
+    else:
+        S.put("D", "D", "diameter", B["d_km"], "km",
+              cite_body(C, "diameter_km",
+                        "not sized from H: %s"
+                        % D.diameter_provenance(C["body"])))
     rho = S.put("rho", "rho", "bulk density", C["rho"], "g/cm3",
                 cite_body(C, "density_gcm3",
                           "measured" if bool(C["body"].get("density_measured"))
@@ -553,16 +566,17 @@ def part_body(S, out):
                 C["cfg"].max_mining_fraction, "-",
                 cite_config("max_mining_fraction"))
 
-    root = pv ** 0.5
-    S.step("sqrt_pV", "sqrt(p_V)", "root of the albedo",
-           "sqrt(p_V)", "sqrt(%s)" % P(pv), root, "-", ["pV"])
-    tenth = 10.0 ** (-H / 5.0)
-    S.step("pogson", "10^(-H/5)", "the magnitude term",
-           "10 ^ (-H / 5)", "10 ^ (-%s / 5)" % P(H), tenth, "-", ["H"])
-    S.step("D", "D", "diameter", "k_D / sqrt(p_V) * 10 ^ (-H / 5)",
-           "%s / %s * %s" % (P(k), P(root), P(tenth)), B["d_km"], "km",
-           ["k_D", "sqrt_pV", "pogson"],
-           "the row's own diameter_km, to the last bit")
+    if from_h:
+        root = pv ** 0.5
+        S.step("sqrt_pV", "sqrt(p_V)", "root of the albedo",
+               "sqrt(p_V)", "sqrt(%s)" % P(pv), root, "-", ["pV"])
+        tenth = 10.0 ** (-H / 5.0)
+        S.step("pogson", "10^(-H/5)", "the magnitude term",
+               "10 ^ (-H / 5)", "10 ^ (-%s / 5)" % P(H), tenth, "-", ["H"])
+        S.step("D", "D", "diameter", "k_D / sqrt(p_V) * 10 ^ (-H / 5)",
+               "%s / %s * %s" % (P(k), P(root), P(tenth)), B["d_km"], "km",
+               ["k_D", "sqrt_pV", "pogson"],
+               "the row's own diameter_km, to the last bit")
     S.step("r", "r", "radius", "D / 2 * 1000",
            "%s / 2 * 1000" % P(B["d_km"]), B["r_m"], "m", ["D"])
     S.step("r3", "r^3", "radius cubed", "r * r * r",
@@ -579,12 +593,13 @@ def part_body(S, out):
            "%s * %s" % (P(phi), P(B["mass"])), B["mineable"], "kg",
            ["phi", "m"],
            "one of the four caps on the payload; see part 5")
-    S.step("albedo_lever", "dm/m", "what a factor-two albedo error does to "
-           "the mass", "2 ^ 1.5, because D goes as 1 / sqrt(p_V) and m as "
-           "D cubed, so m goes as p_V to the power of minus one and a half",
-           "2 ^ 1.5", 2.0 ** 1.5, "x", ["pV", "m"],
-           "neither assumption reaches the answer here: the mineable "
-           "bound does not bind, and nor does the volume cap")
+    if from_h:
+        S.step("albedo_lever", "dm/m", "what a factor-two albedo error does to "
+               "the mass", "2 ^ 1.5, because D goes as 1 / sqrt(p_V) and m as "
+               "D cubed, so m goes as p_V to the power of minus one and a half",
+               "2 ^ 1.5", 2.0 ** 1.5, "x", ["pV", "m"],
+               "neither assumption reaches the answer here: the mineable "
+               "bound does not bind, and nor does the volume cap")
 
 
 # -------------------------------------------- 2. what a kilogram is worth
@@ -1288,6 +1303,12 @@ def part_settled(S, out):
            "%s * %s" % (P(C["rate_kg_yr"]), P(t_max)),
            M["throughput"], "kg", ["rate", "t_max"])
     S.put("V_fair", "V_fair", "fairing volume", C["fairing_m3"], "m3",
+          (cite_table_row(C["veh"], "launch_vehicles.csv",
+                          C["veh"].raw("name"))
+           + ".  The row gives no fairing volume, so this is the model's "
+             "default, <b>modules/calc.py</b>, "
+             "<i>DEFAULT_FAIRING_VOLUME_M3</i>")
+          if C.get("fairing_assumed") else
           cite_table_row(C["veh"], "launch_vehicles.csv",
                          C["veh"].raw("name"), ("fairing_volume_m3",)))
     S.step("vol_cap", "vol_cap", "what the hold can physically carry",

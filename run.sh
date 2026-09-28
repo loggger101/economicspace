@@ -230,12 +230,13 @@ cmd_campaign() {
 }
 
 cmd_verify() {
-  # TWO stages are packages now -- Stage 1's builder is `asteroid_catalog` and
-  # Stage 3's tables are `spacecost` -- so both seams get checked first:
-  # neither needs a baseline, neither fetches, neither writes outside a temp
-  # dir, and together they take seconds.  They run before the exec below,
-  # which never returns.
-  echo "  Stage 1 seam (this repo against the asteroid_catalog package):"
+  # Two stages come from other repositories -- Stage 1 installs a published
+  # AsteroidCatalog release and Stage 3's tables are the `spacecost` package --
+  # so both seams get checked first: neither needs a baseline, neither writes
+  # outside a temp dir (Stage 1's reads the release manifest over the
+  # network), and together they take seconds.  They run before the exec
+  # below, which never returns.
+  echo "  Stage 1 seam (this repo against its pinned catalog release):"
   "$PY" verify_stage1.py || return 1
   echo
   echo "  Stage 3 seam (this repo against the spacecost package):"
