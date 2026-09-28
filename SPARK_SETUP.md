@@ -250,8 +250,9 @@ rsync -avP <reference-host>:<repo>/asteroid_pipeline/ ~/economicspace/asteroid_p
 ```
 
 **Regenerating them instead is not the same thing, and the difference is
-silent.** Stage 1 re-fetches from JPL, which adds bodies daily, so the catalog
-comes back a different length; Stage 2 and Stage 3 re-fetch live prices. The
+silent.** Stage 1 installs the currently pinned catalog release, which is not
+the 2026-08-11 build the campaign was measured on; Stage 2 and Stage 3
+re-fetch live prices. The
 run that follows is perfectly valid and is comparable with nothing already
 measured, which is the whole point of moving the campaign rather than starting
 a new one. `run_pipeline.py` refuses a Stage 4 run whose inputs are missing
