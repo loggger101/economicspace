@@ -257,6 +257,7 @@ RESET_FIELDS = (
     "surplus_price_fraction",    # v1.22.0
     "model_mineral_phases",      # v1.24.0: the phase walk is A/B'd against the four fractions
     "model_refinery",            # v1.25.0: the flown refinery is A/B'd against the price deduction
+    "model_detailed_phases",     # v1.26.0: the detailed phases are A/B'd against comp_phases
 )
 
 

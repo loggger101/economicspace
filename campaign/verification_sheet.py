@@ -923,7 +923,8 @@ def part_prices(S, out):
                       if C.get("phased") else
                       "the residual: 1 - sum of the four taxonomy fractions")
         elif C.get("phased"):
-            column = cite_body(C, "comp_phases", "its %s entry" % name)
+            column = cite_body(C, C.get("phases_col") or "comp_phases",
+                               "its %s entry" % name)
         else:
             column = cite_body(C, "comp_%s_fraction"
                                % {"nickel-iron": "metal",
@@ -2050,6 +2051,13 @@ def part_searches(S, out):
         for kind, ratio, won in sweep["rungs"]:
             mark = " <b>argmin</b>" if (kind, ratio) == (
                 sweep["winner"][0], sweep["winner"][1]) else ""
+            if won is None:
+                # A rung where no mission closes: `concentration_sweep`
+                # keeps it and the winner skips it, and indexing it here
+                # crashed the sheet on the first body that had one.
+                rows.append([kind, P(ratio, 8), "-", "-", "-", "-", "-", "-",
+                             "no mission closes at this ratio", "-"])
+                continue
             best = won["ladder"]["best"]
             obj = S.claim("%s / %s" % (P(best["cost"]["total"]),
                                        P(best["expected"])), best["obj"],

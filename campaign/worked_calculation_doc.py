@@ -922,11 +922,16 @@ def s_composition(out):
     out_html = [
         sec("composition"),
         para("This body is valued by its <strong>mineral phases</strong>, "
-             "Module 1's <em>comp_phases</em>: each of the four taxonomy "
+             "Module 1's <em>%s</em>: each of the four taxonomy "
              "fractions divided into the minerals it is made of, and the "
              "sulfides, oxides and carbonates carved out of what the four "
              "leave. The phases of each group add back to its fraction, so "
-             "this is detail rather than a second composition.")
+             "this is detail rather than a second composition.%s"
+             % (esc(C.get("phases_col") or "comp_phases"),
+                " The metal is resolved into the alloys it is made of "
+                "(kamacite, taenite, tetrataenite, cohenite) and the sulfide "
+                "into its species, each priced by what it yields."
+                if C.get("phases_col") == "comp_phases_detailed" else ""))
         if C.get("phased") else "",
         # The four fractions the phases add back to.  A phase page that
         # printed only the phases left the row's own coarse columns off the
@@ -1230,6 +1235,28 @@ def s_composition(out):
             out_html.append(table(["element", "yield (mass fraction)",
                                    "enrichment", "$/kg", "contribution $/kg"],
                                   rows))
+    for product, group in sorted(C.get("merged", {}).items()):
+        # calc v1.26.0.  The detailed phases name the alloys the metal is made
+        # of, and no process separates them, so they are sold as one product
+        # at their fraction-weighted value.  Shown member by member, so the
+        # blended price on the phase table can be reproduced from this one.
+        total = sum(f for _n, f, _v in group)
+        rows = [[esc(n), pct(f, 4), fmt(f / total, 6), usd(v, 2),
+                 usd(f * v / total, 2)] for n, f, v in group]
+        rows.append(["<strong>%s</strong>" % esc(product),
+                     "<strong>%s</strong>" % pct(total, 4), "", "",
+                     "<strong>%s</strong>" % usd(
+                         sum(f * v for _n, f, v in group) / total, 2)])
+        out_html.append(h(3, "The metal, alloy by alloy"))
+        out_html.append(para(
+            "The metal is intergrown alloys, and no separation takes one "
+            "without the others, so it leaves the rock as one concentrate, "
+            "<em>%s</em>, worth the mass-weighted mean of its alloys. Which "
+            "alloys a class holds is what differs by class: a nickel-rich "
+            "chondrite metal is mostly taenite, an iron meteorite's mostly "
+            "kamacite." % esc(product)))
+        out_html.append(table(["alloy", "fraction of body", "share of metal",
+                               "$/kg", "contribution $/kg"], rows))
     if C["beneficiated"]:
         out_html.append(para(
             "The best phase present is worth %s per kilogram, and that is the "
