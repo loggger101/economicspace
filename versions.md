@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.37.0 / transportation v1.17.0](#master-v1370--transportation-v1170)
 - [master v1.36.0 / catalog v1.4.0](#master-v1360--catalog-v140)
 - [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160)
 - [master v1.34.0: Stage 1 installs a published catalog](#master-v1340-stage-1-installs-a-published-catalog)
@@ -89,9 +90,9 @@ one that does not say is not to be used.
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.4.0** | v1.4.0, nothing physically impossible is published: each mass beside its own source's diameter, class density limits, icy bodies typed D. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.10.0** | v1.10.0, every in-space price moves with spacecost v0.4.0's delivered-price model |
-| 3 | `modules/transportation.py` | **1.16.0** | v1.16.0, the launch table re-audited, 36 rows to 76: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 3 | `modules/transportation.py` | **1.17.0** | v1.17.0, every fairing volume derived from a cited drawing or left blank with a reason: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.23.0** | v1.23.0, the 5% depletion cap comes off: a mission may take the whole body |
-| - | `master.py` | **1.36.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.37.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -163,6 +164,61 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.37.0 / transportation v1.17.0
+
+**spacecost v0.4.0 -> v0.5.0, and the data contract 1.16.0 -> 1.17.0. Every
+fairing volume in the launch table is now derived from a cited source or left
+blank with a reason.** Stage 3 only: the delivery chains Stage 2 prices through
+did not move, so mineral_value stays `1.10.0`, and calc's code is unchanged.
+Nothing measured in this repository has been re-run under it. The package's own
+record, with every row that moved, is
+[spacecost's CHANGELOG](https://github.com/loggger101/spacecost/blob/main/CHANGELOG.md).
+
+### What moved
+
+`fairing_volume_m3` is the usable payload envelope, and Stage 4 caps a return
+load at a quarter of it. Under v0.4.0, 37 of the 76 rows were blank and the
+other 39 typed a volume with no source; Stage 4 flew the blanks at
+`DEFAULT_FAIRING_VOLUME_M3`, 100 m3, and SLS Block 1 won 332 rows of a default
+cislunar sample on that number. v0.5.0 derives every volume in a new
+`spacecost/fairings.py` and appends a `fairing_basis` column saying how:
+
+| basis | the volume is |
+|---|---|
+| `guide` | the envelope a user's guide draws, dimensions printed, revolved about the axis |
+| `published` | a usable volume the maker states (LVM3, Gravity-1, Saturn V) |
+| `estimate` | the published outer cylinder times the median fill of the guide rows, 0.482 |
+| `none` | blank, with the reason in the row's notes |
+
+The method returns the two totals a guide prints, New Glenn's 458 m3 and SLS
+Block 1B's 621 m3, and spacecost asserts both at import. The moves that reach
+Stage 4 hardest, all operational:
+
+| row | v0.4.0 | v0.5.0 | basis |
+|---|---:|---:|---|
+| SLS Block 1 | blank (100 in Stage 4) | 216 | `guide`, the Block 1 cargo fairing NASA documents, never flown |
+| Proton-M | blank (100 in Stage 4) | 91.1 | `guide` |
+| Falcon 9 / Falcon Heavy, all four | 145 | 157 | `guide` |
+| Atlas V 551 | 233 | 127 | `guide` |
+| Vulcan VC2 / VC4 / VC6 | 233 | 171 | `guide` |
+| New Glenn | 480 | 458 | `guide` |
+| Long March 5 | 157 | 126 | `estimate` |
+| PSLV-XL, Long March 7, Zhuque-3 | 34, 111, 190 | blank (100 in Stage 4) | `none` |
+
+⚠️  **The default still prices some operational rows.** A blank now means
+nothing usable is published, which is the case for most Chinese commercial
+vehicles, and Stage 4 still flies those at 100 m3. `fairing_basis` is in the
+CSV for any reader that wants to exclude or flag them; Stage 4 does not read it
+yet.
+
+### What was checked
+
+- The pin moved in all seven places, and `verify_docs.py` passes.
+- `verify_stage3.py` builds Stage 3 through the adapter and the package and
+  compares them byte for byte.
+- spacecost's own suite and all eight of its CI jobs pass on the tagged
+  commit, including the Windows reference-platform hash.
 
 ## master v1.36.0 / catalog v1.4.0
 
@@ -1146,6 +1202,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.37.0 / transportation v1.17.0](#master-v1370--transportation-v1170) | 2026-09-29 | **spacecost v0.5.0**: every fairing volume is derived from a cited user's-guide drawing, a published volume or a stated estimate, or left blank with a reason |
 | [master v1.36.0 / catalog v1.4.0](#master-v1360--catalog-v140) | 2026-09-25 | **Stage 1 repins to `data-2026-09-25`**, data contract 1.4.0, and the redundancies around the Stage 1 and Stage 3 seams go from all three repositories |
 | [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160) | 2026-09-23 | **spacecost v0.4.0**: the launch table re-audited and the delivered-price model changed, so Stages 2 and 3 both re-price |
 | [master v1.34.0](#master-v1340-stage-1-installs-a-published-catalog) | 2026-09-23 | **Stage 1 installs a published catalog** rather than building one: one pinned `data-YYYY-MM-DD` release, sha256-checked, the same bytes on every host |

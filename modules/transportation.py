@@ -106,7 +106,7 @@ import subprocess, sys
 # the two to each other.
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.4.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.5.0",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -255,7 +255,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.16.0"
+    pipeline_version: str = "1.17.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 CONFIG = TransportConfig()

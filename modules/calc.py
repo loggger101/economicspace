@@ -4374,9 +4374,11 @@ def _sizing_propellant_consts(
 
 
 # The fairing volume assumed for a vehicle whose Module 3 row has none.
-# ⚠️  NOT A RARE CASE SINCE spacecost v0.4.0: 37 of its 76 rows carry no
-# `fairing_volume_m3`, among them SLS Block 1 and Proton-M, which win 332 and 6
-# rows of a default cislunar sample.  Named here, rather than typed inline as
+# ⚠️  Since spacecost v0.5.0 (data contract 1.17.0) every volume Module 3 does
+# carry is derived from a cited drawing, and a blank means nothing usable is
+# published: the row's `fairing_basis` reads "none" and its notes say why.
+# Most Chinese commercial vehicles are blank for that reason, so this default
+# still prices some operational rows.  Named here, rather than typed inline as
 # it was, so the worked calculation can say which figure the model used
 # instead of printing the blank cell it read.  The value is unchanged.
 DEFAULT_FAIRING_VOLUME_M3 = 100.0

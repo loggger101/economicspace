@@ -203,8 +203,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.4.0`, mineral_value `1.10.0`, transportation `1.16.0`,
-calc `1.23.0`, master `1.36.0` (the master version is a literal in
+Current: catalog `1.4.0`, mineral_value `1.10.0`, transportation `1.17.0`,
+calc `1.23.0`, master `1.37.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -3074,7 +3074,10 @@ SILENTLY.** Stage 4 flies a vehicle whose row has no `fairing_volume_m3` at a
 sheet's substitution came out NaN while all 88 compared columns agreed,
 because the cap is not a column. Harmless while every row had a fairing;
 spacecost `v0.4.0` left 37 of 76 without one, SLS Block 1 and Proton-M among
-the vehicles that win. Found by the verification sheet naming the line "not
+the vehicles that win. ✅  `v0.5.0` derives every volume it carries from a cited
+drawing and gives both of those one; the blanks that remain are rows where
+nothing is published (`fairing_basis` = `none`), so the default still applies
+to them. Found by the verification sheet naming the line "not
 arithmetic", on a row nobody had asked about. **Where the model defaults a
 missing value, name the default (`DEFAULT_FAIRING_VOLUME_M3`) and have the
 derivation read the name**, so the page can say the figure is assumed rather
@@ -5183,7 +5186,7 @@ passing, which is exactly why nobody deletes them.
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
-[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.4.0`.
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.5.0`.
 **Do not state the row count here**; the adapter's ready banner prints it on
 every import, and this sentence carried "all 141 of them" into a release that
 added a whole table.

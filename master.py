@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.36.0)
+"""Master Asteroid Profitability Pipeline (1.37.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -129,7 +129,7 @@ _MASTER_REQUIRED = [
 # Stage 1 installs no package: it downloads a pinned catalog RELEASE, which is
 # data, not code.  Its pin is `CatalogConfig.catalog_release`.
 _MASTER_PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.4.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.5.0",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -2691,7 +2691,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.16.0"
+    pipeline_version: str = "1.17.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 TRANSPORT_CONFIG = TransportConfig()
@@ -7109,9 +7109,11 @@ def _sizing_propellant_consts(
 
 
 # The fairing volume assumed for a vehicle whose Module 3 row has none.
-# ⚠️  NOT A RARE CASE SINCE spacecost v0.4.0: 37 of its 76 rows carry no
-# `fairing_volume_m3`, among them SLS Block 1 and Proton-M, which win 332 and 6
-# rows of a default cislunar sample.  Named here, rather than typed inline as
+# ⚠️  Since spacecost v0.5.0 (data contract 1.17.0) every volume Module 3 does
+# carry is derived from a cited drawing, and a blank means nothing usable is
+# published: the row's `fairing_basis` reads "none" and its notes say why.
+# Most Chinese commercial vehicles are blank for that reason, so this default
+# still prices some operational rows.  Named here, rather than typed inline as
 # it was, so the worked calculation can say which figure the model used
 # instead of printing the blank cell it read.  The value is unchanged.
 DEFAULT_FAIRING_VOLUME_M3 = 100.0
@@ -12223,7 +12225,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.36.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.37.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
