@@ -326,6 +326,58 @@ def unseen_archives():
     return out
 
 
+def body_phases(body):
+    """[(phase, mass fraction)] from the body's `comp_phases`, or None.
+
+    Module 1's catalog data contract 1.7.0; a body without the column, or an
+    Unknown-class body whose cell is empty, has none.  Zeros are dropped, as
+    calc drops them.
+    """
+    text = body.get("comp_phases") if body is not None else None
+    if isinstance(text, str) and text:
+        return [(str(k), float(v)) for k, v in json.loads(text).items()
+                if float(v) > 0.0]
+    return None
+
+
+def run_phases(archived, body):
+    """Whether the ROW was valued by its mineral phases (calc v1.24.0).
+
+    A property of the RUN as much as of the body -- `model_mineral_phases` and
+    the catalog's contract both decide it -- so calc writes it on the row as
+    `mineral_phases`, and this reads it there rather than inferring it from the
+    live config, which describes this process and not the run.  A row too old
+    to carry the column was valued by the four fractions: that is the only
+    model there was.  A row that says phases, on a body that has none, was run
+    on a different catalog, and deriving it here would be about another body.
+    """
+    flag = archived.get("mineral_phases") if archived is not None else None
+    if flag is None or (not isinstance(flag, str) and pd.isna(flag)):
+        return False
+    if isinstance(flag, str):
+        flag = flag.strip().lower() in ("true", "1")
+    if bool(flag) and body_phases(body) is None:
+        sys.exit("this row was valued by its mineral phases, and the body in "
+                 "the installed catalog carries none (`comp_phases` is missing "
+                 "or empty).\n  The row's run read a catalog at data contract "
+                 "1.7.0 or later; install that release, or document a row "
+                 "valued by the four coarse fractions.")
+    return bool(flag)
+
+
+def body_water_fraction(body, phased):
+    """The fraction of the body that is WATER, as calc's _row_water_fraction.
+
+    With phases, the water phase alone: an outer-belt body's ice is part CO2
+    and ammonia, and hydrolox cannot be made from either.  Without, the ice
+    fraction, which is what every row before calc v1.24.0 read.
+    """
+    if phased:
+        return dict(body_phases(body)).get("water", 0.0)
+    ice = body.get("comp_ice_fraction")
+    return 0.0 if ice is None or pd.isna(ice) else float(ice)
+
+
 def run_setting(archived, cfg, told=None):
     """Whether the RUN that produced this row had beneficiation on.
 
@@ -854,10 +906,28 @@ def mineral_catalog_for(dest, archived=None):
                 and str(head["delivery_destination"].iloc[0]) == dest
                 and run_could_read(archived, live)):
             return live, "the live Stage 2 catalog"
-    frozen = os.path.join(CAMP, "stage2",
-                          "mineral_value_catalog.%s.csv" % dest)
-    if os.path.exists(frozen):
-        return frozen, "campaign/stage2, frozen 2026-09-09"
+    # ✅  MORE THAN ONE FROZEN EPOCH, as Stage 3 has (`transport_tables_for`).
+    # `campaign/stage2/` itself is the 2026-09-09 campaign set; each
+    # `mineral_value-*` subdirectory is a later table frozen before the Stage 2
+    # re-run that replaced it (`mineral_value-1.10.0/`, frozen 2026-09-29 when
+    # 1.11.0 re-priced the live table).  A row reads the NEWEST set its run
+    # could have read, and a row older than every set the oldest.
+    root = os.path.join(CAMP, "stage2")
+    name = "mineral_value_catalog.%s.csv" % dest
+    sets = [(os.path.join(root, name), "campaign/stage2, frozen 2026-09-09")]
+    if os.path.isdir(root):
+        for sub in sorted(os.listdir(root)):
+            if sub.startswith("mineral_value-"):
+                sets.append((os.path.join(root, sub, name),
+                             "campaign/stage2/%s, frozen %s"
+                             % (sub, sub.replace("-", " "))))
+    sets = [(p, label, _table_date(p)) for p, label in sets if os.path.exists(p)]
+    if sets:
+        sets.sort(key=lambda st: st[2] or "")
+        readable = [st for st in sets if run_could_read(archived, st[0])]
+        chosen = readable[-1] if readable else sets[0]
+        return chosen[0], chosen[1]
+    frozen = os.path.join(root, name)
     sys.exit("no Stage 2 catalog priced for %r.\n"
              "  the live catalog is priced for another destination, or was "
              "written after this run,\n  and there is no frozen one at\n  %s\n"
@@ -960,7 +1030,25 @@ def reference_tables(dest, archived=None):
 
 
 # ----------------------------------------------------------------- pricing
-def phase_table(body, minerals):
+def _yield_blend(yields, price, kappa, rare):
+    """sum of yield x (enrichment, on a rare metal) x element price.
+
+    The same walk, in the same order, as calc's `_mineral_implied_value`: an
+    element with no price is skipped, which is also what a NaN quote is.
+    """
+    total = 0.0
+    for element, fraction in yields.items():
+        p = price.get(element)
+        if p is None or not math.isfinite(float(p)):
+            continue
+        share = float(fraction)
+        if element in rare:
+            share *= kappa
+        total += share * float(p)
+    return total
+
+
+def phase_table(body, minerals, phased=False):
     """[(phase, mass fraction, $/kg)] for one body, derived from Module 2.
 
     The four taxonomy fractions priced separately rather than blended, plus the
@@ -972,6 +1060,13 @@ def phase_table(body, minerals):
     `nickel-iron` is the one phase whose price is not a row lookup: it is an
     alloy, so it is the yield-weighted sum of its elements with the body's own
     PGM enrichment on the rare metals.
+
+    `phased` (calc v1.24.0) walks the body's MINERAL PHASES instead, and each
+    is worth the better of two prices: its own Stage 2 row, the mineral used
+    as it is, and its yield blend, the mineral taken apart.  The fourth value
+    returned records both for every phase that has yields, so the page can
+    show which way each one went.  It is empty for the four-fraction walk,
+    whose only yield-priced phase is the alloy, returned as before.
     """
     import master
     price = dict(zip(minerals["name"], minerals["price_usd_per_kg"]))
@@ -992,18 +1087,46 @@ def phase_table(body, minerals):
             share *= kappa
         alloy += share * float(price[element])
 
-    phases, total = [], 0.0
-    for column, mineral in master.FRACTION_TO_MINERAL.items():
-        frac = body.get(column)
-        if frac is None or pd.isna(frac) or float(frac) <= 0:
-            continue
-        value = alloy if mineral == "nickel-iron" else float(price[mineral])
-        phases.append((mineral, float(frac), value))
-        total += float(frac)
+    phases, total, ways = [], 0.0, {}
+    if phased:
+        table_yields = dict(zip(minerals["name"], minerals.get(
+            "yields_json", pd.Series([None] * len(minerals)))))
+        rare = set(master.RARE_METAL_ELEMENTS)
+        for mineral, frac in body_phases(body):
+            as_is = price.get(mineral)
+            as_is = (None if as_is is None or not math.isfinite(float(as_is))
+                     else float(as_is))
+            raw = table_yields.get(mineral)
+            own = json.loads(raw) if isinstance(raw, str) and raw.strip() else {}
+            refined = None
+            if own:
+                blend = _yield_blend(own, price, kappa, rare)
+                refined = blend if blend > 0 else as_is
+            values = [v for v in (refined, as_is) if v is not None]
+            if not values:
+                continue
+            value = max(values)
+            if own:
+                ways[mineral] = {
+                    "yields": own, "refined": refined, "as_is": as_is,
+                    "chosen": "refined" if (refined is not None
+                                            and value == refined
+                                            and refined != as_is) else "as-is",
+                }
+            phases.append((mineral, frac, value))
+            total += frac
+    else:
+        for column, mineral in master.FRACTION_TO_MINERAL.items():
+            frac = body.get(column)
+            if frac is None or pd.isna(frac) or float(frac) <= 0:
+                continue
+            value = alloy if mineral == "nickel-iron" else float(price[mineral])
+            phases.append((mineral, float(frac), value))
+            total += float(frac)
     if 0.0 < total < 1.0:
         phases.append((master._RESIDUAL_PHASE, 1.0 - total,
                        float(price["silicates"])))
-    return phases, alloy, yields
+    return phases, alloy, yields, ways
 
 
 # How close two statements of one quantity have to be before the difference
@@ -1655,9 +1778,8 @@ def context(body, archived, tables):
     rig_trip_limit = not (row_trips is not None and not pd.isna(row_trips)
                           and trip_cap_m3 > 0 and float(row_trips) > trip_cap_m3)
 
-    ice_frac = (0.0 if body.get("comp_ice_fraction") is None
-                or pd.isna(body.get("comp_ice_fraction"))
-                else float(body["comp_ice_fraction"]))
+    # calc v1.24.0: the WATER fraction; see `body_water_fraction`.
+    ice_frac = body_water_fraction(body, run_phases(archived, body))
     isru_feed_per_kg = isru_water_per_kg = 0.0
     if shape["isru"]:
         material = str(pro.get("isru_feed_material") or "").strip().lower()
@@ -3387,11 +3509,17 @@ def build(archived, label, body=None, run_beneficiated=None):
     # what comes home.  See `mining_cap_note`.
     C["archived_payload"] = float(archived.get("max_payload_kg") or 0.0)
     C["archived_feed"] = float(archived.get("feed_processed_kg") or 0.0)
-    phases, alloy, yields = phase_table(body, tables["minerals"])
+    C["phased"] = run_phases(archived, body)
+    phases, alloy, yields, ways = phase_table(body, tables["minerals"],
+                                              C["phased"])
     caps, alias = market_ceilings(tables["minerals"])
     C["phases"] = phases
-    C["alloy"] = alloy
-    C["yields"] = yields
+    # calc v1.24.0: with phases, the alloy is one phase among several priced
+    # from yields, and it may even be sold as it is.  `ways` holds every such
+    # phase's two prices; the alloy block below is the four-fraction page's.
+    C["ways"] = ways
+    C["alloy"] = alloy if not C["phased"] else 0.0
+    C["yields"] = yields if not C["phased"] else {}
     # The three things needed to reproduce the alloy price on the page.  It is
     # the only price in the model that is not a row lookup, so a document that
     # printed it and not its inputs would be asking to be trusted.

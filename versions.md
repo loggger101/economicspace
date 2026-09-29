@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240)
 - [master v1.37.0 / transportation v1.17.0 / catalog v1.6.0](#master-v1370--transportation-v1170--catalog-v160)
 - [master v1.36.0 / catalog v1.4.0](#master-v1360--catalog-v140)
 - [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160)
@@ -88,11 +89,11 @@ one that does not say is not to be used.
 
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
-| 1 | `modules/catalog.py` | **1.6.0** | v1.6.0, the X complex split by albedo into P, M and E, and every class density held to a second route (1.5.0 before it corrected five rows the literature contradicts). The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
-| 2 | `modules/mineral_value.py` | **1.10.0** | v1.10.0, every in-space price moves with spacecost v0.4.0's delivered-price model |
+| 1 | `modules/catalog.py` | **1.7.0** | v1.7.0, every class divided into the mineral phases its four coarse fractions are made of, the new `comp_phases` column; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
+| 2 | `modules/mineral_value.py` | **1.11.0** | v1.11.0, the products the new phases yield: sulfur, phosphorus, chromium, titanium, CO2, ammonia and five trace metals, and four new minerals |
 | 3 | `modules/transportation.py` | **1.17.0** | v1.17.0, every fairing volume derived from a cited drawing or left blank with a reason: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.23.0** | v1.23.0, the 5% depletion cap comes off: a mission may take the whole body |
-| - | `master.py` | **1.37.0** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.24.0** | v1.24.0, a body is sold as the minerals it is made of (`model_mineral_phases`, default on) |
+| - | `master.py` | **1.38.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -164,6 +165,134 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0
+
+**A body is mined and sold as the MINERALS it is made of, not as four coarse
+fractions.** Until now a mission could load "metal", "silicate", "carbon" and
+"ice" and nothing else: an S-type's olivine, pyroxenes and plagioclase were one
+row of rock, the troilite and chromite in it were not there at all, and an
+outer-belt body's ice was all water. Stage 2 already priced eighteen minerals
+Stage 4 never read. Three repositories moved together.
+
+### What moved upstream
+
+- **AsteroidCatalog 0.9.0, data contract 1.7.0**, published as
+  `data-2026-09-29`: a new column `comp_phases`, a JSON object of mass
+  fractions by mineral, from the new `asteroid_catalog/mineralogy.py`. Within
+  each coarse group the table holds SHARES, so the phases add back to the
+  coarse fraction exactly; the accessory phases (troilite, magnetite,
+  chromite, ilmenite, spinel, carbonates) are carved out of the residual and
+  never exceed it; the outer primitive classes split their ice into water, CO2
+  and ammonia (67P's ROSINA bulk); the metal classes carry schreibersite. X and
+  Xc are derived as the P/M/E mixture. Sources per meteorite analogue are in
+  that module, and the unsourced splits say so. **No existing column moved**:
+  against `data-2026-09-27`, zero `comp_*` values differ on the 1,568,641
+  bodies the two share, and the rest is JPL (107 new bodies, 102 orbit refits,
+  19 H revisions).
+
+### What changes here
+
+- **Stage 1** repins `catalog_release` to `data-2026-09-29` and the contract
+  to 1.7.0, and exposes the release's `PHASE_GROUP` beside
+  `TAXONOMY_COMPOSITION`. The installer's staging directory is now unique per
+  install: a fixed `.catalog_download` left by the 2026-09-28 install could not
+  be deleted on the Drive mount (`WinError 5`, swallowed by
+  `rmtree(ignore_errors=True)`), and `makedirs` then died, so one interrupted
+  install blocked every later one.
+- **Stage 2 (mineral_value 1.11.0)**: eleven element rows (sulfur, phosphorus,
+  chromium, titanium, gallium, germanium, rhenium, tungsten, molybdenum, carbon
+  dioxide, ammonia), four minerals (schreibersite, chromite, ilmenite,
+  carbonates), troilite yields its sulfur, the alloy carries Cu/Ge/Ga/Mo/W/Re,
+  and phyllosilicates lose a water yield that would have counted a hydrated
+  class's water twice. Every new row has a utility, a demand class, a market
+  and a process energy, and the per-destination overrides run downward as the
+  rule requires. Two columns are written ahead of the release that reads them,
+  so Stage 2 is re-fetched once: `refining_kwh_per_kg` and
+  `price_before_processing_usd_per_kg`.
+- **Stage 4 (calc 1.24.0)**: `model_mineral_phases` (default **True**) walks
+  `comp_phases` instead of `FRACTION_TO_MINERAL`. A phase is worth the better
+  of its own row (the mineral used as it is) and its yield blend (the mineral
+  taken apart). ISRU, the per-body context and the cargo-water bake read the
+  WATER phase, not all the ice. `phase_price_check` refuses a run whose catalog
+  names a phase Stage 2 does not price. New output column `mineral_phases`.
+- **`verify.py`**: check 6's "every payload phase resolves to a market" reads
+  the catalog's phase vocabulary as well as the four fractions (21 of 21), and
+  `model_mineral_phases` joins `RESET_FIELDS`.
+- **`campaign/worked_calculation.py`** derives a phase-valued row, and both
+  renderers show each mineral's two prices and, where taking it apart wins, its
+  elements. `run_phases` reads the row's `mineral_phases` column rather than
+  the live config, and Stage 2's 1.10.0 table is frozen as
+  `campaign/stage2/mineral_value-1.10.0/` before the re-run that replaced it.
+
+### What it is worth, on a sample
+
+`verify.py`'s four cislunar cells, built three ways on identical inputs
+(`data-2026-09-29`, the 2026-09-29 Stage 2 table): HEAD's `master.py`, this
+build with `model_mineral_phases=False`, and this build with it on.
+
+| cell | HEAD vs switch off | evaluable | median objective, on vs off | best row, off to on |
+|---|---|---|---|---|
+| raw, N = 1 (400 rows) | `ca269a1f6046ff67` **MATCH**, 143/143 | 166 = 166 | **5.35% better** (164 better, 2 worse) | 2022 NX1, 9.1000x to **8.9791x** |
+| raw, searched | `cbcc43a631f4cf48` **MATCH** | 166 = 166 | **7.87% better** (165, 1) | 2022 NX1, 6.9929x to **6.6904x** |
+| beneficiated, N = 1 (150 rows) | `156b7eab8b4b6522` **MATCH** | 58 = 58 | **17.23% better** (52, 1) | 2022 RX1, 24.2785x to **21.8083x** |
+| default, benef + searched | `c0b2e27b66d1d666` **MATCH** | 58 = 58 | **11.29% better** (53, 1) | 2021 TD, 16.3739x to **13.2109x** |
+
+✅  **The switch off IS the old model**, to the bit, on all four cells, and
+the evaluable sets do not move with it on: which bodies close is a mass
+question, and the phases change only what the load is worth.
+
+✅  **The default cell's winner is the feature working.** 2021 TD's hold goes
+from nickel-iron + silicates + carbon to **nickel-iron + troilite + chromite +
+carbon**: troilite taken apart for iron and sulfur, chromite for chromium. The
+delivered value of a kilogram rises 23%, $3,104 to $3,827. Across the cell
+troilite is in 45 of 58 holds and chromite in 44.
+
+⚠️  **It runs both ways, by class, and the losers are the right ones.** On the
+raw cells C- and S-complex bodies gain 7-9%, X-complex under 1%, and the
+D-types LOSE 7.9%: their carbon is part soluble organics, and their ice is part
+CO2 and ammonia, each worth less than the water it used to be counted as. The
+single X-complex row that loses 1.9% beneficiated is 2021 PH27, an X with no
+albedo, whose row is the P/M/E mixture and so inherits P's cometary ice: the
+water it can load falls 9,862 to 8,797 kg. Chased on the row before it was
+written down.
+
+⚠️  **At `earth_surface` the ranking inside a body turns over.** Terrestrial
+rock is worth cents, so chromite (Cr) becomes the best phase of S, V and A
+types, and the sulfur, CO2 and trace metals lift C, D and P bodies 25-60% from
+a very low base. Measured on the valuation functions directly, not on a cell.
+
+These are samples, and [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule)
+applies to them. No full-catalog cell has been run at 1.24.0.
+
+### On disk
+
+Stage 1 installed `data-2026-09-29`, checksummed. Stage 2 re-ran at cislunar
+after the 1.10.0 table was backed up to
+`asteroid_pipeline/_inputs_backup_2026-09-29_pre-v1.38.0/` and frozen as
+`campaign/stage2/mineral_value-1.10.0/`. The live prices are the 2026-09-29
+quotes. Stage 3 did not move.
+
+### What was verified
+
+| harness | result |
+|---|---|
+| AsteroidCatalog `pytest` | 403 passed; `test_mineralogy.py` plants a wrong share to prove the sum check fails |
+| AsteroidCatalog tools, `data-2026-09-29` | audit clean, five reference bodies `measured`, no albedo table stale, density evidence no failures |
+| `verify_stage1.py` | 7 checks, 0 wrong |
+| `verify.py invariants`, new inputs, phases on | mass ledger 0 kg on four cells, never-worse 0 exceptions, Stage 2 tables identical, 21/21 phases resolve to a market, ceilings 0 |
+| the A/B above | four MATCH hashes with the switch off |
+| `worked_calculation.py --audit`, a phase-valued raw row | 88 quantities, 0 DIFFER; 109 of 109 non-zero columns and 34 of 34 rates on the page |
+| `verification_sheet.py --check`, the same row | every price line checks; five WRONG lines on orbital and feed arithmetic that fail identically on the old model, so they predate this release (raw rows had never been checked) |
+| `verify_docs.py` | every check |
+
+### What did not change
+
+- transportation `1.17.0`: no Stage 3 table moved.
+- Every existing `comp_*` column, and the evaluable set of every cell.
+- **Every measured cell in the 28-cell campaign is now a pre-phase
+  measurement.** Set `model_mineral_phases` False, with the other five flags
+  that section already names, to reproduce anything in it.
 
 ## master v1.37.0 / transportation v1.17.0 / catalog v1.6.0
 
@@ -1260,6 +1389,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240) | 2026-09-29 | **the minerals are extracted, not the four fractions**: catalog `data-2026-09-29` carries every class's mineral phases, Stage 2 prices what they yield, and Stage 4 loads, concentrates and sells each one |
 | [master v1.36.0 / catalog v1.4.0](#master-v1360--catalog-v140) | 2026-09-25 | **Stage 1 repins to `data-2026-09-25`**, data contract 1.4.0, and the redundancies around the Stage 1 and Stage 3 seams go from all three repositories |
 | [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160) | 2026-09-23 | **spacecost v0.4.0**: the launch table re-audited and the delivered-price model changed, so Stages 2 and 3 both re-price |
 | [master v1.34.0](#master-v1340-stage-1-installs-a-published-catalog) | 2026-09-23 | **Stage 1 installs a published catalog** rather than building one: one pinned `data-YYYY-MM-DD` release, sha256-checked, the same bytes on every host |
@@ -6082,6 +6212,17 @@ with a measured albedo reads the P, M or E row.
 
 No config field moved.
 
+**`1.7.0` installed, `data-2026-09-29` (master v1.38.0).** AsteroidCatalog's
+contract 1.7.0 divides every class's four coarse fractions into mineral
+phases. Full write-up: [master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240).
+
+New output column: `comp_phases`, a JSON object of mass fractions by mineral,
+empty only for Unknown. No existing column moved on any body the release
+shares with `data-2026-09-27`. `PHASE_GROUP` is now read from the release's
+`taxonomy.json` beside `TAXONOMY_COMPOSITION` (empty before 1.7.0).
+
+Config: `catalog_release` and `pipeline_version` moved; no field added.
+
 ## Stage 2 changelog: `modules/mineral_value.py`
 
 **`1.1.0`  initial release.**
@@ -6377,6 +6518,17 @@ names `spacecost.LEO_LAUNCH_VEHICLE`, and gives the kg-in-LEO ratio from
 `delivery_mass_ratio` with the stage-hardware $/kg beside it. **A Stage 2
 table stamped below `1.10.0` was priced by the 0.3.x model**, and
 `campaign/worked_calculation.py` keys on exactly that.
+
+**`1.11.0`  the products the mineral phases yield.** Full write-up:
+[master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240). Rows 31 to 46: eleven elements (sulfur, phosphorus, chromium,
+titanium, gallium, germanium, rhenium, tungsten, molybdenum, carbon dioxide,
+ammonia) and four minerals (schreibersite, chromite, ilmenite, carbonates).
+Yields changed: troilite adds sulfur, nickel-iron adds six trace metals,
+phyllosilicates lose their water. New output columns at an in-space
+destination: `refining_kwh_per_kg` and `price_before_processing_usd_per_kg`,
+written ahead of the Stage 4 release that reads them. No config field moved.
+⚠️  The new reference prices are the order of USGS MCS 2025's 2024 figures,
+dated `2025-01-31`, and are approximate; none has a live ticker.
 
 ## Stage 3 changelog: `modules/transportation.py`
 
@@ -7269,6 +7421,24 @@ default changes.
   numbers; what changed is that one of them is now spent once.
 - `verify.py` check 6 gained phase-ceiling coverage, and **check 7 was added to
   `verify.py check`**, which had never run it.
+
+**`1.24.0`  the minerals, not the four fractions.** Full write-up:
+[master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240). One config field and one output column are added, and the new
+field defaults ON.
+
+- **New field**: `model_mineral_phases` (default **True**). False drops
+  `comp_phases` at load and is bit-identical to 1.23.0 on all four
+  `verify.py` cells.
+- **New output column**: `mineral_phases`, whether the row was valued by its
+  phases. It describes the run as much as the body and is not recoverable
+  from any other column.
+- **New function**: `phase_price_check`, called beside `destination_check`;
+  a catalog phase with no Stage 2 row refuses the run.
+- **Readers of the ice fraction** (ISRU feed, the per-body context, the
+  cargo-water bake) take the water phase through `_row_water_fraction`.
+- **Needs** Stage 2 at mineral_value 1.11.0 and a catalog at contract 1.7.0;
+  with an older catalog it runs the four-fraction model whatever the switch
+  says.
 
 # Measurement history
 

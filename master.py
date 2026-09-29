@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.37.0)
+"""Master Asteroid Profitability Pipeline (1.38.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -163,6 +163,7 @@ import hashlib
 import json
 import os
 import shutil
+import tempfile
 import warnings
 from dataclasses import dataclass
 from typing import Optional
@@ -235,7 +236,7 @@ class CatalogConfig:
     # reads, and moves every number downstream: record a repin in versions.md.
     # The published tags are listed at
     # https://github.com/loggger101/AsteroidCatalog/releases
-    catalog_release: str = "data-2026-09-27"
+    catalog_release: str = "data-2026-09-29"
 
     # Where release assets are downloaded from; the tag and the asset name are
     # appended.  Plumbing: change it only to point at a mirror.
@@ -269,7 +270,7 @@ class CatalogConfig:
     # only after the stages that read the catalog have been checked against the
     # new schema.  The record of what each contract changed is AsteroidCatalog's
     # CHANGELOG.md; this pipeline's is versions.md > Stage 1 changelog.
-    pipeline_version: str = "1.6.0"
+    pipeline_version: str = "1.7.0"
 
 
 # Instantiate and create the output dir.  Edit CATALOG_CONFIG values above this line
@@ -400,15 +401,18 @@ def _load_taxonomy(config: "CatalogConfig"):
     """
     path = os.path.join(config.output_dir, config.taxonomy_filename)
     if not os.path.isfile(path):
-        return {}, {}
+        return {}, {}, {}
     with open(path, encoding="utf-8") as fh:
         tables = json.load(fh)
-    return tables["TAXONOMY_COMPOSITION"], tables["PGM_ENRICHMENT_BY_TYPE"]
+    # PHASE_GROUP is absent before data contract 1.7.0: an empty vocabulary,
+    # which is what a catalog with no `comp_phases` column has.
+    return (tables["TAXONOMY_COMPOSITION"], tables["PGM_ENRICHMENT_BY_TYPE"],
+            tables.get("PHASE_GROUP", {}))
 
 
-# Updated IN PLACE after a download, so a caller holding a reference to either
-# dict sees the tables of the release that was just installed.
-TAXONOMY_COMPOSITION, PGM_ENRICHMENT_BY_TYPE = _load_taxonomy(CATALOG_CONFIG)
+# Updated IN PLACE after a download, so a caller holding a reference to any of
+# the three dicts sees the tables of the release that was just installed.
+TAXONOMY_COMPOSITION, PGM_ENRICHMENT_BY_TYPE, PHASE_GROUP = _load_taxonomy(CATALOG_CONFIG)
 
 
 def read_catalog(config: "CatalogConfig" = CATALOG_CONFIG) -> pd.DataFrame:
@@ -447,9 +451,13 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
                  manifest["pipeline_version"]))
         print("  Bodies    : {:,}".format(manifest["rows"]))
 
-        stage = os.path.join(config.output_dir, ".catalog_download")
-        shutil.rmtree(stage, ignore_errors=True)
-        os.makedirs(stage)
+        # A FRESH staging directory per install, never a fixed name.  A fixed
+        # `.catalog_download` was cleared with rmtree(ignore_errors=True) and
+        # then created, and on the Drive mount an EMPTY leftover can refuse
+        # deletion (WinError 5): the error was swallowed and `makedirs` died,
+        # so one interrupted install blocked every later one.  A unique name
+        # cannot collide, and the `finally` below still removes it.
+        stage = tempfile.mkdtemp(prefix=".catalog_download-", dir=config.output_dir)
         try:
             files = manifest["files"]
             for asset in (_ASSET_CATALOG, _ASSET_TAXONOMY, _ASSET_REJECTED):
@@ -490,11 +498,13 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
             shutil.rmtree(stage, ignore_errors=True)
         print("  OK  installed %s -> %s" % (config.catalog_release, catalog_path))
 
-    taxonomy, pgm = _load_taxonomy(config)
+    taxonomy, pgm, phases = _load_taxonomy(config)
     TAXONOMY_COMPOSITION.clear()
     TAXONOMY_COMPOSITION.update(taxonomy)
     PGM_ENRICHMENT_BY_TYPE.clear()
     PGM_ENRICHMENT_BY_TYPE.update(pgm)
+    PHASE_GROUP.clear()
+    PHASE_GROUP.update(phases)
 
     catalog = read_catalog(config)
     print("  OK  %s rows x %d columns" % ("{:,}".format(len(catalog)),
@@ -680,7 +690,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.10.0"
+    pipeline_version: str = "1.11.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -1033,6 +1043,14 @@ IN_SPACE_UTILITY: Dict[str, float] = {
     "awaruite":         0.70,
     "magnetite":        0.40,   # oxide, needs reduction before it is metal
     "troilite":         0.30,   # sulphur source, minor structural use
+    # v1.11.0.  Chromium and titanium are structural alloying metals, and
+    # take the structural discount; their ores, like magnetite, need reducing
+    # first.  Schreibersite is a metal phosphide and sits with the alloy.
+    "chromium":         0.70,
+    "titanium":         0.70,
+    "schreibersite":    0.70,
+    "chromite":         0.40,
+    "ilmenite":         0.40,
     # Silicates.  Usable as bulk radiation shielding and as 3-D-printing /
     # sintering feedstock, but a poor per-kg substitute for engineered
     # structure, and available in quantity from the Moon as well.
@@ -1042,6 +1060,18 @@ IN_SPACE_UTILITY: Dict[str, float] = {
     # Carbon and organics: composites, plastics, agriculture feedstock.
     "carbon":           0.40,
     "organics":         0.20,
+    # v1.11.0, the other volatiles and chemicals.  Ammonia is nitrogen, the
+    # element a closed habitat leaks and cannot make, plus a resistojet
+    # propellant; CO2 is the carbon feed for Sabatier methane.  Both are
+    # discounted off water's 1.00 because neither is the depot's main trade.
+    # Sulfur and phosphorus are process chemicals and fertiliser, by the kg.
+    "ammonia":          0.60,
+    "carbon dioxide":   0.30,
+    "carbonates":       0.25,   # the CO2 source, and otherwise shielding rock
+    "sulfur":           0.10,
+    "phosphorus":       0.10,
+    # Gallium, germanium, rhenium, tungsten and molybdenum stay at 0.00 with
+    # the precious metals: nobody in orbit buys them for their own sake.
     # Everything not listed, the precious metals above all, defaults to 0.0.
     # That does NOT make them worthless at a depot: a zero here means only
     # that nobody in orbit wants the material for its own sake, so it is
@@ -1148,6 +1178,13 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         # No chemical plant and no agriculture.
         "carbon":           0.05,
         "organics":         0.05,
+        # v1.11.0.  The same two arguments: no factory for the metals, and no
+        # crew, agriculture or chemistry for the rest.  Ammonia keeps some
+        # value as resistojet propellant, which is the business GEO is in.
+        "chromium":         0.15, "titanium":     0.15, "schreibersite": 0.15,
+        "chromite":         0.05, "ilmenite":     0.05, "carbonates":    0.05,
+        "ammonia":          0.40, "carbon dioxide": 0.05,
+        "sulfur":           0.05, "phosphorus":   0.05,
         # Precious metals stay at the base 0.00 and route down, as everywhere.
     },
     "cislunar": {},                  # base profile, no local resources
@@ -1192,7 +1229,15 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         "phyllosilicates":  0.03, "oxides":         0.03, "silicates":     0.03,
         # Carbon is one of the genuinely scarce elements on the Moon; 
         # solar-wind implantation leaves it at ~100 ppm, which is not a
-        # resource.  No discount.
+        # resource.  No discount.  v1.11.0: nor for CO2 or ammonia, the
+        # volatiles of carbon and nitrogen, which are scarcer still.
+        # v1.11.0.  Mare basalt is up to ~20 wt% ilmenite, the most studied
+        # lunar ore there is, so its titanium competes with local supply the
+        # way the regolith's iron does.
+        "titanium":         0.45,
+        "ilmenite":         0.03,
+        "chromite":         0.25,
+        "carbonates":       0.03,   # as rock; its CO2 is priced as CO2
         # Precious metals stay at the base 0.00 and route down; see the
         # rejected-change note above.
     },
@@ -1218,6 +1263,16 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         # onward feedstock, which is most of what "organics" would be for.
         "carbon":           0.02,
         "organics":         0.05,
+        # v1.11.0.  The same atmosphere is the CO2, and 2.8% of it is N2, the
+        # nitrogen an ammonia import would supply.  The crust is sulfate-rich
+        # (Curiosity, Opportunity), and its basalt is Fe-Ti-Cr oxide-bearing.
+        "carbon dioxide":   0.02,
+        "carbonates":       0.02,
+        "ammonia":          0.30,
+        "sulfur":           0.05,
+        "schreibersite":    0.40,
+        "chromite":         0.02,
+        "ilmenite":         0.02,
         # Precious metals stay at the base 0.00 and route down; see the
         # rejected-change note above.  At Mars that means zero: the $96,394/kg
         # downleg exceeds every terrestrial price in the catalog.
@@ -1265,6 +1320,18 @@ ANNUAL_WORLD_PRODUCTION_KG: Dict[str, float] = {
     "copper":         2.2e10,
     "nickel":         3.6e9,
     "iron":           1.3e12,     # world pig-iron production
+    # v1.11.0, USGS MCS 2025 world production for 2024, rounded
+    "germanium":      1.4e5,      # ~140 t refinery
+    "rhenium":        6.2e4,      # ~62 t
+    "gallium":        7.6e5,      # ~760 t primary
+    "tungsten":       8.1e7,      # ~81,000 t
+    "molybdenum":     2.6e8,      # ~260,000 t
+    "titanium":       3.0e8,      # ~300,000 t sponge
+    "chromium":       4.4e10,     # ~44 Mt chromite ore, the market it trades in
+    "phosphorus":     1.0e9,      # ~1 Mt elemental P4 (phosphate rock is 240 Mt)
+    "sulfur":         8.3e10,     # ~83 Mt
+    "ammonia":        1.8e11,     # ~150 Mt N as ammonia
+    "carbon dioxide": 2.3e11,     # ~230 Mt merchant CO2
     # Effectively unlimited on Earth
     "water":          1.0e15,
     "carbon":         1.0e12,
@@ -1360,6 +1427,16 @@ _COMMODITY_CLASS: Dict[str, str] = {
     # than 0.0005: 75,000 kg/yr at LEO against 250, a factor of 300.
     "sperrylite":      "trace",      "laurite":      "trace",
     "native-pgm":      "trace",
+    # v1.11.0.  Asserted below, so a row added without a class fails at import.
+    "chromium":        "structural", "titanium":     "structural",
+    "schreibersite":   "structural", "chromite":     "structural",
+    "ilmenite":        "structural",
+    "ammonia":         "propellant",
+    "carbon dioxide":  "chemical",   "carbonates":   "chemical",
+    "sulfur":          "chemical",   "phosphorus":   "chemical",
+    "gallium":         "trace",      "germanium":    "trace",
+    "rhenium":         "trace",      "tungsten":     "trace",
+    "molybdenum":      "trace",
 }
 
 # The bulk classes must partition the budget, or the "one import budget"
@@ -1439,6 +1516,24 @@ IN_SPACE_PROCESSING_KWH_PER_KG: Dict[str, float] = {
     "phyllosilicates":  1.0, "oxides":         1.0, "silicates":     1.0,
     "carbon":           2.0,
     "organics":         2.0,
+    # v1.11.0.  Order-of-magnitude process energies, as the rows above are:
+    #   ammonia, CO2       fractional distillation of the ice, like water
+    #   sulfur             melting and filtering
+    #   carbonates         calcination, ~0.5 kWh/kg of CaCO3 in a lime kiln
+    #   schreibersite      as the alloy it is, plus leaching out the P
+    #   chromite/ilmenite  oxide reduction, as magnetite
+    #   chromium           aluminothermic / electrolytic reduction
+    #   titanium           FFC-Cambridge electrolysis; Kroll runs 30-50
+    "ammonia":          0.5,
+    "carbon dioxide":   0.5,
+    "sulfur":           1.0,
+    "carbonates":       1.0,
+    "phosphorus":       8.0,
+    "schreibersite":    6.0,
+    "chromite":         7.0,
+    "ilmenite":         7.0,
+    "chromium":        10.0,
+    "titanium":        20.0,
 }
 
 
@@ -1522,6 +1617,33 @@ def in_space_price_usd_per_kg(
     if use_in_space is not None and use_in_space >= ship_to_earth:
         return max(0.0, use_in_space), "used in space"
     return max(0.0, ship_to_earth), "shipped to Earth"
+
+
+def _new_element(name: str, formula: str, density: float, price: float,
+                 notes: str) -> dict:
+    """A v1.11.0 element row: reference-priced, no live source.
+
+    One constructor for the eleven rows added with the mineral phases, so the
+    fields they all leave empty cannot be left out of one of them.
+    """
+    return {
+        "name":                  name,
+        "kind":                  "element",
+        "formula":               formula,
+        "density_gcm3":          density,
+        "yfinance_ticker":       None,
+        "yfinance_unit":         None,
+        "metals_dev_key":        None,
+        "ref_price_usd_per_kg":  price,
+        "ref_price_date":        _NEW_ROW_PRICE_DATE,
+        "notes":                 notes,
+    }
+
+
+# The publication date of USGS Mineral Commodity Summaries 2025, whose 2024
+# figures the v1.11.0 rows are the order of.  Not today's date, which would
+# claim a quote nobody took.
+_NEW_ROW_PRICE_DATE = "2025-01-31"
 
 
 MINERAL_REFERENCE: List[dict] = [
@@ -1711,6 +1833,64 @@ MINERAL_REFERENCE: List[dict] = [
     },
 
     # ══════════════════════════════════════════════════════════════════════
+    # ELEMENTS AND VOLATILES ADDED WITH THE MINERAL PHASES  (v1.11.0)
+    # ══════════════════════════════════════════════════════════════════════
+    # Module 1's catalog data contract 1.7.0 divides every body into mineral
+    # phases (`comp_phases`), and a phase is only worth what its products are
+    # worth.  These are the products the new phases yield that no row here
+    # priced: the sulfur in troilite, the phosphorus in schreibersite, the
+    # chromium in chromite, the titanium in ilmenite, the CO2 and ammonia of
+    # an outer-belt body's ices and a C-type's carbonates, and the trace
+    # metals of meteoritic Fe-Ni that were never in the alloy's yields.
+    #
+    # ⚠️  REFERENCE PRICES ONLY, NO LIVE TICKER, AND THEY ARE APPROXIMATE.
+    # None of these trades on a futures market this module reads.  Each is
+    # the order of the 2024 figure in USGS Mineral Commodity Summaries 2025
+    # (published 2025-01-31) where USGS carries one, and a trade price where
+    # it does not; the note says which.  They are the SOFT half of the value:
+    # at an in-space destination every row sold there is worth
+    # utility x launch cost avoided, thousands of $/kg, against which a $/kg
+    # terrestrial price is noise, and every row shipped home is worth its
+    # terrestrial price less a ~$25,000/kg downleg, which floors all five
+    # trace metals at zero anywhere but `earth_surface`.  That is the honest
+    # answer, not a gap: gallium is not worth flying down from a depot.
+    _new_element("sulfur", "S", 2.07, 0.10,
+                 "USGS MCS 2025 elemental sulfur, ~$80-100/t in 2024.  In "
+                 "space: sulfur concrete binder and sulfuric-acid leachant."),
+    _new_element("phosphorus", "P", 1.82, 3.00,
+                 "Elemental (P4) trade price, ~$3,000/t; USGS lists phosphate "
+                 "rock, not the element.  In space: fertiliser for agriculture."),
+    _new_element("chromium", "Cr", 7.19, 11.00,
+                 "Aluminothermic chromium metal, ~$10-12/kg (USGS MCS 2025 "
+                 "carries ferrochrome and metal).  Stainless alloying."),
+    _new_element("titanium", "Ti", 4.51, 9.00,
+                 "Titanium sponge, ~$7-10/kg (USGS MCS 2025 import unit "
+                 "value).  Structural."),
+    _new_element("gallium", "Ga", 5.91, 600.0,
+                 "High-purity gallium, 2024 ~$500-700/kg after China's export "
+                 "controls (USGS MCS 2025).  Iron meteorites carry 2-100 ppm."),
+    _new_element("germanium", "Ge", 5.32, 2500.0,
+                 "Zone-refined germanium, 2024 ~$2,000-3,000/kg (USGS MCS "
+                 "2025).  Siderophile: iron meteorites carry 0.1-500 ppm."),
+    _new_element("rhenium", "Re", 21.02, 1500.0,
+                 "Rhenium metal pellets, 2024 ~$1,200-1,600/kg (USGS MCS "
+                 "2025).  Highly siderophile, tracks osmium in meteoritic metal."),
+    _new_element("tungsten", "W", 19.25, 45.00,
+                 "APT ~$340/mtu in 2024 (USGS MCS 2025) = ~$43/kg of contained "
+                 "W (1 mtu = 10 kg WO3 = 7.93 kg W)."),
+    _new_element("molybdenum", "Mo", 10.28, 44.00,
+                 "Molybdic oxide ~$20/lb of contained Mo in 2024 (USGS MCS "
+                 "2025) = ~$44/kg."),
+    _new_element("carbon dioxide", "CO2", 1.56, 0.10,
+                 "Industrial liquid CO2, ~$50-150/t; not a USGS commodity.  "
+                 "Solid density.  In space: the carbon feed for Sabatier "
+                 "methane and a life-support buffer gas."),
+    _new_element("ammonia", "NH3", 0.82, 0.45,
+                 "Anhydrous ammonia, US Gulf ~$450/t in 2024 (USGS MCS 2025 "
+                 "nitrogen).  Solid density.  In space: nitrogen for "
+                 "atmospheres, fertiliser, and resistojet propellant."),
+
+    # ══════════════════════════════════════════════════════════════════════
     # MINERALS  (rock-forming compounds, priced via elemental yield)
     # ══════════════════════════════════════════════════════════════════════
     # `yields` maps mineral → {element_name: mass-fraction}.  Module 3 will
@@ -1748,6 +1928,18 @@ MINERAL_REFERENCE: List[dict] = [
             "osmium":    2.0e-6,   #  2 ppm   ★ NEW v1.1.2
             "rhodium":   1.5e-6,   #  1.5 ppm  ↓ from 2 (rebalanced for sum)
             "gold":      1.0e-6,   #  1 ppm
+            # v1.11.0: the rest of what meteoritic metal carries.  Order-of-
+            # magnitude means over the common iron groups (Scott & Wasson
+            # 1975; the group ranges span one to three decades): Cu 150-300
+            # ppm, Ga 2-100, Ge 0.1-500, Mo ~7, W ~1, Re 0.01-5.  They move
+            # the value only at `earth_surface`; in space every one of them
+            # ships home against a downleg it cannot pay.
+            "copper":     1.5e-4,  # 150 ppm
+            "germanium":  4.0e-5,  #  40 ppm (IIIAB ~40, IAB up to 500)
+            "gallium":    2.0e-5,  #  20 ppm (IIIAB ~20)
+            "molybdenum": 7.0e-6,  #   7 ppm
+            "tungsten":   1.0e-6,  #   1 ppm
+            "rhenium":    3.0e-7,  #   0.3 ppm
         },
         "notes":                 "Iron-meteorite analogue (IIIAB octahedrite mean) — "
                                  "Fe + Ni + trace PGMs + Au.  Total PGM ≈ 37 ppm matches "
@@ -1768,10 +1960,63 @@ MINERAL_REFERENCE: List[dict] = [
         "kind":                  "mineral",
         "formula":               "FeS",
         "density_gcm3":          4.61,
-        "yields": {"iron": 0.635},   # stoichiometric Fe in FeS
+        # Stoichiometric FeS: Fe 55.85, S 32.07.  v1.11.0 added the sulfur,
+        # which until then was "ignored (low value)"; at a depot it is not.
+        "yields": {"iron": 0.635, "sulfur": 0.365},
         "ref_price_usd_per_kg":  None,
         "ref_price_date":        None,
-        "notes":                 "Iron sulfide; sulfur ignored (low value).",
+        "notes":                 "Iron sulfide, standing for all Fe sulfides "
+                                 "(troilite, pyrrhotite).  Yields Fe and S.",
+    },
+    # ── v1.11.0: the accessory and metal phases Module 1 now names ─────────
+    {   # ── Schreibersite ────────────────────────────────────────────────
+        # (Fe,Ni)3P as Fe2NiP: Fe 111.70, Ni 58.69, P 30.97 of 201.36.
+        "name":                  "schreibersite",
+        "kind":                  "mineral",
+        "formula":               "(Fe,Ni)3P",
+        "density_gcm3":          7.40,
+        "yields": {"iron": 0.555, "nickel": 0.291, "phosphorus": 0.154},
+        "ref_price_usd_per_kg":  None,
+        "ref_price_date":        None,
+        "notes":                 "Fe-Ni phosphide, 1.5-3% of iron-meteorite and "
+                                 "enstatite-chondrite metal.  The phosphorus "
+                                 "source in an asteroid.",
+    },
+    {   # ── Chromite ─────────────────────────────────────────────────────
+        # FeCr2O4: Fe 55.85, Cr 104.00, O 64.00 of 223.84.
+        "name":                  "chromite",
+        "kind":                  "mineral",
+        "formula":               "FeCr2O4",
+        "density_gcm3":          4.79,
+        "yields": {"chromium": 0.465, "iron": 0.250},
+        "ref_price_usd_per_kg":  None,
+        "ref_price_date":        None,
+        "notes":                 "Cr-Fe spinel oxide; ~0.5 wt% of ordinary "
+                                 "chondrites, ~1% of HEDs.",
+    },
+    {   # ── Ilmenite ─────────────────────────────────────────────────────
+        # FeTiO3: Fe 55.85, Ti 47.87, O 48.00 of 151.71.
+        "name":                  "ilmenite",
+        "kind":                  "mineral",
+        "formula":               "FeTiO3",
+        "density_gcm3":          4.72,
+        "yields": {"titanium": 0.316, "iron": 0.368},
+        "ref_price_usd_per_kg":  None,
+        "ref_price_date":        None,
+        "notes":                 "Fe-Ti oxide; ~1 wt% of eucrites.  The same "
+                                 "mineral lunar ISRU plans reduce for oxygen.",
+    },
+    {   # ── Carbonates ───────────────────────────────────────────────────
+        # CO2 is 44.0% of calcite, 47.7% of dolomite: the calcite figure.
+        "name":                  "carbonates",
+        "kind":                  "mineral",
+        "formula":               "(Ca,Mg,Fe)CO3",
+        "density_gcm3":          2.80,
+        "yields": {"carbon dioxide": 0.44},
+        "ref_price_usd_per_kg":  0.02,           # crushed limestone
+        "ref_price_date":        _NEW_ROW_PRICE_DATE,
+        "notes":                 "Calcite, dolomite, breunnerite: 2-5 wt% of CI "
+                                 "chondrites.  Calcining releases the CO2.",
     },
 
     # ══════════════════════════════════════════════════════════════════════
@@ -1938,10 +2183,16 @@ MINERAL_REFERENCE: List[dict] = [
         "kind":                  "mineral",
         "formula":               "(varies)",
         "density_gcm3":          2.60,
-        "yields": {"water": 0.10},               # CM2-class bound-water content
+        # v1.11.0: NO WATER YIELD.  It read {"water": 0.10}, the CM2 bound
+        # water, and nothing had ever read it.  Module 1's catalog carries a
+        # hydrated class's water in its ICE fraction, and every class with
+        # phyllosilicates has one, so pricing the clay's water as well counts
+        # the same kilogram twice the moment a consumer walks the phases.
+        "yields": {},
         "ref_price_usd_per_kg":  0.05,
         "ref_price_date":        _REF_PRICE_DATE,
-        "notes":                 "Hydrated clays; valued for releasable bound water.",
+        "notes":                 "Hydrated clays, priced as dehydrated rock: their "
+                                 "bound water is the catalog's ice fraction.",
     },
     {   # ── Oxides (generic) ─────────────────────────────────────────────
         "name":                  "oxides",
@@ -2259,6 +2510,19 @@ def apply_delivery_destination(
     catalog["downleg_cost_usd_per_kg"] = downleg
     catalog["in_space_processing_usd_per_kg"] = [
         in_space_processing_cost_usd_per_kg(str(n)) for n in catalog["name"]
+    ]
+    # v1.11.0: what a refinery FLOWN on the mission would need, so Stage 4 can
+    # charge the energy through the rocket equation instead of taking the
+    # deduction above out of the price: the energy per kg of this row's raw
+    # feedstock, and the price before that deduction.  Written ahead of the
+    # Stage 4 release that reads them, so Stage 2 is re-fetched once, not
+    # twice.
+    catalog["refining_kwh_per_kg"] = [
+        float(IN_SPACE_PROCESSING_KWH_PER_KG.get(str(n), 0.0)) for n in catalog["name"]
+    ]
+    catalog["price_before_processing_usd_per_kg"] = [
+        (float(p) + float(c)) if (r == "used in space" and pd.notna(p)) else p
+        for p, c, r in zip(new_price, catalog["in_space_processing_usd_per_kg"], routes)
     ]
     catalog["value_route"]     = routes
     catalog["price_usd_per_kg"] = new_price
@@ -3051,6 +3315,21 @@ class CalcConfig:
     # Set False for the raw cell (26.7863x), which is what most of the older
     # tables in versions.md were measured at.
     use_beneficiation:         bool  = True
+
+    # Sell the body as the MINERALS it is made of (v1.24.0), read from Module
+    # 1's `comp_phases` column (catalog data contract 1.7.0), instead of as
+    # four coarse fractions.  An S-type then carries olivine, two pyroxenes,
+    # plagioclase, troilite and chromite rather than one "silicates" row; a
+    # C-type its phyllosilicates, magnetite, sulfide and carbonate; an
+    # outer-belt body CO2 and ammonia ice as well as water.  Each phase is
+    # worth the better of selling it as it is and refining it into its Stage 2
+    # yields, and the knapsack can load, and beneficiation concentrate, each one
+    # separately.  The four coarse columns are unchanged and the phases add
+    # back to them.  False drops the column at load, which is the pre-1.24.0
+    # model exactly; a catalog older than contract 1.7.0 has no column and
+    # runs that model whatever this says.  It needs Stage 2 at mineral_value
+    # 1.11.0 or later, which prices the new phases: an older one is refused.
+    model_mineral_phases:      bool  = True
     # Fraction of the valuable phase that actually reports to concentrate.
     # Terrestrial PGM / sulphide flotation circuits run 85-95%; magnetic
     # separation of a metal phase from silicate gangue is mechanically simpler
@@ -3802,7 +4081,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.23.0"
+    pipeline_version: str = "1.24.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -4194,6 +4473,23 @@ def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
         "load_all_catalogs and _CATALOG_PROVENANCE disagree about: %s"
         % sorted(set(catalogs) ^ set(_CATALOG_PROVENANCE)))
 
+    # v1.24.0: the phase switch is decided HERE, once, rather than in every
+    # function that values a body.  With it off the column is gone, so each of
+    # them takes the pre-1.24.0 branch, and no entry point that loads through
+    # this function can run half of each model.
+    if not getattr(config, "model_mineral_phases", True) and \
+            _PHASES_COL in catalogs["asteroids"].columns:
+        catalogs["asteroids"] = catalogs["asteroids"].drop(columns=[_PHASES_COL])
+        print(f"       model_mineral_phases off: {_PHASES_COL} ignored, "
+              f"four coarse fractions only")
+    elif _PHASES_COL in catalogs["asteroids"].columns:
+        # ~29 distinct JSON strings across 1.57 M rows: 367 MB as one Python
+        # string per row, 1.6 MB as a category (measured on data-2026-09-29),
+        # and ~2 s of the read either way.  Same values, so no answer moves;
+        # a row still hands `_row_phases` a str, or NaN for Unknown.
+        catalogs["asteroids"][_PHASES_COL] = (
+            catalogs["asteroids"][_PHASES_COL].astype("category"))
+
     # Parse Module 1's comp_minerals list-column back into actual lists
     if "comp_minerals" in catalogs["asteroids"].columns:
         catalogs["asteroids"]["comp_minerals"] = _parse_minerals_column(
@@ -4268,6 +4564,41 @@ def destination_check(catalogs: Dict[str, pd.DataFrame], config: CalcConfig) -> 
     print(f"          MINERAL_CONFIG.delivery_destination and")
     print(f"          CALC_CONFIG.delivery_destination to the same value and")
     print(f"          re-run Module 2 before Module 4.")
+
+
+def phase_price_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
+    """Every mineral phase the catalog names has a Stage 2 price (v1.24.0).
+
+    Defect class 1 in its purest form: a phase with a mass in the catalog and
+    no row in Stage 2 would be skipped by the valuation, and its mass would
+    fall into the residual at the bulk-silicate floor -- troilite valued as
+    rock, CO2 ice as rock -- with nothing anywhere saying so.  So a missing
+    phase REFUSES the run, naming each phase and both ways out, rather than
+    producing a hybrid of the two models that nobody designed.
+
+    True when there is nothing to check: no `comp_phases` column (an older
+    catalog, or `model_mineral_phases` off).
+    """
+    asteroids = catalogs["asteroids"]
+    if _PHASES_COL not in asteroids.columns:
+        return True
+    names: set = set()
+    for text in asteroids[_PHASES_COL].dropna().unique():
+        if isinstance(text, str) and text:
+            names.update(phase for phase, _frac in _parse_phases(text))
+    priced = set(str(n) for n in catalogs["minerals"]["name"])
+    missing = sorted(names - priced)
+    if not missing:
+        print(f"     OK  Mineral phases: {len(names)} named by the catalog, "
+              f"all priced by Stage 2")
+        return True
+    print(f"\nFAIL  {len(missing)} mineral phase(s) in the catalog have no "
+          f"Stage 2 price: {missing}")
+    print("     Stage 2 at mineral_value 1.11.0 or later prices them.  Either "
+          "re-run Stage 2 (it re-fetches live prices), or set "
+          "CALC_CONFIG.model_mineral_phases = False for the four-fraction "
+          "model.  Aborting.")
+    return False
 
 
 def integrity_check(catalogs: Dict[str, pd.DataFrame]) -> None:
@@ -4660,6 +4991,87 @@ FRACTION_TO_MINERAL: Dict[str, str] = {
 }
 
 
+# ─── MINERAL PHASES  (v1.24.0) ───────────────────────────────────────────────
+# Module 1 (catalog data contract 1.7.0) divides each body into the minerals
+# its four coarse fractions are made of: `comp_phases`, a JSON object of mass
+# fractions by phase name, spelled as Stage 2 spells its rows.  When a row
+# carries it, the three valuation functions below walk the PHASES instead of
+# FRACTION_TO_MINERAL.  The phases of each coarse group add back to that group's
+# fraction (AsteroidCatalog's tests hold it), and the accessory phases --
+# troilite, magnetite, chromite, ilmenite, spinel, carbonates -- are carved out
+# of the residual, so the "other (bulk silicate)" floor gets smaller.
+_PHASES_COL = "comp_phases"
+
+
+# ⚠️  `maxsize=None` IS SAFE HERE AND NAMED AS SUCH: the key is the JSON
+# string, one per taxonomy row Module 1 reads (a few dozen), whatever the size
+# of the catalog.  That is the rule "Where a cache is safe" gives: unbounded
+# exactly when you can name the ceiling.
+@functools.lru_cache(maxsize=None)
+def _parse_phases(text: str) -> Tuple[Tuple[str, float], ...]:
+    """(phase, fraction) pairs from one `comp_phases` cell, zeros dropped.
+
+    A tuple, so the cached value cannot be mutated by a caller.  Order is the
+    catalog's, which is fixed per class (group, then table order).
+    """
+    return tuple((str(name), float(frac))
+                 for name, frac in json.loads(text).items() if float(frac) > 0.0)
+
+
+def _row_phases(asteroid_row: Row) -> Optional[Tuple[Tuple[str, float], ...]]:
+    """The row's phases, or None when it has none (older catalog, switch off,
+    or an Unknown-class body, whose cell is empty)."""
+    text = asteroid_row.get(_PHASES_COL)
+    if isinstance(text, str) and text:
+        return _parse_phases(text)
+    return None
+
+
+def _row_water_fraction(asteroid_row: Row) -> float:
+    """Mass fraction of the body that is WATER, which is not always all its ice.
+
+    v1.24.0.  Three readers took `comp_ice_fraction` as water: ISRU feed, the
+    per-body context, and the cargo-water bake.  For a hydrated C-type that is
+    right, its "ice" is bound water.  For D, Z, P and T the phases split the
+    ice into water, CO2 and ammonia, and reading all of it as water would make
+    propellant out of carbon dioxide.  Without phases, the old reading stands.
+    """
+    phases = _row_phases(asteroid_row)
+    if phases is not None:
+        for name, frac in phases:
+            if name == "water":
+                return frac
+        return 0.0
+    ice = asteroid_row.get("comp_ice_fraction")
+    if ice is None or pd.isna(ice):
+        return 0.0
+    return float(ice)
+
+
+def _phase_value(
+    mineral_df: pd.DataFrame, phase: str, pgm_enrichment: float,
+) -> Optional[float]:
+    """$/kg of one phase: the better of selling it AS IT IS, or REFINED.
+
+    v1.24.0.  A mineral row in Stage 2 has two prices and until now Stage 4
+    read one.  Its own `price_usd_per_kg` is the mineral used for itself --
+    olivine as shielding rock, troilite as a sulfide.  Its yields are what it
+    is worth taken apart -- olivine's 10% iron, troilite's iron and sulfur.
+    `_mineral_implied_value` returns the yields whenever there are any, so
+    olivine was worth its iron and nothing for the 90% that is rock: fine while
+    nothing read olivine, and wrong the moment the phases do.  A buyer does the
+    better of the two, so the value is the larger.  Enrichment scales only the
+    rare-metal yields, in whichever phase carries them.
+
+    Only the phase walk uses this.  The four-fraction walk keeps
+    `_mineral_implied_value`, so switching phases off is the old model exactly.
+    """
+    refined = _mineral_implied_value(mineral_df, phase, pgm_enrichment)
+    as_is = _mineral_price(mineral_df, phase)
+    values = [v for v in (refined, as_is) if v is not None]
+    return max(values) if values else None
+
+
 # ── Composition is a per-TAXONOMY fact, not a per-row one  (v1.17.6) ────────
 # `asteroid_bulk_value_usd_per_kg`, `asteroid_phase_table` and
 # `asteroid_best_phase_usd_per_kg` read exactly five values off the row, the
@@ -4782,6 +5194,12 @@ def _composition_key(asteroid_row: Row) -> Optional[Tuple[Any, ...]]:
             key.append(float(v))
         else:
             return None
+    # v1.24.0: the phases decide the answer too, so they are part of the key.
+    # The JSON string itself: a few dozen distinct values, and two rows share
+    # an answer exactly when they share it.  None when absent, so a row
+    # without phases keys exactly as before.
+    text = asteroid_row.get(_PHASES_COL)
+    key.append(text if isinstance(text, str) and text else None)
     return tuple(key)
 
 
@@ -4813,6 +5231,15 @@ def _phase_prices(
     every release here is argued from; see the v1.14.2 phase-sort warning.
     """
     pgm_enrichment = _pgm_enrichment(asteroid_row)
+    phases = _row_phases(asteroid_row)
+    if phases is not None:
+        # v1.24.0: the minerals, each at the better of as-is and refined.
+        for name, frac in phases:
+            price = _phase_value(mineral_df, name, pgm_enrichment)
+            if price is None:
+                continue
+            yield name, frac, float(price)
+        return
     for frac_col, mineral_name in FRACTION_TO_MINERAL.items():
         frac = asteroid_row.get(frac_col)
         if frac is None or pd.isna(frac) or float(frac) <= 0.0:
@@ -4857,7 +5284,16 @@ def asteroid_bulk_value_usd_per_kg(
 
     total    = 0.0
     frac_sum = 0.0
-    for frac_col, mineral_name in FRACTION_TO_MINERAL.items():
+    # v1.24.0: with phases, blend the phases instead of the four fractions.
+    # `_phase_prices` skips a zero fraction where the four-fraction loop admits
+    # one; a phase list carries no zeros, so the two agree on everything this
+    # branch can be handed.
+    with_phases = _row_phases(asteroid_row) is not None
+    if with_phases:
+        for _name, f, price in _phase_prices(asteroid_row, mineral_df):
+            total    += f * price
+            frac_sum += f
+    for frac_col, mineral_name in (() if with_phases else FRACTION_TO_MINERAL.items()):
         frac = asteroid_row.get(frac_col)
         if frac is None or pd.isna(frac):
             continue
@@ -6012,9 +6448,7 @@ def _cargo_water_kg(
             want_phase="water",
         ))
     if ice_frac is None:
-        ice_frac = asteroid_row.get("comp_ice_fraction")
-        if ice_frac is None or pd.isna(ice_frac):
-            return 0.0
+        ice_frac = _row_water_fraction(asteroid_row)   # v1.24.0
     return payload_kg * float(ice_frac)
 
 
@@ -6925,8 +7359,9 @@ def isru_feed_kg_per_kg_propellant(
         # separation loss, because nothing is being separated.
         return ratio
 
-    ice_frac = asteroid_row.get("comp_ice_fraction")
-    if ice_frac is None or pd.isna(ice_frac) or float(ice_frac) <= 0.0:
+    # v1.24.0: the WATER fraction, not all the ice; see _row_water_fraction.
+    ice_frac = _row_water_fraction(asteroid_row)
+    if ice_frac <= 0.0:
         return None
 
     recovery = max(1e-6, min(1.0, config.beneficiation_recovery))
@@ -9295,9 +9730,7 @@ def asteroid_context(
         storage_wh_per_kg, storage_eta, baseline_dark_h,
     )
 
-    ice_frac = asteroid_row.get("comp_ice_fraction")
-    ice_frac = (0.0 if ice_frac is None or pd.isna(ice_frac)
-                else float(ice_frac))
+    ice_frac = _row_water_fraction(asteroid_row)      # v1.24.0: water, not all ice
 
     return AsteroidContext(
         mineable_kg           = float(asteroid_mass) * config.max_mining_fraction,
@@ -11487,6 +11920,12 @@ def evaluate_asteroid(
         "comp_carbon_fraction":     asteroid_row.get("comp_carbon_fraction"),
         "comp_ice_fraction":        asteroid_row.get("comp_ice_fraction"),
         "comp_pgm_enrichment":      asteroid_row.get("comp_pgm_enrichment"),
+        # v1.24.0: whether THIS row was valued by its mineral phases.  It
+        # describes the run as much as the body -- `model_mineral_phases` and
+        # the catalog's contract both decide it -- and it is not recoverable
+        # from any other column, so a reader re-deriving the row (the worked
+        # calculation) is told rather than left to infer it from the config.
+        "mineral_phases":           _row_phases(asteroid_row) is not None,
     })
 
     return best
@@ -11767,6 +12206,8 @@ def build_profitability_catalog(config: CalcConfig = CALC_CONFIG) -> pd.DataFram
     integrity_check(catalogs)
     destination_check(catalogs, config)
     market_config_check(config)
+    if not phase_price_check(catalogs):
+        return pd.DataFrame()
 
     # ── Step 3, Iterate asteroids ───────────────────────────────────────────
     asteroids = catalogs["asteroids"]
@@ -12227,7 +12668,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.37.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.38.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

@@ -210,7 +210,7 @@ frozen catalog, gated before it is published (every source must have
 contributed, the stamps must be current, and it must not have shrunk) and
 checksummed.
 
-Stage 1 installs **one pinned release**. The pinned catalog release is `data-2026-09-27` (data contract 1.6.0),
+Stage 1 installs **one pinned release**. The pinned catalog release is `data-2026-09-29` (data contract 1.7.0),
 set by `CatalogConfig.catalog_release` in `modules/catalog.py`. Stage 1
 downloads the release's manifest, refuses it unless it is this pipeline's data
 contract (`CatalogConfig.pipeline_version`), downloads the gzipped catalog and
@@ -247,10 +247,10 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
-| 1 | `modules/catalog.py` | 1.6.0 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition. Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
-| 2 | `modules/mineral_value.py` | 1.10.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
+| 1 | `modules/catalog.py` | 1.7.0 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of. Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
+| 2 | `modules/mineral_value.py` | 1.11.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.17.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
-| 4 | `modules/calc.py` | 1.23.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.24.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -559,9 +559,11 @@ full `master.py` at least once, or run stages 1-3 individually first.
 > not a coffee break; budget an afternoon, and cap Stage 4's rows for anything
 > interactive.
 
-- **Stage 1** downloads the pinned catalog release once: a **~290 MB** gzip
-  that decompresses to a **~1.4 GB** CSV (the `data-2026-09-27` release:
-  1,568,641 bodies, 100 columns), checksummed before it replaces anything.
+- **Stage 1** downloads the pinned catalog release once: a **~310 MB** gzip
+  that decompresses to a **~1.8 GB** CSV (the `data-2026-09-29` release:
+  1,568,748 bodies, 101 columns; the `comp_phases` column added at 1.7.0 is
+  ~320 MB of it), checksummed before it replaces anything. Installing it on
+  2026-09-29 took **2 min 33 s** end to end.
   Measured on `data-2026-09-23` (2026-09-23), the install from GitHub took
   **48 s** end to end; a re-run at the same pin downloads nothing and takes
   ~30 s, the checksum and the CSV read.
@@ -620,7 +622,7 @@ that actually move the answer:
 | `.calc.mining_rate_kg_per_day_per_kg_rig` | `0.10` | Extraction throughput per kg of rig; caps payload and sets time at the asteroid |
 | `.calc.max_mining_duration_yr` | `3.0` | Ceiling on time at the asteroid, binds how much you can return |
 | `.calc.nre_recurring_overlap_fraction` | `0.30` | Development share already inside the per-kg recurring rate; `0.0` books both in full |
-| `.catalog.catalog_release` | `"data-2026-09-27"` | Which published catalog build Stage 1 installs. Changing it replaces the catalog every stage reads and moves every result; record a repin in versions.md. See [Stage 1 downloads the catalog](#stage-1-downloads-the-catalog-it-does-not-build-it) |
+| `.catalog.catalog_release` | `"data-2026-09-29"` | Which published catalog build Stage 1 installs. Changing it replaces the catalog every stage reads and moves every result; record a repin in versions.md. See [Stage 1 downloads the catalog](#stage-1-downloads-the-catalog-it-does-not-build-it) |
 | `.calc.eval_row_cap` | `0` | Stage-4 evaluation cap; `0` evaluates every row. Was `5_000`, which discarded 99.7% of a v1.1.0 catalog |
 | `.calc.eval_row_sampling` | `"stride"` | How a cap picks rows. `"stride"` samples the whole belt evenly; `"head"` is the pre-v1.13.0 innermost-N behaviour |
 | `.calc.parallel_workers` | `0` | Stage-4 worker processes. `0` picks a count from the CPU count and the amount of work; `1` forces the single-core path. See [Parallel evaluation](#parallel-evaluation) |
@@ -631,6 +633,7 @@ that actually move the answer:
 | `.calc.model_tank_mass` | `True` | Put propellant tankage in the rocket equation. Tank mass scales with volume, so this is what stops low-density propellants flying their tanks for free |
 | `.calc.allow_rtg_power` | `True` | Let the processing plant use radioisotope power where it is lighter than solar (past 3.46 AU), capped by `rtg_max_power_w` |
 | `.calc.charge_tanker_flights` | `True` | Charge the orbital-refuelling flights a vehicle's escape payload assumes |
+| `.calc.model_mineral_phases` | `True` | Sell a body as the MINERALS it is made of (Stage 1's `comp_phases`) rather than as four coarse fractions: each phase at the better of its own price and the value of its elements. **Default since calc v1.24.0**; `False` is the earlier model to the bit. See [What the rock is made of](#what-the-rock-is-made-of) |
 | `.calc.charge_insurance` | `False` | Charge Module 3's two insurance premiums: a $1.5M third-party liability flat and launch insurance at 10% of (launch + spacecraft book value). **Off since calc v1.20.0** because a premium is priced off an underwriter's book rather than off a mass; every table measured before it is a `True` run. See [What the model deliberately does not charge for](#what-the-model-deliberately-does-not-charge-for) |
 | `.calc.optimise_architecture_per_asteroid` | `True` | Search return mode and propellant sourcing per target rather than fixing them catalog-wide |
 | `.calc.selection_objective` | `"cost_revenue_ratio"` | What the per-asteroid search maximises. `"profit"` restores pre-v1.10.0 behaviour |
@@ -1385,6 +1388,49 @@ Setting only one is the classic error; it prices the cargo at a depot while
 still paying to land it in Utah. Stage 4's `destination_check()` refuses to
 let that pass quietly.
 
+### What the rock is made of
+
+**Since calc v1.24.0 a body is mined and sold as the minerals it is made of.**
+Stage 1's catalog (data contract 1.7.0) divides each class's four coarse
+fractions into phases, from the class's meteorite analogue: an S-type is
+olivine, two pyroxenes, plagioclase and metal, plus the troilite and chromite
+that sit in what the four fractions leave; a C-type is phyllosilicates,
+magnetite, sulfide and carbonate with its water; an outer-belt D-type's ice is
+water, carbon dioxide and ammonia. Stage 2 prices what each phase yields:
+sulfur, phosphorus, chromium, titanium, CO2, ammonia, and the trace metals of
+meteoritic iron (copper, germanium, gallium, molybdenum, tungsten, rhenium).
+
+**A phase is worth the better of two prices**: its own row, the mineral used as
+it is (olivine as shielding rock), and the value of its elements, the mineral
+taken apart (troilite for its iron and sulfur). The knapsack loads each phase
+separately, so a concentrating mission can now carry troilite or chromite
+beside its metal.
+
+Measured on `verify.py`'s four cislunar cells, the phases against the four
+fractions on identical inputs. The switch off reproduces the previous model to
+the bit on all four:
+
+| cell | median body | best row |
+|---|---|---|
+| raw, N = 1 | **5.35% better** | 9.1000x to 8.9791x |
+| raw, searched | **7.87% better** | 6.9929x to 6.6904x |
+| beneficiated, N = 1 | **17.23% better** | 24.2785x to 21.8083x |
+| default, beneficiated and searched | **11.29% better** | 16.3739x to 13.2109x |
+
+On the default cell the winner's hold goes from metal, silicate and carbon to
+**metal, troilite, chromite and carbon**, and a delivered kilogram is worth 23%
+more. It is not a uniform lift: **D-types get worse**, because their carbon is
+part soluble organics and their ice part CO2 and ammonia, each worth less than
+the water it used to be counted as. At `earth_surface`, where rock is worth
+cents, chromium makes chromite the best phase of an S-type.
+
+⚠️  The trace metals are worth **nothing** at an in-space destination: none
+is wanted there, and flying a kilogram of gallium home costs more than it
+fetches. They count at `earth_surface` only. The new reference prices are the
+order of USGS's 2024 figures and are approximate. These are samples; see
+[versions.md](versions.md#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240)
+for the full record.
+
 ### What a kilogram is worth
 
 In-space prices are the launch cost avoided, **derived** rather than
@@ -1889,6 +1935,12 @@ cell**, they do not act in the same proportion on either, and one of them
 ratio.** Every number in this matrix is still a measurement of the model it
 names, which is why it is kept rather than deleted, and it is the only
 seven-destination measurement the project has.
+
+🚨  **AND CALC v1.24.0 SELLS A BODY AS ITS MINERALS.** Every cell below
+valued four coarse fractions; set `CALC_CONFIG.model_mineral_phases = False`
+as well to reproduce one. The phases move the median body by several percent
+and the best by more, in both directions by class; see
+[What the rock is made of](#what-the-rock-is-made-of).
 
 ✅  **THE WHOLE CISLUNAR 2x2 HAS BEEN RE-RUN AT THE CURRENT DEFAULTS.** A
 configure-nothing run answers **3.1822x**, and the four cells are 2.09x to
@@ -2895,7 +2947,7 @@ most here, because the model's mass, and so its ranking, rests on them:
 | `diameter_source` | `measured`, `derived_mass`, `derived_h_measured_albedo`, `derived_h_taxonomy_albedo`, `derived_h_orbit_albedo` | only `measured` is a size somebody observed; `derived_mass` is sized from a measured mass at the class density (data contract 1.4.0); the three `derived_h_*` are sized from H and an albedo |
 | `spectral_type_source` | `source`, `tholen`, `albedo`, `albedo_assumed`, `orbit`, `unknown` | only `source` and `tholen` rest on a spectrum; `orbit` types an untyped body from the Trojans outward as D (data contract 1.4.0) |
 
-In `data-2026-09-27`, **149,718** of 1,568,641 bodies have a measured diameter
+In `data-2026-09-29`, **149,718** of 1,568,748 bodies have a measured diameter
 and 171,109 a taxonomy from a source; the rest are inferred. ⚠️  **Mass is the
 exposed quantity**: D scales as `p_V^-0.5` and mass as `p_V^-1.5`, so a
 factor-2 albedo error is a factor-2.8 mass error. Filter on

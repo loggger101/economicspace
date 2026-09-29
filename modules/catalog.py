@@ -30,10 +30,12 @@ WHAT THIS FILE STILL OWNS:
                         where the files land.  `ui_meta` scrapes each field's
                         comment block as the dashboard's help text, so the
                         comments here are UI copy and not just commentary
-    TAXONOMY_COMPOSITION / PGM_ENRICHMENT_BY_TYPE
+    TAXONOMY_COMPOSITION / PGM_ENRICHMENT_BY_TYPE / PHASE_GROUP
                         read from the release's `taxonomy.json`: the tables
                         the catalog was BUILT with, not whatever a locally
-                        installed package happens to hold
+                        installed package happens to hold.  PHASE_GROUP
+                        (data contract 1.7.0) names every mineral phase the
+                        `comp_phases` column may carry
     the RUN & PREVIEW   the standalone-module behaviour every stage here has,
                         including the overwrite guard
 
@@ -96,6 +98,7 @@ import hashlib
 import json
 import os
 import shutil
+import tempfile
 import warnings
 from dataclasses import dataclass
 from typing import Optional
@@ -168,7 +171,7 @@ class CatalogConfig:
     # reads, and moves every number downstream: record a repin in versions.md.
     # The published tags are listed at
     # https://github.com/loggger101/AsteroidCatalog/releases
-    catalog_release: str = "data-2026-09-27"
+    catalog_release: str = "data-2026-09-29"
 
     # Where release assets are downloaded from; the tag and the asset name are
     # appended.  Plumbing: change it only to point at a mirror.
@@ -202,7 +205,7 @@ class CatalogConfig:
     # only after the stages that read the catalog have been checked against the
     # new schema.  The record of what each contract changed is AsteroidCatalog's
     # CHANGELOG.md; this pipeline's is versions.md > Stage 1 changelog.
-    pipeline_version: str = "1.6.0"
+    pipeline_version: str = "1.7.0"
 
 
 # Instantiate and create the output dir.  Edit CONFIG values above this line
@@ -333,15 +336,18 @@ def _load_taxonomy(config: "CatalogConfig"):
     """
     path = os.path.join(config.output_dir, config.taxonomy_filename)
     if not os.path.isfile(path):
-        return {}, {}
+        return {}, {}, {}
     with open(path, encoding="utf-8") as fh:
         tables = json.load(fh)
-    return tables["TAXONOMY_COMPOSITION"], tables["PGM_ENRICHMENT_BY_TYPE"]
+    # PHASE_GROUP is absent before data contract 1.7.0: an empty vocabulary,
+    # which is what a catalog with no `comp_phases` column has.
+    return (tables["TAXONOMY_COMPOSITION"], tables["PGM_ENRICHMENT_BY_TYPE"],
+            tables.get("PHASE_GROUP", {}))
 
 
-# Updated IN PLACE after a download, so a caller holding a reference to either
-# dict sees the tables of the release that was just installed.
-TAXONOMY_COMPOSITION, PGM_ENRICHMENT_BY_TYPE = _load_taxonomy(CONFIG)
+# Updated IN PLACE after a download, so a caller holding a reference to any of
+# the three dicts sees the tables of the release that was just installed.
+TAXONOMY_COMPOSITION, PGM_ENRICHMENT_BY_TYPE, PHASE_GROUP = _load_taxonomy(CONFIG)
 
 
 def read_catalog(config: "CatalogConfig" = CONFIG) -> pd.DataFrame:
@@ -380,9 +386,13 @@ def build_catalog(config: CatalogConfig = CONFIG) -> pd.DataFrame:
                  manifest["pipeline_version"]))
         print("  Bodies    : {:,}".format(manifest["rows"]))
 
-        stage = os.path.join(config.output_dir, ".catalog_download")
-        shutil.rmtree(stage, ignore_errors=True)
-        os.makedirs(stage)
+        # A FRESH staging directory per install, never a fixed name.  A fixed
+        # `.catalog_download` was cleared with rmtree(ignore_errors=True) and
+        # then created, and on the Drive mount an EMPTY leftover can refuse
+        # deletion (WinError 5): the error was swallowed and `makedirs` died,
+        # so one interrupted install blocked every later one.  A unique name
+        # cannot collide, and the `finally` below still removes it.
+        stage = tempfile.mkdtemp(prefix=".catalog_download-", dir=config.output_dir)
         try:
             files = manifest["files"]
             for asset in (_ASSET_CATALOG, _ASSET_TAXONOMY, _ASSET_REJECTED):
@@ -423,11 +433,13 @@ def build_catalog(config: CatalogConfig = CONFIG) -> pd.DataFrame:
             shutil.rmtree(stage, ignore_errors=True)
         print("  OK  installed %s -> %s" % (config.catalog_release, catalog_path))
 
-    taxonomy, pgm = _load_taxonomy(config)
+    taxonomy, pgm, phases = _load_taxonomy(config)
     TAXONOMY_COMPOSITION.clear()
     TAXONOMY_COMPOSITION.update(taxonomy)
     PGM_ENRICHMENT_BY_TYPE.clear()
     PGM_ENRICHMENT_BY_TYPE.update(pgm)
+    PHASE_GROUP.clear()
+    PHASE_GROUP.update(phases)
 
     catalog = read_catalog(config)
     print("  OK  %s rows x %d columns" % ("{:,}".format(len(catalog)),
