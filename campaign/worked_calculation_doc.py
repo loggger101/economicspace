@@ -921,6 +921,13 @@ def s_composition(out):
     best = max(p[2] for p in C["phases"])
     out_html = [
         sec("composition"),
+        para("This body is valued by its <strong>mineral phases</strong>, "
+             "Module 1's <em>comp_phases</em>: each of the four taxonomy "
+             "fractions divided into the minerals it is made of, and the "
+             "sulfides, oxides and carbonates carved out of what the four "
+             "leave. The phases of each group add back to its fraction, so "
+             "this is detail rather than a second composition.")
+        if C.get("phased") else "",
         para("The taxonomy fractions are priced separately rather than "
              "blended, because a concentrating mission chooses between them. "
              "Across the %d classes Module 1 gives fractions for they sum to "
@@ -1046,7 +1053,12 @@ def s_composition(out):
         price_rows = []
         for name, _frac, price in sorted(C["phases"], key=lambda p: -p[2]):
             part = parts.get(name)
-            if part is None or name == "nickel-iron":
+            # A phase priced from its YIELDS has its own table below: the
+            # alloy on a four-fraction page, and on a phase page every phase
+            # whose parts are worth more than the whole.
+            if part is None or (name == "nickel-iron" and not C.get("phased")):
+                continue
+            if C.get("ways", {}).get(name, {}).get("chosen") == "refined":
                 continue
             if part["route"].startswith("used"):
                 # 🚨  THE DERIVED P_L, NOT MODULE 2's.  This line printed
@@ -1157,6 +1169,49 @@ def s_composition(out):
                 "six figures a kilogram."
                 % (english([esc(n) for n in sorted(dead)]).capitalize(),
                    "prices" if len(dead) == 1 else "price")))
+    if C.get("ways"):
+        # calc v1.24.0.  A mineral with yields can be sold two ways -- as it
+        # is, or taken apart into what it yields -- and the model takes the
+        # better.  Showing only the winner would leave the reader unable to
+        # say why troilite is worth more than its own catalog row.
+        way_rows = []
+        for name, w in sorted(C["ways"].items()):
+            way_rows.append([
+                esc(name),
+                usd(w["as_is"], 2) if w["as_is"] is not None else "-",
+                usd(w["refined"], 2) if w["refined"] is not None else "-",
+                "taken apart" if w["chosen"] == "refined" else "as it is"])
+        out_html.append(h(3, "Minerals that can be sold two ways"))
+        out_html.append(para(
+            "A mineral with element yields is worth the better of two prices: "
+            "its own catalog row, the mineral used as it is (olivine as "
+            "shielding rock), and the yield-weighted sum of its elements, the "
+            "mineral taken apart (olivine for its iron). The model takes the "
+            "larger, and so does this page."))
+        out_html.append(table(["mineral", "as it is $/kg", "taken apart $/kg",
+                               "used"], way_rows))
+        for name, w in sorted(C["ways"].items()):
+            if w["chosen"] != "refined":
+                continue
+            rows = []
+            for element, frac in sorted(w["yields"].items(),
+                                        key=lambda kv2: -float(kv2[1])):
+                price = C["element_price"].get(element)
+                if price is None or not math.isfinite(float(price)):
+                    continue
+                rare = element in C["rare_metals"]
+                share = float(frac) * (C["kappa"] if rare else 1.0)
+                rows.append([esc(element), fmt(float(frac), 6),
+                             ("x " + fmt(C["kappa"], 2)) if rare else "-",
+                             usd(float(price), 2),
+                             usd(share * float(price), 2)])
+            rows.append(["<strong>%s, taken apart</strong>" % esc(name), "",
+                         "", "", "<strong>%s</strong>" % usd(w["refined"], 2)])
+            out_html.append(h(3, "What %s is worth, element by element"
+                              % esc(name)))
+            out_html.append(table(["element", "yield (mass fraction)",
+                                   "enrichment", "$/kg", "contribution $/kg"],
+                                  rows))
     if C["beneficiated"]:
         out_html.append(para(
             "The best phase present is worth %s per kilogram, and that is the "

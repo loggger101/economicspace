@@ -495,7 +495,10 @@ def phase_price_keys(S, C, only=None):
         if only is not None and name not in only:
             continue
         base = "silicates" if name.startswith("other") else name
-        key = ("P_alloy" if base == "nickel-iron"
+        # The alloy's blend is `P_alloy` on a four-fraction page only; with
+        # phases (calc v1.24.0) nickel-iron is one dual-priced phase of several
+        # and takes the same `P_<name>` as the rest.
+        key = ("P_alloy" if base == "nickel-iron" and not C.get("phased")
                else "P_" + base.replace(" ", "_").replace("-", "_"))
         if key in S.tag and key not in seen:
             seen.add(key)
@@ -738,8 +741,13 @@ def part_prices(S, out):
             continue
         seen.append(base)
         short = base.replace(" ", "_").replace("-", "_")
-        if base == "nickel-iron":
+        if base == "nickel-iron" and not C.get("phased"):
             continue
+        # A phase that can be sold two ways registers its ROW price as the
+        # as-it-is half, and the better of the two is its `P_` key below.
+        dual = C.get("phased") and base in C.get("ways", {})
+        pkey = ("Pa_%s" if dual else "P_%s") % short
+        psym = ("P_%s,as-is" if dual else "P_%s") % base
         S.put("u_%s" % short, "u_%s" % base, "%s in-space utility" % base,
               pp["utility"], "-",
               "<b>mineral_value_catalog.csv</b>, row <i>%s</i>, column "
@@ -754,25 +762,34 @@ def part_prices(S, out):
               "per-destination override runs DOWNWARD, against what the "
               "destination can dig up for itself.</span>"
               % (D.esc(base), D.esc(C["destination"])))
+        # A mineral with NO terrestrial quote (the alloy, troilite,
+        # schreibersite) is priced by Stage 2 at a terrestrial price of zero:
+        # `apply_delivery_destination` reads a missing quote as None and
+        # `in_space_price_usd_per_kg` as 0.0.  The page says so rather than
+        # printing a NaN into a sum, which no reader can retype.
+        quoted = math.isfinite(float(pp["terrestrial"]))
+        terrestrial = float(pp["terrestrial"]) if quoted else 0.0
         S.put("t_%s" % short, "p_%s" % base, "%s terrestrial quote" % base,
-              pp["terrestrial"], "$/kg", cite_mineral(C, base))
+              terrestrial, "$/kg", cite_mineral(C, base) if quoted else
+              cite_mineral(C, base) + "  <span class='src'>No quote: Stage 2 "
+              "prices a missing terrestrial price as zero.</span>")
         S.put("c_%s" % short, "c_ref,%s" % base, "%s on-site refining" % base,
               pp["refining"], "$/kg", cite_mineral(C, base))
         if pp["route"] == "used in space":
-            S.step("P_%s" % short, "P_%s" % base, "%s delivered price" % base,
+            S.step(pkey, psym, "%s delivered price" % base,
                    "p + u * P_L - c_ref",
                    "%s + %s * %s - %s"
-                   % (P(pp["terrestrial"]), P(pp["utility"]), P(C["p_l"]),
+                   % (P(terrestrial), P(pp["utility"]), P(C["p_l"]),
                       P(pp["refining"])),
                    pp["delivered"], "$/kg",
                    ["t_%s" % short, "u_%s" % short, "P_L", "c_%s" % short])
         else:
             S.put("dl_%s" % short, "c_down", "downleg from the depot",
                   pp["downleg"], "$/kg", cite_mineral(C, base))
-            S.step("P_%s" % short, "P_%s" % base, "%s delivered price" % base,
+            S.step(pkey, psym, "%s delivered price" % base,
                    "max(0, p - c_down)",
                    "max(0, %s - %s)"
-                   % (P(pp["terrestrial"]), P(pp["downleg"])),
+                   % (P(terrestrial), P(pp["downleg"])),
                    pp["delivered"], "$/kg",
                    ["t_%s" % short, "dl_%s" % short])
 
@@ -834,16 +851,59 @@ def part_prices(S, out):
                " + ".join(terms), C["alloy"], "$/kg", ["kappa", "P_L"],
                "the contribution column above, added term by term")
 
+    if C.get("phased") and C.get("ways"):
+        S.prose("A mineral with element yields is worth the better of two "
+                "prices: its own row, used as it is, and the yield-weighted "
+                "sum of its elements, taken apart.")
+        if "kappa" not in S.tag:
+            S.put("kappa", "kappa", "platinum-group enrichment", C["kappa"],
+                  "x", cite_body(C, "comp_pgm_enrichment",
+                                 "follows the taxonomy class"))
+        for name, w in sorted(C["ways"].items()):
+            short = name.replace(" ", "_").replace("-", "_")
+            inputs, candidates = [], []
+            if w["as_is"] is not None and ("Pa_%s" % short) in S.tag:
+                inputs.append("Pa_%s" % short)
+                candidates.append(w["as_is"])
+            terms, blend = [], 0.0
+            for element, fraction in w["yields"].items():
+                price = C["element_price"].get(element)
+                if price is None or not math.isfinite(float(price)):
+                    continue
+                share = float(fraction)
+                if element in C["rare_metals"]:
+                    share *= C["kappa"]
+                blend += share * float(price)
+                terms.append(P(share * float(price)))
+            if blend > 0:
+                S.step("Pr_%s" % short, "P_%s,apart" % name,
+                       "%s taken apart" % name,
+                       "sum over its elements of yield * enrichment * price",
+                       " + ".join(terms), blend, "$/kg", ["kappa", "P_L"])
+                inputs.append("Pr_%s" % short)
+                candidates.append(blend)
+            if not candidates:
+                continue
+            S.step("P_%s" % short, "P_%s" % name, "%s price" % name,
+                   "the better of as it is and taken apart",
+                   "max(%s)" % ", ".join(P(v) for v in candidates),
+                   max(candidates), "$/kg", inputs)
+
     S.prose("The hold is filled from this.  Module 1's fractions never sum "
             "to one; the remainder is carried at the silicate quote rather "
             "than discarded, which is why this totals one.")
     rows = []
     for name, frac, price in C["phases"]:
-        column = ("the residual: 1 - sum of the four taxonomy fractions"
-                  if name.startswith("other")
-                  else cite_body(C, "comp_%s_fraction"
-                                 % {"nickel-iron": "metal",
-                                    "water": "ice"}.get(name, name)))
+        if name.startswith("other"):
+            column = ("the residual: 1 - sum of the phases"
+                      if C.get("phased") else
+                      "the residual: 1 - sum of the four taxonomy fractions")
+        elif C.get("phased"):
+            column = cite_body(C, "comp_phases", "its %s entry" % name)
+        else:
+            column = cite_body(C, "comp_%s_fraction"
+                               % {"nickel-iron": "metal",
+                                  "water": "ice"}.get(name, name))
         work = S.claim("%s * %s" % (P(frac), P(price)), frac * price,
                        "%s contribution" % name)
         rows.append([D.esc(name), P(frac, 8), "$" + P(price, 10), work,
@@ -1769,35 +1829,80 @@ def part_market(S, out):
     S.prose("The load is RESHAPED, not clipped: the ceilings go into the "
             "knapsack, so space a capped phase does not take passes to the "
             "next phase down, and a bounded hold can still fly full.")
-    rows = []
     surplus_frac = rev["surplus_frac"]
-    for i, step in enumerate(rev["capped"]["walk"], 1):
-        if step["full"]:
-            price_work = "the full price"
-        else:
-            price_work = S.claim(
-                "%s * %s" % (P(step["price"] / surplus_frac),
-                             P(surplus_frac)), step["price"],
-                "%s surplus price" % step["phase"])
-        value = S.claim("%s * %s" % (P(step["take"]), P(step["price"])),
-                        step["take"] * step["price"],
-                        "%s tier %d value" % (step["phase"], i))
-        rows.append([str(i), D.esc(step["phase"]),
-                     "full" if step["full"] else "surplus",
-                     price_work, "$" + P(step["price"], 10),
-                     P(step["supply"], 10),
-                     "-" if step["allowance"] is None
-                     else P(step["allowance"], 10),
-                     P(step["take"], 10), value,
-                     "$" + P(step["take"] * step["price"], 10)])
-    S.block(D.table(["#", "phase", "tier", "price worked out", "$/kg",
-                     "supply (kg)", "allowance (kg)", "sold (kg)",
-                     "value worked out", "value"], rows, "wide"))
-    S.step("Rev", "Rev", "what one delivery sells",
-           "sum over tiers of sold * price",
-           " + ".join("%s * %s" % (P(t["take"]), P(t["price"]))
-                      for t in rev["capped"]["walk"] if t["take"] > 0),
-           rev["capped"]["value"], "$", ["window", "hold_value"])
+    walk = rev["capped"]["walk"]
+    if walk and "take" not in walk[0]:
+        # A RUN-OF-MINE hold is not chosen, it is the body's proportions, so
+        # its sale is `raw_sale`'s walk: each phase sells what fits inside its
+        # market's allowance at full price, and what is over earns the
+        # discount or nothing.  This table was the knapsack's alone, and every
+        # raw row died on its first line with KeyError: 'take'.
+        S.prose("A run-of-mine hold is the body's own proportions, so "
+                "nothing is chosen: each phase sells what fits inside its "
+                "market's allowance at full price, and what is over it earns "
+                "the surplus discount, or nothing when there is none.")
+        rows, terms = [], []
+        for step in walk:
+            full_value = step["full"] * step["price"]
+            full_work = S.claim("%s * %s" % (P(step["full"]), P(step["price"])),
+                                full_value, "%s at full price" % step["phase"])
+            term = "%s * %s" % (P(step["full"]), P(step["price"]))
+            over_work, over_value = "-", 0.0
+            if step["over"] > 0 and surplus_frac > 0.0:
+                over_value = step["over"] * step["price"] * surplus_frac
+                over_work = S.claim(
+                    "%s * %s * %s" % (P(step["over"]), P(step["price"]),
+                                      P(surplus_frac)),
+                    over_value, "%s surplus" % step["phase"])
+                term += " + %s * %s * %s" % (P(step["over"]), P(step["price"]),
+                                             P(surplus_frac))
+            terms.append(term)
+            allowance = step["allowance"]
+            rows.append([D.esc(step["phase"]), "$" + P(step["price"], 10),
+                         P(step["hold"], 10),
+                         "-" if allowance is None or allowance == float("inf")
+                         else P(allowance, 10),
+                         P(step["full"], 10), full_work,
+                         P(step["over"], 10), over_work,
+                         "$" + P(full_value + over_value, 10)])
+        S.block(D.table(["phase", "$/kg", "in the hold (kg)",
+                         "allowance (kg)", "sold at full (kg)",
+                         "full value worked out", "over (kg)",
+                         "surplus worked out", "value"], rows, "wide"))
+        S.step("Rev", "Rev", "what one delivery sells",
+               "sum over phases of sold * price, plus over * price * "
+               "discount",
+               " + ".join(terms), rev["capped"]["value"], "$",
+               ["window", "hold_value"])
+    else:
+        rows = []
+        for i, step in enumerate(rev["capped"]["walk"], 1):
+            if step["full"]:
+                price_work = "the full price"
+            else:
+                price_work = S.claim(
+                    "%s * %s" % (P(step["price"] / surplus_frac),
+                                 P(surplus_frac)), step["price"],
+                    "%s surplus price" % step["phase"])
+            value = S.claim("%s * %s" % (P(step["take"]), P(step["price"])),
+                            step["take"] * step["price"],
+                            "%s tier %d value" % (step["phase"], i))
+            rows.append([str(i), D.esc(step["phase"]),
+                         "full" if step["full"] else "surplus",
+                         price_work, "$" + P(step["price"], 10),
+                         P(step["supply"], 10),
+                         "-" if step["allowance"] is None
+                         else P(step["allowance"], 10),
+                         P(step["take"], 10), value,
+                         "$" + P(step["take"] * step["price"], 10)])
+        S.block(D.table(["#", "phase", "tier", "price worked out", "$/kg",
+                         "supply (kg)", "allowance (kg)", "sold (kg)",
+                         "value worked out", "value"], rows, "wide"))
+        S.step("Rev", "Rev", "what one delivery sells",
+               "sum over tiers of sold * price",
+               " + ".join("%s * %s" % (P(t["take"]), P(t["price"]))
+                          for t in rev["capped"]["walk"] if t["take"] > 0),
+               rev["capped"]["value"], "$", ["window", "hold_value"])
     S.step("clearing", "clearing", "fraction of the unbounded hold that sold",
            "Rev / V_hold",
            "%s / %s" % (P(rev["capped"]["value"]), P(rev["gross_base"])),

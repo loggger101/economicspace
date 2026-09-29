@@ -316,6 +316,21 @@ class CalcConfig:
     # Set False for the raw cell (26.7863x), which is what most of the older
     # tables in versions.md were measured at.
     use_beneficiation:         bool  = True
+
+    # Sell the body as the MINERALS it is made of (v1.24.0), read from Module
+    # 1's `comp_phases` column (catalog data contract 1.7.0), instead of as
+    # four coarse fractions.  An S-type then carries olivine, two pyroxenes,
+    # plagioclase, troilite and chromite rather than one "silicates" row; a
+    # C-type its phyllosilicates, magnetite, sulfide and carbonate; an
+    # outer-belt body CO2 and ammonia ice as well as water.  Each phase is
+    # worth the better of selling it as it is and refining it into its Stage 2
+    # yields, and the knapsack can load, and beneficiation concentrate, each one
+    # separately.  The four coarse columns are unchanged and the phases add
+    # back to them.  False drops the column at load, which is the pre-1.24.0
+    # model exactly; a catalog older than contract 1.7.0 has no column and
+    # runs that model whatever this says.  It needs Stage 2 at mineral_value
+    # 1.11.0 or later, which prices the new phases: an older one is refused.
+    model_mineral_phases:      bool  = True
     # Fraction of the valuable phase that actually reports to concentrate.
     # Terrestrial PGM / sulphide flotation circuits run 85-95%; magnetic
     # separation of a metal phase from silicate gangue is mechanically simpler
@@ -1067,7 +1082,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.23.0"
+    pipeline_version: str = "1.24.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1459,6 +1474,23 @@ def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
         "load_all_catalogs and _CATALOG_PROVENANCE disagree about: %s"
         % sorted(set(catalogs) ^ set(_CATALOG_PROVENANCE)))
 
+    # v1.24.0: the phase switch is decided HERE, once, rather than in every
+    # function that values a body.  With it off the column is gone, so each of
+    # them takes the pre-1.24.0 branch, and no entry point that loads through
+    # this function can run half of each model.
+    if not getattr(config, "model_mineral_phases", True) and \
+            _PHASES_COL in catalogs["asteroids"].columns:
+        catalogs["asteroids"] = catalogs["asteroids"].drop(columns=[_PHASES_COL])
+        print(f"       model_mineral_phases off: {_PHASES_COL} ignored, "
+              f"four coarse fractions only")
+    elif _PHASES_COL in catalogs["asteroids"].columns:
+        # ~29 distinct JSON strings across 1.57 M rows: 367 MB as one Python
+        # string per row, 1.6 MB as a category (measured on data-2026-09-29),
+        # and ~2 s of the read either way.  Same values, so no answer moves;
+        # a row still hands `_row_phases` a str, or NaN for Unknown.
+        catalogs["asteroids"][_PHASES_COL] = (
+            catalogs["asteroids"][_PHASES_COL].astype("category"))
+
     # Parse Module 1's comp_minerals list-column back into actual lists
     if "comp_minerals" in catalogs["asteroids"].columns:
         catalogs["asteroids"]["comp_minerals"] = _parse_minerals_column(
@@ -1533,6 +1565,41 @@ def destination_check(catalogs: Dict[str, pd.DataFrame], config: CalcConfig) -> 
     print(f"          MINERAL_CONFIG.delivery_destination and")
     print(f"          CALC_CONFIG.delivery_destination to the same value and")
     print(f"          re-run Module 2 before Module 4.")
+
+
+def phase_price_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
+    """Every mineral phase the catalog names has a Stage 2 price (v1.24.0).
+
+    Defect class 1 in its purest form: a phase with a mass in the catalog and
+    no row in Stage 2 would be skipped by the valuation, and its mass would
+    fall into the residual at the bulk-silicate floor -- troilite valued as
+    rock, CO2 ice as rock -- with nothing anywhere saying so.  So a missing
+    phase REFUSES the run, naming each phase and both ways out, rather than
+    producing a hybrid of the two models that nobody designed.
+
+    True when there is nothing to check: no `comp_phases` column (an older
+    catalog, or `model_mineral_phases` off).
+    """
+    asteroids = catalogs["asteroids"]
+    if _PHASES_COL not in asteroids.columns:
+        return True
+    names: set = set()
+    for text in asteroids[_PHASES_COL].dropna().unique():
+        if isinstance(text, str) and text:
+            names.update(phase for phase, _frac in _parse_phases(text))
+    priced = set(str(n) for n in catalogs["minerals"]["name"])
+    missing = sorted(names - priced)
+    if not missing:
+        print(f"     OK  Mineral phases: {len(names)} named by the catalog, "
+              f"all priced by Stage 2")
+        return True
+    print(f"\nFAIL  {len(missing)} mineral phase(s) in the catalog have no "
+          f"Stage 2 price: {missing}")
+    print("     Stage 2 at mineral_value 1.11.0 or later prices them.  Either "
+          "re-run Stage 2 (it re-fetches live prices), or set "
+          "CALC_CONFIG.model_mineral_phases = False for the four-fraction "
+          "model.  Aborting.")
+    return False
 
 
 def integrity_check(catalogs: Dict[str, pd.DataFrame]) -> None:
@@ -1925,6 +1992,87 @@ FRACTION_TO_MINERAL: Dict[str, str] = {
 }
 
 
+# ─── MINERAL PHASES  (v1.24.0) ───────────────────────────────────────────────
+# Module 1 (catalog data contract 1.7.0) divides each body into the minerals
+# its four coarse fractions are made of: `comp_phases`, a JSON object of mass
+# fractions by phase name, spelled as Stage 2 spells its rows.  When a row
+# carries it, the three valuation functions below walk the PHASES instead of
+# FRACTION_TO_MINERAL.  The phases of each coarse group add back to that group's
+# fraction (AsteroidCatalog's tests hold it), and the accessory phases --
+# troilite, magnetite, chromite, ilmenite, spinel, carbonates -- are carved out
+# of the residual, so the "other (bulk silicate)" floor gets smaller.
+_PHASES_COL = "comp_phases"
+
+
+# ⚠️  `maxsize=None` IS SAFE HERE AND NAMED AS SUCH: the key is the JSON
+# string, one per taxonomy row Module 1 reads (a few dozen), whatever the size
+# of the catalog.  That is the rule "Where a cache is safe" gives: unbounded
+# exactly when you can name the ceiling.
+@functools.lru_cache(maxsize=None)
+def _parse_phases(text: str) -> Tuple[Tuple[str, float], ...]:
+    """(phase, fraction) pairs from one `comp_phases` cell, zeros dropped.
+
+    A tuple, so the cached value cannot be mutated by a caller.  Order is the
+    catalog's, which is fixed per class (group, then table order).
+    """
+    return tuple((str(name), float(frac))
+                 for name, frac in json.loads(text).items() if float(frac) > 0.0)
+
+
+def _row_phases(asteroid_row: Row) -> Optional[Tuple[Tuple[str, float], ...]]:
+    """The row's phases, or None when it has none (older catalog, switch off,
+    or an Unknown-class body, whose cell is empty)."""
+    text = asteroid_row.get(_PHASES_COL)
+    if isinstance(text, str) and text:
+        return _parse_phases(text)
+    return None
+
+
+def _row_water_fraction(asteroid_row: Row) -> float:
+    """Mass fraction of the body that is WATER, which is not always all its ice.
+
+    v1.24.0.  Three readers took `comp_ice_fraction` as water: ISRU feed, the
+    per-body context, and the cargo-water bake.  For a hydrated C-type that is
+    right, its "ice" is bound water.  For D, Z, P and T the phases split the
+    ice into water, CO2 and ammonia, and reading all of it as water would make
+    propellant out of carbon dioxide.  Without phases, the old reading stands.
+    """
+    phases = _row_phases(asteroid_row)
+    if phases is not None:
+        for name, frac in phases:
+            if name == "water":
+                return frac
+        return 0.0
+    ice = asteroid_row.get("comp_ice_fraction")
+    if ice is None or pd.isna(ice):
+        return 0.0
+    return float(ice)
+
+
+def _phase_value(
+    mineral_df: pd.DataFrame, phase: str, pgm_enrichment: float,
+) -> Optional[float]:
+    """$/kg of one phase: the better of selling it AS IT IS, or REFINED.
+
+    v1.24.0.  A mineral row in Stage 2 has two prices and until now Stage 4
+    read one.  Its own `price_usd_per_kg` is the mineral used for itself --
+    olivine as shielding rock, troilite as a sulfide.  Its yields are what it
+    is worth taken apart -- olivine's 10% iron, troilite's iron and sulfur.
+    `_mineral_implied_value` returns the yields whenever there are any, so
+    olivine was worth its iron and nothing for the 90% that is rock: fine while
+    nothing read olivine, and wrong the moment the phases do.  A buyer does the
+    better of the two, so the value is the larger.  Enrichment scales only the
+    rare-metal yields, in whichever phase carries them.
+
+    Only the phase walk uses this.  The four-fraction walk keeps
+    `_mineral_implied_value`, so switching phases off is the old model exactly.
+    """
+    refined = _mineral_implied_value(mineral_df, phase, pgm_enrichment)
+    as_is = _mineral_price(mineral_df, phase)
+    values = [v for v in (refined, as_is) if v is not None]
+    return max(values) if values else None
+
+
 # ── Composition is a per-TAXONOMY fact, not a per-row one  (v1.17.6) ────────
 # `asteroid_bulk_value_usd_per_kg`, `asteroid_phase_table` and
 # `asteroid_best_phase_usd_per_kg` read exactly five values off the row, the
@@ -2047,6 +2195,12 @@ def _composition_key(asteroid_row: Row) -> Optional[Tuple[Any, ...]]:
             key.append(float(v))
         else:
             return None
+    # v1.24.0: the phases decide the answer too, so they are part of the key.
+    # The JSON string itself: a few dozen distinct values, and two rows share
+    # an answer exactly when they share it.  None when absent, so a row
+    # without phases keys exactly as before.
+    text = asteroid_row.get(_PHASES_COL)
+    key.append(text if isinstance(text, str) and text else None)
     return tuple(key)
 
 
@@ -2078,6 +2232,15 @@ def _phase_prices(
     every release here is argued from; see the v1.14.2 phase-sort warning.
     """
     pgm_enrichment = _pgm_enrichment(asteroid_row)
+    phases = _row_phases(asteroid_row)
+    if phases is not None:
+        # v1.24.0: the minerals, each at the better of as-is and refined.
+        for name, frac in phases:
+            price = _phase_value(mineral_df, name, pgm_enrichment)
+            if price is None:
+                continue
+            yield name, frac, float(price)
+        return
     for frac_col, mineral_name in FRACTION_TO_MINERAL.items():
         frac = asteroid_row.get(frac_col)
         if frac is None or pd.isna(frac) or float(frac) <= 0.0:
@@ -2122,7 +2285,16 @@ def asteroid_bulk_value_usd_per_kg(
 
     total    = 0.0
     frac_sum = 0.0
-    for frac_col, mineral_name in FRACTION_TO_MINERAL.items():
+    # v1.24.0: with phases, blend the phases instead of the four fractions.
+    # `_phase_prices` skips a zero fraction where the four-fraction loop admits
+    # one; a phase list carries no zeros, so the two agree on everything this
+    # branch can be handed.
+    with_phases = _row_phases(asteroid_row) is not None
+    if with_phases:
+        for _name, f, price in _phase_prices(asteroid_row, mineral_df):
+            total    += f * price
+            frac_sum += f
+    for frac_col, mineral_name in (() if with_phases else FRACTION_TO_MINERAL.items()):
         frac = asteroid_row.get(frac_col)
         if frac is None or pd.isna(frac):
             continue
@@ -3277,9 +3449,7 @@ def _cargo_water_kg(
             want_phase="water",
         ))
     if ice_frac is None:
-        ice_frac = asteroid_row.get("comp_ice_fraction")
-        if ice_frac is None or pd.isna(ice_frac):
-            return 0.0
+        ice_frac = _row_water_fraction(asteroid_row)   # v1.24.0
     return payload_kg * float(ice_frac)
 
 
@@ -4190,8 +4360,9 @@ def isru_feed_kg_per_kg_propellant(
         # separation loss, because nothing is being separated.
         return ratio
 
-    ice_frac = asteroid_row.get("comp_ice_fraction")
-    if ice_frac is None or pd.isna(ice_frac) or float(ice_frac) <= 0.0:
+    # v1.24.0: the WATER fraction, not all the ice; see _row_water_fraction.
+    ice_frac = _row_water_fraction(asteroid_row)
+    if ice_frac <= 0.0:
         return None
 
     recovery = max(1e-6, min(1.0, config.beneficiation_recovery))
@@ -6560,9 +6731,7 @@ def asteroid_context(
         storage_wh_per_kg, storage_eta, baseline_dark_h,
     )
 
-    ice_frac = asteroid_row.get("comp_ice_fraction")
-    ice_frac = (0.0 if ice_frac is None or pd.isna(ice_frac)
-                else float(ice_frac))
+    ice_frac = _row_water_fraction(asteroid_row)      # v1.24.0: water, not all ice
 
     return AsteroidContext(
         mineable_kg           = float(asteroid_mass) * config.max_mining_fraction,
@@ -8752,6 +8921,12 @@ def evaluate_asteroid(
         "comp_carbon_fraction":     asteroid_row.get("comp_carbon_fraction"),
         "comp_ice_fraction":        asteroid_row.get("comp_ice_fraction"),
         "comp_pgm_enrichment":      asteroid_row.get("comp_pgm_enrichment"),
+        # v1.24.0: whether THIS row was valued by its mineral phases.  It
+        # describes the run as much as the body -- `model_mineral_phases` and
+        # the catalog's contract both decide it -- and it is not recoverable
+        # from any other column, so a reader re-deriving the row (the worked
+        # calculation) is told rather than left to infer it from the config.
+        "mineral_phases":           _row_phases(asteroid_row) is not None,
     })
 
     return best
@@ -9032,6 +9207,8 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
     integrity_check(catalogs)
     destination_check(catalogs, config)
     market_config_check(config)
+    if not phase_price_check(catalogs):
+        return pd.DataFrame()
 
     # ── Step 3, Iterate asteroids ───────────────────────────────────────────
     asteroids = catalogs["asteroids"]
