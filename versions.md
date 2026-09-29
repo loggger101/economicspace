@@ -274,7 +274,9 @@ read. The archived `spacecost-0.4.0` default cell's winner, 2021 CX5 at
 5.1275x, derives against the new frozen set with 86 of 88 quantities exact;
 the two that DIFFER are `diameter_km` and `estimated_mass_kg`, the body's own
 columns, which `data-2026-09-27` sizes differently (disclosed on the page).
-`stamp_check()` is clean and `verify_stage3.py` passes.
+`stamp_check()` is clean and `verify_stage3.py` passes. `verify.py invariants`
+on the adopted inputs: mass ledger 0 kg on all four cells, never-worse 0
+exceptions, Stage 2 tables identical, ceilings 0.
 
 ## master v1.36.0 / catalog v1.4.0
 
