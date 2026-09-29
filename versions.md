@@ -233,12 +233,11 @@ That mechanism was not chased row by row. These are samples, and
 - **The catalog is adopted**: Stage 1 installed `data-2026-09-27`,
   checksummed; `data-2026-09-25` is still published and comes back by
   repinning.
-- **The Stage 3 tables are NOT.** They are still the 2026-09-24 `1.16.0`
-  build, so `stamp_check()` names them on every Stage 4 run. Adopting `v0.5.0`
-  on disk means re-running Stage 3, which re-fetches live prices over the
-  tables the archived `spacecost-0.4.0` cells were priced on, and those have no
-  frozen copy (`campaign/stage3/` is the 0.3.x epoch). That is left as a
-  decision rather than taken with a repin.
+- **The Stage 3 tables were not, at merge.** Adopting `v0.5.0` on disk
+  re-fetches live prices over the tables the archived `spacecost-0.4.0` cells
+  were priced on, which had no frozen copy, so it was left as a decision. It
+  was taken the same day; see
+  [the data on disk adopts it](#the-data-on-disk-adopts-it-2026-09-28).
 
 ### What was verified
 
@@ -258,6 +257,24 @@ That mechanism was not chased row by row. These are samples, and
   too.
 - A run at this pin is not comparable with one at `data-2026-09-25` or on the
   `1.16.0` fairings without saying so.
+
+### The data on disk adopts it (2026-09-28)
+
+Stage 3 re-run at `1.17.0`, after the `1.16.0` tables were backed up to
+`asteroid_pipeline/_inputs_backup_2026-09-28_pre-v0.5.0/` and the three the
+worked calculation reads were frozen as `campaign/stage3/spacecost-0.4.0/`.
+Against the backup, exactly what the release predicts moved: 53
+`fairing_volume_m3` values, every `notes` cell, the new `fairing_basis`
+column, and the three live-priced propellants (kerolox -1.38%, methalox
+-0.28%, HTP / RP-1 -1.81%, the 2026-09-28 quotes). No other table moved.
+Stage 2 was not re-run: `spacecost.delivery` did not change.
+
+`transport_tables_for` now reads the newest frozen set a row's run could have
+read. The archived `spacecost-0.4.0` default cell's winner, 2021 CX5 at
+5.1275x, derives against the new frozen set with 86 of 88 quantities exact;
+the two that DIFFER are `diameter_km` and `estimated_mass_kg`, the body's own
+columns, which `data-2026-09-27` sizes differently (disclosed on the page).
+`stamp_check()` is clean and `verify_stage3.py` passes.
 
 ## master v1.36.0 / catalog v1.4.0
 
