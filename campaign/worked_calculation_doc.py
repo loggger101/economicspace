@@ -928,6 +928,15 @@ def s_composition(out):
              "leave. The phases of each group add back to its fraction, so "
              "this is detail rather than a second composition.")
         if C.get("phased") else "",
+        # The four fractions the phases add back to.  A phase page that
+        # printed only the phases left the row's own coarse columns off the
+        # page, which the column audit reported on the first S-type it met.
+        kv([("%s fraction" % label, fmt(float(C["body"].get(column) or 0.0), 4))
+            for label, column in (("metal", "comp_metal_fraction"),
+                                  ("silicate", "comp_silicate_fraction"),
+                                  ("carbon", "comp_carbon_fraction"),
+                                  ("ice", "comp_ice_fraction"))])
+        if C.get("phased") else "",
         para("The taxonomy fractions are priced separately rather than "
              "blended, because a concentrating mission chooses between them. "
              "Across the %d classes Module 1 gives fractions for they sum to "
@@ -1059,6 +1068,15 @@ def s_composition(out):
             if part is None or (name == "nickel-iron" and not C.get("phased")):
                 continue
             if C.get("ways", {}).get(name, {}).get("chosen") == "refined":
+                continue
+            if part["route"].startswith("used") and C.get("refinery"):
+                # calc v1.25.0: a flown refinery sells at the price BEFORE
+                # the deduction, which Stage 2 writes as the delivered price
+                # plus the refining it had subtracted.
+                shown = ("%s + %s" % (prec(part["delivered"], 12),
+                                      prec(part["refining"], 10)))
+                price_rows.append([esc(name), esc(part["route"]), shown,
+                                   usd(price, 6)])
                 continue
             if part["route"].startswith("used"):
                 # 🚨  THE DERIVED P_L, NOT MODULE 2's.  This line printed
@@ -1462,6 +1480,10 @@ def s_cascade(out):
         ("mining rig", fmt(C["cfg"].mining_hardware_kg, 1, "kg")),
         ("power system", fmt(M["plant"], 1, "kg")),
         ("electric stage", fmt(M["ep"]["mass"], 1, "kg")),
+    ]
+    if M.get("refinery", 0.0) > 0:
+        ledger.append(("refinery plant", fmt(M["refinery"], 1, "kg")))
+    ledger += [
         ("<strong>hardware total</strong>",
          "<strong>%s</strong>" % fmt(M["hw"], 1, "kg")),
     ]
@@ -1890,6 +1912,52 @@ def solar_plant_terms(C, name="w_plant"):
     ]
 
 
+def refinery_block(C, M):
+    """The flown refinery (calc v1.25.0): what each phase costs to refine,
+    the energy for this hold, and the plant that puts it through."""
+    rows = []
+    for name, _frac, _price in C["phases"]:
+        how = C["refine_how"].get(name, {})
+        if how.get("route") == "refined":
+            parts = (["%s kWh/kg to take it apart" % fmt(how["own_kwh"], 1)]
+                     if how["own_kwh"] else [])
+            parts += ["%s x %s kWh/kg of %s" % (fmt(f, 3), fmt(k, 1), esc(e))
+                      for e, f, k in how["terms"]]
+            basis = "taken apart: " + (", ".join(parts) or "nothing here")
+        else:
+            basis = ("as it is: %s kWh/kg" % fmt(how.get("as_is_kwh", 0.0), 1)
+                     if how.get("as_is_kwh") else
+                     "as it is, refined on Earth: nothing here")
+        rows.append([esc(name), basis,
+                     fmt(C["refine_wh"].get(name, 0.0), 1)])
+    hold = ("the knapsack's mix, each phase at its own energy"
+            if C["beneficiated"] else
+            "the body's own proportions: %s Wh per kg of ore"
+            % prec(C["refine_raw_wh"], 12))
+    return [
+        h(3, "The refinery, flown"),
+        para("Every price on this page is the one <strong>before</strong> "
+             "Stage 2's refining deduction, because the mission carries the "
+             "refinery that the deduction used to stand for. Each phase is "
+             "refined by the route it is sold by, and an element shipped "
+             "home is refined on Earth, so it costs nothing here."),
+        table(["phase", "energy", "Wh per kg in the hold"], rows),
+        deriv([
+            ("E_ref", "= %s Wh" % prec(M["refine_wh"], 12), hold),
+            ("m_ref", "= m_pay / (t_dig * r_plant) = %s / (%s * %s) = %s kg"
+             % (prec(M["m_pay"], 12), prec(M["dig_yr"], 12),
+                prec(C["refinery_rate"], 6), prec(M["refinery"], 12)),
+             "the plant that puts the hold through in the stay; it rides "
+             "with the rig and is costed as the rig is"),
+        ]),
+        kv([("plant throughput", fmt(C["refinery_rate"], 1,
+                                     "kg processed per year per kg of plant")),
+            ("<strong>refinery plant</strong>",
+             "<strong>%s</strong>" % fmt(M["refinery"], 1, "kg")),
+            ("refinery draw", fmt(M["refine_draw"], 1, "W"))]),
+    ]
+
+
 def s_power(out):
     """Section 5: the processing plant, which only some missions need."""
     M, C = out["M"], out["C"]
@@ -1997,6 +2065,12 @@ def s_power(out):
              % (prec(M["liberated"], 12), prec(hrs, 12),
                 prec(C["water_wh"], 6), prec(M["liberated"], 12),
                 prec(hrs, 12), prec(total[-1], 12))))
+    if M.get("refine_draw", 0.0) > 0:
+        draw_terms.append(
+            ("P_ref", "= E_ref / %s = %s / %s = %s W"
+             % (prec(hrs, 12), prec(M["refine_wh"], 12), prec(hrs, 12),
+                prec(M["refine_draw"], 12)),
+             "the refinery, below"))
     draw_terms += [
         ("hours", "= (t_dig * 365.25) * 24 = (%s * 365.25) * 24 = %s h"
          % (prec(M["dig_yr"], 12), prec(hrs, 12)),
@@ -2031,6 +2105,8 @@ def s_power(out):
         deriv(plant_terms),
         kv(pairs),
     ]
+    if M.get("refinery", 0.0) > 0:
+        html_out += refinery_block(C, M)
     if a["power"] == "rtg":
         html_out.append(note(
             "key",
@@ -2845,7 +2921,13 @@ def s_cost(out):
          % (prec(C["cfg"].mining_hardware_kg, 8),
             prec(C["val"]("Mining payload recurring cost"), 8),
             usd(cst["rig_total"], 2)),
-         "one rig, built once"),
+         "one rig, built once")
+        if not M.get("refinery") else
+        ("C_rig", "= (m_rig + m_ref) * c_rig = (%s + %s) * %s = %s"
+         % (prec(C["cfg"].mining_hardware_kg, 8), prec(M["refinery"], 12),
+            prec(C["val"]("Mining payload recurring cost"), 8),
+            usd(cst["rig_total"], 2)),
+         "one rig and the refinery on it, built once"),
         ("util", "= %s" % prec(cst["used"], 12),
          "how much of the rig's life this programme uses"),
         ("terminal", "= C_rig (1 - util) * salvage = %s"

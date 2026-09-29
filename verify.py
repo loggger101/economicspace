@@ -256,6 +256,7 @@ RESET_FIELDS = (
     "sell_surplus_at_discount",  # v1.22.0
     "surplus_price_fraction",    # v1.22.0
     "model_mineral_phases",      # v1.24.0: the phase walk is A/B'd against the four fractions
+    "model_refinery",            # v1.25.0: the flown refinery is A/B'd against the price deduction
 )
 
 
@@ -484,7 +485,14 @@ def _read_baseline(pd, path):
 # THE FIVE CHECKS
 # -----------------------------------------------------------------------------
 def check_mass_ledger(m, frames: Dict[str, Any]) -> bool:
-    """hardware_total_kg == mining_hardware_kg + power_system_kg + ep_system_kg.
+    """hardware_total_kg == mining_hardware_kg + power_system_kg + ep_system_kg
+    + refinery_kg.
+
+    calc v1.25.0 adds the refinery plant, which flies with the rig; a frame
+    older than that has no `refinery_kg` column and the identity is the
+    three-term one it always was.  A plant priced and not flown -- or flown
+    and not reported -- is exactly the defect this check exists to catch, and
+    it fails the identity either way.
 
     The rig is a CONFIG CONSTANT, not an output column.  The identity as
     CLAUDE.md states it raises KeyError if run verbatim against the CSV, which
@@ -500,8 +508,11 @@ def check_mass_ledger(m, frames: Dict[str, Any]) -> bool:
             print(f"  {name:13s} NO ROWS -- the cell produced nothing  FAIL")
             ok = False
             continue
+        refinery = (df["refinery_kg"] if "refinery_kg" in df.columns
+                    else 0.0)
         err = float((df["hardware_total_kg"] - rig
-                     - df["power_system_kg"] - df["ep_system_kg"]).abs().max())
+                     - df["power_system_kg"] - df["ep_system_kg"]
+                     - refinery).abs().max())
         good = err < 1e-6
         ok &= good
         print(f"  {name:13s} max |error| {err:.9f} kg  {'OK' if good else 'FAIL'}")

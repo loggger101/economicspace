@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.38.0)
+"""Master Asteroid Profitability Pipeline (1.39.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -3330,6 +3330,24 @@ class CalcConfig:
     # runs that model whatever this says.  It needs Stage 2 at mineral_value
     # 1.11.0 or later, which prices the new phases: an older one is refused.
     model_mineral_phases:      bool  = True
+
+    # FLY THE REFINERY (v1.25.0) instead of taking it out of the price.  Stage 2
+    # prices a commodity sold in space as "terrestrial + utility x launch cost
+    # avoided - the cost of refining it on site", and that last term is a
+    # dollar estimate of a plant nobody launches: energy at a capital rate and
+    # a plant amortised over a 15-year life.  With this on, every phase is
+    # valued BEFORE that deduction and the mission carries the refinery
+    # itself.  Its energy (Stage 2's `refining_kwh_per_kg`, for the route each
+    # phase is sold by) joins the processing draw that sizes the array, so it
+    # is paid for in array mass through the rocket equation; its plant (the
+    # hold over Module 3's throughput per kg of plant, over the stay) rides
+    # with the mining rig, costed and shared across a programme exactly as the
+    # rig is.  Which way a mineral is sold -- as it is, or taken apart -- is
+    # still decided on Stage 2's net prices, so this changes who pays and not
+    # the choice.  In-space destinations only: at `earth_surface` Stage 2
+    # writes no refining columns and the product is refined on Earth.  False
+    # is the v1.24.0 model to the bit.
+    model_refinery:            bool  = True
     # Fraction of the valuable phase that actually reports to concentrate.
     # Terrestrial PGM / sulphide flotation circuits run 85-95%; magnetic
     # separation of a metal phase from silicate gangue is mechanically simpler
@@ -4081,7 +4099,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.24.0"
+    pipeline_version: str = "1.25.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -4490,6 +4508,25 @@ def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
         catalogs["asteroids"][_PHASES_COL] = (
             catalogs["asteroids"][_PHASES_COL].astype("category"))
 
+    # v1.25.0: the refinery switch, decided HERE for the same reason as the
+    # phase switch above.  With it on, the minerals table's price column
+    # becomes the price BEFORE Stage 2's refining deduction, and the net
+    # figure is kept beside it for the one decision that still reads it: which
+    # way each mineral is sold.  Every reader of `price_usd_per_kg` then sees
+    # the gross price without being told, which is the point: the knapsack,
+    # the market sale and the reported value all value what the flown
+    # refinery produces.  A Stage 2 table without the columns (older than
+    # mineral_value 1.11.0, or priced for `earth_surface`) leaves it off.
+    minerals = catalogs["minerals"]
+    if (getattr(config, "model_refinery", True)
+            and all(c in minerals.columns for c in _REFINING_COLS)):
+        minerals = minerals.copy()
+        minerals[_NET_PRICE_COL] = minerals["price_usd_per_kg"]
+        minerals["price_usd_per_kg"] = minerals["price_before_processing_usd_per_kg"]
+        catalogs["minerals"] = minerals
+        print("       model_refinery on: prices before the refining "
+              "deduction; the refinery is flown")
+
     # Parse Module 1's comp_minerals list-column back into actual lists
     if "comp_minerals" in catalogs["asteroids"].columns:
         catalogs["asteroids"]["comp_minerals"] = _parse_minerals_column(
@@ -4870,8 +4907,12 @@ RARE_METAL_ELEMENTS: set = {
 _MINERAL_CACHE: Tuple[Optional[pd.DataFrame], Dict[str, Tuple[Optional[float], str]]] = (None, {})
 
 
-def _mineral_table(mineral_df: pd.DataFrame) -> Dict[str, Tuple[Optional[float], str]]:
-    """name → (price_usd_per_kg, yields_json) mapping, built once and memoised."""
+def _mineral_table(mineral_df: pd.DataFrame) -> Dict[str, Tuple[Any, ...]]:
+    """name → (price, yields_json, net price, refining kWh/kg, used in space).
+
+    Built once and memoised.  The last three are v1.25.0's and are read only
+    when the refinery flies; see `load_all_catalogs`.
+    """
     global _MINERAL_CACHE
     cached_df, mapping = _MINERAL_CACHE
     if cached_df is mineral_df:
@@ -4879,10 +4920,21 @@ def _mineral_table(mineral_df: pd.DataFrame) -> Dict[str, Tuple[Optional[float],
 
     has_yields = "yields_json" in mineral_df.columns
     yields_col = mineral_df["yields_json"] if has_yields else [None] * len(mineral_df)
+    # v1.25.0: three more fields, read only when the refinery flies (see
+    # `load_all_catalogs`); a table without them fills them with None, 0.0
+    # and False, and the first two fields are exactly what they always were.
+    n = len(mineral_df)
+    net_col = (mineral_df[_NET_PRICE_COL] if _NET_PRICE_COL in mineral_df.columns
+               else [None] * n)
+    kwh_col = (mineral_df["refining_kwh_per_kg"]
+               if "refining_kwh_per_kg" in mineral_df.columns else [0.0] * n)
+    route_col = (mineral_df["value_route"] if "value_route" in mineral_df.columns
+                 else [None] * n)
 
     mapping = {}
-    for name, price, yields in zip(
+    for name, price, yields, net, kwh, route in zip(
         mineral_df["name"], mineral_df["price_usd_per_kg"], yields_col,
+        net_col, kwh_col, route_col,
     ):
         key = str(name)
         if key in mapping:
@@ -4890,6 +4942,9 @@ def _mineral_table(mineral_df: pd.DataFrame) -> Dict[str, Tuple[Optional[float],
         mapping[key] = (
             float(price) if pd.notna(price) else None,
             yields if isinstance(yields, str) else "",
+            float(net) if net is not None and pd.notna(net) else None,
+            float(kwh) if kwh is not None and pd.notna(kwh) else 0.0,
+            route == "used in space",
         )
     _MINERAL_CACHE = (mineral_df, mapping)
     return mapping
@@ -5066,10 +5121,177 @@ def _phase_value(
     Only the phase walk uses this.  The four-fraction walk keeps
     `_mineral_implied_value`, so switching phases off is the old model exactly.
     """
+    if refinery_flown(mineral_df):
+        return _phase_terms(mineral_df, phase, pgm_enrichment, True)[0]
     refined = _mineral_implied_value(mineral_df, phase, pgm_enrichment)
     as_is = _mineral_price(mineral_df, phase)
     values = [v for v in (refined, as_is) if v is not None]
     return max(values) if values else None
+
+
+# ─── THE REFINERY, FLOWN  (v1.25.0) ──────────────────────────────────────────
+# Stage 2 writes, per commodity, the energy to turn a kilogram of its raw
+# feedstock into a usable product (`refining_kwh_per_kg`) and its price before
+# the dollar deduction that energy and an amortised plant used to take out of
+# it (`price_before_processing_usd_per_kg`).  With `model_refinery` on, Stage 4
+# values the hold at the second and flies the first: energy through the array,
+# plant through the rig.  See `CalcConfig.model_refinery`.
+_REFINING_COLS = ("refining_kwh_per_kg", "price_before_processing_usd_per_kg",
+                  "value_route")
+_NET_PRICE_COL = "price_net_usd_per_kg"
+
+
+def refinery_flown(mineral_df: pd.DataFrame) -> bool:
+    """True when `load_all_catalogs` switched this table to gross prices."""
+    return _NET_PRICE_COL in mineral_df.columns
+
+
+def _yield_terms(
+    mineral_df: pd.DataFrame, phase: str, pgm_enrichment: float,
+) -> Tuple[Optional[float], Optional[float], float]:
+    """(gross, net, Wh/kg) of one mineral TAKEN APART into its yields.
+
+    The same walk as `_mineral_implied_value`, over both price columns at
+    once.  Energy is the mineral's own breakdown energy plus each element's,
+    and only for what is refined HERE: an element shipped home is refined on
+    Earth, inside its terrestrial price, and a mineral none of whose elements
+    is used in space is taken apart on Earth too.  (None, None, 0.0) for a
+    mineral with no yields.
+    """
+    table = _mineral_table(mineral_df)
+    entry = table.get(phase)
+    if entry is None:
+        return None, None, 0.0
+    try:
+        yields = json.loads(entry[1] or "{}")
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        yields = {}
+    if not yields:
+        return None, None, 0.0
+    enrichment = float(pgm_enrichment) if pgm_enrichment else 1.0
+    gross = net = 0.0
+    element_wh = 0.0
+    any_here = False
+    for element, fraction in yields.items():
+        e = table.get(element)
+        if e is None or e[0] is None:
+            continue
+        share = float(fraction)
+        if element in RARE_METAL_ELEMENTS:
+            share *= enrichment
+        gross += share * e[0]
+        net += share * (e[2] if e[2] is not None else e[0])
+        if e[4]:
+            any_here = True
+            element_wh += float(fraction) * e[3] * 1000.0
+    if gross <= 0:
+        return None, None, 0.0
+    wh = (entry[3] * 1000.0 if any_here else 0.0) + element_wh
+    return gross, net, wh
+
+
+def _phase_terms(
+    mineral_df: pd.DataFrame, phase: str, pgm_enrichment: float, phased: bool,
+) -> Tuple[Optional[float], float]:
+    """($/kg, refining Wh/kg) of one phase, by the route it is sold by.
+
+    Only meaningful when the refinery flies (`refinery_flown`): the price is
+    then the GROSS one, and the energy is what the flown refinery spends per
+    kilogram of this phase in the hold.  Not memoised itself: both callers
+    are, per composition.
+    """
+    entry = _mineral_table(mineral_df).get(phase)
+    if entry is None:
+        return None, 0.0
+    as_is_gross, as_is_net = entry[0], entry[2]
+    as_is_wh = entry[3] * 1000.0 if entry[4] else 0.0
+    gross, net, wh = _yield_terms(mineral_df, phase, pgm_enrichment)
+    if gross is None:
+        return as_is_gross, (as_is_wh if as_is_gross is not None else 0.0)
+    if not phased:
+        # The four-fraction walk's only rule: a mineral with yields is priced
+        # by them.  Unchanged by the refinery; only who pays moves.
+        return gross, wh
+    # The route is decided on NET prices, which is Stage 2's own estimate of
+    # what each costs to deliver usable; the refinery then charges the flown
+    # cost of the route chosen.  A tie is sold as it is.
+    if as_is_net is None or net > as_is_net:
+        return gross, wh
+    return as_is_gross, as_is_wh
+
+
+def asteroid_refinery(
+    asteroid_row: Row, mineral_df: pd.DataFrame,
+) -> Optional[Tuple[Dict[str, float], float]]:
+    """({phase: refining Wh per kg in the hold}, Wh per kg of run-of-mine ore).
+
+    None when the refinery does not fly.  The phases are exactly
+    `asteroid_phase_table`'s, the residual included (sold as silicates, so it
+    takes silicates' energy), and the second figure is their fraction-weighted
+    sum, which is what a raw hold of the body's own proportions spends.
+    """
+    if not refinery_flown(mineral_df):
+        return None
+    # Memoised per composition, like the three functions above it: it runs
+    # once per catalog row and has a couple of dozen distinct answers.
+    key = _composition_key(asteroid_row)
+    if key is not None:
+        entries = _composition_cache(mineral_df)
+        hit = entries.get(key)
+        if hit is not None and hit.refinery is not None:
+            return hit.refinery
+    pgm = _pgm_enrichment(asteroid_row)
+    phased = _row_phases(asteroid_row) is not None
+    wh: Dict[str, float] = {}
+    raw = 0.0
+    for name, frac, _price in asteroid_phase_table(asteroid_row, mineral_df):
+        key = "silicates" if name == _RESIDUAL_PHASE else name
+        per_kg = _phase_terms(mineral_df, key, pgm,
+                              phased and name != _RESIDUAL_PHASE)[1]
+        wh[name] = per_kg
+        raw += frac * per_kg
+    result = (wh, raw)
+    if key is not None:
+        _composition_entry(entries, key).refinery = result
+    return result
+
+
+def refinery_plant_kg(hold_kg: float, stay_yr: float, kg_per_yr_per_kg: float) -> float:
+    """Mass of the plant that processes `hold_kg` in `stay_yr` (v1.25.0).
+
+    Module 3's "In-space processing plant throughput" is kilograms processed
+    per year per kilogram of plant, so the plant is the hold's rate over it.
+    """
+    if hold_kg <= 0 or stay_yr <= 0 or kg_per_yr_per_kg <= 0:
+        return 0.0
+    return hold_kg / (stay_yr * kg_per_yr_per_kg)
+
+
+def _hold_refining(
+    refinery: Optional[Tuple[Dict[str, float], float]],
+    phases:   Optional[list],
+    payload_kg: float,
+    feed_kg:  float,
+    beneficiate: bool,
+    recovery: float,
+) -> Tuple[float, Optional[float]]:
+    """(refining Wh for this hold, water kg in it or None if not computed).
+
+    A raw hold is the body's proportions, so its energy is the per-kg figure
+    times the payload.  A concentrated hold is whatever the knapsack loads,
+    so the knapsack is asked ONCE for its whole mix, and the water in it is
+    returned too, so the caller does not ask it a second time for that.
+    """
+    if refinery is None or payload_kg <= 0:
+        return 0.0, None
+    per_phase, raw_wh_per_kg = refinery
+    if not beneficiate or not phases:
+        return payload_kg * raw_wh_per_kg, None
+    mix = optimal_payload_mix(payload_kg, feed_kg, phases, recovery)["mix_kg"]
+    wh = 0.0
+    for name, kg in mix.items():
+        wh += kg * per_phase.get(name, 0.0)
+    return wh, float(mix.get("water", 0.0))
 
 
 # ── Composition is a per-TAXONOMY fact, not a per-row one  (v1.17.6) ────────
@@ -5141,7 +5363,7 @@ class _CompositionValues:
     computed yet", which is distinguishable from every value these three can
     legitimately return (all are floats, or a list).
     """
-    __slots__ = ("bulk", "phases", "best")
+    __slots__ = ("bulk", "phases", "best", "refinery")
 
     def __init__(self) -> None:
         """All three slots start as None, meaning "not computed yet".
@@ -5153,6 +5375,7 @@ class _CompositionValues:
         self.bulk = None
         self.phases = None
         self.best = None
+        self.refinery = None      # v1.25.0, `asteroid_refinery`
 
 
 def _composition_entry(
@@ -9103,7 +9326,14 @@ def _mission_cost_prologue(
     # Recurring hardware, split into the mining rig (one-way to asteroid,
     # AMORTISABLE across multi-mission programmes since the rig stays put)
     # and the return capsule (fresh per mission, fly-and-die).
-    mining_rig_cost_total   = config.mining_hardware_kg * hw_per_kg
+    # v1.25.0: the refinery plant sits on the rig and is the rig's kind of
+    # hardware, so it is costed at the rig's rate and inherits everything the
+    # rig's cost does -- shared across the campaigns a ship flies, salvaged,
+    # compounded on the programme calendar.  `+ 0.0` when it does not fly,
+    # which leaves this product the one it always was.
+    mining_rig_cost_total   = ((config.mining_hardware_kg
+                                + float(mass_cascade.get("refinery_kg", 0.0)))
+                               * hw_per_kg)
 
     # v1.17.1: `rig_trips` is `(ops_df, config, stay_yr)` and nothing else, and
     # all three are held FIXED across a programme ladder, so the caller that
@@ -9771,6 +10001,7 @@ def _evaluate_combo_at_ratio(
     power_mode:        str  = "solar",
     ctx:               Optional[AsteroidContext] = None,
     market_mode:       Optional[str] = None,
+    refinery:          Optional[Tuple[Dict[str, float], float]] = None,
 ) -> Optional[Dict[str, float]]:
     """Evaluate one (vehicle × propellant × architecture) mission for one asteroid.
 
@@ -10014,6 +10245,12 @@ def _evaluate_combo_at_ratio(
     # is the mistake v1.12.0 found in the cargo-water array.
     power_system_kg = 0.0
     ep_system_kg    = 0.0
+    # v1.25.0: the refinery plant, sized from the hold and the stay, so it is
+    # one more leg of the same ring; 0.0 whenever the refinery does not fly.
+    refinery_kg     = 0.0
+    refinery_rate   = (_ops_value(ops_df, "In-space processing plant throughput",
+                                  default=100.0)
+                       if refinery is not None else 0.0)
     ep_power_watts  = 0.0
     ep_thrust_yr    = 0.0
     ep_thrust_n     = 0.0
@@ -10055,7 +10292,8 @@ def _evaluate_combo_at_ratio(
             isp_s           = isp_s_val,
             dv_out_m_s      = dv_out_m_s,
             dv_ret_m_s      = dv_ret_eff,
-            hardware_kg     = config.mining_hardware_kg + power_system_kg + ep_system_kg,
+            hardware_kg     = (config.mining_hardware_kg + power_system_kg
+                               + ep_system_kg + refinery_kg),
             dry_return_kg   = config.return_vehicle_dry_kg,
             tps_frac        = tps_frac,
             isru_return     = isru,
@@ -10127,9 +10365,17 @@ def _evaluate_combo_at_ratio(
         need_cargo_water = (config.model_water_liberation
                             or (config.model_volatile_containment
                                 and containment_per_kg > 0))
+        # v1.25.0: the refinery needs the WHOLE hold, and a concentrated hold
+        # comes out of the same knapsack the water does, so it is asked once
+        # and both are read off it.  With the refinery off this is exactly
+        # the call it always was.
+        trial_refine_wh, hold_water = _hold_refining(
+            refinery, phases, trial_payload, trial_feed, beneficiate,
+            config.beneficiation_recovery)
         trial_cargo_water = (
-            _cargo_water_kg(asteroid_row, phases, trial_payload, trial_feed,
-                            beneficiate, config, ctx.cargo_ice_frac)
+            (hold_water if hold_water is not None else
+             _cargo_water_kg(asteroid_row, phases, trial_payload, trial_feed,
+                             beneficiate, config, ctx.cargo_ice_frac))
             if need_cargo_water else 0.0
         )
         # Containment scales with the VOLATILE fraction of the cargo, so it is
@@ -10165,6 +10411,15 @@ def _evaluate_combo_at_ratio(
                 processing_power_watts += (
                     water_wh * trial_water / (trial_dur * 365.25 * 24.0)
                 )
+        new_refinery_kg = 0.0
+        if trial_refine_wh > 0 and trial_dur > 0:
+            # v1.25.0: the refinery's draw, over the same stay as the dig, and
+            # its plant, sized to put the hold through in that stay.
+            processing_power_watts += (
+                trial_refine_wh / (trial_dur * 365.25 * 24.0)
+            )
+            new_refinery_kg = refinery_plant_kg(trial_payload, trial_dur,
+                                                refinery_rate)
 
         if processing_power_watts > 0:
             # v1.14.0: the SOURCE is fixed by `power_mode` before the loop, so
@@ -10187,12 +10442,14 @@ def _evaluate_combo_at_ratio(
             and abs(new_ep_kg - ep_system_kg) <= 0.01 * max(new_ep_kg, 1.0)
             and abs(new_isru_feed - isru_feed_kg) <= 0.01 * max(new_isru_feed, 1.0)
             and abs(new_stay_yr - stay_est_yr) <= 0.01 * max(new_stay_yr, 1.0)
+            and abs(new_refinery_kg - refinery_kg) <= 0.01 * max(new_refinery_kg, 1.0)
             # Containment is a fraction, not a mass, so its convergence test is
             # absolute rather than relative: 1e-4 of a payload-scaling term is
             # far below anything that moves a reported number.
             and abs(new_containment_frac - containment_frac) <= 1e-4
         )
         power_system_kg, ep_system_kg = new_power_kg, new_ep_kg
+        refinery_kg                   = new_refinery_kg
         isru_feed_kg, isru_prop_kg    = new_isru_feed, new_isru_prop
         stay_est_yr                   = new_stay_yr
         containment_frac              = new_containment_frac
@@ -10202,7 +10459,8 @@ def _evaluate_combo_at_ratio(
 
     if cascade is None or not cascade["viable"]:
         return None
-    hardware_total_kg = config.mining_hardware_kg + power_system_kg + ep_system_kg
+    hardware_total_kg = (config.mining_hardware_kg + power_system_kg + ep_system_kg
+                         + refinery_kg)
 
     # ── Volume cap ───────────────────────────────────────────────────────────
     # Cargo volume = payload mass / bulk density.  Asteroid bulk density
@@ -10296,12 +10554,18 @@ def _evaluate_combo_at_ratio(
     # the structure fraction, for the same reason the power plant is settled
     # below: the mission that gets priced has to be the mission that gets flown.
     cargo_water_kg = 0.0
+    # v1.25.0: the refinery's energy for the hold actually flown, off the same
+    # knapsack call as the water, as in the loop.
+    refine_wh, hold_water = _hold_refining(
+        refinery, phases, m_payload, feed_kg, beneficiate,
+        config.beneficiation_recovery)
     if config.model_water_liberation or (config.model_volatile_containment
                                          and containment_per_kg > 0):
-        cargo_water_kg = _cargo_water_kg(
-            asteroid_row, phases, m_payload, feed_kg, beneficiate, config,
-            ctx.cargo_ice_frac,
-        )
+        cargo_water_kg = (hold_water if hold_water is not None else
+                          _cargo_water_kg(
+                              asteroid_row, phases, m_payload, feed_kg,
+                              beneficiate, config, ctx.cargo_ice_frac,
+                          ))
     containment_frac = 0.0
     if config.model_volatile_containment and m_payload > 0:
         containment_frac = containment_per_kg * min(1.0, cargo_water_kg / m_payload)
@@ -10387,6 +10651,12 @@ def _evaluate_combo_at_ratio(
         processing_power_watts += (
             water_wh * water_kg / (mining_yr * 365.25 * 24.0)
         )
+    refinery_power_watts = 0.0
+    refinery_kg = 0.0
+    if refine_wh > 0 and mining_yr > 0:
+        refinery_power_watts = refine_wh / (mining_yr * 365.25 * 24.0)
+        processing_power_watts += refinery_power_watts
+        refinery_kg = refinery_plant_kg(m_payload, mining_yr, refinery_rate)
     if processing_power_watts > 0:
         # The settled draw is the one that has to fit under the Pu-238 ceiling,
         # since the liberation term is a real addition to it.  Re-checked here
@@ -10398,7 +10668,8 @@ def _evaluate_combo_at_ratio(
                            if plant_w_per_kg > 0 else 0.0)
     else:
         power_system_kg = 0.0
-    hardware_total_kg = config.mining_hardware_kg + power_system_kg + ep_system_kg
+    hardware_total_kg = (config.mining_hardware_kg + power_system_kg + ep_system_kg
+                         + refinery_kg)
 
     (m_at_asteroid, m_outbound_prop,
      m_tank_outbound, m_launch) = _downstream_of_hardware(hardware_total_kg)
@@ -10422,6 +10693,8 @@ def _evaluate_combo_at_ratio(
         "m_dry_return":    m_dry_return,
         "m_tank_return":   m_tank_return,
         "m_tank_outbound": m_tank_outbound,
+        # v1.25.0: the refinery plant, costed as mining hardware.
+        "refinery_kg":     refinery_kg,
     }
 
     # ── Delivered $/kg, the best load assemblable from this rock ────────────
@@ -11030,6 +11303,11 @@ def _evaluate_combo_at_ratio(
         "learning_curve_factor":    cost["learning_curve_factor"],
         "processing_power_w":       processing_power_watts,
         "power_system_kg":          power_system_kg,
+        # v1.25.0: the refinery.  Its plant is part of `hardware_total_kg`
+        # and of the rig's cost; its draw is part of `processing_power_w`
+        # and so of `power_system_kg`.  Reported apart so neither is hidden.
+        "refinery_kg":              refinery_kg,
+        "refinery_power_w":         refinery_power_watts,
         "power_w_per_kg_at_target":  plant_w_per_kg,
         "power_source":             power_source,
         "hardware_total_kg":        hardware_total_kg,
@@ -11301,6 +11579,7 @@ def evaluate_combo(
     power_mode:        str  = "solar",
     ctx:               Optional[AsteroidContext] = None,
     market_mode:       Optional[str] = None,
+    refinery:          Optional[Tuple[Dict[str, float], float]] = None,
 ) -> Optional[Dict[str, float]]:
     """Best mission for one (asteroid × vehicle × propellant × architecture),
     optimising over how hard to concentrate.  "Best" is `selection_key`, which
@@ -11332,7 +11611,7 @@ def evaluate_combo(
         phases=phases, target_ratio=r, beneficiate=b, markets=markets,
         market_mode=market_mode,
         aero=aero, isru=isru, rendezvous_apsis=rendezvous_apsis,
-        power_mode=power_mode, ctx=ctx,
+        power_mode=power_mode, ctx=ctx, refinery=refinery,
     )
 
     if not config.use_beneficiation:
@@ -11701,6 +11980,8 @@ def evaluate_asteroid(
     # the market model prices each commodity in the haul separately.
     phases  = asteroid_phase_table(asteroid_row, minerals)
     markets = market_table(minerals)
+    # v1.25.0: per-body, so resolved once here rather than per candidate.
+    refinery = asteroid_refinery(asteroid_row, minerals)
     # v1.21.0.  A per-RUN config value, resolved beside `markets` and threaded
     # the same way.  Asked once per CANDIDATE it was 332 calls per evaluable
     # row and ~47 s of a full beneficiated cell; asked here it is one.
@@ -11893,6 +12174,7 @@ def evaluate_asteroid(
                         aero=dv_aero, isru=isru,
                         rendezvous_apsis=dv_apsis,
                         power_mode=power_mode, ctx=ctx,
+                        refinery=refinery,
                     )
                     if result is None:
                         continue
@@ -12668,7 +12950,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.38.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.39.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
