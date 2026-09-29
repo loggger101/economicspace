@@ -77,6 +77,7 @@ through. Skim for the section that names what you are about to change.
 - [Splitting a quantity finds every reader that took it as its largest part](#splitting-a-quantity-finds-every-reader-that-took-it-as-its-largest-part)
 - [A mineral has two prices, and a walk that read one was right only while nothing walked it](#a-mineral-has-two-prices-and-a-walk-that-read-one-was-right-only-while-nothing-walked-it)
 - [A checker run only on the best case has never run on the rest](#a-checker-run-only-on-the-best-case-has-never-run-on-the-rest)
+- [A cost amortised over a plant's life is not the cost of a plant flown for a stay](#a-cost-amortised-over-a-plants-life-is-not-the-cost-of-a-plant-flown-for-a-stay)
 - [Durable lessons from the release history](#durable-lessons-from-the-release-history)
 - [The verification harness is committed now](#the-verification-harness-is-committed-now)
 - [A comment explaining a duplicate is not a reason it still has to exist](#a-comment-explaining-a-duplicate-is-not-a-reason-it-still-has-to-exist)
@@ -207,7 +208,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.7.0`, mineral_value `1.11.0`, transportation `1.17.0`,
-calc `1.24.0`, master `1.38.0` (the master version is a literal in
+calc `1.25.0`, master `1.39.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -475,6 +476,11 @@ False to reproduce anything here; it is bit-identical to 1.23.0 when you do.
 It moves the median body by several percent and in BOTH directions by class
 (D-types get worse), so it is the least safe of the six to scale by; the
 measurement is in [calc v1.24.0](versions.md#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240).
+
+🚨  **AND calc `1.25.0` ADDS A SEVENTH: `model_refinery` is True**, and it
+moves raw and concentrated cells in OPPOSITE directions, so no single factor
+covers it either. Set it False as well; it is bit-identical to 1.24.0 when you
+do. See [calc v1.25.0](versions.md#master-v1390--calc-v1250).
 
 ⚠️  **DO NOT SCALE THESE CELLS BY A SINGLE RATIO.** On the capped cislunar
 sample cells the four together are worth 2.6x on raw ore and 2.1x on the
@@ -4083,6 +4089,36 @@ rather than folded into this one. It is the
 [unreachable branch](#the-older-matrices-and-the-claims-they-retired) lesson
 for a checker, and `--sweep` exists for exactly this one level up: ask what
 fraction of the cases a check has ever been SHOWN, not only whether it passed.
+
+### A cost amortised over a plant's life is not the cost of a plant flown for a stay
+
+calc `1.25.0`, and it is the reason the refinery's sign depends on the ore.
+Stage 2's refining deduction is an honest number for a DEPOT refinery: energy
+at the capital rate of an array that runs fifteen years, a plant amortised
+over the same fifteen.  Flying the refinery on the mission keeps every rate
+and changes only how long the hardware works, and on a raw mission that is the
+0.25-year stay floor, one sixtieth of the life the deduction assumed.  So
+the same Module 3 rows give an energy about **60x dearer per kWh** and a plant
+about **60x dearer per kg processed**, and nothing about the rates is wrong.
+
+⚠️  **Read a per-unit cost as (capital) / (hours it works), and ask whose
+hours.**  A concentrating mission digs for years, so its refinery lands
+UNDER the flat deduction; that is why the default cell improves while the raw
+cells get worse, and neither is a defect.
+
+⚠️  **Do not "fix" the raw result by sizing the refinery over the whole
+mission.** Refining on the cruise home is a real option, but the electric
+stage uses the array for thrust on most of those years, so it is a design
+question with a model of its own, recorded in the release rather than assumed
+away.
+
+⚠️  **And the refinery is where the stopping-test quirk showed up next.**
+Adding a term to the fixed point's convergence test moved which pass is
+carried, and two bodies became evaluable that the loop had refused by
+stopping a pass early; one Oort-cloud orbit read 4.6x better.  Traced to the
+settle-up's launch recheck, not to refining.  **When a new term makes a
+mission close that did not before, trace the refusal before believing the
+gain**: adding mass can never make a mission fit.
 
 ### A ratio taken across a session is a measurement of the session
 

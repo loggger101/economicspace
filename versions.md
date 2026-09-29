@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.39.0 / calc v1.25.0](#master-v1390--calc-v1250)
 - [master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240)
 - [master v1.37.0 / transportation v1.17.0 / catalog v1.6.0](#master-v1370--transportation-v1170--catalog-v160)
 - [master v1.36.0 / catalog v1.4.0](#master-v1360--catalog-v140)
@@ -92,8 +93,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.7.0** | v1.7.0, every class divided into the mineral phases its four coarse fractions are made of, the new `comp_phases` column; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.11.0** | v1.11.0, the products the new phases yield: sulfur, phosphorus, chromium, titanium, CO2, ammonia and five trace metals, and four new minerals |
 | 3 | `modules/transportation.py` | **1.17.0** | v1.17.0, every fairing volume derived from a cited drawing or left blank with a reason: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.24.0** | v1.24.0, a body is sold as the minerals it is made of (`model_mineral_phases`, default on) |
-| - | `master.py` | **1.38.0** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.25.0** | v1.25.0, the refinery is flown rather than taken out of the price (`model_refinery`, default on) |
+| - | `master.py` | **1.39.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -165,6 +166,110 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.39.0 / calc v1.25.0
+
+**The refinery is flown instead of being taken out of the price.** Stage 2
+prices a commodity sold in space as "terrestrial + utility x launch cost
+avoided - the cost of refining it on site", and that last term is a dollar
+estimate of a plant nobody launches: energy at the capital rate of an array
+that runs for **fifteen years**, and a plant amortised over the same life.
+With `model_refinery` on (the default), every phase is valued before that
+deduction and the mission carries the refinery.
+
+### What changes here
+
+- **Energy**: Stage 2's `refining_kwh_per_kg` (written at mineral_value
+  1.11.0 for this release) for each phase in the hold, by the route it is
+  sold by: as it is, the mineral's own process energy; taken apart, its
+  breakdown energy plus each element's, and only for elements used in space,
+  because anything shipped home is refined on Earth.  It joins the processing
+  draw over the stay, so it is paid in array mass through the rocket equation
+  and in array cost, in the sizing loop and the settle-up alike.
+- **Plant**: the hold over Module 3's "In-space processing plant throughput"
+  (kg per year per kg of plant) over the stay.  It rides with the rig: its
+  mass is in `hardware_total_kg` and its cost in the rig's, so it is shared,
+  salvaged and compounded on the programme calendar exactly as the rig is.
+- **Prices**: `load_all_catalogs` swaps the price column for
+  `price_before_processing_usd_per_kg` and keeps the net one for the one
+  decision that still reads it, which way a mineral is sold.  So the refinery
+  changes who pays, not the choice.  At `earth_surface` Stage 2 writes no
+  refining columns and nothing changes.
+- **New output columns** `refinery_kg` and `refinery_power_w`; the ledger is
+  `hardware_total_kg = rig + power_system_kg + ep_system_kg + refinery_kg`,
+  and `verify.py` check 4 holds it.  `model_refinery` joins `RESET_FIELDS`.
+- **The worked calculation** derives the refinery from the row
+  (`refinery_kg > 0` says it flew), shows each phase's energy and how it was
+  formed, and the verification sheet writes every line of it as arithmetic.
+  A phase page also shows the four coarse fractions now, which the column
+  audit found missing on the first S-type it met.
+
+### What it is worth, on a sample
+
+`verify.py`'s four cislunar cells, the refinery on against off, on identical
+inputs. With it off every cell is **bit-identical to v1.24.0**:
+
+| cell | off vs v1.24.0 | evaluable | median body, on vs off | best row, off to on |
+|---|---|---|---|---|
+| raw, N = 1 | `5bc4ad215a945cce` **MATCH** | 166 to 158 | **18.3% worse** (38 better, 118 worse) | 2022 NX1, 8.9791x to 8.9723x |
+| raw, searched | `5504a4cbf6520067` **MATCH** | 166 to 158 | **24.6% worse** | 2022 NX1, 6.6904x to 6.5619x |
+| beneficiated, N = 1 | `f83bdc0459347b52` **MATCH** | 58 to 56 | **2.8% better** (39, 17) | 2022 RX1, 21.8083x to 20.6165x |
+| default | `88e43eafa8d1eeda` **MATCH** | 58 to 56 | **1.9% better** (44, 12) | 2021 TD 13.2109x to **2022 RX1 12.6380x** |
+
+🚨  **THE SIGN DEPENDS ON THE STAY, AND THAT IS THE FINDING.** Stage 2's
+deduction assumed a refinery running for fifteen years.  One flown on the
+mission runs only for the stay, which on a raw mission is often the 0.25-year
+floor, and a quarter-year is one sixtieth of fifteen: the energy costs about
+**60x more per kWh** and the plant about **60x more per kg processed** than
+the deduction said, before the rig's sharing across a programme.  A
+concentrating mission digs for years and already flies a plant, so its
+refinery's energy is spread thin and comes in UNDER the flat deduction.
+Raw ore gets worse, concentrate gets better, and the default cell is a
+concentrating one.
+
+⚠️  **Distance does the rest.** Median r on the raw cell by semi-major axis:
+1.03 inside 1.5 AU, 1.08 to 2.2 AU, **1.42 from 2.2 to 2.8 AU**: solar power
+falls as 1/r2, so a refinery at a far body pays for a heavier array.  The
+eight bodies the raw cells lose are mostly C-types at 2.5 to 2.8 AU with
+sub-tonne holds, whose array no longer fits.
+
+⚠️  **Two rows are GAINED, and not because refining helps them.** 2020 M4
+(an orbit at 14,513 AU) reads 4.6x better, and one S- and one K-type join
+the evaluable set.  Traced: with the refinery off, the Falcon Heavy candidate
+fails the settle-up's launch-mass recheck, because the fixed point carries its
+last pass rather than re-solving at its settled hardware; the refinery adds a
+term to the stopping test, the loop stops on a different pass, and the stack
+fits.  That is [a fixed point that carries its last pass](CLAUDE.md#a-fixed-point-that-carries-its-last-pass-makes-the-stopping-test-an-answer),
+pre-existing, and not a refinery effect.
+
+⚠️  **A lever left unmodelled, deliberately**: the refinery is sized to put
+the hold through during the STAY, as beneficiation is.  Refining on the cruise
+home would spread it over years and change the raw result most; it needs the
+array free of the electric stage, and it is recorded here rather than guessed.
+
+✅  **And no body declines to concentrate any more**, on the 158 raw/benef
+pairs of `verify.py` check 5, where 13 did at v1.24.0.  The refinery is cheap
+on concentrate and dear on raw ore, so concentrating now wins everywhere it is
+priced, by at least 15% (`max 0.852676`).
+
+These are samples; [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) applies.
+
+### What was verified
+
+| harness | result |
+|---|---|
+| the A/B above | four MATCH hashes with the refinery off |
+| `worked_calculation.py --audit`, refinery-flown raw and default winners | 90 quantities, 0 DIFFER on both; 119 of 119 columns and 36 of 36 rates on the default page |
+| `verification_sheet.py --check`, the default winner | 281 of 281 substitutions reproduce |
+| the archived v0.4.0 default cell | reproduces exactly as recorded, refinery columns reported skipped |
+| `verify.py check` (prune ON vs OFF, serial vs parallel, invariants) | prune ON vs OFF 146/146 identical on all four cells; serial vs 8 workers identical; mass ledger 0 kg with `refinery_kg`; never-worse 0 exceptions on all three pairings; Stage 2 tables identical; ceilings 0. Check 1 was run against a baseline of this same build, only to reach checks 2-7, and the harness says so rather than passing it |
+| `verify_docs.py` | every check |
+
+### What did not change
+
+- catalog `1.7.0`, mineral_value `1.11.0`, transportation `1.17.0`: no stage
+  re-ran, and Stage 2 already wrote the columns this reads.
+- The route each mineral is sold by.
 
 ## master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0
 
@@ -1389,6 +1494,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.39.0 / calc v1.25.0](#master-v1390--calc-v1250) | 2026-09-29 | **the refinery is flown**: energy through the array, plant with the rig, prices before Stage 2's refining deduction |
 | [master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240) | 2026-09-29 | **the minerals are extracted, not the four fractions**: catalog `data-2026-09-29` carries every class's mineral phases, Stage 2 prices what they yield, and Stage 4 loads, concentrates and sells each one |
 | [master v1.36.0 / catalog v1.4.0](#master-v1360--catalog-v140) | 2026-09-25 | **Stage 1 repins to `data-2026-09-25`**, data contract 1.4.0, and the redundancies around the Stage 1 and Stage 3 seams go from all three repositories |
 | [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160) | 2026-09-23 | **spacecost v0.4.0**: the launch table re-audited and the delivered-price model changed, so Stages 2 and 3 both re-price |
@@ -7439,6 +7545,18 @@ field defaults ON.
 - **Needs** Stage 2 at mineral_value 1.11.0 and a catalog at contract 1.7.0;
   with an older catalog it runs the four-fraction model whatever the switch
   says.
+
+**`1.25.0`  the refinery, flown.** Full write-up: [master v1.39.0 / calc v1.25.0](#master-v1390--calc-v1250). One config field
+and two output columns are added, and the field defaults ON.
+
+- **New field**: `model_refinery` (default **True**). False is v1.24.0 to the
+  bit on all four `verify.py` cells.
+- **New output columns**: `refinery_kg` (in `hardware_total_kg`, and costed
+  in the rig) and `refinery_power_w` (in `processing_power_w`).
+- **Reads** Stage 2's `refining_kwh_per_kg`, `price_before_processing_usd_per_kg`
+  and `value_route` (mineral_value 1.11.0) and Module 3's "In-space
+  processing plant throughput"; a Stage 2 table without them leaves the
+  refinery off.
 
 # Measurement history
 
