@@ -365,6 +365,34 @@ def run_phases(archived, body):
     return bool(flag)
 
 
+NET_PRICE_COL = "price_net_usd_per_kg"
+
+
+def run_refinery(archived):
+    """Whether the ROW's run flew the refinery (calc v1.25.0).
+
+    Read off the row, for the reason `run_phases` is: the switch is a property
+    of the run.  A flown refinery always has a plant (the hold is never empty
+    on a row that exists), so a positive `refinery_kg` settles it, and a row
+    too old to carry the column paid Stage 2's price deduction instead.
+    """
+    kg = archived.get("refinery_kg") if archived is not None else None
+    return kg is not None and not pd.isna(kg) and float(kg) > 0.0
+
+
+def gross_minerals(minerals):
+    """The Stage 2 table as a flown-refinery run reads it.
+
+    The model's `load_all_catalogs` does exactly this: the price column
+    becomes the price BEFORE the refining deduction, and the net one is kept
+    for the route choice.  Done here from the row's own run setting.
+    """
+    table = minerals.copy()
+    table[NET_PRICE_COL] = table["price_usd_per_kg"]
+    table["price_usd_per_kg"] = table["price_before_processing_usd_per_kg"]
+    return table
+
+
 def body_water_fraction(body, phased):
     """The fraction of the body that is WATER, as calc's _row_water_fraction.
 
@@ -1048,6 +1076,50 @@ def _yield_blend(yields, price, kappa, rare):
     return total
 
 
+# How each mineral's refining energy was formed on the last `phase_table`
+# call, for the page to show it as arithmetic: filled by `_refining_wh`.
+_HOW = {}
+
+
+def _refining_wh(mineral, table_yields, kwh, here, price, kappa, rare):
+    """(Wh per kg as it is, Wh per kg taken apart, gross blend, net blend).
+
+    calc's `_yield_terms` and `_phase_terms`, written out: a mineral taken
+    apart pays its own breakdown energy when any of its elements is refined
+    HERE, plus each such element's; an element shipped home is refined on
+    Earth.  The blends walk the yields in the same order as the model.
+    """
+    as_is = kwh.get(mineral, 0.0) * 1000.0 if here.get(mineral) else 0.0
+    raw = table_yields.get(mineral)
+    own = json.loads(raw) if isinstance(raw, str) and raw.strip() else {}
+    gross = net = element_wh = 0.0
+    any_here = False
+    _HOW[mineral] = {"as_is_kwh": kwh.get(mineral, 0.0) if here.get(mineral)
+                     else 0.0, "own_kwh": 0.0, "terms": []}
+    net_price = price["__net__"]
+    for element, fraction in own.items():
+        p = price.get(element)
+        if p is None or not math.isfinite(float(p)):
+            continue
+        share = float(fraction)
+        if element in rare:
+            share *= kappa
+        gross += share * float(p)
+        n = net_price.get(element)
+        net += share * (float(n) if n is not None and math.isfinite(float(n))
+                        else float(p))
+        if here.get(element):
+            any_here = True
+            element_wh += float(fraction) * kwh.get(element, 0.0) * 1000.0
+            _HOW[mineral]["terms"].append((element, float(fraction),
+                                           kwh.get(element, 0.0)))
+    if not own or gross <= 0:
+        return as_is, None, None, None
+    _HOW[mineral]["own_kwh"] = kwh.get(mineral, 0.0) if any_here else 0.0
+    apart = (kwh.get(mineral, 0.0) * 1000.0 if any_here else 0.0) + element_wh
+    return as_is, apart, gross, net
+
+
 def phase_table(body, minerals, phased=False):
     """[(phase, mass fraction, $/kg)] for one body, derived from Module 2.
 
@@ -1088,7 +1160,49 @@ def phase_table(body, minerals, phased=False):
         alloy += share * float(price[element])
 
     phases, total, ways = [], 0.0, {}
-    if phased:
+    _HOW.clear()
+    # calc v1.25.0: with the refinery flown (`gross_minerals` was applied),
+    # every phase also carries the energy the refinery spends on a kilogram
+    # of it, by the route it is sold by, and the route is chosen on NET prices.
+    refinery = NET_PRICE_COL in minerals.columns
+    wh = {}
+    if refinery:
+        kwh = {str(n): (float(k) if pd.notna(k) else 0.0) for n, k in
+               zip(minerals["name"], minerals["refining_kwh_per_kg"])}
+        here = {str(n): r == "used in space" for n, r in
+                zip(minerals["name"], minerals["value_route"])}
+        price["__net__"] = dict(zip(minerals["name"], minerals[NET_PRICE_COL]))
+        table_yields_all = dict(zip(minerals["name"], minerals["yields_json"]))
+        rare_all = set(master.RARE_METAL_ELEMENTS)
+    if phased and refinery:
+        for mineral, frac in body_phases(body):
+            as_is = price.get(mineral)
+            as_is = (None if as_is is None or not math.isfinite(float(as_is))
+                     else float(as_is))
+            as_net = price["__net__"].get(mineral)
+            as_net = (None if as_net is None or not math.isfinite(float(as_net))
+                      else float(as_net))
+            e_as_is, e_apart, gross, net = _refining_wh(
+                mineral, table_yields_all, kwh, here, price, kappa, rare_all)
+            if gross is None:
+                if as_is is None:
+                    continue
+                value, energy, chosen = as_is, e_as_is, "as-is"
+            elif as_net is None or net > as_net:
+                value, energy, chosen = gross, e_apart, "refined"
+            else:
+                value, energy, chosen = as_is, e_as_is, "as-is"
+            if gross is not None:
+                ways[mineral] = {"yields": json.loads(table_yields_all[mineral]),
+                                 "refined": gross, "as_is": as_is,
+                                 "refined_net": net, "as_is_net": as_net,
+                                 "chosen": chosen}
+            wh[mineral] = energy
+            _HOW.setdefault(mineral, {"as_is_kwh": 0.0, "own_kwh": 0.0,
+                                      "terms": []})["route"] = chosen
+            phases.append((mineral, frac, value))
+            total += frac
+    elif phased:
         table_yields = dict(zip(minerals["name"], minerals.get(
             "yields_json", pd.Series([None] * len(minerals)))))
         rare = set(master.RARE_METAL_ELEMENTS)
@@ -1121,12 +1235,30 @@ def phase_table(body, minerals, phased=False):
             if frac is None or pd.isna(frac) or float(frac) <= 0:
                 continue
             value = alloy if mineral == "nickel-iron" else float(price[mineral])
+            if refinery:
+                # The four-fraction rule: a mineral with yields is priced,
+                # and so refined, by them.
+                e_as_is, e_apart, gross, _net = _refining_wh(
+                    mineral, table_yields_all, kwh, here, price, kappa,
+                    rare_all)
+                wh[mineral] = e_apart if gross is not None else e_as_is
+                _HOW[mineral]["route"] = ("refined" if gross is not None
+                                          else "as-is")
             phases.append((mineral, float(frac), value))
             total += float(frac)
     if 0.0 < total < 1.0:
         phases.append((master._RESIDUAL_PHASE, 1.0 - total,
                        float(price["silicates"])))
-    return phases, alloy, yields, ways
+        if refinery:
+            # Sold as silicates, so it takes silicates' energy, as it is.
+            wh[master._RESIDUAL_PHASE] = (kwh.get("silicates", 0.0) * 1000.0
+                                          if here.get("silicates") else 0.0)
+            _HOW[master._RESIDUAL_PHASE] = {
+                "route": "as-is", "own_kwh": 0.0, "terms": [],
+                "as_is_kwh": (kwh.get("silicates", 0.0)
+                              if here.get("silicates") else 0.0)}
+    price.pop("__net__", None)
+    return phases, alloy, yields, ways, wh
 
 
 # How close two statements of one quantity have to be before the difference
@@ -1836,6 +1968,11 @@ def context(body, archived, tables):
                 "refining": float(m["in_space_processing_usd_per_kg"]),
                 "route": str(m["value_route"]),
                 "delivered": float(m["price_usd_per_kg"]),
+                # calc v1.25.0: before the refining deduction, which is what
+                # a flown refinery sells at.  Stage 2 >= 1.11.0 only.
+                "gross": (float(m["price_before_processing_usd_per_kg"])
+                          if "price_before_processing_usd_per_kg" in m
+                          else float(m["price_usd_per_kg"])),
             }
     return dict(
         cfg=cfg, body=body, veh=veh, pro=pro, ops=ops, val=val,
@@ -2502,6 +2639,32 @@ def refuse(reason):
     return None
 
 
+def refining_energy(C, payload, mix):
+    """Wh the flown refinery spends on this hold (calc v1.25.0), or 0.0.
+
+    A raw hold is the body's proportions, so it is the payload times the
+    fraction-weighted energy per kilogram; a concentrated one is the knapsack's
+    mix, each phase at its own energy, summed in the mix's own order.
+    """
+    if not C.get("refinery") or payload <= 0:
+        return 0.0
+    if mix is None:
+        return payload * C["refine_raw_wh"]
+    total = 0.0
+    for name, kg in mix.items():
+        total += kg * C["refine_wh"].get(name, 0.0)
+    return total
+
+
+def refinery_plant(C, hold, stay_yr):
+    """The plant that puts `hold` through in `stay_yr`: Module 3's throughput
+    per kilogram of plant, as calc's `refinery_plant_kg`."""
+    rate = C.get("refinery_rate", 0.0)
+    if hold <= 0 or stay_yr <= 0 or rate <= 0:
+        return 0.0
+    return hold / (stay_yr * rate)
+
+
 def mass_and_clock(C, B, DV, ratio):
     """The coupled sizing loop, then the mission actually flown.
 
@@ -2534,6 +2697,7 @@ def mass_and_clock(C, B, DV, ratio):
     throughput = C["rate_kg_yr"] * cfg.max_mining_duration_yr
     phases = C["phases"]
     plant_kg = ep_kg = 0.0
+    refinery_kg = 0.0            # calc v1.25.0, 0.0 unless the refinery flew
     isru_feed = isru_prop = 0.0
     struct = cfg.return_structure_frac_of_payload
     # 🚨  THE STAY IS IN THE CONVERGENCE TEST, AND LEAVING IT OUT COSTS A PASS.
@@ -2564,7 +2728,7 @@ def mass_and_clock(C, B, DV, ratio):
         R = _ratios(C, DV["dv_out"], dv_ret_eff)
         if R is None:
             return refuse("the tank cannot close: delta (R - 1) >= 1 on this propellant")
-        hw_in = cfg.mining_hardware_kg + plant_kg + ep_kg
+        hw_in = cfg.mining_hardware_kg + plant_kg + ep_kg + refinery_kg
         cas = _cascade(C, R, hw_in, struct)
         if cas is None:
             return refuse("the mass cascade does not converge at this hardware mass")
@@ -2600,8 +2764,10 @@ def mass_and_clock(C, B, DV, ratio):
         # gave this body a water cargo the model does not fly, and therefore a
         # 194 kg solar plant the model does not launch -- which moved the
         # payload by 0.7% and every cost downstream of it.
-        water = (knapsack(trial_pay, trial_feed, phases,
-                          C["recovery"])["mix"].get("water", 0.0)
+        trial_mix = (knapsack(trial_pay, trial_feed, phases,
+                              C["recovery"])["mix"]
+                     if C["beneficiated"] else None)
+        water = (trial_mix.get("water", 0.0)
                  if C["beneficiated"] else trial_pay * C["ice_frac"])
         # 🚨  A RAW, NON-ISRU MISSION SIZES NO PLANT FOR ITS DIG.  The model
         # calls `processing_power_w` only when beneficiating or making
@@ -2621,6 +2787,14 @@ def mass_and_clock(C, B, DV, ratio):
                          if isru else 0.0) + water
             if liberated > 0:
                 draw += C["water_wh"] * liberated / hours(trial_dig)
+        # calc v1.25.0: the refinery's draw over the same stay, and the plant
+        # that puts the hold through in it.  A raw hold is the body's own
+        # proportions; a concentrated one is the knapsack's mix.
+        new_refinery = 0.0
+        refine = refining_energy(C, trial_pay, trial_mix)
+        if refine > 0 and trial_dig > 0:
+            draw += refine / hours(trial_dig)
+            new_refinery = refinery_plant(C, trial_pay, trial_dig)
         # A radioisotope plant is not expensive over the ceiling, it is
         # UNAVAILABLE: DOE produces about 1.5 kg of Pu-238 a year, roughly one
         # flagship RTG for the whole world.
@@ -2633,6 +2807,7 @@ def mass_and_clock(C, B, DV, ratio):
                        "m_pay": cas["m_pay"], "ep": ep["mass"],
                        "plant": new_plant, "feed": trial_feed,
                        "dig": trial_dig, "water": water, "c_frac": new_frac,
+                       "refinery": new_refinery,
                        "stay": new_stay, "isru_feed": new_isru_feed})
         held = struct - cfg.return_structure_frac_of_payload
         # Five tests, in the model's own order and with its own tolerances:
@@ -2642,8 +2817,11 @@ def mass_and_clock(C, B, DV, ratio):
                    and abs(ep["mass"] - ep_kg) <= 0.01 * max(ep["mass"], 1.0)
                    and abs(new_isru_feed - isru_feed) <= 0.01 * max(new_isru_feed, 1.0)
                    and abs(new_stay - stay_est) <= 0.01 * max(new_stay, 1.0)
+                   and abs(new_refinery - refinery_kg)
+                   <= 0.01 * max(new_refinery, 1.0)
                    and abs(new_frac - held) <= 1e-4)
         plant_kg, ep_kg = new_plant, ep["mass"]
+        refinery_kg = new_refinery
         isru_feed, isru_prop = new_isru_feed, new_isru_prop
         stay_est = new_stay
         struct = cfg.return_structure_frac_of_payload + new_frac
@@ -2707,10 +2885,17 @@ def mass_and_clock(C, B, DV, ratio):
     liberated = isru_water + (water if cfg.model_water_liberation else 0.0)
     if liberated > 0:
         draw += C["water_wh"] * liberated / hours(dig_yr)
+    refine = refining_energy(C, m_pay,
+                             load["mix"] if C["beneficiated"] else None)
+    refine_draw = refinery_kg = 0.0
+    if refine > 0 and dig_yr > 0:
+        refine_draw = refine / hours(dig_yr)
+        draw += refine_draw
+        refinery_kg = refinery_plant(C, m_pay, dig_yr)
     if C["power_source"] == "rtg" and draw > cfg.rtg_max_power_w:
         return refuse("the radioisotope plant exceeds `rtg_max_power_w`")
     plant_kg = draw / C["plant_w_per_kg"] if draw > 0 else 0.0
-    hw = cfg.mining_hardware_kg + plant_kg + ep["mass"]
+    hw = cfg.mining_hardware_kg + plant_kg + ep["mass"] + refinery_kg
 
     # Under ISRU only the empty tank rides the outbound leg; the propellant is
     # made at the far end.
@@ -2750,6 +2935,8 @@ def mass_and_clock(C, B, DV, ratio):
             "feed": feed, "ratio": feed / m_pay, "load": load, "water": water,
             "c_frac": c_frac, "f_eff": f_eff, "m_containment": c_frac * m_pay,
             "plant": plant_kg, "draw": draw, "hw": hw, "m_dry": m_dry,
+            "refinery": refinery_kg, "refine_draw": refine_draw,
+            "refine_wh": refine,
             "m_after": m_after, "m_rprop": m_rprop, "m_tank_ret": m_tank_ret,
             "m_at": m_at, "m_oprop": m_oprop, "m_tank_out": m_tank_out,
             "m_launch": m_launch, "ret_vol": m_pay / C["rho"] / 1000.0,
@@ -2997,7 +3184,9 @@ def cost(C, M, n_missions, per_ship):
     lc = (sum(k ** math.log(cfg.learning_curve_rate, 2)
               for k in range(1, n_missions + 1)) / n_missions
           if terms["learning"] else 1.0)
-    rig_total = cfg.mining_hardware_kg * val("Mining payload recurring cost")
+    # calc v1.25.0: the refinery plant rides with the rig and is costed as it.
+    rig_total = ((cfg.mining_hardware_kg + M.get("refinery", 0.0))
+                 * val("Mining payload recurring cost"))
     share = max(1, min(per_ship, M["trips"]))
     # 🚨  TWO WAYS TO USE UP A RIG, AND THE SECOND ONE IS GATED WITH THE CAP
     # THAT CREATES IT.  Crediting salvage on remaining calendar years while the
@@ -3375,6 +3564,8 @@ def comparable(C, B, DV, M, P, ladder):
         "processing_power_w": M["draw"], "ep_system_kg": M["ep"]["mass"],
         "ep_power_w": M["ep"]["power"], "ep_thrust_n": M["ep"]["thrust"],
         "hardware_total_kg": M["hw"], "mining_duration_yr": M["dig_yr"],
+        # calc v1.25.0; absent before it, and reported skipped then.
+        "refinery_kg": M["refinery"], "refinery_power_w": M["refine_draw"],
         # The axes the cislunar cells could not exercise, each with a column of
         # its own so that turning one on is checked rather than assumed.  Every
         # one of them is exactly zero (or 1.0) on the mission shape that does
@@ -3510,8 +3701,21 @@ def build(archived, label, body=None, run_beneficiated=None):
     C["archived_payload"] = float(archived.get("max_payload_kg") or 0.0)
     C["archived_feed"] = float(archived.get("feed_processed_kg") or 0.0)
     C["phased"] = run_phases(archived, body)
-    phases, alloy, yields, ways = phase_table(body, tables["minerals"],
-                                              C["phased"])
+    # calc v1.25.0: a flown refinery values every phase before Stage 2's
+    # refining deduction; see `gross_minerals`.  `price_parts` above was read
+    # off the table before the switch, so it still says what Stage 2 wrote.
+    C["refinery"] = run_refinery(archived)
+    if C["refinery"]:
+        tables["minerals"] = gross_minerals(tables["minerals"])
+        C["minerals"] = tables["minerals"]
+        C["refinery_rate"] = C["val"]("In-space processing plant throughput")
+    phases, alloy, yields, ways, refine_wh = phase_table(
+        body, tables["minerals"], C["phased"])
+    C["refine_wh"] = refine_wh
+    C["refine_how"] = {n: dict(h) for n, h in _HOW.items()}
+    C["refine_raw_wh"] = 0.0
+    for name, frac, _price in phases:
+        C["refine_raw_wh"] += frac * refine_wh.get(name, 0.0)
     caps, alias = market_ceilings(tables["minerals"])
     C["phases"] = phases
     # calc v1.24.0: with phases, the alloy is one phase among several priced

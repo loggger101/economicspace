@@ -775,7 +775,22 @@ def part_prices(S, out):
               "prices a missing terrestrial price as zero.</span>")
         S.put("c_%s" % short, "c_ref,%s" % base, "%s on-site refining" % base,
               pp["refining"], "$/kg", cite_mineral(C, base))
-        if pp["route"] == "used in space":
+        if pp["route"] == "used in space" and C.get("refinery"):
+            # calc v1.25.0: the refinery is flown, so the phase sells at the
+            # price BEFORE the deduction: the net price plus what it took off.
+            S.step("Pn_%s" % short, "P_%s,net" % base,
+                   "%s price after the refining deduction" % base,
+                   "p + u * P_L - c_ref",
+                   "%s + %s * %s - %s"
+                   % (P(terrestrial), P(pp["utility"]), P(C["p_l"]),
+                      P(pp["refining"])),
+                   pp["delivered"], "$/kg",
+                   ["t_%s" % short, "u_%s" % short, "P_L", "c_%s" % short])
+            S.step(pkey, psym, "%s price, refinery flown" % base,
+                   "P_net + c_ref",
+                   "%s + %s" % (P(pp["delivered"]), P(pp["refining"])),
+                   pp["gross"], "$/kg", ["Pn_%s" % short, "c_%s" % short])
+        elif pp["route"] == "used in space":
             S.step(pkey, psym, "%s delivered price" % base,
                    "p + u * P_L - c_ref",
                    "%s + %s * %s - %s"
@@ -883,6 +898,15 @@ def part_prices(S, out):
                 inputs.append("Pr_%s" % short)
                 candidates.append(blend)
             if not candidates:
+                continue
+            if C.get("refinery"):
+                # The route is chosen on NET prices and sold at the gross one.
+                value = w["refined"] if w["chosen"] == "refined" else w["as_is"]
+                S.step("P_%s" % short, "P_%s" % name, "%s price" % name,
+                       "the route with the higher NET price (%s), at its "
+                       "gross price" % ("taken apart" if w["chosen"] ==
+                                        "refined" else "as it is"),
+                       P(value), value, "$/kg", inputs)
                 continue
             S.step("P_%s" % short, "P_%s" % name, "%s price" % name,
                    "the better of as it is and taken apart",
@@ -1297,11 +1321,17 @@ def part_fixed_point(S, out):
             "vehicle rather than on it; part 8 closes the difference.")
 
     prev = M["passes"][-2] if len(M["passes"]) > 1 else None
+    with_ref = prev is not None and prev.get("refinery", 0.0) > 0
     S.step("hw_solved", "m_hw,solved", "the hardware the last solve ran at",
-           "m_rig + plant + EP stage, at the PREVIOUS pass",
-           ("%s + %s + %s" % (P(C["cfg"].mining_hardware_kg),
-                              P(prev["plant"]), P(prev["ep"]))
-            if prev is not None else P(M["passes"][-1]["hw_in"])),
+           "m_rig + plant + EP stage%s, at the PREVIOUS pass"
+           % (" + refinery" if with_ref else ""),
+           (("%s + %s + %s + %s" % (P(C["cfg"].mining_hardware_kg),
+                                    P(prev["plant"]), P(prev["ep"]),
+                                    P(prev["refinery"])))
+            if with_ref else
+            ("%s + %s + %s" % (P(C["cfg"].mining_hardware_kg),
+                               P(prev["plant"]), P(prev["ep"]))
+             if prev is not None else P(M["passes"][-1]["hw_in"]))),
            M["hw_solved"], "kg", ["m_rig"],
            "the last row's 'hardware in' column above, and NOT the "
            "hardware the mission actually flies; part 8 is built on that")
@@ -1475,10 +1505,15 @@ def part_settled(S, out):
                "e_H2O * water / hours",
                "%s * %s / %s" % (P(C["water_wh"]), P(M["liberated"]), P(hrs)),
                d2, "W", ["e_h2o", "water", "hrs"])
+    d3 = 0.0
+    if M.get("refine_draw", 0.0) > 0:
+        d3 = part_refinery(S, C, M, hrs)
     S.step("draw", "P", "the continuous processing draw",
-           "P_dig + P_H2O",
-           "%s + %s" % (P(d1), P(d2)), M["draw"], "W",
-           ([k for k in ("P_dig", "P_lib") if k in S.tag] or ["hrs"]))
+           "P_dig + P_H2O + P_ref" if d3 else "P_dig + P_H2O",
+           ("%s + %s + %s" % (P(d1), P(d2), P(d3))) if d3
+           else "%s + %s" % (P(d1), P(d2)), M["draw"], "W",
+           ([k for k in ("P_dig", "P_lib", "P_ref") if k in S.tag]
+            or ["hrs"]))
     S.step("m_plant", "m_plant", "plant mass", "P / w_plant",
            "%s / %s" % (P(M["draw"]), P(C["w_plant"])),
            M["plant"], "kg", ["draw", "w_plant"])
@@ -1540,14 +1575,81 @@ def part_settled(S, out):
                "%s + %s + %s" % (P(ep["array"]), P(ep["ppu"]),
                                  P(ep["thruster"])),
                ep["mass"], "kg", ["ep_array", "ep_ppu", "ep_thr"])
-    S.step("m_hw", "m_hw", "hardware, as flown",
-           "m_rig + m_plant + m_EP",
-           "%s + %s + %s" % (P(C["cfg"].mining_hardware_kg), P(M["plant"]),
-                             P(M["ep"]["mass"])),
-           M["hw"], "kg", ["m_rig", "m_plant", "m_EP"])
+    if M.get("refinery", 0.0) > 0:
+        S.step("m_hw", "m_hw", "hardware, as flown",
+               "m_rig + m_plant + m_EP + m_ref",
+               "%s + %s + %s + %s" % (P(C["cfg"].mining_hardware_kg),
+                                      P(M["plant"]), P(M["ep"]["mass"]),
+                                      P(M["refinery"])),
+               M["hw"], "kg", ["m_rig", "m_plant", "m_EP", "m_ref"])
+    else:
+        S.step("m_hw", "m_hw", "hardware, as flown",
+               "m_rig + m_plant + m_EP",
+               "%s + %s + %s" % (P(C["cfg"].mining_hardware_kg),
+                                 P(M["plant"]), P(M["ep"]["mass"])),
+               M["hw"], "kg", ["m_rig", "m_plant", "m_EP"])
 
 
 # ------------------------------------------------------- 8. the flown stack
+def part_refinery(S, C, M, hrs):
+    """The flown refinery's energy, draw and plant (calc v1.25.0).  Returns
+    the draw, which the caller adds to the processing total."""
+    S.prose("The refinery is flown: each phase is refined by the route it "
+            "is sold by, an element shipped home is refined on Earth, and "
+            "every price above is the one before Stage 2's refining "
+            "deduction.  Energies are Stage 2's <i>refining_kwh_per_kg</i>.")
+    rows, keys = [], []
+    for name, _frac, _price in C["phases"]:
+        how = C["refine_how"].get(name, {})
+        short = ("wh_" + name.replace(" ", "_").replace("-", "_")
+                 .replace("(", "").replace(")", ""))
+        value = C["refine_wh"].get(name, 0.0)
+        if how.get("route") == "refined" and (how["terms"] or how["own_kwh"]):
+            terms = []
+            if how["own_kwh"]:
+                terms.append("%s * 1000" % P(how["own_kwh"]))
+            terms += ["%s * %s * 1000" % (P(f), P(k))
+                      for _e, f, k in how["terms"]]
+            S.step(short, "e_ref,%s" % name, "%s taken apart" % name,
+                   "1000 (own kWh/kg + sum of yield * element kWh/kg)",
+                   " + ".join(terms), value, "Wh/kg", ["hrs"])
+        else:
+            S.put(short, "e_ref,%s" % name, "%s refining energy" % name,
+                  value, "Wh/kg", cite_mineral(
+                      C, "silicates" if name.startswith("other") else name))
+        keys.append(short)
+    if C["beneficiated"]:
+        mix = M["load"]["mix"]
+        S.step("E_ref", "E_ref", "refining energy for this hold",
+               "sum over the hold of kg * e_ref",
+               " + ".join("%s * %s" % (P(kg), P(C["refine_wh"].get(n, 0.0)))
+                          for n, kg in mix.items()),
+               M["refine_wh"], "Wh", keys)
+    else:
+        S.step("e_raw", "e_raw", "refining energy per kg of ore",
+               "sum over phases of f * e_ref",
+               " + ".join("%s * %s" % (P(f), P(C["refine_wh"].get(n, 0.0)))
+                          for n, f, _p in C["phases"]),
+               C["refine_raw_wh"], "Wh/kg", keys)
+        S.step("E_ref", "E_ref", "refining energy for this hold",
+               "m_pay * e_raw", "%s * %s" % (P(M["m_pay"]),
+                                             P(C["refine_raw_wh"])),
+               M["refine_wh"], "Wh", ["e_raw", "m_pay"])
+    S.step("P_ref", "P_ref", "the refinery's draw", "E_ref / hours",
+           "%s / %s" % (P(M["refine_wh"]), P(hrs)), M["refine_draw"], "W",
+           ["E_ref", "hrs"])
+    S.put("r_plant", "r_plant", "refinery throughput", C["refinery_rate"],
+          "kg/yr per kg of plant",
+          cite_ops(C, "In-space processing plant throughput"))
+    S.step("m_ref", "m_ref", "the refinery plant",
+           "m_pay / (t_dig * r_plant)",
+           "%s / (%s * %s)" % (P(M["m_pay"]), P(M["dig_yr"]),
+                               P(C["refinery_rate"])),
+           M["refinery"], "kg", ["m_pay", "r_plant"],
+           "it rides with the rig and is costed as the rig is")
+    return M["refine_draw"]
+
+
 def part_stack(S, out):
     """The stack rebuilt on settled hardware, and what closes it."""
     C, M, B = out["C"], out["M"], out["B"]
@@ -2071,11 +2173,20 @@ def part_cost(S, out):
     S.put("c_rig", "c_rig", "mining rig recurring cost",
           C["val"]("Mining payload recurring cost", used=False), "$/kg",
           cite_ops(C, "Mining payload recurring cost"))
-    S.step("C_rig_total", "C_rig", "one rig, built once", "m_rig * c_rig",
-           "%s * %s" % (P(C["cfg"].mining_hardware_kg),
-                        P(C["val"]("Mining payload recurring cost",
-                                   used=False))),
-           K["rig_total"], "$", ["m_rig", "c_rig"])
+    if M.get("refinery", 0.0) > 0:
+        S.step("C_rig_total", "C_rig", "one rig and its refinery, built once",
+               "(m_rig + m_ref) * c_rig",
+               "(%s + %s) * %s" % (P(C["cfg"].mining_hardware_kg),
+                                   P(M["refinery"]),
+                                   P(C["val"]("Mining payload recurring cost",
+                                              used=False))),
+               K["rig_total"], "$", ["m_rig", "m_ref", "c_rig"])
+    else:
+        S.step("C_rig_total", "C_rig", "one rig, built once", "m_rig * c_rig",
+               "%s * %s" % (P(C["cfg"].mining_hardware_kg),
+                            P(C["val"]("Mining payload recurring cost",
+                                       used=False))),
+               K["rig_total"], "$", ["m_rig", "c_rig"])
     S.step("rig_used", "util", "how much of the rig's life this uses",
            "min(1, max(W t_stay / L_rig, W / trips))",
            "min(1, max(%s * %s / %s, %s / %s))"
@@ -2593,8 +2704,9 @@ def part_checks(S, out):
 
     ident("the hardware ledger",
           "m_hw", M["hw"],
-          "m_rig + m_plant + m_EP",
-          C["cfg"].mining_hardware_kg + M["plant"] + M["ep"]["mass"],
+          "m_rig + m_plant + m_EP + m_ref",
+          (C["cfg"].mining_hardware_kg + M["plant"] + M["ep"]["mass"]
+           + M.get("refinery", 0.0)),
           "S: m_hw, m_plant, m_EP")
     ident("the launch margin",
           "M_LEO - m_launch", C["leo_cap"] - M["m_launch"],

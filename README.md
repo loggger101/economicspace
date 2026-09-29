@@ -250,7 +250,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | 1 | `modules/catalog.py` | 1.7.0 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of. Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
 | 2 | `modules/mineral_value.py` | 1.11.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.17.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
-| 4 | `modules/calc.py` | 1.24.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.25.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -634,6 +634,7 @@ that actually move the answer:
 | `.calc.allow_rtg_power` | `True` | Let the processing plant use radioisotope power where it is lighter than solar (past 3.46 AU), capped by `rtg_max_power_w` |
 | `.calc.charge_tanker_flights` | `True` | Charge the orbital-refuelling flights a vehicle's escape payload assumes |
 | `.calc.model_mineral_phases` | `True` | Sell a body as the MINERALS it is made of (Stage 1's `comp_phases`) rather than as four coarse fractions: each phase at the better of its own price and the value of its elements. **Default since calc v1.24.0**; `False` is the earlier model to the bit. See [What the rock is made of](#what-the-rock-is-made-of) |
+| `.calc.model_refinery` | `True` | Fly the refinery (its energy through the array, its plant with the rig) and value every phase before Stage 2's refining deduction, instead of taking an estimated plant out of the price. **Default since calc v1.25.0**; `False` is the earlier model to the bit. See [What the rock is made of](#what-the-rock-is-made-of) |
 | `.calc.charge_insurance` | `False` | Charge Module 3's two insurance premiums: a $1.5M third-party liability flat and launch insurance at 10% of (launch + spacecraft book value). **Off since calc v1.20.0** because a premium is priced off an underwriter's book rather than off a mass; every table measured before it is a `True` run. See [What the model deliberately does not charge for](#what-the-model-deliberately-does-not-charge-for) |
 | `.calc.optimise_architecture_per_asteroid` | `True` | Search return mode and propellant sourcing per target rather than fixing them catalog-wide |
 | `.calc.selection_objective` | `"cost_revenue_ratio"` | What the per-asteroid search maximises. `"profit"` restores pre-v1.10.0 behaviour |
@@ -1424,6 +1425,26 @@ part soluble organics and their ice part CO2 and ammonia, each worth less than
 the water it used to be counted as. At `earth_surface`, where rock is worth
 cents, chromium makes chromite the best phase of an S-type.
 
+**Since calc v1.25.0 the refinery is flown.** Stage 2 used to take refining
+out of the price as a dollar estimate of a plant running for fifteen years;
+now every phase is valued before that deduction, and the mission carries the
+refinery: its energy, per phase and by the route each is sold by, joins the
+processing draw that sizes the array, and its plant rides with the mining rig
+and is costed as the rig is. A refinery that runs only for the stay costs far
+more per kilogram than one running for fifteen years, so **the sign depends on
+the stay**:
+
+| cell | median body | best row |
+|---|---|---|
+| raw, N = 1 | **18.3% worse** | 8.9791x to 8.9723x |
+| raw, searched | **24.6% worse** | 6.6904x to 6.5619x |
+| beneficiated, N = 1 | **2.8% better** | 21.8083x to 20.6165x |
+| default | **1.9% better** | 13.2109x to 12.6380x (a different winner) |
+
+Raw ore over a short stay pays for a big array for a few months, worst at
+2.2-2.8 AU where sunlight is thin; concentrate is dug for years, so its
+refinery is cheap. Refining on the cruise home is not modelled.
+
 ⚠️  The trace metals are worth **nothing** at an in-space destination: none
 is wanted there, and flying a kilogram of gallium home costs more than it
 fetches. They count at `earth_surface` only. The new reference prices are the
@@ -1936,9 +1957,10 @@ ratio.** Every number in this matrix is still a measurement of the model it
 names, which is why it is kept rather than deleted, and it is the only
 seven-destination measurement the project has.
 
-🚨  **AND CALC v1.24.0 SELLS A BODY AS ITS MINERALS.** Every cell below
-valued four coarse fractions; set `CALC_CONFIG.model_mineral_phases = False`
-as well to reproduce one. The phases move the median body by several percent
+🚨  **AND CALC v1.24.0 SELLS A BODY AS ITS MINERALS, AND v1.25.0 FLIES THE
+REFINERY.** Every cell below valued four coarse fractions and took refining
+out of the price; set `CALC_CONFIG.model_mineral_phases = False` and
+`CALC_CONFIG.model_refinery = False` as well to reproduce one. The phases move the median body by several percent
 and the best by more, in both directions by class; see
 [What the rock is made of](#what-the-rock-is-made-of).
 
