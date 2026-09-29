@@ -159,10 +159,11 @@ and [the data on disk adopts it](versions.md#the-data-on-disk-adopts-it-2026-09-
 now derived from a cited drawing or left blank with a reason, and that is the
 volume cap a mission must fit. The contract went `1.16.0` -> `1.17.0`; the
 grid is still 48 vehicles, and 17 of them (34 of 76 rows overall) still fly
-at calc's `DEFAULT_FAIRING_VOLUME_M3`. **The live `asteroid_pipeline/` has NOT
-adopted it**: its Stage 3 tables are still the 2026-09-24 `1.16.0` build, and
-`stamp_check()` says so on every Stage 4 run. See
-[master v1.37.0](versions.md#master-v1370--transportation-v1170--catalog-v160).
+at calc's `DEFAULT_FAIRING_VOLUME_M3`. **The live `asteroid_pipeline/` adopted
+it on 2026-09-28** (Stage 3 re-run, the `1.16.0` tables backed up and frozen
+under `campaign/stage3/spacecost-0.4.0/` for the archives priced on them). See
+[master v1.37.0](versions.md#master-v1370--transportation-v1170--catalog-v160)
+and [the data on disk adopts it](versions.md#the-data-on-disk-adopts-it-2026-09-28).
 Two checks say the seam is sound, and both are cheap:
 
 ```bash
