@@ -940,7 +940,7 @@ def phase_table(body, minerals):
     """[(phase, mass fraction, $/kg)] for one body, derived from Module 2.
 
     The four taxonomy fractions priced separately rather than blended, plus the
-    residual.  Module 1's fractions sum to 0.73-0.96 and the remainder is
+    residual.  Module 1's fractions sum to less than 1 and the remainder is
     undifferentiated rock, valued at the silicate quote and drawing the silicate
     ceiling; pricing it as silicates and bounding it as something else is the
     defect calc v1.21.2 closed.
@@ -1134,7 +1134,7 @@ def raw_hold(payload_kg, phases):
     Nothing is chosen here, which is the whole difference from the
     beneficiated case.  A raw mission digs what it flies and flies what it
     digs, so the mix is the composition scaled to the payload, and the phase
-    fractions are normalised because they sum to 0.73-0.96 rather than to 1:
+    fractions are normalised because they sum to less than 1:
     the residual is bulk silicate that the phase table prices separately.
 
     No `recovery` term appears, and that is not an omission.  Separation
@@ -1757,7 +1757,7 @@ def context(body, archived, tables):
         leo_cap=float(veh["payload_leo_kg"]),
         # A vehicle row with no fairing volume is flown at the model's
         # default, and the page has to say so rather than print a blank:
-        # 37 of spacecost v0.4.0's 76 rows carry none.
+        # 37 of spacecost v0.4.0's 76 rows carry none, 34 of v0.5.0's.
         fairing_m3=(master.DEFAULT_FAIRING_VOLUME_M3
                     if pd.isna(veh["fairing_volume_m3"])
                     else float(veh["fairing_volume_m3"])),

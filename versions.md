@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.37.0 / transportation v1.17.0 / catalog v1.6.0](#master-v1370--transportation-v1170--catalog-v160)
 - [master v1.36.0 / catalog v1.4.0](#master-v1360--catalog-v140)
 - [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160)
 - [master v1.34.0: Stage 1 installs a published catalog](#master-v1340-stage-1-installs-a-published-catalog)
@@ -87,11 +88,11 @@ one that does not say is not to be used.
 
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
-| 1 | `modules/catalog.py` | **1.4.0** | v1.4.0, nothing physically impossible is published: each mass beside its own source's diameter, class density limits, icy bodies typed D. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
+| 1 | `modules/catalog.py` | **1.6.0** | v1.6.0, the X complex split by albedo into P, M and E, and every class density held to a second route (1.5.0 before it corrected five rows the literature contradicts). The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.10.0** | v1.10.0, every in-space price moves with spacecost v0.4.0's delivered-price model |
-| 3 | `modules/transportation.py` | **1.16.0** | v1.16.0, the launch table re-audited, 36 rows to 76: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 3 | `modules/transportation.py` | **1.17.0** | v1.17.0, every fairing volume derived from a cited drawing or left blank with a reason: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.23.0** | v1.23.0, the 5% depletion cap comes off: a mission may take the whole body |
-| - | `master.py` | **1.36.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.37.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -163,6 +164,100 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.37.0 / transportation v1.17.0 / catalog v1.6.0
+
+**Both external pins move to their current releases: spacecost `v0.4.0` to
+`v0.5.0` (data contract 1.16.0 to 1.17.0), and the catalog `data-2026-09-25`
+to `data-2026-09-27` (data contract 1.4.0 to 1.6.0, crossing 1.5.0).**
+spacecost `v0.5.0` was merged upstream and never tagged; it was tagged here,
+and its GitHub releases, which stopped at 0.2.0, were filled in through 0.5.0.
+
+### What moved upstream
+
+- **spacecost `v0.5.0`**: every `fairing_volume_m3` is derived from a cited
+  drawing (`guide`), a maker's stated volume (`published`), a filled cylinder
+  (`estimate`), or left blank with a reason (`none`), under a new
+  `fairing_basis` column. That is the volume cap Stage 4 enforces. The grid is
+  still 48 operational vehicles; 17 of them (34 of 76 rows) have no volume and
+  fly at calc's `DEFAULT_FAIRING_VOLUME_M3`, against 26 (37) on `v0.4.0`. SLS
+  Block 1 goes from that default to 216 m3, Falcon 9 and Heavy 145 to 157, New
+  Glenn 480 to 458.
+- **catalog 1.5.0**: five taxonomy rows the literature contradicts are
+  corrected. Hydrated C-complex carbon goes 0.20-0.30 to 0.04, S-complex metal
+  to 0.06, V metal to 0.01, Xe and Xk swap, Xc's density goes to 3.30.
+- **catalog 1.6.0**: an X or Xc body with a measured albedo reads the P, M or
+  E row, and one without reads their mixture; P goes to 1.20 g/cm3 and Q to
+  2.70. New column `comp_class`. 1,568,641 bodies, 100 columns.
+
+### What changes here
+
+- The spacecost tag in all seven places that type it, and the transportation
+  stamp to `1.17.0`, which `verify_stage3.py` check 2 holds to the package.
+- `CatalogConfig.catalog_release` and `pipeline_version` together, and the
+  new release's provenance census in `verify_stage1.py` check 8. No provenance
+  label is new, so neither reader of those columns needed to learn one.
+- **The composition interval is deleted rather than corrected.** Catalog 1.5.0
+  took the low end of Module 1's fraction sums from 0.73 to 0.54 (`Ch`), and
+  "0.73-0.96" was still typed in code comments, docstrings, CLAUDE.md and a
+  dashboard caption. They state the property now, that every real class sums
+  to less than one, which is what check 2 asserts.
+- Comments that counted blank fairings name `v0.5.0`'s count beside
+  `v0.4.0`'s.
+
+### What it is worth, on a sample: the fairing column alone
+
+The catalog and the fairing volumes both move every number, so they were not
+measured together. For the fairings, the Stage 3 tables on disk (the
+2026-09-24 `1.16.0` build, live prices and all) were loaded twice on
+`data-2026-09-27`, once as they are and once with ONLY `fairing_volume_m3`
+replaced by `v0.5.0`'s. Same bodies, same prices, same catalog; cislunar,
+`verify.py`'s cell definitions at larger caps:
+
+| cell | rows | evaluable | rows that move | winner |
+|---|---|---|---|---|
+| raw, N = 1 | 4,000 | 1,620 to 1,620 | **35** (22 better, 13 worse, 0.82x to 16.2x) | 2020 SO1 on New Glenn at 19.736460 becomes **2020 WB on Falcon Heavy (expendable) at 19.510668** |
+| default (beneficiated, searched) | 1,500 | 624 to 624 | **2** (both better, 0.96x and 0.998x) | 227066 on Falcon Heavy (expendable) at **9.986510**, bit-identical |
+
+The moving rows fly SLS Block 1 or Falcon Heavy, the two vehicles whose cap
+grew, and beneficiation almost removes the effect because a concentrated load
+rarely fills a fairing. ⚠️  **Thirteen raw rows get WORSE under a looser
+cap**, which is possible here because the haul is derived from whichever
+constraint binds rather than searched; see
+[a constraint that rarely binds can still be sizing your answer](CLAUDE.md#a-constraint-that-rarely-binds-can-still-be-sizing-your-answer).
+That mechanism was not chased row by row. These are samples, and
+[THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) applies to them.
+
+### On disk
+
+- **The catalog is adopted**: Stage 1 installed `data-2026-09-27`,
+  checksummed; `data-2026-09-25` is still published and comes back by
+  repinning.
+- **The Stage 3 tables are NOT.** They are still the 2026-09-24 `1.16.0`
+  build, so `stamp_check()` names them on every Stage 4 run. Adopting `v0.5.0`
+  on disk means re-running Stage 3, which re-fetches live prices over the
+  tables the archived `spacecost-0.4.0` cells were priced on, and those have no
+  frozen copy (`campaign/stage3/` is the 0.3.x epoch). That is left as a
+  decision rather than taken with a repin.
+
+### What was verified
+
+| harness | result |
+|---|---|
+| `verify_stage1.py`, `data-2026-09-27` installed | 7 checks, 0 wrong; census reproduces |
+| `verify_stage3.py` | 6 checks against spacecost `v0.5.0`, sibling checkout at the tag |
+| `verify_docs.py` | every check |
+| spacecost `pytest` at `v0.5.0` | 235 passed |
+| the fairing A/B above | evaluable sets identical on both cells |
+| `verify.py invariants`, `data-2026-09-27` inputs | mass ledger 0 kg on all four cells, never-worse 0 exceptions, Stage 2 tables identical, ceilings 0 |
+
+### What did not change
+
+- mineral_value `1.10.0` and calc `1.23.0`: no Stage 2 or Stage 4 computation
+  moved. `spacecost.delivery` is unchanged in `v0.5.0`, so Stage 2's prices are
+  too.
+- A run at this pin is not comparable with one at `data-2026-09-25` or on the
+  `1.16.0` fairings without saying so.
 
 ## master v1.36.0 / catalog v1.4.0
 
@@ -5952,6 +6047,19 @@ Meanings that moved: `density_measured` is True only for a density resting on
 measurements alone, and `diameter_provider` for a body with a measured mass is
 the mass's source. ⚠️  Composition is no longer a function of `spectral_type`
 alone: a body past 5.5 AU takes D's.
+
+No config field moved.
+
+**`1.6.0` installed, `data-2026-09-27` (master v1.37.0).** Two data contracts
+at once: AsteroidCatalog's 1.5.0 corrected five taxonomy rows the literature
+contradicts (hydrated C-complex carbon 0.20-0.30 to 0.04, S-complex metal to
+0.06, Xe and Xk swapped), and 1.6.0 split the X complex by albedo into P, M and
+E. Full write-up: [master v1.37.0](#master-v1370--transportation-v1170--catalog-v160).
+
+New output column: `comp_class`, the taxonomy row each body's `comp_*` columns
+were read from. No provenance value is new. ⚠️  Composition is still not a
+function of `spectral_type` alone, now for a second reason: an X or Xc body
+with a measured albedo reads the P, M or E row.
 
 No config field moved.
 
