@@ -326,14 +326,35 @@ def unseen_archives():
     return out
 
 
-def body_phases(body):
-    """[(phase, mass fraction)] from the body's `comp_phases`, or None.
+PHASES_COL = "comp_phases"
+DETAILED_COL = "comp_phases_detailed"
 
-    Module 1's catalog data contract 1.7.0; a body without the column, or an
-    Unknown-class body whose cell is empty, has none.  Zeros are dropped, as
-    calc drops them.
+
+def phases_column(body):
+    """Which phase column the body carries after `body_for_run`: one or none.
+
+    calc v1.26.0 reads `comp_phases_detailed` when the run chose it and
+    `comp_phases` otherwise, and `body_for_run` leaves the body holding only
+    the column the ROW's run read, so this answers for the run.
     """
-    text = body.get("comp_phases") if body is not None else None
+    if body is None:
+        return None
+    for col in (DETAILED_COL, PHASES_COL):
+        if col in body:
+            return col
+    return None
+
+
+def body_phases(body):
+    """[(phase, mass fraction)] from the body's phase column, or None.
+
+    Module 1's catalog data contract 1.7.0 (`comp_phases`) or 1.8.0
+    (`comp_phases_detailed`), whichever `body_for_run` left; a body without
+    either, or an Unknown-class body whose cell is empty, has none.  Zeros are
+    dropped, as calc drops them.
+    """
+    col = phases_column(body)
+    text = body.get(col) if col is not None else None
     if isinstance(text, str) and text:
         return [(str(k), float(v)) for k, v in json.loads(text).items()
                 if float(v) > 0.0]
@@ -358,11 +379,49 @@ def run_phases(archived, body):
         flag = flag.strip().lower() in ("true", "1")
     if bool(flag) and body_phases(body) is None:
         sys.exit("this row was valued by its mineral phases, and the body in "
-                 "the installed catalog carries none (`comp_phases` is missing "
+                 "the installed catalog carries none (`%s` is missing "
                  "or empty).\n  The row's run read a catalog at data contract "
                  "1.7.0 or later; install that release, or document a row "
-                 "valued by the four coarse fractions.")
+                 "valued by the four coarse fractions."
+                 % (phases_column(body) or PHASES_COL))
     return bool(flag)
+
+
+def run_detailed(archived):
+    """Whether the ROW's run read the DETAILED phases (calc v1.26.0).
+
+    Read off the row's `detailed_phases`, for the reason `run_phases` is.  A
+    row too old to carry the column read `comp_phases`: that was the only
+    phase column there was.
+    """
+    flag = archived.get("detailed_phases") if archived is not None else None
+    if flag is None or (not isinstance(flag, str) and pd.isna(flag)):
+        return False
+    if isinstance(flag, str):
+        return flag.strip().lower() in ("true", "1")
+    return bool(flag)
+
+
+def body_for_run(archived, body):
+    """The body holding ONLY the phase column the row's run read.
+
+    calc reads `comp_phases_detailed` whenever a row carries it, which is
+    right after `load_all_catalogs` has dropped whichever column the run did
+    not choose.  The installed catalog carries both, so the body is trimmed
+    here the same way, by the ROW's `detailed_phases`, never by the live
+    config.  A detailed row on a body with no detailed column was run on a
+    different catalog, and deriving it here would be about another body.
+    """
+    if body is None:
+        return body
+    if run_detailed(archived):
+        if DETAILED_COL not in body:
+            sys.exit("this row was valued by the DETAILED mineral phases, and "
+                     "the installed catalog carries no `%s`.\n  The row's run "
+                     "read a catalog at data contract 1.8.0 or later; install "
+                     "that release." % DETAILED_COL)
+        return body.drop(labels=[PHASES_COL], errors="ignore")
+    return body.drop(labels=[DETAILED_COL], errors="ignore")
 
 
 NET_PRICE_COL = "price_net_usd_per_kg"
@@ -1120,6 +1179,50 @@ def _refining_wh(mineral, table_yields, kwh, here, price, kappa, rare):
     return as_is, apart, gross, net
 
 
+# calc v1.26.0: the phases no process separates, merged into the one product
+# they are sold as.  Filled by `merge_inseparable` per derivation: {product:
+# [(member, fraction, $/kg)]}, so the page can show what the blend is made of.
+_MERGED = {}
+
+
+def merge_inseparable(phases, wh):
+    """The phase list with calc's inseparable phases sold as one product.
+
+    Written out here rather than called: the three Fe-Ni alloys of the
+    detailed phases are one metal concentrate, keyed by the product calc's
+    `_INSEPARABLE` names, at the fraction-weighted mean of their values, and
+    the refinery spends their fraction-weighted mean energy.  Summed in the
+    phases' own order, as calc sums them, so the blend is the same double.
+    A phase not in the table is its own product and passes through.
+    """
+    import master
+    _MERGED.clear()
+    order, members = [], {}
+    for name, frac, value in phases:
+        product = master._INSEPARABLE.get(name, name)
+        if product not in members:
+            order.append(product)
+            members[product] = []
+        members[product].append((name, frac, value))
+    out = []
+    for product in order:
+        group = members[product]
+        if len(group) == 1:
+            out.append(group[0])
+            continue
+        frac = sum_fv = sum_fw = 0.0
+        for name, f, v in group:
+            frac += f
+            sum_fv += f * v
+        for name, f, v in group:
+            sum_fw += f * wh.get(name, 0.0)
+        out.append((product, frac, sum_fv / frac))
+        if wh:
+            wh[product] = sum_fw / frac
+        _MERGED[product] = group
+    return out
+
+
 def phase_table(body, minerals, phased=False):
     """[(phase, mass fraction, $/kg)] for one body, derived from Module 2.
 
@@ -1246,6 +1349,8 @@ def phase_table(body, minerals, phased=False):
                                           else "as-is")
             phases.append((mineral, float(frac), value))
             total += float(frac)
+    if phased:
+        phases = merge_inseparable(phases, wh)
     if 0.0 < total < 1.0:
         phases.append((master._RESIDUAL_PHASE, 1.0 - total,
                        float(price["silicates"])))
@@ -3683,6 +3788,9 @@ def build(archived, label, body=None, run_beneficiated=None):
     # `catalog_bodies`.  A single document still just asks for its own.
     if body is None:
         body = catalog_body(designation)
+    # calc v1.26.0: the installed catalog carries both phase columns, and the
+    # row's run read one.  Trimmed before anything reads the body.
+    body = body_for_run(archived, body)
     # The prices have to be chosen before anything is derived, and they are
     # chosen by the ROW's destination rather than by the config, for the same
     # reason the legs are.  See `mineral_catalog_for`.
@@ -3701,6 +3809,7 @@ def build(archived, label, body=None, run_beneficiated=None):
     C["archived_payload"] = float(archived.get("max_payload_kg") or 0.0)
     C["archived_feed"] = float(archived.get("feed_processed_kg") or 0.0)
     C["phased"] = run_phases(archived, body)
+    C["phases_col"] = phases_column(body)
     # calc v1.25.0: a flown refinery values every phase before Stage 2's
     # refining deduction; see `gross_minerals`.  `price_parts` above was read
     # off the table before the switch, so it still says what Stage 2 wrote.
@@ -3722,6 +3831,8 @@ def build(archived, label, body=None, run_beneficiated=None):
     # from yields, and it may even be sold as it is.  `ways` holds every such
     # phase's two prices; the alloy block below is the four-fraction page's.
     C["ways"] = ways
+    # calc v1.26.0: what each merged product is made of; see merge_inseparable.
+    C["merged"] = {p: list(g) for p, g in _MERGED.items()}
     C["alloy"] = alloy if not C["phased"] else 0.0
     C["yields"] = yields if not C["phased"] else {}
     # The three things needed to reproduce the alloy price on the page.  It is
@@ -4176,6 +4287,8 @@ BORROWED = {
     "_LEO_USD_PER_KG": ("data", "the launch price, off spacecost's vehicle table"),
     "_PHASE_MARKET_ALIAS": ("data", "phase -> market key"),
     "_RESIDUAL_PHASE": ("data", "the name of the composition residual"),
+    "_INSEPARABLE": (
+        "shape", "which phases no process separates, so are sold as one product; the blend is priced here"),
     "_load_csv": ("data", "the CSV loader, so the tables are read as the run read them"),
     "_ops_value": ("data", "a row out of the operational table"),
     "window_phasing_au": ("data", "a lookup into DELIVERY_ARCHITECTURES"),

@@ -332,6 +332,22 @@ class CalcConfig:
     # 1.11.0 or later, which prices the new phases: an older one is refused.
     model_mineral_phases:      bool  = True
 
+    # Read the DETAILED phases (v1.26.0): Module 1's `comp_phases_detailed`
+    # (catalog data contract 1.8.0) instead of `comp_phases`.  The metal stops
+    # being one "nickel-iron" and becomes the kamacite, taenite, tetrataenite
+    # and cohenite a class actually holds, so an S-type's Ni-rich chondrite
+    # metal carries more nickel and platinum per kg than an M-type's; the
+    # sulfide stops being one "troilite" and becomes pyrrhotite and
+    # pentlandite (a C-type's nickel), or troilite with niningerite, oldhamite
+    # and daubreelite (an enstatite body's chromium); and the phosphates and
+    # CAI oxides in the residual are named and sold.  Every detailed phase
+    # adds back to the `comp_phases` entry it resolves.  False reads
+    # `comp_phases`, which is v1.25.0 exactly; a catalog older than contract
+    # 1.8.0 has no detailed column and runs that model whatever this says.
+    # Needs Stage 2 at mineral_value 1.12.0 or later, which prices the new
+    # phases: an older one is refused.  Inert with `model_mineral_phases` off.
+    model_detailed_phases:     bool  = True
+
     # FLY THE REFINERY (v1.25.0) instead of taking it out of the price.  Stage 2
     # prices a commodity sold in space as "terrestrial + utility x launch cost
     # avoided - the cost of refining it on site", and that last term is a
@@ -1100,7 +1116,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.25.0"
+    pipeline_version: str = "1.26.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1496,12 +1512,29 @@ def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
     # function that values a body.  With it off the column is gone, so each of
     # them takes the pre-1.24.0 branch, and no entry point that loads through
     # this function can run half of each model.
-    if not getattr(config, "model_mineral_phases", True) and \
-            _PHASES_COL in catalogs["asteroids"].columns:
-        catalogs["asteroids"] = catalogs["asteroids"].drop(columns=[_PHASES_COL])
-        print(f"       model_mineral_phases off: {_PHASES_COL} ignored, "
-              f"four coarse fractions only")
-    elif _PHASES_COL in catalogs["asteroids"].columns:
+    #
+    # v1.26.0: and which of the two phase columns, decided the same way.  At
+    # most ONE survives this block, so every reader downstream asks
+    # `_row_phases_text` and gets the column the run chose, never a mix.
+    asteroids = catalogs["asteroids"]
+    detailed = (getattr(config, "model_detailed_phases", True)
+                and _DETAILED_COL in asteroids.columns)
+    if not getattr(config, "model_mineral_phases", True):
+        gone = [c for c in (_PHASES_COL, _DETAILED_COL) if c in asteroids.columns]
+        if gone:
+            catalogs["asteroids"] = asteroids.drop(columns=gone)
+            print(f"       model_mineral_phases off: {', '.join(gone)} ignored, "
+                  f"four coarse fractions only")
+    elif detailed:
+        catalogs["asteroids"] = asteroids.drop(
+            columns=[c for c in (_PHASES_COL,) if c in asteroids.columns])
+        catalogs["asteroids"][_DETAILED_COL] = (
+            catalogs["asteroids"][_DETAILED_COL].astype("category"))
+        print(f"       detailed phases: {_DETAILED_COL} read, {_PHASES_COL} ignored")
+    elif _PHASES_COL in asteroids.columns:
+        if _DETAILED_COL in asteroids.columns:
+            catalogs["asteroids"] = asteroids.drop(columns=[_DETAILED_COL])
+            print(f"       model_detailed_phases off: {_DETAILED_COL} ignored")
         # ~29 distinct JSON strings across 1.57 M rows: 367 MB as one Python
         # string per row, 1.6 MB as a category (measured on data-2026-09-29),
         # and ~2 s of the read either way.  Same values, so no answer moves;
@@ -1614,14 +1647,17 @@ def phase_price_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
     phase REFUSES the run, naming each phase and both ways out, rather than
     producing a hybrid of the two models that nobody designed.
 
-    True when there is nothing to check: no `comp_phases` column (an older
-    catalog, or `model_mineral_phases` off).
+    True when there is nothing to check: no phase column (an older catalog,
+    or `model_mineral_phases` off).  v1.26.0: whichever of the two columns
+    `load_all_catalogs` kept.
     """
     asteroids = catalogs["asteroids"]
-    if _PHASES_COL not in asteroids.columns:
+    col = next((c for c in (_DETAILED_COL, _PHASES_COL) if c in asteroids.columns),
+               None)
+    if col is None:
         return True
     names: set = set()
-    for text in asteroids[_PHASES_COL].dropna().unique():
+    for text in asteroids[col].dropna().unique():
         if isinstance(text, str) and text:
             names.update(phase for phase, _frac in _parse_phases(text))
     priced = set(str(n) for n in catalogs["minerals"]["name"])
@@ -1630,12 +1666,18 @@ def phase_price_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
         print(f"     OK  Mineral phases: {len(names)} named by the catalog, "
               f"all priced by Stage 2")
         return True
-    print(f"\nFAIL  {len(missing)} mineral phase(s) in the catalog have no "
-          f"Stage 2 price: {missing}")
-    print("     Stage 2 at mineral_value 1.11.0 or later prices them.  Either "
-          "re-run Stage 2 (it re-fetches live prices), or set "
-          "CALC_CONFIG.model_mineral_phases = False for the four-fraction "
-          "model.  Aborting.")
+    print(f"\nFAIL  {len(missing)} mineral phase(s) in the catalog's {col} have "
+          f"no Stage 2 price: {missing}")
+    if col == _DETAILED_COL:
+        print("     Stage 2 at mineral_value 1.12.0 or later prices them.  Either "
+              "re-run Stage 2 (it re-fetches live prices), or set "
+              "CALC_CONFIG.model_detailed_phases = False to read comp_phases.  "
+              "Aborting.")
+    else:
+        print("     Stage 2 at mineral_value 1.11.0 or later prices them.  Either "
+              "re-run Stage 2 (it re-fetches live prices), or set "
+              "CALC_CONFIG.model_mineral_phases = False for the four-fraction "
+              "model.  Aborting.")
     return False
 
 
@@ -2058,6 +2100,24 @@ FRACTION_TO_MINERAL: Dict[str, str] = {
 # of the residual, so the "other (bulk silicate)" floor gets smaller.
 _PHASES_COL = "comp_phases"
 
+# v1.26.0: the same, one level down (catalog data contract 1.8.0): the alloy
+# as kamacite / taenite / tetrataenite / cohenite, the sulfide by species,
+# and the phosphates and CAI oxides named.  `load_all_catalogs` keeps at most
+# one of the two columns, so a row carries the one the run chose.
+_DETAILED_COL = "comp_phases_detailed"
+
+
+def _row_phases_text(asteroid_row: Row) -> Any:
+    """The row's phase JSON, from whichever phase column it carries.
+
+    The detailed column when the row has it, which after `load_all_catalogs`
+    means the run chose it; a hand-built row carrying both is read as the
+    detailed model, and one that wants the other drops the column first.
+    """
+    if _DETAILED_COL in asteroid_row:
+        return asteroid_row.get(_DETAILED_COL)
+    return asteroid_row.get(_PHASES_COL)
+
 
 # ⚠️  `maxsize=None` IS SAFE HERE AND NAMED AS SUCH: the key is the JSON
 # string, one per taxonomy row Module 1 reads (a few dozen), whatever the size
@@ -2077,10 +2137,78 @@ def _parse_phases(text: str) -> Tuple[Tuple[str, float], ...]:
 def _row_phases(asteroid_row: Row) -> Optional[Tuple[Tuple[str, float], ...]]:
     """The row's phases, or None when it has none (older catalog, switch off,
     or an Unknown-class body, whose cell is empty)."""
-    text = asteroid_row.get(_PHASES_COL)
+    text = _row_phases_text(asteroid_row)
     if isinstance(text, str) and text:
         return _parse_phases(text)
     return None
+
+
+# ─── WHAT A BENEFICIATION STEP CANNOT SEPARATE  (v1.26.0) ────────────────────
+# The detailed phases name the three Fe-Ni alloys, and they are not three
+# products.  Kamacite and taenite are intergrown in the same metal grains -- the
+# Widmanstatten plates and the plessite between them -- and tetrataenite is a
+# rim on the taenite, so no physical separation takes one without the others:
+# the metal leaves the rock as ONE concentrate, in the proportions the class
+# holds.  So they are sold as one product, keyed `nickel-iron` (the row whose
+# market and demand class they share), at the fraction-weighted blend of their
+# values, which is where the class-specific nickel and platinum show.
+#
+# 🚨  FOUND BY MEASURING, NOT BY THINKING.  The first build loaded them as three
+# phases, and the concentration search bounds itself on the fraction of the
+# SINGLE best phase (`saturation_ratio`): tetrataenite is fractionally the
+# richest alloy, so an S-type's best phase fell from 6% of the body to 0.4%,
+# the search range widened fourteen-fold, and the beneficiated cells moved in
+# both directions by up to 43% for no physical reason.  The knapsack would also
+# have loaded pure taenite ahead of kamacite whenever the hold was the limit,
+# a grade no process can make.
+#
+# Cohenite and schreibersite stay separate phases: they are discrete crystals,
+# as schreibersite has been since v1.24.0.  A phase not named here is its own
+# product, and takes exactly the path it took before.
+_INSEPARABLE: Dict[str, str] = {
+    "kamacite":     "nickel-iron",
+    "taenite":      "nickel-iron",
+    "tetrataenite": "nickel-iron",
+}
+
+
+@functools.lru_cache(maxsize=None)
+def _phase_products(
+    phases: Tuple[Tuple[str, float], ...],
+) -> Tuple[Tuple[str, Tuple[Tuple[str, float], ...]], ...]:
+    """(product, its member phases) in first-appearance order.
+
+    A product of one member is that phase unchanged.  Keyed on the parsed
+    phase tuple, of which there are a few dozen, so the unbounded cache has a
+    ceiling it can name.
+    """
+    order: List[str] = []
+    members: Dict[str, List[Tuple[str, float]]] = {}
+    for name, frac in phases:
+        product = _INSEPARABLE.get(name, name)
+        if product not in members:
+            order.append(product)
+            members[product] = []
+        members[product].append((name, frac))
+    return tuple((product, tuple(members[product])) for product in order)
+
+
+def _blend(members: Tuple[Tuple[str, float], ...], value) -> Optional[Tuple[float, float]]:
+    """(fraction, fraction-weighted mean of `value`) over the members it prices.
+
+    A member `value` returns None for is left out, as an unpriced phase is
+    left out of the walk; None when none is priced.
+    """
+    frac = total = 0.0
+    for name, f in members:
+        v = value(name)
+        if v is None:
+            continue
+        frac += f
+        total += f * float(v)
+    if frac <= 0.0:
+        return None
+    return frac, total / frac
 
 
 def _row_water_fraction(asteroid_row: Row) -> float:
@@ -2242,11 +2370,24 @@ def asteroid_refinery(
         if hit is not None and hit.refinery is not None:
             return hit.refinery
     pgm = _pgm_enrichment(asteroid_row)
-    phased = _row_phases(asteroid_row) is not None
+    phases = _row_phases(asteroid_row)
+    phased = phases is not None
+    # v1.26.0: a product of several phases spends their blended energy, by
+    # the same weights its price is blended by.
+    merged = ({product: members for product, members in _phase_products(phases)
+               if len(members) > 1} if phased else {})
     wh: Dict[str, float] = {}
     raw = 0.0
     for name, frac, _price in asteroid_phase_table(asteroid_row, mineral_df):
         key = "silicates" if name == _RESIDUAL_PHASE else name
+        if name in merged:
+            terms = {n: _phase_terms(mineral_df, n, pgm, True) for n, _f in merged[name]}
+            blended = _blend(merged[name], lambda n: (
+                terms[n][1] if terms[n][0] is not None else None))
+            per_kg = blended[1] if blended is not None else 0.0
+            wh[name] = per_kg
+            raw += frac * per_kg
+            continue
         per_kg = _phase_terms(mineral_df, key, pgm,
                               phased and name != _RESIDUAL_PHASE)[1]
         wh[name] = per_kg
@@ -2422,7 +2563,7 @@ def _composition_key(asteroid_row: Row) -> Optional[Tuple[Any, ...]]:
     # The JSON string itself: a few dozen distinct values, and two rows share
     # an answer exactly when they share it.  None when absent, so a row
     # without phases keys exactly as before.
-    text = asteroid_row.get(_PHASES_COL)
+    text = _row_phases_text(asteroid_row)
     key.append(text if isinstance(text, str) and text else None)
     return tuple(key)
 
@@ -2458,11 +2599,21 @@ def _phase_prices(
     phases = _row_phases(asteroid_row)
     if phases is not None:
         # v1.24.0: the minerals, each at the better of as-is and refined.
-        for name, frac in phases:
-            price = _phase_value(mineral_df, name, pgm_enrichment)
-            if price is None:
+        # v1.26.0: the ones no process separates, as the one product they
+        # are; see `_INSEPARABLE`.  A lone phase takes the pre-1.26.0 path.
+        for product, members in _phase_products(phases):
+            if len(members) == 1:
+                name, frac = members[0]
+                price = _phase_value(mineral_df, name, pgm_enrichment)
+                if price is None:
+                    continue
+                yield name, frac, float(price)
                 continue
-            yield name, frac, float(price)
+            blended = _blend(members, lambda n: _phase_value(
+                mineral_df, n, pgm_enrichment))
+            if blended is None:
+                continue
+            yield product, blended[0], blended[1]
         return
     for frac_col, mineral_name in FRACTION_TO_MINERAL.items():
         frac = asteroid_row.get(frac_col)
@@ -9209,6 +9360,10 @@ def evaluate_asteroid(
         # from any other column, so a reader re-deriving the row (the worked
         # calculation) is told rather than left to infer it from the config.
         "mineral_phases":           _row_phases(asteroid_row) is not None,
+        # v1.26.0: and whether they were the DETAILED phases, for the same
+        # reason: which column a run read is not in any other column.
+        "detailed_phases":          (_DETAILED_COL in asteroid_row
+                                     and _row_phases(asteroid_row) is not None),
     })
 
     return best

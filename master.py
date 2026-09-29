@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.39.0)
+"""Master Asteroid Profitability Pipeline (1.40.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -236,7 +236,7 @@ class CatalogConfig:
     # reads, and moves every number downstream: record a repin in versions.md.
     # The published tags are listed at
     # https://github.com/loggger101/AsteroidCatalog/releases
-    catalog_release: str = "data-2026-09-29"
+    catalog_release: str = "data-2026-09-29c"
 
     # Where release assets are downloaded from; the tag and the asset name are
     # appended.  Plumbing: change it only to point at a mirror.
@@ -270,7 +270,7 @@ class CatalogConfig:
     # only after the stages that read the catalog have been checked against the
     # new schema.  The record of what each contract changed is AsteroidCatalog's
     # CHANGELOG.md; this pipeline's is versions.md > Stage 1 changelog.
-    pipeline_version: str = "1.7.0"
+    pipeline_version: str = "1.8.1"
 
 
 # Instantiate and create the output dir.  Edit CATALOG_CONFIG values above this line
@@ -690,7 +690,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.11.0"
+    pipeline_version: str = "1.12.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -1070,6 +1070,21 @@ IN_SPACE_UTILITY: Dict[str, float] = {
     "carbonates":       0.25,   # the CO2 source, and otherwise shielding rock
     "sulfur":           0.10,
     "phosphorus":       0.10,
+    # v1.12.0, the detailed phases, each at the row of the mineral it resolves
+    # or the ore it is: the alloys at nickel-iron's 0.70, the Fe and Ni
+    # sulfides at troilite's 0.30, perovskite at ilmenite's, hibonite at
+    # spinel's.  Oldhamite and the phosphates follow CARBONATES: as they are,
+    # they are shielding rock at 0.25, and the element they carry (S, P) is
+    # priced as that element when they are taken apart.  At sulfur's or
+    # phosphorus's 0.10 they would be worth LESS than the residual rock they
+    # are carved out of, so naming a phosphate would make a body worse for a
+    # reason with no physics in it: caught on the first priced table.
+    "kamacite":         0.70, "taenite":      0.70, "tetrataenite": 0.70,
+    "cohenite":         0.70,
+    "pyrrhotite":       0.30, "pentlandite":  0.30, "niningerite":  0.30,
+    "daubreelite":      0.30, "oldhamite":    0.25,
+    "merrillite":       0.25, "chlorapatite": 0.25,
+    "perovskite":       0.40, "hibonite":     0.25,
     # Gallium, germanium, rhenium, tungsten and molybdenum stay at 0.00 with
     # the precious metals: nobody in orbit buys them for their own sake.
     # Everything not listed, the precious metals above all, defaults to 0.0.
@@ -1185,6 +1200,14 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         "chromite":         0.05, "ilmenite":     0.05, "carbonates":    0.05,
         "ammonia":          0.40, "carbon dioxide": 0.05,
         "sulfur":           0.05, "phosphorus":   0.05,
+        # v1.12.0.  As the rows they resolve: the alloys as nickel-iron, the
+        # rest as the ores and rock beside them.
+        "kamacite":         0.15, "taenite":      0.15, "tetrataenite": 0.15,
+        "cohenite":         0.15,
+        "pyrrhotite":       0.05, "pentlandite":  0.05, "niningerite":  0.05,
+        "daubreelite":      0.05, "oldhamite":    0.05,
+        "merrillite":       0.05, "chlorapatite": 0.05,
+        "perovskite":       0.05, "hibonite":     0.05,
         # Precious metals stay at the base 0.00 and route down, as everywhere.
     },
     "cislunar": {},                  # base profile, no local resources
@@ -1238,6 +1261,14 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         "ilmenite":         0.03,
         "chromite":         0.25,
         "carbonates":       0.03,   # as rock; its CO2 is priced as CO2
+        # v1.12.0.  The alloys compete with regolith iron as nickel-iron does;
+        # perovskite with mare ilmenite; hibonite, oldhamite and the
+        # phosphates are rock as carbonates are (their S and P are priced as
+        # S and P).  The Fe and Ni sulfides take the base, as troilite does.
+        "kamacite":         0.45, "taenite":      0.45, "tetrataenite": 0.45,
+        "cohenite":         0.45,
+        "perovskite":       0.03, "hibonite":     0.03, "oldhamite":    0.03,
+        "merrillite":       0.03, "chlorapatite": 0.03,
         # Precious metals stay at the base 0.00 and route down; see the
         # rejected-change note above.
     },
@@ -1273,11 +1304,31 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         "schreibersite":    0.40,
         "chromite":         0.02,
         "ilmenite":         0.02,
+        # v1.12.0.  The alloys as nickel-iron; the Fe and Ni sulfides as
+        # troilite, since the crust is sulfate-rich; perovskite and hibonite as
+        # the basalt's oxides; oldhamite and the phosphates as rock, as
+        # carbonates are (their S and P are priced as S and P).
+        "kamacite":         0.40, "taenite":      0.40, "tetrataenite": 0.40,
+        "cohenite":         0.40,
+        "pyrrhotite":       0.15, "pentlandite":  0.15, "niningerite":  0.15,
+        "daubreelite":      0.15, "oldhamite":    0.02,
+        "merrillite":       0.02, "chlorapatite": 0.02,
+        "perovskite":       0.02, "hibonite":     0.02,
         # Precious metals stay at the base 0.00 and route down; see the
         # rejected-change note above.  At Mars that means zero: the $96,394/kg
         # downleg exceeds every terrestrial price in the catalog.
     },
 }
+
+
+# v1.12.0: the rule the comment above states, asserted.  An override that ran
+# UPWARD would be a way to manufacture viability, and this table grows by
+# hand every time a commodity is added.
+_UPWARD = sorted((dest, name) for dest, over in IN_SPACE_UTILITY_BY_DESTINATION.items()
+                 for name, u in over.items()
+                 if u > IN_SPACE_UTILITY.get(name, IN_SPACE_UTILITY_DEFAULT))
+assert not _UPWARD, "utility overrides must run DOWNWARD from the base: %s" % _UPWARD
+del _UPWARD
 
 
 def in_space_utility(name: str, destination: str) -> float:
@@ -1437,6 +1488,14 @@ _COMMODITY_CLASS: Dict[str, str] = {
     "gallium":         "trace",      "germanium":    "trace",
     "rhenium":         "trace",      "tungsten":     "trace",
     "molybdenum":      "trace",
+    # v1.12.0, each in the class of the row it resolves or the ore it is.
+    "kamacite":        "structural", "taenite":      "structural",
+    "tetrataenite":    "structural", "cohenite":     "structural",
+    "pyrrhotite":      "structural", "pentlandite":  "structural",
+    "niningerite":     "structural", "daubreelite":  "structural",
+    "oldhamite":       "chemical",   "merrillite":   "chemical",
+    "chlorapatite":    "chemical",   "perovskite":   "structural",
+    "hibonite":        "shielding",
 }
 
 # The bulk classes must partition the budget, or the "one import budget"
@@ -1534,6 +1593,16 @@ IN_SPACE_PROCESSING_KWH_PER_KG: Dict[str, float] = {
     "ilmenite":         7.0,
     "chromium":        10.0,
     "titanium":        20.0,
+    # v1.12.0.  The alloys as nickel-iron; the sulfides, oldhamite included,
+    # as troilite (roasting frees the sulfur, and the metal then pays its
+    # own); the phosphates and hibonite as rock, by grinding (the P then pays
+    # phosphorus's 8.0 when it is taken apart); perovskite as the Ti ores.
+    "kamacite":         5.0, "taenite":      5.0, "tetrataenite": 5.0,
+    "cohenite":         5.0,
+    "pyrrhotite":       4.0, "pentlandite":  4.0, "niningerite":  4.0,
+    "daubreelite":      4.0, "oldhamite":    4.0,
+    "merrillite":       1.0, "chlorapatite": 1.0, "hibonite":     1.0,
+    "perovskite":       7.0,
 }
 
 
@@ -1644,6 +1713,153 @@ def _new_element(name: str, formula: str, density: float, price: float,
 # figures the v1.11.0 rows are the order of.  Not today's date, which would
 # claim a quote nobody took.
 _NEW_ROW_PRICE_DATE = "2025-01-31"
+
+
+# ─── THE NICKEL-IRON ALLOY, AND THE THREE IT IS MADE OF  (v1.12.0) ───────────
+# The bulk alloy: a typical IIIAB iron meteorite.  Moved here from the
+# nickel-iron row, unchanged and in the same order (the row's `yields_json` is
+# this dict's json.dumps, so the order is part of the output), because the
+# alloys below are derived from it.
+_NICKEL_IRON_YIELDS: Dict[str, float] = {
+    # Bulk metals, typical IIIAB iron-meteorite Fe-Ni alloy.
+    "iron":      0.900,    # ~90 wt% Fe
+    "nickel":    0.090,    # 7-10 wt% Ni in IIIAB octahedrites
+    "cobalt":    0.005,
+    # Platinum-group metals (PGMs).  Siderites average ~30 ppm total
+    # PGM (per USGS Bulletin 1214 / Nichiporuk 1965).  Distribution
+    # below sums to ~37 ppm total + 1 ppm Au, calibrated to IIIAB
+    # medium-octahedrite means.  Ir bumped from 2→4 ppm (range cited
+    # at 0.01-19 ppm).  Ru + Os added (were missing in v1.1.0-1.1.1),
+    # both concentrate in the metallic phase and are present at
+    # 1-5 ppm in nearly every iron meteorite group.
+    "platinum":  1.5e-5,   # 15 ppm   (Pt is the dominant PGM)
+    "palladium": 1.0e-5,   # 10 ppm
+    "ruthenium": 3.0e-6,   #  3 ppm   ★ NEW v1.1.2
+    "iridium":   4.0e-6,   #  4 ppm   ↑ from 2 ppm
+    "osmium":    2.0e-6,   #  2 ppm   ★ NEW v1.1.2
+    "rhodium":   1.5e-6,   #  1.5 ppm  ↓ from 2 (rebalanced for sum)
+    "gold":      1.0e-6,   #  1 ppm
+    # v1.11.0: the rest of what meteoritic metal carries.  Order-of-
+    # magnitude means over the common iron groups (Scott & Wasson
+    # 1975; the group ranges span one to three decades): Cu 150-300
+    # ppm, Ga 2-100, Ge 0.1-500, Mo ~7, W ~1, Re 0.01-5.  They move
+    # the value only at `earth_surface`; in space every one of them
+    # ships home against a downleg it cannot pay.
+    "copper":     1.5e-4,  # 150 ppm
+    "germanium":  4.0e-5,  #  40 ppm (IIIAB ~40, IAB up to 500)
+    "gallium":    2.0e-5,  #  20 ppm (IIIAB ~20)
+    "molybdenum": 7.0e-6,  #   7 ppm
+    "tungsten":   1.0e-6,  #   1 ppm
+    "rhenium":    3.0e-7,  #   0.3 ppm
+}
+
+# Module 1's catalog data contract 1.8.0 (`comp_phases_detailed`) names the
+# alloy's two halves and says how much of each a class holds: an ordinary
+# chondrite's metal is Ni-rich, mostly taenite and tetrataenite, where an iron
+# meteorite's is mostly kamacite.  What each half IS belongs here, beside the
+# prices, and is DERIVED rather than typed, so the three cannot disagree with
+# the bulk alloy they came from:
+#
+#   NICKEL     kamacite ~6.5 wt% (the alpha phase saturates near 7), taenite
+#              ~30 (taken with the plessite it grades into; 20-50 in the
+#              phase), tetrataenite ~50 (ordered FeNi).  The lever rule
+#              between the first two returns the taenite share of the bulk:
+#              (9.0 - 6.5) / (30 - 6.5) = 0.106, a Widmanstatten octahedrite.
+#   EVERYTHING ELSE partitions between the two halves by a ratio D =
+#              taenite / kamacite, and each half's content is then fixed by
+#              requiring the octahedrite mix to give back the bulk row EXACTLY.
+#              The direction of each D is what laser-ablation work on iron
+#              meteorites reports -- Pd, Pt, Au and Cu into taenite, Co into
+#              kamacite, Ir, Os, Ru, Re and the refractory siderophiles nearly
+#              even -- and the magnitudes are a judgement, not a measurement.
+#   IRON       the remainder, with the bulk row's unassigned ~0.5% (its S, P
+#              and C) left unassigned in each half as well, so iron gives back
+#              0.900 exactly too.
+#   TETRATAENITE  taenite's trace contents at 50% Ni: the same gamma family,
+#              ordered below ~320 C.  Its value as a rare-earth-free magnet has
+#              no market to price, so it is priced by what it yields.
+#
+# So an iron meteorite's metal is the old nickel-iron row to rounding, and an
+# ordinary chondrite's carries more of the taenite-loving metals per kilogram.
+# That is the conservative direction of a known understatement: LL-chondrite
+# metal holds 50-220 ppm precious metals (Kargel 1994), against the ~48 this
+# gives an S-type's.
+_KAMACITE_NI     = 0.065
+_TAENITE_NI      = 0.30
+_TETRATAENITE_NI = 0.50
+_TAENITE_OVER_KAMACITE: Dict[str, float] = {
+    "cobalt":    0.4,
+    "copper":    3.0,
+    "platinum":  2.0,
+    "palladium": 3.0,
+    "gold":      3.0,
+    "rhodium":   1.5,
+    # every other element of the bulk row: 1.0
+}
+_TAENITE_SHARE_OF_BULK = ((_NICKEL_IRON_YIELDS["nickel"] - _KAMACITE_NI)
+                          / (_TAENITE_NI - _KAMACITE_NI))
+
+
+def _unmixed_alloys() -> Dict[str, Dict[str, float]]:
+    """{kamacite, taenite, tetrataenite: yields}, derived from the bulk row.
+
+    Keys in the bulk row's order, so each row's `yields_json` is fixed.
+    """
+    bulk = _NICKEL_IRON_YIELDS
+    s_t = _TAENITE_SHARE_OF_BULK
+    unassigned = 1.0 - sum(bulk.values())
+    kam: Dict[str, float] = {}
+    tae: Dict[str, float] = {}
+    for element, b in bulk.items():
+        if element in ("iron", "nickel"):
+            continue
+        d = _TAENITE_OVER_KAMACITE.get(element, 1.0)
+        kam[element] = b / ((1.0 - s_t) + s_t * d)
+        tae[element] = d * kam[element]
+
+    def assemble(ni: float, traces: Dict[str, float]) -> Dict[str, float]:
+        """One alloy: iron as the remainder, then nickel, then the traces."""
+        out ={"iron": 1.0 - unassigned - ni - sum(traces.values()), "nickel": ni}
+        out.update(traces)
+        return out
+
+    return {"kamacite":     assemble(_KAMACITE_NI, kam),
+            "taenite":      assemble(_TAENITE_NI, tae),
+            "tetrataenite": assemble(_TETRATAENITE_NI, dict(tae))}
+
+
+_ALLOY_YIELDS = _unmixed_alloys()
+
+# Asserted, not commented: the two halves in the octahedrite's proportions ARE
+# the bulk row, element by element, or the derivation above is wrong.
+for _element, _bulk in _NICKEL_IRON_YIELDS.items():
+    _mixed = ((1.0 - _TAENITE_SHARE_OF_BULK) * _ALLOY_YIELDS["kamacite"][_element]
+              + _TAENITE_SHARE_OF_BULK * _ALLOY_YIELDS["taenite"][_element])
+    assert abs(_mixed - _bulk) <= 1e-12 * max(1.0, _bulk), (
+        "kamacite + taenite do not give back nickel-iron's %s: %r vs %r"
+        % (_element, _mixed, _bulk))
+del _element, _bulk, _mixed
+
+
+def _new_mineral(name: str, formula: str, density: float,
+                 yields: Dict[str, float], price: Optional[float],
+                 notes: str) -> dict:
+    """A v1.12.0 mineral row: priced by its yields, and by `price` as it is.
+
+    One constructor for the rows added with the detailed phases, so the
+    fields they share cannot be left out of one of them.  `price` None means
+    the mineral has no market of its own, only its yields.
+    """
+    return {
+        "name":                  name,
+        "kind":                  "mineral",
+        "formula":               formula,
+        "density_gcm3":          density,
+        "yields":                yields,
+        "ref_price_usd_per_kg":  price,
+        "ref_price_date":        _NEW_ROW_PRICE_DATE if price is not None else None,
+        "notes":                 notes,
+    }
 
 
 MINERAL_REFERENCE: List[dict] = [
@@ -1909,38 +2125,9 @@ MINERAL_REFERENCE: List[dict] = [
         "metals_dev_key":        None,
         "ref_price_usd_per_kg":  None,           # priced via yields, not directly
         "ref_price_date":        None,
-        "yields": {
-            # Bulk metals, typical IIIAB iron-meteorite Fe-Ni alloy.
-            "iron":      0.900,    # ~90 wt% Fe
-            "nickel":    0.090,    # 7-10 wt% Ni in IIIAB octahedrites
-            "cobalt":    0.005,
-            # Platinum-group metals (PGMs).  Siderites average ~30 ppm total
-            # PGM (per USGS Bulletin 1214 / Nichiporuk 1965).  Distribution
-            # below sums to ~37 ppm total + 1 ppm Au, calibrated to IIIAB
-            # medium-octahedrite means.  Ir bumped from 2→4 ppm (range cited
-            # at 0.01-19 ppm).  Ru + Os added (were missing in v1.1.0-1.1.1),
-            # both concentrate in the metallic phase and are present at
-            # 1-5 ppm in nearly every iron meteorite group.
-            "platinum":  1.5e-5,   # 15 ppm   (Pt is the dominant PGM)
-            "palladium": 1.0e-5,   # 10 ppm
-            "ruthenium": 3.0e-6,   #  3 ppm   ★ NEW v1.1.2
-            "iridium":   4.0e-6,   #  4 ppm   ↑ from 2 ppm
-            "osmium":    2.0e-6,   #  2 ppm   ★ NEW v1.1.2
-            "rhodium":   1.5e-6,   #  1.5 ppm  ↓ from 2 (rebalanced for sum)
-            "gold":      1.0e-6,   #  1 ppm
-            # v1.11.0: the rest of what meteoritic metal carries.  Order-of-
-            # magnitude means over the common iron groups (Scott & Wasson
-            # 1975; the group ranges span one to three decades): Cu 150-300
-            # ppm, Ga 2-100, Ge 0.1-500, Mo ~7, W ~1, Re 0.01-5.  They move
-            # the value only at `earth_surface`; in space every one of them
-            # ships home against a downleg it cannot pay.
-            "copper":     1.5e-4,  # 150 ppm
-            "germanium":  4.0e-5,  #  40 ppm (IIIAB ~40, IAB up to 500)
-            "gallium":    2.0e-5,  #  20 ppm (IIIAB ~20)
-            "molybdenum": 7.0e-6,  #   7 ppm
-            "tungsten":   1.0e-6,  #   1 ppm
-            "rhenium":    3.0e-7,  #   0.3 ppm
-        },
+        # v1.12.0: the table moved above MINERAL_REFERENCE, unchanged, so the
+        # three alloys it unmixes into can be derived from it.
+        "yields": _NICKEL_IRON_YIELDS,
         "notes":                 "Iron-meteorite analogue (IIIAB octahedrite mean) — "
                                  "Fe + Ni + trace PGMs + Au.  Total PGM ≈ 37 ppm matches "
                                  "siderite literature.  Yields cover all 6 PGMs as of v1.1.2.",
@@ -2018,6 +2205,82 @@ MINERAL_REFERENCE: List[dict] = [
         "notes":                 "Calcite, dolomite, breunnerite: 2-5 wt% of CI "
                                  "chondrites.  Calcining releases the CO2.",
     },
+
+    # ══════════════════════════════════════════════════════════════════════
+    # THE DETAILED PHASES  (v1.12.0)
+    # ══════════════════════════════════════════════════════════════════════
+    # Module 1's data contract 1.8.0 (`comp_phases_detailed`) resolves
+    # "nickel-iron" and "troilite", which each stood for a family, and names
+    # the phosphates and CAI oxides in the residual.  Every row below is
+    # priced by what it yields; stoichiometry from standard atomic masses
+    # (Fe 55.845, Ni 58.693, S 32.06, Cr 51.996, Ti 47.867, P 30.974,
+    # Ca 40.078, C 12.011, O 15.999), shown per row.  Calcium, magnesium,
+    # aluminium, sodium, manganese, chlorine and oxygen are NOT priced: they
+    # are the light elements whose extraction is deferred, so a phase's yield
+    # leaves them unassigned, as olivine's leaves its Mg, Si and O.
+    #
+    # The three alloys are derived from the nickel-iron row above; see
+    # `_unmixed_alloys`.  No market price of their own.
+    _new_mineral("kamacite", "alpha-(Fe,Ni)", 7.90, _ALLOY_YIELDS["kamacite"], None,
+                 "Low-Ni body-centred Fe-Ni (~6.5 wt% Ni): most of an iron "
+                 "meteorite's metal and an H chondrite's.  Derived from the "
+                 "IIIAB nickel-iron row; Co-richer, Pt/Pd/Au/Cu-poorer."),
+    _new_mineral("taenite", "gamma-(Fe,Ni)", 8.00, _ALLOY_YIELDS["taenite"], None,
+                 "High-Ni face-centred Fe-Ni (~30 wt% Ni, with plessite): most "
+                 "of an LL chondrite's metal.  Derived from the IIIAB row; "
+                 "carries the taenite-loving Pt, Pd, Au and Cu."),
+    _new_mineral("tetrataenite", "FeNi (L1_0)", 8.25, _ALLOY_YIELDS["tetrataenite"],
+                 None,
+                 "Ordered FeNi (~50 wt% Ni) in slowly cooled chondrite metal. "
+                 "A rare-earth-free magnet candidate with no market to price, "
+                 "so priced by its yields at taenite's trace contents."),
+    # (Fe0.97Ni0.03)3C: Fe 162.509, Ni 5.282, C 12.011 of 179.802.  The carbon
+    # is not a yield: "carbon" is priced as a mineral, not an element.
+    _new_mineral("cohenite", "(Fe,Ni)3C", 7.40, {"iron": 0.904, "nickel": 0.029},
+                 None,
+                 "Iron carbide with ~3 wt% Ni, in iron meteorites (IAB, IIAB) "
+                 "and some chondrite metal.  Steel-like; yields Fe and Ni."),
+    # Fe7S8: Fe 390.915, S 256.48 of 647.395.
+    _new_mineral("pyrrhotite", "Fe7S8", 4.61, {"iron": 0.604, "sulfur": 0.396},
+                 None,
+                 "The Fe(1-x)S sulfide of CI, CM and Tagish Lake, where "
+                 "troilite is the ordinary chondrites'.  Yields Fe and S."),
+    # (Fe4.5Ni4.5)S8: Fe 251.303, Ni 264.119, S 256.48 of 771.902.
+    _new_mineral("pentlandite", "(Fe,Ni)9S8", 4.80,
+                 {"iron": 0.326, "nickel": 0.342, "sulfur": 0.332}, None,
+                 "The nickel sulfide: where a CI or CK chondrite's nickel is, "
+                 "rather than in metal.  The terrestrial Ni ore mineral."),
+    # (Mg0.6Fe0.3Mn0.1)S: Mg 14.583, Fe 16.754, Mn 5.494, S 32.06 of 68.891.
+    _new_mineral("niningerite", "(Mg,Fe,Mn)S", 3.50,
+                 {"iron": 0.243, "sulfur": 0.465}, None,
+                 "Mg-rich monosulfide of the EH enstatite chondrites, ~2 wt%. "
+                 "Its Mg and Mn are not priced."),
+    # CaS: Ca 40.078, S 32.06 of 72.138.
+    _new_mineral("oldhamite", "CaS", 2.58, {"sulfur": 0.444}, None,
+                 "Calcium sulfide of enstatite chondrites and aubrites, formed "
+                 "only in very reducing conditions.  Its Ca is not priced."),
+    # FeCr2S4: Fe 55.845, Cr 103.992, S 128.24 of 288.077.
+    _new_mineral("daubreelite", "FeCr2S4", 3.81,
+                 {"chromium": 0.361, "iron": 0.194, "sulfur": 0.445}, None,
+                 "Fe-Cr sulfide of enstatite chondrites and aubrites, and "
+                 "lamellae in iron-meteorite troilite: chromium as a sulfide."),
+    # Ca9NaMg(PO4)7: P 216.818 of 1072.787.
+    _new_mineral("merrillite", "Ca9NaMg(PO4)7", 3.10, {"phosphorus": 0.202}, 0.10,
+                 "The anhydrous Ca phosphate of ordinary chondrites, ~0.4 "
+                 "wt%.  Priced as it is as phosphate rock (USGS MCS 2025, "
+                 "~$100/t in 2024) and taken apart for its P."),
+    # Ca5(PO4)3Cl: P 92.922 of 520.75.
+    _new_mineral("chlorapatite", "Ca5(PO4)3Cl", 3.17, {"phosphorus": 0.178}, 0.10,
+                 "The Cl-apatite of ordinary chondrites, ~0.2 wt%.  Priced as "
+                 "phosphate rock, as merrillite is."),
+    # CaTiO3: Ti 47.867 of 135.942.
+    _new_mineral("perovskite", "CaTiO3", 4.00, {"titanium": 0.352}, None,
+                 "A CAI oxide in CV/CO chondrites (K, L types).  Titanium as "
+                 "ilmenite gives it; its Ca is not priced."),
+    _new_mineral("hibonite", "CaAl12O19", 3.84, {}, 0.05,
+                 "A refractory CAI oxide in CV/CO chondrites.  Its aluminium is "
+                 "a light metal whose extraction is deferred, so it is priced "
+                 "as rock, as spinel is."),
 
     # ══════════════════════════════════════════════════════════════════════
     # RARE-MINERAL PHASES  (v1.1.3, added for PGM-rich inclusions)
@@ -3331,6 +3594,22 @@ class CalcConfig:
     # 1.11.0 or later, which prices the new phases: an older one is refused.
     model_mineral_phases:      bool  = True
 
+    # Read the DETAILED phases (v1.26.0): Module 1's `comp_phases_detailed`
+    # (catalog data contract 1.8.0) instead of `comp_phases`.  The metal stops
+    # being one "nickel-iron" and becomes the kamacite, taenite, tetrataenite
+    # and cohenite a class actually holds, so an S-type's Ni-rich chondrite
+    # metal carries more nickel and platinum per kg than an M-type's; the
+    # sulfide stops being one "troilite" and becomes pyrrhotite and
+    # pentlandite (a C-type's nickel), or troilite with niningerite, oldhamite
+    # and daubreelite (an enstatite body's chromium); and the phosphates and
+    # CAI oxides in the residual are named and sold.  Every detailed phase
+    # adds back to the `comp_phases` entry it resolves.  False reads
+    # `comp_phases`, which is v1.25.0 exactly; a catalog older than contract
+    # 1.8.0 has no detailed column and runs that model whatever this says.
+    # Needs Stage 2 at mineral_value 1.12.0 or later, which prices the new
+    # phases: an older one is refused.  Inert with `model_mineral_phases` off.
+    model_detailed_phases:     bool  = True
+
     # FLY THE REFINERY (v1.25.0) instead of taking it out of the price.  Stage 2
     # prices a commodity sold in space as "terrestrial + utility x launch cost
     # avoided - the cost of refining it on site", and that last term is a
@@ -4099,7 +4378,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.25.0"
+    pipeline_version: str = "1.26.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -4495,12 +4774,29 @@ def load_all_catalogs(config: CalcConfig) -> Dict[str, pd.DataFrame]:
     # function that values a body.  With it off the column is gone, so each of
     # them takes the pre-1.24.0 branch, and no entry point that loads through
     # this function can run half of each model.
-    if not getattr(config, "model_mineral_phases", True) and \
-            _PHASES_COL in catalogs["asteroids"].columns:
-        catalogs["asteroids"] = catalogs["asteroids"].drop(columns=[_PHASES_COL])
-        print(f"       model_mineral_phases off: {_PHASES_COL} ignored, "
-              f"four coarse fractions only")
-    elif _PHASES_COL in catalogs["asteroids"].columns:
+    #
+    # v1.26.0: and which of the two phase columns, decided the same way.  At
+    # most ONE survives this block, so every reader downstream asks
+    # `_row_phases_text` and gets the column the run chose, never a mix.
+    asteroids = catalogs["asteroids"]
+    detailed = (getattr(config, "model_detailed_phases", True)
+                and _DETAILED_COL in asteroids.columns)
+    if not getattr(config, "model_mineral_phases", True):
+        gone = [c for c in (_PHASES_COL, _DETAILED_COL) if c in asteroids.columns]
+        if gone:
+            catalogs["asteroids"] = asteroids.drop(columns=gone)
+            print(f"       model_mineral_phases off: {', '.join(gone)} ignored, "
+                  f"four coarse fractions only")
+    elif detailed:
+        catalogs["asteroids"] = asteroids.drop(
+            columns=[c for c in (_PHASES_COL,) if c in asteroids.columns])
+        catalogs["asteroids"][_DETAILED_COL] = (
+            catalogs["asteroids"][_DETAILED_COL].astype("category"))
+        print(f"       detailed phases: {_DETAILED_COL} read, {_PHASES_COL} ignored")
+    elif _PHASES_COL in asteroids.columns:
+        if _DETAILED_COL in asteroids.columns:
+            catalogs["asteroids"] = asteroids.drop(columns=[_DETAILED_COL])
+            print(f"       model_detailed_phases off: {_DETAILED_COL} ignored")
         # ~29 distinct JSON strings across 1.57 M rows: 367 MB as one Python
         # string per row, 1.6 MB as a category (measured on data-2026-09-29),
         # and ~2 s of the read either way.  Same values, so no answer moves;
@@ -4613,14 +4909,17 @@ def phase_price_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
     phase REFUSES the run, naming each phase and both ways out, rather than
     producing a hybrid of the two models that nobody designed.
 
-    True when there is nothing to check: no `comp_phases` column (an older
-    catalog, or `model_mineral_phases` off).
+    True when there is nothing to check: no phase column (an older catalog,
+    or `model_mineral_phases` off).  v1.26.0: whichever of the two columns
+    `load_all_catalogs` kept.
     """
     asteroids = catalogs["asteroids"]
-    if _PHASES_COL not in asteroids.columns:
+    col = next((c for c in (_DETAILED_COL, _PHASES_COL) if c in asteroids.columns),
+               None)
+    if col is None:
         return True
     names: set = set()
-    for text in asteroids[_PHASES_COL].dropna().unique():
+    for text in asteroids[col].dropna().unique():
         if isinstance(text, str) and text:
             names.update(phase for phase, _frac in _parse_phases(text))
     priced = set(str(n) for n in catalogs["minerals"]["name"])
@@ -4629,12 +4928,18 @@ def phase_price_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
         print(f"     OK  Mineral phases: {len(names)} named by the catalog, "
               f"all priced by Stage 2")
         return True
-    print(f"\nFAIL  {len(missing)} mineral phase(s) in the catalog have no "
-          f"Stage 2 price: {missing}")
-    print("     Stage 2 at mineral_value 1.11.0 or later prices them.  Either "
-          "re-run Stage 2 (it re-fetches live prices), or set "
-          "CALC_CONFIG.model_mineral_phases = False for the four-fraction "
-          "model.  Aborting.")
+    print(f"\nFAIL  {len(missing)} mineral phase(s) in the catalog's {col} have "
+          f"no Stage 2 price: {missing}")
+    if col == _DETAILED_COL:
+        print("     Stage 2 at mineral_value 1.12.0 or later prices them.  Either "
+              "re-run Stage 2 (it re-fetches live prices), or set "
+              "CALC_CONFIG.model_detailed_phases = False to read comp_phases.  "
+              "Aborting.")
+    else:
+        print("     Stage 2 at mineral_value 1.11.0 or later prices them.  Either "
+              "re-run Stage 2 (it re-fetches live prices), or set "
+              "CALC_CONFIG.model_mineral_phases = False for the four-fraction "
+              "model.  Aborting.")
     return False
 
 
@@ -5057,6 +5362,24 @@ FRACTION_TO_MINERAL: Dict[str, str] = {
 # of the residual, so the "other (bulk silicate)" floor gets smaller.
 _PHASES_COL = "comp_phases"
 
+# v1.26.0: the same, one level down (catalog data contract 1.8.0): the alloy
+# as kamacite / taenite / tetrataenite / cohenite, the sulfide by species,
+# and the phosphates and CAI oxides named.  `load_all_catalogs` keeps at most
+# one of the two columns, so a row carries the one the run chose.
+_DETAILED_COL = "comp_phases_detailed"
+
+
+def _row_phases_text(asteroid_row: Row) -> Any:
+    """The row's phase JSON, from whichever phase column it carries.
+
+    The detailed column when the row has it, which after `load_all_catalogs`
+    means the run chose it; a hand-built row carrying both is read as the
+    detailed model, and one that wants the other drops the column first.
+    """
+    if _DETAILED_COL in asteroid_row:
+        return asteroid_row.get(_DETAILED_COL)
+    return asteroid_row.get(_PHASES_COL)
+
 
 # ⚠️  `maxsize=None` IS SAFE HERE AND NAMED AS SUCH: the key is the JSON
 # string, one per taxonomy row Module 1 reads (a few dozen), whatever the size
@@ -5076,10 +5399,78 @@ def _parse_phases(text: str) -> Tuple[Tuple[str, float], ...]:
 def _row_phases(asteroid_row: Row) -> Optional[Tuple[Tuple[str, float], ...]]:
     """The row's phases, or None when it has none (older catalog, switch off,
     or an Unknown-class body, whose cell is empty)."""
-    text = asteroid_row.get(_PHASES_COL)
+    text = _row_phases_text(asteroid_row)
     if isinstance(text, str) and text:
         return _parse_phases(text)
     return None
+
+
+# ─── WHAT A BENEFICIATION STEP CANNOT SEPARATE  (v1.26.0) ────────────────────
+# The detailed phases name the three Fe-Ni alloys, and they are not three
+# products.  Kamacite and taenite are intergrown in the same metal grains -- the
+# Widmanstatten plates and the plessite between them -- and tetrataenite is a
+# rim on the taenite, so no physical separation takes one without the others:
+# the metal leaves the rock as ONE concentrate, in the proportions the class
+# holds.  So they are sold as one product, keyed `nickel-iron` (the row whose
+# market and demand class they share), at the fraction-weighted blend of their
+# values, which is where the class-specific nickel and platinum show.
+#
+# 🚨  FOUND BY MEASURING, NOT BY THINKING.  The first build loaded them as three
+# phases, and the concentration search bounds itself on the fraction of the
+# SINGLE best phase (`saturation_ratio`): tetrataenite is fractionally the
+# richest alloy, so an S-type's best phase fell from 6% of the body to 0.4%,
+# the search range widened fourteen-fold, and the beneficiated cells moved in
+# both directions by up to 43% for no physical reason.  The knapsack would also
+# have loaded pure taenite ahead of kamacite whenever the hold was the limit,
+# a grade no process can make.
+#
+# Cohenite and schreibersite stay separate phases: they are discrete crystals,
+# as schreibersite has been since v1.24.0.  A phase not named here is its own
+# product, and takes exactly the path it took before.
+_INSEPARABLE: Dict[str, str] = {
+    "kamacite":     "nickel-iron",
+    "taenite":      "nickel-iron",
+    "tetrataenite": "nickel-iron",
+}
+
+
+@functools.lru_cache(maxsize=None)
+def _phase_products(
+    phases: Tuple[Tuple[str, float], ...],
+) -> Tuple[Tuple[str, Tuple[Tuple[str, float], ...]], ...]:
+    """(product, its member phases) in first-appearance order.
+
+    A product of one member is that phase unchanged.  Keyed on the parsed
+    phase tuple, of which there are a few dozen, so the unbounded cache has a
+    ceiling it can name.
+    """
+    order: List[str] = []
+    members: Dict[str, List[Tuple[str, float]]] = {}
+    for name, frac in phases:
+        product = _INSEPARABLE.get(name, name)
+        if product not in members:
+            order.append(product)
+            members[product] = []
+        members[product].append((name, frac))
+    return tuple((product, tuple(members[product])) for product in order)
+
+
+def _blend(members: Tuple[Tuple[str, float], ...], value) -> Optional[Tuple[float, float]]:
+    """(fraction, fraction-weighted mean of `value`) over the members it prices.
+
+    A member `value` returns None for is left out, as an unpriced phase is
+    left out of the walk; None when none is priced.
+    """
+    frac = total = 0.0
+    for name, f in members:
+        v = value(name)
+        if v is None:
+            continue
+        frac += f
+        total += f * float(v)
+    if frac <= 0.0:
+        return None
+    return frac, total / frac
 
 
 def _row_water_fraction(asteroid_row: Row) -> float:
@@ -5241,11 +5632,24 @@ def asteroid_refinery(
         if hit is not None and hit.refinery is not None:
             return hit.refinery
     pgm = _pgm_enrichment(asteroid_row)
-    phased = _row_phases(asteroid_row) is not None
+    phases = _row_phases(asteroid_row)
+    phased = phases is not None
+    # v1.26.0: a product of several phases spends their blended energy, by
+    # the same weights its price is blended by.
+    merged = ({product: members for product, members in _phase_products(phases)
+               if len(members) > 1} if phased else {})
     wh: Dict[str, float] = {}
     raw = 0.0
     for name, frac, _price in asteroid_phase_table(asteroid_row, mineral_df):
         key = "silicates" if name == _RESIDUAL_PHASE else name
+        if name in merged:
+            terms = {n: _phase_terms(mineral_df, n, pgm, True) for n, _f in merged[name]}
+            blended = _blend(merged[name], lambda n: (
+                terms[n][1] if terms[n][0] is not None else None))
+            per_kg = blended[1] if blended is not None else 0.0
+            wh[name] = per_kg
+            raw += frac * per_kg
+            continue
         per_kg = _phase_terms(mineral_df, key, pgm,
                               phased and name != _RESIDUAL_PHASE)[1]
         wh[name] = per_kg
@@ -5421,7 +5825,7 @@ def _composition_key(asteroid_row: Row) -> Optional[Tuple[Any, ...]]:
     # The JSON string itself: a few dozen distinct values, and two rows share
     # an answer exactly when they share it.  None when absent, so a row
     # without phases keys exactly as before.
-    text = asteroid_row.get(_PHASES_COL)
+    text = _row_phases_text(asteroid_row)
     key.append(text if isinstance(text, str) and text else None)
     return tuple(key)
 
@@ -5457,11 +5861,21 @@ def _phase_prices(
     phases = _row_phases(asteroid_row)
     if phases is not None:
         # v1.24.0: the minerals, each at the better of as-is and refined.
-        for name, frac in phases:
-            price = _phase_value(mineral_df, name, pgm_enrichment)
-            if price is None:
+        # v1.26.0: the ones no process separates, as the one product they
+        # are; see `_INSEPARABLE`.  A lone phase takes the pre-1.26.0 path.
+        for product, members in _phase_products(phases):
+            if len(members) == 1:
+                name, frac = members[0]
+                price = _phase_value(mineral_df, name, pgm_enrichment)
+                if price is None:
+                    continue
+                yield name, frac, float(price)
                 continue
-            yield name, frac, float(price)
+            blended = _blend(members, lambda n: _phase_value(
+                mineral_df, n, pgm_enrichment))
+            if blended is None:
+                continue
+            yield product, blended[0], blended[1]
         return
     for frac_col, mineral_name in FRACTION_TO_MINERAL.items():
         frac = asteroid_row.get(frac_col)
@@ -12208,6 +12622,10 @@ def evaluate_asteroid(
         # from any other column, so a reader re-deriving the row (the worked
         # calculation) is told rather than left to infer it from the config.
         "mineral_phases":           _row_phases(asteroid_row) is not None,
+        # v1.26.0: and whether they were the DETAILED phases, for the same
+        # reason: which column a run read is not in any other column.
+        "detailed_phases":          (_DETAILED_COL in asteroid_row
+                                     and _row_phases(asteroid_row) is not None),
     })
 
     return best
@@ -12950,7 +13368,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.39.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.40.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

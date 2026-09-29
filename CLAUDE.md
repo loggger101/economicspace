@@ -77,6 +77,9 @@ through. Skim for the section that names what you are about to change.
 - [Splitting a quantity finds every reader that took it as its largest part](#splitting-a-quantity-finds-every-reader-that-took-it-as-its-largest-part)
 - [A mineral has two prices, and a walk that read one was right only while nothing walked it](#a-mineral-has-two-prices-and-a-walk-that-read-one-was-right-only-while-nothing-walked-it)
 - [A checker run only on the best case has never run on the rest](#a-checker-run-only-on-the-best-case-has-never-run-on-the-rest)
+- [Splitting a phase splits every bound that reads ONE phase](#splitting-a-phase-splits-every-bound-that-reads-one-phase)
+- [No source means no change](#no-source-means-no-change)
+- [A Stage 2 table can be rebuilt without being re-fetched](#a-stage-2-table-can-be-rebuilt-without-being-re-fetched)
 - [A cost amortised over a plant's life is not the cost of a plant flown for a stay](#a-cost-amortised-over-a-plants-life-is-not-the-cost-of-a-plant-flown-for-a-stay)
 - [Durable lessons from the release history](#durable-lessons-from-the-release-history)
 - [The verification harness is committed now](#the-verification-harness-is-committed-now)
@@ -207,8 +210,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.7.0`, mineral_value `1.11.0`, transportation `1.17.0`,
-calc `1.25.0`, master `1.39.0` (the master version is a literal in
+Current: catalog `1.8.1`, mineral_value `1.12.0`, transportation `1.17.0`,
+calc `1.26.0`, master `1.40.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -443,9 +446,9 @@ flag in this repo restores the old tables: reproducing a cell here needs the
 2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
 tables now frozen under `campaign/stage3/`. ⚠️  **The live
 `asteroid_pipeline/` has held spacecost `v0.5.0`'s tables since 2026-09-28,
-and the `data-2026-09-29` catalog and a mineral_value 1.11.0 Stage 2 since
-2026-09-29** (the 1.10.0 Stage 2 table is frozen under
-`campaign/stage2/mineral_value-1.10.0/`; the `v0.4.0` tables it held from
+and the `data-2026-09-29c` catalog and a mineral_value 1.12.0 Stage 2 since
+2026-09-29** (the 1.10.0 and 1.11.0 Stage 2 tables are frozen under
+`campaign/stage2/mineral_value-1.10.0/` and `-1.11.0/`; the `v0.4.0` tables it held from
 2026-09-24 are frozen under `campaign/stage3/spacecost-0.4.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
 a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
 grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
@@ -481,6 +484,14 @@ measurement is in [calc v1.24.0](versions.md#master-v1380--catalog-v170--mineral
 moves raw and concentrated cells in OPPOSITE directions, so no single factor
 covers it either. Set it False as well; it is bit-identical to 1.24.0 when you
 do. See [calc v1.25.0](versions.md#master-v1390--calc-v1250).
+
+⚠️  **AND calc `1.26.0` ADDS AN EIGHTH: `model_detailed_phases` is True**, the
+catalog's `comp_phases_detailed` (the alloy as kamacite, taenite, tetrataenite
+and cohenite; the sulfide by species; phosphates and CAI oxides named). It is
+the mildest of the eight in space, within 0.08% of every cislunar body on the
+`verify.py` cells, and far from mild at `earth_surface` (median 25-33% better).
+Set it False as well; it is bit-identical to 1.25.0 when you do. See
+[calc v1.26.0](versions.md#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260).
 
 ⚠️  **DO NOT SCALE THESE CELLS BY A SINGLE RATIO.** On the capped cislunar
 sample cells the four together are worth 2.6x on raw ore and 2.1x on the
@@ -4090,6 +4101,61 @@ rather than folded into this one. It is the
 for a checker, and `--sweep` exists for exactly this one level up: ask what
 fraction of the cases a check has ever been SHOWN, not only whether it passed.
 
+### Splitting a phase splits every bound that reads ONE phase
+
+calc `1.26.0`, and it is [splitting a quantity finds every reader that took it
+as its largest part](#splitting-a-quantity-finds-every-reader-that-took-it-as-its-largest-part)
+arriving at a BOUND rather than at a reader.  The detailed phases split
+"nickel-iron" into kamacite, taenite and tetrataenite, three rows priced
+within a fraction of a percent of each other at cislunar.  A split like that
+should move nothing.  It moved the beneficiated cells **up to 43% in both
+directions**.
+
+🚨  **`saturation_ratio` bounds the concentration search by the fraction of
+the single best-PRICED phase**, and tetrataenite, the richest alloy by a
+hair, is 0.4% of an S-type where the metal it came from was 6%.  The search
+range widened fourteen-fold and the non-exhaustive grid landed elsewhere.  No
+price moved and no cost moved; the answer did.
+
+⚠️  **The fix was physical, not numerical, and that is the part to keep.**
+Kamacite and taenite are intergrown in one grain; no separation takes one
+without the other, so they were never three products.  `_INSEPARABLE` sells
+them as one, at their blended value.  Widening the bound to "the best phase
+GROUP" would have fixed the search and left the knapsack loading pure taenite
+ahead of kamacite, a grade no process makes, which at `earth_surface` is worth
+several times the blend.  **Before splitting a phase, ask whether a process can
+separate the parts; if it cannot, they are one product with a composition.**
+
+✅  The tell was a winner that got WORSE on the same body, and gross value
+falling to 0.47x on one row, under a change that was supposed to be detail.
+A refinement that moves an answer is either finding something real or
+exposing a bound; a 43% swing both ways is not a mineral.
+
+### No source means no change
+
+The same release, upstream.  AsteroidCatalog 1.8.0 gave every class whose
+metal has no meteorite analogue pure kamacite (~6.5 wt% Ni), where the
+coarse "nickel-iron" had always meant an iron meteorite's ~9%.  Nothing
+supports either; one of them was already the answer every result stood on.
+The probe caught it (those classes 6-12% poorer at `earth_surface`), and 1.8.1
+put them back, with a test there that holds them to it.  **A refinement may
+move a number only where a source moves it**, and the default for an
+unsourced split is the value the unsplit quantity already had, never the
+first member of the list.
+
+### A Stage 2 table can be rebuilt without being re-fetched
+
+The same release.  Adding Stage 2 rows used to mean running Stage 2, which
+re-fetches live quotes and moves every existing price under every baseline
+(see "RUNNING STAGE 2 OR STAGE 3 DESTROYS EVERY BASELINE YOU HOLD").  The
+table RECORDS the quotes it used (`live_price_*`, five yfinance rows), so the
+new table was built by feeding those back in as the live frame with the
+network untouched: **0 cells differ over the 46 shared rows**.  The same
+replay priced an `earth_surface` table into scratch for a second
+destination's A/B without touching the live one, and
+`CalcConfig.mineral_catalog_file` given an absolute path points a run at it.
+**Replay the recorded quotes whenever the change is to rows, not to prices.**
+
 ### A cost amortised over a plant's life is not the cost of a plant flown for a stay
 
 calc `1.25.0`, and it is the reason the refinery's sign depends on the ore.
@@ -5235,8 +5301,8 @@ package. The builder is
 [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog), and that
 repository PUBLISHES its builds as GitHub Releases, one frozen catalog per
 `data-YYYY-MM-DD` tag, gated before publishing (every source contributed,
-stamps current, no shrink against the previous release). The pinned catalog release is `data-2026-09-29`,
-`CatalogConfig.catalog_release`, at data contract 1.7.0.
+stamps current, no shrink against the previous release). The pinned catalog release is `data-2026-09-29c`,
+`CatalogConfig.catalog_release`, at data contract 1.8.1.
 
 ⚠️  **THE INSTALLER STAGES INTO A FRESH DIRECTORY EVERY TIME, AND A FIXED ONE
 IS A TRAP ON THIS MOUNT.** It used `.catalog_download`, cleared it with

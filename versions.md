@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260)
 - [master v1.39.0 / calc v1.25.0](#master-v1390--calc-v1250)
 - [master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240)
 - [master v1.37.0 / transportation v1.17.0 / catalog v1.6.0](#master-v1370--transportation-v1170--catalog-v160)
@@ -90,11 +91,11 @@ one that does not say is not to be used.
 
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
-| 1 | `modules/catalog.py` | **1.7.0** | v1.7.0, every class divided into the mineral phases its four coarse fractions are made of, the new `comp_phases` column; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
-| 2 | `modules/mineral_value.py` | **1.11.0** | v1.11.0, the products the new phases yield: sulfur, phosphorus, chromium, titanium, CO2, ammonia and five trace metals, and four new minerals |
+| 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
+| 2 | `modules/mineral_value.py` | **1.12.0** | v1.12.0, thirteen minerals for the detailed phases: three Fe-Ni alloys derived from the nickel-iron row, cohenite, five sulfides, two phosphates and two CAI oxides |
 | 3 | `modules/transportation.py` | **1.17.0** | v1.17.0, every fairing volume derived from a cited drawing or left blank with a reason: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.25.0** | v1.25.0, the refinery is flown rather than taken out of the price (`model_refinery`, default on) |
-| - | `master.py` | **1.39.0** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.26.0** | v1.26.0, the detailed phases are read (`model_detailed_phases`, default on), with the intergrown Fe-Ni alloys sold as one product |
+| - | `master.py` | **1.40.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -166,6 +167,148 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0
+
+**The metal and the sulfide are the minerals they are, not two family
+names.** `comp_phases` sold every class's metal as one "nickel-iron", an iron
+meteorite's alloy at ~9 wt% Ni, and every sulfide as "troilite". Neither is
+one mineral, and the difference is worth money wherever nickel is: an
+LL-leaning chondrite's metal is Ni-rich because its iron oxidised into the
+silicate and its nickel stayed, and a CI chondrite's nickel is in pentlandite,
+not in metal at all. Three repositories moved together, as for v1.38.0.
+
+### What moved upstream
+
+- **AsteroidCatalog 0.10.0, data contract 1.8.0** adds `comp_phases_detailed`,
+  a refinement of `comp_phases` (which is unchanged): per class, nickel-iron
+  divided into **kamacite**, **taenite**, **tetrataenite** and **cohenite**, and
+  troilite into **pyrrhotite** and **pentlandite** (the C complex, P, D, Z, CK,
+  CV) or troilite with **niningerite**, **oldhamite** and **daubreelite** (E,
+  Xe), each share adding back to the entry it divides; and new residual
+  accessories, **merrillite** and **chlorapatite** in the S complex and Q,
+  **perovskite** and **hibonite** in K and L. Sources in its `mineralogy.py`.
+- **0.10.1, data contract 1.8.1, published as `data-2026-09-29c`**, the pin.
+  1.8.0 had given every class whose metal has no source pure kamacite (~6.5
+  wt% Ni) where "nickel-iron" meant ~9%, which read those classes 6-12%
+  poorer at `earth_surface` on this repo's valuation functions for a choice
+  nothing supports. **No source means no change**: they take kamacite and
+  taenite in an octahedrite's proportions, which is that alloy, and a test
+  there now holds them to it. `data-2026-09-29b` (1.8.0) stays published and
+  was never pinned here.
+- Against `data-2026-09-29`, no `comp_*` column moved on any shared body; 134
+  new bodies and 82 orbit refits from JPL. ⚠️  74,414 diameters and 124,109
+  masses differ from `data-2026-09-29` **in the last bit** (median 2.2e-16;
+  only the 9 H-revised bodies by more than 1e-12), between two builds of
+  identical software on GitHub's runners. `-29c` against `-29b`, built three
+  hours apart, differs in `comp_phases_detailed` alone. Likely the runner CPU;
+  it is why this repo compares catalogs by value, never by hash.
+
+### What changes here
+
+- **Stage 1** repins `catalog_release` to `data-2026-09-29c`, contract 1.8.1.
+- **Stage 2 (mineral_value 1.12.0)**: thirteen mineral rows. The three alloys
+  are **derived** from the nickel-iron row: the lever rule between kamacite
+  (6.5 wt% Ni) and taenite (30%) gives the taenite share of the IIIAB bulk,
+  0.106, and every other element partitions between them by a taenite/kamacite
+  ratio (Pd, Pt, Au and Cu into taenite, Co into kamacite, the rest even) with
+  each half's content fixed so that the octahedrite mix gives back the bulk row
+  exactly, asserted at import. So an S-type's metal carries ~48 ppm of PGMs and
+  gold per kg against the iron meteorite's 37, the conservative end of the
+  50-220 ppm LL-chondrite metal holds (Kargel 1994). The other ten are
+  stoichiometric. Oldhamite and the phosphates are shielding rock as they are,
+  as carbonates are, and their S and P are priced as S and P: at sulfur's or
+  phosphorus's utility they were worth less than the residual rock they are
+  carved from, caught on the first priced table. A new import-time assertion
+  holds every per-destination utility override to run downward.
+- **The table was not re-fetched.** It was rebuilt by REPLAYING the five live
+  quotes the 1.11.0 table recorded, with the network untouched: **0 cells
+  differ over the 46 shared rows**, so every existing price is this morning's,
+  exactly, and the A/B below is on identical inputs. The 1.11.0 table is frozen
+  as `campaign/stage2/mineral_value-1.11.0/`.
+- **Stage 4 (calc 1.26.0)**: `model_detailed_phases` (default **True**) reads
+  `comp_phases_detailed`; `load_all_catalogs` keeps one of the two columns and
+  every reader asks `_row_phases_text`. New output column `detailed_phases`.
+  ⚠️  The catalog is **2.2 GB** now, the new column ~430 MB of it, and both
+  phase columns are read before one is dropped. Measured on the read alone:
+  the frame is 0.47 GB larger (4.82 against 4.35 GB, as one Python string per
+  row until calc makes it a category), and peak RSS moves **6.23 to 6.25 GB**,
+  so a run's memory is not what this costs.
+- 🚨  **The three Fe-Ni alloys are ONE product.** The first build loaded them
+  as three phases, and the beneficiated cells moved **up to 43% in both
+  directions** with gross value falling to 0.47x on one body. Traced to
+  `saturation_ratio`, which bounds the concentration search by the fraction of
+  the single best-PRICED phase: tetrataenite is fractionally the richest alloy,
+  so an S-type's best phase fell from 6% of the body to 0.4%, the search range
+  widened fourteen-fold, and the non-exhaustive grid landed elsewhere. It was
+  also wrong physically: kamacite and taenite are intergrown in one metal grain,
+  and a knapsack that loads pure taenite ahead of kamacite is selling a grade no
+  process makes. `_INSEPARABLE` sells them as `nickel-iron` at their
+  fraction-weighted value and energy; cohenite and schreibersite stay separate
+  crystals.
+- **The worked calculation** trims the installed body to the column the ROW's
+  run read (`body_for_run`, by `detailed_phases`), merges the alloys the way
+  calc does in the same summation order, and shows the metal alloy by alloy.
+  `verification_sheet.py` crashed on any beneficiated body with a concentration
+  rung where no mission closes (`won` is None), which predates this release and
+  surfaced on 2018 GT11; such a rung now prints as that.
+
+### What it is worth, on a sample
+
+`verify.py`'s four cislunar cells, HEAD (v1.39.0) against this build with the
+switch off and on, on identical inputs (`data-2026-09-29c`, the replayed
+table). **Switch off is v1.39.0 to the bit on all four:**
+
+| cell | off vs v1.39.0 | median body, on vs off | best row |
+|---|---|---|---|
+| raw, N = 1 (400 rows) | `34934864f1217742` **MATCH** | +0.000%, every body within 0.08% | 2022 NX1, 8.9723x, unchanged |
+| raw, searched | `d9d5715144635212` **MATCH** | +0.000% | 2022 NX1, 6.5619x, unchanged |
+| beneficiated, N = 1 (150 rows) | `40a61404417d1850` **MATCH** | +0.000% | 2018 GT11, 19.1888x, unchanged |
+| default | `420d7585aa6f689f` **MATCH** | +0.000%, every body within 0.06% | 2018 GT11, 10.9498x, unchanged |
+
+✅  **At cislunar it is close to inert, and that is the answer rather than a
+disappointment.** In space structural metal sells by the kilogram at the
+launch cost it avoids, so every alloy is worth the same $4,814.57; and a
+phosphate replaces residual rock at a rock price. The ledger that the minerals
+move is a terrestrial one.
+
+**At `earth_surface`** (the same build and quotes, an `earth_surface` table
+replayed into scratch, 400 raw and 150 beneficiated rows), **the median body
+improves 25.4% raw and 33.0% beneficiated**, 194 of 197 and 81 of 82 bodies
+better: the C complex by 38-56% (the nickel in pentlandite), the S complex by
+25-30% (Ni-rich chondrite metal, and the phosphates), K 37% (taenite-rich CV
+metal), V 2-4% worse (Ni-poor eucrite metal). The beneficiated winner stays
+2018 GT11 and goes 40,893x to 28,892x on a different vehicle; delivering to
+Earth stays hopeless, but the ranking now sees the minerals. Per class, on the
+valuation functions: S and Q +34%, the C complex +24-61%, K +58%, E and Xe
+-10% (low-Ni kamacite, and sulfides whose Ca and Mg are light metals and not
+priced), V -2.4%, every class with no source within 0.4%, L +3.2% (its
+perovskite's titanium).
+
+These are samples; [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) applies.
+
+### What was verified
+
+| harness | result |
+|---|---|
+| AsteroidCatalog `pytest` | 619 passed; a planted wrong split and a planted unsourced kamacite each turn it red |
+| AsteroidCatalog tools, `data-2026-09-29c` | audit clean, five reference bodies `measured`, no albedo table stale, density evidence no failures |
+| `verify_stage1.py` | 7 checks, 0 wrong, at `data-2026-09-29c` / 1.8.1 |
+| the Stage 2 replay | 46 of 46 shared rows identical in all 23 columns |
+| the A/B above | four MATCH hashes with the switch off, reproduced twice |
+| `worked_calculation.py --audit`, detailed raw and default rows | 90 quantities, 0 DIFFER on both; 120 of 120 non-zero columns and 36 of 36 rates on the default page |
+| `verification_sheet.py --check`, the default row | 304 of 304 substitutions reproduce, 131 of 131 inputs cited; `--self-test` catches its planted perturbation |
+| `verification_sheet.py --check`, the raw row | 212 of 217; the 5 WRONG are the orbital and feed lines v1.38.0 records as predating the phases |
+| `verify.py check` | prune ON vs OFF 147/147 identical on all four cells; serial vs 8 workers identical; mass ledger 0 kg; never-worse 0 exceptions on all three pairings; Stage 2 tables identical, 34/34 phases resolve to a market; ceilings 0. Check 1 was run against a baseline of this same build, only to reach checks 2-7, and the harness says NOT VERIFIED rather than passing it; its four hashes are the A/B's switch-on hashes exactly |
+| `verify_docs.py` | every check |
+
+### What did not change
+
+- transportation `1.17.0`: no Stage 3 table moved.
+- `comp_phases`, every existing Stage 2 row and price, and the evaluable set
+  of every cell.
+- **Every measured cell before this release reads `comp_phases`.** Set
+  `model_detailed_phases` False to reproduce one; it is v1.39.0 exactly.
 
 ## master v1.39.0 / calc v1.25.0
 
@@ -1494,6 +1637,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260) | 2026-09-29 | **the alloy and the sulfides are the minerals they are**: catalog `data-2026-09-29c` resolves nickel-iron and troilite and names the phosphates and CAI oxides, Stage 2 prices thirteen new minerals, and Stage 4 reads them, selling the intergrown alloys as one metal |
 | [master v1.39.0 / calc v1.25.0](#master-v1390--calc-v1250) | 2026-09-29 | **the refinery is flown**: energy through the array, plant with the rig, prices before Stage 2's refining deduction |
 | [master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240) | 2026-09-29 | **the minerals are extracted, not the four fractions**: catalog `data-2026-09-29` carries every class's mineral phases, Stage 2 prices what they yield, and Stage 4 loads, concentrates and sells each one |
 | [master v1.36.0 / catalog v1.4.0](#master-v1360--catalog-v140) | 2026-09-25 | **Stage 1 repins to `data-2026-09-25`**, data contract 1.4.0, and the redundancies around the Stage 1 and Stage 3 seams go from all three repositories |
@@ -6329,6 +6473,24 @@ shares with `data-2026-09-27`. `PHASE_GROUP` is now read from the release's
 
 Config: `catalog_release` and `pipeline_version` moved; no field added.
 
+**`1.8.1` installed, `data-2026-09-29c` (master v1.40.0).** AsteroidCatalog's
+contract 1.8.0 resolves the alloy and the sulfides, and 1.8.1 keeps the metal
+of every class with no source for it as the ~9 wt% Ni alloy `nickel-iron`
+meant (1.8.0 had made it pure kamacite; `data-2026-09-29b`, its one release,
+was never pinned here). Full write-up:
+[master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260).
+
+New output column: `comp_phases_detailed`, the same JSON as `comp_phases` with
+"nickel-iron" divided into kamacite, taenite, tetrataenite and cohenite in
+per-class proportions (Ni-rich for the S complex and Q, an octahedrite for M
+and Xk and for every class with no source, taenite-rich for K, kamacite for
+E, Xe and V), "troilite" into pyrrhotite, pentlandite, niningerite,
+oldhamite and daubreelite where those are the sulfides, and merrillite,
+chlorapatite, perovskite and hibonite added in the residual. `comp_phases` is
+unchanged. `PHASE_GROUP` grows by those thirteen names.
+
+Config: `catalog_release` and `pipeline_version` moved; no field added.
+
 ## Stage 2 changelog: `modules/mineral_value.py`
 
 **`1.1.0`  initial release.**
@@ -6635,6 +6797,19 @@ destination: `refining_kwh_per_kg` and `price_before_processing_usd_per_kg`,
 written ahead of the Stage 4 release that reads them. No config field moved.
 ⚠️  The new reference prices are the order of USGS MCS 2025's 2024 figures,
 dated `2025-01-31`, and are approximate; none has a live ticker.
+
+**`1.12.0`  the detailed phases.** Full write-up: [master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260). Thirteen mineral
+rows: the three alloys the nickel-iron row is made of (kamacite, taenite,
+tetrataenite), DERIVED from it by the lever rule and a taenite/kamacite
+partition per element, and asserted at import to mix back into it exactly;
+cohenite; five sulfides (pyrrhotite, pentlandite, niningerite, oldhamite,
+daubreelite); two phosphates (merrillite, chlorapatite); two CAI oxides
+(perovskite, hibonite). The nickel-iron row's yields moved into
+`_NICKEL_IRON_YIELDS`, same values and order, so its `yields_json` is
+unchanged. Every existing row is unchanged on disk: the table was rebuilt by
+REPLAYING the 1.11.0 table's five recorded live quotes rather than re-fetching,
+0 cells differ over the 46 shared rows. New: an import-time assertion that
+every per-destination utility override runs downward. No config field moved.
 
 ## Stage 3 changelog: `modules/transportation.py`
 
@@ -7557,6 +7732,25 @@ and two output columns are added, and the field defaults ON.
   and `value_route` (mineral_value 1.11.0) and Module 3's "In-space
   processing plant throughput"; a Stage 2 table without them leaves the
   refinery off.
+
+**`1.26.0`  the detailed phases.** Full write-up: [master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260). One config
+field and one output column are added, and the field defaults ON.
+
+- **New field**: `model_detailed_phases` (default **True**): read the
+  catalog's `comp_phases_detailed` rather than `comp_phases`. False is v1.25.0
+  to the bit on all four `verify.py` cells. `load_all_catalogs` keeps at most
+  one of the two columns, and every reader asks `_row_phases_text`.
+- **New output column**: `detailed_phases`, whether the row's phases were the
+  detailed ones; the worked calculation trims the body to that column.
+- **The Fe-Ni alloys are one product** (`_INSEPARABLE`): kamacite, taenite and
+  tetrataenite are intergrown in one metal, so they are loaded, concentrated
+  and sold as `nickel-iron` at their fraction-weighted value and energy.
+  Loading them as three phases moved the beneficiated cells up to 43% both
+  ways, through the concentration search's best-phase bound; see the
+  write-up.
+- **Needs** a catalog at contract 1.8.0 and Stage 2 at mineral_value 1.12.0;
+  `phase_price_check` refuses a detailed phase Stage 2 does not price, and an
+  older catalog runs the `comp_phases` model whatever the switch says.
 
 # Measurement history
 
