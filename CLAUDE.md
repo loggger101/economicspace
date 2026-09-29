@@ -438,9 +438,9 @@ changed the delivered-price model, so Stage 2 and Stage 3 both re-price and no
 flag in this repo restores the old tables: reproducing a cell here needs the
 2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
 tables now frozen under `campaign/stage3/`. ⚠️  **The live
-`asteroid_pipeline/` has held the `v0.4.0` tables since 2026-09-24** (master
-v1.37.0 pins `v0.5.0` and has not re-run Stage 3), and the `data-2026-09-27`
-catalog since 2026-09-28, and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
+`asteroid_pipeline/` has held spacecost `v0.5.0`'s tables and the
+`data-2026-09-27` catalog since 2026-09-28** (the `v0.4.0` tables it held from
+2026-09-24 are frozen under `campaign/stage3/spacecost-0.4.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
 a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
 grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
 default configuration measured the repricing at a median **1.58x worse**
@@ -3151,10 +3151,16 @@ diameter moved 11.8%, and its page DIFFERs on 39 columns while saying why
 before it starts. A 1.1 GB catalog is not worth committing to make an archived
 non-winner reproduce.
 
-⚠️  **The frozen set is ONE epoch.** Re-run Stage 2 or 3 again and a `v0.4.0`
-archive written before that re-run will fall back to the 0.3.x tables, which
-are the wrong frozen set for it. The compared columns catch that, loudly; the
-fix, when it is needed, is to key the frozen sets by stamp.
+✅  **The frozen Stage 3 sets are epochs now, not one set.** This said a
+second re-run would send a `v0.4.0` archive to the 0.3.x tables, and that the
+fix was to key the frozen sets by stamp. It was needed on 2026-09-28, when
+spacecost `v0.5.0` was adopted on disk: the `1.16.0` tables went into
+`campaign/stage3/spacecost-0.4.0/`, and `transport_tables_for` reads the NEWEST
+set a row's run could have read, by the same dates `run_could_read` compares.
+The archived default cell's winner derives against it with every Stage 3
+quantity exact. ⚠️  **Freeze the live set BEFORE the re-run that replaces
+it**; after, it is gone. Stage 2 is still one frozen epoch, because nothing
+has re-priced it since `v0.4.0`.
 
 ⚠️  **`campaign/run_cell.py` had the mirror image of this, and it was worse,
 because it WRITES.** It copies the frozen Stage 2 catalog over the live one

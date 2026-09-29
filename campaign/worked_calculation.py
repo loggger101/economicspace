@@ -877,17 +877,41 @@ def transport_tables_for(archived=None):
     `run_could_read`.  Three propellant prices in that set are the 2026-09-17
     refetch, which does not matter: the outbound price is recovered from the
     row anyway (`run_propellant_price`).
+
+    ✅  AND THERE IS MORE THAN ONE FROZEN SET NOW, KEYED BY WHEN IT WAS
+    WRITTEN.  `campaign/stage3/` itself is the 0.3.x epoch; each
+    `spacecost-*` subdirectory is a later one (`spacecost-0.4.0/`, frozen when
+    spacecost v0.5.0 was adopted on disk on 2026-09-28).  A row reads the NEWEST set its
+    run could have read, which is the one that was live while it ran.  A row
+    older than every set falls back to the oldest, which is what the 2026-09
+    campaign cells need: their 0.3.x set carries the 2026-09-17 refetch date,
+    after they ended.
     """
     import master
     cfg = master.CALC_CONFIG
     live = os.path.join(ROOT, "asteroid_pipeline", cfg.transportation_subdir)
     if run_could_read(archived, os.path.join(live, cfg.launch_vehicles_file)):
         return live, "the live Stage 3 tables"
-    frozen = os.path.join(CAMP, "stage3")
-    if os.path.exists(os.path.join(frozen, cfg.launch_vehicles_file)):
-        return frozen, "campaign/stage3, frozen spacecost 0.3.x"
-    sys.exit("the live Stage 3 tables were written after this run ended, and "
-             "there is no frozen set at\n  %s" % frozen)
+    root = os.path.join(CAMP, "stage3")
+    sets = [(root, "campaign/stage3, frozen spacecost 0.3.x")]
+    if os.path.isdir(root):
+        for sub in sorted(os.listdir(root)):
+            if sub.startswith("spacecost-"):
+                sets.append((os.path.join(root, sub),
+                             "campaign/stage3/%s, frozen %s"
+                             % (sub, sub.replace("-", " "))))
+    sets = [(d, label, _table_date(os.path.join(d, cfg.launch_vehicles_file)))
+            for d, label in sets
+            if os.path.exists(os.path.join(d, cfg.launch_vehicles_file))]
+    if not sets:
+        sys.exit("the live Stage 3 tables were written after this run ended, "
+                 "and there is no frozen set under\n  %s" % root)
+    sets.sort(key=lambda s: s[2] or "")
+    readable = [s for s in sets
+                if run_could_read(archived,
+                                  os.path.join(s[0], cfg.launch_vehicles_file))]
+    chosen = readable[-1] if readable else sets[0]
+    return chosen[0], chosen[1]
 
 
 def reference_tables(dest, archived=None):

@@ -74,6 +74,9 @@ The files on the reference host were re-run at 1.16.0 on 2026-09-24, when
 master v1.35.0 adopted spacecost v0.4.0 on disk.  The 2026-09-09 tables the
 28-cell campaign flew are frozen under `campaign/stage3/`; see
 [the data on disk adopts it](../versions.md#the-data-on-disk-adopts-it-2026-09-24).
+They were re-run again at 1.17.0 on 2026-09-28, adopting spacecost v0.5.0,
+and the 1.16.0 set is frozen under `campaign/stage3/spacecost-0.4.0/`; see
+[the second adoption](../versions.md#the-data-on-disk-adopts-it-2026-09-28).
 
     to re-check that claim:   py verify_stage3.py
 
