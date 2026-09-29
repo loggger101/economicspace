@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.36.0)
+"""Master Asteroid Profitability Pipeline (1.37.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -129,7 +129,7 @@ _MASTER_REQUIRED = [
 # Stage 1 installs no package: it downloads a pinned catalog RELEASE, which is
 # data, not code.  Its pin is `CatalogConfig.catalog_release`.
 _MASTER_PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.4.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.5.0",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -235,7 +235,7 @@ class CatalogConfig:
     # reads, and moves every number downstream: record a repin in versions.md.
     # The published tags are listed at
     # https://github.com/loggger101/AsteroidCatalog/releases
-    catalog_release: str = "data-2026-09-25"
+    catalog_release: str = "data-2026-09-27"
 
     # Where release assets are downloaded from; the tag and the asset name are
     # appended.  Plumbing: change it only to point at a mirror.
@@ -269,7 +269,7 @@ class CatalogConfig:
     # only after the stages that read the catalog have been checked against the
     # new schema.  The record of what each contract changed is AsteroidCatalog's
     # CHANGELOG.md; this pipeline's is versions.md > Stage 1 changelog.
-    pipeline_version: str = "1.4.0"
+    pipeline_version: str = "1.6.0"
 
 
 # Instantiate and create the output dir.  Edit CATALOG_CONFIG values above this line
@@ -2691,7 +2691,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.16.0"
+    pipeline_version: str = "1.17.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 TRANSPORT_CONFIG = TransportConfig()
@@ -4842,8 +4842,8 @@ def asteroid_bulk_value_usd_per_kg(
     in nickel-iron, base metals (Fe, Ni, Co) and non-metal categories
     (silicates, carbon, water) are unaffected.
 
-    v1.3.3, "Other" residual mass (Module 1 fractions sum to 0.73-0.96
-    across types) was silently zero-valued; now treated as bulk silicate
+    v1.3.3, "Other" residual mass (Module 1 fractions sum to less than 1
+    in every type) was silently zero-valued; now treated as bulk silicate
     at $0.05/kg floor.
     """
     key = _composition_key(asteroid_row)
@@ -4968,7 +4968,7 @@ def asteroid_phase_table(
 
     The same four taxonomy fractions `asteroid_bulk_value_usd_per_kg` blends,
     but kept SEPARATE so a mission can choose what to load rather than being
-    handed the mean.  The residual (Module 1's fractions sum to 0.73-0.96) is
+    handed the mean.  The residual (Module 1's fractions sum to less than 1) is
     included as bulk silicate, matching the bulk function's floor treatment.
 
     Phases with zero fraction are dropped; you cannot select what is not
@@ -4998,7 +4998,7 @@ def asteroid_phase_table(
         frac_sum += frac
 
     if 0.0 < frac_sum < 1.0:
-        # Composition fractions sum to 0.73-0.96; the remainder is undifferentiated
+        # Composition fractions sum to less than 1; the remainder is undifferentiated
         # rock and is valued at the bulk-silicate floor.  ⚠️  It is priced at the
         # `silicates` QUOTE, which is why `_PHASE_MARKET_ALIAS` below must give it
         # the `silicates` CEILING: a phase that declares itself silicates for
@@ -7114,6 +7114,10 @@ def _sizing_propellant_consts(
 # rows of a default cislunar sample.  Named here, rather than typed inline as
 # it was, so the worked calculation can say which figure the model used
 # instead of printing the blank cell it read.  The value is unchanged.
+# spacecost v0.5.0 derives every volume from a cited drawing or leaves it blank
+# with a reason: SLS Block 1 (216 m3) and Proton-M (91.1) stop taking this
+# default, and 34 of 76 rows (17 of the 48 operational ones) still do, some of
+# them rows that had carried an unsourced figure before.
 DEFAULT_FAIRING_VOLUME_M3 = 100.0
 
 
@@ -12223,7 +12227,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.36.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.37.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

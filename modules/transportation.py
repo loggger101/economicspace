@@ -55,6 +55,14 @@ that moves alone; this one moved rows, so adopting it means re-running Stage 3,
 and that is a decision about the baselines rather than a chore.  See
 [master v1.35.0](../versions.md#master-v1350--mineral_value-v1100--transportation-v1160).
 
+⚠️  v0.5.0 TOOK IT 1.16.0 -> 1.17.0 AND MOVED ONE COLUMN THAT STAGE 4 READS.
+Every `fairing_volume_m3` is now derived from a cited drawing, or left blank
+with a reason, under a new `fairing_basis` column.  That is the volume cap
+Stage 4 enforces, so adopting it moves any mission the cap binds on; a blank
+is still flown at calc's `DEFAULT_FAIRING_VOLUME_M3`.  The grid stays 48
+vehicles.  Adopting it on disk is the same decision as v0.4.0's.  See
+[master v1.37.0](../versions.md#master-v1370--transportation-v1170--catalog-v160).
+
 RE-RUN STAGE 3 WHEN A ROW CHANGES, NOT WHEN A STAMP DOES.  A repin does not
 require a restamp: Stage 4 reads no column this contract moved, so leaving the
 CSVs at the older stamp costs one `stamp_check()` line and nothing else, where
@@ -106,7 +114,7 @@ import subprocess, sys
 # the two to each other.
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.4.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.5.0",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -255,7 +263,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.16.0"
+    pipeline_version: str = "1.17.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 CONFIG = TransportConfig()

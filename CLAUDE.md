@@ -203,8 +203,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.4.0`, mineral_value `1.10.0`, transportation `1.16.0`,
-calc `1.23.0`, master `1.36.0` (the master version is a literal in
+Current: catalog `1.6.0`, mineral_value `1.10.0`, transportation `1.17.0`,
+calc `1.23.0`, master `1.37.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -212,7 +212,8 @@ number this repo owns, and `verify_stage3.py` check 2 asserts the two are
 equal. It stayed at `1.14.0` through the split because the data did not move;
 it moved to `1.15.0` when the package gained a sixth table (`environments`,
 spacecost v0.2.0), and to `1.16.0` when the launch table was re-audited and
-the delivered-price model changed (spacecost v0.4.0). **So it follows a repin, and a repin follows it: the two
+the delivered-price model changed (spacecost v0.4.0), and to `1.17.0` when
+every fairing volume was re-derived from a drawing (spacecost v0.5.0). **So it follows a repin, and a repin follows it: the two
 are one number in two repositories.**
 
 ℹ️  **TWENTY-ONE stamps so far do NOT mean the numbers moved.** The rule
@@ -437,9 +438,9 @@ changed the delivered-price model, so Stage 2 and Stage 3 both re-price and no
 flag in this repo restores the old tables: reproducing a cell here needs the
 2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
 tables now frozen under `campaign/stage3/`. ⚠️  **The live
-`asteroid_pipeline/` has held the `v0.4.0` tables since 2026-09-24**, and the
-`data-2026-09-25` catalog once Stage 1 has installed master v1.36.0's pin, and
-`campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
+`asteroid_pipeline/` has held the `v0.4.0` tables since 2026-09-24** (master
+v1.37.0 pins `v0.5.0` and has not re-run Stage 3), and the `data-2026-09-27`
+catalog since 2026-09-28, and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
 a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
 grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
 default configuration measured the repricing at a median **1.58x worse**
@@ -5106,8 +5107,8 @@ package. The builder is
 [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog), and that
 repository PUBLISHES its builds as GitHub Releases, one frozen catalog per
 `data-YYYY-MM-DD` tag, gated before publishing (every source contributed,
-stamps current, no shrink against the previous release). The pinned catalog release is `data-2026-09-25`,
-`CatalogConfig.catalog_release`, at data contract 1.4.0.
+stamps current, no shrink against the previous release). The pinned catalog release is `data-2026-09-27`,
+`CatalogConfig.catalog_release`, at data contract 1.6.0.
 
 ✅  **A CONTRACT CHANGE IS ADOPTED BY ASKING WHO READS THE LABELS.** 1.4.0 added
 no column this pipeline reads and removed none, and still needed code here:
@@ -5183,7 +5184,7 @@ passing, which is exactly why nobody deletes them.
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
-[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.4.0`.
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.5.0`.
 **Do not state the row count here**; the adapter's ready banner prints it on
 every import, and this sentence carried "all 141 of them" into a release that
 added a whole table.
@@ -5360,8 +5361,17 @@ Undoing any of these silently corrupts the output:
 - **The return-capsule volume cap must bind**, not merely be reported. It is
   the only constraint keeping the mission physical when ISRU is on and
   aerocapture is off.
-- **Composition fractions sum to 0.73-0.96**, not 1.0. The residual is valued
-  at a bulk-silicate floor rather than zero.
+- **Composition fractions sum to less than 1.0 in every real class.** The
+  residual is valued at a bulk-silicate floor rather than zero. The span is
+  what `verify_stage1.py` check 2 prints; it is deliberately not typed here.
+
+  🚨  **THIS READ "0.73-0.96" UNTIL 2026-09-28, AND THE INTERVAL ROTTED THE
+  OTHER WAY.** Catalog data contract 1.5.0 cut hydrated C-complex carbon from
+  0.20-0.30 to 0.04, so `Ch` sums to 0.54 and most of the C complex joins it.
+  The old interval was still typed in code comments, docstrings and a
+  dashboard caption, when the repin to `data-2026-09-27` made check 2 print the new
+  span. The two corrections below each fixed the figure; this one deleted it,
+  which is what this file prescribes for a number nothing checks.
 
   🚨  **THIS SAID 0.76-0.96 UNTIL 2026-09-15, AND THE TABLE HAS ALWAYS SAID
   0.73.** `Cgh` sums to 0.73 and `Cg`, `G` and `Ch` to 0.74-0.75, in **every
