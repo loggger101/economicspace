@@ -84,6 +84,25 @@ acknowledged by name rather than through a single paper
   `modules/mineral_value.py`.
 - **metals.dev**: optional, off by default. The key defaults to `"DEMO"`, which
   skips the fetcher.
+- **U.S. Geological Survey, *Mineral Commodity Summaries 2025*** (published
+  2025-01-31): the order of the 2024 prices and world production behind the
+  rows mineral_value 1.11.0 added (sulfur, chromium, titanium, gallium,
+  germanium, rhenium, tungsten, molybdenum, ammonia). Approximate, and dated
+  to the publication rather than to a quote. Phosphorus and CO2 are trade
+  prices USGS does not carry; their rows say so.
+
+### Mineral composition
+
+- **The mineral phases** in each taxonomy class (catalog data contract 1.7.0)
+  come from AsteroidCatalog's `asteroid_catalog/mineralogy.py`, which cites a
+  meteorite analogue per class (Dunn et al. 2010; King et al. 2015; Howard et
+  al. 2015; Alexander et al. 2007; Mittlefehldt 2015; Sunshine et al. 2008;
+  Rubin et al. 2019; Hiroi et al. 2001). That repository is the authority for
+  them and is not restated here.
+- **The trace metals of meteoritic Fe-Ni** in the `nickel-iron` yields (Cu,
+  Ga, Ge, Mo, W, Re) are order-of-magnitude means over the common iron
+  meteorite groups: Scott, E. R. D. & Wasson, J. T. (1975), *Classification
+  and properties of iron meteorites*, Rev. Geophys. Space Phys. 13, 527.
 
 ⚠️  Prices are fetched live, so a figure derived from this pipeline is a
 figure **on a date**. `catalog_date` is stamped into every output CSV for

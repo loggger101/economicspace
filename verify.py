@@ -255,6 +255,7 @@ RESET_FIELDS = (
     "apply_wacc_compounding",    # v1.22.0
     "sell_surplus_at_discount",  # v1.22.0
     "surplus_price_fraction",    # v1.22.0
+    "model_mineral_phases",      # v1.24.0: the phase walk is A/B'd against the four fractions
 )
 
 
@@ -750,6 +751,10 @@ def check_stage2(m) -> bool:
     # exactly how it slipped through for a release.
     markets = m.market_table(d)
     phase_names = set(m.FRACTION_TO_MINERAL.values()) | {m._RESIDUAL_PHASE}
+    # calc v1.24.0: and every MINERAL PHASE the installed catalog may carry,
+    # read off its own taxonomy.json.  Before this, a phase added upstream with
+    # no Stage 2 row would have passed the check written to catch exactly it.
+    phase_names |= set(getattr(m, "PHASE_GROUP", {}) or {})
     unbounded = sorted(p for p in phase_names
                        if m.phase_market_kg(markets, p) == float("inf"))
     ok &= not unbounded

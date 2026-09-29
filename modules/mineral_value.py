@@ -227,7 +227,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.10.0"
+    pipeline_version: str = "1.11.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -580,6 +580,14 @@ IN_SPACE_UTILITY: Dict[str, float] = {
     "awaruite":         0.70,
     "magnetite":        0.40,   # oxide, needs reduction before it is metal
     "troilite":         0.30,   # sulphur source, minor structural use
+    # v1.11.0.  Chromium and titanium are structural alloying metals, and
+    # take the structural discount; their ores, like magnetite, need reducing
+    # first.  Schreibersite is a metal phosphide and sits with the alloy.
+    "chromium":         0.70,
+    "titanium":         0.70,
+    "schreibersite":    0.70,
+    "chromite":         0.40,
+    "ilmenite":         0.40,
     # Silicates.  Usable as bulk radiation shielding and as 3-D-printing /
     # sintering feedstock, but a poor per-kg substitute for engineered
     # structure, and available in quantity from the Moon as well.
@@ -589,6 +597,18 @@ IN_SPACE_UTILITY: Dict[str, float] = {
     # Carbon and organics: composites, plastics, agriculture feedstock.
     "carbon":           0.40,
     "organics":         0.20,
+    # v1.11.0, the other volatiles and chemicals.  Ammonia is nitrogen, the
+    # element a closed habitat leaks and cannot make, plus a resistojet
+    # propellant; CO2 is the carbon feed for Sabatier methane.  Both are
+    # discounted off water's 1.00 because neither is the depot's main trade.
+    # Sulfur and phosphorus are process chemicals and fertiliser, by the kg.
+    "ammonia":          0.60,
+    "carbon dioxide":   0.30,
+    "carbonates":       0.25,   # the CO2 source, and otherwise shielding rock
+    "sulfur":           0.10,
+    "phosphorus":       0.10,
+    # Gallium, germanium, rhenium, tungsten and molybdenum stay at 0.00 with
+    # the precious metals: nobody in orbit buys them for their own sake.
     # Everything not listed, the precious metals above all, defaults to 0.0.
     # That does NOT make them worthless at a depot: a zero here means only
     # that nobody in orbit wants the material for its own sake, so it is
@@ -695,6 +715,13 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         # No chemical plant and no agriculture.
         "carbon":           0.05,
         "organics":         0.05,
+        # v1.11.0.  The same two arguments: no factory for the metals, and no
+        # crew, agriculture or chemistry for the rest.  Ammonia keeps some
+        # value as resistojet propellant, which is the business GEO is in.
+        "chromium":         0.15, "titanium":     0.15, "schreibersite": 0.15,
+        "chromite":         0.05, "ilmenite":     0.05, "carbonates":    0.05,
+        "ammonia":          0.40, "carbon dioxide": 0.05,
+        "sulfur":           0.05, "phosphorus":   0.05,
         # Precious metals stay at the base 0.00 and route down, as everywhere.
     },
     "cislunar": {},                  # base profile, no local resources
@@ -739,7 +766,15 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         "phyllosilicates":  0.03, "oxides":         0.03, "silicates":     0.03,
         # Carbon is one of the genuinely scarce elements on the Moon; 
         # solar-wind implantation leaves it at ~100 ppm, which is not a
-        # resource.  No discount.
+        # resource.  No discount.  v1.11.0: nor for CO2 or ammonia, the
+        # volatiles of carbon and nitrogen, which are scarcer still.
+        # v1.11.0.  Mare basalt is up to ~20 wt% ilmenite, the most studied
+        # lunar ore there is, so its titanium competes with local supply the
+        # way the regolith's iron does.
+        "titanium":         0.45,
+        "ilmenite":         0.03,
+        "chromite":         0.25,
+        "carbonates":       0.03,   # as rock; its CO2 is priced as CO2
         # Precious metals stay at the base 0.00 and route down; see the
         # rejected-change note above.
     },
@@ -765,6 +800,16 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         # onward feedstock, which is most of what "organics" would be for.
         "carbon":           0.02,
         "organics":         0.05,
+        # v1.11.0.  The same atmosphere is the CO2, and 2.8% of it is N2, the
+        # nitrogen an ammonia import would supply.  The crust is sulfate-rich
+        # (Curiosity, Opportunity), and its basalt is Fe-Ti-Cr oxide-bearing.
+        "carbon dioxide":   0.02,
+        "carbonates":       0.02,
+        "ammonia":          0.30,
+        "sulfur":           0.05,
+        "schreibersite":    0.40,
+        "chromite":         0.02,
+        "ilmenite":         0.02,
         # Precious metals stay at the base 0.00 and route down; see the
         # rejected-change note above.  At Mars that means zero: the $96,394/kg
         # downleg exceeds every terrestrial price in the catalog.
@@ -812,6 +857,18 @@ ANNUAL_WORLD_PRODUCTION_KG: Dict[str, float] = {
     "copper":         2.2e10,
     "nickel":         3.6e9,
     "iron":           1.3e12,     # world pig-iron production
+    # v1.11.0, USGS MCS 2025 world production for 2024, rounded
+    "germanium":      1.4e5,      # ~140 t refinery
+    "rhenium":        6.2e4,      # ~62 t
+    "gallium":        7.6e5,      # ~760 t primary
+    "tungsten":       8.1e7,      # ~81,000 t
+    "molybdenum":     2.6e8,      # ~260,000 t
+    "titanium":       3.0e8,      # ~300,000 t sponge
+    "chromium":       4.4e10,     # ~44 Mt chromite ore, the market it trades in
+    "phosphorus":     1.0e9,      # ~1 Mt elemental P4 (phosphate rock is 240 Mt)
+    "sulfur":         8.3e10,     # ~83 Mt
+    "ammonia":        1.8e11,     # ~150 Mt N as ammonia
+    "carbon dioxide": 2.3e11,     # ~230 Mt merchant CO2
     # Effectively unlimited on Earth
     "water":          1.0e15,
     "carbon":         1.0e12,
@@ -907,6 +964,16 @@ _COMMODITY_CLASS: Dict[str, str] = {
     # than 0.0005: 75,000 kg/yr at LEO against 250, a factor of 300.
     "sperrylite":      "trace",      "laurite":      "trace",
     "native-pgm":      "trace",
+    # v1.11.0.  Asserted below, so a row added without a class fails at import.
+    "chromium":        "structural", "titanium":     "structural",
+    "schreibersite":   "structural", "chromite":     "structural",
+    "ilmenite":        "structural",
+    "ammonia":         "propellant",
+    "carbon dioxide":  "chemical",   "carbonates":   "chemical",
+    "sulfur":          "chemical",   "phosphorus":   "chemical",
+    "gallium":         "trace",      "germanium":    "trace",
+    "rhenium":         "trace",      "tungsten":     "trace",
+    "molybdenum":      "trace",
 }
 
 # The bulk classes must partition the budget, or the "one import budget"
@@ -986,6 +1053,24 @@ IN_SPACE_PROCESSING_KWH_PER_KG: Dict[str, float] = {
     "phyllosilicates":  1.0, "oxides":         1.0, "silicates":     1.0,
     "carbon":           2.0,
     "organics":         2.0,
+    # v1.11.0.  Order-of-magnitude process energies, as the rows above are:
+    #   ammonia, CO2       fractional distillation of the ice, like water
+    #   sulfur             melting and filtering
+    #   carbonates         calcination, ~0.5 kWh/kg of CaCO3 in a lime kiln
+    #   schreibersite      as the alloy it is, plus leaching out the P
+    #   chromite/ilmenite  oxide reduction, as magnetite
+    #   chromium           aluminothermic / electrolytic reduction
+    #   titanium           FFC-Cambridge electrolysis; Kroll runs 30-50
+    "ammonia":          0.5,
+    "carbon dioxide":   0.5,
+    "sulfur":           1.0,
+    "carbonates":       1.0,
+    "phosphorus":       8.0,
+    "schreibersite":    6.0,
+    "chromite":         7.0,
+    "ilmenite":         7.0,
+    "chromium":        10.0,
+    "titanium":        20.0,
 }
 
 
@@ -1069,6 +1154,33 @@ def in_space_price_usd_per_kg(
     if use_in_space is not None and use_in_space >= ship_to_earth:
         return max(0.0, use_in_space), "used in space"
     return max(0.0, ship_to_earth), "shipped to Earth"
+
+
+def _new_element(name: str, formula: str, density: float, price: float,
+                 notes: str) -> dict:
+    """A v1.11.0 element row: reference-priced, no live source.
+
+    One constructor for the eleven rows added with the mineral phases, so the
+    fields they all leave empty cannot be left out of one of them.
+    """
+    return {
+        "name":                  name,
+        "kind":                  "element",
+        "formula":               formula,
+        "density_gcm3":          density,
+        "yfinance_ticker":       None,
+        "yfinance_unit":         None,
+        "metals_dev_key":        None,
+        "ref_price_usd_per_kg":  price,
+        "ref_price_date":        _NEW_ROW_PRICE_DATE,
+        "notes":                 notes,
+    }
+
+
+# The publication date of USGS Mineral Commodity Summaries 2025, whose 2024
+# figures the v1.11.0 rows are the order of.  Not today's date, which would
+# claim a quote nobody took.
+_NEW_ROW_PRICE_DATE = "2025-01-31"
 
 
 MINERAL_REFERENCE: List[dict] = [
@@ -1258,6 +1370,64 @@ MINERAL_REFERENCE: List[dict] = [
     },
 
     # ══════════════════════════════════════════════════════════════════════
+    # ELEMENTS AND VOLATILES ADDED WITH THE MINERAL PHASES  (v1.11.0)
+    # ══════════════════════════════════════════════════════════════════════
+    # Module 1's catalog data contract 1.7.0 divides every body into mineral
+    # phases (`comp_phases`), and a phase is only worth what its products are
+    # worth.  These are the products the new phases yield that no row here
+    # priced: the sulfur in troilite, the phosphorus in schreibersite, the
+    # chromium in chromite, the titanium in ilmenite, the CO2 and ammonia of
+    # an outer-belt body's ices and a C-type's carbonates, and the trace
+    # metals of meteoritic Fe-Ni that were never in the alloy's yields.
+    #
+    # ⚠️  REFERENCE PRICES ONLY, NO LIVE TICKER, AND THEY ARE APPROXIMATE.
+    # None of these trades on a futures market this module reads.  Each is
+    # the order of the 2024 figure in USGS Mineral Commodity Summaries 2025
+    # (published 2025-01-31) where USGS carries one, and a trade price where
+    # it does not; the note says which.  They are the SOFT half of the value:
+    # at an in-space destination every row sold there is worth
+    # utility x launch cost avoided, thousands of $/kg, against which a $/kg
+    # terrestrial price is noise, and every row shipped home is worth its
+    # terrestrial price less a ~$25,000/kg downleg, which floors all five
+    # trace metals at zero anywhere but `earth_surface`.  That is the honest
+    # answer, not a gap: gallium is not worth flying down from a depot.
+    _new_element("sulfur", "S", 2.07, 0.10,
+                 "USGS MCS 2025 elemental sulfur, ~$80-100/t in 2024.  In "
+                 "space: sulfur concrete binder and sulfuric-acid leachant."),
+    _new_element("phosphorus", "P", 1.82, 3.00,
+                 "Elemental (P4) trade price, ~$3,000/t; USGS lists phosphate "
+                 "rock, not the element.  In space: fertiliser for agriculture."),
+    _new_element("chromium", "Cr", 7.19, 11.00,
+                 "Aluminothermic chromium metal, ~$10-12/kg (USGS MCS 2025 "
+                 "carries ferrochrome and metal).  Stainless alloying."),
+    _new_element("titanium", "Ti", 4.51, 9.00,
+                 "Titanium sponge, ~$7-10/kg (USGS MCS 2025 import unit "
+                 "value).  Structural."),
+    _new_element("gallium", "Ga", 5.91, 600.0,
+                 "High-purity gallium, 2024 ~$500-700/kg after China's export "
+                 "controls (USGS MCS 2025).  Iron meteorites carry 2-100 ppm."),
+    _new_element("germanium", "Ge", 5.32, 2500.0,
+                 "Zone-refined germanium, 2024 ~$2,000-3,000/kg (USGS MCS "
+                 "2025).  Siderophile: iron meteorites carry 0.1-500 ppm."),
+    _new_element("rhenium", "Re", 21.02, 1500.0,
+                 "Rhenium metal pellets, 2024 ~$1,200-1,600/kg (USGS MCS "
+                 "2025).  Highly siderophile, tracks osmium in meteoritic metal."),
+    _new_element("tungsten", "W", 19.25, 45.00,
+                 "APT ~$340/mtu in 2024 (USGS MCS 2025) = ~$43/kg of contained "
+                 "W (1 mtu = 10 kg WO3 = 7.93 kg W)."),
+    _new_element("molybdenum", "Mo", 10.28, 44.00,
+                 "Molybdic oxide ~$20/lb of contained Mo in 2024 (USGS MCS "
+                 "2025) = ~$44/kg."),
+    _new_element("carbon dioxide", "CO2", 1.56, 0.10,
+                 "Industrial liquid CO2, ~$50-150/t; not a USGS commodity.  "
+                 "Solid density.  In space: the carbon feed for Sabatier "
+                 "methane and a life-support buffer gas."),
+    _new_element("ammonia", "NH3", 0.82, 0.45,
+                 "Anhydrous ammonia, US Gulf ~$450/t in 2024 (USGS MCS 2025 "
+                 "nitrogen).  Solid density.  In space: nitrogen for "
+                 "atmospheres, fertiliser, and resistojet propellant."),
+
+    # ══════════════════════════════════════════════════════════════════════
     # MINERALS  (rock-forming compounds, priced via elemental yield)
     # ══════════════════════════════════════════════════════════════════════
     # `yields` maps mineral → {element_name: mass-fraction}.  Module 3 will
@@ -1295,6 +1465,18 @@ MINERAL_REFERENCE: List[dict] = [
             "osmium":    2.0e-6,   #  2 ppm   ★ NEW v1.1.2
             "rhodium":   1.5e-6,   #  1.5 ppm  ↓ from 2 (rebalanced for sum)
             "gold":      1.0e-6,   #  1 ppm
+            # v1.11.0: the rest of what meteoritic metal carries.  Order-of-
+            # magnitude means over the common iron groups (Scott & Wasson
+            # 1975; the group ranges span one to three decades): Cu 150-300
+            # ppm, Ga 2-100, Ge 0.1-500, Mo ~7, W ~1, Re 0.01-5.  They move
+            # the value only at `earth_surface`; in space every one of them
+            # ships home against a downleg it cannot pay.
+            "copper":     1.5e-4,  # 150 ppm
+            "germanium":  4.0e-5,  #  40 ppm (IIIAB ~40, IAB up to 500)
+            "gallium":    2.0e-5,  #  20 ppm (IIIAB ~20)
+            "molybdenum": 7.0e-6,  #   7 ppm
+            "tungsten":   1.0e-6,  #   1 ppm
+            "rhenium":    3.0e-7,  #   0.3 ppm
         },
         "notes":                 "Iron-meteorite analogue (IIIAB octahedrite mean) — "
                                  "Fe + Ni + trace PGMs + Au.  Total PGM ≈ 37 ppm matches "
@@ -1315,10 +1497,63 @@ MINERAL_REFERENCE: List[dict] = [
         "kind":                  "mineral",
         "formula":               "FeS",
         "density_gcm3":          4.61,
-        "yields": {"iron": 0.635},   # stoichiometric Fe in FeS
+        # Stoichiometric FeS: Fe 55.85, S 32.07.  v1.11.0 added the sulfur,
+        # which until then was "ignored (low value)"; at a depot it is not.
+        "yields": {"iron": 0.635, "sulfur": 0.365},
         "ref_price_usd_per_kg":  None,
         "ref_price_date":        None,
-        "notes":                 "Iron sulfide; sulfur ignored (low value).",
+        "notes":                 "Iron sulfide, standing for all Fe sulfides "
+                                 "(troilite, pyrrhotite).  Yields Fe and S.",
+    },
+    # ── v1.11.0: the accessory and metal phases Module 1 now names ─────────
+    {   # ── Schreibersite ────────────────────────────────────────────────
+        # (Fe,Ni)3P as Fe2NiP: Fe 111.70, Ni 58.69, P 30.97 of 201.36.
+        "name":                  "schreibersite",
+        "kind":                  "mineral",
+        "formula":               "(Fe,Ni)3P",
+        "density_gcm3":          7.40,
+        "yields": {"iron": 0.555, "nickel": 0.291, "phosphorus": 0.154},
+        "ref_price_usd_per_kg":  None,
+        "ref_price_date":        None,
+        "notes":                 "Fe-Ni phosphide, 1.5-3% of iron-meteorite and "
+                                 "enstatite-chondrite metal.  The phosphorus "
+                                 "source in an asteroid.",
+    },
+    {   # ── Chromite ─────────────────────────────────────────────────────
+        # FeCr2O4: Fe 55.85, Cr 104.00, O 64.00 of 223.84.
+        "name":                  "chromite",
+        "kind":                  "mineral",
+        "formula":               "FeCr2O4",
+        "density_gcm3":          4.79,
+        "yields": {"chromium": 0.465, "iron": 0.250},
+        "ref_price_usd_per_kg":  None,
+        "ref_price_date":        None,
+        "notes":                 "Cr-Fe spinel oxide; ~0.5 wt% of ordinary "
+                                 "chondrites, ~1% of HEDs.",
+    },
+    {   # ── Ilmenite ─────────────────────────────────────────────────────
+        # FeTiO3: Fe 55.85, Ti 47.87, O 48.00 of 151.71.
+        "name":                  "ilmenite",
+        "kind":                  "mineral",
+        "formula":               "FeTiO3",
+        "density_gcm3":          4.72,
+        "yields": {"titanium": 0.316, "iron": 0.368},
+        "ref_price_usd_per_kg":  None,
+        "ref_price_date":        None,
+        "notes":                 "Fe-Ti oxide; ~1 wt% of eucrites.  The same "
+                                 "mineral lunar ISRU plans reduce for oxygen.",
+    },
+    {   # ── Carbonates ───────────────────────────────────────────────────
+        # CO2 is 44.0% of calcite, 47.7% of dolomite: the calcite figure.
+        "name":                  "carbonates",
+        "kind":                  "mineral",
+        "formula":               "(Ca,Mg,Fe)CO3",
+        "density_gcm3":          2.80,
+        "yields": {"carbon dioxide": 0.44},
+        "ref_price_usd_per_kg":  0.02,           # crushed limestone
+        "ref_price_date":        _NEW_ROW_PRICE_DATE,
+        "notes":                 "Calcite, dolomite, breunnerite: 2-5 wt% of CI "
+                                 "chondrites.  Calcining releases the CO2.",
     },
 
     # ══════════════════════════════════════════════════════════════════════
@@ -1485,10 +1720,16 @@ MINERAL_REFERENCE: List[dict] = [
         "kind":                  "mineral",
         "formula":               "(varies)",
         "density_gcm3":          2.60,
-        "yields": {"water": 0.10},               # CM2-class bound-water content
+        # v1.11.0: NO WATER YIELD.  It read {"water": 0.10}, the CM2 bound
+        # water, and nothing had ever read it.  Module 1's catalog carries a
+        # hydrated class's water in its ICE fraction, and every class with
+        # phyllosilicates has one, so pricing the clay's water as well counts
+        # the same kilogram twice the moment a consumer walks the phases.
+        "yields": {},
         "ref_price_usd_per_kg":  0.05,
         "ref_price_date":        _REF_PRICE_DATE,
-        "notes":                 "Hydrated clays; valued for releasable bound water.",
+        "notes":                 "Hydrated clays, priced as dehydrated rock: their "
+                                 "bound water is the catalog's ice fraction.",
     },
     {   # ── Oxides (generic) ─────────────────────────────────────────────
         "name":                  "oxides",
@@ -1806,6 +2047,19 @@ def apply_delivery_destination(
     catalog["downleg_cost_usd_per_kg"] = downleg
     catalog["in_space_processing_usd_per_kg"] = [
         in_space_processing_cost_usd_per_kg(str(n)) for n in catalog["name"]
+    ]
+    # v1.11.0: what a refinery FLOWN on the mission would need, so Stage 4 can
+    # charge the energy through the rocket equation instead of taking the
+    # deduction above out of the price: the energy per kg of this row's raw
+    # feedstock, and the price before that deduction.  Written ahead of the
+    # Stage 4 release that reads them, so Stage 2 is re-fetched once, not
+    # twice.
+    catalog["refining_kwh_per_kg"] = [
+        float(IN_SPACE_PROCESSING_KWH_PER_KG.get(str(n), 0.0)) for n in catalog["name"]
+    ]
+    catalog["price_before_processing_usd_per_kg"] = [
+        (float(p) + float(c)) if (r == "used in space" and pd.notna(p)) else p
+        for p, c, r in zip(new_price, catalog["in_space_processing_usd_per_kg"], routes)
     ]
     catalog["value_route"]     = routes
     catalog["price_usd_per_kg"] = new_price

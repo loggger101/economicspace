@@ -74,6 +74,9 @@ through. Skim for the section that names what you are about to change.
 - [`y * 365.25 * 24.0` is not `y * 8766.0`](#y--36525--240-is-not-y--87660)
 - [A Stage 2 catalog is priced for ONE destination](#a-stage-2-catalog-is-priced-for-one-destination-and-so-are-its-ceilings)
 - [A bit-identical WINNER is not a bit-identical CELL](#a-bit-identical-winner-is-not-a-bit-identical-cell)
+- [Splitting a quantity finds every reader that took it as its largest part](#splitting-a-quantity-finds-every-reader-that-took-it-as-its-largest-part)
+- [A mineral has two prices, and a walk that read one was right only while nothing walked it](#a-mineral-has-two-prices-and-a-walk-that-read-one-was-right-only-while-nothing-walked-it)
+- [A checker run only on the best case has never run on the rest](#a-checker-run-only-on-the-best-case-has-never-run-on-the-rest)
 - [Durable lessons from the release history](#durable-lessons-from-the-release-history)
 - [The verification harness is committed now](#the-verification-harness-is-committed-now)
 - [A comment explaining a duplicate is not a reason it still has to exist](#a-comment-explaining-a-duplicate-is-not-a-reason-it-still-has-to-exist)
@@ -203,8 +206,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.6.0`, mineral_value `1.10.0`, transportation `1.17.0`,
-calc `1.23.0`, master `1.37.0` (the master version is a literal in
+Current: catalog `1.7.0`, mineral_value `1.11.0`, transportation `1.17.0`,
+calc `1.24.0`, master `1.38.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -438,8 +441,10 @@ changed the delivered-price model, so Stage 2 and Stage 3 both re-price and no
 flag in this repo restores the old tables: reproducing a cell here needs the
 2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
 tables now frozen under `campaign/stage3/`. ⚠️  **The live
-`asteroid_pipeline/` has held spacecost `v0.5.0`'s tables and the
-`data-2026-09-27` catalog since 2026-09-28** (the `v0.4.0` tables it held from
+`asteroid_pipeline/` has held spacecost `v0.5.0`'s tables since 2026-09-28,
+and the `data-2026-09-29` catalog and a mineral_value 1.11.0 Stage 2 since
+2026-09-29** (the 1.10.0 Stage 2 table is frozen under
+`campaign/stage2/mineral_value-1.10.0/`; the `v0.4.0` tables it held from
 2026-09-24 are frozen under `campaign/stage3/spacecost-0.4.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
 a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
 grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
@@ -461,6 +466,15 @@ now, not 0.05.** Set it back to reproduce this section. It is the mildest of
 the five and the easiest to forget, because it is bit-identical on both
 BENEFICIATED cislunar cells and moves the raw N = 1 cell 5.11%; a reproduction
 that checks a beneficiated cell and stops will pass without it.
+
+🚨  **AND calc `1.24.0` ADDS A SIXTH, AND IT IS NOT A DIAL BUT A DIFFERENT
+COMPOSITION: `model_mineral_phases` is True.** A body is sold as the minerals
+Stage 1's `comp_phases` says it is made of, so troilite, chromite, magnetite and
+CO2 ice are cargo that did not exist when this section was measured. Set it
+False to reproduce anything here; it is bit-identical to 1.23.0 when you do.
+It moves the median body by several percent and in BOTH directions by class
+(D-types get worse), so it is the least safe of the six to scale by; the
+measurement is in [calc v1.24.0](versions.md#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240).
 
 ⚠️  **DO NOT SCALE THESE CELLS BY A SINGLE RATIO.** On the capped cislunar
 sample cells the four together are worth 2.6x on raw ore and 2.1x on the
@@ -3998,6 +4012,78 @@ propellants, which makes it look like the price. It got **cheaper** and lost
 share, so it cannot be. A confound that points the wrong way is evidence
 against itself.
 
+### Splitting a quantity finds every reader that took it as its largest part
+
+calc `1.24.0`, and it is defect class 1 arriving from a direction this file has
+not recorded: not a mass with no price, but a quantity that was silently ONE
+of its parts. When Stage 1 split each coarse fraction into mineral phases, the
+coarse ice fraction stopped being all water, and three readers had been taking
+it as water all along:
+
+| reader | what it did with "ice" |
+|---|---|
+| ISRU feed | made hydrolox out of it |
+| the per-body context | carried it as the water the cargo holds |
+| the cargo-water bake | sized the array to bake it out |
+
+For a hydrated C-type that is right, because its ice IS bound water. For D, Z,
+P and T the phases carry CO2 and ammonia as well, and every one of those
+readers would have made propellant out of carbon dioxide. They read
+`_row_water_fraction` now, which is the water phase when there are phases and
+the old reading when there are not.
+
+⚠️  **The same split found two more instances in the same release**, which is
+the argument for hunting them as a class. Stage 2's `phyllosilicates` row
+yielded water that the catalog already counts in the ice fraction of every
+class that has phyllosilicates, a double count that was harmless only because
+nothing had ever read the row. And `verify.py` check 6, written after v1.21.1
+precisely to catch a payload phase with no market, enumerated the phases from
+the four fractions, so every new phase would have walked straight past it; it
+reads the installed catalog's `PHASE_GROUP` now and reports 21 of 21.
+
+✅  **The general rule: when a quantity is divided, grep for every reader of
+the undivided one and ask which PART each of them meant.** A reader that meant
+the whole is fine; a reader that meant the biggest part was right by
+coincidence, and the coincidence ends at the split.
+
+### A mineral has two prices, and a walk that read one was right only while nothing walked it
+
+calc `1.24.0`.  A Stage 2 mineral row carries its own `price_usd_per_kg`, the
+mineral used as it is, and `yields_json`, what it is worth taken apart.
+`_mineral_implied_value` returns the yields whenever there are any, so olivine
+was worth its 10% iron and nothing for the 90% that is rock, and troilite
+nothing for its sulfur. **That was a latent defect for as long as the only
+yield-priced phase Stage 4 read was the alloy**, which has no price of its own
+and so no second answer to miss.
+
+✅  The phase walk takes the better of the two (`_phase_value`), and the four-
+fraction walk keeps the old function, so switching phases off is the old model
+to the bit on all four cells. The worked calculation shows both prices for
+every mineral that has yields, and the verification sheet registers each and a
+`max` step, so a reader can see why troilite is worth more than its own row.
+
+⚠️  **Do not "simplify" the four-fraction walk onto `_phase_value`.** At
+cislunar the alloy's own row beats its blend by a fraction of a percent, so
+that edit moves every metal body in every archived cell while looking like a
+tidy de-duplication.
+
+### A checker run only on the best case has never run on the rest
+
+2026-09-29, deriving a phase-valued raw row. `verification_sheet.py --check`
+died on its first raw row with `KeyError: 'take'`, and the row was not the
+problem: a run-of-mine hold's sale is `raw_sale`'s walk (`full` and `over` per
+phase), and the tier table only knew the beneficiated knapsack's. **Every page
+the sheet had ever built was a beneficiated best case**, so the raw branch had
+never executed.
+
+✅  Fixed with a raw tier table. Behind it, five substitution lines on orbital
+and feed arithmetic do not reproduce their printed values, **identically on
+the old model**, so they predate the phases and are left for their own change
+rather than folded into this one. It is the
+[unreachable branch](#the-older-matrices-and-the-claims-they-retired) lesson
+for a checker, and `--sweep` exists for exactly this one level up: ask what
+fraction of the cases a check has ever been SHOWN, not only whether it passed.
+
 ### A ratio taken across a session is a measurement of the session
 
 calc `1.22.0`, and it is THE SAMPLING RULE arriving from a direction that rule
@@ -5113,8 +5199,17 @@ package. The builder is
 [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog), and that
 repository PUBLISHES its builds as GitHub Releases, one frozen catalog per
 `data-YYYY-MM-DD` tag, gated before publishing (every source contributed,
-stamps current, no shrink against the previous release). The pinned catalog release is `data-2026-09-27`,
-`CatalogConfig.catalog_release`, at data contract 1.6.0.
+stamps current, no shrink against the previous release). The pinned catalog release is `data-2026-09-29`,
+`CatalogConfig.catalog_release`, at data contract 1.7.0.
+
+⚠️  **THE INSTALLER STAGES INTO A FRESH DIRECTORY EVERY TIME, AND A FIXED ONE
+IS A TRAP ON THIS MOUNT.** It used `.catalog_download`, cleared it with
+`rmtree(ignore_errors=True)`, then created it. An EMPTY leftover from the
+2026-09-28 install refused deletion (`WinError 5`, from Python as well as the
+shell), the error was swallowed, and `makedirs` died with `FileExistsError`,
+so one interrupted install blocked every later one. `tempfile.mkdtemp` under
+the output directory cannot collide. **`ignore_errors=True` followed by a call
+that needs the thing gone is a check that cannot tell you it failed.**
 
 ✅  **A CONTRACT CHANGE IS ADOPTED BY ASKING WHO READS THE LABELS.** 1.4.0 added
 no column this pipeline reads and removed none, and still needed code here:
