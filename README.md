@@ -585,10 +585,13 @@ full `master.py` at least once, or run stages 1-3 individually first.
   The first full-catalog default cell on it ran its second 1% of rows in
   **9.5 minutes**, where the same cell on the old grid averaged **1.7 minutes
   per 1%** over its whole run. A slice of one run is not a budget
-  ([THE SAMPLING RULE](CLAUDE.md#the-sampling-rule)), but a factor of about
-  five is not rounding either: **do not budget a default run from the figures
-  above** until the cells are re-measured. See
-  [the data on disk adopts it](versions.md#the-data-on-disk-adopts-it-2026-09-24).
+  ([THE SAMPLING RULE](CLAUDE.md#the-sampling-rule)), and this one was not
+  one: **measured whole, the default cell took 16,862 s on `v0.4.0`
+  (2026-09-24) and 12,062 s on master v1.40.0 (2026-09-30)**, about 2.8 and
+  2.0 minutes per 1%, so the slice overstated it 3.4-fold. Budget a default
+  cislunar run at **3.5-5 h** on this grid; the banners still derive from
+  calc 1.22.0's cells until a whole square is re-measured. See
+  [the v1.40.0 default cell](versions.md#the-full-catalog-default-cell-at-this-release-2026-09-30).
 - **The catalog's size is not a dial here any more.** Which bodies exist, which
   surveys contributed and whether diameters are derived from H are decided
   when a catalog release is built, in the AsteroidCatalog repository. To study
@@ -1953,6 +1956,35 @@ not budget.
 
 ## Results
 
+### What a configure-nothing run answers today
+
+**4.8379x, and still zero viable missions.** The default cell (`cislunar`,
+concentrate, programme search on) was run over every row of
+`data-2026-09-29c` on master v1.40.0 (calc 1.26.0, spacecost `v0.5.0`,
+mineral_value 1.12.0) on 2026-09-30, 12 workers, 12,062 s of Stage 4:
+
+| | |
+|---|---|
+| best case | **2018 DT (M), 4.8379x**: New Glenn on krypton Hall thrusters, one ship flying 3 campaigns of 103,701 kg, concentrated 2.11x |
+| next | 2021 CX5 (D) 4.9899x, 2010 CE55 (X) 5.0547x, 2015 DS (X) 5.0585x, 2005 QP87 (X) 5.0936x |
+| evaluable bodies | 604,422 of 1,568,878 |
+| median body | 20.9073x |
+
+🚨  **THE BEST CASE IMPROVED AND THE MEDIAN BODY GOT WORSE**, against the
+last full default cell (5.1275x on spacecost `v0.4.0`, 2026-09-24): the winner
+by 5.6%, the median of 603,366 paired bodies by **19.3% the other way**. Taken
+apart on a sample, the worsening is almost entirely the **catalog**: its 1.5.0
+correction cut S-complex metal to 0.06 and V to 0.01, which costs the median
+body a third, and the mineral phases and the refinery give back about an
+eighth. 2018 DT's own composition did not change; its hold is worth 29% more
+a kilogram sold as minerals. The decomposition, the population and the
+invariants are in
+[the v1.40.0 default cell](versions.md#the-full-catalog-default-cell-at-this-release-2026-09-30).
+
+⚠️  **It is one cell.** The other three cislunar cells and the six other
+destinations have not been run on these inputs; every matrix below is an older
+model, and says which.
+
 ### Current results: the complete 28-cell matrix
 
 Every destination × both settings of beneficiation × both settings of the
@@ -1989,16 +2021,21 @@ ratio.** Every number in this matrix is still a measurement of the model it
 names, which is why it is kept rather than deleted, and it is the only
 seven-destination measurement the project has.
 
-🚨  **AND CALC v1.24.0 SELLS A BODY AS ITS MINERALS, AND v1.25.0 FLIES THE
-REFINERY.** Every cell below valued four coarse fractions and took refining
-out of the price; set `CALC_CONFIG.model_mineral_phases = False` and
-`CALC_CONFIG.model_refinery = False` as well to reproduce one. The phases move the median body by several percent
-and the best by more, in both directions by class; see
-[What the rock is made of](#what-the-rock-is-made-of).
+🚨  **AND CALC v1.24.0 SELLS A BODY AS ITS MINERALS, v1.25.0 FLIES THE
+REFINERY, AND v1.26.0 READS THE DETAILED PHASES.** Every cell below valued four
+coarse fractions and took refining out of the price; set
+`CALC_CONFIG.model_mineral_phases = False`, `CALC_CONFIG.model_refinery = False`
+and `CALC_CONFIG.model_detailed_phases = False` as well to reproduce one. The
+phases move the median body by several percent and the best by more, in both
+directions by class; see [What the rock is made of](#what-the-rock-is-made-of).
+⚠️  **And every cell below flew an older catalog and older launch prices**, so
+no flag restores one on today's inputs; see
+[what a configure-nothing run answers today](#what-a-configure-nothing-run-answers-today).
 
-✅  **THE WHOLE CISLUNAR 2x2 HAS BEEN RE-RUN AT THE CURRENT DEFAULTS.** A
-configure-nothing run answers **3.1822x**, and the four cells are 2.09x to
-3.11x better than the ones below. See
+✅  **THE WHOLE CISLUNAR 2x2 WAS RE-RUN AT THE v1.22.0 DEFAULTS**, on the
+2026-08-11 catalog and the spacecost 0.3.x tables, where a configure-nothing
+run answered **3.1822x**, each cell better than its counterpart below by the
+factor tabulated in
 [the cislunar 2x2 at the v1.22.0 defaults](#the-cislunar-2x2-at-the-v1220-defaults).
 The other six destinations have NOT been re-run.
 
@@ -2036,10 +2073,12 @@ fresh price epoch. The superseded matrix is in
 
 #### The cislunar 2x2 at the v1.22.0 defaults
 
-**A configure-nothing run today answers 3.1822x.** All four cislunar cells were
-re-measured on 2026-09-16 over every row of the 1,555,667-row catalog, 12
-workers, 18,586 s in total. The matrix above is v1.21.2, and the other six
-destinations have not been re-run.
+**A configure-nothing run answered 3.1822x at v1.22.0 and v1.23.0**, on the
+2026-08-11 catalog and the spacecost 0.3.x tables; it answers 4.8379x today,
+see [above](#what-a-configure-nothing-run-answers-today). All four cislunar
+cells were re-measured on 2026-09-16 over every row of the 1,555,667-row
+catalog, 12 workers, 18,586 s in total. The matrix above is v1.21.2, and the
+other six destinations have not been re-run.
 
 | cell | v1.21.2 | **v1.22.0** | factor |
 |---|---|---|---|

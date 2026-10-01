@@ -78,6 +78,16 @@ def exact(value):
     return repr(float(value))
 
 
+def ordinal(n):
+    """A table row's position, marked so the traceability check skips it.
+
+    A row number is a label.  Read as a number it has to be traced to
+    something the page derived, and it is traced only by coincidence, while
+    some step happens to produce the same small integer.
+    """
+    return '<span class="ord">%d</span>' % n
+
+
 # ------------------------------------------------------------------ the sheet
 class Worksheet(object):
     """The ordered register of inputs and steps a reader checks by hand.
@@ -176,7 +186,7 @@ class Worksheet(object):
              unit, tags, note))
         return value
 
-    def claim(self, work, value, what=""):
+    def claim(self, work, value, what="", uses=()):
         """Register a checkable arithmetic claim a BLOCK TABLE makes.
 
         A table row is a step that happens to be laid out in columns, and
@@ -188,7 +198,14 @@ class Worksheet(object):
         check and the traceability check treat it exactly as they treat a
         step.  Returns the working, so a caller can put it straight in a
         cell.
+
+        `uses` names the registered keys the working consumes, exactly as a
+        step's does.  Without it an input spent only inside a table read as
+        never spent: the market ceilings are each worked into an allowance
+        in a table row, and all of them were reported in the footer as a
+        missing step or a citation nobody needs.
         """
+        self.cited(uses)
         self.claims.append((work, value, what))
         return D.esc(work)
 
@@ -248,21 +265,6 @@ def cited(html):
     page itself asserts.
     """
     return '<span class="cite">%s</span>' % html
-
-
-def spacecost_pin():
-    """The spacecost tag this repo installs Stage 3's tables from.
-
-    Read out of `requirements.txt` rather than typed, because the pin is in
-    four places already and CLAUDE.md records what a fifth copy costs.
-    """
-    path = os.path.join(ROOT, "requirements.txt")
-    if not os.path.exists(path):
-        return ""
-    for line in open(path, encoding="utf-8"):
-        if "spacecost" in line and "@" in line:
-            return line.strip().rsplit("@", 1)[-1].split("#")[0].strip()
-    return ""
 
 
 def stamp(row):
@@ -627,7 +629,16 @@ def part_prices(S, out):
                   % D.esc(C["pricing_label"]))
     if hw_on:
         rates = C["hw_rates"]
+        # ⚠️  ONLY THE RATES THIS CHAIN SPENDS.  Every stage rate and the
+        # entry-system rate used to be registered on every page, so a
+        # cislunar page listed a lander's build rate and an EDL rate it can
+        # never use as inputs "registered and never spent".  The condition is
+        # the chain's own, the same one the legs below branch on.
+        steps = C["chain"]["steps"]
+        flown = set(leg["dry"] for leg in steps if leg["kind"] == "burn")
         for dry, rate in sorted(rates["stage"].items()):
+            if dry not in flown:
+                continue
             S.put("h_st%d" % round(dry * 100), "h_stage,%s" % P(dry),
                   "build cost of an expended stage at dry fraction %s"
                   % P(dry), rate, "$/kg of stage dry mass",
@@ -640,10 +651,11 @@ def part_prices(S, out):
               "$/kg", "<b>spacecost/delivery.py</b>, "
                       "<i>TUG_PROPELLANT_USD_PER_KG</i>: the hydrolox row's "
                       "reference price.")
-        S.put("h_edl", "h_edl", "the entry system an edl leg discards",
-              rates["entry"], "$/kg", "<b>spacecost/delivery.py</b>, "
-                                      "<i>ENTRY_SYSTEM_USD_PER_KG</i>: the TPS "
-                                      "row, the nearest priced article.")
+        if any(leg["kind"] != "burn" for leg in steps):
+            S.put("h_edl", "h_edl", "the entry system an edl leg discards",
+                  rates["entry"], "$/kg", "<b>spacecost/delivery.py</b>, "
+                  "<i>ENTRY_SYSTEM_USD_PER_KG</i>: the TPS row, the nearest "
+                  "priced article.")
     chain = C["chain"]
     prior = 1.0
     keys = ["c_LEO"]
@@ -1065,9 +1077,12 @@ def part_transfer(S, out):
            leg["v_tr"], "x v_E", ["r_t", "a_t"])
     S.step("dv_match", "dv_match", "the match burn",
            "|v_ast - v_tr| * v_E",
-           "|%s - %s| * %s" % (P(leg["v_ast"]), P(leg["v_tr"]),
+           "|%s - %s| * %s" % (exact(leg["v_ast"]), exact(leg["v_tr"]),
                                P(W.V_EARTH)),
-           leg["match"], "km/s", ["v_ast", "v_tr", "v_E"])
+           leg["match"], "km/s", ["v_ast", "v_tr", "v_E"],
+           "the two speeds are given exactly: for a body whose orbit the "
+           "transfer nearly matches, this subtraction CANCELS digits, and "
+           "the rounded values above then miss the burn")
     S.step("dv_out_raw", "dv_out,raw", "outbound, before floor and penalty",
            "dv_dep + dv_match",
            "%s + %s" % (P(leg["depart"]), P(leg["match"])),
@@ -1473,15 +1488,21 @@ def part_settled(S, out):
     S.claim("365.25 * 24", 8766.0, "hours in a year, pre-multiplied")
 
     hrs = W.hours(M["dig_yr"])
-    S.put("e_dig", "e_dig", "excavation energy", C["dig_wh"], "Wh/kg dug",
-          cite_ops(C, "Drilling / excavation energy"))
+    # The dig draw is charged only under the condition below, so a raw
+    # mission that makes no propellant listed this as never spent.
+    if C["beneficiated"] or C["isru"]:
+        S.put("e_dig", "e_dig", "excavation energy", C["dig_wh"], "Wh/kg dug",
+              cite_ops(C, "Drilling / excavation energy"))
     if C["beneficiated"]:
         S.put("e_ben", "e_ben", "beneficiation energy", C["benef_wh"],
               "Wh/kg of product",
               cite_ops(C, "Beneficiation / on-site processing energy"))
-    S.put("e_h2o", "e_H2O", "bound-water liberation energy", C["water_wh"],
-          "Wh/kg of water",
-          cite_ops(C, "Water liberation energy (bound water)"))
+    # Only when there is water to liberate, which is the condition the draw
+    # below spends it under; a dry body listed it as never spent.
+    if M["liberated"] > 0:
+        S.put("e_h2o", "e_H2O", "bound-water liberation energy",
+              C["water_wh"], "Wh/kg of water",
+              cite_ops(C, "Water liberation energy (bound water)"))
     d1 = 0.0
     if C["beneficiated"] or C["isru"]:
         d1 = (C["dig_wh"] * (M["feed"] + M["isru_feed"])
@@ -1846,7 +1867,7 @@ def part_hold(S, out):
                              "%s supply" % w["phase"])
             take = S.claim("min(%s, %s)" % (P(w["supply"]), P(w["hold"])),
                            w["take"], "%s taken" % w["phase"])
-            rows.append([str(n), D.esc(w["phase"]), "$" + P(w["price"], 10),
+            rows.append([ordinal(n), D.esc(w["phase"]), "$" + P(w["price"], 10),
                          P(frac[w["phase"]], 8), supply, P(w["supply"], 10),
                          P(w["hold"], 10), take, P(w["take"], 10),
                          "hold full" if w["take"] <= 0
@@ -1915,7 +1936,8 @@ def part_market(S, out):
     rows = []
     for market, allow in sorted(rev["allow"].items()):
         cap = C["market_kg"].get(market)
-        S.put("cap_%s" % market.replace(" ", "_").replace("-", "_"),
+        cap_key = "cap_%s" % market.replace(" ", "_").replace("-", "_")
+        S.put(cap_key,
               "Cap_%s" % market, "%s absorption ceiling" % market, cap,
               "kg/yr",
               "<b>mineral_value_catalog.csv</b> &middot; row <i>%s</i> "
@@ -1925,7 +1947,7 @@ def part_market(S, out):
               "production.  " % D.esc(market)
               + cite_mineral(C, market))
         work = S.claim("%s * %s" % (P(cap), P(rev["window"])), allow,
-                       "%s allowance" % market)
+                       "%s allowance" % market, [cap_key, "window"])
         rows.append([D.esc(market), P(cap, 10), work, P(allow, 10)])
     S.block(D.table(["market", "ceiling (kg/yr)", "allowance worked out",
                      "allowance (kg)"], rows))
@@ -1990,7 +2012,7 @@ def part_market(S, out):
             value = S.claim("%s * %s" % (P(step["take"]), P(step["price"])),
                             step["take"] * step["price"],
                             "%s tier %d value" % (step["phase"], i))
-            rows.append([str(i), D.esc(step["phase"]),
+            rows.append([ordinal(i), D.esc(step["phase"]),
                          "full" if step["full"] else "surplus",
                          price_work, "$" + P(step["price"], 10),
                          P(step["supply"], 10),
@@ -2572,8 +2594,12 @@ _SCALES = (1.0, 1e6, 1e-6, 1e3, 1e-3, 1e2, 1e-2, 1e9, 1e-9)
 # Citations are QUOTED source; the tag column and the cited-tag spans are
 # the page's own cross-references.  "I10" and "S22" are labels that happen to
 # contain digits, and reading them as numbers reported well over a hundred
-# findings that were nothing but the sheet pointing at itself.
-_CITE = re.compile(r'<(span|td)[^>]*class="[^"]*\b(?:cite|tag|uses)\b[^"]*"'
+# findings that were nothing but the sheet pointing at itself.  An `ord` span
+# is the same kind of label: a table row's position, which counts rows rather
+# than claiming anything about them.  The sale-tier table reached twelve tiers
+# on the detailed phases, twelve is not a number any step makes, and the row
+# label read as an untraced claim.
+_CITE = re.compile(r'<(span|td)[^>]*class="[^"]*\b(?:cite|tag|uses|ord)\b[^"]*"'
                    r'[^>]*>.*?</\1>', re.S)
 # A table whose rows are the whole cascade at another setting.  Excluded and
 # COUNTED, never excluded quietly: the number it excused is printed beside
@@ -2923,9 +2949,11 @@ def header(out):
              % D.fmt(C["population"], 0)),
             ("source", D.esc(out["cell"])),
             ("calc version", D.esc(out["terms"]["stamp"])),
-            ("market model", D.esc(out["terms"]["market"])),
-            ("Stage 3 tables", "spacecost %s" % D.esc(spacecost_pin())),
-            ("built", datetime.date.today().isoformat())]
+            ("market model", D.esc(out["terms"]["market"]))]
+    # Which catalog and tables the run read, derived from the files the
+    # derivation loaded; see `input_provenance`.
+    rows += [(k, D.esc(v)) for k, v in C.get("provenance", [])]
+    rows.append(("built", datetime.date.today().isoformat()))
     return ('<div class="card"><table>%s</table></div>'
             % "".join("<tr><td>%s</td><td><b>%s</b></td></tr>" % (k, v)
                       for k, v in rows))
@@ -3042,7 +3070,12 @@ def document(out, sheet=None, pt=DEFAULT_PT):
     for n, part in enumerate(sheet.parts, 1):
         anchor = "p%d" % n
         contents.append('<a href="#%s">%s</a>' % (anchor, part["title"]))
-        body.append(D.h(2, D.esc(part["title"]), anchor))
+        # The part's number is a label, like a table row's: it read as an
+        # untraced claim the day the page reached a twelfth part, having
+        # been "traced" through eleven only by coinciding with small
+        # integers some step happened to produce.
+        body.append(D.h(2, re.sub(r"^(\d+)\.", r'<span class="ord">\1.</span>',
+                                  D.esc(part["title"]), count=1), anchor))
         if part["blurb"]:
             body.append('<p class="blurb">%s</p>' % part["blurb"])
         body.append('<div class="tw"><table class="sheet">'

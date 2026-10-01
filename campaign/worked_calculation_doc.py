@@ -441,7 +441,11 @@ def named_as(out):
     `name` as its own text on most rows, and printing "2021 CX5 2021 CX5"
     reads as two facts where there is one.
     """
-    name = str(out["archived"].get("name") or "").strip()
+    # ⚠️  A MISSING NAME IS A FLOAT NaN, AND NaN IS TRUTHY, so `or ""` never
+    # fires on it and the header printed "2018 DT nan".  Only a string is a
+    # name.
+    raw = out["archived"].get("name")
+    name = raw.strip() if isinstance(raw, str) else ""
     if not name or name in str(out["designation"]):
         return ""
     return " " + esc(name)
@@ -483,8 +487,11 @@ def s_header(out):
          % (P["n"], P["f"], P["w"])),
         ("market model", esc(out["terms"]["market"])),
         ("calc version", esc(out["terms"]["stamp"])),
-        ("built", datetime.date.today().isoformat()),
     ]
+    # Which catalog and tables the run read, derived from the files the
+    # derivation loaded; see `input_provenance` in worked_calculation.py.
+    rows += [(k, esc(v)) for k, v in C.get("provenance", [])]
+    rows.append(("built", datetime.date.today().isoformat()))
     if C.get("arch_label"):
         rows.insert(2, ("delivery architecture", esc(C["arch_label"])))
     if C.get("population"):

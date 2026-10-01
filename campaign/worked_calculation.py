@@ -939,6 +939,61 @@ def _table_date(path):
     return str(head["catalog_date"].iloc[0])
 
 
+def _table_stamp(path):
+    """`(pipeline_version, catalog_date)` a stage stamped into a table, or Nones."""
+    try:
+        head = pd.read_csv(path, nrows=1)
+    except (OSError, ValueError):
+        return None, None
+    def cell(col):
+        """The first row's value in `col` as text, or None if absent or blank."""
+        if col not in head or pd.isna(head[col].iloc[0]):
+            return None
+        return str(head[col].iloc[0])
+    return cell("pipeline_version"), cell("catalog_date")
+
+
+def input_provenance(archived, manifest, minerals_path, minerals_from,
+                     tdir, transport_from, vehicles_file):
+    """Which catalog and which tables this page was priced from, in words.
+
+    🚨  THE PAGE NAMED THE CODE AND NOT THE DATA, AND THE DATA IS WHAT MOVED.
+    Both documents printed the calc stamp and the verification sheet the
+    spacecost PIN, read out of `requirements.txt`; neither said which catalog
+    the body came from.  The 2026-09-30 default cell found that the catalog's
+    1.5.0 correction moved the median cislunar body by a third, more than
+    every calc release since 1.22.0, so a page that does not name its catalog
+    leaves out the input most likely to explain it.  And the pin describes
+    THIS checkout, not the run: an archived 0.3.x cell would have been
+    labelled v0.5.0.
+
+    Each line is derived from the file the derivation actually read: the
+    tables' own stamps, and Stage 1's manifest through `run_could_read`, so a
+    row older than the installed release says so instead of borrowing its
+    name.
+    """
+    rows = []
+    if os.path.exists(manifest):
+        with open(manifest, encoding="utf-8") as fh:
+            m = json.load(fh)
+        tag = m.get("release_tag", "?")
+        if run_could_read(archived, manifest):
+            rows.append(("Stage 1 catalog", "%s (data contract %s)"
+                         % (tag, m.get("pipeline_version", "?"))))
+        else:
+            rows.append(("Stage 1 catalog", "an earlier release than %s, "
+                         "which was installed after this run ended; the "
+                         "body is read from %s" % (tag, tag)))
+    for label, path, src, module in (
+            ("Stage 2 table", minerals_path, minerals_from, "mineral_value"),
+            ("Stage 3 tables", os.path.join(tdir, vehicles_file),
+             transport_from, "transportation")):
+        ver, date = _table_stamp(path)
+        rows.append((label, "%s %s, written %s: %s"
+                     % (module, ver or "?", date or "?", src)))
+    return rows
+
+
 def run_could_read(archived, path):
     """False when the row's run finished before this table was written.
 
@@ -1106,6 +1161,9 @@ def reference_tables(dest, archived=None):
     return {
         "minerals_from": minerals_from,
         "transport_from": transport_from,
+        "provenance": input_provenance(archived, manifest, minerals_path,
+                                       minerals_from, tdir, transport_from,
+                                       cfg.launch_vehicles_file),
         "minerals": master._load_csv(minerals_path, "M2"),
         "vehicles": master._load_csv(
             os.path.join(tdir, cfg.launch_vehicles_file), "M3 vehicles"),
@@ -3798,6 +3856,7 @@ def build(archived, label, body=None, run_beneficiated=None):
     C = context(body, archived, tables)
     # Which Stage 2 and Stage 3 tables priced this page; see `run_could_read`.
     C["inputs_from"] = (tables["minerals_from"], tables["transport_from"])
+    C["provenance"] = tables["provenance"]
     # Before anything is derived: what the ROW charges decides what the
     # derivation charges.  See `terms_in_force`.
     C["terms"] = terms_in_force(archived, C["cfg"])
