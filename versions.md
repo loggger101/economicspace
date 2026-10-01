@@ -310,6 +310,196 @@ These are samples; [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) applies.
 - **Every measured cell before this release reads `comp_phases`.** Set
   `model_detailed_phases` False to reproduce one; it is v1.39.0 exactly.
 
+### The full-catalog default cell at this release (2026-09-30)
+
+The release above is argued from 400/150-row stride cells. This is the
+configure-nothing cell over every row of the catalog: `cislunar`,
+beneficiated, programme search on, 12 workers,
+`run_pipeline.py --preset full --stages 4 --destination cislunar`, launched
+detached and **12,061.7 s** in Stage 4. Stages 1-3 were not run; the inputs are
+the ones on disk since 2026-09-29: catalog `data-2026-09-29c` (1,568,882 rows,
+1,568,878 with a positive mass), the mineral_value `1.12.0` table replayed from
+the 2026-09-29 quotes, and the spacecost `v0.5.0` tables of 2026-09-28. The
+log carries no `MISMATCH` and no stale stamp.
+
+**It is the current answer to a configure-nothing run**, and the first
+full-catalog cell since the mineral phases, the flown refinery and the
+detailed phases became defaults. Against the last full default cell, which was
+also never written down until now (see
+[the default cell on these inputs](#the-default-cell-on-these-inputs-measured-2026-09-24)):
+
+| | calc `1.23.0`, spacecost `v0.4.0` (2026-09-24) | **calc `1.26.0`, spacecost `v0.5.0` (this run)** |
+|---|---|---|
+| cost / revenue | 5.1275x | **4.8379x** |
+| winner | 2021 CX5 (D) | **2018 DT (M)** |
+| vehicle / propellant | New Glenn / iodine | New Glenn / **krypton** (Hall) |
+| payload | 62,283 kg | 103,701 kg |
+| concentration ratio | 3.519 | 2.113 |
+| programme | N = 18, 6 ships x 3 campaigns | **N = 3, 1 ship x 3 campaigns** |
+| evaluable rows | 641,120 | **604,422** |
+| population median objective | 20.5995 | 20.9073 |
+| Stage 4 wall clock | 16,861.7 s | 12,061.7 s |
+
+The winner's objective is `4.837894610823662`: $2.375 B of cost against
+$491.0 M of value, a refinery of 346 kg in 7,316 kg of hardware, solar power,
+no ISRU, no aerocapture. The next four are 2021 CX5 (D, 4.9899x, iodine),
+2010 CE55 (X, 5.0547x, krypton), 2015 DS (X, 5.0585x, iodine) and 2005 QP87
+(X, 5.0936x, iodine), all New Glenn but the last, which flies Falcon Heavy with
+reusable side cores. **Still zero viable missions**: the best case in the model
+is a factor of 4.8 from breakeven.
+
+#### The winner improved and the population got worse
+
+Paired on `designation`, 603,366 bodies are evaluable in both cells:
+
+| | |
+|---|---|
+| median `1 - r` (this run over the 2026-09-24 cell) | **-19.3%**, i.e. worse |
+| better / worse / identical | 128,689 / 474,677 / 0 |
+| `r` at the 10th / 90th percentile | 0.750 / 2.570 |
+| changed propellant / vehicle | 198,487 / 240,905 |
+| left the evaluable set / joined it | 37,754 / 1,056 |
+
+By class, the median ratio is worse for the S complex (S 1.192, Sq 1.216,
+Q 1.259), C (1.212) and V (1.310), and better for X (0.931), L (0.904),
+Ls (0.903), A (0.912), K (0.933), D (0.985) and B (0.985).
+
+🚨  **SO THE HEADLINE MOVED ONE WAY AND THE MIDDLE MOVED THE OTHER.** The best
+case improved 5.6% while the median body got 19.3% worse, which is
+[the winner moving more than the population](README.md#the-winner-moved-far-more-than-the-population-did)
+with the sign of the two disagreeing as well as the size. Quote the median
+before claiming the model got better.
+
+#### What moved it: the catalog, not the model
+
+Six things changed between the two cells, so they were taken apart one at a
+time on a 3,000-row stride sample of the default cell (1,230 evaluable bodies),
+each step changing exactly one input or one switch and pairing on
+`designation`. The calc steps use this build with its switches; every switch
+off is v1.23.0's model to the bit, as each release proved. The input steps run
+with all three switches off, against the 2026-09-24 archive, and use the
+Stage 2 and Stage 3 tables backed up to
+`asteroid_pipeline/_inputs_backup_2026-09-28_pre-v0.5.0/`:
+
+| step | median `1 - r` | better / worse / same | worst-hit and best-helped classes (median `r`) |
+|---|---|---|---|
+| catalog `data-2026-09-23` to `-29c` | **-32.93%** | 169 / 947 / 112 | **V 1.634, S 1.383**, C 1.080; X 0.669 |
+| Stage 3, spacecost `v0.4.0` to `v0.5.0` | +0.00% | 8 / 5 / 1,217 | none |
+| Stage 2, `1.10.0` (2026-09-23 quotes) to `1.12.0` (2026-09-29) | +0.012% | 1,074 / 0 / 156 | none; `r` within 0.999854-1.0 |
+| calc 1.24.0, mineral phases | **+11.02%** | 1,090 / 8 / 132 | V 0.830, S 0.883, L 0.917, C 0.926 |
+| calc 1.25.0, flown refinery | +1.28% | 748 / 405 / 0 | C 1.247 worse, V 0.945 better; evaluable 1,230 to 1,153 |
+| calc 1.26.0, detailed phases | +0.00% | 170 / 90 / 893 | none |
+| **all six, this sample** | **-19.63%** | 219 / 932 / 0 | S 1.196, V 1.318, C 1.255; X 0.723 |
+
+✅  **The sample lands on the full catalog's -19.3%**, the narrow kind of
+projection (a model ratio over identical rows) that this project has seen
+hold before. It is not a wall clock and is not offered as one.
+
+🚨  **THE POPULATION GOT WORSE BECAUSE THE CATALOG STOPPED OVERSTATING
+METAL.** Catalog 1.5.0 corrected five taxonomy rows the literature contradicts,
+and [master v1.37.0](#master-v1370--transportation-v1170--catalog-v160) adopted
+it without measuring it on a cell ("the catalog and the fairing volumes both
+move every number, so they were not measured together"; only the fairings
+were). The two archives carry the body columns, so what moved can be read off
+them: across the 603,366 paired bodies the median S-type's metal fraction went
+**0.15 to 0.06** (444,373 rows changed it), V **0.05 to 0.01**, hydrated C
+carbon **0.25 to 0.04** (157,898 rows), and X-types gained metal (0.30 to 0.33)
+and PGM enrichment (1.5 to 2.0) through catalog 1.6.0's P/M/E mapping, at a
+lower density. **This is the first measurement of that correction**, and it is
+worth a third of the median body at cislunar.
+
+✅  **The model changes ran the other way and were worth +12.5% together**,
+which is roughly the sum of v1.38.0's and v1.39.0's own samples. The mineral
+phases claw back much of what the catalog took from S and V bodies: the troilite
+and chromite they now sell are worth more than the iron the old metal fraction
+had them carrying. The refinery is the term that shrinks the evaluable set.
+
+⚠️  **The headline moved the other way for a DIFFERENT reason, and it was
+checked rather than assumed.** The first draft of this note credited 2018 DT's
+win to the catalog correction helping the X complex. Its rows say otherwise:
+its composition is identical in both catalogs (M, metal 0.50, PGM enrichment
+2.0, 3.9 g/cm3), and what moved is its hold's worth, **$3,657.54 to $4,734.63
+a kilogram (+29%)** once sold as minerals. It was **sixth at 5.5668x** in the
+2026-09-24 cell and is first now; 2021 CX5 is second, at 4.9899x against its
+own 5.1275x. **So the model lifted the top while the catalog lowered the
+middle**, and a reader who sees only the headline would conclude the opposite
+of what happened to the population.
+
+⚠️  **One harness bug was hit and caught on the way**, and it is
+`verify.py`'s own trap #13 in a new field: `run_cell` resets only the fields on
+its list, so a `mineral_catalog_file` set for one run leaked into the next and
+reported the Stage 2 step as bit-identical on all 1,230 rows. The tell was a
+300-row cell, run to print which file it loaded, that disagreed on 108 of 124
+rows. The Stage 2 figure above is the re-run with every path set explicitly.
+
+#### What moved in the population
+
+| | 2026-09-24 | **this run** |
+|---|---|---|
+| bodies declining to concentrate (`concentration_ratio <= 1`) | 54,064 (8.43%) | **5,864 (0.97%)** |
+| make their own propellant (ISRU) | 36,016 | **103,490** |
+| propellant, top four (% of rows) | xenon 57.35, iodine 20.89, water ion 15.57, hydrolox 5.62 | xenon 61.87, **hydrolox 17.12**, iodine 12.12, water ion 8.48 |
+| vehicle, top three | Falcon Heavy (expendable) 57.58, SLS Block 1 24.48, New Glenn 16.09 | Falcon Heavy (expendable) 42.95, New Glenn 29.96, SLS Block 1 26.32 |
+| RTG plant | 9.44% | 8.05% |
+| fleet median / N median | 4 / 20 | **12 / 48** |
+| at `max_fleet_ships` | 91,662 (14.30%) | **151,092 (25.00%)** |
+| rows bound by a ceiling | 3.72% | 7.89% |
+| rig life, median trips | 5 | 4 |
+| `W < trips` | 8,475 (1.32%) | **2** |
+
+⚠️  **The fleet cap binds on a quarter of the population now**, and the run
+says so itself. Those rows' programme size is where the ladder stopped, not an
+optimum, and an unbound one may still improve with a larger
+`max_fleet_ships`; the winner is not among them (one ship).
+
+⚠️  **The fall in bodies declining to concentrate is consistent with
+[calc v1.25.0](#master-v1390--calc-v1250)'s sample finding** that the flown
+refinery costs raw ore more than concentrate, since a body that declines flies
+raw. The decomposition above is of the median objective and does not attribute
+this share.
+
+#### Invariants, on all 604,422 rows
+
+- **mass ledger**, `hardware_total_kg == 2000 + power_system_kg + ep_system_kg
+  + refinery_kg`: max `|error|` **1.8e-11 kg**, i.e. float summation order
+- **programme structure**: `N = F x W` on every row, and `W > trips` never
+- **`saturation_multiplier` identically 1.0**, inert under `capacity_cap`
+- `unsold_payload_kg` and `surplus_payload_kg` exclusive: **0 rows carry both**
+  at the milligram floor, 0 unsold and 1,682 with a surplus
+- clearing min **0.961169**, median 1.000000
+
+⚠️  **The never-worse pairings are not reported**, because the v1.40.0 square
+has only this corner, and joining across releases compares two models rather
+than two settings.
+
+#### The wall clock, and a slice of one run that predicted it badly
+
+[The 2026-09-24 note](#the-wider-grid-costs-runtime-and-the-priors-do-not-know-it-yet)
+recorded that the first cell on the 1,008-combination grid ran its second 1%
+of rows in 9.5 minutes, against 1.7 minutes per 1% on the old grid, and that
+"a factor of about five is not rounding". **Measured whole, the two cells on
+the wide grid averaged 2.8 and 2.0 minutes per 1%**, against the 1.7 of the
+`data-2026-09-23` cell on the old grid. The slice was 3.4x the run it came
+from. That is [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) for a slice of
+rows in catalog ORDER rather than a stride sample, and it failed the same way.
+
+⚠️  **The three wall clocks are three sessions, three releases and two grids**,
+and are not offered as ratios.
+
+✅  **`MEASURED_CELL_SECONDS` deliberately does not move.** It is four
+cislunar cells at one release and only one exists at v1.40.0; one row would
+make it a mixed-release object and `verify_docs.py` check 9 would go red. The
+banners therefore still derive from calc `1.22.0`'s cells.
+
+#### The archive, and the worked calculation
+
+Archived as
+`campaign/cells/cislunar__benef__search-on__calc-1.26.0__spacecost-0.5.0.csv.gz`
+(the release-suffixed name, invisible to `population.py` and `analyse.py`), and
+left as the live `profitability_catalog.csv`. The driver, log and wall clock
+are in `asteroid_pipeline/_run4_calc-1.26.0_2026-09-30/`. Build the worked
+calculation from it with `--catalog` pointed at the archive.
+
 ## master v1.39.0 / calc v1.25.0
 
 **The refinery is flown instead of being taken out of the price.** Stage 2
@@ -972,8 +1162,10 @@ percent are invisible next to the epoch changes this file records.
 #### The wider grid costs runtime, and the priors do not know it yet
 
 The full-catalog default cell on these inputs was started on 2026-09-24 at
-00:19 and is not recorded here, because it had not finished when this was
-written. What it had measured by then: on the 1,008-combination grid it ran
+00:19 and had not finished when this was written; it is recorded in
+[the next subsection](#the-default-cell-on-these-inputs-measured-2026-09-24),
+and the slice below turned out to overstate its pace 3.4-fold. What it had
+measured by then: on the 1,008-combination grid it ran
 its **second 1% of rows (15,616 bodies) in 9.5 minutes**, uncontended. The
 data-2026-09-23 cell above, on the same catalog and the 357-combination grid,
 averaged **102 s per 1%** over its whole 10,249 s.
@@ -988,6 +1180,50 @@ read LOW now, by something nearer five times than 10%. They stay as they are,
 pinned by `verify_docs.py` check 9 to the logs the runs wrote, until a
 re-measured campaign replaces them; a wall clock is only ever true of the
 release it names.
+
+#### The default cell on these inputs, measured (2026-09-24)
+
+The cell above finished, and so did a raw N = 1 cell after it, and neither was
+written down until 2026-10-01. Both ran detached through
+`run_pipeline.py --preset full --stages 4 --destination cislunar` on
+`data-2026-09-23` (1,566,555 bodies with a positive mass) and the tables this
+section adopts; the driver, logs and wall clocks are in
+`asteroid_pipeline/_run3_v0.4.0_2026-09-24/`, the archives are
+`campaign/cells/cislunar__{benef__search-on,raw__search-off}__calc-1.23.0__spacecost-0.4.0.csv.gz`.
+
+| | default (beneficiated, searched) | raw, N = 1 |
+|---|---|---|
+| cost / revenue | **5.1275x** | **8.8217x** |
+| winner | 2021 CX5 (D) | 2018 DT (M) |
+| vehicle / propellant | New Glenn / iodine | Falcon Heavy (expendable) / iodine |
+| payload | 62,283 kg | 141,375 kg |
+| programme | N = 18, 6 ships x 3 campaigns | N = 1 |
+| next | 678927 (5.1541x), 2012 ER14 (5.3397x), 2016 GS2 (5.4645x, Falcon 9 on water ion), 4660 (5.5569x) | 2014 YN (8.8543x), 2015 BM510 (9.2139x) |
+| evaluable | 641,120 | 631,698 |
+| median objective | 20.5995 | 72.2531 |
+| Stage 4 wall clock | 16,861.7 s | 1,239.3 s |
+
+✅  **The default winner is the calc 1.23.0 cell's winner flown again, to the
+bit**: payload `62282.753868077045`, concentration ratio `3.518630541998643`,
+the same vehicle, propellant and programme. Only the prices moved: gross value
+**-37.2%** ($573.05 M to $359.97 M), because the cheaper LEO anchor lowers
+what a kilogram that avoids a launch is worth, and cost **+1.2%**. 3.1822x
+becomes 5.1275x, a factor of 1.611.
+
+✅  **The population moved by the factor the 300-row sample predicted.**
+Paired against [the calc 1.23.0 cell](#the-full-catalog-default-cell-at-this-release-2026-09-18)
+on 636,226 bodies, the median `r` is **1.580** (55,068 better, 581,158 worse),
+where [master v1.35.0](#master-v1350--mineral_value-v1100--transportation-v1160)'s
+300-row stride sample said a median **1.58x** worse. That comparison also
+crosses the 2026-08-11 to `data-2026-09-23` catalog change, which
+[measured on its own](#the-catalog-measured-on-its-own-first) has a median of
+exactly 1, so the factor is the repricing. Evaluable bodies fall 660,253 to
+641,120.
+
+⚠️  **This cell was the current answer to a configure-nothing run for six days
+without being recorded anywhere**, while README still quoted 3.1822x from two
+input epochs earlier. It is superseded by
+[the v1.40.0 default cell](#the-full-catalog-default-cell-at-this-release-2026-09-30).
 
 #### What adopting it exposed
 

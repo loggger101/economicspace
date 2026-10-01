@@ -493,6 +493,16 @@ the mildest of the eight in space, within 0.08% of every cislunar body on the
 Set it False as well; it is bit-identical to 1.25.0 when you do. See
 [calc v1.26.0](versions.md#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260).
 
+✅  **THE CURRENT ANSWER IS ONE FULL CELL, AND IT IS README'S, NOT THIS
+SECTION'S.** The default cislunar cell was run over the whole catalog at master
+v1.40.0 on 2026-09-30: see
+[what a configure-nothing run answers today](README.md#what-a-configure-nothing-run-answers-today)
+and [its record](versions.md#the-full-catalog-default-cell-at-this-release-2026-09-30).
+⚠️  **It is not a ninth flag on this section.** Everything here also flew the
+2026-08-11 catalog and the spacecost 0.3.x tables, and the catalog's 1.5.0
+correction alone moves the median cislunar body by about a third, so no
+setting of the eight flags reproduces a cell below on today's inputs.
+
 ⚠️  **DO NOT SCALE THESE CELLS BY A SINGLE RATIO.** On the capped cislunar
 sample cells the four together are worth 2.6x on raw ore and 2.1x on the
 default cell, the cost of capital alone is 42-52% of it, and the learning
@@ -2239,6 +2249,14 @@ sweep is under-represented in a stride sample.
 > that the ~5× bound is a bound on the *worst* case and not a typical error, 
 > and that the cell most likely to break a projection is the most expensive
 > one, which is also the one you were trying to budget.
+
+> ⚠️  **A SIXTH DATA POINT, 2026-10-01, and it is a SLICE rather than a
+> sample.** The first default cell on spacecost `v0.4.0`'s wider grid took
+> 3.4x longer over its second 1% of rows, in catalog ORDER, than over the
+> average 1% of the whole run, and versions.md carried that slice as "a factor
+> of about five is not rounding" for a week. A contiguous slice is worse conditioned than a stride sample, because
+> the catalog's order is not random in cost. See
+> [the v1.40.0 default cell](versions.md#the-full-catalog-default-cell-at-this-release-2026-09-30).
 
 **This is the canonical statement; everywhere else in this file points here.**
 
@@ -5327,6 +5345,18 @@ Treat it like re-running Stage 1 used to be treated: baseline first, repin, run
 Stage 1, re-measure, and record the repin in versions.md with the release it
 moved from. A table in versions.md names its catalog by `catalog_date`; a
 release's `catalog_date` is its build date, so the two identify each other.
+
+🚨  **AND "RE-MEASURE" MEANS ON A CELL, BECAUSE A CATALOG IS A MODEL CHANGE
+FOR THE POPULATION.** master v1.37.0 adopted catalog 1.5.0 (five taxonomy rows
+corrected: S-complex metal to 0.06, V to 0.01, hydrated C carbon to 0.04)
+having measured only the fairing column beside it, on the argument that the two
+"both move every number". The first full cell on it, on 2026-09-30, found the
+median cislunar body worse by about a fifth, and a stride-sample decomposition
+put a third against the catalog alone, more than every calc release since
+1.22.0 put together and in the opposite direction. **It went unnoticed for
+three releases because the winner improved**: the model's mineral phases
+lifted an M-type whose composition the correction never touched. A repin's
+measurement is a paired median over the population, never the best row.
 
 ✅  **What the release buys: Stage 1 is idempotent.** Same pin, same bytes, on
 every host, checked against the release's sha256s. With the pin already
