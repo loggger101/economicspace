@@ -2625,10 +2625,21 @@ def s_searches(out):
         # it, so grade stops improving while dig time, processing energy and
         # the ops clock keep climbing.  Naming it is what makes an interior
         # optimum legible as a result rather than as a search that stopped.
+        # ⚠️  AND THE SEARCH IS CAPPED AT `max_concentration_ratio`, which the
+        # page used to leave out: it printed "1 / (f_best * eps_rec)" equal to
+        # the cap, which is false whenever the cap binds.  It first did on
+        # the v1.40.0 mars_surface winner, whose best-priced phase is under
+        # half a percent of the body (2026-10-05).
+        r_cap = float(C["cfg"].max_concentration_ratio)
+        r_body = 1.0 / (best_frac * C["recovery"])
         html_out.append(deriv([
-            ("r_max", "= 1 / (f_best * eps_rec) = 1 / (%s * %s) = %s"
-             % (prec(best_frac, 6), prec(C["recovery"], 4),
+            ("r_max", "= max(1, min(1 / (f_best * eps_rec), r_cap)) "
+             "= max(1, min(1 / (%s * %s), %s)) = %s"
+             % (prec(best_frac, 6), prec(C["recovery"], 4), prec(r_cap, 6),
                 prec(sweep["r_max"], 12)),
+             ("the body would saturate at %s, so the configured cap "
+              "max_concentration_ratio binds" % prec(r_body, 6))
+             if r_body > r_cap else
              "above this the hold is pure %s and grade stops improving"
              % esc(max(C["phases"], key=lambda p: p[2])[0])),
             ("step", "= r_max^(1/%d) = %s"

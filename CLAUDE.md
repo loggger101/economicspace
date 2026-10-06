@@ -493,11 +493,17 @@ the mildest of the eight in space, within 0.08% of every cislunar body on the
 Set it False as well; it is bit-identical to 1.25.0 when you do. See
 [calc v1.26.0](versions.md#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260).
 
-✅  **THE CURRENT ANSWER IS ONE FULL CELL, AND IT IS README'S, NOT THIS
-SECTION'S.** The default cislunar cell was run over the whole catalog at master
-v1.40.0 on 2026-09-30: see
-[what a configure-nothing run answers today](README.md#what-a-configure-nothing-run-answers-today)
-and [its record](versions.md#the-full-catalog-default-cell-at-this-release-2026-09-30).
+✅  **THE CURRENT ANSWER IS SEVEN FULL CELLS, AND IT IS README'S, NOT THIS
+SECTION'S.** The default cell was run over the whole catalog at master v1.40.0
+at every destination, cislunar on 2026-09-30 and the other six on
+2026-10-01/03: see
+[what a configure-nothing run answers today](README.md#what-a-configure-nothing-run-answers-today),
+[the cislunar record](versions.md#the-full-catalog-default-cell-at-this-release-2026-09-30)
+and [the other six](versions.md#the-six-other-destinations-at-this-release-2026-10-0103).
+🚨  **They reorder the destinations**: the two surfaces lead and cislunar is
+fourth, because spacecost `v0.4.0` made a kilogram on a surface dearer to
+replace and one in orbit cheaper. Every "cislunar is the best case" below is a
+2026-09 campaign statement.
 ⚠️  **It is not a ninth flag on this section.** Everything here also flew the
 2026-08-11 catalog and the spacecost 0.3.x tables, and the catalog's 1.5.0
 correction alone moves the median cislunar body by about a third, so no
@@ -570,8 +576,9 @@ turned out to be identically 1.0 and therefore dead as a diagnostic, "ISRU track
 hydrolox to within 0.03 pp" failed at three destinations, and iodine went from
 winning two beneficiated cells to three.
 
-Two facts everything below leans on: **`cislunar` is the best case on all four
-settings**, though `mars_orbit` is now within 11% of it on the default cell,
+Two facts everything below leans on: **`cislunar` was the best case on all
+four settings of this campaign** (it is not at master v1.40.0; see the banner
+above), though `mars_orbit` was within 11% of it on the default cell,
 and **the programme search never changes the evaluable set** at any of the seven
 destinations, as it must not, since N enters nothing in the mass cascade.
 
@@ -2391,14 +2398,14 @@ already:
 
 | retired claim | what is true now |
 |---|---|
-| "`mars_surface` is the best case" | **`cislunar` is**, on all four settings, by a factor of 1.72 on the default cell |
+| "`mars_surface` is the best case" | retired at calc 1.21.2, where **`cislunar` was**, on all four settings; ⚠️  **TRUE AGAIN on the master v1.40.0 default cell, for a different reason**: not the ISRU discount but spacecost `v0.4.0`'s delivered price. A claim retired by one mechanism can be restored by another; re-measure, never restore from an older revision |
 | "chemical propulsion is extinct in this model" | hydrolox holds 0.2-10.3% everywhere; methalox reaches **11-15% of FOUR destinations** beneficiated |
 | "iodine wins nine of the ten cells" | a **single-mission** claim; on the 28-cell campaign iodine wins **three** beneficiated searched cells (`earth_surface`, `geo`, `leo`) |
 | "zero `replicated`-scaling devices survive" | they survive, and as of 2026-08-24 one **wins**, at `mars_surface` raw with the search on |
 | "a `replicated` device never wins anywhere" | retired by the same measurement; the gate is a mass penalty, not a threshold |
 | "a `replicated` device wins exactly one cell" | it wins **two** as of 2026-09: both raw `mars_surface` cells, N = 1 included |
 | "2021 CX5 takes 10 of the 20 cells" | an `elasticity` claim; on 28 cells it takes **8**, and sweeps no destination |
-| "cislunar is the best case by a factor of 1.72" | still best, but `mars_orbit` is within **11%** on the default cell |
+| "cislunar is the best case by a factor of 1.72" | true of the 2026-09 campaign only; at master v1.40.0 it is **fourth** of seven on the default cell |
 | "the campaign is five destinations and the model has seven" | **all seven are measured** as of 2026-09 |
 | "`W < trips` on 2,077 rows" | an `elasticity` figure; under `capacity_cap` it is ~146,000 at cislunar |
 | "the optimum N is *provably* a multiple of the rig's trip life" | only *usually*; programme calendar time pushes back inside a band |
@@ -3221,6 +3228,15 @@ whenever the frozen catalog's stamp is not the one the Stage 2 code writes.
 **The general question: which artefacts on disk were written by the run you are
 describing, and which merely sit beside it?** A destination match is not
 provenance, and neither is a file name.
+
+⚠️  **A TABLE THE RUN READ FROM ITS OWN DIRECTORY IS ON NEITHER LIST.** The
+v1.40.0 destination cells read Stage 2 tables replayed into their run
+directory; `mineral_catalog_for` looks only at the live table and
+`campaign/stage2/`, so for `mars_surface` it fell back to the 2026-09-09 table
+(1.9.0) and died on a missing column. Freezing them as
+`campaign/stage2/mineral_value-1.12.0/` is the fix, and a refinery row offered
+a table without the gross price now refuses with that instruction. **When a
+run redirects an input, freeze the input before anything documents the run.**
 
 ### A convenience path that bypasses the constructor loses what the constructor attached
 
@@ -4118,6 +4134,17 @@ rather than folded into this one. It is the
 [unreachable branch](#the-older-matrices-and-the-claims-they-retired) lesson
 for a checker, and `--sweep` exists for exactly this one level up: ask what
 fraction of the cases a check has ever been SHOWN, not only whether it passed.
+
+⚠️  **AND A CLAMP THAT NEVER BINDS ON A BEST CASE IS ABSENT FROM THE PAGE.**
+2026-10-05: both documents printed the saturation ratio as
+`1 / (f_best * eps_rec)` for every release, and the model clamps it at
+`max_concentration_ratio`. The v1.40.0 `mars_surface` winner is the first
+best case whose best-priced phase is rare enough (under half a percent) for
+the clamp to bind, and the sheet's `--check` caught `1 / (0.00477 * 0.9)`
+printed beside 50. The worked calculation printed the same false line and its
+column comparison passed, because the column it checks is the clamped one.
+**A formula printed beside a result is a claim about every row, and a branch
+the best case never takes is a branch the page never wrote.**
 
 ### Splitting a phase splits every bound that reads ONE phase
 
