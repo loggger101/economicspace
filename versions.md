@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.46.0 / mineral_value v1.13.0 / transportation v1.18.0](#master-v1460--mineral_value-v1130--transportation-v1180)
 - [master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3](#master-v1450--mineral_value-v1123--transportation-v1173)
 - [master v1.44.0 / transportation v1.17.2](#master-v1440--transportation-v1172)
 - [master v1.43.0 / calc v1.27.0](#master-v1430--calc-v1270)
@@ -97,10 +98,10 @@ one that does not say is not to be used.
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
-| 2 | `modules/mineral_value.py` | **1.12.3** | v1.12.3, the tungsten row's note corrected and no value moved (v1.12.2 was the last to move one, titanium and chromium priced as iron wherever their ore is discounted) |
-| 3 | `modules/transportation.py` | **1.17.3** | v1.17.3, four more citations corrected and no value moved (v1.17.0 was the last to move one, every fairing volume derived from a cited drawing or left blank with a reason): the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 2 | `modules/mineral_value.py` | **1.13.0** | v1.13.0, twelve reference prices and market sizes re-pinned to the figure their source gives at the row's own date |
+| 3 | `modules/transportation.py` | **1.18.0** | v1.18.0, Atlas V 551, Minotaur IV and Pegasus XL carried to 2026 dollars and Deep Space Network time re-derived from its rate base: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.27.0** | v1.27.0, a mission whose settled stack overshoots its vehicle is re-solved under a payload ceiling instead of refused (`repair_settled_overshoot`, default on), with the new `settle_repairs` column |
-| - | `master.py` | **1.45.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.46.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -176,6 +177,119 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.46.0 / mineral_value v1.13.0 / transportation v1.18.0
+
+**Sixteen General_Research revision candidates settled by their own
+sources, with no modelling choice left in any of them.** Twelve Stage 2 values
+and four spacecost rows move to the figure the cited document gives at the
+row's own date; two more candidates are declined because the registry's own
+evidence says the cells are right. Every candidate that does ask for a choice
+(a commercial against a government launch price, a comet against a Tagish
+Lake end-member, which chondrite a C-type row follows) is left open and named
+in the registry.
+
+### Stage 2 (mineral_value 1.13.0)
+
+| row | was | now | source, at the row's date |
+|---|---|---|---|
+| nickel | 16.50 | **18.806** | World Bank Pink Sheet, May 2026 average |
+| iron | 0.50 | **0.319** | USGS MCS 2026, No. 1 HMS composite, 2025 average ($319/t) |
+| iridium | 160,000 | **257,206** | Johnson Matthey, Q1-2026 $8,000/oz |
+| ruthenium | 16,000 | **56,263.8** | Johnson Matthey, Q1-2026 $1,750/oz |
+| titanium | 9.00 | **13.00** | USGS MCS 2025, 2024 sponge import value |
+| gallium | 600 | **500** | USGS MCS 2025, 2024 high-purity import value |
+| ammonia | 0.45 | **0.485** | USGS MCS 2025: $440 per SHORT ton |
+| silver | 950 | 2,436.5 | LBMA, 2026-05-29 |
+| copper | 8.80 | 13.543 | World Bank Pink Sheet, May 2026 average |
+| platinum | 45,000 | 61,472.2 | LBMA, 2026-05-29 (was a Heraeus forecast midpoint) |
+| cobalt, world production | 2.3e8 kg/yr | **3.1e8** | USGS MCS 2026, 2025 estimate |
+| ammonia, world production | 1.8e11 kg/yr | **1.5e11** | USGS MCS 2025, 2024 estimate, and the row's own comment |
+| `geo` absorption | 40,000 kg/yr | **44,600** | 613 active GEO payloads (McDowell GCAT, Jan 2026) at the 72.7 kg/yr 1.9.0 implied |
+
+⚠️  **Silver, copper and platinum are fallbacks**, and every run that
+reaches yfinance prices them from SI=F, HG=F and PL=F instead, so they move no
+number here; they were wrong for an offline run. The bold rows are the ones a
+run actually reads. Declined: Ir/Rh/Ru world production (rc-058), which JM's
+2025 primary supply (7.1 / 21.8 / 30.2 t) puts within 6% of the cells.
+
+**Replayed from the recorded quotes, no network**: exactly the edited rows
+differ, in all seven tables. In space the large moves are the two PGMs:
+iridium roughly 1.8x at every orbit, and **ruthenium from $0 to $11,325-30,854/kg**
+at the five in-space destinations it now beats the downleg at (still $0 at
+`mars_surface`, whose downleg is $96,394). Nickel and iron move by $2 or less
+in space, where launch cost avoided is the price.
+
+Stage 4, calc 1.27.0, on each destination's archived v1.40.0 default cell's
+**top 300 bodies plus a ~3,000-row stride**, the 1.12.2 table against the
+1.13.0 one, `--preset full`, the live Stage 3 tables on both sides:
+
+| destination | paired | better / worse | median `1 - r` | winner, 1.12.2 -> 1.13.0 |
+|---|---|---|---|---|
+| **`earth_surface`** | 3,300 | **3,300 / 0** | **+10.28%** | 2018 DT, **6,154.06x -> 5,374.37x** |
+| `geo` | 3,306 | 2,530 / 4 | +0.020% | 2021 CX5, 6.6331x -> 6.5185x |
+| `leo` | 3,300 | 1,916 / 95 | +0.013% | 2005 QP87, 17.0106x -> 17.0092x |
+| `lunar_surface` | 3,302 | 2,763 / 4 | +0.002% | 2005 QP87, 2.93526x -> 2.93515x |
+| `mars_surface` | 3,301 | 3,301 / 0 | +0.0005% | 2015 DS, 1.091367x -> 1.091355x |
+| `mars_orbit` | 3,308 | 31 / 1,852 | -0.0001% | 350751, 4.590828x -> 4.590840x |
+| `cislunar` | 3,306 | 57 / 2,239 | -0.001% | 2018 DT, 4.837895x -> 4.837899x |
+
+✅  **Only `earth_surface` moves, and it moves the right way for the right
+reason**: a terrestrial market is where a kilogram of nickel, iridium or
+ruthenium is sold at its terrestrial price, so every sampled body improves.
+In space the cheaper iron is the only term most bodies see, which is why
+`cislunar` and `mars_orbit` get worse by parts per million. The `geo` and
+`leo` winners in this table are calc 1.27.0's, not README's v1.40.0 ones.
+
+🚨  **TWO `geo` ROWS MOVED THE WRONG WAY, AND BOTH ARE THE OPEN CLIFF, NOT
+THE PRICES.** 18075 (M) leaves the evaluable set and 111694 (X) gets 2.26x
+worse, under prices that only rose and a ceiling that only widened. Probed one
+body at a time: with `model_refinery` off both behave exactly as the prices
+say (18075 at 124.64x -> 124.56x, 111694 at N = 1 52.921x -> 52.920x), and a
+three-times-finer concentration grid does not recover 111694. That is
+[master v1.43.0's open item](#master-v1430--calc-v1270), the flown refinery
+making the pass-2 sizing cliff sensitive to what the knapsack loads, surfaced
+here by a price rather than caused by one. It waits for the decision that
+section asks for.
+
+### Stage 3 (spacecost v0.6.0, transportation 1.18.0)
+
+spacecost 0.6.0 (data contract 1.18.0) re-pins four rows the same way:
+**Atlas V 551** carried from 2016 to 2026 dollars, $153M to **$211M**
+($8,132 to $11,215/kg to LEO); **Minotaur IV**'s high end at CPI-U to Aug 2026,
+$72M to $76M (centre $60.0M to $61.6M); **Pegasus XL** $40M to $54M; and
+**Deep Space Network time** $1,530 to $2,082/hr from JPL's Rev H rate base.
+Stage 4 reads `usd_per_kg_to_leo` and no DSN row, and Pegasus is `retired`,
+so only Atlas V and Minotaur IV can reach a mission.
+
+Measured on every body an archived v1.40.0 default cell flew on Atlas V (468
+at `earth_surface`, 29 at `lunar_surface`, 2 at `leo`, 1 at `mars_orbit`),
+with the 1.13.0 Stage 2 tables on both sides and the live 1.17.0 Stage 3 set
+against the 1.18.0 replay: **at calc 1.27.0 only 11 of those 500 still fly
+it.** Ten `lunar_surface` bodies move to Proton-M, a median 2.09% worse and at
+most 2.36%; the one `mars_orbit` body stays on Atlas V, 2.53% worse; the other
+489 are identical in every column, and no winner moves. ✅  A control, the
+3,300-row `earth_surface` sample above, is identical in every column under
+both Stage 3 sets, which is what "only a mission that flies the vehicle can
+see its price" predicts.
+
+Left open in the registry, each for a reason the release should not settle:
+raising Falcon Heavy (expendable)'s band to NASA's $178M (rc-022) would move
+its central price toward a government full-service price, and the lunar
+descent (rc-016) is right to move but moves every archived lunar price with
+it, so it waits for a delivery chain that knows its epoch.
+
+### On disk
+
+- **Stage 2**: the seven 1.13.0 tables are frozen under
+  `campaign/stage2/mineral_value-1.13.0/`, and the live cislunar table is
+  its 1.13.0 replay.
+- **Stage 3**: the 1.17.0 tables the v1.40.0 cells read are frozen under
+  `campaign/stage3/spacecost-0.5.0/`, and the live set is v0.6.0 rebuilt by
+  replaying the three fuel quotes the 1.17.0 `propellants.csv` recorded. A
+  control replay on v0.5.3 first reproduced every live value, so the only
+  values that differ are the four rows above.
+- Stage 1 and Stage 4's code are untouched; no config field moved.
 
 ## master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3
 
@@ -2610,6 +2724,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.46.0 / mineral_value v1.13.0 / transportation v1.18.0](#master-v1460--mineral_value-v1130--transportation-v1180) | 2026-10-06 | **sixteen values re-pinned to their sources, two candidates declined**: nickel, iron, iridium, ruthenium, titanium, gallium and ammonia priced from USGS, the World Bank, LBMA and Johnson Matthey; GEO's market recounted; Atlas V 551 in 2026 dollars. `earth_surface` moves 10.3% on the median sampled body; nothing else moves 2% |
 | [master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3](#master-v1450--mineral_value-v1123--transportation-v1173) | 2026-10-06 | **spacecost `v0.5.3` and one Stage 2 note: five citations corrected, no value moved**: Psyche, Didymos and two Mars delta-v rows upstream, tungsten's price note here; Stage 4 reads no notes |
 | [master v1.44.0 / transportation v1.17.2](#master-v1440--transportation-v1172) | 2026-10-06 | **spacecost `v0.5.2`: twenty-three citations corrected, no value moved**: the repin carries 0.5.1 and 0.5.2's notes; Stage 4 reads no notes, so the tables on disk stay at 1.17.0 |
 | [master v1.43.0 / calc v1.27.0](#master-v1430--calc-v1270) | 2026-10-06 | **a mission 0.1% over its vehicle is flown lighter, not refused**: v1.42.0's knapsack diagnosis corrected; about two bodies in five were scored on the wrong mission, and no headline moved |
@@ -7807,6 +7922,11 @@ config field or column moved.
 tungsten row's `notes` now cite USGS MCS 2026's Rotterdam APT prices rather
 than a 2024 figure MCS 2025 does not carry. No value, config field or column
 moved.
+
+**`1.13.0`  twelve values re-pinned to their sources.** Full write-up: [master v1.46.0 / mineral_value v1.13.0 / transportation v1.18.0](#master-v1460--mineral_value-v1130--transportation-v1180). Nickel, iron, iridium, ruthenium, titanium, gallium and ammonia reference
+prices; the silver, copper and platinum fallbacks; cobalt and ammonia world
+production; and `geo`'s annual absorption, 40,000 to 44,600 kg. No config
+field or column moved.
 
 ## Stage 3 changelog: `modules/transportation.py`
 

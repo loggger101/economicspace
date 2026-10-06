@@ -74,6 +74,14 @@ v0.5.3 TOOK IT 1.17.2 -> 1.17.3 AND MOVED NO VALUE: four more notes cells
 they are for the same reason.  See
 [master v1.45.0](../versions.md#master-v1450--mineral_value-v1123--transportation-v1173).
 
+v0.6.0 TOOK IT 1.17.3 -> 1.18.0 AND MOVED FOUR VALUES: Atlas V 551, Minotaur
+IV and Pegasus XL carried to 2026 dollars, and Deep Space Network time
+re-derived.  A row changed, so the tables on disk were rebuilt, by REPLAYING
+the three fuel quotes the 1.17.0 `propellants.csv` recorded rather than
+fetching: every other value is the one those tables held.  The 1.17.0 set is
+frozen under `campaign/stage3/spacecost-0.5.0/`.  See
+[master v1.46.0](../versions.md#master-v1460--mineral_value-v1130--transportation-v1180).
+
 RE-RUN STAGE 3 WHEN A ROW CHANGES, NOT WHEN A STAMP DOES.  A repin does not
 require a restamp: Stage 4 reads no column this contract moved, so leaving the
 CSVs at the older stamp costs one `stamp_check()` line and nothing else, where
@@ -128,7 +136,7 @@ import subprocess, sys
 # the two to each other.
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.5.3",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.6.0",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -277,7 +285,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.17.3"
+    pipeline_version: str = "1.18.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 CONFIG = TransportConfig()
