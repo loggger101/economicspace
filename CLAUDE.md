@@ -4201,10 +4201,10 @@ phase), and the tier table only knew the beneficiated knapsack's. **Every page
 the sheet had ever built was a beneficiated best case**, so the raw branch had
 never executed.
 
-✅  Fixed with a raw tier table. Behind it, five substitution lines on orbital
-and feed arithmetic do not reproduce their printed values, **identically on
-the old model**, so they predate the phases and are left for their own change
-rather than folded into this one. It is the
+✅  Fixed with a raw tier table. Behind it, substitution lines on orbital and
+feed arithmetic did not reproduce their printed values, **identically on the
+old model**, and they were left for their own change; it came on 2026-10-06
+(below). It is the
 [unreachable branch](#the-older-matrices-and-the-claims-they-retired) lesson
 for a checker, and `--sweep` exists for exactly this one level up: ask what
 fraction of the cases a check has ever been SHOWN, not only whether it passed.
@@ -4219,6 +4219,28 @@ printed beside 50. The worked calculation printed the same false line and its
 column comparison passed, because the column it checks is the clamped one.
 **A formula printed beside a result is a claim about every row, and a branch
 the best case never takes is a branch the page never wrote.**
+
+🚨  **AND THE FOUR LINES LEFT OVER WERE THE SAME DEFECT, THREE TIMES, PLUS
+ONE CANCELLATION.** 2026-10-06, on a raw cislunar row (2022 NX1):
+
+| line | printed | the model |
+|---|---|---|
+| the synodic period | `1 / abs(1/T_ast - 1/T_dest)`, 28.8 yr | capped at **10** |
+| the rig's salvage credit | `C_rig (1 - util) * salvage`, $205M | **0** when N = 1 |
+| a raw mission's feed | `feed = m_pay` at the closed form's 206,860 kg | `m_pay` is the **smallest of four ceilings**; the hold bound it at 149,150 |
+| `v_inf^2` | operands at 12 figures | a subtraction that cancels four digits |
+
+Every one is a clamp or condition the best case never reaches, which is the
+paragraph above happening three more times. The payload one is the worst: the
+sheet had **no step for the payload flown at all**. It printed the closed
+form's number as "the model's max_payload_kg", and nothing compared that label
+to the column. It now steps `m_pay = min(m_pay,cf, m_min, vol_cap[,
+throughput])`, and the narrative document's "used up exactly" explanation of
+a zero salvage credit says what is true on N = 1. Clean on all four cells
+`.verify/baseline-1.40.0` holds, plus a repaired lunar row, and `--self-test`
+still fails a planted value. **Check a page against a row where the clamps
+BIND, not against the best case, because the best case is chosen for not
+binding.**
 
 ### Splitting a phase splits every bound that reads ONE phase
 
