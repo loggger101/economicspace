@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.40.0)
+"""Master Asteroid Profitability Pipeline (1.41.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -690,7 +690,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.12.0"
+    pipeline_version: str = "1.12.1"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -1267,6 +1267,12 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         # S and P).  The Fe and Ni sulfides take the base, as troilite does.
         "kamacite":         0.45, "taenite":      0.45, "tetrataenite": 0.45,
         "cohenite":         0.45,
+        # v1.12.1.  Schreibersite sits with the alloy (base 0.70, geo 0.15,
+        # mars_surface 0.40, all nickel-iron's) and was the one alloy phase
+        # left at the base here, worth 0.70 of a launched kilogram where
+        # every Fe-Ni phase beside it took 0.45.  Found by holding the table
+        # to the families its own comments state; see _UTILITY_FAMILIES.
+        "schreibersite":    0.45,
         "perovskite":       0.03, "hibonite":     0.03, "oldhamite":    0.03,
         "merrillite":       0.03, "chlorapatite": 0.03,
         # Precious metals stay at the base 0.00 and route down; see the
@@ -1329,6 +1335,30 @@ _UPWARD = sorted((dest, name) for dest, over in IN_SPACE_UTILITY_BY_DESTINATION.
                  if u > IN_SPACE_UTILITY.get(name, IN_SPACE_UTILITY_DEFAULT))
 assert not _UPWARD, "utility overrides must run DOWNWARD from the base: %s" % _UPWARD
 del _UPWARD
+
+# v1.12.1: the families the comments above state, asserted at every
+# destination.  Each row of a family is priced "as" its first member, and a
+# destination override added for one member and not the rest is the defect
+# this caught: schreibersite at lunar_surface kept the base 0.70 while every
+# Fe-Ni phase there took 0.45.  A judgement may move a family; it may not
+# split one.
+_UTILITY_FAMILIES: Dict[str, List[str]] = {
+    "the alloy, as nickel-iron": ["nickel-iron", "awaruite", "kamacite", "taenite",
+                                  "tetrataenite", "cohenite", "schreibersite"],
+    "the sulfides, as troilite": ["troilite", "pyrrhotite", "pentlandite",
+                                  "niningerite", "daubreelite"],
+    "S and P carriers, as carbonates": ["carbonates", "oldhamite", "merrillite",
+                                        "chlorapatite"],
+    "perovskite, as ilmenite": ["ilmenite", "perovskite"],
+    "hibonite, as spinel": ["spinel", "hibonite"],
+}
+_SPLIT = sorted(
+    (dest, family) for dest in list(IN_SPACE_UTILITY_BY_DESTINATION) + [""]
+    for family, names in _UTILITY_FAMILIES.items()
+    if len({IN_SPACE_UTILITY_BY_DESTINATION.get(dest, {}).get(
+        n, IN_SPACE_UTILITY.get(n, IN_SPACE_UTILITY_DEFAULT)) for n in names}) > 1)
+assert not _SPLIT, "a utility family is priced at two levels: %s" % _SPLIT
+del _SPLIT
 
 
 def in_space_utility(name: str, destination: str) -> float:
@@ -2783,9 +2813,23 @@ def apply_delivery_destination(
     catalog["refining_kwh_per_kg"] = [
         float(IN_SPACE_PROCESSING_KWH_PER_KG.get(str(n), 0.0)) for n in catalog["name"]
     ]
+    # v1.12.1: a row whose net in-space value is NEGATIVE but still beats the
+    # downleg is floored at 0.0 above, and adding the processing cost back to
+    # that floor gave the processing cost, not the gross: phosphorus at leo
+    # read 248.67 where terrestrial + 0.10 x launch cost avoided is 244.40.
+    # A flown refinery values the hold at this column, so the floored rows
+    # take the gross itself.  Every other row is written exactly as before
+    # (net + processing), so no unfloored price moves by even a ULP.
+    gross_in_space = [
+        (0.0 if pd.isna(t) else float(t))
+        + in_space_utility(str(n), dest_key) * dest["usd_per_kg"]
+        for n, t in zip(catalog["name"], catalog["price_usd_per_kg"])
+    ]
     catalog["price_before_processing_usd_per_kg"] = [
-        (float(p) + float(c)) if (r == "used in space" and pd.notna(p)) else p
-        for p, c, r in zip(new_price, catalog["in_space_processing_usd_per_kg"], routes)
+        (g if float(p) <= 0.0 else float(p) + float(c))
+        if (r == "used in space" and pd.notna(p)) else p
+        for p, c, r, g in zip(new_price, catalog["in_space_processing_usd_per_kg"],
+                              routes, gross_in_space)
     ]
     catalog["value_route"]     = routes
     catalog["price_usd_per_kg"] = new_price
@@ -13368,7 +13412,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.40.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.41.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
