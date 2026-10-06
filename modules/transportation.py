@@ -69,6 +69,11 @@ no `notes`, so the tables on disk stay at 1.17.0 under the rule below, and the
 one `stamp_check()` line that says so is expected.  See
 [master v1.44.0](../versions.md#master-v1440--transportation-v1172).
 
+v0.5.3 TOOK IT 1.17.2 -> 1.17.3 AND MOVED NO VALUE: four more notes cells
+(Psyche, Didymos and two Mars delta-v rows).  The tables on disk stay where
+they are for the same reason.  See
+[master v1.45.0](../versions.md#master-v1450--mineral_value-v1123--transportation-v1173).
+
 RE-RUN STAGE 3 WHEN A ROW CHANGES, NOT WHEN A STAMP DOES.  A repin does not
 require a restamp: Stage 4 reads no column this contract moved, so leaving the
 CSVs at the older stamp costs one `stamp_check()` line and nothing else, where
@@ -123,7 +128,7 @@ import subprocess, sys
 # the two to each other.
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.5.2",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.5.3",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -272,7 +277,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.17.2"
+    pipeline_version: str = "1.17.3"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 CONFIG = TransportConfig()
