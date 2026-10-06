@@ -52,7 +52,7 @@ _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 # name in the install list would resolve to nothing.  The tag is typed in
 # several places in this repo; verify_docs check 7 finds and holds them all.
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.5.2",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.5.3",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -227,7 +227,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.12.2"
+    pipeline_version: str = "1.12.3"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -1000,6 +1000,13 @@ IN_SPACE_ANNUAL_DEMAND_KG: Dict[str, float] = {
     # inert and 100% of rows run to the fleet ceiling, and nothing anchored
     # the other end.
     "geo":            40_000.0,
+    # Anchors for when these two are revisited, not a re-pin: Kornuta et al.
+    # 2019 (Commercial Lunar Propellant Architecture) put near-term demand for
+    # lunar-derived propellant at 450 t/yr, ~4.5x the cislunar row, with 100
+    # t/yr in its Moon-only scenario and ~1,640 t/yr from all customers; the
+    # DARPA LunA-10 rail-network study (Northrop Grumman 2024) projects
+    # 500-2,500 t/yr under a Starship price ladder.  Both are forecasts of a
+    # market that does not yet exist, so the rows stay judgement.
     "cislunar":      100_000.0,
     "lunar_surface":  50_000.0,
     # v1.8.0.  LARGER than the surface base it serves, which is the one row of
@@ -1679,8 +1686,11 @@ MINERAL_REFERENCE: List[dict] = [
                  "Rhenium metal pellets, 2024 ~$1,200-1,600/kg (USGS MCS "
                  "2025).  Highly siderophile, tracks osmium in meteoritic metal."),
     _new_element("tungsten", "W", 19.25, 45.00,
-                 "APT ~$340/mtu in 2024 (USGS MCS 2025) = ~$43/kg of contained "
-                 "W (1 mtu = 10 kg WO3 = 7.93 kg W)."),
+                 "APT at the start of 2025: Rotterdam $331/mtu (USGS MCS 2026, "
+                 "which says it rose to $675 during 2025, ~$85/kg W) = ~$42/kg "
+                 "of contained W (1 mtu = 7.93 kg W, MCS 2025).  MCS 2025 "
+                 "withholds the 2024 price.  The cell is the start-of-2025 "
+                 "level, matching the row date."),
     _new_element("molybdenum", "Mo", 10.28, 44.00,
                  "Molybdic oxide ~$20/lb of contained Mo in 2024 (USGS MCS "
                  "2025) = ~$44/kg."),
