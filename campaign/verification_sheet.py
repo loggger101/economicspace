@@ -1045,8 +1045,10 @@ def part_transfer(S, out):
            "cos(i)", "cos(%s deg)" % P(inc), leg["cos_i"], "-", ["inc"])
     S.step("vinf2", "v_inf^2", "hyperbolic excess, squared",
            "v_t^2 + 1 - 2 v_t cos i",
+           # repr operands: the subtraction cancels three or four digits,
+           # so twelve significant figures in did not give the result back.
            "%s + 1 - 2 * %s * %s"
-           % (P(leg["v_t"] ** 2), P(leg["v_t"]), P(leg["cos_i"])),
+           % (exact(leg["v_t"] ** 2), exact(leg["v_t"]), exact(leg["cos_i"])),
            leg["v_inf_sq"], "x v_E^2", ["v_t", "cos_i"],
            "the law of cosines against Earth's own velocity")
     S.step("v_inf", "v_inf", "hyperbolic excess", "sqrt(v_inf^2) * v_E",
@@ -1383,10 +1385,12 @@ def part_fixed_point(S, out):
            cas["bracket"], "kg", ["budget", "hw_solved", "coef", "d0"])
     rep = M.get("repair")
     if not rep:
-        S.step("m_pay", "m_pay", "returned payload", "bracket / denom",
+        S.step("m_pay_cf", "m_pay,cf", "the closed form's payload",
+               "bracket / denom",
                "%s / %s" % (P(cas["bracket"]), P(cas["denom"])),
                cas["m_pay"], "kg", ["bracket", "denom"],
-               "the model's max_payload_kg")
+               "what the rocket equation can carry; part 7 holds it to the "
+               "physical ceilings")
         return
     # calc v1.27.0, `repair_settled_overshoot`.  The first settle-up flew a
     # stack over the vehicle, so the payload was re-solved at the hardware
@@ -1431,10 +1435,11 @@ def part_fixed_point(S, out):
            "%s / %s" % (P(fit["bracket"]), P(fit["denom"])),
            fit["m_pay"], "kg", ["bracket_cap", "denom_cap", "m_launch_1"],
            "the ceiling the mission is priced again under")
-    S.step("m_pay", "m_pay", "returned payload", "min(m_pay,cf, m_cap)",
+    S.step("m_fit", "m_pay,fit", "the payload the stack can carry",
+           "min(m_pay,cf, m_cap)",
            "min(%s, %s)" % (P(cas["m_pay"]), P(fit["m_pay"])),
-           M["m_pay"], "kg", ["m_pay_cf", "m_cap"],
-           "the model's max_payload_kg")
+           min(cas["m_pay"], fit["m_pay"]), "kg", ["m_pay_cf", "m_cap"],
+           "part 7 holds it to the physical ceilings")
 
 
 # ------------------------------------------------- 7. the settled mission
@@ -1442,9 +1447,6 @@ def part_settled(S, out):
     """Feed, water, the seal, the power draw, the plant and the EP stage."""
     C, M, B = out["C"], out["M"], out["B"]
     cas = M["cascade"]
-    # The payload flown: the closed form's, unless a settle-up repair set a
-    # lower ceiling (calc v1.27.0), and then the ceiling's.
-    pay = M["m_pay"] if M.get("repair") else cas["m_pay"]
     S.part("7. The feed, the water and the power it takes",
            "Settled on the payload the last solve produced.")
     rate_rig = S.put("gamma", "gamma", "mining rate per kg of rig",
@@ -1475,6 +1477,46 @@ def part_settled(S, out):
            "0.25 * %s * 1000 * %s" % (P(C["fairing_m3"]), P(C["rho"])),
            M["vol_cap"], "kg", ["V_fair", "rho"],
            "a quarter of the fairing, at the ore's bulk density")
+    # The payload FLOWN.  Part 6 ends on what the rocket equation can carry;
+    # the model then takes the smallest of that and three physical ceilings
+    # (`_evaluate_combo_at_ratio`'s settle-up: what the body allows, what the
+    # hold holds and, on run-of-mine ore only, what the rig can dig in a
+    # stay).  This step used to be missing, so a raw mission whose dig
+    # clipped the payload printed "feed = m_pay" beside the closed form's
+    # number and a feed a third smaller.  ISRU feed comes off the body and
+    # the rig before any ore is loaded, which is why both carry it.
+    cf_key = "m_fit" if M.get("repair") else "m_pay_cf"
+    cf_sym = "m_pay,fit" if M.get("repair") else "m_pay,cf"
+    cf_val = M["repair"]["refit"]["m_pay"] if M.get("repair") else cas["m_pay"]
+    if M.get("repair"):
+        cf_val = min(cas["m_pay"], cf_val)
+    isru = M["isru_feed"] > 0
+    if isru:
+        S.put("f_isru", "f_ISRU", "rock dug for propellant made on site",
+              M["isru_feed"], "kg",
+              "<b>Derived on this page</b>: part 6's settled pass, the "
+              "propellant made on site times the feed it takes per kg.")
+    sub_isru = (lambda name: "%s - f_ISRU" % name) if isru else (lambda n: n)
+    num_isru = ((lambda v: "%s - %s" % (P(v), P(M["isru_feed"])))
+                if isru else (lambda v: P(v)))
+    terms = [cf_sym, sub_isru("m_min"), "vol_cap"]
+    nums = [P(cf_val), num_isru(B["mineable"]), P(M["vol_cap"])]
+    uses = [cf_key, "m_min", "vol_cap"]
+    if not C["beneficiated"]:
+        terms.append(sub_isru("throughput"))
+        nums.append(num_isru(M["throughput"]))
+        uses.append("throughput")
+    if isru:
+        uses.append("f_isru")
+    S.step("m_pay", "m_pay", "the payload flown",
+           "min(%s)" % ", ".join(terms), "min(%s)" % ", ".join(nums),
+           M["m_pay"], "kg", uses,
+           "the model's max_payload_kg"
+           + ("" if C["beneficiated"] else
+              "; on run-of-mine ore the dig caps the payload itself, where "
+              "concentrating lets it cap only the feed"))
+    pay = M["m_pay"]
+
 
     if C["beneficiated"]:
         S.put("ratio", "r", "concentration ratio", out["ratio"], "-",
@@ -1807,8 +1849,12 @@ def part_stack(S, out):
              M["throughput"], "throughput"),
             ("volume", "a quarter of the fairing at the ore's bulk density",
              M["vol_cap"], "vol_cap"),
-            ("rocket equation", "bracket / denom, the closed form",
-             M["m_pay"], "m_pay")]
+            ("rocket equation",
+             ("the closed form under the settle-up's ceiling" if M.get("repair")
+              else "bracket / denom, the closed form"),
+             (min(cas["m_pay"], M["repair"]["refit"]["m_pay"])
+              if M.get("repair") else cas["m_pay"]),
+             "m_fit" if M.get("repair") else "m_pay_cf")]
     low = min(v for _n, _w, v, _t in caps)
     S.block(D.table(["cap", "what it is", "kg", "worked out at"],
                     [[n, w, P(v, 10) + (" <b>binds</b>" if v == low else ""),
@@ -1830,10 +1876,23 @@ def part_clock(S, out):
     S.step("T_dest", "T_dest", "the orbit the destination is phased against",
            "a_dest ^ 1.5", "%s ^ 1.5" % P(DV["a_dest"]), DV["t_dest"], "yr",
            ["a"])
-    S.step("synodic", "S_syn", "synodic period",
-           "1 / |1 / T_ast - 1 / T_dest|",
-           "1 / |1 / %s - 1 / %s|" % (P(DV["t_ast"]), P(DV["t_dest"])),
-           DV["synodic"], "yr", ["T_ast", "T_dest"])
+    # The model caps the period at ten years (a co-orbital body's windows
+    # never come round, and a real mission takes a worse transfer instead),
+    # and answers one year for a geometry the term cannot speak about.  The
+    # cap BINDS on every near-Earth body whose period is within ~10% of the
+    # destination's, so a formula without it is wrong exactly there.
+    if not (0.05 < C["a_au"] < 100.0) or DV["a_dest"] <= 0:
+        S.step("synodic", "S_syn", "synodic period",
+               "1, outside the geometry the term covers", "1",
+               DV["synodic"], "yr", ["a"])
+    else:
+        S.step("synodic", "S_syn", "synodic period",
+               "min(1 / |1 / T_ast - 1 / T_dest|, 10)",
+               "min(1 / |1 / %s - 1 / %s|, 10)"
+               % (exact(DV["t_ast"]), exact(DV["t_dest"])),
+               DV["synodic"], "yr", ["T_ast", "T_dest"],
+               "capped at ten years: a body whose period nearly matches "
+               "the destination's would otherwise wait for ever")
     S.step("t_win", "t_win", "expected wait for a departure window",
            "S_syn / 2" if C["windows"] else "0: windows are not modelled",
            ("%s / 2" % P(DV["synodic"])) if C["windows"] else "0",
@@ -2291,12 +2350,21 @@ def part_cost(S, out):
     S.put("salvage", "salvage", "rig salvage fraction",
           C["val"]("Rig salvage fraction", used=False), "-",
           cite_ops(C, "Rig salvage fraction"))
-    S.step("rig_term", "terminal", "salvage credit on what is left",
-           "C_rig (1 - util) * salvage",
-           "%s * (1 - %s) * %s"
-           % (P(K["rig_total"]), P(K["used"]),
-              P(C["val"]("Rig salvage fraction", used=False))),
-           K["terminal"], "$", ["C_rig_total", "rig_used", "salvage"])
+    # A single mission salvages nothing: the model credits a terminal
+    # value only when N > 1 (`cost` in worked_calculation, which mirrors
+    # calc).  The formula without that condition printed a nine-figure
+    # credit beside a page value of 0 on every N = 1 row.
+    if P_["n"] > 1:
+        S.step("rig_term", "terminal", "salvage credit on what is left",
+               "C_rig (1 - util) * salvage, when N > 1",
+               "%s * (1 - %s) * %s"
+               % (P(K["rig_total"]), P(K["used"]),
+                  P(C["val"]("Rig salvage fraction", used=False))),
+               K["terminal"], "$", ["C_rig_total", "rig_used", "salvage", "N"])
+    else:
+        S.step("rig_term", "terminal", "salvage credit on what is left",
+               "0 when N = 1: the rig's remaining life goes unsold", "0",
+               K["terminal"], "$", ["N", "salvage"])
     S.step("L_rig_share", "C_rig/W", "this mission's share of the rig",
            "(C_rig - terminal) / W",
            "(%s - %s) / %s" % (P(K["rig_total"]), P(K["terminal"]),

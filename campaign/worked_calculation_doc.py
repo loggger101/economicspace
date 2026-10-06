@@ -1595,8 +1595,9 @@ def s_cascade(out):
     caps_rows = [
         ["mineable", "%s of the body" % pct(C["cfg"].max_mining_fraction, 0),
          fmt(out["B"]["mineable"], 0)],
-        ["throughput", "%s kg/yr over %s yr, on the feed"
-         % (fmt(C["rate_kg_yr"], 0), fmt(C["cfg"].max_mining_duration_yr, 1)),
+        ["throughput", "%s kg/yr over %s yr, on the %s"
+         % (fmt(C["rate_kg_yr"], 0), fmt(C["cfg"].max_mining_duration_yr, 1),
+            "feed" if a["beneficiated"] else "payload itself"),
          fmt(M["throughput"], 0)],
         ["volume", "%s of the fairing at %s kg/L"
          % (pct(0.25, 0), fmt(C["rho"], 2)), fmt(M["vol_cap"], 0)],
@@ -1640,10 +1641,11 @@ def s_cascade(out):
     feed_terms = []
     if a["beneficiated"]:
         feed_terms += [
-            ("feed", "= min(m_pay * r, throughput, mineable)"),
-            ("", "= min(%s * %s, %s, %s)"
+            ("feed", "= max(min(m_pay * r, throughput, mineable), m_pay)"),
+            ("", "= max(min(%s * %s, %s, %s), %s)"
              % (prec(M["m_pay"], 12), prec(out["ratio"], 12),
-                prec(M["throughput"], 12), prec(out["B"]["mineable"], 12))),
+                prec(M["throughput"], 12), prec(out["B"]["mineable"], 12),
+                prec(M["m_pay"], 12))),
             ("", "= %s kg" % prec(M["feed"], 15)),
             ("r", "= feed / m_pay = %s" % prec(M["ratio"], 15),
              "achieved, against the %s the sweep chose"
@@ -2269,9 +2271,14 @@ def s_clock(out):
         ("T_dest", "= %s^1.5 = %s yr" % (prec(DV["a_dest"], 12),
                                          prec(t_dest, 12)),
          "the orbit the destination is phased against"),
-        ("S", "= 1 / |1/T_ast - 1/T_dest| = 1 / |%s - %s|"
+        # The model caps the period at ten years, so a body whose period
+        # nearly matches the destination's does not wait for ever; the
+        # line used to print the uncapped formula beside the capped value.
+        ("S", "= min(1 / |1/T_ast - 1/T_dest|, 10) = min(1 / |%s - %s|, 10)"
          % (prec(1.0 / DV["t_ast"], 12), prec(1.0 / t_dest, 12))),
-        ("", "= %s yr" % prec(DV["synodic"], 12), "the synodic period"),
+        ("", "= %s yr" % prec(DV["synodic"], 12),
+         "the synodic period, at the ten-year cap"
+         if DV["synodic"] >= 10.0 else "the synodic period"),
         ("t_win", "= S / 2 = %s yr" % prec(DV["window_wait"], 12),
          "the expected wait once the feed is out of the ground"
          if C["cfg"].model_launch_windows
@@ -3018,10 +3025,14 @@ def s_cost(out):
          "one rig and the refinery on it, built once"),
         ("util", "= %s" % prec(cst["used"], 12),
          "how much of the rig's life this programme uses"),
-        ("terminal", "= C_rig (1 - util) * salvage = %s"
+        # A single mission is credited nothing, whatever is left of the rig:
+        # the model takes a terminal value only when N > 1.
+        ("terminal", ("= C_rig (1 - util) * salvage = %s"
+                      if P["n"] > 1 else "= 0 on a single mission (%s)")
          % usd(cst["terminal"], 2),
          "credited back at the end" if cst["terminal"]
-         else "the rig is used up exactly"),
+         else ("the rig is used up exactly" if P["n"] > 1
+               else "a single mission sells none of the rig's remaining life")),
         ("rig share", "= (C_rig - terminal) / W = (%s - %s) / %d = %s"
          % (prec(cst["rig_total"], 12), prec(cst["terminal"], 12),
             cst["share"], usd(cst["lines"]["rig"], 2))),
