@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.44.0 / transportation v1.17.2](#master-v1440--transportation-v1172)
 - [master v1.43.0 / calc v1.27.0](#master-v1430--calc-v1270)
 - [master v1.42.0 / mineral_value v1.12.2](#master-v1420--mineral_value-v1122)
 - [master v1.41.0 / mineral_value v1.12.1](#master-v1410--mineral_value-v1121)
@@ -96,9 +97,9 @@ one that does not say is not to be used.
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.12.2** | v1.12.2, titanium and chromium priced as iron wherever their ore is discounted (Mars, and the Moon's chromium) |
-| 3 | `modules/transportation.py` | **1.17.0** | v1.17.0, every fairing volume derived from a cited drawing or left blank with a reason: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 3 | `modules/transportation.py` | **1.17.2** | v1.17.2, twenty-one citations corrected and no value moved (v1.17.0 was the last to move one, every fairing volume derived from a cited drawing or left blank with a reason): the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.27.0** | v1.27.0, a mission whose settled stack overshoots its vehicle is re-solved under a payload ceiling instead of refused (`repair_settled_overshoot`, default on), with the new `settle_repairs` column |
-| - | `master.py` | **1.43.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.44.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -113,7 +114,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Twenty-one stamps so far have moved without moving a number:
+Twenty-two stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -138,15 +139,16 @@ Twenty-one stamps so far have moved without moving a number:
 | transportation `1.14.0` | **four reference rows** | bit-identical, verified |
 | transportation `1.15.0` | **a sixth reference table** | bit-identical, verified |
 | calc `1.19.1` | **a check that cried wolf** | bit-identical, verified |
+| transportation `1.17.2` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
 together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0`,
-`transportation 1.14.0` and `transportation 1.15.0`.
+`transportation 1.14.0`, `transportation 1.15.0` and `transportation 1.17.2`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and thirteen are not, and that split rotted in prose
+rows are performance stamps and fourteen are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -170,6 +172,61 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.44.0 / transportation v1.17.2
+
+**spacecost moves from `v0.5.0` to `v0.5.2` (data contract 1.17.0 to 1.17.2),
+and no value moves.** Both releases correct citations only. 0.5.1 withdrew two
+dead ones; this repo never repinned to it, so this release picks it up too.
+0.5.2 corrects twenty-one attributions that the General_Research evidence
+registry found naming documents that do not hold their numbers. Both are
+recorded in
+[spacecost's CHANGELOG](https://github.com/loggger101/spacecost/blob/main/CHANGELOG.md).
+
+### What moved upstream
+
+- **0.5.1**: the beneficiation-energy row and the HTP-98 price now call
+  themselves unsourced. They had cited a grades 7-8 classroom worksheet and a
+  vendor page that has since gone (rc-048, rc-061).
+- **0.5.2**: four NASA DRA 5.0 attributions are corrected. DRA contains none
+  of the 2.65 km/s arrival v-infinity, the 2,100 m/s LMO TEI or the 4,100 m/s
+  Mars ascent, and its TMI swing is 3.5-4.1 km/s, not 3.6-4.3. SP-125 is no
+  longer cited for the ascent delta-v and ITU-R S.1003 no longer for GEO
+  eclipses. The NEA "median" is now called a peak. The MMRTG mass is 44 kg,
+  and Pu-238 output is a goal that was missed. The 2023 insurance reset
+  followed Viasat-3 and Inmarsat 6-F2, not Intelsat 33e. The Mars entry
+  survival fractions are recomputed on JPL's best-estimated entry masses. The
+  rest are listed in spacecost's CHANGELOG. **Every one is a `notes` cell or a comment.**
+  A column-by-column comparison of all seven of spacecost's committed reference
+  files against 0.5.1 differs in `notes` (21 cells) and `pipeline_version`
+  only.
+
+### What changes here
+
+- The spacecost tag in all seven places that type it, and the transportation
+  stamp to `1.17.2`, which `verify_stage3.py` check 2 holds to the package.
+- The Mars entry survival fractions quoted in README and CLAUDE.md: MSL
+  **28.5%** and Perseverance **30.5%**, where they said 27.6% and 29.8%.
+  `MARS_LANDED_MASS_FRACTION` stays 0.30 and still sits at the better of the
+  two.
+- CITATIONS.md's Horizons endpoint, which answered HTTP 404, is now the live
+  `https://ssd.jpl.nasa.gov/api/horizons.api` (rc-049). No pipeline code calls
+  it.
+
+### What does not change, and why the tables on disk stay at 1.17.0
+
+**Stage 4 reads no `notes` column** (`modules/calc.py` never names one), so a
+Stage 4 run against 1.17.2 tables is bit-identical to one against 1.17.0 by
+construction. The Stage 3 CSVs in `asteroid_pipeline/transportation/` were
+**not** re-run, and that follows the rule in `modules/transportation.py`:
+re-run Stage 3 when a row changes, not when a stamp does. A re-run would
+re-fetch three live fuel prices over the only copy of the tables every
+current measurement was taken against. The cost is one `stamp_check` line per
+run, naming the files as 1.17.0 against a module at 1.17.2. That line is
+correct and means nothing more. The worked calculation and the verification
+sheet print a row's citation from the tables the run read, so a page about a
+run on the 1.17.0 tables still shows the old wording. That is the point of
+reading them.
 
 ## master v1.43.0 / calc v1.27.0
 
@@ -2482,6 +2539,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.44.0 / transportation v1.17.2](#master-v1440--transportation-v1172) | 2026-10-06 | **spacecost `v0.5.2`: twenty-three citations corrected, no value moved**: the repin carries 0.5.1 and 0.5.2's notes; Stage 4 reads no notes, so the tables on disk stay at 1.17.0 |
 | [master v1.43.0 / calc v1.27.0](#master-v1430--calc-v1270) | 2026-10-06 | **a mission 0.1% over its vehicle is flown lighter, not refused**: v1.42.0's knapsack diagnosis corrected; about two bodies in five were scored on the wrong mission, and no headline moved |
 | [master v1.42.0 / mineral_value v1.12.2](#master-v1420--mineral_value-v1122) | 2026-10-05 | **a metal with a local ore is priced as that place's iron**: titanium and chromium at Mars, chromium at the Moon; the measurement found the payload knapsack ignores the flown refinery |
 | [master v1.41.0 / mineral_value v1.12.1](#master-v1410--mineral_value-v1121) | 2026-10-05 | **every Stage 2 price held to its rule, at every destination**: schreibersite at the Moon priced with the alloy, a floored row's gross price fixed, and the `lunar_surface` winner moves |

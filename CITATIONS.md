@@ -121,7 +121,7 @@ measures the model against.
   round-trip delta-v and mission duration for the near-Earth asteroids
   accessible to human spaceflight. Read by
   `research/starred-repos/probe_nhats.py`.
-- **NASA JPL Horizons**, `https://ssd-api.jpl.nasa.gov/horizons.api`, and the
+- **NASA JPL Horizons**, `https://ssd.jpl.nasa.gov/api/horizons.api`, and the
   **NAIF** kernel archive. Recommended in F7 for bounding the two-body error in
   F4's Lambert oracle; not yet used.
 - **NEODyS** (University of Pisa and SpaceDyS),
@@ -290,7 +290,7 @@ rights reserved, so that failure runs in the dangerous direction.
 
 ## 6. Software this pipeline depends on
 
-⚠️  **spacecost** is this project's own, extracted from Stage 3 and MIT licensed; it is pinned to tag `v0.5.0` and carries every launch, propellant, Delta-v, operational and storage row, with the citations for them, and since `v0.3.0` the delivery chains Stage 2 prices through.
+⚠️  **spacecost** is this project's own, extracted from Stage 3 and MIT licensed; it is pinned to tag `v0.5.2` and carries every launch, propellant, Delta-v, operational and storage row, with the citations for them, and since `v0.3.0` the delivery chains Stage 2 prices through.
 
 ⚠️  **asteroid_catalog** is this project's own too, extracted from Stage 1 and
 MIT licensed. It carries the four survey fetchers, the cross-match, the

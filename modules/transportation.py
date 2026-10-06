@@ -63,6 +63,12 @@ is still flown at calc's `DEFAULT_FAIRING_VOLUME_M3`.  The grid stays 48
 vehicles.  Adopting it on disk is the same decision as v0.4.0's.  See
 [master v1.37.0](../versions.md#master-v1370--transportation-v1170--catalog-v160).
 
+v0.5.2 TOOK IT 1.17.0 -> 1.17.2 AND MOVED NO VALUE: notes cells only (v0.5.1's
+two withdrawn citations and v0.5.2's twenty-one corrected ones).  Stage 4 reads
+no `notes`, so the tables on disk stay at 1.17.0 under the rule below, and the
+one `stamp_check()` line that says so is expected.  See
+[master v1.44.0](../versions.md#master-v1440--transportation-v1172).
+
 RE-RUN STAGE 3 WHEN A ROW CHANGES, NOT WHEN A STAMP DOES.  A repin does not
 require a restamp: Stage 4 reads no column this contract moved, so leaving the
 CSVs at the older stamp costs one `stamp_check()` line and nothing else, where
@@ -117,7 +123,7 @@ import subprocess, sys
 # the two to each other.
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.5.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.5.2",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -266,7 +272,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.17.0"
+    pipeline_version: str = "1.17.2"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 CONFIG = TransportConfig()

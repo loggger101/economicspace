@@ -210,8 +210,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.8.1`, mineral_value `1.12.2`, transportation `1.17.0`,
-calc `1.27.0`, master `1.43.0` (the master version is a literal in
+Current: catalog `1.8.1`, mineral_value `1.12.2`, transportation `1.17.2`,
+calc `1.27.0`, master `1.44.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -220,17 +220,19 @@ equal. It stayed at `1.14.0` through the split because the data did not move;
 it moved to `1.15.0` when the package gained a sixth table (`environments`,
 spacecost v0.2.0), and to `1.16.0` when the launch table was re-audited and
 the delivered-price model changed (spacecost v0.4.0), and to `1.17.0` when
-every fairing volume was re-derived from a drawing (spacecost v0.5.0). **So it follows a repin, and a repin follows it: the two
+every fairing volume was re-derived from a drawing (spacecost v0.5.0), and to
+`1.17.2` when twenty-three citations were corrected and no value moved
+(spacecost v0.5.2, carrying v0.5.1). **So it follows a repin, and a repin follows it: the two
 are one number in two repositories.**
 
-ℹ️  **TWENTY-ONE stamps so far do NOT mean the numbers moved.** The rule
+ℹ️  **TWENTY-TWO stamps so far do NOT mean the numbers moved.** The rule
 is one-directional: *changing a number means bumping; bumping does not mean a
 number changed*, and reading a version as evidence that a result moved is the
 mistake this table exists to prevent.
 
 ⚠️  Most rows are **calc** stamps. The exceptions are `mineral_value 1.7.1`,
 `mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0`,
-`transportation 1.14.0` and `transportation 1.15.0`, so read the module and not just the number: `1.7.1`
+`transportation 1.14.0`, `transportation 1.15.0` and `transportation 1.17.2`, so read the module and not just the number: `1.7.1`
 and `1.17.1` are different modules and unrelated releases, and so are `1.14.0`
 and `1.19.0`, which shipped together.
 
@@ -257,16 +259,17 @@ and `1.19.0`, which shipped together.
 | transportation `1.14.0` | **four reference rows** | bit-identical, verified |
 | `1.19.1` | **a check that cried wolf** | bit-identical, verified |
 | transportation `1.15.0` | **a sixth reference table** | bit-identical, verified |
+| transportation `1.17.2` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 
-**Every measured cell in this file stands unaltered across all twenty-one; do not
+**Every measured cell in this file stands unaltered across all twenty-two; do not
 re-measure anything on account of any of them.** Each release's own section
 carries its verification.
 
 ⚠️  **Derive the taxonomy from the table above, not from a count in prose.**
-Eight rows are *performance* stamps; the other thirteen are `1.17.0` (a default
+Eight rows are *performance* stamps; the other fourteen are `1.17.0` (a default
 flip), `1.17.3` (a cleanup), `1.17.7` (a memory bound), `1.17.8` (a new
 upstream check), `1.19.1` (that same check, fixed), `1.7.1` (a silent default
-closed in another module), and two
+closed in another module), transportation `1.17.2` (citations only), and two
 trios that each add a delivery destination without touching any existing one:
 `1.18.0` / `1.8.0` / `1.13.0` for `mars_orbit` and `1.19.0` / `1.9.0` /
 `1.14.0` for `geo`. See
@@ -2004,7 +2007,7 @@ heat shield is not worth hauling out and pushing back.
 `_DELIVERY_LEGS` walks real stages backwards from the payload. Collapsing the
 lunar chain into one 5,920 m/s burn would overstate the Moon by ~2x (10.96 vs
 4.99 kg in LEO per kg landed) because it throws away staging. Mars' `edl` leg
-carries a measured surviving-mass fraction (MSL 27.6%, Perseverance 29.8%),
+carries a measured surviving-mass fraction (MSL 28.5%, Perseverance 30.5%),
 not a Delta-v.
 
 **The two surface prices are marginal-transport LOWER BOUNDS.** No NRE, no
@@ -5515,7 +5518,7 @@ passing, which is exactly why nobody deletes them.
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
-[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.5.0`.
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.5.2`.
 **Do not state the row count here**; the adapter's ready banner prints it on
 every import, and this sentence carried "all 141 of them" into a release that
 added a whole table.
