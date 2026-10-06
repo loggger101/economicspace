@@ -445,7 +445,24 @@ def gross_minerals(minerals):
     The model's `load_all_catalogs` does exactly this: the price column
     becomes the price BEFORE the refining deduction, and the net one is kept
     for the route choice.  Done here from the row's own run setting.
+
+    ⚠️  A ROW THAT FLEW THE REFINERY CANNOT HAVE READ A TABLE WITHOUT THE
+    GROSS PRICE, so a table missing the column is the wrong table, not a
+    missing feature.  It happened on 2026-10-05: the v1.40.0 `mars_surface`
+    cell read a 1.12.0 table replayed into its run directory, nothing under
+    `campaign/stage2/` carried one, and `mineral_catalog_for` fell back to the
+    2026-09-09 campaign table (1.9.0).  That used to be a bare `KeyError`;
+    it is a refusal that says which table and what to freeze.
     """
+    if "price_before_processing_usd_per_kg" not in minerals:
+        ver = (str(minerals["pipeline_version"].iloc[0])
+               if "pipeline_version" in minerals and len(minerals) else "?")
+        sys.exit("this row flew the refinery (calc 1.25.0 or later), but the "
+                 "Stage 2 table chosen for it is mineral_value %s, which "
+                 "carries no price before the refining deduction.\n  The run "
+                 "read a later table that is not on disk where this script "
+                 "looks: freeze it as\n  campaign/stage2/mineral_value-<ver>/"
+                 "mineral_value_catalog.<destination>.csv" % ver)
     table = minerals.copy()
     table[NET_PRICE_COL] = table["price_usd_per_kg"]
     table["price_usd_per_kg"] = table["price_before_processing_usd_per_kg"]

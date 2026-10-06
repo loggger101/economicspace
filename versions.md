@@ -500,6 +500,177 @@ left as the live `profitability_catalog.csv`. The driver, log and wall clock
 are in `asteroid_pipeline/_run4_calc-1.26.0_2026-09-30/`. Build the worked
 calculation from it with `--catalog` pointed at the archive.
 
+### The six other destinations at this release (2026-10-01/03)
+
+The cislunar cell above was one corner of one destination. These are the
+other six default cells (beneficiated, programme search on) over every row of
+the same inputs, so the seven together are the first full-catalog
+measurement of every destination since the 2026-09 campaign, and the first
+on the spacecost `v0.4.0` delivered-price model at all. Each ran as
+`run_pipeline.py --preset full --stages 4 --destination <d>` through
+`run_pipeline`'s own resolve, preset and `preflight()`, 12 workers, detached
+and in turn, from `asteroid_pipeline/_run5_destinations_calc-1.26.0_2026-10-01/`.
+Stages 1-3 were not run. Two fields were redirected and only two: each cell's
+output went to its own directory, so the live cislunar catalog was never
+overwritten, and each read its own Stage 2 table.
+
+**Those Stage 2 tables were REPLAYED, not fetched.** The live table records
+the five yfinance quotes it was priced from (2026-09-29), and feeding them back
+in as the live frame priced the six other destinations with the network
+untouched, which is [the replay this release introduced](CLAUDE.md#a-stage-2-table-can-be-rebuilt-without-being-re-fetched).
+Rebuilding cislunar the same way reproduces every price on all 59 rows; the
+one input that differs is silver's recorded quote, by one ULP
+(`1969.55468079172` against `1969.5546807917196`), which the replay's own
+check could not see because it read both tables with pandas' default float
+parser. **All seven tables are committed as
+`campaign/stage2/mineral_value-1.12.0/`** (cislunar's is the live table the
+cislunar cell read, not the replay), so every one of these cells can be
+re-derived.
+
+| destination | cost / revenue | winner | vehicle / propellant | N = F x W | evaluable | median | Stage 4 |
+|---|---|---|---|---|---|---|---|
+| **`mars_surface`** | **1.0914x** | 2015 DS (X) | Falcon Heavy (expendable) / iodine, aerocaptured | 2 = 1 x 2 | 813,471 | **2.0246** | 24,644 s |
+| `lunar_surface` | 2.9068x | 2018 DT (M) | Falcon Heavy (expendable) / iodine | 3 = 1 x 3 | 567,904 | 8.7376 | 7,585 s |
+| `mars_orbit` | 4.5908x | 350751 (B) | New Glenn / iodine | 12 = 4 x 3 | 872,321 | 13.9410 | 35,509 s |
+| `cislunar` (above) | 4.8379x | 2018 DT (M) | New Glenn / krypton | 3 = 1 x 3 | 604,422 | 20.9073 | 12,062 s |
+| `geo` | 6.8572x | 2016 GS2 (D) | New Glenn / iodine | 9 = 3 x 3 | 625,730 | 92.9549 | 26,612 s |
+| `leo` | 17.0106x | 2005 QP87 (X) | Falcon Heavy (expendable) / iodine | 45 = 15 x 3 | 774,210 | 60.4780 | 20,842 s |
+| `earth_surface` | 6,154.06x† | 2018 DT (M) | Falcon Heavy (expendable) / iodine | 192 = 64 x 3 | 867,142 | 24,301.21 | 37,594 s |
+
+† At `max_fleet_ships` on **every** row of the cell (867,142 of 867,142), so
+a value at the ladder's top rung and not an optimum, exactly as in every
+earlier `earth_surface` searched cell.
+
+The `mars_surface` winner's objective is `1.091366616755096`: $4.230 B of
+cost against $3.875 B of value, two missions of 49,101 kg concentrated 4.46x,
+solar power with a 164 kg refinery, no ISRU. The next four are within 2%:
+2013 PH10 (X) 1.1012x, 261938 (X) 1.1060x, 2005 QP87 (X) 1.1065x and 2009 CV
+(X) 1.1125x. **Still zero viable missions**, at every destination: the best
+case in the model is now 9% from breakeven rather than a factor of 4.8.
+
+#### The destination ranking turned over, and the delivered price says why
+
+| destination | 2026-09 campaign (calc 1.21.2) | **this release** | nickel used there, $/kg, 1.9.0 table to 1.12.0 |
+|---|---|---|---|
+| `mars_surface` | 12.6892x, 5th | **1.0914x, 1st** | 31,360 to 129,154 (**4.12x**) |
+| `lunar_surface` | 11.5920x, 4th | **2.9068x, 2nd** | 14,633 to 29,631 (2.02x) |
+| `mars_orbit` | 7.3681x, 2nd | 4.5908x, 3rd | 9,233 to 5,881 (0.64x) |
+| `cislunar` | 6.6622x, 1st | 4.8379x, 4th | 7,353 to 4,601 (0.63x) |
+| `geo` | 9.6949x, 3rd | 6.8572x, 5th | 1,665 to 993 (0.60x) |
+| `leo` | 13.6875x, 6th | **17.0106x, 6th, and worse** | 2,763 to 1,476 (**0.53x**) |
+| `earth_surface` | 7,074.20x | 6,154.06x | 16 to 16 |
+
+🚨  **THE TWO SURFACES WENT FROM 4TH AND 5TH TO 1ST AND 2ND, AND THE PRICE
+MOVED THEM.** A kilogram used in space is worth its terrestrial price plus
+`in_space_utility` times the launch cost it avoids, and spacecost `v0.4.0`
+changed that cost in opposite directions: the LEO anchor fell 43%, which
+cheapened every orbit, and the surfaces started paying to BUILD the lander and
+aeroshell a chain expends, which made them two- and fourfold dearer (see
+[master v1.35.0](#master-v1350--mineral_value-v1100--transportation-v1160)).
+Sorted by how far that price moved, the six in-space destinations come out
+in exactly the order of the new ranking, and `leo`, which took the deepest
+cut, is the one destination whose default cell got WORSE between the two
+campaigns.
+
+⚠️  **This is a price, not a defect, and CLAUDE.md already says not to "fix"
+it.** The surface prices are marginal-transport lower bounds for cargo
+launched from Earth; asteroid cargo delivered to Mars pays none of that chain,
+which is the premise the destination exists to test. What this run adds is
+that the premise now carries the ranking. ⚠️  **And the Mars market is still
+the shallowest in the model**: 5 t/yr of each structural metal, which is why
+the winner is a programme of two missions and one ship.
+
+⚠️  **The 2026-09 column is not a paired comparison and none is offered.**
+Between the two campaigns the catalog moved (2026-08-11 to `data-2026-09-29c`,
+including 1.5.0's composition correction), launch prices moved twice, four
+defaults moved at calc 1.22.0 and four model terms arrived at 1.23.0-1.26.0.
+The cislunar decomposition above attributes a single cell's move across part
+of that span; nobody has decomposed the others, and **a ratio between these
+two columns is a statement about all of those at once**.
+
+#### What every cell shares
+
+- **Iodine flies all six of these winners**; only cislunar's flies krypton.
+  Six of the seven are a programme of three campaigns per ship, the
+  exception being `mars_surface`'s two.
+- **2018 DT (M) wins three destinations** (`cislunar`, `lunar_surface`,
+  `earth_surface`) 2005 QP87 (X) wins `leo` and places in the top five at five of the
+  other six.
+- `mars_surface` is the only winner that aerocaptures; none makes its own
+  propellant.
+
+#### Invariants, on every row of every cell
+
+| | `lunar_surface` | `geo` | `earth_surface` | `leo` | `mars_surface` | `mars_orbit` |
+|---|---|---|---|---|---|---|
+| mass ledger, largest error, kg | 1.5e-11 | 2.2e-11 | 2.2e-11 | 2.2e-11 | 2.2e-11 | 2.2e-11 |
+| `N = F x W`, and `W > trips` | every row, never | every row, never | every row, never | every row, never | every row, never | every row, never |
+| `saturation_multiplier` | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| rows with both unsold and surplus | 0 | 0 | 0 | 0 | 0 | 0 |
+| rows with a surplus | 441 | 3,854 | 0 | 18 | 5,285 | 10,022 |
+| clearing min | 0.9559 | 0.8221 | 1.0000 | 0.9987 | 0.8583 | 0.8836 |
+| at `max_fleet_ships` | 114,743 | 35,482 | **867,142** | 270,440 | 153,445 | 199,523 |
+| fleet / N median | 6 / 24 | 4 / 16 | 64 / 256 | 47 / 188 | 3 / 9 | 8 / 24 |
+| declining to concentrate | 27,944 | 1,812 | 2,076 | 1,715 | 159 | 1,363 |
+| viable | 0 | 0 | 0 | 0 | 0 | 0 |
+
+⚠️  **The fleet cap binds on 35% of `leo` and 24% of `mars_surface`'s rows**,
+and on all of `earth_surface`'s; those rows' programme size is where the ladder
+stopped. None of the six winners is among them except `earth_surface`'s.
+
+#### Propellant and vehicle, % of evaluable rows
+
+| destination | propellant, top four | vehicle, top three |
+|---|---|---|
+| `lunar_surface` | xenon 50.99, iodine 17.95, water ion 16.16, hydrolox 9.52 | Falcon Heavy (expendable) 57.31, SLS Block 1 34.16, New Glenn 6.42 |
+| `geo` | xenon 73.97, iodine 12.90, hydrolox 8.38, water ion 3.11 | Falcon Heavy (expendable) 70.61, SLS Block 1 15.40, New Glenn 12.91 |
+| `earth_surface` | xenon 55.71, iodine 31.08, methalox 7.83, krypton 4.00 | New Glenn 36.19, Falcon Heavy (expendable) 14.57, SLS Block 1 12.46 |
+| `leo` | xenon 63.57, iodine 18.75, methalox 14.10, water ion 1.70 | Falcon Heavy (expendable) 37.52, New Glenn 35.54, SLS Block 1 24.08 |
+| `mars_surface` | xenon 55.72, iodine 22.76, methalox 18.66, krypton 1.64 | Falcon Heavy (expendable) 42.60, New Glenn 28.52, SLS Block 1 26.16 |
+| `mars_orbit` | xenon 48.56, iodine 28.36, methalox 22.49, water ion 0.49 | Falcon Heavy (expendable) 45.82, SLS Block 1 29.18, New Glenn 24.92 |
+
+#### Wall clock
+
+**152,787 s (42.4 h) for the six**, against the 2026-09 campaign's 35-hour sum
+for the same six default cells. `lunar_surface` is again the cheapest
+destination to run; `earth_surface` rather than `mars_orbit` is now the
+dearest. ⚠️  `geo` was killed once
+at 12% when the session that launched it restarted, and re-run from the start
+under a scheduled task; its figure is the complete second run. These are
+single runs on one host, and are not offered as ratios against the 2026-09
+cells or folded into `MEASURED_DEST_SECONDS`, which holds one release.
+
+#### The archives, and the worked calculation
+
+Archived as `campaign/cells/<destination>__benef__search-on__calc-1.26.0__spacecost-0.5.0.csv.gz`,
+the release-suffixed name that `population.py` and `analyse.py` cannot see.
+The best case is now the `mars_surface` archive, so the worked calculation and
+the verification sheet are built from it with `--catalog`. ⚠️  **Building them
+found that nothing under `campaign/stage2/` held a 1.12.0 `mars_surface`
+table**: `mineral_catalog_for` fell back to the 2026-09-09 campaign table
+(1.9.0), and `gross_minerals` died with a bare `KeyError` on the column that
+table predates. Freezing the replayed tables closes it, and a table without
+the gross price is now a refusal that says what to freeze.
+
+🚨  **And the verification sheet found a line both documents had always
+printed wrong.** The saturation ratio was written as `1 / (f_best * eps_rec)`,
+and the model clamps it at `max_concentration_ratio` (50). 2015 DS's
+best-priced phase is schreibersite at under half a percent of the body, so it
+would saturate at 233 and the clamp binds: the first best case on record where
+it does. The sheet's `--check` printed `1 / (0.00476734131065 * 0.9)` beside
+50 as WRONG; the worked calculation printed the same line and passed, because
+the column its comparison reads is the clamped one. Both now write
+`max(1, min(1 / (f_best * eps_rec), r_cap))` with the cap as a cited input.
+
+| | worked calculation | verification sheet |
+|---|---|---|
+| derived against the row | 90 quantities, 88 bit-exact, 2 within 1e-12, 0 DIFFER | the same |
+| completeness | 127 of 127 non-zero columns, 36 of 36 rates | 168 of 168 inputs cited, 501 of 501 numbers traced |
+| arithmetic | | 392 of 392 substitutions reproduce, `--self-test` fails as it should |
+
+The cislunar winner, where the clamp does not bind, still derives 90 of 90
+bit-exact through both renderers after the change.
+
 ## master v1.39.0 / calc v1.25.0
 
 **The refinery is flown instead of being taken out of the price.** Stage 2
