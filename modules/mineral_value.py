@@ -227,7 +227,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.12.1"
+    pipeline_version: str = "1.12.2"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -795,6 +795,12 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         # lunar ore there is, so its titanium competes with local supply the
         # way the regolith's iron does.
         "titanium":         0.45,
+        # v1.12.2.  And chromium, by the same argument: its ore is discounted
+        # here (chromite 0.25, chromite-bearing mare basalt) and the metal had
+        # kept the base 0.70, so a chromite hold was valued through its
+        # chromium at the full structural price and the ore discount bought
+        # nothing.  Asserted with iron and titanium; see _UTILITY_FAMILIES.
+        "chromium":         0.45,
         "ilmenite":         0.03,
         "chromite":         0.25,
         "carbonates":       0.03,   # as rock; its CO2 is priced as CO2
@@ -847,6 +853,16 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         "schreibersite":    0.40,
         "chromite":         0.02,
         "ilmenite":         0.02,
+        # v1.12.2.  The basalt is Fe-Ti-Cr oxide-bearing, which is why the two
+        # ores above sit at 0.02, and its titanium and chromium compete with
+        # local supply the way its iron does, so they take iron's 0.40.  Left
+        # at the base 0.70 they undid the ore discounts: Stage 4 values an ore
+        # at the better of its own price and its yields, and ilmenite worth
+        # $3,696/kg as rock was valued at $68,087 through its titanium.  The
+        # lunar block made this argument for titanium in v1.11.0.  Ni / Co /
+        # Cu stay undiscounted: no concentrated martian ore of them is known.
+        "titanium":         0.40,
+        "chromium":         0.40,
         # v1.12.0.  The alloys as nickel-iron; the Fe and Ni sulfides as
         # troilite, since the crust is sulfate-rich; perovskite and hibonite as
         # the basalt's oxides; oldhamite and the phosphates as rock, as
@@ -888,6 +904,10 @@ _UTILITY_FAMILIES: Dict[str, List[str]] = {
                                         "chlorapatite"],
     "perovskite, as ilmenite": ["ilmenite", "perovskite"],
     "hibonite, as spinel": ["spinel", "hibonite"],
+    # v1.12.2.  A metal whose local ore a destination discounts competes with
+    # local supply as that destination's iron does.  Ni, Co and Cu are not in
+    # it: no concentrated ore of any of them is known on the Moon or Mars.
+    "the metals with a local ore, as iron": ["iron", "titanium", "chromium"],
 }
 _SPLIT = sorted(
     (dest, family) for dest in list(IN_SPACE_UTILITY_BY_DESTINATION) + [""]
