@@ -228,6 +228,23 @@ sheet print a row's citation from the tables the run read, so a page about a
 run on the 1.17.0 tables still shows the old wording. That is the point of
 reading them.
 
+### The worksheet's last false lines (same day, no stamp)
+
+`campaign/verification_sheet.py --check` failed four substitution lines on a
+raw row, and they have been failing since before the mineral phases landed.
+Three of them printed a formula without a clamp or condition the model
+applies: the synodic period's ten-year cap, the rig salvage credit being zero
+when N = 1, and the payload flown being the smallest of four ceilings. The
+sheet had no step for that last one at all. The fourth was a subtraction that
+cancels four digits and now prints its operands with `repr`.
+`worked_calculation_doc.py` printed the same uncapped synodic formula, and on
+N = 1 rows it explained a zero salvage credit as "the rig is used up exactly".
+Both are fixed. All four `.verify/baseline-1.40.0` cells and a repaired lunar
+row now check clean, and `--self-test` still fails a planted value. These are
+campaign scripts, so no `pipeline_version` moves and `master.py` is untouched.
+See
+[a checker run only on the best case](CLAUDE.md#a-checker-run-only-on-the-best-case-has-never-run-on-the-rest).
+
 ## master v1.43.0 / calc v1.27.0
 
 **A mission whose settled stack lands a fraction of a percent over its
