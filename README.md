@@ -250,7 +250,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | 1 | `modules/catalog.py` | 1.8.1 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
 | 2 | `modules/mineral_value.py` | 1.12.2 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.17.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
-| 4 | `modules/calc.py` | 1.26.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.27.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -1990,7 +1990,7 @@ best to deliver":
 | destination | cost / revenue | winner | median body |
 |---|---|---|---|
 | **`mars_surface`** | **1.0914x** | 2015 DS (X), Falcon Heavy (expendable) on iodine, aerocaptured, 2 missions | **2.0246x** |
-| `lunar_surface` | 2.9353x‡ | 2005 QP87 (X), Falcon Heavy (expendable) on iodine | 8.7376x |
+| `lunar_surface` | 2.9353x‡ | 2005 QP87 (X), Falcon Heavy (expendable) on iodine | 8.2537x |
 | `mars_orbit` | 4.5908x | 350751 (B), New Glenn on iodine | 13.9410x |
 | `cislunar` | 4.8379x | 2018 DT (M), above | 20.9073x |
 | `geo` | 6.8572x | 2016 GS2 (D), New Glenn on iodine | 92.9549x |
@@ -1999,13 +1999,11 @@ best to deliver":
 
 † At `max_fleet_ships` on every row, so the ladder's top rung, not an optimum.
 
-‡ mineral_value 1.12.1 (master v1.41.0) prices schreibersite at the Moon with
-the alloy it belongs to; 1.12.0 had left it at the base utility, which made it
-the dearest phase in a lunar hold. The full cell measured **2.9068x with 2018 DT**
-on the 1.12.0 table; the 1.12.1 figure is the cell's top 300 bodies re-run on
-the corrected table, and 2018 DT falls to 2.9996x. The median is the full
-cell's, which the sample did not move. See
-[master v1.41.0](versions.md#master-v1410--mineral_value-v1121).
+‡ Re-run over the full catalog at master v1.43.0 (calc 1.27.0, mineral_value
+1.12.2) on 2026-10-06. 2018 DT's 2.9068x at v1.40.0 rested on schreibersite
+being priced at the base utility on the Moon, which made it the dearest phase
+in the hold; with that corrected 2018 DT scores 2.9996x. See
+[the full cell](versions.md#the-full-lunar_surface-cell-at-this-release).
 
 🚨  **THE BEST CASE IN THE MODEL IS NOW 9% FROM BREAKEVEN, AT `mars_surface`,
 AND STILL NOTHING IS VIABLE.** The two surfaces went from fourth and fifth in
@@ -2021,6 +2019,16 @@ the Mars market is the shallowest in the model, which is why its winner is two
 missions and one ship; see [What a kilogram is worth](#what-a-kilogram-is-worth).
 The population, the invariants and the wall clocks are in
 [the six other destinations](versions.md#the-six-other-destinations-at-this-release-2026-10-0103).
+
+⚠️  **calc 1.27.0 changes the population and not, so far, the answer.** A
+mission whose settled launch stack came out a fraction of a percent over its
+vehicle used to be refused outright, and on samples of three of these cells
+that had put about two bodies in five on a worse mission than the one they
+could fly. It is re-solved with a little less payload now. Every best case
+above was unaffected on those samples; the six cells measured before it are
+calc 1.26.0 populations, and the `lunar_surface` row is the full cell re-run
+at this release. See
+[master v1.43.0](versions.md#master-v1430--calc-v1270).
 
 ⚠️  **Seven cells, one setting.** The raw and N = 1 cells have not been run on
 these inputs at any destination; every matrix below is an older model, and

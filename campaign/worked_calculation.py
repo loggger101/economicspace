@@ -2845,7 +2845,7 @@ def refinery_plant(C, hold, stay_yr):
     return hold / (stay_yr * rate)
 
 
-def mass_and_clock(C, B, DV, ratio):
+def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None):
     """The coupled sizing loop, then the mission actually flown.
 
     Seven quantities in one ring: payload sets the feed, the feed sets the dig
@@ -2915,6 +2915,9 @@ def mass_and_clock(C, B, DV, ratio):
         ep = _ep_stage(C, cas["m_prop"])
         trial_pay = min(cas["m_pay"], B["mineable"],
                         max(0.0, throughput - isru_feed))
+        # calc v1.27.0: a repair's payload ceiling; see the refusal below.
+        if cap is not None and trial_pay > cap:
+            trial_pay = cap
         if trial_pay <= 0:
             return refuse("no payload is left once the rig, the plant and the feed are paid")
         new_isru_prop = new_isru_feed = 0.0
@@ -3017,6 +3020,8 @@ def mass_and_clock(C, B, DV, ratio):
     ore_throughput = max(0.0, throughput - isru_feed)
     ore_mineable = max(0.0, B["mineable"] - isru_feed)
     demand = min(cas["m_pay"], ore_mineable)
+    if cap is not None and demand > cap:
+        demand = cap
     # ⚠️  THE THROUGHPUT CAP BOUNDS DIFFERENT THINGS IN THE TWO ORE STATES.
     # Concentrating means the rig digs FEED and flies product, so throughput
     # caps the feed below and not the payload here; not concentrating means the
@@ -3085,6 +3090,22 @@ def mass_and_clock(C, B, DV, ratio):
     m_tank_out = R["t"] * m_oprop
     m_launch = m_at + m_tank_out + m_oprop
     if m_launch > C["leo_cap"]:
+        # calc v1.27.0, `repair_settled_overshoot`: the settled plant made the
+        # stack heavier than the one the closed form was solved at, so the
+        # payload is re-solved at the settled hardware and the mission priced
+        # again with that as its ceiling.  Only for a run that did it: a row
+        # with no `settle_repairs` column predates the repair, and its run
+        # refused here.
+        if C.get("repair") and depth < 3:
+            refit = _cascade(C, R, hw, f_eff)
+            ceiling = refit["m_pay"] if refit else 0.0
+            if 0.0 < ceiling < m_pay:
+                # What the page needs to show the repair rather than assert
+                # it: the attempt that overshot, and the solve at its hardware.
+                over = {"m_pay": m_pay, "hw": hw, "f_eff": f_eff,
+                        "m_launch": m_launch, "refit": refit,
+                        "budget": R["budget"]}
+                return mass_and_clock(C, B, DV, ratio, ceiling, depth + 1, over)
         return refuse("the launch stack exceeds the vehicle's capacity to LEO")
 
     stay = dig_yr + DV["window_wait"]
@@ -3126,7 +3147,8 @@ def mass_and_clock(C, B, DV, ratio):
             "t_out": t_out, "t_back": t_back, "isru_prop": isru_prop,
             "isru_feed": isru_feed, "isru_water": isru_water,
             "liberated": liberated, "boiloff_factor": boiloff_factor,
-            "dv_ret_eff": dv_ret_eff}
+            "dv_ret_eff": dv_ret_eff, "repairs": depth, "payload_cap": cap,
+            "repair": attempt}
 
 
 # --------------------------------------------------------- periods and money
@@ -3619,10 +3641,19 @@ def concentration_sweep(C, B, DV):
         sys.exit("no mission closes on this body at any concentration ratio.\n"
                  "  The cascade refused because %s.%s" % (why, hint))
     best_r = min(live, key=lambda p: p[2]["ladder"]["best"]["obj"])[1]
+    # calc v1.27.0: refine around the best UNREPAIRED rung as well, when it is
+    # a different one, exactly as the model does; see its concentration
+    # search.  Without a repair the two are the same rung.
+    whole = [p for p in live if not p[2]["M"]["repairs"]]
+    old_r = (min(whole, key=lambda p: p[2]["ladder"]["best"]["obj"])[1]
+             if whole else None)
+    centres = ([old_r, best_r] if old_r is not None and old_r != best_r
+               else [best_r])
     step = r_max ** (1.0 / (steps - 1))
-    for ratio in (best_r / step ** 0.5, best_r * step ** 0.5):
-        if 1.0 <= ratio <= r_max:
-            priced.append(("refine", ratio, at(ratio)))
+    for centre in centres:
+        for ratio in (centre / step ** 0.5, centre * step ** 0.5):
+            if 1.0 <= ratio <= r_max:
+                priced.append(("refine", ratio, at(ratio)))
     winner = min((p for p in priced if p[2]),
                  key=lambda p: p[2]["ladder"]["best"]["obj"])
     return {"r_max": r_max, "step": step, "rungs": priced, "winner": winner}
@@ -3746,6 +3777,8 @@ def comparable(C, B, DV, M, P, ladder):
         "hardware_total_kg": M["hw"], "mining_duration_yr": M["dig_yr"],
         # calc v1.25.0; absent before it, and reported skipped then.
         "refinery_kg": M["refinery"], "refinery_power_w": M["refine_draw"],
+        # calc v1.27.0; absent before it, and reported skipped then.
+        "settle_repairs": M["repairs"],
         # The axes the cislunar cells could not exercise, each with a column of
         # its own so that turning one on is checked rather than assumed.  Every
         # one of them is exactly zero (or 1.0) on the mission shape that does
@@ -3890,6 +3923,11 @@ def build(archived, label, body=None, run_beneficiated=None):
     # refining deduction; see `gross_minerals`.  `price_parts` above was read
     # off the table before the switch, so it still says what Stage 2 wrote.
     C["refinery"] = run_refinery(archived)
+    # calc v1.27.0: whether the row's run trimmed an overshooting payload
+    # rather than refusing it.  The column exists only from that release, so
+    # an older row's run refused, whatever this process's config says.
+    C["repair"] = (archived is not None and "settle_repairs" in archived
+                   and bool(getattr(C["cfg"], "repair_settled_overshoot", False)))
     if C["refinery"]:
         tables["minerals"] = gross_minerals(tables["minerals"])
         C["minerals"] = tables["minerals"]

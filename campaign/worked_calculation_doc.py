@@ -1602,6 +1602,36 @@ def s_cascade(out):
          % (pct(0.25, 0), fmt(C["rho"], 2)), fmt(M["vol_cap"], 0)],
         ["rocket equation", "the closed form above", fmt(cas["m_pay"], 0)],
     ]
+    # calc v1.27.0, `repair_settled_overshoot`.  The first settle-up's stack
+    # overshot the vehicle, so the payload was re-solved at the hardware it
+    # settled on and the mission priced again under that ceiling.  Shown as
+    # the same closed form at that attempt's numbers, so it is derived on
+    # the page rather than asserted.
+    rep = M.get("repair")
+    repaired = []
+    if rep:
+        fit = rep["refit"]
+        repaired = [
+            ("m_launch,1", "= %s kg, against M_LEO = %s kg"
+             % (prec(rep["m_launch"], 12), prec(C["leo_cap"], 8)),
+             "the first settle-up's stack, at a payload of %s kg"
+             % prec(rep["m_pay"], 12)),
+            ("m_hw,1", "= %s kg" % prec(rep["hw"], 15),
+             "the hardware that stack settled on"),
+            ("m_cap", "= (budget - m_hw,1 - coef_1 d_0) / (coef_1 (1 + f_1) - 1)",
+             "the same closed form, at that hardware"),
+            ("", "= (%s - %s - %s * %s) / (%s * %s - 1)"
+             % (prec(rep["budget"], 12), prec(rep["hw"], 12),
+                prec(fit["coef"], 12), prec(fit["d0"], 8),
+                prec(fit["coef"], 12), prec(1.0 + rep["f_eff"], 12))),
+            ("", "= %s kg" % prec(fit["m_pay"], 15),
+             "the ceiling the mission is priced again under"),
+            ("m_pay", "= min(closed form, m_cap) = %s kg"
+             % prec(M["m_pay"], 15), "the payload flown"),
+        ]
+        caps_rows.append(["settle-up repair", "the closed form at the "
+                          "hardware the first stack settled on",
+                          fmt(fit["m_pay"], 0)])
     binds = min(caps_rows, key=lambda r: float(r[2].replace(",", "")))
     for r in caps_rows:
         if r is binds:
@@ -1717,6 +1747,19 @@ def s_cascade(out):
         deriv(constants),
         h(3, "That last pass, term by term"),
         deriv(closed_form),
+    ] + ([
+        h(3, "The stack overshot, so the payload was re-solved"),
+        para("The plant re-sized on the payload the loop carried came out "
+             "heavier than the plant that payload was solved at, and the "
+             "stack landed over the vehicle. The model does not refuse the "
+             "mission for that: it re-solves the payload at the hardware the "
+             "stack settled on, and prices the whole mission again under "
+             "that ceiling. A lighter payload never needs a heavier plant, "
+             "so the second stack fits. This run did it %s."
+             % {1: "once", 2: "twice"}.get(M["repairs"], "three times")),
+        deriv(repaired),
+    ] if rep else []) + [
+        h(3, "The feed, the water in the hold and the seal"),
         h(3, "The feed, the water in the hold and the seal"),
         deriv(feed_terms),
         h(3, "The hardware ledger"),
@@ -1739,8 +1782,8 @@ def s_cascade(out):
              "capacity exactly."
              % fmt(slack, 3)),
         h(3, "Which cap binds"),
-        para("Four ceilings stand over the payload and only the smallest of "
-             "them is the answer. Naming which one binds is the difference "
+        para("The ceilings below stand over the payload and only the "
+             "smallest of them is the answer. Naming which one binds is the difference "
              "between a result about this body and a result about the rig."),
         table(["cap", "what it is", "kg"], caps_rows),
     ]
