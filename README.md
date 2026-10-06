@@ -248,7 +248,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.8.1 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
-| 2 | `modules/mineral_value.py` | 1.12.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
+| 2 | `modules/mineral_value.py` | 1.12.1 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.17.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
 | 4 | `modules/calc.py` | 1.26.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
@@ -1990,7 +1990,7 @@ best to deliver":
 | destination | cost / revenue | winner | median body |
 |---|---|---|---|
 | **`mars_surface`** | **1.0914x** | 2015 DS (X), Falcon Heavy (expendable) on iodine, aerocaptured, 2 missions | **2.0246x** |
-| `lunar_surface` | 2.9068x | 2018 DT (M), Falcon Heavy (expendable) on iodine | 8.7376x |
+| `lunar_surface` | 2.9353x‡ | 2005 QP87 (X), Falcon Heavy (expendable) on iodine | 8.7376x |
 | `mars_orbit` | 4.5908x | 350751 (B), New Glenn on iodine | 13.9410x |
 | `cislunar` | 4.8379x | 2018 DT (M), above | 20.9073x |
 | `geo` | 6.8572x | 2016 GS2 (D), New Glenn on iodine | 92.9549x |
@@ -1998,6 +1998,14 @@ best to deliver":
 | `earth_surface` | 6,154.06x† | 2018 DT (M), Falcon Heavy (expendable) on iodine | 24,301.21x |
 
 † At `max_fleet_ships` on every row, so the ladder's top rung, not an optimum.
+
+‡ mineral_value 1.12.1 (master v1.41.0) prices schreibersite at the Moon with
+the alloy it belongs to; 1.12.0 had left it at the base utility, which made it
+the dearest phase in a lunar hold. The full cell measured **2.9068x with 2018 DT**
+on the 1.12.0 table; the 1.12.1 figure is the cell's top 300 bodies re-run on
+the corrected table, and 2018 DT falls to 2.9996x. The median is the full
+cell's, which the sample did not move. See
+[master v1.41.0](versions.md#master-v1410--mineral_value-v1121).
 
 🚨  **THE BEST CASE IN THE MODEL IS NOW 9% FROM BREAKEVEN, AT `mars_surface`,
 AND STILL NOTHING IS VIABLE.** The two surfaces went from fourth and fifth in
