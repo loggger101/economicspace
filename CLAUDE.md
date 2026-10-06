@@ -211,7 +211,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.8.1`, mineral_value `1.12.2`, transportation `1.17.0`,
-calc `1.26.0`, master `1.42.0` (the master version is a literal in
+calc `1.27.0`, master `1.43.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -4143,29 +4143,51 @@ to make the gross, so the "gross" of a floored row was the processing cost.
 Only one row in seven tables was floored (phosphorus at `leo`) and it moved
 nothing, but a flown refinery reads exactly that column.
 
-### A greedy fill is optimal only while every phase costs the same to carry
+### A tolerance in the loop must not be enforced as a cliff after it
 
-🚨  **OPEN, measured at master v1.42.0 and not fixed.** `optimal_payload_mix`
-fills the hold greedily by gross $/kg, and this file has called that
-"provably optimal" because the phases are divisible and priced per kg. It was,
-until calc `1.25.0` flew the refinery: each phase now brings its own refining
-energy, so its own array mass, and a phase that is valuable but expensive to
-refine can push the stack past the vehicle. The search then has no candidate
-that loads LESS of it, so the mission does not close and a far worse one wins.
+calc `1.27.0`, and it replaces an entry that diagnosed the same symptom
+wrongly. master v1.42.0 recorded "the payload knapsack ignores the flown
+refinery": body 552702 scored 291x with chromite in its hold and 20x without,
+and the refinery being off made it 14.2x, so the greedy fill looked guilty.
+**Tracing the refused candidate guard by guard said otherwise**: its good
+rungs were refused by the settle-up's `if m_launch > leo_cap: return None`,
+**0.09 to 0.16% over a 95-tonne vehicle**.
 
-Body 552702 at `lunar_surface`: 291x with chromite in the hold (its chromium
-made it the second most valuable phase), 20x once chromite's price fell to
-fourth, 14.2x with the refinery off. On the cislunar and lunar samples the
-refinery makes 141 and 188 rows over 1.5x worse WITH the payload halving, and
-takes 66 and 36 bodies out of the evaluable set, while **no row in either top
-300 moves by 1.5x**. So the headlines stand and the C- and S-type tail does
-not; the figures are in
-[master v1.42.0](versions.md#master-v1420--mineral_value-v1122).
+The sizing loop stops when every term is within 1% and carries the payload it
+solved at the previous pass's hardware (the entry on the stopping test below
+says why that is deliberate). The settle-up then re-sizes the plant at that
+payload; a little heavier, and the stack lands over the vehicle by less than
+the loop's own tolerance, and the whole candidate was thrown away. ✅
+`repair_settled_overshoot` re-solves the payload at the settled hardware and
+prices the candidate again under that ceiling; on three samples about two
+bodies in five had been scored on the wrong mission, and no headline moved.
 
-⚠️  **Do not read a refinery-on against refinery-off ratio as the size of the
-defect**: some of it is the refinery's real cost. And **a price that moves a
-feasibility boundary will move a population by more than the price**; the
-large swings in an A/B of a trace-metal price were this, not the price.
+⚠️  **A FIX THAT ONLY ADDS CANDIDATES MADE ROWS WORSE**, 23 of 1,840 at Mars by
+up to 5.3%, because the concentration search refines around its coarse winner
+and the coarse winner was now a repaired rung, so the ratio that used to win
+was never visited. Refining around the best UNREPAIRED rung as well closes it
+exactly: that rung is the old coarse winner. **Before shipping an "it can only
+help" change to a non-exhaustive search, check what it does to the search's
+neighbourhood, not only to its options.**
+
+🚨  **OPEN: THE SAME CLIFF, ONE PASS EARLIER, AND IT IS BIGGER.** Pass 1 solves
+the payload with no plant or electric stage aboard; pass 2 flies the stage
+sized for that payload, and refuses if the stack no longer closes. Body 2023
+TN102 converges at 5,762 kg with the refinery off and is refused at every ratio
+with its 65 kg plant on, so a fixed point exists and the iteration starts on
+the wrong side of it. That refusal is **74.3% of every candidate evaluation**
+at cislunar (`_closes_carrying_its_own_stage`'s own measurement), and the
+pre-filter prunes on it; its soundness argument is against the loop's
+iteration, not against the existence of a mission. Damping the loop is a
+population-wide model change, not a repair, so it waits for a decision. See
+[master v1.43.0](versions.md#master-v1430--calc-v1270).
+
+⚠️  **And the lesson about the misdiagnosis is the one this file keeps
+paying for: the A/B that turned a term OFF made the symptom go away, and that
+was read as locating the cause.** It located a term that made the cliff
+common. Only the trace of which `return None` fired could say which line was
+wrong. **When a candidate disappears, name the guard that refused it before
+naming the term that moved it.**
 
 ### A checker run only on the best case has never run on the rest
 
