@@ -210,8 +210,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.8.1`, mineral_value `1.12.3`, transportation `1.17.3`,
-calc `1.27.0`, master `1.45.0` (the master version is a literal in
+Current: catalog `1.8.1`, mineral_value `1.13.0`, transportation `1.18.0`,
+calc `1.27.0`, master `1.46.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -223,7 +223,8 @@ the delivered-price model changed (spacecost v0.4.0), and to `1.17.0` when
 every fairing volume was re-derived from a drawing (spacecost v0.5.0), and to
 `1.17.2` when twenty-three citations were corrected and no value moved
 (spacecost v0.5.2, carrying v0.5.1), and to `1.17.3` when four more were
-(spacecost v0.5.3). **So it follows a repin, and a repin follows it: the two
+(spacecost v0.5.3), and to `1.18.0` when four values were re-pinned to their
+sources (spacecost v0.6.0). **So it follows a repin, and a repin follows it: the two
 are one number in two repositories.**
 
 ℹ️  **TWENTY-FOUR stamps so far do NOT mean the numbers moved.** The rule
@@ -453,11 +454,12 @@ changed the delivered-price model, so Stage 2 and Stage 3 both re-price and no
 flag in this repo restores the old tables: reproducing a cell here needs the
 2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
 tables now frozen under `campaign/stage3/`. ⚠️  **The live
-`asteroid_pipeline/` has held spacecost `v0.5.0`'s tables since 2026-09-28,
-and the `data-2026-09-29c` catalog and a mineral_value 1.12.0 Stage 2 since
-2026-09-29** (the 1.10.0 and 1.11.0 Stage 2 tables are frozen under
-`campaign/stage2/mineral_value-1.10.0/` and `-1.11.0/`; the `v0.4.0` tables it held from
-2026-09-24 are frozen under `campaign/stage3/spacecost-0.4.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
+`asteroid_pipeline/` has held spacecost `v0.6.0`'s tables and a
+mineral_value 1.13.0 Stage 2 since 2026-10-06, and the `data-2026-09-29c`
+catalog since 2026-09-29** (the earlier Stage 2 tables are frozen under
+`campaign/stage2/mineral_value-*/`; the `v0.4.0` tables it held from
+2026-09-24 and the `v0.5.0` ones from 2026-09-28 are frozen under
+`campaign/stage3/spacecost-0.4.0/` and `-0.5.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
 a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
 grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
 default configuration measured the repricing at a median **1.58x worse**
@@ -1735,7 +1737,7 @@ or more distinctive numbers across two files:
 | the base in-space utility profile itself: water 1.00, structural metals 0.70, silicates 0.25, carbon 0.40, and the Mars overrides against it | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
 | the insurance premiums: 2.4-4.3% of total cost against 5.5-9.6% of the answer, and liability alone at 0.03-0.05% | [What the model deliberately does not charge for](README.md#what-the-model-deliberately-does-not-charge-for) | "The corrections the model accumulated" |
 | the median raw cislunar cadence, **1.384 yr**, used to argue the ceilings bind where the results actually sit | [What the model charges for](README.md#what-the-model-charges-for) | "The rig's two bounds, and the cadence, at every destination (2026-09)"; the cadence reproduces unchanged, the fleet median beside it did not |
-| the in-space absorption ceilings: LEO **500 t/yr**, cislunar 100 t, `geo` 40 t/yr | [What the model charges for](README.md#what-the-model-charges-for) | "Model assumptions that are load-bearing" |
+| the in-space absorption ceilings: LEO **500 t/yr**, cislunar 100 t, `geo` 44.6 t/yr (40 until mineral_value 1.13.0) | [What the model charges for](README.md#what-the-model-charges-for) | "Model assumptions that are load-bearing" |
 | 🚨  **the four cislunar cell objectives, now 15.3937 / 9.5435 / 14.1071 / 6.6622** -- the project's headline answer, and the pair this register missed for longest | [Current results](README.md#current-results-the-complete-28-cell-matrix), **and again** under [Programme scale](README.md#programme-scale) | the 28-cell matrix section |
 | 🚨  **the winner-against-population table: 39.4 / 39.5 / -8.4, 66.1 / 63.8 / -36.5, 77.7 / -6.5** -- the 2026-09 campaign's most reusable finding, and deliberately in both files because README needs the result and this file needs the warning | [The winner moved far more than the population did](README.md#the-winner-moved-far-more-than-the-population-did) | the 28-cell matrix section |
 | the 28-cell wall clocks, 947 / 2,888 / 4,967 / 9,878 s at cislunar | [Beneficiation](README.md#beneficiation) | **this row itself**, which said "not quoted here" while quoting all four until 2026-09-15; check 9 now pins README's whole seven-row table AND this row to `MEASURED_DEST_SECONDS` |
@@ -1921,7 +1923,7 @@ v1.3.0). At an in-space destination a kilogram is worth its terrestrial price
 **plus** `in_space_utility × launch-cost-avoided`, less the cost of refining
 it on site. The *plus* is the point, v1.3.0 briefly replaced the terrestrial
 price instead of adding to it, which quietly threw the material itself away.
-Bulk iron goes from $0.50/kg to ~$1,460/kg in LEO (~$2,747 before spacecost
+Bulk iron goes from $0.32/kg to ~$1,460/kg in LEO (~$2,747 before spacecost
 `v0.4.0` moved the LEO anchor). The in-space prices are
 derived through the rocket equation in `delivered_cost_usd_per_kg()`, not
 tabulated, but the utility factors are *engineering judgements*, and they
@@ -5545,7 +5547,7 @@ passing, which is exactly why nobody deletes them.
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
-[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.5.3`.
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.6.0`.
 **Do not state the row count here**; the adapter's ready banner prints it on
 every import, and this sentence carried "all 141 of them" into a release that
 added a whole table.

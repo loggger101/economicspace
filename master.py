@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.45.0)
+"""Master Asteroid Profitability Pipeline (1.46.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -129,7 +129,7 @@ _MASTER_REQUIRED = [
 # Stage 1 installs no package: it downloads a pinned catalog RELEASE, which is
 # data, not code.  Its pin is `CatalogConfig.catalog_release`.
 _MASTER_PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.5.3",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.6.0",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -618,7 +618,7 @@ class MineralValueConfig:
     #                     exists.  Favours water- and metal-rich bulk.
     #   "geo"           - sold at a geostationary servicing depot
     #                     ($8,046/kg).  The only destination in this model
-    #                     with a paying customer TODAY: ~550 active
+    #                     with a paying customer TODAY: ~610 active
     #                     satellites, and MEV-1 / MEV-2 have already docked
     #                     with commercial GEO spacecraft.  A narrow market
     #                     though; see IN_SPACE_UTILITY_BY_DESTINATION, where
@@ -690,7 +690,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.12.3"
+    pipeline_version: str = "1.13.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -1417,7 +1417,7 @@ ANNUAL_WORLD_PRODUCTION_KG: Dict[str, float] = {
     "gold":           3.0e6,      # ~3,000 t
     "silver":         2.6e7,      # ~26,000 t
     # Base metals; large markets, saturation effectively never binds
-    "cobalt":         2.3e8,
+    "cobalt":         3.1e8,      # ~310,000 t mined, 2025 (USGS MCS 2026)
     "copper":         2.2e10,
     "nickel":         3.6e9,
     "iron":           1.3e12,     # world pig-iron production
@@ -1431,7 +1431,7 @@ ANNUAL_WORLD_PRODUCTION_KG: Dict[str, float] = {
     "chromium":       4.4e10,     # ~44 Mt chromite ore, the market it trades in
     "phosphorus":     1.0e9,      # ~1 Mt elemental P4 (phosphate rock is 240 Mt)
     "sulfur":         8.3e10,     # ~83 Mt
-    "ammonia":        1.8e11,     # ~150 Mt N as ammonia
+    "ammonia":        1.5e11,     # ~150 Mt N as ammonia
     "carbon dioxide": 2.3e11,     # ~230 Mt merchant CO2
     # Effectively unlimited on Earth
     "water":          1.0e15,
@@ -1455,14 +1455,17 @@ _UNLIMITED_MARKET_KG = 1.0e15
 # pay the same price for the 400th tonne as for the first.
 IN_SPACE_ANNUAL_DEMAND_KG: Dict[str, float] = {
     "leo":           500_000.0,
-    # v1.9.0.  The only row here anchored on hardware that EXISTS: ~550 active
+    # v1.9.0.  The only row here anchored on hardware that EXISTS: active
     # geostationary satellites at roughly 70 kg/yr of station-keeping
-    # propellant each.  That makes it the smallest in-space market in the
+    # propellant each.  v1.13.0 recounts them: 613 active payloads in the
+    # operational band (McDowell, GCAT "Space Activities in 2025", Table 22,
+    # Jan 2026) where 1.9.0 had ~550, at the 72.7 kg/yr per satellite that
+    # 40,000 / 550 implied.  That makes it the smallest in-space market in the
     # table and the one most likely to saturate, which is the point of having
     # it: `earth_surface` is the destination where saturation is numerically
     # inert and 100% of rows run to the fleet ceiling, and nothing anchored
     # the other end.
-    "geo":            40_000.0,
+    "geo":            44_600.0,
     # Anchors for when these two are revisited, not a re-pin: Kornuta et al.
     # 2019 (Commercial Lunar Propellant Architecture) put near-term demand for
     # lunar-derived propellant at 450 t/yr, ~4.5x the cislunar row, with 100
@@ -1933,10 +1936,12 @@ MINERAL_REFERENCE: List[dict] = [
         "yfinance_ticker":       None,           # iron ore (TIO=F) is CNY/MT, skip
         "yfinance_unit":         None,
         "metals_dev_key":        None,
-        "ref_price_usd_per_kg":  0.50,           # steel scrap / refined iron metal
+        "ref_price_usd_per_kg":  0.319,          # USGS No. 1 HMS composite, 2025
         "ref_price_date":        _REF_PRICE_DATE,
-        "notes":                 "Priced as refined steel scrap (Q1 2026 mid-range "
-                                 "$343/MT US, $400/MT global — $0.34-0.50/kg).  "
+        "notes":                 "Priced as refined steel scrap: No. 1 heavy melting "
+                                 "composite, delivered, $319/t average for 2025 "
+                                 "(USGS MCS 2026), within its $303-366/t monthly "
+                                 "range for Jan-Nov 2025.  "
                                  "Asteroid mining produces refined iron from "
                                  "nickel-iron alloy, NOT iron ore — so the "
                                  "relevant sale price is steel scrap / refined "
@@ -1950,9 +1955,10 @@ MINERAL_REFERENCE: List[dict] = [
         "yfinance_ticker":       None,           # LME, not on yfinance
         "yfinance_unit":         None,
         "metals_dev_key":        "nickel",
-        "ref_price_usd_per_kg":  16.50,          # LME nickel ~$16 500/tonne
+        "ref_price_usd_per_kg":  18.806,         # World Bank, May 2026 average
         "ref_price_date":        _REF_PRICE_DATE,
-        "notes":                 "LME 3-month nickel.",
+        "notes":                 "LME nickel.  Reference $18,806/t, the World Bank "
+                                 "Pink Sheet monthly average for May 2026.",
     },
     {   # ── Cobalt ───────────────────────────────────────────────────────
         "name":                  "cobalt",
@@ -1974,9 +1980,11 @@ MINERAL_REFERENCE: List[dict] = [
         "yfinance_ticker":       "HG=F",         # COMEX copper, USD / lb
         "yfinance_unit":         "lb",
         "metals_dev_key":        "copper",
-        "ref_price_usd_per_kg":  8.80,
+        "ref_price_usd_per_kg":  13.543,
         "ref_price_date":        _REF_PRICE_DATE,
-        "notes":                 "COMEX copper front-month.",
+        "notes":                 "COMEX copper front-month.  Reference $13,543/t, "
+                                 "the World Bank Pink Sheet monthly average for "
+                                 "May 2026.",
     },
     {   # ── Gold ─────────────────────────────────────────────────────────
         "name":                  "gold",
@@ -2000,9 +2008,10 @@ MINERAL_REFERENCE: List[dict] = [
         "yfinance_ticker":       "SI=F",         # COMEX silver, USD / troy oz
         "yfinance_unit":         "troy_oz",
         "metals_dev_key":        "silver",
-        "ref_price_usd_per_kg":  950.0,
+        "ref_price_usd_per_kg":  2_436.5,
         "ref_price_date":        _REF_PRICE_DATE,
-        "notes":                 "COMEX silver front-month.",
+        "notes":                 "COMEX silver front-month.  Reference $2,436.5/kg "
+                                 "= $75.78/oz, the LBMA silver price on 2026-05-29.",
     },
     {   # ── Platinum ─────────────────────────────────────────────────────
         "name":                  "platinum",
@@ -2012,11 +2021,11 @@ MINERAL_REFERENCE: List[dict] = [
         "yfinance_ticker":       "PL=F",         # NYMEX platinum, USD / troy oz
         "yfinance_unit":         "troy_oz",
         "metals_dev_key":        "platinum",
-        "ref_price_usd_per_kg":  45_000.0,       # ~$1,400/oz (Heraeus 2026 mid)
+        "ref_price_usd_per_kg":  61_472.2,       # $1,912/oz (2026-05-29 LBMA)
         "ref_price_date":        _REF_PRICE_DATE,
-        "notes":                 "NYMEX platinum front-month.  Reference $45k/kg = "
-                                 "$1,400/oz, mid of Heraeus 2026 forecast "
-                                 "$1,300-$1,800/oz.",
+        "notes":                 "NYMEX platinum front-month.  Reference $61,472/kg "
+                                 "= $1,912/oz, the LBMA platinum price on "
+                                 "2026-05-29.",
     },
     {   # ── Palladium ────────────────────────────────────────────────────
         "name":                  "palladium",
@@ -2053,9 +2062,13 @@ MINERAL_REFERENCE: List[dict] = [
         "yfinance_ticker":       None,
         "yfinance_unit":         None,
         "metals_dev_key":        "iridium",
-        "ref_price_usd_per_kg":  160_000.0,
+        "ref_price_usd_per_kg":  257_206.0,      # $8,000/oz (JM, Q1 2026)
         "ref_price_date":        _REF_PRICE_DATE,
-        "notes":                 "OTC quote.  Trace PGM in iron-meteorite analogues.",
+        "notes":                 "OTC quote.  Reference $257,206/kg = $8,000/oz, "
+                                 "the Q1-2026 all-time high in the Johnson Matthey "
+                                 "PGM Market Report (May 2026), the latest JM base "
+                                 "price published before this row's date.  Trace "
+                                 "PGM in iron-meteorite analogues.",
     },
     {   # ── Ruthenium ────────────────────────────────────────────────────
         "name":                  "ruthenium",
@@ -2065,9 +2078,12 @@ MINERAL_REFERENCE: List[dict] = [
         "yfinance_ticker":       None,
         "yfinance_unit":         None,
         "metals_dev_key":        "ruthenium",
-        "ref_price_usd_per_kg":  16_000.0,
+        "ref_price_usd_per_kg":  56_263.8,       # $1,750/oz (JM, Q1 2026)
         "ref_price_date":        _REF_PRICE_DATE,
-        "notes":                 "OTC quote.  Trace PGM.",
+        "notes":                 "OTC quote.  Reference $56,264/kg = $1,750/oz, the "
+                                 "Q1-2026 all-time high in the Johnson Matthey PGM "
+                                 "Market Report (May 2026), as for iridium; JM's "
+                                 "end-2025 record was $1,275/oz.  Trace PGM.",
     },
     {   # ── Osmium ───────────────────────────────────────────────────────
         "name":                  "osmium",
@@ -2136,12 +2152,14 @@ MINERAL_REFERENCE: List[dict] = [
     _new_element("chromium", "Cr", 7.19, 11.00,
                  "Aluminothermic chromium metal, ~$10-12/kg (USGS MCS 2025 "
                  "carries ferrochrome and metal).  Stainless alloying."),
-    _new_element("titanium", "Ti", 4.51, 9.00,
-                 "Titanium sponge, ~$7-10/kg (USGS MCS 2025 import unit "
-                 "value).  Structural."),
-    _new_element("gallium", "Ga", 5.91, 600.0,
-                 "High-purity gallium, 2024 ~$500-700/kg after China's export "
-                 "controls (USGS MCS 2025).  Iron meteorites carry 2-100 ppm."),
+    _new_element("titanium", "Ti", 4.51, 13.00,
+                 "Titanium sponge, $13/kg in 2024 and $10.6-12.4/kg in "
+                 "2020-2023 (USGS MCS 2025, landed duty-paid import value).  "
+                 "Structural."),
+    _new_element("gallium", "Ga", 5.91, 500.0,
+                 "High-purity refined gallium, $500/kg in 2024 and $450-625/kg "
+                 "over 2020-2024 (USGS MCS 2025, average unit value of "
+                 "imports).  Iron meteorites carry 2-100 ppm."),
     _new_element("germanium", "Ge", 5.32, 2500.0,
                  "Zone-refined germanium, 2024 ~$2,000-3,000/kg (USGS MCS "
                  "2025).  Siderophile: iron meteorites carry 0.1-500 ppm."),
@@ -2161,9 +2179,10 @@ MINERAL_REFERENCE: List[dict] = [
                  "Industrial liquid CO2, ~$50-150/t; not a USGS commodity.  "
                  "Solid density.  In space: the carbon feed for Sabatier "
                  "methane and a life-support buffer gas."),
-    _new_element("ammonia", "NH3", 0.82, 0.45,
-                 "Anhydrous ammonia, US Gulf ~$450/t in 2024 (USGS MCS 2025 "
-                 "nitrogen).  Solid density.  In space: nitrogen for "
+    _new_element("ammonia", "NH3", 0.82, 0.485,
+                 "Anhydrous ammonia, US Gulf FOB $440 per SHORT ton in 2024 "
+                 "(USGS MCS 2025 nitrogen) = $485 per metric ton.  Solid "
+                 "density.  In space: nitrogen for "
                  "atmospheres, fertiliser, and resistojet propellant."),
 
     # ══════════════════════════════════════════════════════════════════════
@@ -2784,8 +2803,8 @@ def apply_delivery_destination(
     See in_space_price_usd_per_kg for the rule.  Two consequences worth being
     explicit about, because they are the whole point of the field:
 
-      • Bulk material becomes enormously more valuable.  Iron is worth $0.50/kg
-        on Earth and ~$2,978/kg in LEO, because a kilogram of structural metal
+      • Bulk material becomes enormously more valuable.  Iron is worth $0.32/kg
+        on Earth and ~$1,460/kg in LEO, because a kilogram of structural metal
         already in orbit is a kilogram nobody has to launch.
       • Precious metals lose their in-space premium but keep their value.
         Nobody in orbit wants platinum, so it is priced by shipping it down:
@@ -3292,7 +3311,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.17.3"
+    pipeline_version: str = "1.18.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 TRANSPORT_CONFIG = TransportConfig()
@@ -13521,7 +13540,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.45.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.46.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
