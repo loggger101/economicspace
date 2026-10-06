@@ -2050,13 +2050,24 @@ def part_searches(S, out):
     if C["beneficiated"]:
         best_name, best_frac, _best_price = max(C["phases"],
                                                 key=lambda ph: ph[2])
-        S.step("r_max", "r_max", "saturation ratio",
-               "1 / (f_best * eps_rec), f_best being the fraction of the "
-               "best-PRICED phase (%s) and not of the commonest" % best_name,
-               "1 / (%s * %s)" % (P(best_frac), P(C["recovery"])),
-               sweep["r_max"], "-", ["eps_rec"],
-               "above this the hold is pure best-phase and grade stops "
-               "improving, while the costs do not")
+        # The search is capped at `max_concentration_ratio`.  This step wrote
+        # the uncapped formula until 2026-10-05, when the v1.40.0 mars_surface
+        # winner became the first best case whose cap binds, and `--check`
+        # caught "1 / (0.00477 * 0.9)" printed beside 50.
+        S.put("r_cap", "r_cap", "concentration ratio ceiling",
+              C["cfg"].max_concentration_ratio, "-",
+              cite_config("max_concentration_ratio"))
+        S.step("r_max", "r_max", "saturation ratio, capped",
+               "max(1, min(1 / (f_best * eps_rec), r_cap)), f_best being the "
+               "fraction of the best-PRICED phase (%s) and not of the "
+               "commonest" % best_name,
+               "max(1, min(1 / (%s * %s), %s))"
+               % (P(best_frac), P(C["recovery"]),
+                  P(C["cfg"].max_concentration_ratio)),
+               sweep["r_max"], "-", ["eps_rec", "r_cap"],
+               "above the body's own ratio the hold is pure best-phase and "
+               "grade stops improving, while the costs do not; the cap "
+               "binds where that ratio is larger")
         S.step("r_step", "step", "the coarse ladder's geometric step",
                "r_max ^ (1 / (steps - 1))",
                "%s ^ (1 / %s)"

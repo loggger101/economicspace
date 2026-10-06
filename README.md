@@ -1981,9 +1981,42 @@ a kilogram sold as minerals. The decomposition, the population and the
 invariants are in
 [the v1.40.0 default cell](versions.md#the-full-catalog-default-cell-at-this-release-2026-09-30).
 
-⚠️  **It is one cell.** The other three cislunar cells and the six other
-destinations have not been run on these inputs; every matrix below is an older
-model, and says which.
+#### Every destination at this release: Mars surface is now the best case
+
+The six other destinations' default cells were run on the same inputs on
+2026-10-01/03, so the seven together are the current answer to "where is it
+best to deliver":
+
+| destination | cost / revenue | winner | median body |
+|---|---|---|---|
+| **`mars_surface`** | **1.0914x** | 2015 DS (X), Falcon Heavy (expendable) on iodine, aerocaptured, 2 missions | **2.0246x** |
+| `lunar_surface` | 2.9068x | 2018 DT (M), Falcon Heavy (expendable) on iodine | 8.7376x |
+| `mars_orbit` | 4.5908x | 350751 (B), New Glenn on iodine | 13.9410x |
+| `cislunar` | 4.8379x | 2018 DT (M), above | 20.9073x |
+| `geo` | 6.8572x | 2016 GS2 (D), New Glenn on iodine | 92.9549x |
+| `leo` | 17.0106x | 2005 QP87 (X), Falcon Heavy (expendable) on iodine | 60.4780x |
+| `earth_surface` | 6,154.06x† | 2018 DT (M), Falcon Heavy (expendable) on iodine | 24,301.21x |
+
+† At `max_fleet_ships` on every row, so the ladder's top rung, not an optimum.
+
+🚨  **THE BEST CASE IN THE MODEL IS NOW 9% FROM BREAKEVEN, AT `mars_surface`,
+AND STILL NOTHING IS VIABLE.** The two surfaces went from fourth and fifth in
+the 2026-09 campaign to first and second, and the reason is the delivered
+price rather than the asteroids: spacecost `v0.4.0` charges for building the
+lander and aeroshell a delivery chain expends, which made a kilogram on the
+surface of Mars about four times as valuable to replace and one on the Moon
+twice, while the cheaper LEO anchor took 36-47% off every orbit. Sorted by how
+far that price moved, the in-space destinations fall in exactly the order of
+the new ranking, and `leo`, which lost the most, is the one destination that
+got worse. ⚠️  **The surface prices are marginal-transport lower bounds**, and
+the Mars market is the shallowest in the model, which is why its winner is two
+missions and one ship; see [What a kilogram is worth](#what-a-kilogram-is-worth).
+The population, the invariants and the wall clocks are in
+[the six other destinations](versions.md#the-six-other-destinations-at-this-release-2026-10-0103).
+
+⚠️  **Seven cells, one setting.** The raw and N = 1 cells have not been run on
+these inputs at any destination; every matrix below is an older model, and
+says which.
 
 ### Current results: the complete 28-cell matrix
 
@@ -2060,10 +2093,11 @@ Evaluable rows, raw / beneficiated: 650,921 / 660,253 (`cislunar`), 821,078 /
 (`leo`), 784,242 / 912,846 (`earth_surface`). The programme search never changes
 the evaluable set, at any destination.
 
-**Cislunar is still the best case**, at 6.6622× on the default cell, but the
-margin is now narrow: `mars_orbit` is 7.3681×, within 11%. Still **zero viable
-missions anywhere**: the best cell in the entire model is a factor of 6.7 from
-breakeven, and the project's headline is unchanged.
+**At calc 1.21.2, cislunar was the best case**, at 6.6622× on the default
+cell, with `mars_orbit` within 11% at 7.3681×. ⚠️  **It is not now**: on
+today's inputs `mars_surface` leads and cislunar is fourth; see
+[every destination at this release](#every-destination-at-this-release-mars-surface-is-now-the-best-case).
+Still **zero viable missions anywhere**, then and now.
 
 🚨  **THIS MATRIX IS NOT COMPARABLE CELL-FOR-CELL WITH THE 20-CELL ONE IT
 REPLACES.** Four things moved at once: two new destinations, `market_model` from
@@ -2310,15 +2344,15 @@ Stated plainly so results aren't over-read:
 
 - **Nothing is viable, in any configuration.** Zero asteroids turn a profit on
   a default run, and that is the honest answer rather than a bug. Fixed costs
-  (development NRE, autonomy NRE, rig, capsule, contingency, WACC) run to
-  billions, while the best bulk material is worth a few dollars per kg. The
-  best case the model can reach, `cislunar` delivery plus beneficiation plus a
-  searched programme, still comes in **~13× short** (**13.1443×**, full
-  catalog, calc v1.17.7; **20.5895×** at a single mission). There is no "don't
+  (development NRE, autonomy NRE, rig, capsule, contingency) run to
+  billions, while the best bulk material is worth a few dollars per kg on
+  Earth. The best case the model reaches today, `mars_surface` delivery plus
+  beneficiation plus a searched programme, comes within 9% of breakeven (see
+  [every destination at this release](#every-destination-at-this-release-mars-surface-is-now-the-best-case));
+  it was `cislunar` at **13.1443×** on calc v1.17.7, and the change is the
+  delivered price of a kilogram on Mars, not the asteroids. There is no "don't
   fly" option, so the ranking is really *which target loses least*.
-  (This was `mars_surface` at ~25× until mineral_value v1.7.0 priced the local
-  resources a planetary surface already has; Mars is now the *worst* of the
-  four in-space destinations at 74.6748× raw.) **Scale does not rescue it**,
+  **Scale does not rescue it**,
   and since v1.14.0 it does not even help monotonically, market saturation
   sees the programme's concurrent output, so the optimum programme size is
   interior. Searching it per body is worth about 40%, which is the difference
