@@ -210,8 +210,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.8.1`, mineral_value `1.12.0`, transportation `1.17.0`,
-calc `1.26.0`, master `1.40.0` (the master version is a literal in
+Current: catalog `1.8.1`, mineral_value `1.12.1`, transportation `1.17.0`,
+calc `1.26.0`, master `1.41.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -4117,6 +4117,31 @@ every mineral that has yields, and the verification sheet registers each and a
 cislunar the alloy's own row beats its blend by a fraction of a percent, so
 that edit moves every metal body in every archived cell while looking like a
 tidy de-duplication.
+
+### A family stated in a comment is split by the first override that forgets a member
+
+mineral_value `1.12.1`. The utility table prices phases "as" the row they
+belong with -- the alloys as nickel-iron, the sulfides as troilite -- and says
+so in comments, and every destination block grows by hand. `lunar_surface`
+discounted nickel-iron, awaruite and the four detailed alloys for competition
+with regolith iron and never named schreibersite, which "sits with the alloy",
+so it fell through to the base 0.70 and was **the dearest phase in a lunar
+hold**: the purity bound and the concentration ceiling read it on every body
+carrying it, and it was the Moon's winner that moved when it was fixed.
+
+✅  **The families are asserted at import now (`_UTILITY_FAMILIES`), at every
+destination**, beside the assertion that overrides run downward, and the new
+one was proved by deleting the fix and watching it name `lunar_surface`. **A
+rule a table states in comments and grows by hand is a rule waiting for the
+row that forgets it**; the same audit found the floor below by recomputing
+every row from the function that forms it, which is the cheap version of
+this check for any derived table.
+
+⚠️  **A floor applied before an add-back is not a floor on the sum.** Stage 2
+floored a negative net price at zero and then added the processing cost back
+to make the gross, so the "gross" of a floored row was the processing cost.
+Only one row in seven tables was floored (phosphorus at `leo`) and it moved
+nothing, but a flown refinery reads exactly that column.
 
 ### A checker run only on the best case has never run on the rest
 

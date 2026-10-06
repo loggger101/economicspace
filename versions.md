@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.41.0 / mineral_value v1.12.1](#master-v1410--mineral_value-v1121)
 - [master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260)
 - [master v1.39.0 / calc v1.25.0](#master-v1390--calc-v1250)
 - [master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240)
@@ -92,10 +93,10 @@ one that does not say is not to be used.
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
-| 2 | `modules/mineral_value.py` | **1.12.0** | v1.12.0, thirteen minerals for the detailed phases: three Fe-Ni alloys derived from the nickel-iron row, cohenite, five sulfides, two phosphates and two CAI oxides |
+| 2 | `modules/mineral_value.py` | **1.12.1** | v1.12.1, schreibersite priced with the alloy at `lunar_surface`, and a floored row's gross price written as the gross; utility families asserted at import |
 | 3 | `modules/transportation.py` | **1.17.0** | v1.17.0, every fairing volume derived from a cited drawing or left blank with a reason: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.26.0** | v1.26.0, the detailed phases are read (`model_detailed_phases`, default on), with the intergrown Fe-Ni alloys sold as one product |
-| - | `master.py` | **1.40.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.41.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -167,6 +168,142 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.41.0 / mineral_value v1.12.1
+
+**Every Stage 2 price was held to the rule that forms it, at every
+destination, and two were wrong.** An audit of the seven 1.12.0 tables (the
+ones the v1.40.0 cells read, frozen under `campaign/stage2/mineral_value-1.12.0/`)
+recomputed each row from the module's own `in_space_price_usd_per_kg` and
+checked the utility table against the families its comments state. What held:
+
+- **the pricing rule reproduces all 354 in-space rows bit-exact**, price and
+  route both, and `earth_surface` carries the terrestrial price on every
+  priced row;
+- **all 33 phases Stage 1 can put in a hold have a Stage 2 row**, across both
+  `comp_phases` and `comp_phases_detailed`, and every element a `yields_json`
+  names is a row;
+- **no phase is worth $0 at any destination** both as it is and taken apart;
+- every row has a market ceiling, and every commodity a market class (an
+  import-time assertion since 1.7.1);
+- the terrestrial prices are plausible for the quote date: gold $134,240/kg
+  ($4,175.30/oz), platinum $55,087, palladium $38,983, silver $1,970,
+  copper $14.66, with the reference-only rows at USGS MCS order of magnitude.
+
+The twenty "unpriced" rows at `earth_surface` (nickel-iron, troilite, the
+detailed alloys and sulfides, the PGM ores) are by design: they have no
+market as a mineral, carry `NaN`, and Stage 4 values them by their yields.
+
+### What was wrong
+
+| | where | was | is |
+|---|---|---|---|
+| **schreibersite's utility** | `lunar_surface` | 0.70, the base | **0.45**, as every Fe-Ni phase there |
+| **a floored row's gross price** | `leo` phosphorus | 248.67 $/kg | **244.40**, terrestrial + 0.10 x launch cost avoided |
+
+🚨  **SCHREIBERSITE "SITS WITH THE ALLOY" AND WAS THE ONE ALLOY PHASE LEFT
+OUT AT THE MOON.** The base table says so and `geo` (0.15) and `mars_surface`
+(0.40) both price it as nickel-iron; the `lunar_surface` block discounted
+nickel-iron, awaruite and the four detailed alloys to 0.45 for competition
+with regolith iron, and never named schreibersite, so it fell through to 0.70.
+At $29,608/kg it was **the dearest phase in a lunar hold**, which made it the
+phase the purity bound and the concentration ceiling read on every body that
+carries it. Now $18,949. A new import-time assertion, `_UTILITY_FAMILIES`,
+holds each family to one level at every destination; it fails on the 1.12.0
+table, naming `lunar_surface` and the alloy.
+
+⚠️  **THE FLOOR WAS IN THE GROSS PRICE, NOT THE NET.** A commodity whose net
+in-space value is negative still routes "used in space" when shipping it down
+is worse, and its price is floored at 0.0. `price_before_processing_usd_per_kg`
+was then written as that floor plus the processing cost, which is the
+processing cost: 248.67 for phosphorus at `leo`, where the gross is 244.40. A
+flown refinery (calc 1.25.0) values the hold at the gross column, so it was
+over-reading by the refinery cost it was meant to replace. Floored rows now
+take the gross itself; **every unfloored row is written exactly as before**
+(net + processing), so no other price moves by even a ULP. Phosphorus at `leo`
+is the only floored row in the seven tables.
+
+### What it moves
+
+The tables were rebuilt by **replaying the 1.12.0 cislunar table's five
+recorded quotes**, no network, and diffed against the 1.12.0 tables by row
+name:
+
+| table | cells that differ, beside the stamp and date |
+|---|---|
+| `cislunar` | **0** |
+| `lunar_surface` | schreibersite's utility, price, gross and basis |
+| `leo` | phosphorus's gross |
+| `geo`, `earth_surface`, `mars_surface`, `mars_orbit` | silver's quote, by one ULP |
+
+⚠️  **The silver ULP is the 1.12.0 replay's, not this release's.** The
+destination tables were replayed from quotes read with pandas' default float
+parser, which returned silver as `1969.55468079172` where the live table
+recorded `1969.5546807917196`; the replay here reads `round_trip`, so silver
+is the recorded quote again. It is worth $0 at every in-space destination
+(the downleg exceeds it), so it is one ULP of one trace metal at
+`earth_surface` and nothing anywhere else.
+
+Measured in Stage 4 on a sample of each affected destination: the archived
+v1.40.0 cell's **top 300 bodies plus a 3,000-row stride**, run with the
+1.12.0 and the 1.12.1 table, `--preset full`. ✅  **The 1.12.0 runs reproduce
+the archived rows in every model column** (the two Stage 1 columns that differ,
+`diameter_km` and `estimated_mass_kg`, are within 2.7e-16, the sample having
+been written through the default float parser), which is what makes the
+comparison a measurement rather than a second model.
+
+| | `lunar_surface` | `leo` |
+|---|---|---|
+| rows paired | 1,392 | 1,770 |
+| moved | **101** (76 X, 11 M, 14 other X-complex): 96 worse, 5 better | **0** |
+| median `1 - r` | +0.00% | +0.00% |
+| winner, 1.12.0 | 2018 DT (M), 2.9068x | 2005 QP87 (X), 17.0106x |
+| **winner, 1.12.1** | **2005 QP87 (X), 2.9353x** | 2005 QP87 (X), 17.0106x, the same float |
+
+✅  **`leo` is inert by proof, not only on the sample.** Every phase Stage 1
+writes was valued through Stage 4's `_phase_value` on both tables, gross
+prices on, at PGM enrichment 1, 1.5, 2 and 3: 128 values, none moved: no phase's
+value at `leo` comes through phosphorus's gross. The same comparison at `lunar_surface` moves exactly one phase,
+schreibersite, which is the control that says it can.
+
+🚨  **THE `lunar_surface` WINNER CHANGES, AND 2018 DT FALLS TO 2.9996x.** It
+was the best case at the Moon on a phase overpriced by half again. The new
+leader is 2005 QP87 (X), Falcon Heavy (expendable) on iodine, N = 3,
+concentrated 3.11x, then 2018 LQ2 (Xn) 2.9627x, 762379 (X) 2.9725x and 2013
+EC20 (X) 2.9736x. ⚠️  **This is a sample, and it covers the winner by a
+bound rather than by a run**: a body outside the archived top 300 sat at
+4.0193x or worse and would need to improve by 27% to lead, against a largest
+improvement of 5.03% on the sample. The full `lunar_surface` cell has not
+been re-run at this release.
+
+⚠️  **Some bodies got BETTER from a price that only fell**, by up to 5.03%,
+and one got 2.02x worse. Both are
+[splitting a phase splits every bound that reads ONE phase](CLAUDE.md#splitting-a-phase-splits-every-bound-that-reads-one-phase)
+again: schreibersite was the best-priced phase, so it set the purity bound and
+the concentration ceiling, and moving it moved the non-exhaustive
+concentration search onto different rungs. Nothing about either is a defect in
+the search; it is the search no longer chasing a mispriced phase.
+
+### What was verified
+
+- `verify.py check --tag 1.40.0 --skip prune parallel` against a baseline
+  taken on the clean tree before the edit: **all four cislunar cells MATCH**, 147 of 147 columns, hashes
+  `ff38bf18b652582c` / `4a9cca9addcd2e6e` / `a713a13dea472794` /
+  `c60cdeeedc6f52c3`; mass ledger exact, never-worse on every pairing, check 6
+  recomputing all 59 cislunar rows identical with 34 of 34 payload phases
+  resolving to a market, and check 7's ceilings sound. `ALL CHECKS PASSED`.
+- `verify_docs.py`: green.
+- the live cislunar Stage 2 table was replaced by its 1.12.1 replay, which
+  differs from it in nothing but the stamp and the date; the 1.12.0 table it
+  replaced is byte-identical to the committed
+  `campaign/stage2/mineral_value-1.12.0/mineral_value_catalog.cislunar.csv`.
+
+### What did not change
+
+Stages 1, 3 and 4. No config field moved. Every cell measured at master
+v1.40.0 stands as a measurement of the 1.12.0 tables; `mars_surface`,
+`mars_orbit`, `geo`, `cislunar` and `earth_surface` would price identically
+on these tables apart from silver's ULP at `earth_surface`.
 
 ## master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0
 
@@ -2044,6 +2181,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.41.0 / mineral_value v1.12.1](#master-v1410--mineral_value-v1121) | 2026-10-05 | **every Stage 2 price held to its rule, at every destination**: schreibersite at the Moon priced with the alloy, a floored row's gross price fixed, and the `lunar_surface` winner moves |
 | [master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260) | 2026-09-29 | **the alloy and the sulfides are the minerals they are**: catalog `data-2026-09-29c` resolves nickel-iron and troilite and names the phosphates and CAI oxides, Stage 2 prices thirteen new minerals, and Stage 4 reads them, selling the intergrown alloys as one metal |
 | [master v1.39.0 / calc v1.25.0](#master-v1390--calc-v1250) | 2026-09-29 | **the refinery is flown**: energy through the array, plant with the rig, prices before Stage 2's refining deduction |
 | [master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240) | 2026-09-29 | **the minerals are extracted, not the four fractions**: catalog `data-2026-09-29` carries every class's mineral phases, Stage 2 prices what they yield, and Stage 4 loads, concentrates and sells each one |
@@ -7217,6 +7355,14 @@ unchanged. Every existing row is unchanged on disk: the table was rebuilt by
 REPLAYING the 1.11.0 table's five recorded live quotes rather than re-fetching,
 0 cells differ over the 46 shared rows. New: an import-time assertion that
 every per-destination utility override runs downward. No config field moved.
+
+**`1.12.1`  every price held to its rule.** Full write-up: [master v1.41.0 / mineral_value v1.12.1](#master-v1410--mineral_value-v1121). Two rows: schreibersite at
+`lunar_surface` takes the alloy's 0.45 rather than the base 0.70, and a row
+whose net in-space price is floored at zero writes its gross price as the
+gross rather than as the processing cost (phosphorus at `leo`, 248.67 to
+244.40). New: `_UTILITY_FAMILIES`, an import-time assertion that each family
+the utility comments name is priced at one level at every destination. No
+config field or column moved.
 
 ## Stage 3 changelog: `modules/transportation.py`
 
