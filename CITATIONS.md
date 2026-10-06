@@ -90,6 +90,28 @@ acknowledged by name rather than through a single paper
   germanium, rhenium, tungsten, molybdenum, ammonia). Approximate, and dated
   to the publication rather than to a quote. Phosphorus and CO2 are trade
   prices USGS does not carry; their rows say so.
+- **U.S. Geological Survey, *Mineral Commodity Summaries 2026***: the iron row
+  (No. 1 heavy melting steel scrap composite, 2025 average), the tungsten note
+  (Rotterdam APT during 2025) and cobalt's world mine production (mineral_value
+  1.12.3 and 1.13.0).
+- **World Bank, *Commodity Markets (Pink Sheet)* monthly prices**: the nickel
+  and copper reference prices, May 2026 averages (mineral_value 1.13.0).
+- **LBMA precious-metal prices**: the silver and platinum reference prices,
+  the fixings on 2026-05-29 (mineral_value 1.13.0).
+- **Johnson Matthey, *PGM Market Report* (May 2026)**: the iridium and
+  ruthenium reference prices, its Q1-2026 base prices (mineral_value 1.13.0).
+  JM's terms reserve its price data, so the row quotes the figure and the
+  report, and this repository carries no copy.
+
+### In-space demand
+
+- **McDowell, J., *Space Activities in 2025*** (General Catalog of Artificial
+  Space Objects, Rev 1.2), Table 22: the count of active geostationary
+  payloads behind the `geo` absorption ceiling (mineral_value 1.13.0).
+- **Kornuta et al. 2019**, *Commercial Lunar Propellant Architecture* (REACH
+  13:100026), and **Northrop Grumman 2024**, *DARPA LunA-10 Lunar Rail Network
+  study*: lunar propellant demand forecasts recorded beside the cislunar and
+  lunar-surface ceilings as anchors, not used as values (master v1.45.0).
 
 ### Mineral composition
 
@@ -290,7 +312,7 @@ rights reserved, so that failure runs in the dangerous direction.
 
 ## 6. Software this pipeline depends on
 
-⚠️  **spacecost** is this project's own, extracted from Stage 3 and MIT licensed; it is pinned to tag `v0.5.3` and carries every launch, propellant, Delta-v, operational and storage row, with the citations for them, and since `v0.3.0` the delivery chains Stage 2 prices through.
+⚠️  **spacecost** is this project's own, extracted from Stage 3 and MIT licensed; it is pinned to tag `v0.6.0` and carries every launch, propellant, Delta-v, operational and storage row, with the citations for them, and since `v0.3.0` the delivery chains Stage 2 prices through.
 
 ⚠️  **asteroid_catalog** is this project's own too, extracted from Stage 1 and
 MIT licensed. It carries the four survey fetchers, the cross-match, the

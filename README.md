@@ -161,7 +161,9 @@ volume cap a mission must fit. The contract went `1.16.0` -> `1.17.0`; the
 grid is still 48 vehicles, and 17 of them (34 of 76 rows overall) still fly
 at calc's `DEFAULT_FAIRING_VOLUME_M3`. **The live `asteroid_pipeline/` adopted
 it on 2026-09-28** (Stage 3 re-run, the `1.16.0` tables backed up and frozen
-under `campaign/stage3/spacecost-0.4.0/` for the archives priced on them). See
+under `campaign/stage3/spacecost-0.4.0/` for the archives priced on them), and
+`v0.6.0` on 2026-10-06, rebuilt by replaying the recorded fuel quotes with the
+`1.17.0` set frozen under `campaign/stage3/spacecost-0.5.0/`. See
 [master v1.37.0](versions.md#master-v1370--transportation-v1170--catalog-v160)
 and [the data on disk adopts it](versions.md#the-data-on-disk-adopts-it-2026-09-28).
 Two checks say the seam is sound, and both are cheap:
@@ -181,7 +183,7 @@ compared byte for byte. **The invariants, and what fails when each breaks, are
 in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)**, which is
 where the editing rules live.
 
-**spacecost is pinned to a tagged release**, `v0.5.3`, in all seven places
+**spacecost is pinned to a tagged release**, `v0.6.0`, in all seven places
 that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
 `build_master.py`, and in `_PIP_SPEC` in both `modules/transportation.py` and
 `modules/mineral_value.py` (what a standalone module run installs from, and
@@ -248,8 +250,8 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.8.1 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
-| 2 | `modules/mineral_value.py` | 1.12.3 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.17.3 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
+| 2 | `modules/mineral_value.py` | 1.13.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
+| 3 | `modules/transportation.py` | 1.18.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
 | 4 | `modules/calc.py` | 1.27.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
@@ -1511,7 +1513,7 @@ actually be flown.
 | `mars_surface` | $184,811/kg ($159,209 of it stage hardware) | 10.61 | TMI (3,600 m/s), aeroentry at 30% surviving mass, 800 m/s retroprop |
 
 `geo` is a geostationary servicing depot, and it is the only destination in
-this model with a **paying customer today**: roughly 550 active satellites,
+this model with a **paying customer today**: roughly 610 active satellites,
 and MEV-1 and MEV-2 have already docked with and station-kept commercial GEO
 spacecraft. It is also the only one that pays a **plane change**. An asteroid
 arrives near the ecliptic and GEO is equatorial, so 23.44 deg has to be bought
@@ -1580,8 +1582,8 @@ so it is priced by shipping it home rather than written off:
 | Commodity | `earth_surface` | `leo` | `cislunar` | `lunar_surface` | `mars_surface` | Route |
 |-----------|----------------|-------|------------|-----------------|----------------|-------|
 | water | $0.001/kg | $2,211 | $6,675 | $25,378 | $46,000 | used in space |
-| iron | $0.50/kg | $1,460 | $4,585 | $18,956 | $73,694 | used in space |
-| nickel | $16.50/kg | $1,476 | $4,601 | $29,631 | $129,154 | used in space |
+| iron | $0.32/kg | $1,460 | $4,584 | $18,956 | $73,694 | used in space |
+| nickel | $18.81/kg | $1,478 | $4,603 | $29,633 | $129,156 | used in space |
 | platinum | $59,038/kg | $33,628 | $31,721 | $14,099 | $0 | shipped down |
 | gold | $142,206/kg | $116,796 | $114,889 | $97,267 | $45,812 | shipped down |
 | rhodium | $320,000/kg | $294,590 | $292,683 | $275,061 | $223,606 | shipped down |
@@ -2005,6 +2007,15 @@ best to deliver":
 being priced at the base utility on the Moon, which made it the dearest phase
 in the hold; with that corrected 2018 DT scores 2.9996x. See
 [the full cell](versions.md#the-full-lunar_surface-cell-at-this-release).
+
+⚠️  **mineral_value 1.13.0 (master v1.46.0) moves the `earth_surface` row and
+nothing else beyond 2%.** It re-pins nickel, iron, iridium, ruthenium and
+four more reference prices to their sources, and a terrestrial market is
+where those prices are paid: on a sample holding this cell's top 300 bodies,
+**2018 DT goes from 6,154.06x to 5,374.37x** and the median sampled body
+improves 10.3%. The other six winners move by under 2% on the same kind of
+sample. The full cells have not been re-run; see
+[master v1.46.0](versions.md#master-v1460--mineral_value-v1130--transportation-v1180).
 
 🚨  **THE BEST CASE IN THE MODEL IS NOW 9% FROM BREAKEVEN, AT `mars_surface`,
 AND STILL NOTHING IS VIABLE.** The two surfaces went from fourth and fifth in
@@ -2638,7 +2649,8 @@ so the cell has to be named. Re-derived by `campaign/population.py`.
 ✅  **They were recalibrated in calc v1.21.1 and the LEVELS did not move**, on
 the argument that they never were curve parameters: every row in
 `IN_SPACE_ANNUAL_DEMAND_KG` is documented as an absorption budget, `geo` being
-550 geostationary satellites at ~70 kg/yr of station-keeping propellant and
+613 active geostationary satellites (McDowell's GCAT, Jan 2026; 550 until
+mineral_value 1.13.0) at ~73 kg/yr of station-keeping propellant and
 `mars_surface` being "a base that imports 20 t/yr". A kilogram delivered inside
 a consumption budget genuinely displaces a launched kilogram, so it earns full
 launch-cost-avoided; the curve, which had the price already quartered at exactly
