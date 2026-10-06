@@ -210,8 +210,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.8.1`, mineral_value `1.12.1`, transportation `1.17.0`,
-calc `1.26.0`, master `1.41.0` (the master version is a literal in
+Current: catalog `1.8.1`, mineral_value `1.12.2`, transportation `1.17.0`,
+calc `1.26.0`, master `1.42.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -4142,6 +4142,30 @@ floored a negative net price at zero and then added the processing cost back
 to make the gross, so the "gross" of a floored row was the processing cost.
 Only one row in seven tables was floored (phosphorus at `leo`) and it moved
 nothing, but a flown refinery reads exactly that column.
+
+### A greedy fill is optimal only while every phase costs the same to carry
+
+🚨  **OPEN, measured at master v1.42.0 and not fixed.** `optimal_payload_mix`
+fills the hold greedily by gross $/kg, and this file has called that
+"provably optimal" because the phases are divisible and priced per kg. It was,
+until calc `1.25.0` flew the refinery: each phase now brings its own refining
+energy, so its own array mass, and a phase that is valuable but expensive to
+refine can push the stack past the vehicle. The search then has no candidate
+that loads LESS of it, so the mission does not close and a far worse one wins.
+
+Body 552702 at `lunar_surface`: 291x with chromite in the hold (its chromium
+made it the second most valuable phase), 20x once chromite's price fell to
+fourth, 14.2x with the refinery off. On the cislunar and lunar samples the
+refinery makes 141 and 188 rows over 1.5x worse WITH the payload halving, and
+takes 66 and 36 bodies out of the evaluable set, while **no row in either top
+300 moves by 1.5x**. So the headlines stand and the C- and S-type tail does
+not; the figures are in
+[master v1.42.0](versions.md#master-v1420--mineral_value-v1122).
+
+⚠️  **Do not read a refinery-on against refinery-off ratio as the size of the
+defect**: some of it is the refinery's real cost. And **a price that moves a
+feasibility boundary will move a population by more than the price**; the
+large swings in an A/B of a trace-metal price were this, not the price.
 
 ### A checker run only on the best case has never run on the rest
 

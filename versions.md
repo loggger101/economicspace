@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.42.0 / mineral_value v1.12.2](#master-v1420--mineral_value-v1122)
 - [master v1.41.0 / mineral_value v1.12.1](#master-v1410--mineral_value-v1121)
 - [master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260)
 - [master v1.39.0 / calc v1.25.0](#master-v1390--calc-v1250)
@@ -93,10 +94,10 @@ one that does not say is not to be used.
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
-| 2 | `modules/mineral_value.py` | **1.12.1** | v1.12.1, schreibersite priced with the alloy at `lunar_surface`, and a floored row's gross price written as the gross; utility families asserted at import |
+| 2 | `modules/mineral_value.py` | **1.12.2** | v1.12.2, titanium and chromium priced as iron wherever their ore is discounted (Mars, and the Moon's chromium) |
 | 3 | `modules/transportation.py` | **1.17.0** | v1.17.0, every fairing volume derived from a cited drawing or left blank with a reason: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.26.0** | v1.26.0, the detailed phases are read (`model_detailed_phases`, default on), with the intergrown Fe-Ni alloys sold as one product |
-| - | `master.py` | **1.41.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.42.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -168,6 +169,119 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.42.0 / mineral_value v1.12.2
+
+**A metal whose local ore a destination discounts now competes with local
+supply as that destination's iron does.** At `mars_surface` titanium and
+chromium go from the base 0.70 to iron's 0.40, and at `lunar_surface` chromium
+goes from 0.70 to iron's and titanium's 0.45. Nothing else moves.
+
+🚨  **THE ORE DISCOUNTS WERE BEING UNDONE THROUGH THE YIELDS.** Stage 4
+values a phase at the better of its own price and what it is worth taken
+apart ([calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240)),
+so an ore is only as cheap as its metal. The `mars_surface` block discounts
+ilmenite and chromite to 0.02 because the basalt is "Fe-Ti-Cr oxide-bearing",
+and left the metals at 0.70, so the discount bought nothing:
+
+| phase at `mars_surface` | own gross price | valued at, 1.12.1 |
+|---|---|---|
+| ilmenite | $3,696/kg | **$68,087/kg**, through its titanium |
+| chromite | $3,696/kg | **$78,642/kg**, through its chromium |
+| perovskite | $3,696/kg | $45,541/kg |
+
+The lunar block had already made the argument for titanium in v1.11.0 ("its
+titanium competes with local supply the way the regolith's iron does") and
+discounted chromite to 0.25 without discounting chromium. This release applies
+that argument everywhere it reaches, and runs downward, which is the only
+direction the table moves. Ni, Co and Cu stay undiscounted at both surfaces:
+no concentrated ore of any of them is known on the Moon or Mars.
+
+✅  **Asserted, not commented.** `_UTILITY_FAMILIES` gains "the metals with a
+local ore, as iron" (iron, titanium, chromium). Removing the Mars titanium
+override makes the import fail naming `mars_surface` and that family. Every
+destination now prices the three alike: 0.70 at `leo`, `cislunar` and
+`mars_orbit`, 0.15 at `geo`, 0.45 on the Moon and 0.40 on Mars.
+
+### What it moves
+
+Replayed from the same recorded quotes, no network: **three prices in seven
+tables**, chromium at `lunar_surface` ($29,595 to $18,936/kg) and titanium and
+chromium at `mars_surface` ($129,055 and $129,118 to $73,612 and $73,674/kg).
+The other five tables differ only in the stamp and the date.
+
+Stage 4, on each surface cell's archived top 300 bodies plus a 3,000-row
+stride, 1.12.1 table against 1.12.2. ✅  The `mars_surface` 1.12.1 run
+reproduces the archived v1.40.0 cell in **every column** on all 1,840 rows,
+which also measures silver's 1.12.1 ULP as inert there.
+
+| | `mars_surface` | `lunar_surface` |
+|---|---|---|
+| rows paired | 1,840 | 1,392 |
+| moved | 1,075: 1,073 worse, 2 better | 864: 675 worse, 189 better |
+| classes moving most | S 865, X 168, V 19 | S 779, X 53, V 19 |
+| median `1 - r` | -0.0075% | +0.00% |
+| largest move | 1.23x worse | **12.3x worse and 14.6x better** (see below) |
+| winner | **2015 DS, 1.0914x, the same float** | 2005 QP87, 2.9353x, unchanged to 1e-7 |
+
+✅  **Neither headline moves.** The best case in the model is still 2015 DS at
+`mars_surface`, bit-identical, and the top five at both surfaces keep their
+order. The change is to the S-type and V-type population, whose holds carry
+chromite, ilmenite and perovskite.
+
+#### What the large Moon moves found: the payload knapsack ignores the refinery
+
+🚨  **27 OF 1,392 LUNAR ROWS MOVED BY MORE THAN 1.5x, BOTH WAYS, FROM A
+PRICE THAT ONLY FELL.** Chromium is a trace part of an S-type hold, so this
+is not the price. Probed on body 552702, by recording every candidate
+`evaluate_combo` priced:
+
+| | 1.12.1 table | 1.12.2 table |
+|---|---|---|
+| refinery flown (the default) | **291x**: the iodine / SLS candidate does not close, only water-ion missions of 936 kg at the fleet cap remain | 20.0x: iodine / SLS closes, 12,044 kg |
+| refinery off | 14.2x, xenon, 25,690 kg | 14.4x, xenon, 25,690 kg |
+
+At 1.12.1 chromite was the **second most valuable phase** in that body's hold
+($18,679/kg through its chromium), so the knapsack, which fills the hold
+greedily by gross $/kg, loaded it; the energy to refine it into chromium
+sized a larger array, and the stack stopped fitting the vehicle.
+At 1.12.2 chromite falls to fourth and the mission closes. **A price moved a
+FEASIBILITY boundary**, and the search has no way to load less of a phase that
+is valuable but expensive to carry.
+
+⚠️  **This is a calc 1.25.0 defect, not a price, and it is NOT fixed here.**
+The greedy fill was provably optimal while every phase cost the same to fly;
+the flown refinery gave each phase its own energy, and so its own mass. The
+size of it, refinery on against off on the same samples at 1.12.2:
+
+| | cislunar | `lunar_surface` |
+|---|---|---|
+| rows over 1.5x worse with the refinery flown | 209 of 1,441 | 377 of 1,392 |
+| of which the payload also halves | **141** | **188** |
+| worst body | 42.7x worse | 226x worse |
+| bodies that stop being evaluable | 66 (4.4%) | 36 |
+| top 300 bodies over 1.5x worse | **0** | **0** |
+
+So the headline cells stand and the population tail does not: a share of C-
+and S-type bodies are being scored on a hold no operator would fly. Some of
+the "worse" is the refinery's real cost, which is why this release does not
+attribute a figure to the defect; separating the two needs a knapsack that can
+see the energy, which is a Stage 4 model change. Recorded in CLAUDE.md as
+open.
+
+### What was verified
+
+- `verify.py check --tag 1.40.0 --skip prune parallel`: **all four cislunar cells MATCH** the pre-1.12.1 baseline,
+  147 of 147 columns, the same four hashes; check 6 recomputes all 59 rows
+  identical. `ALL CHECKS PASSED`.
+- `verify_docs.py`: green.
+- the live cislunar Stage 2 table replaced by its 1.12.2 replay, identical to
+  the 1.12.1 table in every value column.
+
+### What did not change
+
+Stages 1, 3 and 4, and every price at `leo`, `geo`, `cislunar`, `mars_orbit`
+and `earth_surface`. No config field moved.
 
 ## master v1.41.0 / mineral_value v1.12.1
 
@@ -2181,6 +2295,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.42.0 / mineral_value v1.12.2](#master-v1420--mineral_value-v1122) | 2026-10-05 | **a metal with a local ore is priced as that place's iron**: titanium and chromium at Mars, chromium at the Moon; the measurement found the payload knapsack ignores the flown refinery |
 | [master v1.41.0 / mineral_value v1.12.1](#master-v1410--mineral_value-v1121) | 2026-10-05 | **every Stage 2 price held to its rule, at every destination**: schreibersite at the Moon priced with the alloy, a floored row's gross price fixed, and the `lunar_surface` winner moves |
 | [master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260) | 2026-09-29 | **the alloy and the sulfides are the minerals they are**: catalog `data-2026-09-29c` resolves nickel-iron and troilite and names the phosphates and CAI oxides, Stage 2 prices thirteen new minerals, and Stage 4 reads them, selling the intergrown alloys as one metal |
 | [master v1.39.0 / calc v1.25.0](#master-v1390--calc-v1250) | 2026-09-29 | **the refinery is flown**: energy through the array, plant with the rig, prices before Stage 2's refining deduction |
@@ -7362,6 +7477,12 @@ whose net in-space price is floored at zero writes its gross price as the
 gross rather than as the processing cost (phosphorus at `leo`, 248.67 to
 244.40). New: `_UTILITY_FAMILIES`, an import-time assertion that each family
 the utility comments name is priced at one level at every destination. No
+config field or column moved.
+
+**`1.12.2`  the metals with a local ore.** Full write-up: [master v1.42.0 / mineral_value v1.12.2](#master-v1420--mineral_value-v1122). Titanium and
+chromium take iron's 0.40 at `mars_surface`, and chromium iron's 0.45 at
+`lunar_surface`, where each destination already discounted their ores; a new
+`_UTILITY_FAMILIES` row holds iron, titanium and chromium to one level. No
 config field or column moved.
 
 ## Stage 3 changelog: `modules/transportation.py`
