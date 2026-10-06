@@ -365,6 +365,18 @@ class CalcConfig:
     # writes no refining columns and the product is refined on Earth.  False
     # is the v1.24.0 model to the bit.
     model_refinery:            bool  = True
+
+    # TRIM THE PAYLOAD rather than refuse the mission when the settled stack
+    # overshoots the vehicle (v1.27.0).  The sizing loop stops when every term
+    # is within 1% and carries the payload it solved at the previous pass's
+    # hardware; the plant is then re-sized at that payload, and if it came
+    # out heavier the launch stack can land a fraction of a percent over the
+    # vehicle.  Until v1.27.0 that refused the whole candidate, so a mission
+    # 0.1% over its rocket was scored as impossible and a far worse one won.
+    # With this on, the payload is re-solved against the settled hardware and
+    # the candidate priced again at that ceiling, up to three times.  A
+    # candidate that fit before is not touched.  False is v1.26.0 to the bit.
+    repair_settled_overshoot:  bool  = True
     # Fraction of the valuable phase that actually reports to concentrate.
     # Terrestrial PGM / sulphide flotation circuits run 85-95%; magnetic
     # separation of a metal phase from silicate gangue is mechanically simpler
@@ -1116,7 +1128,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.26.0"
+    pipeline_version: str = "1.27.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -7154,6 +7166,8 @@ def _evaluate_combo_at_ratio(
     ctx:               Optional[AsteroidContext] = None,
     market_mode:       Optional[str] = None,
     refinery:          Optional[Tuple[Dict[str, float], float]] = None,
+    payload_cap_kg:    Optional[float] = None,
+    _repair_depth:     int = 0,
 ) -> Optional[Dict[str, float]]:
     """Evaluate one (vehicle × propellant × architecture) mission for one asteroid.
 
@@ -7197,6 +7211,10 @@ def _evaluate_combo_at_ratio(
     (dv_penalty, thruster_eff_row, thruster_kg_per_n_row,
      tank_frac, isp_s_val, boiloff_pct) = sizing_consts
 
+    # v1.27.0: the caller's figures, kept for the overshoot repair below,
+    # which prices this same candidate again and must not apply the penalty
+    # twice.
+    dv_out_arg, dv_ret_arg = dv_out_m_s, dv_ret_m_s
     dv_out_m_s = dv_out_m_s * dv_penalty
     dv_ret_m_s = dv_ret_m_s * dv_penalty
 
@@ -7469,6 +7487,11 @@ def _evaluate_combo_at_ratio(
         # share of the rig's throughput before any ore does.
         trial_payload = min(cascade["max_payload_kg"], mineable_kg,
                             max(0.0, throughput_cap_kg - isru_feed_kg))
+        # v1.27.0: a repair's ceiling; see `repair_settled_overshoot`.  A
+        # branch and no arithmetic when there is none, so every candidate
+        # priced without one is unchanged to the bit.
+        if payload_cap_kg is not None and trial_payload > payload_cap_kg:
+            trial_payload = payload_cap_kg
         if trial_payload <= 0:
             return None
         new_isru_feed = 0.0
@@ -7661,6 +7684,8 @@ def _evaluate_combo_at_ratio(
     ore_mineable_kg   = max(0.0, mineable_kg - isru_feed_kg)
 
     m_payload_demand = min(cascade["max_payload_kg"], ore_mineable_kg)
+    if payload_cap_kg is not None and m_payload_demand > payload_cap_kg:
+        m_payload_demand = payload_cap_kg
     volume_fits      = m_payload_demand <= volume_capacity_kg
     throughput_fits  = m_payload_demand <= ore_throughput_kg
     if beneficiate:
@@ -7830,6 +7855,38 @@ def _evaluate_combo_at_ratio(
     # rechecked against the vehicle; the closed-form guarantee only holds at
     # the mass it was solved for.
     if m_launch > leo_cap:
+        # v1.27.0.  Re-solve the payload against the hardware actually flown
+        # and price the candidate again with that as its ceiling.  A lighter
+        # payload never needs a heavier plant, so the second stack fits; the
+        # depth limit is for the case where the dig clock moves enough to
+        # break that, which then refuses exactly as before.
+        if (getattr(config, "repair_settled_overshoot", False)
+                and _repair_depth < 3):
+            refit = max_return_payload_kg(
+                leo_capacity_kg = leo_cap,
+                isp_s           = isp_s_val,
+                dv_out_m_s      = dv_out_m_s,
+                dv_ret_m_s      = dv_ret_eff,
+                hardware_kg     = hardware_total_kg,
+                dry_return_kg   = config.return_vehicle_dry_kg,
+                tps_frac        = tps_frac,
+                isru_return     = isru,
+                structure_frac  = structure_frac_eff,
+                tank_frac       = tank_frac,
+            )
+            cap = float(refit["max_payload_kg"]) if refit["viable"] else 0.0
+            if 0.0 < cap < m_payload:
+                return _evaluate_combo_at_ratio(
+                    asteroid_row, vehicle, propellant, bulk_value_per_kg,
+                    dv_out_arg, dv_ret_arg, ops_df, config,
+                    best_phase_value_per_kg=best_phase_value_per_kg,
+                    phases=phases, target_ratio=target_ratio,
+                    beneficiate=beneficiate, markets=markets, aero=aero,
+                    isru=isru, rendezvous_apsis=rendezvous_apsis,
+                    power_mode=power_mode, ctx=ctx, market_mode=market_mode,
+                    refinery=refinery, payload_cap_kg=cap,
+                    _repair_depth=_repair_depth + 1,
+                )
         return None
 
     actual_cascade = {
@@ -8460,6 +8517,10 @@ def _evaluate_combo_at_ratio(
         # and so of `power_system_kg`.  Reported apart so neither is hidden.
         "refinery_kg":              refinery_kg,
         "refinery_power_w":         refinery_power_watts,
+        # v1.27.0: how many times the settle-up re-solved this payload because
+        # the settled stack overshot the vehicle; 0 for a mission that fit.
+        # See `repair_settled_overshoot`.
+        "settle_repairs":           _repair_depth,
         "power_w_per_kg_at_target":  plant_w_per_kg,
         "power_source":             power_source,
         "hardware_total_kg":        hardware_total_kg,
@@ -8777,6 +8838,18 @@ def evaluate_combo(
     best = solve(1.0, False)
     best_key = selection_key(best, config)
     best_r = 1.0
+    # v1.27.0.  The coarse winner among the candidates priced WITHOUT a
+    # settle-up repair, which is exactly v1.26.0's coarse winner: a candidate
+    # that fit is untouched by the repair, and one that was repaired was None
+    # before.  Refining around it as well as around the overall winner means
+    # every candidate v1.26.0 priced is still priced, so the repair can only
+    # add options and no row gets worse.  Measured before this: 23 of 1,840
+    # mars_surface rows up to 5.3% worse, every one a refinement neighbourhood
+    # that had moved to a repaired rung.  With the repair off the two winners
+    # are always the same rung and the search is v1.26.0's to the bit.
+    old_found = best is not None and not best.get("settle_repairs", 0)
+    old_key = best_key if old_found else (-np.inf, -np.inf)
+    old_r = 1.0
 
     r_max = saturation_ratio(
         phases or [], config.beneficiation_recovery, config.max_concentration_ratio,
@@ -8794,17 +8867,23 @@ def evaluate_combo(
         key = selection_key(res, config)
         if res is not None and key > best_key:
             best_key, best, best_r = key, res, r
+        if (res is not None and not res.get("settle_repairs", 0)
+                and key > old_key):
+            old_found, old_key, old_r = True, key, r
 
-    # One refinement pass around the winner, on the same geometric spacing.
+    # One refinement pass around the winner, on the same geometric spacing,
+    # and around the unrepaired winner too when that is a different rung.
     if best is not None and n > 2:
         step = r_max ** (1.0 / (n - 1))
-        for r in (best_r / (step ** 0.5), best_r * (step ** 0.5)):
-            if not (1.0 <= r <= r_max):
-                continue
-            res = solve(r)
-            key = selection_key(res, config)
-            if res is not None and key > best_key:
-                best_key, best = key, res
+        centres = [old_r, best_r] if (old_found and old_r != best_r) else [best_r]
+        for centre in centres:
+            for r in (centre / (step ** 0.5), centre * (step ** 0.5)):
+                if not (1.0 <= r <= r_max):
+                    continue
+                res = solve(r)
+                key = selection_key(res, config)
+                if res is not None and key > best_key:
+                    best_key, best = key, res
     return best
 
 

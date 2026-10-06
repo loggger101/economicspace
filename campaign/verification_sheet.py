@@ -1381,9 +1381,59 @@ def part_fixed_point(S, out):
            "%s - %s - %s * %s" % (P(R["budget"]), P(cas["hardware_kg"]),
                                   P(cas["coef"]), P(cas["d0"])),
            cas["bracket"], "kg", ["budget", "hw_solved", "coef", "d0"])
-    S.step("m_pay", "m_pay", "returned payload", "bracket / denom",
+    rep = M.get("repair")
+    if not rep:
+        S.step("m_pay", "m_pay", "returned payload", "bracket / denom",
+               "%s / %s" % (P(cas["bracket"]), P(cas["denom"])),
+               cas["m_pay"], "kg", ["bracket", "denom"],
+               "the model's max_payload_kg")
+        return
+    # calc v1.27.0, `repair_settled_overshoot`.  The first settle-up flew a
+    # stack over the vehicle, so the payload was re-solved at the hardware
+    # that stack settled on and the mission priced again under that ceiling.
+    # The ceiling is the same closed form at that attempt's hardware and
+    # structure fraction, so it is stepped here rather than asserted.
+    fit = rep["refit"]
+    S.step("m_pay_cf", "m_pay,cf", "the closed form's payload",
+           "bracket / denom",
            "%s / %s" % (P(cas["bracket"]), P(cas["denom"])),
-           cas["m_pay"], "kg", ["bracket", "denom"],
+           cas["m_pay"], "kg", ["bracket", "denom"])
+    S.put("m_launch_1", "m_launch,1", "the first settle-up's launch stack",
+          rep["m_launch"], "kg",
+          "<b>Derived on this page</b>: parts 6 to 8 at the payload the "
+          "first solve carried, %s kg, which put the stack over the "
+          "vehicle's %s kg.  The run records how many times it re-solved as "
+          "<b>profitability_catalog</b> &middot; column "
+          "<i>settle_repairs</i>." % (P(rep["m_pay"]), P(C["leo_cap"])))
+    S.put("hw_1", "m_hw,1", "the hardware that stack settled on",
+          rep["hw"], "kg",
+          "<b>Derived on this page</b>: part 8's settled hardware, for that "
+          "first attempt.")
+    S.put("f_1", "f_1", "the structure fraction it settled on",
+          rep["f_eff"], "-",
+          "<b>Derived on this page</b>: part 7's ore restraint plus seal, "
+          "for that first attempt.")
+    S.put("coef_1", "coef_1", "the returning stack's multiplier then",
+          fit["coef"], "-",
+          "<b>Derived on this page</b>: the first attempt's "
+          "k_ret * s_TPS%s." % ("" if C["isru"] else " * R_ret"))
+    S.step("bracket_cap", "bracket_cap", "the numerator at that hardware",
+           "budget - m_hw,1 - coef_1 * d_0",
+           "%s - %s - %s * %s" % (P(rep["budget"]), P(rep["hw"]),
+                                  P(fit["coef"]), P(fit["d0"])),
+           fit["bracket"], "kg", ["budget", "hw_1", "coef_1", "d0"])
+    S.step("denom_cap", "denom_cap", "the denominator at that hardware",
+           "coef_1 (1 + f_1) - 1",
+           "%s * (1 + %s) - 1" % (P(fit["coef"]), P(rep["f_eff"])),
+           fit["denom"], "-", ["coef_1", "f_1"])
+    S.step("m_cap", "m_cap", "the payload that fits at that hardware",
+           "bracket_cap / denom_cap",
+           "%s / %s" % (P(fit["bracket"]), P(fit["denom"])),
+           fit["m_pay"], "kg", ["bracket_cap", "denom_cap", "m_launch_1"],
+           "the ceiling the mission is priced again under")
+    S.step("m_pay", "m_pay", "returned payload", "min(m_pay,cf, m_cap)",
+           "min(%s, %s)" % (P(cas["m_pay"]), P(fit["m_pay"])),
+           M["m_pay"], "kg", ["m_pay_cf", "m_cap"],
            "the model's max_payload_kg")
 
 
@@ -1392,6 +1442,9 @@ def part_settled(S, out):
     """Feed, water, the seal, the power draw, the plant and the EP stage."""
     C, M, B = out["C"], out["M"], out["B"]
     cas = M["cascade"]
+    # The payload flown: the closed form's, unless a settle-up repair set a
+    # lower ceiling (calc v1.27.0), and then the ceiling's.
+    pay = M["m_pay"] if M.get("repair") else cas["m_pay"]
     S.part("7. The feed, the water and the power it takes",
            "Settled on the payload the last solve produced.")
     rate_rig = S.put("gamma", "gamma", "mining rate per kg of rig",
@@ -1433,19 +1486,19 @@ def part_settled(S, out):
         S.step("feed", "feed", "rock dug and processed",
                "max(min(m_pay * r, throughput, mineable), m_pay)",
                "max(min(%s * %s, %s, %s), %s)"
-               % (P(cas["m_pay"]), P(out["ratio"]), P(M["throughput"]),
-                  P(B["mineable"]), P(cas["m_pay"])),
+               % (P(pay), P(out["ratio"]), P(M["throughput"]),
+                  P(B["mineable"]), P(pay)),
                M["feed"], "kg", ["m_pay", "ratio", "throughput", "m_min"])
         S.step("ratio_got", "r_achieved", "the ratio the rig actually reaches",
                "feed / m_pay",
-               "%s / %s" % (P(M["feed"]), P(cas["m_pay"])),
+               "%s / %s" % (P(M["feed"]), P(pay)),
                M["ratio"], "-", ["feed", "m_pay"],
                "below the %s the sweep chose, because the throughput "
                "ceiling clips the feed before the ratio does"
                % P(out["ratio"], 8))
     else:
         S.step("feed", "feed", "rock dug", "feed = m_pay on run-of-mine ore",
-               P(cas["m_pay"]), M["feed"], "kg", ["m_pay"],
+               P(pay), M["feed"], "kg", ["m_pay"],
                "not concentrating means the feed and the payload are the "
                "same rock")
     S.put("eps_rec", "eps_rec", "separation recovery",
@@ -1454,15 +1507,15 @@ def part_settled(S, out):
            ("what the knapsack in part 10 loaded"
             if C["beneficiated"] else "m_pay * f_ice"),
            (P(M["water"]) if C["beneficiated"]
-            else "%s * %s" % (P(cas["m_pay"]), P(C["ice_frac"]))),
+            else "%s * %s" % (P(pay), P(C["ice_frac"]))),
            M["water"], "kg", ["m_pay", "eps_rec"])
     S.step("c_frac", "c_frac", "containment as a fraction of payload",
            "c_seal * min(1, water / m_pay)",
            "%s * min(1, %s / %s)"
-           % (P(C["contain_per_kg"]), P(M["water"]), P(cas["m_pay"])),
+           % (P(C["contain_per_kg"]), P(M["water"]), P(pay)),
            M["c_frac"], "-", ["c_seal", "water", "m_pay"])
     S.step("m_seal", "m_seal", "volatile containment mass", "c_frac * m_pay",
-           "%s * %s" % (P(M["c_frac"]), P(cas["m_pay"])),
+           "%s * %s" % (P(M["c_frac"]), P(pay)),
            M["m_containment"], "kg", ["c_frac", "m_pay"])
     S.step("f_eff", "f", "ore restraint plus the sealed hold",
            "f_str + c_frac",
