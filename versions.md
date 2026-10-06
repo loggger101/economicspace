@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3](#master-v1450--mineral_value-v1123--transportation-v1173)
 - [master v1.44.0 / transportation v1.17.2](#master-v1440--transportation-v1172)
 - [master v1.43.0 / calc v1.27.0](#master-v1430--calc-v1270)
 - [master v1.42.0 / mineral_value v1.12.2](#master-v1420--mineral_value-v1122)
@@ -96,10 +97,10 @@ one that does not say is not to be used.
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
-| 2 | `modules/mineral_value.py` | **1.12.2** | v1.12.2, titanium and chromium priced as iron wherever their ore is discounted (Mars, and the Moon's chromium) |
-| 3 | `modules/transportation.py` | **1.17.2** | v1.17.2, twenty-one citations corrected and no value moved (v1.17.0 was the last to move one, every fairing volume derived from a cited drawing or left blank with a reason): the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 2 | `modules/mineral_value.py` | **1.12.3** | v1.12.3, the tungsten row's note corrected and no value moved (v1.12.2 was the last to move one, titanium and chromium priced as iron wherever their ore is discounted) |
+| 3 | `modules/transportation.py` | **1.17.3** | v1.17.3, four more citations corrected and no value moved (v1.17.0 was the last to move one, every fairing volume derived from a cited drawing or left blank with a reason): the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.27.0** | v1.27.0, a mission whose settled stack overshoots its vehicle is re-solved under a payload ceiling instead of refused (`repair_settled_overshoot`, default on), with the new `settle_repairs` column |
-| - | `master.py` | **1.44.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.45.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -114,7 +115,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Twenty-two stamps so far have moved without moving a number:
+Twenty-four stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -140,15 +141,18 @@ Twenty-two stamps so far have moved without moving a number:
 | transportation `1.15.0` | **a sixth reference table** | bit-identical, verified |
 | calc `1.19.1` | **a check that cried wolf** | bit-identical, verified |
 | transportation `1.17.2` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
+| mineral_value `1.12.3` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
+| transportation `1.17.3` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
 together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0`,
-`transportation 1.14.0`, `transportation 1.15.0` and `transportation 1.17.2`.
+`transportation 1.14.0`, `transportation 1.15.0`, `transportation 1.17.2`,
+`mineral_value 1.12.3` and `transportation 1.17.3`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and fourteen are not, and that split rotted in prose
+rows are performance stamps and sixteen are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -172,6 +176,56 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3
+
+**spacecost moves from `v0.5.2` to `v0.5.3` (data contract 1.17.2 to 1.17.3),
+one Stage 2 note is corrected, and no value moves.** All five items are
+revision candidates in the General_Research evidence registry, which read the
+cited documents and found the attribution, not the number, wrong. The
+value-moving candidates it holds against these tables are left for a release
+that re-measures.
+
+### What moved upstream (spacecost 0.5.3)
+
+- **16 Psyche** (rc-068): 2.29e19 kg is the Kretlow (2020) SiMDA perturber
+  mass, as Kretlow 2022 Table 2 lists it, not Siltala & Granvik's; their GM
+  gives 2.22e19 kg, now quoted beside it.
+- **65803 Didymos** (rc-067): neither 5.28e11 kg nor 390 m is in Daly et al.
+  2023, whose Table 1 gives (5.6 +/- 0.5)e11 kg for the system and a 761 m
+  diameter. Both cells sit inside that 1-sigma and stay, labelled unsourced.
+- **1-sol Mars orbit TEI** (rc-070): 900 m/s is now labelled the Hohmann
+  floor; DRA 5.0 flies 1.563 km/s from the same orbit.
+- **Mars retroprop descent** (rc-072): DRA 5.0 Table 4-3's 595 m/s is cited,
+  and 800 stays as the conservative side of it.
+
+A column-by-column comparison of all seven of spacecost's committed reference
+files against 0.5.2 differs in `notes` (4 cells) and `pipeline_version` only.
+
+### What changes here
+
+- The spacecost tag in all seven places that type it, and the transportation
+  stamp to `1.17.3`, which `verify_stage3.py` check 2 holds to the package.
+- **Tungsten** (rc-063, mineral_value `1.12.3`): the note cited "APT ~$340/mtu
+  in 2024 (USGS MCS 2025)", and MCS 2025 withholds the tungsten price in every
+  year. It now cites MCS 2026: Rotterdam APT ran from $331 to $675 per mtu
+  during 2025, so the 45.00 cell is the start-of-2025 level (~$42/kg W),
+  which is what the row's 2025-01-31 date already says. The end-of-2025 level,
+  ~$85/kg W, is in the note for whoever re-prices it. The note is a column of
+  the Stage 2 CSV, so the stamp moves.
+- `IN_SPACE_ANNUAL_DEMAND_KG` carries the two published lunar demand forecasts
+  beside the cislunar and lunar_surface rows (rc-056): Kornuta et al. 2019's
+  450 t/yr near term, and LunA-10's 500-2,500 t/yr. A comment, not a re-pin;
+  the block stays judgement.
+
+### What does not change
+
+**Stage 4 reads no `notes` column**, so a run against the new tables is
+bit-identical to one against the old by construction, and neither Stage 2 nor
+Stage 3 was re-run: that would re-fetch live prices over the only copies of
+the tables the current measurements were taken against. The cost is the
+`stamp_check` lines naming the files on disk as older than the modules, which
+are correct and mean nothing more.
 
 ## master v1.44.0 / transportation v1.17.2
 
@@ -2556,6 +2610,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3](#master-v1450--mineral_value-v1123--transportation-v1173) | 2026-10-06 | **spacecost `v0.5.3` and one Stage 2 note: five citations corrected, no value moved**: Psyche, Didymos and two Mars delta-v rows upstream, tungsten's price note here; Stage 4 reads no notes |
 | [master v1.44.0 / transportation v1.17.2](#master-v1440--transportation-v1172) | 2026-10-06 | **spacecost `v0.5.2`: twenty-three citations corrected, no value moved**: the repin carries 0.5.1 and 0.5.2's notes; Stage 4 reads no notes, so the tables on disk stay at 1.17.0 |
 | [master v1.43.0 / calc v1.27.0](#master-v1430--calc-v1270) | 2026-10-06 | **a mission 0.1% over its vehicle is flown lighter, not refused**: v1.42.0's knapsack diagnosis corrected; about two bodies in five were scored on the wrong mission, and no headline moved |
 | [master v1.42.0 / mineral_value v1.12.2](#master-v1420--mineral_value-v1122) | 2026-10-05 | **a metal with a local ore is priced as that place's iron**: titanium and chromium at Mars, chromium at the Moon; the measurement found the payload knapsack ignores the flown refinery |
@@ -7747,6 +7802,11 @@ chromium take iron's 0.40 at `mars_surface`, and chromium iron's 0.45 at
 `lunar_surface`, where each destination already discounted their ores; a new
 `_UTILITY_FAMILIES` row holds iron, titanium and chromium to one level. No
 config field or column moved.
+
+**`1.12.3`  a note corrected.** Full write-up: [master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3](#master-v1450--mineral_value-v1123--transportation-v1173). The
+tungsten row's `notes` now cite USGS MCS 2026's Rotterdam APT prices rather
+than a 2024 figure MCS 2025 does not carry. No value, config field or column
+moved.
 
 ## Stage 3 changelog: `modules/transportation.py`
 
