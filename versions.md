@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.43.0 / calc v1.27.0](#master-v1430--calc-v1270)
 - [master v1.42.0 / mineral_value v1.12.2](#master-v1420--mineral_value-v1122)
 - [master v1.41.0 / mineral_value v1.12.1](#master-v1410--mineral_value-v1121)
 - [master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260)
@@ -96,8 +97,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.12.2** | v1.12.2, titanium and chromium priced as iron wherever their ore is discounted (Mars, and the Moon's chromium) |
 | 3 | `modules/transportation.py` | **1.17.0** | v1.17.0, every fairing volume derived from a cited drawing or left blank with a reason: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.26.0** | v1.26.0, the detailed phases are read (`model_detailed_phases`, default on), with the intergrown Fe-Ni alloys sold as one product |
-| - | `master.py` | **1.42.0** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.27.0** | v1.27.0, a mission whose settled stack overshoots its vehicle is re-solved under a payload ceiling instead of refused (`repair_settled_overshoot`, default on), with the new `settle_repairs` column |
+| - | `master.py` | **1.43.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -170,6 +171,182 @@ four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
 
+## master v1.43.0 / calc v1.27.0
+
+**A mission whose settled stack lands a fraction of a percent over its
+vehicle is now flown with a little less payload, not refused.** And the
+finding v1.42.0 recorded as "the payload knapsack ignores the refinery" was
+the wrong diagnosis of this.
+
+### What v1.42.0 got wrong, and what the defect is
+
+v1.42.0 saw body 552702 at `lunar_surface` score 291x with chromite in its
+hold and 20x without, and concluded the greedy knapsack was loading an
+energy-hungry phase that stopped the mission closing. Tracing the refused
+candidate (SLS Block 1 on iodine) through `_evaluate_combo_at_ratio`, guard
+by guard, says otherwise:
+
+| concentration ratio | refused by | by how much |
+|---|---|---|
+| 1.0 to 2.65 | the in-loop cascade (`if not cascade["viable"]`) | an electric stage of 42 t |
+| 4.30 | **the settle-up's launch recheck** | **0.1585%** over the vehicle |
+| 7.00 | the settle-up's launch recheck | 0.1450% |
+| 11.39 | the settle-up's launch recheck | 0.1351% |
+| 18.52 | the settle-up's launch recheck | 0.0908% |
+
+🚨  **THE GOOD MISSIONS DIED 0.1% OVER A 95-TONNE VEHICLE.** The sizing loop
+stops when every term is within 1% and carries forward the payload it solved
+at the PREVIOUS pass's hardware (which CLAUDE.md records as deliberate). The
+settle-up then re-sizes the plant at that payload, and when it comes out a
+little heavier the stack lands over the vehicle, and `if m_launch > leo_cap:
+return None` threw the whole candidate away. A tolerance of 1% in the loop
+was being enforced as a cliff at 0% after it. The chromite price only decided
+which side of the cliff each rung landed on, and the flown refinery made the
+cliff common, because it makes the plant more sensitive to the payload than
+anything before it did.
+
+### What changes here
+
+- **New field `repair_settled_overshoot`** (default **True**). When the settled
+  stack overshoots, the payload is re-solved against the hardware actually
+  flown and the candidate priced again with that as a ceiling, at most three
+  times; a lighter payload never needs a heavier plant, so the second stack
+  fits. A candidate that fit before never reaches this path. False is calc
+  1.26.0 to the bit.
+- **New output column `settle_repairs`**: how many times the row's mission was
+  re-solved; 0 for one that fit.
+- **The concentration search refines around two rungs where it used to refine
+  around one**: the overall coarse winner and the best UNREPAIRED one. Without
+  that, the repair made rows worse: on the first build, 4, 5 and 23 rows of the
+  three samples below, up to **5.3%**, every one a refinement neighbourhood that
+  had moved to a repaired rung and stopped visiting the ratio that used to win.
+  The unrepaired winner is exactly calc 1.26.0's coarse winner, so refining
+  around it re-prices every candidate 1.26.0 priced, and the repair can only add
+  options. With the repair off the two are always one rung, and the search is
+  1.26.0's.
+- **The worked calculation and the verification sheet derive a repaired
+  mission**: the first stack's overshoot, the ceiling as the same closed form
+  at that stack's hardware, and the payload flown as the smaller of the two,
+  every line checked like the rest. Whether a row's run repaired is read off
+  the row: a row with no `settle_repairs` column predates it, and is derived
+  as its run refused.
+
+### What it is worth, on samples
+
+Each cell's archived top 300 bodies plus a 3,000-row stride, at the
+mineral_value 1.12.2 tables, the repair on against off:
+
+| | cislunar | `lunar_surface` | `mars_surface` |
+|---|---|---|---|
+| repair off against calc 1.26.0 | **identical**, 146 shared columns | **identical** | **identical** |
+| rows | 1,441 | 1,392 | 1,840 |
+| winning mission was a repaired one | **550** | **589** | **654** |
+| rows that moved | 566, all better | 594, all better | 748, all better |
+| median improvement of a moved row | 3.73% | 11.04% | 2.96% |
+| improved by more than 1.5x | 83 | 161 | 29 |
+| largest improvement | 13.1x | 69.6x | 31.1x |
+| rows worse | **0** | **0** | **0** |
+| evaluable rows | unchanged | unchanged | unchanged |
+| winner | 2018 DT, 4.8379x, the same float | 2005 QP87, 2.9353x, the same float | 2015 DS, 1.0914x, the same float |
+| top 300: rows moved / median change | 152 / 0 | 133 / 0 | 59 / 0 |
+
+✅  **The headlines stand and about two bodies in five were being scored on
+the wrong mission.** The best case at every destination measured is the same
+float, and in each top 300 the median does not move; what moved is the
+population, where the cliff had been choosing a worse architecture for
+roughly 40% of bodies.
+
+### What it does not fix: the same cliff, one pass earlier
+
+v1.42.0's refinery-on against refinery-off comparison, repeated with the
+repair: the rows over 1.5x worse with the payload halving fall from **141 to
+107** at cislunar and from **188 to 71** at `lunar_surface`. Each that remains
+was traced by pricing the refinery-off winner's architecture with the refinery
+on and recording the guard that refused it:
+
+| guard | cislunar | `lunar_surface` |
+|---|---|---|
+| the in-loop cascade (`if not cascade["viable"]`), pass 2 or later | **87** | **49** |
+| the radioisotope plant over `rtg_max_power_w` | 20 | 18 |
+| the architecture closes; the search chose another | 0 | 4 |
+
+🚨  **THE IN-LOOP REFUSAL IS THE SAME CLASS, AND IT IS THE LARGER ONE.** Pass 1
+solves the payload with no plant and no electric stage aboard; pass 2 sizes the
+electric stage for that payload and flies it, and if the stack no longer closes
+the candidate is refused. Body 2023 TN102: a 19,576 kg pass-1 payload sizes a
+26,625 kg electric stage, and with the refinery's 65 kg plant and its draw
+added the pass-2 stack does not close at any ratio, while with the refinery off
+the same loop converges at 5,762 kg and 14.2x. A fixed point exists in both
+cases; the iteration starts from the wrong side of it.
+
+⚠️  **This is not fixed here, deliberately.** `_closes_carrying_its_own_stage`
+documents that pass 2 refuses **74.3% of every candidate evaluated** at
+cislunar, and prunes them before the loop on exactly this ground; that pruning
+is sound against the loop's own iteration, not against the existence of a
+mission. Damping the loop instead would make a large share of the electric
+search newly feasible, change the pre-filter, cost runtime, and could move the
+headlines. It is recorded in CLAUDE.md as open. The radioisotope refusals are a
+supply limit and are not a defect.
+
+### The full `lunar_surface` cell at this release
+
+Run 2026-10-06 01:29 to 05:12 over every row of `data-2026-09-29c`,
+12 workers, detached under Task Scheduler, **13,392 s** of Stage 4, on the
+mineral_value 1.12.2 table (frozen as
+`campaign/stage2/mineral_value-1.12.2/`). Archived as
+`campaign/cells/lunar_surface__benef__search-on__calc-1.27.0__spacecost-0.5.0.csv.gz`.
+
+| | calc 1.26.0, table 1.12.0 (2026-10-01) | **calc 1.27.0, table 1.12.2 (this run)** |
+|---|---|---|
+| winner | 2018 DT (M), 2.9068x | **2005 QP87 (X), 2.9353x**, not a repaired mission |
+| next | 2005 QP87 2.9167x, 2018 LQ2, 2013 EC20, 762379 | 2018 LQ2 (Xn) 2.9627x, 762379 (X) 2.9726x, 2013 EC20 (X) 2.9736x, 2010 CE55 (X) 2.9954x |
+| evaluable bodies | 567,904 | **568,258** |
+| median body | 8.7376x | **8.2537x** |
+| rows whose mission was repaired | (none) | **234,344 (41.24%)**, depth up to 3 |
+| Stage 4 wall clock | 7,585 s | 13,392 s |
+
+✅  **The sample's prediction held exactly.** The top-300 runs of
+master v1.41.0 and v1.42.0 put 2005 QP87 first at `2.935254772783742`; the full
+cell returns that float, at the same payload and programme. The winner is
+the 1.12.1 schreibersite correction's, not this release's: neither it nor any
+of the top five was repaired.
+
+⚠️  **The paired comparison mixes three releases and is reported as such.**
+Over the 567,784 bodies in both cells, 248,241 are better, 259,483 worse and
+60,060 identical, with `r` at 0.509 at the 10th percentile and 1.013 at the
+90th. The repair can only improve a row; the two price corrections can only
+lower a hold's value, so the worse half is theirs and the long better tail is
+the repair's, but this cell does not separate them.
+
+⚠️  **The wall clock rose 1.77x**, and it is three changes on one host a week
+apart, so it is not offered as the repair's cost. It is in the direction the
+repair predicts: every repaired candidate is priced at least twice, and the
+concentration search refines around a second rung on every body where it
+differs.
+
+Invariants on all 568,258 rows: mass ledger exact (largest error 0.0 kg),
+`N = F x W` everywhere and `W > trips` never, `saturation_multiplier`
+identically 1.0, no row with both unsold and surplus payload, 109,824 rows at
+`max_fleet_ships`, and **zero viable missions**.
+
+### What was verified
+
+- the repair OFF reproduces calc 1.26.0 on all three samples, 146 shared
+  columns, 4,673 rows;
+- `verify.py invariants` with the repair ON: mass ledger exact on all four
+  cells, never-worse on every pairing, Stage 2 recompute identical, ceilings
+  sound;
+- the worked calculation and the verification sheet derive a repaired mission
+  (2021 CX5 at `lunar_surface`, repaired once): 91 quantities, 0 DIFFER; 310 of
+  310 substitutions, 413 of 413 numbers traced; and the published `mars_surface`
+  best case is unchanged, 392 of 392 and 501 of 501;
+- `verify_docs.py`: green.
+
+### What did not change
+
+Stages 1 to 3. The pre-filter, the knapsack, every model term and every price.
+A candidate that fit its vehicle is priced exactly as before.
+
 ## master v1.42.0 / mineral_value v1.12.2
 
 **A metal whose local ore a destination discounts now competes with local
@@ -230,6 +407,16 @@ order. The change is to the S-type and V-type population, whose holds carry
 chromite, ilmenite and perovskite.
 
 #### What the large Moon moves found: the payload knapsack ignores the refinery
+
+⚠️  **CORRECTED IN [master v1.43.0](#master-v1430--calc-v1270): THE
+KNAPSACK IS NOT THE CAUSE.** Tracing the refused candidate through the
+sizing loop found it refused by the settle-up's launch recheck, its stack
+0.09 to 0.16% over the vehicle, and not by anything the knapsack loaded.
+The flown refinery made that cliff frequent, because it makes the plant
+sensitive to the payload; turning it off hid the cliff rather than the
+defect. The section below is kept as the record of what this release
+measured and concluded, which is the reason to read it alongside the
+correction rather than instead of it.
 
 🚨  **27 OF 1,392 LUNAR ROWS MOVED BY MORE THAN 1.5x, BOTH WAYS, FROM A
 PRICE THAT ONLY FELL.** Chromium is a trace part of an S-type hold, so this
@@ -2295,6 +2482,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.43.0 / calc v1.27.0](#master-v1430--calc-v1270) | 2026-10-06 | **a mission 0.1% over its vehicle is flown lighter, not refused**: v1.42.0's knapsack diagnosis corrected; about two bodies in five were scored on the wrong mission, and no headline moved |
 | [master v1.42.0 / mineral_value v1.12.2](#master-v1420--mineral_value-v1122) | 2026-10-05 | **a metal with a local ore is priced as that place's iron**: titanium and chromium at Mars, chromium at the Moon; the measurement found the payload knapsack ignores the flown refinery |
 | [master v1.41.0 / mineral_value v1.12.1](#master-v1410--mineral_value-v1121) | 2026-10-05 | **every Stage 2 price held to its rule, at every destination**: schreibersite at the Moon priced with the alloy, a floored row's gross price fixed, and the `lunar_surface` winner moves |
 | [master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260) | 2026-09-29 | **the alloy and the sulfides are the minerals they are**: catalog `data-2026-09-29c` resolves nickel-iron and troilite and names the phosphates and CAI oxides, Stage 2 prices thirteen new minerals, and Stage 4 reads them, selling the intergrown alloys as one metal |
@@ -8435,6 +8623,19 @@ catalog it belongs to. If one does not say, do not use it.**
 The current answers are in the README:
 [Results](README.md#current-results-the-complete-28-cell-matrix) for the model,
 [Beneficiation](README.md#beneficiation) for the wall clock.
+
+**`1.27.0`  the settle-up overshoot.** Full write-up: [master v1.43.0 / calc v1.27.0](#master-v1430--calc-v1270). One config
+field and one output column are added, and the field defaults ON.
+
+- **New field**: `repair_settled_overshoot` (default **True**): when the
+  settled stack lands over the vehicle, re-solve the payload at the settled
+  hardware and price the candidate again under that ceiling, up to three
+  times, instead of refusing it. False is v1.26.0 to the bit.
+- **New output column**: `settle_repairs`, how many times the row's mission
+  was re-solved; 0 for one that fit. A row without the column predates the
+  repair, and the worked calculation derives it as its run refused.
+- **The concentration search refines around the best unrepaired coarse rung
+  as well as the overall one**, so the repair only ever adds options.
 
 ## Cost/revenue matrices
 
