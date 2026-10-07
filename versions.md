@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.48.0 / transportation v1.18.1](#master-v1480--transportation-v1181)
 - [master v1.47.0 / calc v1.28.0](#master-v1470--calc-v1280)
 - [master v1.46.0 / mineral_value v1.13.0 / transportation v1.18.0](#master-v1460--mineral_value-v1130--transportation-v1180)
 - [master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3](#master-v1450--mineral_value-v1123--transportation-v1173)
@@ -100,9 +101,9 @@ one that does not say is not to be used.
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.13.0** | v1.13.0, twelve reference prices and market sizes re-pinned to the figure their source gives at the row's own date |
-| 3 | `modules/transportation.py` | **1.18.0** | v1.18.0, Atlas V 551, Minotaur IV and Pegasus XL carried to 2026 dollars and Deep Space Network time re-derived from its rate base: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 3 | `modules/transportation.py` | **1.18.1** | v1.18.1, four citations corrected and no value moved (v1.18.0 was the last to move one, Atlas V 551, Minotaur IV and Pegasus XL carried to 2026 dollars and Deep Space Network time re-derived from its rate base): the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.28.0** | v1.28.0, a pass of the sizing loop whose stack does not close backs the loop off toward the last state that did instead of refusing the candidate (`damp_sizing_loop`, default on), with the new `sizing_damped` column |
-| - | `master.py` | **1.47.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.48.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -117,7 +118,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Twenty-four stamps so far have moved without moving a number:
+Twenty-five stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -145,16 +146,17 @@ Twenty-four stamps so far have moved without moving a number:
 | transportation `1.17.2` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 | mineral_value `1.12.3` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 | transportation `1.17.3` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
+| transportation `1.18.1` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
 together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0`,
 `transportation 1.14.0`, `transportation 1.15.0`, `transportation 1.17.2`,
-`mineral_value 1.12.3` and `transportation 1.17.3`.
+`mineral_value 1.12.3`, `transportation 1.17.3` and `transportation 1.18.1`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and sixteen are not, and that split rotted in prose
+rows are performance stamps and seventeen are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -178,6 +180,52 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.48.0 / transportation v1.18.1
+
+**spacecost moves from `v0.6.0` to `v0.6.1` (data contract 1.18.0 to 1.18.1),
+and no value moves.** All three items are revision candidates in the
+General_Research evidence registry, whose sources were re-read before the edit;
+for one of them the re-read changed the fix.
+
+### What moved upstream (spacecost 0.6.1)
+
+- **Mining reliability growth exponent** (rc-084): the note credited
+  MIL-HDBK-189 with alpha at 0.3-0.6 for an "active" growth programme and
+  0.1-0.2 for "passive" fielding. MIL-HDBK-189C draws no such split. The
+  registry read the handbook as giving no band at all and proposed dropping
+  the numbers; it does give one, in Table II (5.2.6.2), split by SYSTEM TYPE
+  rather than by programme: 0.27-0.64 for one-shot systems (median 0.47) and
+  0.23-0.53 for time-based ones (median 0.32). The row's 0.30 sits near the
+  bottom of both and stands, and the note now says its 0.10 low end is a
+  sensitivity bound below every figure the handbook gives.
+- **Starship (projected)** (rc-082): the $90M low end is Voyager
+  Technologies' commitment for one Starlab launch in its IPO prospectus (Form
+  424B4, Jun 2025), not a 2026 contract; the FY2025 10-K names the contract and
+  states no price. Re-read from EDGAR before the edit.
+- **MMH / NTO and Hydrazine** (rc-083): the "DOD FY20" standard prices both
+  rows cite can no longer be found. DLA Energy's FY2025 Aerospace Standard
+  Prices are quoted beside them (MMH ~$497/kg, NTO MON-3 ~$235/kg, hydrazine
+  ~$365/kg) as the government comparison, and the values are not re-pinned to
+  them: an owner decision, since they are DoD prices including DLA overhead and
+  a five- to seven-fold move on five propellant rows.
+
+A column-by-column comparison of all seven of spacecost's committed reference
+files against 0.6.0 differs in `notes` (4 cells) and `pipeline_version` only.
+
+### What changes here
+
+- The spacecost tag in all seven places that type it, and the transportation
+  stamp to `1.18.1`, which `verify_stage3.py` check 2 holds to the package.
+- README's reliability-growth paragraph, which repeated the "active band"
+  attribution.
+
+### What does not change
+
+**Stage 4 reads no `notes` column**, so a run against the new tables is
+bit-identical to one against the old by construction, and Stage 3 was not
+re-run: the tables on disk stay at `1.18.0`, and the one `stamp_check()` line
+that says so is expected.
 
 ## master v1.47.0 / calc v1.28.0
 
@@ -2825,6 +2873,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.48.0 / transportation v1.18.1](#master-v1480--transportation-v1181) | 2026-10-07 | **spacecost `v0.6.1`: four citations corrected, no value moved**: the reliability growth exponent cites MIL-HDBK-189C's Table II, Starship's $90M the Voyager prospectus, and the hypergolics quote DLA's FY2025 prices beside a basis that can no longer be checked; Stage 4 reads no notes |
 | [master v1.47.0 / calc v1.28.0](#master-v1470--calc-v1280) | 2026-10-07 | **a pass that overshoots backs the sizing loop off instead of refusing the mission**: evaluable bodies 1.6-2.4x on every destination's catalog stride, a sixth to two fifths of existing bodies better, none worse, no winner moved |
 | [master v1.46.0 / mineral_value v1.13.0 / transportation v1.18.0](#master-v1460--mineral_value-v1130--transportation-v1180) | 2026-10-06 | **sixteen values re-pinned to their sources, two candidates declined**: nickel, iron, iridium, ruthenium, titanium, gallium and ammonia priced from USGS, the World Bank, LBMA and Johnson Matthey; GEO's market recounted; Atlas V 551 in 2026 dollars. `earth_surface` moves 10.3% on the median sampled body; nothing else moves 2% |
 | [master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3](#master-v1450--mineral_value-v1123--transportation-v1173) | 2026-10-06 | **spacecost `v0.5.3` and one Stage 2 note: five citations corrected, no value moved**: Psyche, Didymos and two Mars delta-v rows upstream, tungsten's price note here; Stage 4 reads no notes |
