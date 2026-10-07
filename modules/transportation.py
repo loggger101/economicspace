@@ -82,6 +82,11 @@ fetching: every other value is the one those tables held.  The 1.17.0 set is
 frozen under `campaign/stage3/spacecost-0.5.0/`.  See
 [master v1.46.0](../versions.md#master-v1460--mineral_value-v1130--transportation-v1180).
 
+v0.6.1 TOOK IT 1.18.0 -> 1.18.1 AND MOVED NO VALUE: four notes cells (the
+reliability growth exponent, Starship and the two hypergolics).  The tables
+on disk stay at 1.18.0 under the rule below.  See
+[master v1.48.0](../versions.md#master-v1480--transportation-v1181).
+
 RE-RUN STAGE 3 WHEN A ROW CHANGES, NOT WHEN A STAMP DOES.  A repin does not
 require a restamp: Stage 4 reads no column this contract moved, so leaving the
 CSVs at the older stamp costs one `stamp_check()` line and nothing else, where
@@ -136,7 +141,7 @@ import subprocess, sys
 # the two to each other.
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.6.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.6.1",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -285,7 +290,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.18.0"
+    pipeline_version: str = "1.18.1"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 CONFIG = TransportConfig()

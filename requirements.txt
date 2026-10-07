@@ -17,4 +17,4 @@ pandas
 numpy
 yfinance
 tqdm
-spacecost @ git+https://github.com/loggger101/spacecost@v0.6.0
+spacecost @ git+https://github.com/loggger101/spacecost@v0.6.1

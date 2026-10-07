@@ -183,7 +183,7 @@ compared byte for byte. **The invariants, and what fails when each breaks, are
 in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)**, which is
 where the editing rules live.
 
-**spacecost is pinned to a tagged release**, `v0.6.0`, in all seven places
+**spacecost is pinned to a tagged release**, `v0.6.1`, in all seven places
 that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
 `build_master.py`, and in `_PIP_SPEC` in both `modules/transportation.py` and
 `modules/mineral_value.py` (what a standalone module run installs from, and
@@ -251,7 +251,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.8.1 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
 | 2 | `modules/mineral_value.py` | 1.13.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.18.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
+| 3 | `modules/transportation.py` | 1.18.1 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
 | 4 | `modules/calc.py` | 1.28.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
@@ -2770,9 +2770,10 @@ by the spacecraft MTBF term rather than double-counted here.
 `p_mining` used to sit at
 its first-of-kind value however many missions a programme flew, the one place
 the model was *pessimistic*. Duane/AMSAA: failure probability falls as a power
-law in cumulative production, `q(n) = q_first · n^(−α)` with α = 0.30, the
-bottom of MIL-HDBK-189's *active* growth band, appropriate for hardware that
-flies once every few years with no test fleet. Capped at a 0.95 mature ceiling.
+law in cumulative production, `q(n) = q_first · n^(−α)` with α = 0.30, near
+the bottom of the historical growth rates in MIL-HDBK-189C's Table II
+(0.27-0.64 for one-shot systems, 0.23-0.53 for time-based ones), which suits
+hardware that flies once every few years with no test fleet. Capped at a 0.95 mature ceiling.
 
 | Programme size | `p_mining` (fleet average) |
 |---|---|
