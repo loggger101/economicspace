@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0](#master-v1500--mineral_value-v1140--transportation-v1200)
 - [master v1.49.0 / transportation v1.19.0](#master-v1490--transportation-v1190)
 - [master v1.48.0 / transportation v1.18.1](#master-v1480--transportation-v1181)
 - [master v1.47.0 / calc v1.28.0](#master-v1470--calc-v1280)
@@ -101,10 +102,10 @@ one that does not say is not to be used.
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
-| 2 | `modules/mineral_value.py` | **1.13.0** | v1.13.0, twelve reference prices and market sizes re-pinned to the figure their source gives at the row's own date |
-| 3 | `modules/transportation.py` | **1.19.0** | v1.19.0, Electron and Pegasus XL priced as the bands their sources give, neither flyable by any mission: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 2 | `modules/mineral_value.py` | **1.14.0** | v1.14.0, every used-in-space price re-derived at spacecost v0.8.0's LEO anchor ($2,555/kg, was $2,414); no Stage 2 code moved (v1.13.0 was the last to move a row) |
+| 3 | `modules/transportation.py` | **1.20.0** | v1.20.0, Falcon Heavy (expendable)'s band topped by NASA's $178M, which moves the LEO price anchor: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.28.0** | v1.28.0, a pass of the sizing loop whose stack does not close backs the loop off toward the last state that did instead of refusing the candidate (`damp_sizing_loop`, default on), with the new `sizing_damped` column |
-| - | `master.py` | **1.49.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.50.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -183,6 +184,104 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0
+
+**Falcon Heavy (expendable)'s price band now reaches what NASA paid for one,
+and because that row is the LEO price every delivered price is built on, the
+whole model moves: every sampled body at every in-space destination gets
+better, by 0.45% at `mars_surface` to 5.04% at `leo`.** General_Research
+revision candidate rc-022, under the owner's decision (taken for Pegasus XL in
+master v1.49.0) that a launch band may span a government full-service price as
+well as a list price.
+
+### What moved upstream (spacecost 0.8.0)
+
+Falcon Heavy (expendable)'s band was SpaceX's $150M (2017) up to the same
+figure carried forward by the 2026 Falcon 9 rise, $159M. Its high end is now
+**$178M**, what NASA paid for the Falcon Heavy that launched Europa Clipper
+(NASA OIG IG-24-001, p24; a 2021 award, stated unescalated). The centre goes
+$154M to **$163M**, $2,414 to **$2,555/kg** to LEO. The anchor rule still
+selects it; the next candidate is $3,333/kg.
+
+| destination | delivered price, v0.7.0 | v0.8.0 | change |
+|---|---:|---:|---:|
+| `leo` | 2,414 | 2,555 | +5.8% |
+| `geo` | 8,046 | 8,462 | +5.2% |
+| `cislunar` | 6,878 | 7,236 | +5.2% |
+| `mars_orbit` | 8,706 | 9,154 | +5.1% |
+| `lunar_surface` | 42,635 | 43,338 | +1.6% |
+| `mars_surface` | 184,811 | 186,306 | +0.8% |
+
+### What moves here
+
+- **Stage 2, mineral_value 1.14.0.** No line of the module changed. The 43
+  used-in-space prices at each in-space destination follow the anchor, and
+  `earth_surface`'s table is identical. Replayed from the quotes each 1.13.0
+  table recorded, no network: a control replay on spacecost 0.7.0 reproduced
+  all seven 1.13.0 tables exactly first, and the 0.8.0 replay then differs in
+  `price_usd_per_kg` and `price_before_processing_usd_per_kg` only, on 43 rows
+  per in-space table. No commodity changed its route.
+- **Stage 3, transportation 1.20.0.** The Falcon Heavy (expendable) row, and
+  the 1,107 summary rows that fly it. Replayed the same way.
+- **`campaign/worked_calculation.py`** chooses the anchor an archived Stage 2
+  table was priced at by its stamp, as it already did for spacecost 0.4.0: a
+  table stamped 1.10.0-1.13.0 is derived at $2,414/kg, and
+  `check_delivery_pricing` holds that choice to every used-in-space price the
+  table carries.
+
+### Measured
+
+Stage 4, calc 1.28.0, on each destination's archived v1.40.0 default cell's
+**top 300 bodies plus a 3,000-row stride**, `--preset full`, three ways: the
+1.13.0 Stage 2 and 1.19.0 Stage 3 tables (A); the new Stage 3 alone (S3); and
+both new (B). r is the new objective over the old, and the figure is
+`median(1 - r)`:
+
+| destination | flies FH (exp) | FH price alone (S3 / A) | anchor alone (B / S3) | both (B / A) | winner, A -> B |
+|---|---:|---:|---:|---:|---|
+| `leo` | 70.0% | -0.497% | +5.510% | **+5.042%**, 3,300 / 0 | 2005 QP87, 17.0092x -> 16.1519x |
+| `cislunar` | 68.6% | -0.524% | +4.952% | **+4.454%**, 3,300 / 0 | 2018 DT, 4.8379x -> 4.5983x |
+| `geo` | 82.8% | -0.506% | +4.898% | **+4.417%**, 3,300 / 0 | 2021 CX5, 6.51851x -> 6.1986x |
+| `mars_orbit` | 71.2% | -0.505% | +4.888% | **+4.407%**, 3,300 / 0 | 350751, 4.59084x -> 4.36645x |
+| `lunar_surface` | 91.1% | -0.417% | +1.622% | **+1.212%**, 3,300 / 0 | 2005 QP87, 2.93514x -> 2.89477x |
+| `mars_surface` | 70.0% | -0.361% | +0.803% | **+0.445%**, 3,300 / 0 | 2015 DS, 1.09136x -> 1.08536x |
+| `earth_surface` | 16.5% | 0.000% (544 worse) | 0 | **0.000%**, 0 / 544 | 2018 DT, 5,374.37x -> 5,391.51x |
+
+The A column reproduces the committed winners: `leo`'s 17.0092x and
+`earth_surface`'s 5,374.37x are [master v1.46.0](#master-v1460--mineral_value-v1130--transportation-v1180)'s
+calc 1.27.0 figures exactly, and `cislunar`'s 4.8379x is README's v1.40.0
+cell. **No body entered or left the evaluable set** at any destination, and
+**no winner changed body**.
+
+🚨  **A DEARER LAUNCH MAKES IN-SPACE MINING LOOK BETTER, AND THAT IS THE
+MODEL'S PREMISE, NOT A DEFECT.** The two halves pull opposite ways: the
+missions that fly Falcon Heavy pay about 0.5% more, while every kilogram sold
+in space is worth the launch it avoids, which rose 5-6% in orbit. The revenue
+half wins everywhere a delivered price exists, and loses nowhere because it
+reaches every body. `earth_surface` has no delivered price, so it sees only
+the cost: its median does not move and 544 bodies that fly the vehicle are up
+to 1.76% worse. **Read that before quoting a better objective as better
+economics**: anchoring the revenue on a government full-service price was a
+decision about which price a buyer would otherwise pay, and the results now
+carry it.
+
+⚠️  **A handful of `geo` bodies improve by far more than the price**, up to
+46% (78046, 166.7x to 90.4x). All are uneconomic, objective 90x and above, and
+on each the search picks a much heavier load at the higher price (78046: 9.7 t
+to 18.9 t, same vehicle and propellant). The mechanism is not measured here; it
+is nowhere near a winner.
+
+### On disk
+
+- **Stage 2**: the seven 1.14.0 tables are frozen under
+  `campaign/stage2/mineral_value-1.14.0/`, and the live cislunar table is its
+  1.14.0 replay; the 1.13.0 tables were already frozen.
+- **Stage 3**: the 1.19.0 set is frozen under
+  `campaign/stage3/spacecost-0.7.0/`, and the live set is the v0.8.0 replay.
+- The inputs it replaced are backed up under
+  `asteroid_pipeline/_inputs_backup_2026-10-07_pre-v1.50.0/`. Stage 1 and
+  Stage 4's code are untouched; no config field moved.
 
 ## master v1.49.0 / transportation v1.19.0
 
@@ -2923,6 +3022,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0](#master-v1500--mineral_value-v1140--transportation-v1200) | 2026-10-07 | **Falcon Heavy (expendable)'s band reaches NASA's $178M, and the LEO price anchor moves $2,414 -> $2,555/kg**: every sampled in-space body better by 0.45-5.04%, `earth_surface` unmoved at the median; no winner changed body |
 | [master v1.49.0 / transportation v1.19.0](#master-v1490--transportation-v1190) | 2026-10-07 | **spacecost `v0.7.0`: Electron and Pegasus XL become the bands their sources give**: Rocket Lab's reported revenue per launch, and a list price up to NASA's ICON price; neither flies a mission, and every Stage 4 cell is bit-identical |
 | [master v1.48.0 / transportation v1.18.1](#master-v1480--transportation-v1181) | 2026-10-07 | **spacecost `v0.6.1`: four citations corrected, no value moved**: the reliability growth exponent cites MIL-HDBK-189C's Table II, Starship's $90M the Voyager prospectus, and the hypergolics quote DLA's FY2025 prices beside a basis that can no longer be checked; Stage 4 reads no notes |
 | [master v1.47.0 / calc v1.28.0](#master-v1470--calc-v1280) | 2026-10-07 | **a pass that overshoots backs the sizing loop off instead of refusing the mission**: evaluable bodies 1.6-2.4x on every destination's catalog stride, a sixth to two fifths of existing bodies better, none worse, no winner moved |
@@ -8129,6 +8229,14 @@ moved.
 prices; the silver, copper and platinum fallbacks; cobalt and ammonia world
 production; and `geo`'s annual absorption, 40,000 to 44,600 kg. No config
 field or column moved.
+
+**`1.14.0`  the LEO anchor moved under every used-in-space price.** Full write-up: [master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0](#master-v1500--mineral_value-v1140--transportation-v1200).
+No line of this module changed. spacecost v0.8.0 raised Falcon Heavy
+(expendable)'s band, the LEO price every delivered price is built on, from
+$2,414 to $2,555/kg, so the 43 used-in-space prices at each in-space
+destination moved and `earth_surface` did not. The stamp moves because the
+numbers did, and it is what `campaign/worked_calculation.py` reads to choose
+the anchor an archived table was priced at. No config field or column moved.
 
 ## Stage 3 changelog: `modules/transportation.py`
 
