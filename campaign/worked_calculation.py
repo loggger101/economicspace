@@ -2845,7 +2845,8 @@ def refinery_plant(C, hold, stay_yr):
     return hold / (stay_yr * rate)
 
 
-def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None):
+def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
+                   damped0=0):
     """The coupled sizing loop, then the mission actually flown.
 
     Seven quantities in one ring: payload sets the feed, the feed sets the dig
@@ -2894,8 +2895,42 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None):
     dv_ret_eff = DV["dv_ret"]
     boiloff_factor = 1.0
     passes, cas, ep, R = [], None, None, None
+    # calc v1.28.0, `damp_sizing_loop`: a pass after the first that does not
+    # close steps the state back toward the last one that did, halving the
+    # step, instead of refusing.  Only for a run that did it: a row with no
+    # `sizing_damped` column predates the damping, and its run refused here.
+    # The containment fraction is carried as its own state, as the model
+    # carries it, rather than recovered from `struct`, because the model
+    # blends the fraction and `struct - f_str` is not always it to the bit.
+    import master
+    damp = bool(C.get("damp"))
+    step, damped, settled = 1.0, 0, False
+    base = target = None
+    held_frac = 0.0
+    backoffs = []
+    i, limit = 0, 12
 
-    for i in range(12):
+    def back_off(why):
+        """Halve the step and blend back, or refuse as the model does."""
+        nonlocal step, damped, limit, plant_kg, ep_kg, refinery_kg
+        nonlocal isru_feed, isru_prop, stay_est, held_frac, struct
+        if not damp or base is None:
+            return refuse(why)
+        step *= 0.5
+        damped += 1
+        if step < master._DAMP_MIN_STEP:
+            return refuse(why + ", at every step the damped loop backs off to")
+        if damped == 1:
+            limit += master._DAMP_EXTRA_PASSES
+        backoffs.append({"n": i, "hw_tried": hw_in, "why": why, "step": step})
+        # Term by term, b + step (t - b): the model's own blend, written out.
+        (plant_kg, ep_kg, refinery_kg, isru_feed, isru_prop, stay_est,
+         held_frac) = tuple(b + step * (t - b) for b, t in zip(base, target))
+        struct = cfg.return_structure_frac_of_payload + held_frac
+        return False
+
+    while i < limit:
+        i += 1
         if models_boiloff:
             # Folded into an EFFECTIVE return delta-v rather than bolted onto
             # the cascade: m_return_prop scales with (R_ret - 1), so inflating
@@ -2905,13 +2940,17 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None):
             boiloff_factor = math.exp(C["boiloff_pct"] / 100.0 * hold_yr * 365.25)
             r_ret_raw = math.exp(DV["dv_ret"] / C["ve"])
             dv_ret_eff = C["ve"] * math.log(1.0 + (r_ret_raw - 1.0) * boiloff_factor)
+        hw_in = cfg.mining_hardware_kg + plant_kg + ep_kg + refinery_kg
         R = _ratios(C, DV["dv_out"], dv_ret_eff)
         if R is None:
-            return refuse("the tank cannot close: delta (R - 1) >= 1 on this propellant")
-        hw_in = cfg.mining_hardware_kg + plant_kg + ep_kg + refinery_kg
+            if back_off("the tank cannot close: delta (R - 1) >= 1 on this propellant") is None:
+                return None
+            continue
         cas = _cascade(C, R, hw_in, struct)
         if cas is None:
-            return refuse("the mass cascade does not converge at this hardware mass")
+            if back_off("the mass cascade does not converge at this hardware mass") is None:
+                return None
+            continue
         ep = _ep_stage(C, cas["m_prop"])
         trial_pay = min(cas["m_pay"], B["mineable"],
                         max(0.0, throughput - isru_feed))
@@ -2986,13 +3025,17 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None):
         new_plant = draw / C["plant_w_per_kg"] if draw > 0 else 0.0
         new_frac = C["contain_per_kg"] * min(1.0, water / trial_pay)
         new_stay = trial_dig + DV["window_wait"]
-        passes.append({"n": i + 1, "hw_in": hw_in, "f_used": struct,
+        passes.append({"n": i, "hw_in": hw_in, "f_used": struct,
                        "m_pay": cas["m_pay"], "ep": ep["mass"],
                        "plant": new_plant, "feed": trial_feed,
                        "dig": trial_dig, "water": water, "c_frac": new_frac,
                        "refinery": new_refinery,
-                       "stay": new_stay, "isru_feed": new_isru_feed})
-        held = struct - cfg.return_structure_frac_of_payload
+                       "stay": new_stay, "isru_feed": new_isru_feed,
+                       # calc v1.28.0: the state this pass was SOLVED at,
+                       # and the step it was blended at (1.0 for a pass
+                       # that took the previous pass's sizing whole).
+                       "plant_in": plant_kg, "ep_in": ep_kg,
+                       "refinery_in": refinery_kg, "step": step})
         # Five tests, in the model's own order and with its own tolerances:
         # three masses and the stay relative at 1%, the containment fraction
         # absolute at 1e-4 because it is a fraction and not a mass.
@@ -3002,14 +3045,30 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None):
                    and abs(new_stay - stay_est) <= 0.01 * max(new_stay, 1.0)
                    and abs(new_refinery - refinery_kg)
                    <= 0.01 * max(new_refinery, 1.0)
-                   and abs(new_frac - held) <= 1e-4)
-        plant_kg, ep_kg = new_plant, ep["mass"]
-        refinery_kg = new_refinery
-        isru_feed, isru_prop = new_isru_feed, new_isru_prop
-        stay_est = new_stay
-        struct = cfg.return_structure_frac_of_payload + new_frac
+                   and abs(new_frac - held_frac) <= 1e-4)
+        if damp:
+            base = (plant_kg, ep_kg, refinery_kg, isru_feed, isru_prop,
+                    stay_est, held_frac)
+            target = (new_plant, ep["mass"], new_refinery, new_isru_feed,
+                      new_isru_prop, new_stay, new_frac)
+        if settled or step == 1.0:
+            plant_kg, ep_kg = new_plant, ep["mass"]
+            refinery_kg = new_refinery
+            isru_feed, isru_prop = new_isru_feed, new_isru_prop
+            stay_est = new_stay
+            held_frac = new_frac
+        else:
+            # The model's blend, b + step (t - b), term by term.
+            (plant_kg, ep_kg, refinery_kg, isru_feed, isru_prop, stay_est,
+             held_frac) = tuple(b + step * (t - b)
+                                for b, t in zip(base, target))
+        struct = cfg.return_structure_frac_of_payload + held_frac
         if settled:
             break
+    # A damped loop must settle: a blend's stage was sized for neither of the
+    # stacks it lies between, so the model refuses one that runs out of passes.
+    if damped and not settled:
+        return refuse("the damped sizing loop did not settle in its passes")
 
     # The mission actually flown: the loop's payload, capped by volume, with
     # the plant, the seal and the ISRU books re-settled on it and the stack
@@ -3105,7 +3164,8 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None):
                 over = {"m_pay": m_pay, "hw": hw, "f_eff": f_eff,
                         "m_launch": m_launch, "refit": refit,
                         "budget": R["budget"]}
-                return mass_and_clock(C, B, DV, ratio, ceiling, depth + 1, over)
+                return mass_and_clock(C, B, DV, ratio, ceiling, depth + 1, over,
+                                      damped0 + damped)
         return refuse("the launch stack exceeds the vehicle's capacity to LEO")
 
     stay = dig_yr + DV["window_wait"]
@@ -3148,7 +3208,10 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None):
             "isru_feed": isru_feed, "isru_water": isru_water,
             "liberated": liberated, "boiloff_factor": boiloff_factor,
             "dv_ret_eff": dv_ret_eff, "repairs": depth, "payload_cap": cap,
-            "repair": attempt}
+            "repair": attempt,
+            # calc v1.28.0: the back-offs this solve and any it was repaired
+            # from took, and this solve's own, for the page.
+            "damped": damped0 + damped, "backoffs": backoffs}
 
 
 # --------------------------------------------------------- periods and money
@@ -3644,11 +3707,19 @@ def concentration_sweep(C, B, DV):
     # calc v1.27.0: refine around the best UNREPAIRED rung as well, when it is
     # a different one, exactly as the model does; see its concentration
     # search.  Without a repair the two are the same rung.
-    whole = [p for p in live if not p[2]["M"]["repairs"]]
+    # calc v1.28.0: and around the best UNDAMPED rung, in the slot the overall
+    # winner held, so a sweep that damped nothing walks v1.27.0's ratios.
+    whole = [p for p in live
+             if not p[2]["M"]["repairs"] and not p[2]["M"]["damped"]]
     old_r = (min(whole, key=lambda p: p[2]["ladder"]["best"]["obj"])[1]
              if whole else None)
-    centres = ([old_r, best_r] if old_r is not None and old_r != best_r
-               else [best_r])
+    undamped = [p for p in live if not p[2]["M"]["damped"]]
+    und_r = (min(undamped, key=lambda p: p[2]["ladder"]["best"]["obj"])[1]
+             if undamped else best_r)
+    centres = ([old_r, und_r] if old_r is not None and old_r != und_r
+               else [und_r])
+    if best_r not in centres:
+        centres.append(best_r)
     step = r_max ** (1.0 / (steps - 1))
     for centre in centres:
         for ratio in (centre / step ** 0.5, centre * step ** 0.5):
@@ -3779,6 +3850,8 @@ def comparable(C, B, DV, M, P, ladder):
         "refinery_kg": M["refinery"], "refinery_power_w": M["refine_draw"],
         # calc v1.27.0; absent before it, and reported skipped then.
         "settle_repairs": M["repairs"],
+        # calc v1.28.0; absent before it, and reported skipped then.
+        "sizing_damped": M["damped"],
         # The axes the cislunar cells could not exercise, each with a column of
         # its own so that turning one on is checked rather than assumed.  Every
         # one of them is exactly zero (or 1.0) on the mission shape that does
@@ -3928,6 +4001,11 @@ def build(archived, label, body=None, run_beneficiated=None):
     # an older row's run refused, whatever this process's config says.
     C["repair"] = (archived is not None and "settle_repairs" in archived
                    and bool(getattr(C["cfg"], "repair_settled_overshoot", False)))
+    # calc v1.28.0: whether the row's run backed its sizing loop off rather
+    # than refusing a pass that overshot.  The same rule as the repair: the
+    # column exists only from that release.
+    C["damp"] = (archived is not None and "sizing_damped" in archived
+                 and bool(getattr(C["cfg"], "damp_sizing_loop", False)))
     if C["refinery"]:
         tables["minerals"] = gross_minerals(tables["minerals"])
         C["minerals"] = tables["minerals"]
@@ -4413,6 +4491,10 @@ BORROWED = {
         "shape", "which (N, F, W) the search proposed; every value is priced here"),
     "_fleet_refinement_cached": (
         "shape", "the fleet refinement pass around the coarse winner"),
+    "_DAMP_MIN_STEP": (
+        "shape", "how far the damped sizing loop backs off before it refuses"),
+    "_DAMP_EXTRA_PASSES": (
+        "shape", "the passes the sizing loop is given once it has backed off"),
 }
 
 

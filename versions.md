@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.47.0 / calc v1.28.0](#master-v1470--calc-v1280)
 - [master v1.46.0 / mineral_value v1.13.0 / transportation v1.18.0](#master-v1460--mineral_value-v1130--transportation-v1180)
 - [master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3](#master-v1450--mineral_value-v1123--transportation-v1173)
 - [master v1.44.0 / transportation v1.17.2](#master-v1440--transportation-v1172)
@@ -100,8 +101,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.13.0** | v1.13.0, twelve reference prices and market sizes re-pinned to the figure their source gives at the row's own date |
 | 3 | `modules/transportation.py` | **1.18.0** | v1.18.0, Atlas V 551, Minotaur IV and Pegasus XL carried to 2026 dollars and Deep Space Network time re-derived from its rate base: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.27.0** | v1.27.0, a mission whose settled stack overshoots its vehicle is re-solved under a payload ceiling instead of refused (`repair_settled_overshoot`, default on), with the new `settle_repairs` column |
-| - | `master.py` | **1.46.0** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.28.0** | v1.28.0, a pass of the sizing loop whose stack does not close backs the loop off toward the last state that did instead of refusing the candidate (`damp_sizing_loop`, default on), with the new `sizing_damped` column |
+| - | `master.py` | **1.47.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -177,6 +178,106 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.47.0 / calc v1.28.0
+
+**A pass of the sizing loop that overshoots its vehicle now backs the loop
+off instead of refusing the mission, and on every destination's sample that
+roughly doubles the bodies the model can reach without moving any headline.**
+It closes [master v1.43.0's open item](#master-v1430--calc-v1270): the same
+cliff as the settle-up overshoot, one pass earlier.
+
+### The defect
+
+Pass 1 of the sizing loop solves the payload with no plant and no electric
+stage aboard. Pass 2 flies the stage and the plant sized for that payload,
+and if the stack no longer closed, the candidate was refused. But the stage
+was sized for a payload the stack could never carry once the stage was aboard;
+a smaller payload with a smaller stage and a smaller plant closes. The fixed
+point existed and the iteration started on the wrong side of it.
+`_closes_carrying_its_own_stage` measured this refusal at **74.3%** of every
+candidate evaluated at cislunar in calc 1.17.4, and pruned on it, soundly
+against the loop and not against the existence of a mission.
+
+### What changes
+
+- **New field `damp_sizing_loop`** (default **True**). A pass after the first
+  whose stack does not close moves the loop's state back toward the state the
+  last closing pass was solved at, halving the step each time, down to a
+  thousandth, and the loop carries on at the reduced step with 36 more passes.
+  A damped loop must converge or it is refused. **False is calc 1.27.0 to the
+  bit**, and so is every candidate that closes at every pass, because at a
+  step of 1.0 the new state is assigned rather than blended.
+- **New output column `sizing_damped`**: the back-offs the row's loop took,
+  counting any repair's re-solves; 0 for a mission whose every pass closed.
+- **The pre-filter's second stage sizes its stage off a floor** without ISRU:
+  the full-vehicle outbound load (the same at every hardware mass) plus the
+  EMPTY return vehicle's, less the loop's 1%. Every converged state flies at
+  least that stage, so the refusal is still sound; under ISRU pass 1's stage is
+  already the floor. See CLAUDE.md,
+  [a pre-filter proven sound against an iteration](CLAUDE.md#a-pre-filter-proven-sound-against-an-iteration-is-not-proven-sound-against-the-problem).
+- **The concentration search refines around the best undamped coarse rung**
+  as well as the unrepaired and the overall one. The undamped winner is calc
+  1.27.0's overall winner, so every candidate 1.27.0 priced is still priced.
+- **The worked calculation and the verification sheet derive a damped loop**:
+  each back-off, and the blend every pass after it is solved at.
+
+### Verified
+
+| | raw | raw searched | benef | benef searched |
+|---|---|---|---|---|
+| damping off, against `.verify/baseline-1.46.0` (calc 1.27.0) | **MATCH** `636f71ab37008f73` | **MATCH** `3d16c80392bb81ad` | **MATCH** `a2ecad96be71c05d` | **MATCH** `3b453a750cf03edd` |
+| damping on, evaluable rows | 149 -> **358** | 149 -> **358** | 58 -> **135** | 58 -> **135** |
+| rows better / worse | 51 / **0** | 59 / **0** | 19 / **0** | 19 / **0** |
+| best case | 2022 NX1, the same float | 2022 NX1, the same float | 2018 GT11, the same float | 2018 GT11, the same float |
+| pruned against unpruned, damping on | **MATCH** | **MATCH** | **MATCH** | **MATCH** |
+
+The mass ledger closes to 0 kg on the damped cells and no row's launch mass
+exceeds its vehicle. A damped row (2021 ND73, raw) derives 92 quantities with
+0 DIFFER, its verification sheet reproduces 237 of 237 substitutions, and its
+page audit is complete. `verify.py invariants` passes at the new default.
+
+### What it is worth, on samples
+
+Two samples per destination, at the live tables (mineral_value 1.13.0,
+spacecost `v0.6.0`), damping off against on. The first is the archived
+v1.40.0 default cell's top 300 bodies plus a ~3,000-row stride, the sample
+v1.43.0 and v1.46.0 were measured on; its damping-off side is v1.46.0's own
+measurement, reproduced bit for bit at cislunar. It holds only bodies that
+were evaluable, so it cannot see a body the damping makes reachable; the
+second is a 3,000-body stride over the whole catalog, which can.
+
+| destination | archived sample: rows better / worse | median improvement of a moved row | top 300 moved | winner, unchanged | catalog stride: evaluable bodies |
+|---|---|---|---|---|---|
+| `cislunar` | 964 / **0** of 3,306 | 95.0% | 0 | 2018 DT, 4.8379x | 1,142 -> **2,654** |
+| `lunar_surface` | 1,270 / **0** of 3,302 | 94.9% | 0 | 2005 QP87, 2.9351x | 1,093 -> **2,651** |
+| `mars_surface` | 773 / **0** of 3,301 | 99.1% | 0 | 2015 DS, 1.0914x | 1,541 -> **2,663** |
+| `mars_orbit` | 1,341 / **0** of 3,308 | 46.5% | 0 | 350751, 4.5908x | 1,668 -> **2,667** |
+| `leo` | 708 / **0** of 3,300 | 98.9% | 0 | 2005 QP87, 17.0092x | 1,474 -> **2,668** |
+| `geo` | 551 / **0** of 3,307 | 95.3% | 0 | 2021 CX5, 6.5185x | 1,191 -> **2,658** |
+| `earth_surface` | 953 / **0** of 3,300 | 35.7% | 0 | 2018 DT, 5,374.37x | 1,648 -> **2,669** |
+
+✅  **No row anywhere gets worse, no winner moves by a single float, and no
+body in any top 300 moves.** What the cliff was doing was choosing a far worse
+architecture for between a sixth and two fifths of
+the bodies the model could already reach, and refusing between a third and a
+half of the catalog outright.
+
+🚨  **THE BODIES IT ADDS ARE ALL ELECTRIC AND MOSTLY EXPENSIVE**, so the median
+EVALUABLE body reads worse at six destinations (cislunar 20.4x -> 27.4x on the
+stride) while no body that was evaluable got worse. On the 400-row `verify.py`
+cells every new row flies xenon on solar power, at a median outbound
+delta-v of about 15.8 km/s against about 13 km/s for the bodies that were
+already reachable. **Compare paired bodies, never the medians of two evaluable
+sets**, which is the denominator rule in CLAUDE.md arriving at full size.
+
+⚠️  **`geo` adds one row to its archived sample**: a body calc 1.27.0 refused on
+the v1.46.0 tables, which is one of the two rows v1.46.0 traced to this cliff.
+
+⚠️  **Runtime is not measured on a full cell.** On the capped `verify.py` cells
+the damping costs 1.00-1.08x, and the unpruned search runs about as fast as the
+pruned one, so the floor now prunes little; THE SAMPLING RULE says a capped
+cell predicts neither. The seven full cells have not been re-run.
 
 ## master v1.46.0 / mineral_value v1.13.0 / transportation v1.18.0
 
@@ -2724,6 +2825,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.47.0 / calc v1.28.0](#master-v1470--calc-v1280) | 2026-10-07 | **a pass that overshoots backs the sizing loop off instead of refusing the mission**: evaluable bodies 1.6-2.4x on every destination's catalog stride, a sixth to two fifths of existing bodies better, none worse, no winner moved |
 | [master v1.46.0 / mineral_value v1.13.0 / transportation v1.18.0](#master-v1460--mineral_value-v1130--transportation-v1180) | 2026-10-06 | **sixteen values re-pinned to their sources, two candidates declined**: nickel, iron, iridium, ruthenium, titanium, gallium and ammonia priced from USGS, the World Bank, LBMA and Johnson Matthey; GEO's market recounted; Atlas V 551 in 2026 dollars. `earth_surface` moves 10.3% on the median sampled body; nothing else moves 2% |
 | [master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3](#master-v1450--mineral_value-v1123--transportation-v1173) | 2026-10-06 | **spacecost `v0.5.3` and one Stage 2 note: five citations corrected, no value moved**: Psyche, Didymos and two Mars delta-v rows upstream, tungsten's price note here; Stage 4 reads no notes |
 | [master v1.44.0 / transportation v1.17.2](#master-v1440--transportation-v1172) | 2026-10-06 | **spacecost `v0.5.2`: twenty-three citations corrected, no value moved**: the repin carries 0.5.1 and 0.5.2's notes; Stage 4 reads no notes, so the tables on disk stay at 1.17.0 |
@@ -8869,16 +8971,6 @@ field and one output column are added, and the field defaults ON.
   `phase_price_check` refuses a detailed phase Stage 2 does not price, and an
   older catalog runs the `comp_phases` model whatever the switch says.
 
-# Measurement history
-
-What the numbers used to be, why they moved, and the rule this project keeps
-relearning about predicting them. **Every table here names the release and the
-catalog it belongs to. If one does not say, do not use it.**
-
-The current answers are in the README:
-[Results](README.md#current-results-the-complete-28-cell-matrix) for the model,
-[Beneficiation](README.md#beneficiation) for the wall clock.
-
 **`1.27.0`  the settle-up overshoot.** Full write-up: [master v1.43.0 / calc v1.27.0](#master-v1430--calc-v1270). One config
 field and one output column are added, and the field defaults ON.
 
@@ -8891,6 +8983,34 @@ field and one output column are added, and the field defaults ON.
   repair, and the worked calculation derives it as its run refused.
 - **The concentration search refines around the best unrepaired coarse rung
   as well as the overall one**, so the repair only ever adds options.
+
+**`1.28.0`  the damped sizing loop.** Full write-up: [master v1.47.0 / calc v1.28.0](#master-v1470--calc-v1280). One config
+field and one output column are added, and the field defaults ON.
+
+- **New field**: `damp_sizing_loop` (default **True**): when a pass of the
+  sizing loop after the first does not close, step the state back toward the
+  last state that closed, halving the step down to a thousandth, and keep
+  iterating at the reduced step instead of refusing the candidate. A damped
+  loop must converge. False is v1.27.0 to the bit.
+- **New output column**: `sizing_damped`, how many times the row's sizing loop
+  backed off, counting any repair's re-solves; 0 for a mission whose every pass
+  closed. A row without the column predates the damping, and the worked
+  calculation derives it as its run refused.
+- **The pre-filter's second stage sizes its stage off a floor** when the
+  damping is on and the return is not ISRU: the full-vehicle outbound load
+  plus the empty return vehicle's, less the loop's 1%.
+- **The concentration search refines around the best undamped coarse rung as
+  well**, so the damping only ever adds options.
+
+# Measurement history
+
+What the numbers used to be, why they moved, and the rule this project keeps
+relearning about predicting them. **Every table here names the release and the
+catalog it belongs to. If one does not say, do not use it.**
+
+The current answers are in the README:
+[Results](README.md#current-results-the-complete-28-cell-matrix) for the model,
+[Beneficiation](README.md#beneficiation) for the wall clock.
 
 ## Cost/revenue matrices
 

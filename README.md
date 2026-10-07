@@ -252,7 +252,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | 1 | `modules/catalog.py` | 1.8.1 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
 | 2 | `modules/mineral_value.py` | 1.13.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.18.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
-| 4 | `modules/calc.py` | 1.27.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.28.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -1945,8 +1945,13 @@ the two points where the answer is already decided rather than re-deriving it
 once per power source and once per point of the concentration sweep: v1.14.1
 refutes at pass 1 of the sizing loop, which prunes **75.9%** of candidates, and
 v1.17.4 refutes at pass 2, the first pass that carries the electric stage, 
-which kills a further **84-86%** of what pass 1 lets through. ⚠️  Both are
+which killed a further **84-86%** of what pass 1 let through. ⚠️  Both are
 decisions rather than bounds: nothing is approximated, so no mission is lost.
+🚨  **Since calc 1.28.0 the loop no longer refuses at pass 2** (it backs off;
+see below), so the second refutation tests the smallest electric stage any
+settled loop can fly instead, and prunes far less: on the capped verification
+cells the unpruned search now runs about as fast as the pruned one. The two
+shares above are calc 1.17.4 measurements.
 ⚠️  Turning the switch off restores the **pre-v1.14.1** search, not the v1.14.1
 one, and an unpruned full cell is very slow.
 
@@ -2041,6 +2046,21 @@ above was unaffected on those samples; the six cells measured before it are
 calc 1.26.0 populations, and the `lunar_surface` row is the full cell re-run
 at this release. See
 [master v1.43.0](versions.md#master-v1430--calc-v1270).
+
+🚨  **calc 1.28.0 roughly doubles the bodies the model can reach, and still
+does not move a best case.** Pass 2 of the sizing loop used to refuse any
+candidate whose stack no longer closed once it carried the electric stage and
+plant pass 1 had sized, although a smaller payload with a smaller stage
+closes; the loop now backs off toward the last state that closed. On a
+3,000-body stride over the catalog, the evaluable bodies go from 36-56% of it
+to about 89% at every destination, and on each archived default cell's sample
+a sixth to two fifths of the bodies already reachable improve, most by more
+than an order of magnitude, with **no body worse and every winner above the
+same float**. The bodies it adds fly electric stages to high-delta-v targets
+and are mostly dear, so the median EVALUABLE body reads worse while no body
+did: compare paired bodies, not the medians of two evaluable sets. The full
+cells have not been re-run; see
+[master v1.47.0](versions.md#master-v1470--calc-v1280).
 
 ⚠️  **Seven cells, one setting.** The raw and N = 1 cells have not been run on
 these inputs at any destination; every matrix below is an older model, and

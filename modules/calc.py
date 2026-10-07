@@ -377,6 +377,18 @@ class CalcConfig:
     # the candidate priced again at that ceiling, up to three times.  A
     # candidate that fit before is not touched.  False is v1.26.0 to the bit.
     repair_settled_overshoot:  bool  = True
+
+    # BACK OFF rather than refuse when a pass of the sizing loop overshoots
+    # (v1.28.0).  Pass 1 solves the payload with no plant and no electric
+    # stage aboard, so the stage and the plant pass 2 flies are sized for a
+    # payload the mission cannot carry once they are aboard; if that stack no
+    # longer closes, the candidate used to be refused, although a smaller
+    # payload with a smaller stage and plant closes.  With this on, the loop
+    # steps back toward the last pass that closed, halving the step until a
+    # stack closes, and keeps iterating from there at the reduced step.  Only
+    # a candidate the loop would have refused is touched: one that closed at
+    # every pass is priced exactly as before.  False is v1.27.0 to the bit.
+    damp_sizing_loop:          bool  = True
     # Fraction of the valuable phase that actually reports to concentrate.
     # Terrestrial PGM / sulphide flotation circuits run 85-95%; magnetic
     # separation of a metal phase from silicate gangue is mechanically simpler
@@ -1128,7 +1140,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.27.0"
+    pipeline_version: str = "1.28.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -5232,6 +5244,20 @@ def _closes_carrying_its_own_stage(
     ⚠️  Non-electric candidates return True without touching the solver.  With
     no electric stage `ep` is 0, so this test IS the first stage, which the
     caller has already applied.
+
+    🚨  v1.28.0: WITH `damp_sizing_loop` ON, PASS 2 IS NO LONGER THE TEST.
+    The argument above is sound against the loop's own iteration, and that
+    is all it ever was: pass 1's stage is sized for the payload a stack with
+    NO stage aboard could carry, so a stack that does not close carrying it
+    can still close with a smaller payload and a smaller stage, and the
+    damped loop finds that mission.  So without ISRU the test here uses the
+    smallest stage any converged state can fly: the outbound load of a
+    full-vehicle cascade (the same at every hardware mass, because the
+    payload fills the vehicle) plus the return load of the EMPTY vehicle,
+    less the loop's 1% tolerance.  Every converged state's stage is at least
+    that, so refusing on it is still a decision rather than a guess.  Under
+    ISRU the outbound load grows with the hardware, so pass 1's stage is
+    already the floor and the test is unchanged.
     """
     (dv_penalty, thruster_eff_row, thruster_kg_per_n_row,
      tank_frac, isp_s_val, boiloff_pct) = sizing_consts
@@ -5293,10 +5319,30 @@ def _closes_carrying_its_own_stage(
     if not pass1["viable"]:
         return False                   # stage 1 already knew this; agree with it
 
+    stage_basis = pass1
+    if getattr(config, "damp_sizing_loop", False) and not isru:
+        # v1.28.0.  With the loop damped, pass 2 is no longer the test: a
+        # candidate whose pass-2 stack overshoots backs off to a smaller
+        # payload and a smaller stage.  What every closing state still flies
+        # is a stage sized off a full-vehicle cascade (the outbound load is
+        # the same at every hardware mass, because the payload fills the
+        # vehicle) carrying at least the EMPTY return vehicle home, so the
+        # stage for that load is a floor under every stage the loop can
+        # converge on.  The loop converges to 1%, hence the slack below.
+        # Under ISRU the outbound load grows with the hardware, so pass 1's
+        # stage is already the floor and the test is unchanged.
+        k_ret = float(pass1.get("k_ret", 1.0))
+        stage_basis = {
+            "m_outbound_prop": float(pass1.get("m_outbound_prop", 0.0)),
+            "m_return_prop":   (k_ret * (1.0 + tps_frac) * dry_return_kg
+                                * (float(pass1["r_ret"]) - 1.0)),
+        }
     ep_kg, _pw, _tn, _ty = _ep_stage_kg(
-        pass1, isp_s_val, eff_used, solar_w_per_kg,
+        stage_basis, isp_s_val, eff_used, solar_w_per_kg,
         ppu_kg_per_kw, thruster_kg_per_n, config,
     )
+    if stage_basis is not pass1:
+        ep_kg = max(0.0, ep_kg - 0.01 * max(ep_kg, 1.0))
     if ep_kg <= 0.0:
         return True
 
@@ -7145,6 +7191,28 @@ def asteroid_context(
     )
 
 
+# v1.28.0, `damp_sizing_loop`.  The smallest step the loop backs off to before
+# it refuses, and the passes it is given beyond the usual twelve once it has
+# had to back off at all.  Ten halvings is a thousandth of the way from the
+# last stack that closed; a candidate still overshooting there is refused, as
+# every one of them was before.
+_DAMP_MIN_STEP     = 1.0 / 1024.0
+_DAMP_EXTRA_PASSES = 36
+
+
+def _damp_blend(base: Tuple[float, ...], target: Tuple[float, ...],
+                step: float) -> Tuple[float, ...]:
+    """`step` of the way from `base` to `target`, term by term.
+
+    The sizing loop's state, moved part of the way toward the state its last
+    closing pass computed (v1.28.0, `damp_sizing_loop`).  Never called at a
+    step of 1.0, where the loop assigns `target` itself: `b + 1.0 * (t - b)`
+    is not `t` in floating point, and the bit-identity of every candidate that
+    closes at every pass rests on that.
+    """
+    return tuple(b + step * (t - b) for b, t in zip(base, target))
+
+
 def _evaluate_combo_at_ratio(
     asteroid_row:      Row,
     vehicle:           Row,
@@ -7168,6 +7236,7 @@ def _evaluate_combo_at_ratio(
     refinery:          Optional[Tuple[Dict[str, float], float]] = None,
     payload_cap_kg:    Optional[float] = None,
     _repair_depth:     int = 0,
+    _damped_steps:     int = 0,
 ) -> Optional[Dict[str, float]]:
     """Evaluate one (vehicle × propellant × architecture) mission for one asteroid.
 
@@ -7445,7 +7514,19 @@ def _evaluate_combo_at_ratio(
         ops_df, "Water liberation energy (bound water)", default=2_500.0,
     )
     cascade = None
-    for _ in range(12):
+    # v1.28.0, `damp_sizing_loop`.  `base` is the state the last CLOSING pass
+    # was solved at and `target` the state that pass computed; the loop moves
+    # `step` of the way from one to the other.  While no pass has failed the
+    # step is 1.0 and the state is assigned `target` itself, not a blend of it,
+    # so every candidate that closes at every pass is priced exactly as before.
+    damp        = bool(getattr(config, "damp_sizing_loop", False))
+    step        = 1.0
+    damped_here = 0
+    base = target = None
+    converged   = False
+    passes, pass_limit = 0, 12
+    while passes < pass_limit:
+        passes += 1
         # Boil-off, folded into an EFFECTIVE return Δv: since m_return_prop
         # scales with (R_ret − 1), inflating that term by k is exactly
         # R_eff = 1 + (R_ret − 1)·k, and dv_eff = Isp·g0·ln(R_eff) leaves the
@@ -7471,7 +7552,23 @@ def _evaluate_combo_at_ratio(
             tank_frac       = tank_frac,
         )
         if not cascade["viable"]:
-            return None
+            # Pass 1 carries no plant and no stage, so a pass-1 refusal is
+            # final.  A later one means the stage and the plant were sized for
+            # a payload the stack cannot carry once they are aboard: step back
+            # toward the last state that closed and try again.
+            if not damp or base is None:
+                return None
+            step *= 0.5
+            damped_here += 1
+            if step < _DAMP_MIN_STEP:
+                return None
+            if damped_here == 1:
+                pass_limit += _DAMP_EXTRA_PASSES
+            (power_system_kg, ep_system_kg, refinery_kg, isru_feed_kg,
+             isru_prop_kg, stay_est_yr, containment_frac) = _damp_blend(
+                base, target, step)
+            structure_frac_eff = structure_frac + containment_frac
+            continue
 
         new_ep_kg = 0.0
         if is_electric:
@@ -7623,16 +7720,32 @@ def _evaluate_combo_at_ratio(
             # far below anything that moves a reported number.
             and abs(new_containment_frac - containment_frac) <= 1e-4
         )
-        power_system_kg, ep_system_kg = new_power_kg, new_ep_kg
-        refinery_kg                   = new_refinery_kg
-        isru_feed_kg, isru_prop_kg    = new_isru_feed, new_isru_prop
-        stay_est_yr                   = new_stay_yr
-        containment_frac              = new_containment_frac
+        if damp:
+            base   = (power_system_kg, ep_system_kg, refinery_kg, isru_feed_kg,
+                      isru_prop_kg, stay_est_yr, containment_frac)
+            target = (new_power_kg, new_ep_kg, new_refinery_kg, new_isru_feed,
+                      new_isru_prop, new_stay_yr, new_containment_frac)
+        if converged or step == 1.0:
+            power_system_kg, ep_system_kg = new_power_kg, new_ep_kg
+            refinery_kg                   = new_refinery_kg
+            isru_feed_kg, isru_prop_kg    = new_isru_feed, new_isru_prop
+            stay_est_yr                   = new_stay_yr
+            containment_frac              = new_containment_frac
+        else:
+            (power_system_kg, ep_system_kg, refinery_kg, isru_feed_kg,
+             isru_prop_kg, stay_est_yr, containment_frac) = _damp_blend(
+                base, target, step)
         structure_frac_eff            = structure_frac + containment_frac
         if converged:
             break
 
     if cascade is None or not cascade["viable"]:
+        return None
+    # A loop that had to back off flies a blend until it settles, and a blend
+    # is not a mission: its stage was sized for neither of the stacks it lies
+    # between.  So a damped loop must converge, where an undamped one that
+    # runs out of passes flies its last pass, as it always has.
+    if damped_here and not converged:
         return None
     hardware_total_kg = (config.mining_hardware_kg + power_system_kg + ep_system_kg
                          + refinery_kg)
@@ -7886,6 +7999,7 @@ def _evaluate_combo_at_ratio(
                     power_mode=power_mode, ctx=ctx, market_mode=market_mode,
                     refinery=refinery, payload_cap_kg=cap,
                     _repair_depth=_repair_depth + 1,
+                    _damped_steps=_damped_steps + damped_here,
                 )
         return None
 
@@ -8521,6 +8635,10 @@ def _evaluate_combo_at_ratio(
         # the settled stack overshot the vehicle; 0 for a mission that fit.
         # See `repair_settled_overshoot`.
         "settle_repairs":           _repair_depth,
+        # v1.28.0: how many times the sizing loop stepped back because a pass
+        # overshot, counting any repair's re-solves; 0 for a mission whose
+        # every pass closed.  See `damp_sizing_loop`.
+        "sizing_damped":            _damped_steps + damped_here,
         "power_w_per_kg_at_target":  plant_w_per_kg,
         "power_source":             power_source,
         "hardware_total_kg":        hardware_total_kg,
@@ -8847,9 +8965,18 @@ def evaluate_combo(
     # mars_surface rows up to 5.3% worse, every one a refinement neighbourhood
     # that had moved to a repaired rung.  With the repair off the two winners
     # are always the same rung and the search is v1.26.0's to the bit.
-    old_found = best is not None and not best.get("settle_repairs", 0)
+    old_found = (best is not None and not best.get("settle_repairs", 0)
+                 and not best.get("sizing_damped", 0))
     old_key = best_key if old_found else (-np.inf, -np.inf)
     old_r = 1.0
+    # v1.28.0, the same argument one release on.  A candidate the sizing loop
+    # did not have to damp is priced exactly as v1.27.0 priced it, and one it
+    # did damp was None in v1.27.0, so the best UNDAMPED rung is v1.27.0's
+    # overall coarse winner.  Refining around it too keeps every candidate
+    # v1.27.0 priced in the search, so the damping can only add options.
+    und_found = best is not None and not best.get("sizing_damped", 0)
+    und_key = best_key if und_found else (-np.inf, -np.inf)
+    und_r = 1.0
 
     r_max = saturation_ratio(
         phases or [], config.beneficiation_recovery, config.max_concentration_ratio,
@@ -8868,14 +8995,24 @@ def evaluate_combo(
         if res is not None and key > best_key:
             best_key, best, best_r = key, res, r
         if (res is not None and not res.get("settle_repairs", 0)
-                and key > old_key):
+                and not res.get("sizing_damped", 0) and key > old_key):
             old_found, old_key, old_r = True, key, r
+        if (res is not None and not res.get("sizing_damped", 0)
+                and key > und_key):
+            und_found, und_key, und_r = True, key, r
 
     # One refinement pass around the winner, on the same geometric spacing,
-    # and around the unrepaired winner too when that is a different rung.
+    # and around the unrepaired and the undamped winners too when either is a
+    # different rung.  The order is v1.27.0's, with the undamped winner (its
+    # overall winner) in the slot its overall winner held, so a search that
+    # damped nothing walks exactly the ratios v1.27.0 walked.
     if best is not None and n > 2:
         step = r_max ** (1.0 / (n - 1))
-        centres = [old_r, best_r] if (old_found and old_r != best_r) else [best_r]
+        if not und_found:
+            und_r = best_r
+        centres = [old_r, und_r] if (old_found and old_r != und_r) else [und_r]
+        if best_r not in centres:
+            centres.append(best_r)
         for centre in centres:
             for r in (centre / (step ** 0.5), centre * (step ** 0.5)):
                 if not (1.0 <= r <= r_max):

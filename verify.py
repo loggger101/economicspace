@@ -258,6 +258,8 @@ RESET_FIELDS = (
     "model_mineral_phases",      # v1.24.0: the phase walk is A/B'd against the four fractions
     "model_refinery",            # v1.25.0: the flown refinery is A/B'd against the price deduction
     "model_detailed_phases",     # v1.26.0: the detailed phases are A/B'd against comp_phases
+    "repair_settled_overshoot",  # v1.27.0: the settle-up repair is A/B'd against the refusal
+    "damp_sizing_loop",          # v1.28.0: the damped loop is A/B'd against the pass-2 refusal
 )
 
 

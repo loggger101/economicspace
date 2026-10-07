@@ -211,7 +211,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.8.1`, mineral_value `1.13.0`, transportation `1.18.0`,
-calc `1.27.0`, master `1.46.0` (the master version is a literal in
+calc `1.28.0`, master `1.47.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -4180,17 +4180,16 @@ exactly: that rung is the old coarse winner. **Before shipping an "it can only
 help" change to a non-exhaustive search, check what it does to the search's
 neighbourhood, not only to its options.**
 
-🚨  **OPEN: THE SAME CLIFF, ONE PASS EARLIER, AND IT IS BIGGER.** Pass 1 solves
-the payload with no plant or electric stage aboard; pass 2 flies the stage
-sized for that payload, and refuses if the stack no longer closes. Body 2023
-TN102 converges at 5,762 kg with the refinery off and is refused at every ratio
-with its 65 kg plant on, so a fixed point exists and the iteration starts on
-the wrong side of it. That refusal is **74.3% of every candidate evaluation**
-at cislunar (`_closes_carrying_its_own_stage`'s own measurement), and the
-pre-filter prunes on it; its soundness argument is against the loop's
-iteration, not against the existence of a mission. Damping the loop is a
-population-wide model change, not a repair, so it waits for a decision. See
-[master v1.43.0](versions.md#master-v1430--calc-v1270).
+✅  **CLOSED IN calc `1.28.0`: THE SAME CLIFF, ONE PASS EARLIER, AND IT WAS
+BIGGER.** Pass 1 solves the payload with no plant or electric stage aboard;
+pass 2 flies the stage sized for that payload, and refused if the stack no
+longer closed, although a smaller payload with a smaller stage did. Body 2023
+TN102 converges at 5,762 kg with the refinery off and was refused at every
+ratio with its 65 kg plant on. `damp_sizing_loop` backs the loop off toward
+the last state that closed instead; see
+[a pre-filter proven sound against an iteration](#a-pre-filter-proven-sound-against-an-iteration-is-not-proven-sound-against-the-problem)
+for what that did to the pruning, and
+[master v1.47.0](versions.md#master-v1470--calc-v1280) for what it moved.
 
 ⚠️  **And the lesson about the misdiagnosis is the one this file keeps
 paying for: the A/B that turned a term OFF made the symptom go away, and that
@@ -4198,6 +4197,47 @@ was read as locating the cause.** It located a term that made the cliff
 common. Only the trace of which `return None` fired could say which line was
 wrong. **When a candidate disappears, name the guard that refused it before
 naming the term that moved it.**
+
+### A pre-filter proven sound against an iteration is not proven sound against the problem
+
+calc `1.28.0`, and it is the entry above arriving one pass earlier, with a
+pre-filter standing on it. `_closes_carrying_its_own_stage` refuses a
+candidate before the sizing loop runs, and its docstring proves the refusal
+sound: viability is monotone in the two quantities that grow from pass 1 to
+pass 2, so a stack that fails pass 2 at pass 1's stage fails it at every
+concentration ratio and power source. **Every step of that is correct, and it
+proves the wrong thing.** It shows the pre-filter agrees with the LOOP; it says
+nothing about whether a mission exists, because the loop itself refused where a
+mission existed.
+
+🚨  **SO THE PRUNE AND THE LOOP WERE WRONG TOGETHER, AND `verify.py` CHECK 2
+COULD NOT SEE IT.** Check 2 holds the pruned search to the unpruned one, column
+for column, and they agreed perfectly, because both refused the same
+candidates for the same reason. A check that compares two implementations of
+one rule cannot find a defect in the rule.
+
+✅  **What the fix needed was a bound on the PROBLEM, not on the iteration.**
+Damping the loop means it can settle on a smaller stage than pass 1 sized, so
+pass 1's stage stops being a lower bound. Without ISRU it is the opposite: the
+stage pass 1 sizes is the LARGEST any closing state flies, because the outbound
+load of a full-vehicle cascade does not depend on the hardware and the return
+load only shrinks as the hardware grows. The floor is the stage for that
+outbound load plus the EMPTY return vehicle's, less the loop's 1%. Under ISRU
+the outbound load grows with the hardware, so pass 1's stage already is the
+floor. **Before trusting a pre-filter, ask whether its proof is about the
+model's answer or about the model's procedure**; only the first survives a fix
+to the procedure.
+
+⚠️  **The direction of a monotone term decides which pass is the bound, and it
+reversed between two branches of one function.** The no-ISRU and ISRU cascades
+both return a "propellant load", and one falls with the hardware while the
+other rises. A bound written once for both would have been sound on one branch
+and silently unsound on the other.
+
+✅  **Proved the standing way, by the diff the check exists to run**: with the
+damping on, every `verify.py` cell is identical pruned and unpruned, and with it
+off every cell reproduces the calc `1.27.0` hashes exactly, which is what says
+the damping only ever reaches a candidate the loop used to refuse.
 
 ### A checker run only on the best case has never run on the rest
 
@@ -4581,6 +4621,20 @@ reads.
   Containment grows that term, and it appears in `denom` rather than in
   `bracket`, where a larger value only helps. Testing `denom <= 0` instead looks
   sound and is wrong in the one direction no output diff can see.
+- **With `damp_sizing_loop` on, that stage sizes its electric stage off the
+  FLOOR, not off pass 1** (calc `1.28.0`): a full-vehicle outbound load plus the
+  EMPTY return vehicle's, less the loop's 1%. Restoring pass 1's stage there
+  re-introduces the refusal the damping removed, and only for the candidates
+  the pre-filter sees, so the prune and the unpruned search silently disagree.
+  Under ISRU pass 1's stage is already the floor and is used unchanged.
+- **A damped loop must converge, and an undamped one need not.** A blend's
+  stage was sized for neither of the two stacks it lies between, so a damped
+  loop that runs out of passes is refused, while an undamped one flies its last
+  pass as it always has. "Tidying" the two into one rule moves every
+  non-converging undamped row or admits a stage that was never sized.
+- **At a step of 1.0 the loop assigns the new state, it does not blend it.**
+  `b + 1.0 * (t - b)` is not `t` in floating point, and the bit-identity of every
+  candidate that closes at every pass rests on that branch.
 - **`want_phase` must stay a short circuit inside the one walk**, not a
   water-only copy: the greedy walk is cheap and the bookkeeping is what costs,
   so a copy buys nothing and adds a drift hazard on a function that is

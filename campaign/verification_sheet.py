@@ -1337,19 +1337,43 @@ def part_fixed_point(S, out):
             "loop, at the previous pass's hardware.  That is the model's "
             "own behaviour, and it is why the launch mass lands under the "
             "vehicle rather than on it; part 8 closes the difference.")
+    if M.get("backoffs"):
+        # calc v1.28.0, `damp_sizing_loop`: the passes whose stack did not
+        # close, and the step the loop backed off to after each.
+        S.prose("<b>The loop backed off.</b>  A pass after the first whose "
+                "stack did not close moved the state back toward the one the "
+                "last closing pass was solved at, by the step below, instead "
+                "of refusing; the passes after it are solved at that blend, "
+                "b + step (t - b) term by term, where b is the state a pass "
+                "was solved at and t the sizing it computed.  A damped loop "
+                "must settle, or the model refuses it.")
+        S.block(D.table(["after pass", "hardware tried (kg)",
+                         "why it did not close", "step now"],
+                        [[str(b["n"]), P(b["hw_tried"], 10), b["why"],
+                          P(b["step"], 6)] for b in M["backoffs"]], "wide"),
+                rerun=RERUN_PASS)
 
+    # calc v1.28.0: the state the last pass was SOLVED at.  That is the
+    # previous pass's sizing taken whole, unless the loop had to back off, in
+    # which case it is a blend of two passes' sizing and the back-off table
+    # below says which.
+    last = M["passes"][-1]
     prev = M["passes"][-2] if len(M["passes"]) > 1 else None
-    with_ref = prev is not None and prev.get("refinery", 0.0) > 0
+    blended = last.get("step", 1.0) < 1.0
+    with_ref = prev is not None and last.get("refinery_in", 0.0) > 0
     S.step("hw_solved", "m_hw,solved", "the hardware the last solve ran at",
-           "m_rig + plant + EP stage%s, at the PREVIOUS pass"
-           % (" + refinery" if with_ref else ""),
+           "m_rig + plant + EP stage%s, %s"
+           % (" + refinery" if with_ref else "",
+              "%s of the way from the state the previous pass was solved "
+              "at to the sizing it computed" % P(last["step"]) if blended
+              else "at the PREVIOUS pass"),
            (("%s + %s + %s + %s" % (P(C["cfg"].mining_hardware_kg),
-                                    P(prev["plant"]), P(prev["ep"]),
-                                    P(prev["refinery"])))
+                                    P(last["plant_in"]), P(last["ep_in"]),
+                                    P(last["refinery_in"])))
             if with_ref else
             ("%s + %s + %s" % (P(C["cfg"].mining_hardware_kg),
-                               P(prev["plant"]), P(prev["ep"]))
-             if prev is not None else P(M["passes"][-1]["hw_in"]))),
+                               P(last["plant_in"]), P(last["ep_in"]))
+             if prev is not None else P(last["hw_in"]))),
            M["hw_solved"], "kg", ["m_rig"],
            "the last row's 'hardware in' column above, and NOT the "
            "hardware the mission actually flies; part 8 is built on that")
