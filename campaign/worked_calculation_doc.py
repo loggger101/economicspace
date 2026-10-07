@@ -1510,6 +1510,29 @@ def s_cascade(out):
                   fmt(p["m_pay"], 1), fmt(p["ep"], 1), fmt(p["plant"], 1),
                   fmt(p["feed"], 0), fmt(p["dig"], 4)]
                  for p in M["passes"]]
+    # calc v1.28.0, `damp_sizing_loop`.  A pass after the first whose stack
+    # did not close stepped the loop back toward the last state that did,
+    # instead of refusing the mission; each back-off is shown, and the state
+    # the passes after it were solved at is a blend rather than the previous
+    # pass's sizing.
+    damp_blocks = []
+    if M.get("backoffs"):
+        damp_blocks = [
+            note("key",
+                 "<strong>The loop had to back off.</strong> Pass one is "
+                 "solved with no plant and no electric stage aboard, so the "
+                 "stage and the plant it sizes are sized for a payload the "
+                 "stack cannot carry once they are aboard. Where a later "
+                 "pass did not close, the model did not refuse the mission: "
+                 "it moved the sizing back toward the state the last closing "
+                 "pass was solved at, halving the step each time, and kept "
+                 "iterating at the reduced step until the loop settled. "
+                 "Every pass after a back-off is solved at that blend."),
+            table(["after pass", "hardware tried (kg)", "why it did not close",
+                   "step now"],
+                  [[b["n"], fmt(b["hw_tried"], 1), b["why"], fmt(b["step"], 6)]
+                   for b in M["backoffs"]]),
+        ]
     ledger = [
         ("mining rig", fmt(C["cfg"].mining_hardware_kg, 1, "kg")),
         ("power system", fmt(M["plant"], 1, "kg")),
@@ -1745,6 +1768,7 @@ def s_cascade(out):
              "made here. It is also why the launch mass comes out a little "
              "under the vehicle instead of exactly on it, which the last "
              "block in this section accounts for to the kilogram."),
+        *damp_blocks,
         h(3, "The propellant constants"),
         deriv(constants),
         h(3, "That last pass, term by term"),
