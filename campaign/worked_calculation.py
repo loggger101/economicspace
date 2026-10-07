@@ -1873,6 +1873,14 @@ def eclipse_derate(w_bare, dark_h, dark_fraction, storage_wh_per_kg,
 # every `used in space` price the table actually carries and refuses on a miss.
 _PRE_V040_LEO_USD_PER_KG = 4253.0      # Falcon 9 (reusable), spacecost 0.3.x
 _FIRST_HARDWARE_STAGE2 = (1, 10, 0)    # mineral_value, the spacecost 0.4.0 repin
+# ⚠️  AND THE ANCHOR'S PRICE MOVED ONCE MORE, UNDER THE SAME MODEL.  spacecost
+# v0.8.0 topped Falcon Heavy (expendable)'s band with NASA's $178M, so its
+# centre went $2,414 -> $2,555/kg.  Stage 2 moved to mineral_value 1.14.0 with
+# it, and every table stamped 1.10.0-1.13.0 was priced at the old anchor.
+# Typed for the same reason as the legacy one, and held to the table by
+# `check_delivery_pricing` exactly as that one is.
+_V040_TO_V070_LEO_USD_PER_KG = 2414.0  # Falcon Heavy (expendable), spacecost 0.4.0-0.7.0
+_FIRST_V080_STAGE2 = (1, 14, 0)        # mineral_value, the spacecost 0.8.0 repin
 
 
 def delivery_pricing(minerals):
@@ -1890,6 +1898,12 @@ def delivery_pricing(minerals):
                 "Stage 2 %s, priced before spacecost 0.4.0: Falcon 9 "
                 "(reusable) to LEO, and no charge for building the stages "
                 "the chain expends" % stamp)
+    if key is not None and key < _FIRST_V080_STAGE2:
+        return (_V040_TO_V070_LEO_USD_PER_KG, True,
+                "Stage 2 %s, priced by spacecost 0.4.0-0.7.0: Falcon Heavy "
+                "(expendable) at $%s/kg to LEO, before its band reached "
+                "NASA's price, plus what the stages the chain expends cost to "
+                "build" % (stamp, format(_V040_TO_V070_LEO_USD_PER_KG, ",.0f")))
     return (float(master._LEO_USD_PER_KG), True,
             "Stage 2 %s, priced by spacecost %s: %s to LEO, plus what the "
             "stages the chain expends cost to build"

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.49.0)
+"""Master Asteroid Profitability Pipeline (1.50.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -129,7 +129,7 @@ _MASTER_REQUIRED = [
 # Stage 1 installs no package: it downloads a pinned catalog RELEASE, which is
 # data, not code.  Its pin is `CatalogConfig.catalog_release`.
 _MASTER_PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.7.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.8.0",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -613,11 +613,11 @@ class MineralValueConfig:
     #                     metal-rich M / X types.
     #   "leo"           - delivered to and sold in low Earth orbit.  Every
     #                     commodity with in-space utility is worth the launch
-    #                     cost it avoids ($2,414/kg); precious metals are
+    #                     cost it avoids ($2,555/kg); precious metals are
     #                     worth nothing, because no orbital market for them
     #                     exists.  Favours water- and metal-rich bulk.
     #   "geo"           - sold at a geostationary servicing depot
-    #                     ($8,046/kg).  The only destination in this model
+    #                     ($8,462/kg).  The only destination in this model
     #                     with a paying customer TODAY: ~610 active
     #                     satellites, and MEV-1 / MEV-2 have already docked
     #                     with commercial GEO spacecraft.  A narrow market
@@ -625,21 +625,21 @@ class MineralValueConfig:
     #                     it is the only destination that discounts the
     #                     METALS rather than the volatiles.
     #   "cislunar"      - sold at a lunar-vicinity (NRHO) depot, worth the
-    #                     larger launch cost avoided ($6,878/kg, derived).
+    #                     larger launch cost avoided ($7,236/kg, derived).
     #                     Also the CHEAPEST of the orbital options to reach
     #                     from an asteroid; see Module 4's return-Δv model.
-    #   "lunar_surface", sold at a Moon base.  $42,635/kg: nearest
+    #   "lunar_surface", sold at a Moon base.  $43,338/kg: nearest
     #                     destination, but airless, so all 5,920 m/s from LEO
     #                     is propulsive, and the tug and lander that do it
-    #                     are thrown away (72% of the price is that hardware).
-    #   "mars_orbit"    - sold at a 1-sol Mars-orbit depot ($8,706/kg).  The
+    #                     are thrown away (71% of the price is that hardware).
+    #   "mars_orbit"    - sold at a 1-sol Mars-orbit depot ($9,154/kg).  The
     #                     Mars destination that nothing lands on, so it pays
     #                     no entry-survival fraction and, crucially, competes
     #                     with EARTH freight rather than with the Martian
     #                     crust; see IN_SPACE_UTILITY_BY_DESTINATION.
-    #   "mars_surface"  - sold at a Mars base.  $184,811/kg: the atmosphere
+    #   "mars_surface"  - sold at a Mars base.  $186,306/kg: the atmosphere
     #                     brakes most of the arrival, but the tug, aeroshell and
-    #                     lander are all expended (86% of the price).
+    #                     lander are all expended (85% of the price).
     #
     # ⚠️  The two surface figures are MARGINAL-TRANSPORT LOWER BOUNDS.  They
     # price the propellant and stages needed to move a kilogram, on the
@@ -690,7 +690,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.13.0"
+    pipeline_version: str = "1.14.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -1117,7 +1117,7 @@ IN_SPACE_UTILITY_DEFAULT = 0.0
 #
 # So the correction runs mostly DOWNWARD, and hardest at the destination that
 # is furthest away, which inverts the naive reading of the price table above.
-# Mars has the dearest freight ($184,811/kg) AND the poorest market for bulk
+# Mars has the dearest freight ($186,306/kg) AND the poorest market for bulk
 # asteroid material, because a settlement with an atmosphere and a crust makes
 # its own water, carbon and rock.  Do not "fix" that by raising these back up:
 # the high delivered cost is what Earth would pay, and the low utility is the
@@ -2804,7 +2804,7 @@ def apply_delivery_destination(
     explicit about, because they are the whole point of the field:
 
       • Bulk material becomes enormously more valuable.  Iron is worth $0.32/kg
-        on Earth and ~$1,460/kg in LEO, because a kilogram of structural metal
+        on Earth and ~$1,558/kg in LEO, because a kilogram of structural metal
         already in orbit is a kilogram nobody has to launch.
       • Precious metals lose their in-space premium but keep their value.
         Nobody in orbit wants platinum, so it is priced by shipping it down:
@@ -3311,7 +3311,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.19.0"
+    pipeline_version: str = "1.20.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 TRANSPORT_CONFIG = TransportConfig()
@@ -13677,7 +13677,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.49.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.50.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
