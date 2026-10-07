@@ -210,8 +210,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.8.1`, mineral_value `1.13.0`, transportation `1.18.1`,
-calc `1.28.0`, master `1.48.0` (the master version is a literal in
+Current: catalog `1.8.1`, mineral_value `1.13.0`, transportation `1.19.0`,
+calc `1.28.0`, master `1.49.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -225,10 +225,11 @@ every fairing volume was re-derived from a drawing (spacecost v0.5.0), and to
 (spacecost v0.5.2, carrying v0.5.1), and to `1.17.3` when four more were
 (spacecost v0.5.3), and to `1.18.0` when four values were re-pinned to their
 sources (spacecost v0.6.0), and to `1.18.1` when four more citations were
-corrected (spacecost v0.6.1). **So it follows a repin, and a repin follows it: the two
+corrected (spacecost v0.6.1), and to `1.19.0` when Electron and Pegasus XL
+became bands (spacecost v0.7.0). **So it follows a repin, and a repin follows it: the two
 are one number in two repositories.**
 
-ℹ️  **TWENTY-FIVE stamps so far do NOT mean the numbers moved.** The rule
+ℹ️  **TWENTY-SIX stamps so far do NOT mean the numbers moved.** The rule
 is one-directional: *changing a number means bumping; bumping does not mean a
 number changed*, and reading a version as evidence that a result moved is the
 mistake this table exists to prevent.
@@ -236,8 +237,8 @@ mistake this table exists to prevent.
 ⚠️  Most rows are **calc** stamps. The exceptions are `mineral_value 1.7.1`,
 `mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0`,
 `transportation 1.14.0`, `transportation 1.15.0`, `transportation 1.17.2`,
-`mineral_value 1.12.3`, `transportation 1.17.3` and `transportation 1.18.1`,
-so read the module and not just the number: `1.7.1`
+`mineral_value 1.12.3`, `transportation 1.17.3`, `transportation 1.18.1` and
+`transportation 1.19.0`, so read the module and not just the number: `1.7.1`
 and `1.17.1` are different modules and unrelated releases, and so are `1.14.0`
 and `1.19.0`, which shipped together.
 
@@ -268,17 +269,19 @@ and `1.19.0`, which shipped together.
 | mineral_value `1.12.3` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 | transportation `1.17.3` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 | transportation `1.18.1` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
+| transportation `1.19.0` | **two launch rows no mission can fly** | bit-identical, verified |
 
-**Every measured cell in this file stands unaltered across all twenty-five; do not
+**Every measured cell in this file stands unaltered across all twenty-six; do not
 re-measure anything on account of any of them.** Each release's own section
 carries its verification.
 
 ⚠️  **Derive the taxonomy from the table above, not from a count in prose.**
-Eight rows are *performance* stamps; the other seventeen are `1.17.0` (a default
+Eight rows are *performance* stamps; the other eighteen are `1.17.0` (a default
 flip), `1.17.3` (a cleanup), `1.17.7` (a memory bound), `1.17.8` (a new
 upstream check), `1.19.1` (that same check, fixed), `1.7.1` (a silent default
 closed in another module), transportation `1.17.2`, `1.17.3` and `1.18.1`
-and mineral_value `1.12.3` (citations only), and two
+and mineral_value `1.12.3` (citations only), transportation `1.19.0` (two
+launch rows no mission flies), and two
 trios that each add a delivery destination without touching any existing one:
 `1.18.0` / `1.8.0` / `1.13.0` for `mars_orbit` and `1.19.0` / `1.9.0` /
 `1.14.0` for `geo`. See
@@ -457,12 +460,13 @@ changed the delivered-price model, so Stage 2 and Stage 3 both re-price and no
 flag in this repo restores the old tables: reproducing a cell here needs the
 2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
 tables now frozen under `campaign/stage3/`. ⚠️  **The live
-`asteroid_pipeline/` has held spacecost `v0.6.0`'s tables and a
+`asteroid_pipeline/` has held spacecost `v0.7.0`'s tables since 2026-10-07, a
 mineral_value 1.13.0 Stage 2 since 2026-10-06, and the `data-2026-09-29c`
 catalog since 2026-09-29** (the earlier Stage 2 tables are frozen under
 `campaign/stage2/mineral_value-*/`; the `v0.4.0` tables it held from
-2026-09-24 and the `v0.5.0` ones from 2026-09-28 are frozen under
-`campaign/stage3/spacecost-0.4.0/` and `-0.5.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
+2026-09-24, the `v0.5.0` ones from 2026-09-28 and the `v0.6.0` ones from
+2026-10-06 are frozen under `campaign/stage3/spacecost-0.4.0/`, `-0.5.0/` and
+`-0.6.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
 a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
 grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
 default configuration measured the repricing at a median **1.58x worse**
@@ -5604,7 +5608,7 @@ passing, which is exactly why nobody deletes them.
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
-[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.6.1`.
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.7.0`.
 **Do not state the row count here**; the adapter's ready banner prints it on
 every import, and this sentence carried "all 141 of them" into a release that
 added a whole table.
