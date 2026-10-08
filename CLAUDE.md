@@ -211,7 +211,7 @@ See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
 Current: catalog `1.8.1`, mineral_value `1.14.0`, transportation `1.20.0`,
-calc `1.28.0`, master `1.50.0` (the master version is a literal in
+calc `1.29.0`, master `1.51.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -4201,6 +4201,23 @@ the last state that closed instead; see
 [a pre-filter proven sound against an iteration](#a-pre-filter-proven-sound-against-an-iteration-is-not-proven-sound-against-the-problem)
 for what that did to the pruning, and
 [master v1.47.0](versions.md#master-v1470--calc-v1280) for what it moved.
+
+🚨  **AND THE REPAIR HAD A CLIFF OF ITS OWN, AT THE LAST BIT (calc
+`1.29.0`).** It re-solves the payload so the stack sits EXACTLY at the
+vehicle's capacity, and then rechecked it with the same strict `>`: over by
+2.9e-11 kg on a 63,800 kg vehicle, refused. **A solve that lands ON a
+constraint makes the strict test a coin flip on rounding**, and this one came
+up refused on about one sampled body in twenty-four and on the lunar winner.
+`launch_capacity_rtol` (1e-9) is the fix; 0.0 is the old test to the bit.
+
+✅  **It was found the way the paragraph above says to find these**, by a
+result that cannot be right: a higher Delta-v (rc-016's lunar descent) made a
+mission close that a lower one refused, and adding Delta-v never makes a
+mission fit. Counting every `return None` line master executed under
+`sys.settrace`, at both Delta-v, named the guard, the repair depth and the
+overshoot in one run. **Count the refusals by line before naming a cause**;
+it takes a minute on one body and needs no instrumentation in the model. See
+[master v1.51.0](versions.md#master-v1510--calc-v1290).
 
 ⚠️  **And the lesson about the misdiagnosis is the one this file keeps
 paying for: the A/B that turned a term OFF made the symptom go away, and that

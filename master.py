@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.50.0)
+"""Master Asteroid Profitability Pipeline (1.51.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -3744,6 +3744,16 @@ class CalcConfig:
     # a candidate the loop would have refused is touched: one that closed at
     # every pass is priced exactly as before.  False is v1.27.0 to the bit.
     damp_sizing_loop:          bool  = True
+
+    # How far over the vehicle's capacity to LEO a settled launch stack may
+    # land and still fly, as a fraction of that capacity (v1.29.0).  The
+    # overshoot repair above re-solves the payload so the stack sits EXACTLY at
+    # the vehicle's capacity, and the recheck then found it over by a few
+    # units in the last place -- 2.9e-11 kg on a 63,800 kg Falcon Heavy -- and
+    # refused the mission it had just repaired.  1e-9 is 64 micrograms on that
+    # vehicle: far above float residue, far below anything physical.  0.0 is
+    # the strict test, and v1.28.0 to the bit.
+    launch_capacity_rtol:      float = 1e-9
     # Fraction of the valuable phase that actually reports to concentrate.
     # Terrestrial PGM / sulphide flotation circuits run 85-95%; magnetic
     # separation of a metal phase from silicate gangue is mechanically simpler
@@ -4495,7 +4505,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.28.0"
+    pipeline_version: str = "1.29.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -11322,7 +11332,10 @@ def _evaluate_combo_at_ratio(
     # settling the plant made the hardware HEAVIER, the launch stack has to be
     # rechecked against the vehicle; the closed-form guarantee only holds at
     # the mass it was solved for.
-    if m_launch > leo_cap:
+    # v1.29.0: `launch_capacity_rtol`.  A stack the repair solved AT capacity
+    # must not be refused for the rounding of its own solve; at 0.0 this is
+    # `m_launch > leo_cap` exactly, since `leo_cap * 1.0` is `leo_cap`.
+    if m_launch > leo_cap * (1.0 + float(getattr(config, "launch_capacity_rtol", 0.0))):
         # v1.27.0.  Re-solve the payload against the hardware actually flown
         # and price the candidate again with that as its ceiling.  A lighter
         # payload never needs a heavier plant, so the second stack fits; the
@@ -13677,7 +13690,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.50.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.51.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 
