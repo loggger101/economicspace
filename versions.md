@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.53.0 / transportation v1.22.0](#master-v1530--transportation-v1220)
 - [master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0](#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210)
 - [master v1.51.0 / calc v1.29.0](#master-v1510--calc-v1290)
 - [master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0](#master-v1500--mineral_value-v1140--transportation-v1200)
@@ -105,9 +106,9 @@ one that does not say is not to be used.
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.15.0** | v1.15.0, the `lunar_surface` prices and downleg re-derived through spacecost v0.9.0's lunar chain; no Stage 2 code moved (v1.13.0 was the last to move a row) |
-| 3 | `modules/transportation.py` | **1.21.0** | v1.21.0, the lunar descent re-pinned to Apollo's 2,050 m/s and a 1,850 m/s ascent row added: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 3 | `modules/transportation.py` | **1.22.0** | v1.22.0, krypton's price a band ($300-$2,100/kg, centred at $794) where it was an unsourced $300: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.30.0** | v1.30.0, the NRHO-to-lunar-surface Delta-v at Apollo's 2,050 m/s descent; v1.29.0 had made a stack the overshoot repair solved at capacity fly (`launch_capacity_rtol`) |
-| - | `master.py` | **1.52.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.53.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -186,6 +187,90 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.53.0 / transportation v1.22.0
+
+**Krypton costs $794/kg, the geometric centre of the band its two sources
+bound, where it was an unsourced $300.** General_Research revision candidate
+rc-059. Krypton is a propellant only, so it reaches no delivered price and no
+Stage 2 table: it moves the missions that fly krypton Hall thrusters, and the
+searches in which krypton was the option a winner beat.
+
+### What moved upstream (spacecost 0.10.0)
+
+- **Krypton  (Hall)**: **$300 -> $794/kg**, and $165 -> $437/L. The low end is
+  bulk: Idaho National Laboratory's 2023 market survey (INL/RPT-23-75203,
+  Sec. 1) found krypton prices hover around $1/L, about $267/kg at the gas's
+  standard density, so $300 stands as the bulk figure. The high end is the
+  bottom of SETS Space's 2024 flight-grade quote, $2,100-$4,800/kg. The band is
+  the owner's decision (the two measure different markets), and the row carries
+  its geometric centre, rounded as every spacecost band's centre is.
+
+Krypton is now about 13x cheaper than xenon where it was about 33x.
+
+### What moves here
+
+- **transportation 1.22.0**: the krypton row. No other Stage 3 value moved.
+- **No module code moved**, and mineral_value stays **1.15.0**: nothing in
+  `spacecost.delivery` reads a propellant price, so every Stage 2 table is
+  1.15.0's exactly and Stage 2 was not re-run.
+
+### Measured
+
+Stage 4 on each destination's archived v1.40.0 default cell's top 300 bodies
+plus a 3,000-row stride (3,300 bodies each), calc 1.30.0 and Stage 2 1.15.0 on
+both sides, spacecost 0.9.0's Stage 3 against 0.10.0's. `median` is among the
+bodies that moved, as `median(r - 1)`, where `r` is the 0.10.0 objective over
+the 0.9.0 one:
+
+| destination | flew krypton | worse | median among them | largest | still on krypton | winner |
+|---|---:|---:|---:|---:|---:|---|
+| `earth_surface` | 90 | 90 | 0.29% | 0.76% | 25 | 2018 DT, 5,391.51x, unchanged |
+| `geo` | 27 | 27 | 0.79% | 1.09% | 5 | 2021 CX5, 6.1986x, unchanged |
+| `mars_surface` | 14 | 14 | 0.59% | 0.78% | 11 | 2015 DS, 1.08536x, unchanged |
+| `lunar_surface` | 10 | 10 | 0.62% | 0.87% | 7 | 2014 YN, 2.61433x, unchanged |
+| `cislunar` | 6 | 6 | 0.44% | 0.78% | 3 | **2018 DT, 4.5983x on krypton -> 4.61562x on iodine** |
+| `leo` | 1 | 1 | 0.96% | 0.96% | 1 | 2005 QP87, 16.1519x, unchanged |
+| `mars_orbit` | 1 | 1 | 0.72% | 0.72% | 1 | 350751, 4.36645x, unchanged |
+
+**Every body that flew krypton got worse, and no other body moved**: 149 of
+23,100, none better, none entering or leaving an evaluable set, and the
+whole-sample median is 0.000% at every destination. 96 of the 149 leave
+krypton, 56 for xenon and 40 for iodine, and 71 of those change vehicle as
+well; the other 53 still fly it at the higher price. The largest loss is
+1.09%, so a krypton mission was never far ahead of its next-best: the
+propellant is about 1% of these missions' cost, and the tank, not the price,
+is what decided krypton's share.
+
+⚠️  **The `cislunar` winner is the one headline that moves, and it moves
+0.38%.** 2018 DT keeps the cell on New Glenn, now on iodine. It is also the
+body that won the full v1.40.0 cislunar cell on krypton (4.8379x), which is
+the archived figure README quotes; that cell has not been re-run.
+
+### Verified
+
+`verify.py check` against `.verify/baseline-1.52.0` (calc 1.30.0 on the master
+v1.52.0 inputs, taken before the Stage 3 replay): **all four cislunar cells
+MATCH** (`26da59a4a0e60b37` / `f0a8a28fa60dfb91` / `bded3ad7998d1a9a` /
+`da745840931dcf86`), as the measurement predicts (6 of 3,300 cislunar bodies
+fly krypton, none of them in these cells); the mass ledger, never-worse,
+Stage 2 recompute and ceiling checks pass. A fresh cislunar row of the new
+winner (2018 DT on iodine, 4.6156x) and one that still flies krypton at $794
+(2007 WU3, 6.8248x) derive with 0 DIFFER, and their verification sheets
+reproduce every substitution (360 and 517 traced numbers). The archived
+v1.40.0 cislunar winner (2018 DT on krypton at $300) still derives 90 of 90
+bit-exact against `campaign/stage3/spacecost-0.5.0/`. `verify_stage3.py`
+passes at v0.10.0 and `verify_docs.py` is clean.
+
+### On disk
+
+- **Stage 3**: the 1.21.0 set is frozen under
+  `campaign/stage3/spacecost-0.9.0/`, and the live set is the v0.10.0 replay
+  of the recorded fuel quotes (no network).
+- **Stage 2** did not move; the live cislunar table is still mineral_value
+  1.15.0.
+- The Stage 3 tables it replaced are backed up under
+  `asteroid_pipeline/_inputs_backup_2026-10-07_pre-v1.53.0/`.
 
 ## master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0
 
@@ -3207,6 +3292,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.53.0 / transportation v1.22.0](#master-v1530--transportation-v1220) | 2026-10-07 | **krypton becomes a band, $794/kg** where it was an unsourced $300: the 149 of 23,100 sampled bodies that flew it get worse by up to 1.1%, no other body moves, and the sampled `cislunar` winner 2018 DT moves to iodine (4.5983x -> 4.61562x) |
 | [master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0](#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210) | 2026-10-07 | **the lunar descent is Apollo's 2,050 m/s**: the lunar price $43,338 -> $48,226/kg, every sampled lunar body better by a median 9.0%, 2014 YN 2.86091x -> 2.61433x; no other destination moves |
 | [master v1.51.0 / calc v1.29.0](#master-v1510--calc-v1290) | 2026-10-07 | **a stack the repair solved at capacity flies**: the overshoot repair refused its own solutions by 2.9e-11 kg; 8-328 sampled bodies per destination improve by a median 1-18%, none enters or leaves a set, and the `lunar_surface` winner becomes 2014 YN |
 | [master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0](#master-v1500--mineral_value-v1140--transportation-v1200) | 2026-10-07 | **Falcon Heavy (expendable)'s band reaches NASA's $178M, and the LEO price anchor moves $2,414 -> $2,555/kg**: every sampled in-space body better by 0.45-5.04%, `earth_surface` unmoved at the median; no winner changed body |
