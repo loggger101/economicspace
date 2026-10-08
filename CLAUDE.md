@@ -210,8 +210,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.8.1`, mineral_value `1.14.0`, transportation `1.20.0`,
-calc `1.29.0`, master `1.51.0` (the master version is a literal in
+Current: catalog `1.8.1`, mineral_value `1.15.0`, transportation `1.21.0`,
+calc `1.30.0`, master `1.52.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -228,7 +228,8 @@ sources (spacecost v0.6.0), and to `1.18.1` when four more citations were
 corrected (spacecost v0.6.1), and to `1.19.0` when Electron and Pegasus XL
 became bands (spacecost v0.7.0), and to `1.20.0` when Falcon Heavy
 (expendable)'s band reached NASA's price and moved the LEO price anchor
-(spacecost v0.8.0). **So it follows a repin, and a repin follows it: the two
+(spacecost v0.8.0), and to `1.21.0` when the lunar descent was re-pinned to
+Apollo's (spacecost v0.9.0). **So it follows a repin, and a repin follows it: the two
 are one number in two repositories.**
 
 ℹ️  **TWENTY-SIX stamps so far do NOT mean the numbers moved.** The rule
@@ -462,13 +463,14 @@ changed the delivered-price model, so Stage 2 and Stage 3 both re-price and no
 flag in this repo restores the old tables: reproducing a cell here needs the
 2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
 tables now frozen under `campaign/stage3/`. ⚠️  **The live
-`asteroid_pipeline/` has held spacecost `v0.8.0`'s tables and a
-mineral_value 1.14.0 Stage 2 since 2026-10-07, and the `data-2026-09-29c`
+`asteroid_pipeline/` has held spacecost `v0.9.0`'s tables and a
+mineral_value 1.15.0 Stage 2 since 2026-10-07, and the `data-2026-09-29c`
 catalog since 2026-09-29** (the earlier Stage 2 tables are frozen under
 `campaign/stage2/mineral_value-*/`; the `v0.4.0` tables it held from
 2026-09-24, the `v0.5.0` ones from 2026-09-28, the `v0.6.0` ones from
-2026-10-06 and the `v0.7.0` ones from earlier on 2026-10-07 are frozen under
-`campaign/stage3/spacecost-0.4.0/`, `-0.5.0/`, `-0.6.0/` and `-0.7.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
+2026-10-06 and the `v0.7.0` and `v0.8.0` ones from earlier on 2026-10-07 are
+frozen under `campaign/stage3/spacecost-0.4.0/`, `-0.5.0/`, `-0.6.0/`,
+`-0.7.0/` and `-0.8.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
 a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
 grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
 default configuration measured the repricing at a median **1.58x worse**
@@ -1738,7 +1740,7 @@ or more distinctive numbers across two files:
 | the shared measurement | in README under | here under |
 |---|---|---|
 | the winners: 2021 CX5 taking **8 of 28** cells and 2018 DT 6, 2016 PN38 sweeping `earth_surface` | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "Winners, and what 28 cells did to the claim" |
-| the lunar staging figures: 5,920 m/s, and 10.96 against 4.99 kg in LEO per kg landed | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" (and again in `versions.md`, mineral_value `1.4.0`) |
+| the lunar staging figures: 6,100 m/s, and 12.81 against 5.28 kg in LEO per kg landed | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" (and again in `versions.md`, mineral_value `1.4.0`) |
 | the `replicated` win: 13.4% clear, 6,667 kg of thruster for 96.7 kW | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "RETIRED TWICE: a `replicated` device wins TWO cells now" |
 | the Mars cadence, **3.7-4.5 yr** against ~1.37 everywhere else, now covering BOTH Mars destinations | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "The rig's two bounds, and the cadence, at every destination (2026-09)" |
 | everything older than `1.17.7` being high by 1.78-4.32x | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "Runtime, and the three quantities a sample cannot predict" |
@@ -2022,8 +2024,8 @@ heat shield is not worth hauling out and pushing back.
 
 **Surface delivery costs are chained per stage, not lumped.** Module 2's
 `_DELIVERY_LEGS` walks real stages backwards from the payload. Collapsing the
-lunar chain into one 5,920 m/s burn would overstate the Moon by ~2x (10.96 vs
-4.99 kg in LEO per kg landed) because it throws away staging. Mars' `edl` leg
+lunar chain into one 6,100 m/s burn would overstate the Moon by ~2.4x (12.81 vs
+5.28 kg in LEO per kg landed) because it throws away staging. Mars' `edl` leg
 carries a measured surviving-mass fraction (MSL 28.5%, Perseverance 30.5%),
 not a Delta-v.
 
@@ -2032,15 +2034,17 @@ programme overhead, no cadence limit, on the cheapest LEO price a buyer can
 book (Falcon Heavy expendable since spacecost `v0.4.0`, which also started
 charging for BUILDING the stages a chain expends, not only for launching
 them). Real CLPS lunar delivery is ~$1M/kg today at ~100 kg scale against this
-model's $43,338/kg ($42,635 before `v0.8.0` and $21,210 before `v0.4.0`). They answer "what could this cost
+model's $48,226/kg ($43,338 before `v0.9.0`, $42,635 before `v0.8.0` and
+$21,210 before `v0.4.0`). They answer "what could this cost
 at industrial scale", and the whole Mars result rests on that framing.
 
 🚨  **Do not "fix" the surfaces rising while every orbit fell under `v0.4.0`.**
 The orbital prices fell about a third because the LEO anchor fell 43%; the
 surfaces rose two- and fourfold because a $200k/kg lander and a $50k/kg
-aeroshell had been thrown away for free. Building the expended stages is 71%
-of the lunar price and 85% of the Mars one (72% and 86% before `v0.8.0`
-raised the anchor under them).
+aeroshell had been thrown away for free. Building the expended stages is 72%
+of the lunar price and 85% of the Mars one (the lunar share was 71% between
+`v0.8.0`, which raised the anchor under both, and `v0.9.0`, which re-pinned
+the lunar descent).
 
 **A commodity with no in-space market is not worth zero at a depot.** It is
 worth its terrestrial price *minus* the downleg (`downleg_cost_usd_per_kg`: 
@@ -5629,7 +5633,7 @@ passing, which is exactly why nobody deletes them.
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
-[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.8.0`.
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.9.0`.
 **Do not state the row count here**; the adapter's ready banner prints it on
 every import, and this sentence carried "all 141 of them" into a release that
 added a whole table.

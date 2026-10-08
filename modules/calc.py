@@ -787,7 +787,7 @@ class CalcConfig:
     #                     because capture only has to bind the orbit and the
     #                     burn takes the Oberth benefit at low perigee.
     #   "lunar_surface", landed at a Moon base.  Cislunar capture plus
-    #                     2.6 km/s of NRHO→LLO→surface, all propulsive; the
+    #                     2.78 km/s of NRHO→LLO→surface, all propulsive; the
     #                     Moon has no atmosphere to brake against.  Carries a
     #                     $200k/kg lander instead of a berthing adapter.
     #   "mars_surface"  - landed at a Mars base.  NOT an Earth return: the
@@ -1150,7 +1150,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.29.0"
+    pipeline_version: str = "1.30.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -3970,8 +3970,11 @@ DV_LEO_DEORBIT_KM_S = 0.100
 
 # ── Lunar surface  (v1.6.0) ──────────────────────────────────────────────────
 # From a cislunar (NRHO) depot down to the surface, Module 3 DELTA_V_REFERENCE:
-#   NRHO → LLO   0.73 km/s        LLO → surface   1.87 km/s
-DV_NRHO_TO_LUNAR_SURFACE_KM_S = 0.730 + 1.870
+#   NRHO → LLO   0.73 km/s        LLO → surface   2.05 km/s
+# The descent was 1.87 until calc 1.30.0, when spacecost v0.9.0 re-pinned it to
+# the 2,050 m/s Apollo 15-17 flew (NASA SP-4029).  Typed, not read, so a
+# Delta-v row moving cannot reach Stage 4 without a calc release.
+DV_NRHO_TO_LUNAR_SURFACE_KM_S = 0.730 + 2.050
 
 # ── Mars  (v1.6.0) ───────────────────────────────────────────────────────────
 MU_MARS_KM3_S2   = 42_828.37           # Mars gravitational parameter
@@ -4150,7 +4153,7 @@ def _transfer_legs_for_apsis(
     #   Cislunar; cheapest, because capture only has to BIND the orbit, and
     #     the burn happens at low perigee where Oberth pays best.
     #   Lunar surface, cislunar capture, then NRHO→LLO→surface.  Airless, so
-    #     that last 2.6 km/s is entirely propulsive.
+    #     that last 2.78 km/s is entirely propulsive.
     #   Mars, not an Earth return at all.  See the separate transfer below.
     dv_leo_capture = _leo_departure_dv_km_s(v_inf)
     dv_cislunar    = _cislunar_capture_dv_km_s(v_inf)
