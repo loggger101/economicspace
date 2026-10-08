@@ -2724,6 +2724,22 @@ exact. Bare integers are then matched exactly or not at all, which is the
 right answer for a fleet size and costs nothing, because every formatter on
 the page renders a real measurement to at least three significant figures.
 
+⚠️  **THE PERCENT IS A RULE ABOUT THE PAGE'S PRECISION, AND IT WAS BEING
+CHARGED FOR THE ROW'S.** 2026-10-08: a correct page (2007 WU3, cislunar) came
+back INCOMPLETE on `payload_mix`, whose "ammonia 44kg" the page prints as
+43.6. The cell is rounded to the kilogram, and that 0.5 kg was added to the
+page's own rounding before the 1% test, so any phase under 50 kg could never
+match however exactly the page printed it. The test now holds only the page
+number to the percent. 🚨  **And relaxing it opened the hole the percent had
+been plugging by accident**: the unit search multiplied the cell's 0.5 kg by
+each scale, so 44 kg matched an unrelated `$4,402.91` at "percent", and a page
+printing the wrong ammonia mass still passed. A number inside a text cell
+carries its unit, so it is matched as it is and at no other scale. **Proved
+the standing way**: the correct page is complete, 49.6 and 44.9 in place of
+43.6 both fail, and the perturbation figure, which now moves the masses inside
+`payload_mix` too because they had never been measured, finds the same hits
+on three pages as before.
+
 🚨  **THE GENERAL RULE IS THE ONE THIS FILE KEEPS ARRIVING AT FROM NEW
 DIRECTIONS, AND HERE IT IS ABOUT A CHECKER RATHER THAN A DIAGNOSTIC: MEASURE
 A CHECK BY FEEDING IT WRONG ANSWERS.** Both versions printed the same clean

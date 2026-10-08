@@ -4282,7 +4282,7 @@ def page_numbers(text):
     return found
 
 
-def on_page(value, numbers, slack=0.0):
+def on_page(value, numbers, slack=0.0, scales=SCALES):
     """The scale at which the page shows `value`, or None if it does not.
 
     `slack` is the uncertainty in `value` ITSELF, which is zero for a float
@@ -4302,19 +4302,26 @@ def on_page(value, numbers, slack=0.0):
     agrees with itself perfectly.  A page number must now pin the value to
     within `RESOLUTION`, or print it exactly; the same perturbation now
     matches 3 of 100.
+
+    ⚠️  `RESOLUTION` IS A RULE ABOUT THE PAGE'S PRECISION, NOT THE VALUE'S.
+    It used to be tested against `half + slack`, so a small phase in
+    `payload_mix` could never match: 43.6 kg of ammonia reaches here as "44kg",
+    whose own rounding (0.5 kg) is already 1.1% of it, and the page printing
+    43.6 to a tenth of a kilogram was refused for the column's coarseness
+    rather than its own.  The page has to pin the figure; it cannot be asked
+    to pin it more tightly than the column it is checked against states it.
     """
-    for scale, name in SCALES:
+    for scale, name in scales:
         target = value * scale
-        room = half_room = slack * abs(scale)
+        half_room = slack * abs(scale)
         for shown, half in numbers:
             gap = abs(target - shown)
             # Printed exactly, at whatever precision: an integer rendered as
             # an integer is the commonest case and carries no rounding at all.
             if gap <= abs(target) * 1e-12:
                 return name
-            room = half + half_room
-            if (gap <= room * (1.0 + 1e-9)
-                    and room <= RESOLUTION * abs(target)):
+            if (gap <= (half + half_room) * (1.0 + 1e-9)
+                    and half <= RESOLUTION * abs(target)):
                 return name
     return None
 
@@ -4356,7 +4363,13 @@ def composite_part_on_page(part, text, numbers):
     kind, value, decimals = part
     if kind == "word":
         return value.lower() in text.lower()
-    return on_page(value, numbers, slack=0.5 * (10.0 ** -decimals)) is not None
+    # 🚨  AS IT IS, AND AT NO OTHER SCALE.  A number inside a text cell
+    # carries its unit with it (`44kg`) and the page prints it in that unit,
+    # so the unit search has nothing to find -- and everything to lose, because
+    # the cell's own rounding scales with it: 0.5 kg is +/-50 at the percent
+    # scale, and 44 kg of ammonia matched an unrelated `$4,402.91` there.
+    return on_page(value, numbers, slack=0.5 * (10.0 ** -decimals),
+                   scales=SCALES[:1]) is not None
 
 
 def audit_columns(row, text, numbers, skip=None):
@@ -4478,12 +4491,30 @@ def discrimination(row, text, numbers):
     floor -- the page holds hundreds of numbers and some collision is
     inevitable -- and anything approaching the column count means the matcher
     has stopped discriminating and the clean line above it means nothing.
+
+    ⚠️  THE NUMBERS INSIDE A TEXT COLUMN ARE MOVED TOO, because they go
+    through `on_page` with a slack of their own and were never measured: the
+    phase masses in `payload_mix` are where a loose tolerance would hide.
+    Only the cells `audit_columns` takes apart are moved; one it finds
+    verbatim (`2007 WU3`, `1.30.0`) is a word, not a measurement.
     """
     fake = row.copy()
-    moved = 0
+    moved = composite_hits = 0
+    lowered = text.lower()
     for column in row.index:
         value = row[column]
-        if isinstance(value, str) or value is None:
+        if isinstance(value, str):
+            word = value.strip()
+            if (not word or word.lower() in lowered
+                    or word.replace("_", " ").lower() in lowered):
+                continue
+            for kind, number, decimals in composite(word) or ():
+                if kind == "number" and number != 0.0:
+                    moved += 1
+                    composite_hits += composite_part_on_page(
+                        (kind, number * PERTURBATION, decimals), text, numbers)
+            continue
+        if value is None:
             continue
         try:
             number = float(value)
@@ -4493,8 +4524,8 @@ def discrimination(row, text, numbers):
             fake[column] = number * PERTURBATION
             moved += 1
     out = audit_columns(fake, text, numbers)
-    hits = sum(1 for column, _how in out["shown"]
-               if not isinstance(row[column], str))
+    hits = composite_hits + sum(1 for column, _how in out["shown"]
+                                if not isinstance(row[column], str))
     return hits, moved
 
 
