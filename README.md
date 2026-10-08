@@ -166,7 +166,9 @@ under `campaign/stage3/spacecost-0.4.0/` for the archives priced on them), and
 `1.17.0` set frozen under `campaign/stage3/spacecost-0.5.0/`, and `v0.7.0`
 on 2026-10-07 the same way, with the `1.18.0` set frozen under
 `campaign/stage3/spacecost-0.6.0/`, and `v0.8.0` the same day, with the
-`1.19.0` set frozen under `campaign/stage3/spacecost-0.7.0/`. See
+`1.19.0` set frozen under `campaign/stage3/spacecost-0.7.0/`, and `v0.9.0`
+after it, with the `1.20.0` set frozen under
+`campaign/stage3/spacecost-0.8.0/`. See
 [master v1.37.0](versions.md#master-v1370--transportation-v1170--catalog-v160)
 and [the data on disk adopts it](versions.md#the-data-on-disk-adopts-it-2026-09-28).
 Two checks say the seam is sound, and both are cheap:
@@ -186,7 +188,7 @@ compared byte for byte. **The invariants, and what fails when each breaks, are
 in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)**, which is
 where the editing rules live.
 
-**spacecost is pinned to a tagged release**, `v0.8.0`, in all seven places
+**spacecost is pinned to a tagged release**, `v0.9.0`, in all seven places
 that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
 `build_master.py`, and in `_PIP_SPEC` in both `modules/transportation.py` and
 `modules/mineral_value.py` (what a standalone module run installs from, and
@@ -253,9 +255,9 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.8.1 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
-| 2 | `modules/mineral_value.py` | 1.14.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.20.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
-| 4 | `modules/calc.py` | 1.29.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 2 | `modules/mineral_value.py` | 1.15.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
+| 3 | `modules/transportation.py` | 1.21.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
+| 4 | `modules/calc.py` | 1.30.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -1501,8 +1503,8 @@ walking a chain of real stages backwards from the payload (`delivered_cost_usd_p
 `_DELIVERY_LEGS`, both re-exported here from `spacecost.delivery`, where every
 leg's Δv is a lookup into the same table Stage 3 reads). Staging is modelled
 leg-by-leg because it matters, a
-single stage flying the whole 5,920 m/s to the lunar surface needs 10.96 kg
-in LEO per kg landed against 4.99 kg for the tug-plus-lander pair that would
+single stage flying the whole 6,100 m/s to the lunar surface needs 12.81 kg
+in LEO per kg landed against 5.28 kg for the tug-plus-lander pair that would
 actually be flown.
 
 | Destination | Launch cost avoided | kg in LEO per kg | Chain |
@@ -1511,7 +1513,7 @@ actually be flown.
 | `leo` | $2,555/kg | 1.00 | Falcon Heavy (expendable) $/kg-to-LEO |
 | `geo` | $8,462/kg ($937 of it stage hardware) | 2.95 | LEO to GTO (2,455 m/s), then 1,836 m/s to circularise and remove 28.5 deg |
 | `cislunar` | $7,236/kg ($742 of it stage hardware) | 2.54 | TLI + NRHO insertion (3,600 m/s), cryo tug |
-| `lunar_surface` | $43,338/kg ($30,596 of it stage hardware) | 4.99 | TLI + LOI (4,050 m/s) tug, then 1,870 m/s lander |
+| `lunar_surface` | $48,226/kg ($34,737 of it stage hardware) | 5.28 | TLI + LOI (4,050 m/s) tug, then 2,050 m/s lander |
 | `mars_orbit` | $9,154/kg ($1,046 of it stage hardware) | 3.17 | TMI (3,600 m/s) + MOI (900 m/s) into the 1-sol staging orbit |
 | `mars_surface` | $186,306/kg ($159,209 of it stage hardware) | 10.61 | TMI (3,600 m/s), aeroentry at 30% surviving mass, 800 m/s retroprop |
 
@@ -1561,7 +1563,7 @@ not "what it costs now".
 🚨  **The hardware charge is why both surfaces rose while every orbit fell.**
 Until `v0.4.0` a chain paid to LAUNCH the tug, lander and aeroshell it throws
 away and nothing to BUILD them, so a $200k/kg lander and a $50k/kg aeroshell
-were free. Building them is now 71% of the lunar price and 85% of the Mars
+were free. Building them is now 72% of the lunar price and 85% of the Mars
 one; at the orbital destinations it is 11-12%, and the cheaper LEO anchor
 dominates.
 
@@ -1584,18 +1586,19 @@ so it is priced by shipping it home rather than written off:
 
 | Commodity | `earth_surface` | `leo` | `cislunar` | `lunar_surface` | `mars_surface` | Route |
 |-----------|----------------|-------|------------|-----------------|----------------|-------|
-| water | $0.001/kg | $2,352 | $7,033 | $25,800 | $46,374 | used in space |
-| iron | $0.32/kg | $1,558 | $4,835 | $19,272 | $74,292 | used in space |
-| nickel | $18.81/kg | $1,577 | $4,854 | $30,125 | $130,203 | used in space |
-| platinum | $59,038/kg | $33,628 | $31,721 | $14,099 | $0 | shipped down |
-| gold | $142,206/kg | $116,796 | $114,889 | $97,267 | $45,812 | shipped down |
-| rhodium | $320,000/kg | $294,590 | $292,683 | $275,061 | $223,606 | shipped down |
-| olivine | $0.05/kg | $433 | $1,603 | $1,094 | $3,520 | used in space |
-| carbon | $0.20/kg | $810 | $2,683 | $17,123 | $3,514 | used in space |
+| water | $0.001/kg | $2,352 | $7,033 | $28,733 | $46,374 | used in space |
+| iron | $0.32/kg | $1,558 | $4,835 | $21,472 | $74,292 | used in space |
+| nickel | $18.81/kg | $1,577 | $4,854 | $33,547 | $130,203 | used in space |
+| platinum | $59,038/kg | $33,628 | $31,721 | $14,296 | $0 | shipped down |
+| gold | $142,206/kg | $116,796 | $114,889 | $97,464 | $45,812 | shipped down |
+| rhodium | $320,000/kg | $294,590 | $292,683 | $275,258 | $223,606 | shipped down |
+| olivine | $0.05/kg | $433 | $1,603 | $1,241 | $3,520 | used in space |
+| carbon | $0.20/kg | $810 | $2,683 | $19,079 | $3,514 | used in space |
 
-The used-in-space rows are mineral_value 1.14.0 on spacecost `v0.8.0`; the
+The used-in-space rows are mineral_value 1.15.0 on spacecost `v0.9.0`; the
 shipped-down rows were computed on `v0.4.0` from the 2026-09-09 terrestrial
-quotes frozen under `campaign/stage2/`, and the LEO anchor does not reach them. Precious-metal rows carry a live spot quote, so they
+quotes frozen under `campaign/stage2/`, and the LEO anchor does not reach them,
+though the lunar ones carry `v0.9.0`'s ascent ($197/kg less downleg). Precious-metal rows carry a live spot quote, so they
 move between runs; the rest are reference prices. Four things in that table
 are worth reading twice:
 
@@ -1607,13 +1610,13 @@ are worth reading twice:
   every terrestrial price in the catalog, and there is no Martian buyer. That
   is the correct answer, not a bug.
 - **Water at Mars captures a quarter of its freight, and at the Moon three
-  fifths**: $46,374 of $186,306 against $25,800 of $43,338, because Mars has
+  fifths**: $46,374 of $186,306 against $28,733 of $48,226, because Mars has
   its own ground ice and the Moon's is in permanently shadowed craters.
   ⚠️  Until `v0.4.0` this line said water was worth MORE on the Moon than on
   Mars; charging for the expended aeroshell and lander put Mars' freight up
   fourfold, and the ranking reversed with it.
-- **Olivine is worth less on the Moon than at a cislunar depot** ($1,094 vs
-  $1,603) even though the surface costs nearly six times as much to reach.
+- **Olivine is worth less on the Moon than at a cislunar depot** ($1,241 vs
+  $1,603) even though the surface costs over six times as much to reach.
   Shipping rock to a body made of rock is not a business.
 
 The `value_route` column records which fate was chosen for every row.
@@ -2088,6 +2091,14 @@ enters or leaves a set. At `lunar_surface` the refused mission was the best
 one in the sample: **2014 YN, 2.86091x**, against 2005 QP87's 2.89477x. Every
 other winner is the same float. See
 [master v1.51.0](versions.md#master-v1510--calc-v1290).
+
+⚠️  **spacecost 0.9.0 (master v1.52.0) re-pins the lunar descent to what
+Apollo flew, 2,050 m/s rather than 1,870**, which makes a kilogram landed on
+the Moon 11.3% dearer to replace ($48,226/kg) and every lunar return a little
+harder. On the `lunar_surface` cell's sample every body improves, by a median
+9.0%, and **2014 YN goes from 2.86091x to 2.61433x**; no other destination
+moves. The full cell has not been re-run; see
+[master v1.52.0](versions.md#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210).
 
 ⚠️  **Seven cells, one setting.** The raw and N = 1 cells have not been run on
 these inputs at any destination; every matrix below is an older model, and

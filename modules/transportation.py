@@ -100,6 +100,12 @@ follows to mineral_value 1.14.0.  The 1.19.0 set is frozen under
 `campaign/stage3/spacecost-0.7.0/`.  See
 [master v1.50.0](../versions.md#master-v1500--mineral_value-v1140--transportation-v1200).
 
+v0.9.0 TOOK IT 1.20.0 -> 1.21.0 AND MOVED THE LUNAR DESCENT: 1,870 -> 2,050
+m/s, what Apollo 15-17 flew, with a new 1,850 m/s ascent row for the
+downleg.  Only `lunar_surface` moves.  The 1.20.0 set is frozen under
+`campaign/stage3/spacecost-0.8.0/`.  See
+[master v1.52.0](../versions.md#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210).
+
 RE-RUN STAGE 3 WHEN A ROW CHANGES, NOT WHEN A STAMP DOES.  A repin does not
 require a restamp: Stage 4 reads no column this contract moved, so leaving the
 CSVs at the older stamp costs one `stamp_check()` line and nothing else, where
@@ -154,7 +160,7 @@ import subprocess, sys
 # the two to each other.
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.8.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.9.0",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -303,7 +309,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.20.0"
+    pipeline_version: str = "1.21.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 CONFIG = TransportConfig()

@@ -52,7 +52,7 @@ _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 # name in the install list would resolve to nothing.  The tag is typed in
 # several places in this repo; verify_docs check 7 finds and holds them all.
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.8.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.9.0",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -165,10 +165,10 @@ class MineralValueConfig:
     #                     larger launch cost avoided ($7,236/kg, derived).
     #                     Also the CHEAPEST of the orbital options to reach
     #                     from an asteroid; see Module 4's return-Δv model.
-    #   "lunar_surface", sold at a Moon base.  $43,338/kg: nearest
-    #                     destination, but airless, so all 5,920 m/s from LEO
+    #   "lunar_surface", sold at a Moon base.  $48,226/kg: nearest
+    #                     destination, but airless, so all 6,100 m/s from LEO
     #                     is propulsive, and the tug and lander that do it
-    #                     are thrown away (71% of the price is that hardware).
+    #                     are thrown away (72% of the price is that hardware).
     #   "mars_orbit"    - sold at a 1-sol Mars-orbit depot ($9,154/kg).  The
     #                     Mars destination that nothing lands on, so it pays
     #                     no entry-survival fraction and, crucially, competes
@@ -227,7 +227,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.14.0"
+    pipeline_version: str = "1.15.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview

@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0](#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210)
 - [master v1.51.0 / calc v1.29.0](#master-v1510--calc-v1290)
 - [master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0](#master-v1500--mineral_value-v1140--transportation-v1200)
 - [master v1.49.0 / transportation v1.19.0](#master-v1490--transportation-v1190)
@@ -103,10 +104,10 @@ one that does not say is not to be used.
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
-| 2 | `modules/mineral_value.py` | **1.14.0** | v1.14.0, every used-in-space price re-derived at spacecost v0.8.0's LEO anchor ($2,555/kg, was $2,414); no Stage 2 code moved (v1.13.0 was the last to move a row) |
-| 3 | `modules/transportation.py` | **1.20.0** | v1.20.0, Falcon Heavy (expendable)'s band topped by NASA's $178M, which moves the LEO price anchor: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.29.0** | v1.29.0, a stack the overshoot repair solved at its vehicle's capacity is no longer refused for overshooting by float residue (`launch_capacity_rtol`, default 1e-9) |
-| - | `master.py` | **1.51.0** | a literal in `build_master.py`, in **two** places |
+| 2 | `modules/mineral_value.py` | **1.15.0** | v1.15.0, the `lunar_surface` prices and downleg re-derived through spacecost v0.9.0's lunar chain; no Stage 2 code moved (v1.13.0 was the last to move a row) |
+| 3 | `modules/transportation.py` | **1.21.0** | v1.21.0, the lunar descent re-pinned to Apollo's 2,050 m/s and a 1,850 m/s ascent row added: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 4 | `modules/calc.py` | **1.30.0** | v1.30.0, the NRHO-to-lunar-surface Delta-v at Apollo's 2,050 m/s descent; v1.29.0 had made a stack the overshoot repair solved at capacity fly (`launch_capacity_rtol`) |
+| - | `master.py` | **1.52.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -185,6 +186,98 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0
+
+**The lunar descent is what Apollo flew, 2,050 m/s rather than 1,870, and the
+ascent the downleg climbs has a row of its own.** General_Research revision
+candidate rc-016. It moves one destination, `lunar_surface`, in all three
+places the descent reaches: the delivered price Stage 2 sells at, the
+downleg it ships home through, and the return Delta-v Stage 4 flies.
+
+### What moved upstream (spacecost 0.9.0)
+
+- **LLO -> lunar surface (descent)**: **1,870 -> 2,050 m/s**. The row cited
+  NASA SP-4029 for 1.87 km/s, and SP-4029's lunar-orbit phase tables give the
+  descent engine's velocity change on Apollo 15, 16 and 17 as 6,813, 6,703 and
+  6,698 ft/s (2,077 / 2,043 / 2,042 m/s, mean 2,054).
+- **Lunar surface -> LLO (ascent)**, new: **1,850 m/s** (Apollo 14, 15 and 17:
+  6,066 / 6,059 / 6,076 ft/s). The downleg took the descent row as a
+  symmetric ascent; it departs on 2,700 m/s now, where it was 2,720.
+- **LEO -> lunar surface**: 5,920 -> **6,100 m/s**.
+
+The delivered lunar price goes **$43,338 -> $48,226/kg** (+11.3%; the chain's
+mass ratio 4.99 -> 5.28) and the lunar downleg $44,939 -> $44,742. spacecost
+keeps every earlier lunar price reproducible bit for bit through `burn_dv=`,
+`departure_dv_m_s=` and `CHAIN_BURN_DV_BEFORE_V090`.
+
+### What moves here
+
+- **calc 1.30.0**: `DV_NRHO_TO_LUNAR_SURFACE_KM_S` is 0.730 + 2.050, the
+  NRHO-to-surface leg every `lunar_surface` return flies. Typed rather than
+  read, so a Delta-v row cannot reach Stage 4 without a calc release.
+- **mineral_value 1.15.0**: no code moved. The `lunar_surface` table's 48
+  prices and every downleg follow the chain, replayed from the recorded quotes
+  (no network); the six other tables are identical to 1.14.0 but for the stamp.
+- **transportation 1.21.0**: the descent and composite rows, and the new ascent
+  row; `delta_v_segments` has 34 rows.
+- **`campaign/worked_calculation.py`** derives an archived row through the
+  chain and the descent its own run flew: a `lunar_surface` Stage 2 table
+  stamped before 1.15.0 through the pre-v0.9.0 chain, and a row calc wrote
+  before 1.30.0 at the 1,870 m/s descent.
+
+### Measured
+
+Stage 4 on the archived v1.40.0 `lunar_surface` default cell's top 300 bodies
+plus a 3,000-row stride, against calc 1.29.0 on the master v1.51.0 inputs.
+`median(1 - r)`:
+
+| | bodies better / worse | median | range | winner |
+|---|---|---:|---|---|
+| the descent alone (calc 1.30.0, 1.14.0 prices) | 55 / 3,245 | **-1.23%** | -7.55% .. +2.81% | 2014 YN, 2.86091x -> 2.90912x |
+| the prices alone | 3,300 / 0 | **+10.13%** | +10.13% .. +10.14% | |
+| both | **3,300 / 0** | **+9.03%** | +3.35% .. +12.66% | **2014 YN, 2.86091x -> 2.61433x** |
+
+No body entered or left the evaluable set. The higher descent costs every
+mission a little Delta-v and raises what every kilogram landed is worth by
+more, because the price is the launch a kilogram on the surface avoids; the
+same reading master v1.50.0 gives for the LEO anchor.
+
+⚠️  **55 bodies improve under the descent ALONE, by up to 2.8%, and none of
+them is a refusal.** Probed on 2007 WU3: Falcon Heavy on iodine is searched to
+3.854x at 1,870 m/s (concentration 4.33, a programme of 6 x 1) and to 3.536x at
+2,050 (3.68, 4 x 2); nothing is refused at either, and the old search picked
+xenon at 3.638x. The same vehicle and propellant land on a different
+concentration and programme, which is the non-exhaustive search CLAUDE.md
+records under
+[the fleet search is coarse-then-refine](CLAUDE.md#the-fleet-search-is-coarse-then-refine-so-tightening-a-constraint-can-improve-a-row),
+and the ceiling is not involved (surplus 0, clearing 1.0). Before calc 1.29.0
+the same measurement showed 137 such bodies and a winner that took the cell
+under a HIGHER descent; that one was a refusal, and it is
+[master v1.51.0](#master-v1510--calc-v1290).
+
+### Verified
+
+`verify.py check` against `.verify/baseline-1.51.0` (calc 1.29.0, spacecost
+v0.8.0), after the Stage 2 and 3 replays: **all four cislunar cells MATCH**
+(`26da59a4a0e60b37` / `f0a8a28fa60dfb91` / `bded3ad7998d1a9a` /
+`da745840931dcf86`), which is the release's claim that nothing outside
+`lunar_surface` moves; the mass ledger, never-worse, Stage 2 recompute and
+ceiling checks pass. A fresh lunar row (2014 YN at 2.6143x, Stage 2 1.15.0,
+calc 1.30.0) derives 92 quantities with 0 DIFFER and its verification sheet
+reproduces 279 of 279 substitutions; the archived calc 1.26.0 lunar winner
+(2018 DT, Stage 2 1.12.0) still derives with 0 DIFFER through the pre-v0.9.0
+chain and descent. `verify_stage3.py` passes at v0.9.0.
+
+### On disk
+
+- **Stage 2**: the seven 1.15.0 tables are frozen under
+  `campaign/stage2/mineral_value-1.15.0/`, and the live cislunar table is its
+  1.15.0 replay (identical to 1.14.0 but for the stamp).
+- **Stage 3**: the 1.20.0 set is frozen under
+  `campaign/stage3/spacecost-0.8.0/`, and the live set is the v0.9.0 replay.
+- The inputs it replaced are backed up under
+  `asteroid_pipeline/_inputs_backup_2026-10-07_pre-v1.52.0/`.
 
 ## master v1.51.0 / calc v1.29.0
 
@@ -3114,6 +3207,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0](#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210) | 2026-10-07 | **the lunar descent is Apollo's 2,050 m/s**: the lunar price $43,338 -> $48,226/kg, every sampled lunar body better by a median 9.0%, 2014 YN 2.86091x -> 2.61433x; no other destination moves |
 | [master v1.51.0 / calc v1.29.0](#master-v1510--calc-v1290) | 2026-10-07 | **a stack the repair solved at capacity flies**: the overshoot repair refused its own solutions by 2.9e-11 kg; 8-328 sampled bodies per destination improve by a median 1-18%, none enters or leaves a set, and the `lunar_surface` winner becomes 2014 YN |
 | [master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0](#master-v1500--mineral_value-v1140--transportation-v1200) | 2026-10-07 | **Falcon Heavy (expendable)'s band reaches NASA's $178M, and the LEO price anchor moves $2,414 -> $2,555/kg**: every sampled in-space body better by 0.45-5.04%, `earth_surface` unmoved at the median; no winner changed body |
 | [master v1.49.0 / transportation v1.19.0](#master-v1490--transportation-v1190) | 2026-10-07 | **spacecost `v0.7.0`: Electron and Pegasus XL become the bands their sources give**: Rocket Lab's reported revenue per launch, and a list price up to NASA's ICON price; neither flies a mission, and every Stage 4 cell is bit-identical |
@@ -8331,6 +8425,13 @@ destination moved and `earth_surface` did not. The stamp moves because the
 numbers did, and it is what `campaign/worked_calculation.py` reads to choose
 the anchor an archived table was priced at. No config field or column moved.
 
+**`1.15.0`  the lunar chain moved under the lunar prices.** Full write-up: [master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0](#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210).
+No line of this module changed. spacecost v0.9.0 re-pinned the lunar descent
+and gave the ascent its own row, so the `lunar_surface` table's 48 delivered
+prices and every downleg moved; the six other tables are 1.14.0's but for the
+stamp, which `campaign/worked_calculation.py` reads to choose the chain an
+archived lunar table was priced through. No config field or column moved.
+
 ## Stage 3 changelog: `modules/transportation.py`
 
 🚨  **THIS RECORD MOVED WITH THE TABLES IT DESCRIBES, AND
@@ -9312,6 +9413,11 @@ field is added, and it defaults to a tolerance.
   re-solved to exactly the vehicle's capacity is not refused for the rounding
   of its own solve. 0.0 is v1.28.0 to the bit. No output column; the worked
   calculation reads the row's stamp to know which test its run used.
+
+**`1.30.0`  the lunar descent is Apollo's.** Full write-up: [master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0](#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210).
+`DV_NRHO_TO_LUNAR_SURFACE_KM_S` is 0.730 + 2.050 km/s, where it was 0.730 +
+1.870, following spacecost v0.9.0's descent row. It moves `lunar_surface` and
+nothing else. No config field or column moved.
 
 # Measurement history
 

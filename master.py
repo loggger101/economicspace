@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.51.0)
+"""Master Asteroid Profitability Pipeline (1.52.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -129,7 +129,7 @@ _MASTER_REQUIRED = [
 # Stage 1 installs no package: it downloads a pinned catalog RELEASE, which is
 # data, not code.  Its pin is `CatalogConfig.catalog_release`.
 _MASTER_PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.8.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.9.0",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -628,10 +628,10 @@ class MineralValueConfig:
     #                     larger launch cost avoided ($7,236/kg, derived).
     #                     Also the CHEAPEST of the orbital options to reach
     #                     from an asteroid; see Module 4's return-Δv model.
-    #   "lunar_surface", sold at a Moon base.  $43,338/kg: nearest
-    #                     destination, but airless, so all 5,920 m/s from LEO
+    #   "lunar_surface", sold at a Moon base.  $48,226/kg: nearest
+    #                     destination, but airless, so all 6,100 m/s from LEO
     #                     is propulsive, and the tug and lander that do it
-    #                     are thrown away (71% of the price is that hardware).
+    #                     are thrown away (72% of the price is that hardware).
     #   "mars_orbit"    - sold at a 1-sol Mars-orbit depot ($9,154/kg).  The
     #                     Mars destination that nothing lands on, so it pays
     #                     no entry-survival fraction and, crucially, competes
@@ -690,7 +690,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.14.0"
+    pipeline_version: str = "1.15.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -3311,7 +3311,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.20.0"
+    pipeline_version: str = "1.21.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 TRANSPORT_CONFIG = TransportConfig()
@@ -4142,7 +4142,7 @@ class CalcConfig:
     #                     because capture only has to bind the orbit and the
     #                     burn takes the Oberth benefit at low perigee.
     #   "lunar_surface", landed at a Moon base.  Cislunar capture plus
-    #                     2.6 km/s of NRHO→LLO→surface, all propulsive; the
+    #                     2.78 km/s of NRHO→LLO→surface, all propulsive; the
     #                     Moon has no atmosphere to brake against.  Carries a
     #                     $200k/kg lander instead of a berthing adapter.
     #   "mars_surface"  - landed at a Mars base.  NOT an Earth return: the
@@ -4505,7 +4505,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.29.0"
+    pipeline_version: str = "1.30.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -7325,8 +7325,11 @@ DV_LEO_DEORBIT_KM_S = 0.100
 
 # ── Lunar surface  (v1.6.0) ──────────────────────────────────────────────────
 # From a cislunar (NRHO) depot down to the surface, Module 3 DELTA_V_REFERENCE:
-#   NRHO → LLO   0.73 km/s        LLO → surface   1.87 km/s
-DV_NRHO_TO_LUNAR_SURFACE_KM_S = 0.730 + 1.870
+#   NRHO → LLO   0.73 km/s        LLO → surface   2.05 km/s
+# The descent was 1.87 until calc 1.30.0, when spacecost v0.9.0 re-pinned it to
+# the 2,050 m/s Apollo 15-17 flew (NASA SP-4029).  Typed, not read, so a
+# Delta-v row moving cannot reach Stage 4 without a calc release.
+DV_NRHO_TO_LUNAR_SURFACE_KM_S = 0.730 + 2.050
 
 # ── Mars  (v1.6.0) ───────────────────────────────────────────────────────────
 MU_MARS_KM3_S2   = 42_828.37           # Mars gravitational parameter
@@ -7505,7 +7508,7 @@ def _transfer_legs_for_apsis(
     #   Cislunar; cheapest, because capture only has to BIND the orbit, and
     #     the burn happens at low perigee where Oberth pays best.
     #   Lunar surface, cislunar capture, then NRHO→LLO→surface.  Airless, so
-    #     that last 2.6 km/s is entirely propulsive.
+    #     that last 2.78 km/s is entirely propulsive.
     #   Mars, not an Earth return at all.  See the separate transfer below.
     dv_leo_capture = _leo_departure_dv_km_s(v_inf)
     dv_cislunar    = _cislunar_capture_dv_km_s(v_inf)
@@ -13690,7 +13693,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.51.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.52.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

@@ -112,9 +112,13 @@ DV_LEO_DEORBIT = 0.100
 # Periapsis raise that finishes an aerobraked capture.  It is a TRIM, which is
 # what separates LEO from GEO below.
 DV_AEROBRAKE_TRIM = 0.100
-# NRHO down to the lunar surface: 0.730 to LLO, then 1.870 to the ground, and
-# all of it propulsive because there is no air.
-DV_NRHO_TO_LUNAR_SURFACE = 0.730 + 1.870
+# NRHO down to the lunar surface: 0.730 to LLO, then 2.050 to the ground, and
+# all of it propulsive because there is no air.  A row calc wrote before 1.30.0
+# flew 1.870, the descent spacecost carried until v0.9.0, and is derived at it:
+# see `dv_nrho_to_lunar_surface`.
+DV_NRHO_TO_LUNAR_SURFACE = 0.730 + 2.050
+_DV_NRHO_TO_LUNAR_SURFACE_BEFORE_1300 = 0.730 + 1.870
+_FIRST_CALC_2050_DESCENT = (1, 30, 0)
 
 
 # Mass below this is float residue rather than a measurement: see `walled` in
@@ -1893,10 +1897,57 @@ _FIRST_HARDWARE_STAGE2 = (1, 10, 0)    # mineral_value, the spacecost 0.4.0 repi
 # `check_delivery_pricing` exactly as that one is.
 _V040_TO_V070_LEO_USD_PER_KG = 2414.0  # Falcon Heavy (expendable), spacecost 0.4.0-0.7.0
 _FIRST_V080_STAGE2 = (1, 14, 0)        # mineral_value, the spacecost 0.8.0 repin
+# ⚠️  AND THEN THE LUNAR CHAIN.  spacecost v0.9.0 re-pinned the lunar descent
+# (1,870 -> 2,050 m/s), so a lunar_surface table stamped before 1.15.0 was
+# priced through the old chain.  spacecost keeps it reproducible as
+# `burn_dv=CHAIN_BURN_DV_BEFORE_V090[dest]`, and the table check holds it.
+_FIRST_V090_STAGE2 = (1, 15, 0)        # mineral_value, the spacecost 0.9.0 repin
+
+
+def _stamp_key(stamp):
+    """A dotted stamp as a comparable tuple, or None."""
+    try:
+        return tuple(int(x) for x in str(stamp).strip().split("."))
+    except (AttributeError, ValueError):
+        return None
+
+
+def dv_nrho_to_lunar_surface(archived):
+    """The NRHO-to-surface Delta-v the run that wrote `archived` flew.
+
+    calc types it rather than reading a table, so the row's own calc stamp
+    says which: before 1.30.0 the descent was 1,870 m/s.  A row whose stamp
+    cannot be read is taken as current.
+    """
+    if (archived is not None and hasattr(archived, "get")
+            and _stamp_key(archived.get("pipeline_version")) is not None
+            and not run_calc_at_least(archived, _FIRST_CALC_2050_DESCENT)):
+        return _DV_NRHO_TO_LUNAR_SURFACE_BEFORE_1300
+    return DV_NRHO_TO_LUNAR_SURFACE
 
 
 def delivery_pricing(minerals):
-    """`(c_LEO, stage_hardware, label)` for the model that priced `minerals`."""
+    """`(c_LEO, stage_hardware, label, burn_dv)` for the model that priced
+    `minerals`.  `burn_dv` is None unless the destination's chain has moved
+    since the table was priced, as the lunar one did in spacecost v0.9.0."""
+    burn_dv = None
+    if "delivery_destination" in minerals.columns and len(minerals):
+        st = (str(minerals["pipeline_version"].iloc[0])
+              if "pipeline_version" in minerals.columns else None)
+        k = _stamp_key(st)
+        if k is not None and k < _FIRST_V090_STAGE2:
+            burn_dv = _sd.CHAIN_BURN_DV_BEFORE_V090.get(
+                str(minerals["delivery_destination"].iloc[0]).strip())
+    c_leo, hardware, label = _delivery_pricing(minerals)
+    if burn_dv is not None:
+        label += ("; and the chain's burns at %s m/s, as they were before "
+                  "spacecost 0.9.0 re-pinned the lunar descent"
+                  % " + ".join(format(dv, ",.0f") for dv in burn_dv))
+    return c_leo, hardware, label, burn_dv
+
+
+def _delivery_pricing(minerals):
+    """The anchor half of `delivery_pricing`: `(c_LEO, stage_hardware, label)`."""
     import master
     stamp = None
     if "pipeline_version" in minerals.columns and len(minerals):
@@ -2143,6 +2194,14 @@ def context(body, archived, tables):
     # Earth's surface price its non-existent chain at the LEO $/kg, which is what
     # `delivery_chain` and the renderer both test with `is not None`.
     legs = master._DELIVERY_LEGS.get(cfg.delivery_destination)
+    pricing = delivery_pricing(tables["minerals"])
+    # The chain the table was priced through, which is not the live one for a
+    # lunar_surface table from before spacecost v0.9.0: its descent leg burns
+    # what that release replaced.  Same legs, the old Delta-v in each burn.
+    if legs and pricing[3] is not None:
+        burns = iter(pricing[3])
+        legs = [(("burn", float(next(burns))) + tuple(leg[2:]))
+                if leg[0] == "burn" else leg for leg in legs]
     # 🚨  THE FOUR COLUMNS BEHIND EVERY PRICE IN THE PHASE TABLE, so the page
     # can show where a delivered price comes from instead of asserting it.
     # Stage 2 writes them all: a commodity USED at the destination is worth its
@@ -2164,7 +2223,6 @@ def context(body, archived, tables):
               "downleg_cost_usd_per_kg", "in_space_processing_usd_per_kg",
               "value_route", "price_usd_per_kg")
     price_parts = {}
-    pricing = delivery_pricing(tables["minerals"])
     if all(column in tables["minerals"].columns for column in needed):
         for _i, m in tables["minerals"].iterrows():
             price_parts[str(m["name"])] = {
@@ -2180,17 +2238,21 @@ def context(body, archived, tables):
                           if "price_before_processing_usd_per_kg" in m
                           else float(m["price_usd_per_kg"])),
             }
+    # The descent the run that wrote this row flew; see the constants block.
+    dv_nrho_lunar = dv_nrho_to_lunar_surface(archived)
     return dict(
         cfg=cfg, body=body, veh=veh, pro=pro, ops=ops, val=val,
         minerals=tables["minerals"], legs=legs, price_parts=price_parts,
-        physics=PHYSICS,
+        physics=dict(PHYSICS, dv_nrho_to_lunar_surface=dv_nrho_lunar),
+        dv_nrho_lunar=dv_nrho_lunar,
         leo_usd_per_kg=pricing[0], stage_hardware=pricing[1],
         pricing_label=pricing[2],
         hw_rates=dict(stage=dict(_sd.STAGE_HARDWARE_USD_PER_KG),
                       propellant=_sd.TUG_PROPELLANT_USD_PER_KG,
                       entry=_sd.ENTRY_SYSTEM_USD_PER_KG),
         p_l=master.delivered_cost_usd_per_kg(
-            cfg.delivery_destination, pricing[0], stage_hardware=pricing[1]),
+            cfg.delivery_destination, pricing[0], stage_hardware=pricing[1],
+            burn_dv=pricing[3]),
         a_au=a_au, e=float(body["eccentricity"]),
         inc=float(body["inclination_deg"]),
         rho=float(body["density_gcm3"]),
@@ -2608,7 +2670,7 @@ def _legs(C, r_target):
                 cap=cislunar_capture,
                 ret_cislunar_prop=match + cislunar_capture,
                 ret_lunar_surface_prop=(match + cislunar_capture
-                                        + DV_NRHO_TO_LUNAR_SURFACE),
+                                        + C["dv_nrho_lunar"]),
                 ret_leo_prop=match + leo_capture,
                 ret_leo_aero=match + DV_AEROBRAKE_TRIM,
                 ret_geo_prop=match + geo_capture,
@@ -2624,7 +2686,7 @@ def _legs(C, r_target):
             ("asteroid departure, apsis match burn", match),
             ("cislunar capture", cislunar_capture),
             ("NRHO to low lunar orbit to the surface, all propulsive",
-             DV_NRHO_TO_LUNAR_SURFACE)],
+             C["dv_nrho_lunar"])],
         "ret_leo_prop": [
             ("asteroid departure, apsis match burn", match),
             ("capture into LEO: the escape velocity as well as the excess",
