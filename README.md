@@ -168,7 +168,8 @@ on 2026-10-07 the same way, with the `1.18.0` set frozen under
 `campaign/stage3/spacecost-0.6.0/`, and `v0.8.0` the same day, with the
 `1.19.0` set frozen under `campaign/stage3/spacecost-0.7.0/`, and `v0.9.0`
 after it, with the `1.20.0` set frozen under
-`campaign/stage3/spacecost-0.8.0/`. See
+`campaign/stage3/spacecost-0.8.0/`, and `v0.10.0` after that, with the
+`1.21.0` set frozen under `campaign/stage3/spacecost-0.9.0/`. See
 [master v1.37.0](versions.md#master-v1370--transportation-v1170--catalog-v160)
 and [the data on disk adopts it](versions.md#the-data-on-disk-adopts-it-2026-09-28).
 Two checks say the seam is sound, and both are cheap:
@@ -188,7 +189,7 @@ compared byte for byte. **The invariants, and what fails when each breaks, are
 in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)**, which is
 where the editing rules live.
 
-**spacecost is pinned to a tagged release**, `v0.9.0`, in all seven places
+**spacecost is pinned to a tagged release**, `v0.10.0`, in all seven places
 that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
 `build_master.py`, and in `_PIP_SPEC` in both `modules/transportation.py` and
 `modules/mineral_value.py` (what a standalone module run installs from, and
@@ -256,7 +257,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.8.1 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
 | 2 | `modules/mineral_value.py` | 1.15.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.21.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
+| 3 | `modules/transportation.py` | 1.22.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
 | 4 | `modules/calc.py` | 1.30.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
@@ -1743,8 +1744,10 @@ antimatter, which is why the gate exists.
 Three of the additions matter more than the row count suggests:
 
 - **Krypton** is, by unit count, the most-flown electric propellant in history,
-  every Starlink v1.0 Hall thruster ran it, and it was absent. It is 30×
-  cheaper than xenon at two-thirds the Isp, and it pays for that with a much
+  every Starlink v1.0 Hall thruster ran it, and it was absent. It is about
+  13× cheaper than xenon at two-thirds the Isp ($794/kg since spacecost
+  `v0.10.0`, the centre of a $300-$2,100 band; 33× at the unsourced $300
+  before it), and it pays for that with a much
   worse tank (0.55 kg/L supercritical against xenon's 2.0, so 12.5% of its own
   mass in COPV against 1.9%).
 - **Iodine** stores as a *solid* at ambient pressure, ρ 4.93 kg/L, so its
@@ -2099,6 +2102,14 @@ harder. On the `lunar_surface` cell's sample every body improves, by a median
 9.0%, and **2014 YN goes from 2.86091x to 2.61433x**; no other destination
 moves. The full cell has not been re-run; see
 [master v1.52.0](versions.md#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210).
+
+⚠️  **spacecost 0.10.0 (master v1.53.0) prices krypton at $794/kg, the
+centre of a $300-$2,100 band, where it was an unsourced $300.** It reaches no
+delivered price; it costs the missions that flew krypton up to 1.1%, on 149 of
+23,100 sampled bodies across the seven destinations, and moves no other body.
+**The sampled `cislunar` winner, 2018 DT, moves to iodine at 4.61562x**
+(4.5983x on krypton); every other winner is the same float. See
+[master v1.53.0](versions.md#master-v1530--transportation-v1220).
 
 ⚠️  **Seven cells, one setting.** The raw and N = 1 cells have not been run on
 these inputs at any destination; every matrix below is an older model, and

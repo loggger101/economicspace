@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.52.0)
+"""Master Asteroid Profitability Pipeline (1.53.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
@@ -129,7 +129,7 @@ _MASTER_REQUIRED = [
 # Stage 1 installs no package: it downloads a pinned catalog RELEASE, which is
 # data, not code.  Its pin is `CatalogConfig.catalog_release`.
 _MASTER_PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.9.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.10.0",
 }
 _master_missing = []
 for _pkg in _MASTER_REQUIRED:
@@ -3311,7 +3311,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.21.0"
+    pipeline_version: str = "1.22.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 TRANSPORT_CONFIG = TransportConfig()
@@ -13693,7 +13693,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.52.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.53.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

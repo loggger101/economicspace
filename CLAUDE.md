@@ -210,8 +210,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.8.1`, mineral_value `1.15.0`, transportation `1.21.0`,
-calc `1.30.0`, master `1.52.0` (the master version is a literal in
+Current: catalog `1.8.1`, mineral_value `1.15.0`, transportation `1.22.0`,
+calc `1.30.0`, master `1.53.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -229,7 +229,8 @@ corrected (spacecost v0.6.1), and to `1.19.0` when Electron and Pegasus XL
 became bands (spacecost v0.7.0), and to `1.20.0` when Falcon Heavy
 (expendable)'s band reached NASA's price and moved the LEO price anchor
 (spacecost v0.8.0), and to `1.21.0` when the lunar descent was re-pinned to
-Apollo's (spacecost v0.9.0). **So it follows a repin, and a repin follows it: the two
+Apollo's (spacecost v0.9.0), and to `1.22.0` when krypton's price became a
+band (spacecost v0.10.0). **So it follows a repin, and a repin follows it: the two
 are one number in two repositories.**
 
 ℹ️  **TWENTY-SIX stamps so far do NOT mean the numbers moved.** The rule
@@ -463,14 +464,14 @@ changed the delivered-price model, so Stage 2 and Stage 3 both re-price and no
 flag in this repo restores the old tables: reproducing a cell here needs the
 2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
 tables now frozen under `campaign/stage3/`. ⚠️  **The live
-`asteroid_pipeline/` has held spacecost `v0.9.0`'s tables and a
+`asteroid_pipeline/` has held spacecost `v0.10.0`'s tables and a
 mineral_value 1.15.0 Stage 2 since 2026-10-07, and the `data-2026-09-29c`
 catalog since 2026-09-29** (the earlier Stage 2 tables are frozen under
 `campaign/stage2/mineral_value-*/`; the `v0.4.0` tables it held from
 2026-09-24, the `v0.5.0` ones from 2026-09-28, the `v0.6.0` ones from
-2026-10-06 and the `v0.7.0` and `v0.8.0` ones from earlier on 2026-10-07 are
-frozen under `campaign/stage3/spacecost-0.4.0/`, `-0.5.0/`, `-0.6.0/`,
-`-0.7.0/` and `-0.8.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
+2026-10-06 and the `v0.7.0`, `v0.8.0` and `v0.9.0` ones from earlier on
+2026-10-07 are frozen under `campaign/stage3/spacecost-0.4.0/`, `-0.5.0/`,
+`-0.6.0/`, `-0.7.0/`, `-0.8.0/` and `-0.9.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
 a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
 grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
 default configuration measured the repricing at a median **1.58x worse**
@@ -5633,7 +5634,7 @@ passing, which is exactly why nobody deletes them.
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
-[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.9.0`.
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.10.0`.
 **Do not state the row count here**; the adapter's ready banner prints it on
 every import, and this sentence carried "all 141 of them" into a release that
 added a whole table.
