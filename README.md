@@ -2452,6 +2452,18 @@ Stated plainly so results aren't over-read:
   optimised the ratio this README ranks by. See `selection_key`.
 - **Cheap launch does not rescue this.** Launch is ~2.3% of a mission. Zeroing
   it entirely improves the ratio by 2.3%.
+- **Launch prices are held at today's list for the whole programme.** A
+  searched programme runs 10 to 20 years, and launch keeps getting cheaper:
+  Terzi & Nicoli (2026) fit an experience curve of 21.2% per doubling of
+  cumulative payload to orbit, and their conservative scenario puts the cost
+  45% below today's by 2030 and 75% below by 2040. Every launch price here is
+  the vehicle table's current figure, flat. **The direction of that error is
+  not the obvious one**, because a kilogram in space is valued at the launch it
+  avoids: a falling price cheapens every mission and every delivered price
+  above LEO together, and [master v1.50.0](versions.md#master-v1500--mineral_value-v1140--transportation-v1200)
+  measured that pair, the other way round, as worth ~0.5% on the cost side
+  against 0.8-5.5% on the revenue side. A projected launch price would make
+  the in-space answers WORSE and help only `earth_surface`.
 - **In-space utility fractions are judgements.** `IN_SPACE_UTILITY` and its
   per-destination overrides decide how much of the launch-cost-avoided each
   commodity captures, and no market exists to calibrate them against. They are
@@ -2466,6 +2478,12 @@ Stated plainly so results aren't over-read:
   asteroid, so `mining_rate_kg_per_day_per_kg_rig` is an engineering
   assumption. It is a single obvious dial rather than a hidden infinity, but
   it is still an assumption.
+- **The drill's cool-down is not on the clock.** Metzger, Zacny & Morrison
+  (2020) report that drilling heats regolith enough that it "takes hours or
+  even days" to cool back, so a rig that waits between operations digs at a
+  lower duty cycle than its rate implies. There is no term for it: the stay is
+  the dig at the rated mass rate plus the launch window. Read it into the
+  mining-rate dial above, which is where any such loss would land.
 - **Δv is analytic, not trajectory-optimised, and it is OPTIMISTIC.** The
   patched-conic estimator meets the target at an apsis and takes the whole
   inclination change at departure, using `a`, `e` and `i` only. Measured

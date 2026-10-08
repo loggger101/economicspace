@@ -126,6 +126,21 @@ acknowledged by name rather than through a single paper
   meteorite groups: Scott, E. R. D. & Wasson, J. T. (1975), *Classification
   and properties of iron meteorites*, Rev. Geophys. Space Phys. 13, 527.
 
+### Assumptions named rather than modelled
+
+Cited in README's [What the model does not capture](README.md#what-the-model-does-not-capture)
+to say what a held-fixed assumption ignores; neither reaches a value.
+
+- **Terzi, F. & Nicoli, F. (2026)**, *From Sputnik to Starship: Estimating the
+  experience curve of space launch technology*, PNAS Nexus,
+  doi:10.1093/pnasnexus/pgag217: the launch-cost experience curve beside the
+  flat launch prices (General_Research rc-025).
+- **Metzger, P. T., Zacny, K. & Morrison, P. (2020)**, *Thermal Extraction of
+  Volatiles from Lunar and Asteroid Regolith in Axisymmetric Crank-Nicolson
+  Modeling*, J. Aerospace Engineering, doi:10.1061/(ASCE)AS.1943-5525.0001165:
+  the drill's cool-down time the dig clock does not carry (General_Research
+  rc-029).
+
 ⚠️  Prices are fetched live, so a figure derived from this pipeline is a
 figure **on a date**. `catalog_date` is stamped into every output CSV for
 exactly this reason; quote it.
