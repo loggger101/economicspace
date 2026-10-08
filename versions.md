@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.51.0 / calc v1.29.0](#master-v1510--calc-v1290)
 - [master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0](#master-v1500--mineral_value-v1140--transportation-v1200)
 - [master v1.49.0 / transportation v1.19.0](#master-v1490--transportation-v1190)
 - [master v1.48.0 / transportation v1.18.1](#master-v1480--transportation-v1181)
@@ -104,8 +105,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.14.0** | v1.14.0, every used-in-space price re-derived at spacecost v0.8.0's LEO anchor ($2,555/kg, was $2,414); no Stage 2 code moved (v1.13.0 was the last to move a row) |
 | 3 | `modules/transportation.py` | **1.20.0** | v1.20.0, Falcon Heavy (expendable)'s band topped by NASA's $178M, which moves the LEO price anchor: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.28.0** | v1.28.0, a pass of the sizing loop whose stack does not close backs the loop off toward the last state that did instead of refusing the candidate (`damp_sizing_loop`, default on), with the new `sizing_damped` column |
-| - | `master.py` | **1.50.0** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.29.0** | v1.29.0, a stack the overshoot repair solved at its vehicle's capacity is no longer refused for overshooting by float residue (`launch_capacity_rtol`, default 1e-9) |
+| - | `master.py` | **1.51.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -184,6 +185,97 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.51.0 / calc v1.29.0
+
+**The overshoot repair was refusing the missions it repaired, over the last
+bit of a float.** calc 1.27.0 re-solves the payload of a stack that settled
+over its vehicle so the stack sits exactly at the vehicle's capacity to LEO,
+and then rechecks it with `m_launch > leo_cap`. The re-solved stack came out
+over by a few units in the last place, **2.9e-11 kg on a 63,800 kg Falcon
+Heavy**, and the repaired candidate was refused. Across seven destinations'
+samples about one sampled body in twenty-four (984 of 23,100) had been scored on a worse mission than
+one it could fly, and at `lunar_surface` that changed the winner.
+
+### How it was found
+
+Measuring rc-016 (the lunar descent re-pinned from 1,870 to 2,050 m/s), the
+lunar winner moved to a body that got BETTER under the higher Delta-v, which
+cannot happen to a mission that fits: adding Delta-v never makes one fit.
+2014 YN on Falcon Heavy (expendable) and iodine produced no mission at all at
+1,870 m/s and closed at 2,050. Every refusal line master executes was counted
+under `sys.settrace` at both Delta-v: the settle-up recheck fired on every
+rung at 1,870 and on three at 2,050, always at repair depth 1, with the
+re-solved payload equal to the one it was solved at and the stack over by
+2.9e-11 kg. At 2,050 some rungs happened to round the other way. **So the
+winner change rc-016's measurement showed was this defect, not the descent**,
+and rc-016 waits for this release so each effect is attributed to its own.
+
+### What changes
+
+- **New field `launch_capacity_rtol`** (default **1e-9**): how far over the
+  vehicle's capacity to LEO a settled stack may land and still fly, as a
+  fraction of that capacity. 1e-9 is 64 micrograms on a Falcon Heavy, far
+  above float residue and far below anything physical. **0.0 is the strict
+  test and calc 1.28.0 to the bit**, since `leo_cap * 1.0` is `leo_cap`.
+- **`campaign/worked_calculation.py` applies it only to rows calc 1.29.0 or
+  later wrote**, read off the row's own stamp because the release adds no
+  column: an older row's run used the strict test.
+- **The verification sheet says a stack on capacity is on it.** Its "why it
+  lands under the vehicle" step holds the spare capacity to
+  `(budget - m_at) k_out R_out`, an identity that is true to the residue, and
+  for a stack the repair solved TO capacity the residue is all there is: the
+  sheet's own check caught the two forms disagreeing at -2.9e-11 kg. Such a
+  row now steps `M_LEO - m_launch` with exact operands and says why; every
+  other row is as before (an archived calc 1.26.0 row: 271 of 271).
+
+No output column moved.
+
+### Verified
+
+| | raw | raw searched | benef | benef searched |
+|---|---|---|---|---|
+| `launch_capacity_rtol = 0.0`, against `.verify/baseline-1.50.0` (calc 1.28.0) | **MATCH** `b5f3e1ef886e1864` | **MATCH** `df1498fce4601c71` | **MATCH** `dc8bffcf2d3b6ffc` | **MATCH** `1b2e41d84c93f777` |
+| at the default, against the same baseline | DIFFER, `26da59a4a0e60b37` | DIFFER, `f0a8a28fa60dfb91` | DIFFER, `bded3ad7998d1a9a` | DIFFER, `da745840931dcf86` |
+| pruned against unpruned, at the default | **MATCH** | **MATCH** | **MATCH** | **MATCH** |
+
+At the default, serial against parallel matches on both searched cells, the
+mass ledger closes to 0 kg on all four, and never-worse, the Stage 2
+recompute and the market-ceiling checks all pass.
+
+A repaired row the tolerance reaches (2014 YN, lunar_surface, Falcon Heavy on
+iodine, one repair) derives 92 quantities with 0 DIFFER, and an archived calc
+1.26.0 lunar winner (2018 DT) still derives with 0 DIFFER under the strict
+test.
+
+### What it moves, on samples
+
+Stage 4 on each destination's archived v1.40.0 default cell's top 300 bodies
+plus a 3,000-row stride, on the master v1.50.0 inputs (mineral_value 1.14.0,
+spacecost v0.8.0), calc 1.28.0 against 1.29.0. `median` is among the bodies
+that moved, as `median(1 - r)`:
+
+| destination | bodies better | median among them | largest | worse | winner |
+|---|---:|---:|---:|---:|---|
+| `mars_orbit` | 328 | +9.47% | +57.95% | 0 | 350751, 4.36645x, unchanged |
+| `cislunar` | 205 | +14.11% | +58.05% | 0 | 2018 DT, 4.5983x, unchanged |
+| `lunar_surface` | 145 | +12.92% | +48.54% | 0 | **2005 QP87 2.89477x -> 2014 YN 2.86091x** |
+| `leo` | 139 | +17.88% | +53.05% | 0 | 2005 QP87, 16.1519x, unchanged |
+| `geo` | 108 | +14.08% | +43.58% | 0 | 2021 CX5, 6.1986x, unchanged |
+| `earth_surface` | 51 | +3.56% | +51.97% | 1 | 2018 DT, 5,391.51x, unchanged |
+| `mars_surface` | 8 | +0.94% | +44.98% | 0 | 2015 DS, 1.08536x, unchanged |
+
+**No body entered or left any evaluable set**: every refused candidate had a
+sibling that closed, so the defect cost bodies their best mission rather than
+their only one. The median over each whole sample is 0.000%, and every winner
+but the lunar one is the same float.
+
+⚠️  **One body is worse, by 4 parts per million**: 2013 NF15 at
+`earth_surface`, the same vehicle, propellant, fleet and programme, its payload
+one unit in the last place different and its cost $2,932 higher. It has the
+shape of [master v1.43.0's](#master-v1430--calc-v1270) finding that adding
+candidates to a non-exhaustive search can move the neighbourhood it refines,
+and it was not traced further.
 
 ## master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0
 
@@ -3022,6 +3114,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.51.0 / calc v1.29.0](#master-v1510--calc-v1290) | 2026-10-07 | **a stack the repair solved at capacity flies**: the overshoot repair refused its own solutions by 2.9e-11 kg; 8-328 sampled bodies per destination improve by a median 1-18%, none enters or leaves a set, and the `lunar_surface` winner becomes 2014 YN |
 | [master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0](#master-v1500--mineral_value-v1140--transportation-v1200) | 2026-10-07 | **Falcon Heavy (expendable)'s band reaches NASA's $178M, and the LEO price anchor moves $2,414 -> $2,555/kg**: every sampled in-space body better by 0.45-5.04%, `earth_surface` unmoved at the median; no winner changed body |
 | [master v1.49.0 / transportation v1.19.0](#master-v1490--transportation-v1190) | 2026-10-07 | **spacecost `v0.7.0`: Electron and Pegasus XL become the bands their sources give**: Rocket Lab's reported revenue per launch, and a list price up to NASA's ICON price; neither flies a mission, and every Stage 4 cell is bit-identical |
 | [master v1.48.0 / transportation v1.18.1](#master-v1480--transportation-v1181) | 2026-10-07 | **spacecost `v0.6.1`: four citations corrected, no value moved**: the reliability growth exponent cites MIL-HDBK-189C's Table II, Starship's $90M the Voyager prospectus, and the hypergolics quote DLA's FY2025 prices beside a basis that can no longer be checked; Stage 4 reads no notes |
@@ -9209,6 +9302,16 @@ field and one output column are added, and the field defaults ON.
   plus the empty return vehicle's, less the loop's 1%.
 - **The concentration search refines around the best undamped coarse rung as
   well**, so the damping only ever adds options.
+
+**`1.29.0`  a stack the repair solved at capacity flies.** Full write-up: [master v1.51.0 / calc v1.29.0](#master-v1510--calc-v1290). One config
+field is added, and it defaults to a tolerance.
+
+- **New field**: `launch_capacity_rtol` (default **1e-9**): the settle-up
+  recheck refuses a stack only when it lands more than this fraction of the
+  vehicle's capacity to LEO over it, so a payload the overshoot repair
+  re-solved to exactly the vehicle's capacity is not refused for the rounding
+  of its own solve. 0.0 is v1.28.0 to the bit. No output column; the worked
+  calculation reads the row's stamp to know which test its run used.
 
 # Measurement history
 

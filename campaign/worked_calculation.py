@@ -427,6 +427,18 @@ def body_for_run(archived, body):
 NET_PRICE_COL = "price_net_usd_per_kg"
 
 
+def run_calc_at_least(archived, version):
+    """Whether the calc that wrote `archived` is `version` or later, read off
+    the row's own `pipeline_version` stamp.  False when it cannot say."""
+    if archived is None or not hasattr(archived, "get"):
+        return False
+    try:
+        key = tuple(int(x) for x in str(archived.get("pipeline_version")).split("."))
+    except (TypeError, ValueError):
+        return False
+    return key >= tuple(version)
+
+
 def run_refinery(archived):
     """Whether the ROW's run flew the refinery (calc v1.25.0).
 
@@ -3162,7 +3174,7 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
     m_oprop = m_at * R["k_out"] * (R["R_out"] - 1.0)
     m_tank_out = R["t"] * m_oprop
     m_launch = m_at + m_tank_out + m_oprop
-    if m_launch > C["leo_cap"]:
+    if m_launch > C["leo_cap"] * (1.0 + C.get("launch_rtol", 0.0)):
         # calc v1.27.0, `repair_settled_overshoot`: the settled plant made the
         # stack heavier than the one the closed form was solved at, so the
         # payload is re-solved at the settled hardware and the mission priced
@@ -4020,6 +4032,11 @@ def build(archived, label, body=None, run_beneficiated=None):
     # column exists only from that release.
     C["damp"] = (archived is not None and "sizing_damped" in archived
                  and bool(getattr(C["cfg"], "damp_sizing_loop", False)))
+    # calc v1.29.0: how far over the vehicle a settled stack may land.  It
+    # adds no column, so the row's own calc stamp says which test its run
+    # used: before 1.29.0 the strict one, whatever this process's config says.
+    C["launch_rtol"] = (float(getattr(C["cfg"], "launch_capacity_rtol", 0.0))
+                        if run_calc_at_least(archived, (1, 29, 0)) else 0.0)
     if C["refinery"]:
         tables["minerals"] = gross_minerals(tables["minerals"])
         C["minerals"] = tables["minerals"]

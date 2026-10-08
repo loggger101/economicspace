@@ -255,7 +255,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | 1 | `modules/catalog.py` | 1.8.1 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
 | 2 | `modules/mineral_value.py` | 1.14.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.20.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
-| 4 | `modules/calc.py` | 1.28.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.29.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -2078,6 +2078,16 @@ because a kilogram in space is worth the launch it avoids, which is a reason to
 know which launch price the revenue is anchored on. The full cells have not
 been re-run; see
 [master v1.50.0](versions.md#master-v1500--mineral_value-v1140--transportation-v1200).
+
+🚨  **calc 1.29.0 changes the `lunar_surface` winner, and nothing else at
+the top.** The overshoot repair re-solved a payload to exactly its vehicle's
+capacity and then refused it for overshooting by a few units in the last
+place. On each cell's sample, 8 to 328 bodies per destination were flying a
+worse mission than one they could fly, and improve by a median 1-18%; none
+enters or leaves a set. At `lunar_surface` the refused mission was the best
+one in the sample: **2014 YN, 2.86091x**, against 2005 QP87's 2.89477x. Every
+other winner is the same float. See
+[master v1.51.0](versions.md#master-v1510--calc-v1290).
 
 ⚠️  **Seven cells, one setting.** The raw and N = 1 cells have not been run on
 these inputs at any destination; every matrix below is an older model, and

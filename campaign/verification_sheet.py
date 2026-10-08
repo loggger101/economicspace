@@ -1848,22 +1848,40 @@ def part_stack(S, out):
            M["m_launch"], "kg", ["m_at", "m_tank_out", "m_oprop"],
            "against a vehicle capacity of %s kg" % P(C["leo_cap"]))
 
-    S.prose("Why it lands under the vehicle, exactly.")
-    short = R["budget"] - M["m_at"]
-    S.step("short", "budget - m_at", "how far under the budget the flown "
-           "stack arrives", "budget - m_at",
-           "%s - %s" % (exact(R["budget"]), exact(M["m_at"])), short, "kg",
-           ["budget", "m_at"],
-           "this subtraction CANCELS five digits, so the operands are "
-           "given exactly; the rounded values in parts 4 and 8 land about "
-           "three digits short")
-    S.step("spare", "M_LEO - m_launch", "spare capacity",
-           "(budget - m_at) * k_out * R_out",
-           "%s * %s * %s" % (P(short), P(R["k_out"]), P(R["R_out"])),
-           C["leo_cap"] - M["m_launch"], "kg",
-           ["short", "k_out", "R_out"],
-           "the same number as M_LEO - m_launch, which is what closes the "
-           "cascade against itself")
+    # calc v1.29.0: a stack the overshoot repair re-solved sits ON the
+    # vehicle's capacity, and its "spare" is the rounding of that solve --
+    # a few units in the last place either side of zero.  The identity
+    # below holds only to that noise, so a page that asserted it would be
+    # asserting a residue; this one says what the run actually did.
+    spare_kg = C["leo_cap"] - M["m_launch"]
+    if abs(spare_kg) <= 1e-9 * C["leo_cap"]:
+        S.prose("It lands ON the vehicle's capacity, not under it: the "
+                "overshoot repair solved the payload to that capacity, and "
+                "what is left is the rounding of the solve, inside calc's "
+                "launch_capacity_rtol.")
+        S.step("spare", "M_LEO - m_launch", "spare capacity",
+               "M_LEO - m_launch",
+               "%s - %s" % (exact(C["leo_cap"]), exact(M["m_launch"])),
+               spare_kg, "kg", ["M_LEO", "m_launch"],
+               "the operands are given exactly, because the difference is "
+               "the last bit of a solve that landed on the constraint")
+    else:
+        S.prose("Why it lands under the vehicle, exactly.")
+        short = R["budget"] - M["m_at"]
+        S.step("short", "budget - m_at", "how far under the budget the flown "
+               "stack arrives", "budget - m_at",
+               "%s - %s" % (exact(R["budget"]), exact(M["m_at"])), short, "kg",
+               ["budget", "m_at"],
+               "this subtraction CANCELS five digits, so the operands are "
+               "given exactly; the rounded values in parts 4 and 8 land about "
+               "three digits short")
+        S.step("spare", "M_LEO - m_launch", "spare capacity",
+               "(budget - m_at) * k_out * R_out",
+               "%s * %s * %s" % (P(short), P(R["k_out"]), P(R["R_out"])),
+               spare_kg, "kg",
+               ["short", "k_out", "R_out"],
+               "the same number as M_LEO - m_launch, which is what closes the "
+               "cascade against itself")
 
     S.prose("Four ceilings stand over the payload; only the smallest is "
             "the answer.")
