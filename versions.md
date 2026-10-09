@@ -272,6 +272,124 @@ passes at v0.10.0 and `verify_docs.py` is clean.
 - The Stage 3 tables it replaced are backed up under
   `asteroid_pipeline/_inputs_backup_2026-10-07_pre-v1.53.0/`.
 
+### The worksheet shows every dial, and derives what its best case never took (2026-10-08, no stamp)
+
+`campaign/verification_sheet.py` is meant to let a reader redo the answer by
+hand, and it could not, for three reasons.
+
+- **Most dials were missing.** The derivation reads 84 `CalcConfig` fields
+  and the sheet registered 17. Part 1 is now a ledger of every field, walked
+  off the dataclass, with the value used, how the page knows it (the row's
+  column, or this process's config) and the tag a step spends it under.
+  Config citations quote the field's definition and name the line its whole
+  comment starts on, rather than pasting release history about other bodies
+  (`max_mining_fraction`'s comment cited 2017 KJ5 beside 2018 DT).
+- **Several lines described a mission that had not flown.** The albedo note
+  said no cap bound, whichever did. `r_achieved` blamed the throughput
+  whether or not it clipped. "See part 5" pointed at caps in part 8. The
+  boil-off step's substitution read "as the model associates it". Part
+  numbers are positions in one list now, cross-references are looked up by
+  key, and each note is decided from the mission's own numbers.
+- **Inputs were spent without being shown.** These are on the page now: the
+  element yields and prices behind every taken-apart mineral, with both net
+  prices that choose its route; the members of an inseparable product (the
+  hold's "nickel-iron" on a detailed-phase body is kamacite and taenite, and
+  had been priced and refined from nickel-iron's own row); the body's water
+  fraction; the heat-shield fraction; the destination's phasing orbit; the
+  delta-v floors; the ISRU feed ratio; the electric stage's propellant load;
+  and every return leg the model flies, not only the cislunar capture.
+  Reliability, the learning curve, insurance and the cost of capital are
+  written out when a run charges them, and the market part follows the run's
+  own market model.
+
+`verification_sheet.py --sweep` builds and checks a worksheet for one mission
+per architecture on disk. It found the RTG, `earth_surface`, net-price floor,
+single-route and cancellation defects CLAUDE.md lists under
+[a checker run only on the best case](CLAUDE.md#a-checker-run-only-on-the-best-case-has-never-run-on-the-rest),
+plus one in the derivation: `phase_table` only cleared its merge register on a
+phased row, so a four-fraction row derived after a detailed-phase one carried
+the previous body's merge. That bit the narrative document too, and it now
+clears per derivation.
+
+The sweep, and then a `--check` of the winner of every Stage 4 output on
+disk, found places where `campaign/worked_calculation.py` did not reproduce
+the run, so neither document could be built for those rows:
+
+| what the derivation did | what the model does | rows that refused or DIFFERed |
+|---|---|---|
+| sized an ISRU mission's electric stage on the propellant flown | sizes it on the ISRU cascade's PLACEHOLDER: the empty stack's outbound load and no return propellant | 2016 YK (`geo`, 62 columns), 2002 AT4 (`leo`, 48) |
+| scaled the solar array as 1/a^2 at any distance | falls back to the 1 AU rating outside 0.1-100 AU | 2025 NK497 (`mars_orbit`, a = 806 AU: refused) |
+| chose Stage 2 and 3 tables by date alone, reading an equal date as "could have read it" | the lunar calc 1.27.0 cell ran on mineral_value 1.12.2 and spacecost 0.5.0, frozen the day before tables of the same date | 2021 CX5 (6 prices, 1e-6) |
+| read the body from the installed catalog | the 2026-09 campaign read the 2026-08-11 build, which is not on disk | every campaign row whose body moved (diameter and mass) |
+| took the depletion cap from this process (1.0 since calc 1.23.0) | a row older than 1.23.0 ran at 0.05 unless configured otherwise | every 2026-09 campaign row, which each needed `--max-mining-fraction` typed by hand |
+| took `model_water_liberation` from this process | the row's `water_liberated_kg`, less the ISRU feed's water, is the hold's water and is non-zero only with the term on | a cell built with the term off (2024 UF9: 29,585 kg baked that the run never paid for, 39 columns) |
+| subtracted the capped load from the uncapped one wherever the market was `capacity_cap` | reports 0.0 unsold without subtracting when no pooled market is past its allowance | 2005 QP87 (`lunar_surface` calc 1.27.0, 1.455e-11 kg against 0.0) |
+| derived a row older than every frozen Stage 2 table against the oldest one | (no table on disk is one the run read) | the 2026-08 archive, all 20 cells: revenue off by 0.9% to 43% at the 2026-09-09 prices |
+| took a row with no `market_model` column as `capacity_cap` | before calc 1.21.0 the only market term was the demand curve, which `saturation_multiplier` below 1.0 records | the 2026-08 archive's cislunar cells, revenue 29-43% high |
+| pooled the composition residual onto silicates whatever the release | before 1.21.1 the residual sold into no ceiling; 1.21.1 gave it a copy of the silicates one; 1.21.2 pooled them | the same raw cells, multiplier 11% low |
+
+The first two now mirror calc, and the ISRU page says the stage is sized on the
+placeholder rather than on the load flown. The depletion cap and the
+water-liberation flag are read off the row (its stamp, and its own
+`water_liberated_kg`), the unsold column follows the model's fast path, and
+a row older than every frozen Stage 2 table is now **refused by name** rather
+than priced at a later epoch. The 2026-08 cislunar table survived in a local
+inputs backup and is frozen as `campaign/stage2/mineral_value-1.7.1/`
+(byte-identical, sha256 `1a0db144...`), so the four 2026-08 cislunar cells
+derive again, bit-exact on every compared column, and reproduce the four
+committed headline numbers of that campaign: **26.7863 / 15.4272 / 20.5895 /
+13.1443**. The other four destinations' tables are **rebuilt, not fetched**:
+`campaign/stage2/mineral_value-1.7.1/replay.py` runs Stage 2 as it was at
+mineral_value 1.7.1 (`bf1f43d`, read out of git) with the five quotes the
+surviving table recorded, and rebuilds that table identically before it
+rebuilds the others. The rows then prove the rebuilt prices: **all twenty
+2026-08 cells derive with 0 DIFFER**, so every Stage 4 output on disk now
+gets a page. The market part of the page says which market rule the row's
+release applied to the residual.
+
+Coverage, from one traced `--sweep` with the scratch cells and named
+missions:
+
+- **The one-year floor on mission duration never binds.** Each leg of the
+  transfer fit is at least half a year and the stay is positive, so the page
+  label that named the floor was a branch no mission could reach; it is gone,
+  and the step says why the 1 never binds.
+- **A phase shipped home is drawn on a counterfactual table.** No phase any
+  body carries is ever routed home (only elements are), so `--self-test` and
+  the sweep route the page's cheapest phase home in the table held in memory
+  and hold the resulting page to every check. Breaking the step's formula
+  gives 13 findings.
+- **Propellant made from bulk rock on site** is reached by a scratch cell
+  flying only the mass driver (`operational_propellants_only` off,
+  `candidate_propellants` set): every row of it makes its propellant from
+  regolith, and its winner's page passes every check.
+- **The price of a phase sold one way, or the better of two,** renders only
+  with phases on and the refinery off, and **the water-liberation step with
+  the term off** only on a water-fed ISRU mission; a scratch cell of each
+  (`model_refinery` off; hydrolox only with `model_water_liberation` off)
+  reaches them, and both winners' pages pass every check. Two more do the
+  same for the single-route price, which shows on an `earth_surface` page
+  with phases on and the refinery off (that table has no route columns, so
+  only the taken-apart price registers), and for the alloy table's net
+  columns, which show on a four-fraction page with the refinery on.
+- **No body's phases sum to exactly one**, so the sentence for that case is
+  one sentence now, true either way.
+- **A citation to a row the table lacks, a dial with no comment or no
+  definition line, or dial help that failed to scrape, now stops the build**
+  rather than printing a stand-in such as "A dial: chosen here rather than
+  measured." The sweep lists every unrun line of the page, apart from the
+  lines that run only when a check finds something or a page is refused. The third is a register of
+recorded run inputs (`RUN_INPUTS`), keyed by archive name and cited to this
+file. The fourth takes each body column the row carries from the row when the
+installed catalog postdates the run, and the page cites those as the run's own
+values beside the installed ones. ⚠️  **The ISRU sizing is a finding about the
+model, not fixed here**: calc's electric stage on an ISRU mission is sized on
+a load smaller than the one it flies. Changing that moves results and needs a
+release of its own.
+
+These are campaign scripts, so no `pipeline_version` moves and `master.py` is
+untouched. The default best case still derives 90 of 90 bit-exact.
+
 ## master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0
 
 **The lunar descent is what Apollo flew, 2,050 m/s rather than 1,870, and the
