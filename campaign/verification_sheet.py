@@ -4205,6 +4205,83 @@ def untraced(sheet, html):
     return len(seen), bad, reruns
 
 
+def ledger_on_page(html):
+    """(tabulated {name: (value, definition)}, path names, duplicates), READ
+    OFF THE RENDERED PAGE rather than off the code that built it, so the
+    check below cannot agree with the ledger by construction."""
+    head = html.find('<h2 id="p%d"' % part_no("dials"))
+    if head < 0:
+        return {}, [], []
+    tail = html.find("<h2 id=", head + 1)
+    part = html[head:tail if tail > 0 else len(html)]
+    tabulated, dupes = {}, []
+    for row in re.findall(r"<tr>(.*?)</tr>", part, re.S):
+        cells = re.findall(r"<td>(.*?)</td>", row, re.S)
+        if len(cells) != 5 or not cells[0].startswith("<i>"):
+            continue
+        name = re.sub(r"<[^>]+>", "", cells[0]).strip()
+        text = [D.html.unescape(re.sub(r"<[^>]+>", "", c)).strip()
+                for c in cells]
+        if name in tabulated:
+            dupes.append(name)
+        tabulated[name] = (text[1], text[2], text[4])
+    prose = part[part.find("Not tabulated:"):]
+    prose = prose[:prose.find("</p>")] if "</p>" in prose else prose
+    paths = re.findall(r"<i>([a-z0-9_]+)</i>", prose)
+    return tabulated, paths, dupes
+
+
+def report_dials(html, quiet=False):
+    """Every Stage 4 config field is on the page, with a value and a meaning.
+
+    🚨  THE LEDGER WAS CHECKED ONLY BY LOOKING AT IT.  It is built by
+    walking the dataclass, which is the right construction and not a proof:
+    a `continue` added for some class of field, or a renderer that drops a
+    row, would leave a page that reads complete and is not.  This reads the
+    RENDERED ledger and holds it to `dataclasses.fields(CalcConfig)`: every
+    field must be a row with a value and its own comment's definition, or be
+    named as one of the file paths the page does not tabulate.  A row naming
+    no field, or a field listed twice, is a finding too.
+    """
+    import dataclasses
+    import master
+    fields = [f.name for f in dataclasses.fields(master.CALC_CONFIG)]
+    tabulated, paths, dupes = ledger_on_page(html)
+    missing = [f for f in fields if f not in tabulated and f not in paths]
+    blank = [f for f, (value, how, meaning) in tabulated.items()
+             if not value or not how or not meaning]
+    stray = [f for f in list(tabulated) + paths if f not in fields]
+    bad = missing + blank + stray + dupes
+    if not quiet:
+        print("  dials      %d of %d Stage 4 config fields on the page: %d "
+              "tabulated with a value, how it is known and a definition, "
+              "%d named as file paths; %d missing, %d blank, %d not a field, %d twice"
+              % (len(fields) - len(missing), len(fields),
+                 len(tabulated) - len(blank), len(paths), len(missing),
+                 len(blank), len(stray), len(dupes)))
+        for name in bad:
+            print("     ! %s" % name)
+    return len(bad)
+
+
+def dial_self_test(html):
+    """Delete one ledger row from the page and confirm the check notices."""
+    tabulated, _paths, _dupes = ledger_on_page(html)
+    if not tabulated:
+        print("  self-test  *** NO DIAL LEDGER TO PERTURB ***")
+        return 1
+    name = sorted(tabulated)[0]
+    row = re.search(r"<tr><td><i>%s</i></td>.*?</tr>" % re.escape(name),
+                    html, re.S)
+    planted = html[:row.start()] + html[row.end():]
+    if report_dials(planted, quiet=True):
+        print("  self-test  deleting the %s row is caught: the dial check "
+              "can fail" % name)
+        return 0
+    print("  self-test  *** DELETING THE %s ROW WENT UNNOTICED ***" % name)
+    return 1
+
+
 def report_untraced(sheet, html, quiet=False):
     """Print the traceability check, and return the number of findings."""
     seen, bad, reruns = untraced(sheet, html)
@@ -4870,6 +4947,7 @@ def sweep(args):
             bad = (report_substitutions(sheet, quiet=True)
                    + report_origins(sheet, quiet=True)
                    + report_untraced(sheet, html, quiet=True)
+                   + report_dials(html, quiet=True)
                    + report_monochrome(quiet=True)
                    + report_furniture(stylesheet(DEFAULT_PT), html,
                                       quiet=True))
@@ -4888,6 +4966,7 @@ def sweep(args):
             report_substitutions(sheet)
             report_origins(sheet)
             report_untraced(sheet, html)
+            report_dials(html)
             if loose_in:
                 print("     ! unspent: %s"
                       % ", ".join(sorted(sheet.tag[k] + " " + k
@@ -4930,6 +5009,7 @@ def sweep(args):
     # defect proofs exercise those.  They are listed apart, so a branch of
     # the PAGE that never rendered cannot hide among them.
     checks = {"report_substitutions", "report_origins", "report_untraced",
+              "report_dials", "ledger_on_page", "dial_self_test",
               "report_monochrome", "report_furniture", "check_substitutions",
               "untraced", "is_traced", "as_number", "evaluable", "monochrome",
               "print_furniture", "footer", "branch_test", "patched",
@@ -5041,9 +5121,11 @@ def main(argv=None):
     sheet = build_sheet(out)
     html = document(out, sheet, args.font)
     bad = (report_substitutions(sheet) + report_origins(sheet)
-           + report_untraced(sheet, html) + report_monochrome()
+           + report_untraced(sheet, html) + report_dials(html)
+           + report_monochrome()
            + report_furniture(stylesheet(args.font), html))
-    if args.self_test and (self_test(sheet) + branch_test(winner, label)):
+    if args.self_test and (self_test(sheet) + dial_self_test(html)
+                           + branch_test(winner, label)):
         return 1
     if bad:
         print("")

@@ -4347,7 +4347,11 @@ asks about a number that IS on the page. The sheet's part 1 is now a ledger of
 every `CalcConfig` field, walked off the dataclass rather than a typed list.
 It gives the value used, how the page knows it (the row's column or this
 process's config, from `worked_calculation.dials_in_force`), and the tag where
-a step spends it, found by reading which inputs cite the field.
+a step spends it, found by reading which inputs cite the field. ✅  **And
+`--check` reads the ledger back off the rendered page and holds it to the
+dataclass**, because a ledger built by walking the fields is a construction,
+not a proof: a `continue` added for one kind of field would leave a page that
+reads complete and is not.
 
 ⚠️  **A PRODUCT SOLD AS ONE IS PRICED FROM ITS MEMBERS, NOT FROM ITS NAME.**
 On a detailed-phase body the hold's "nickel-iron" is kamacite and taenite,

@@ -363,6 +363,12 @@ missions:
   flying only the mass driver (`operational_propellants_only` off,
   `candidate_propellants` set): every row of it makes its propellant from
   regolith, and its winner's page passes every check.
+- **The ledger is checked, not only built.** `--check` reads the RENDERED
+  dial ledger and holds it to `dataclasses.fields(CalcConfig)`: every field
+  must be a row with a value, how the page knows it and its own comment's
+  definition, or be named as a file path. On every Stage 4 output on disk it
+  reads 84 of 84 (74 tabulated, 10 paths), and `--self-test` deletes a row and
+  watches it fail.
 - **The price of a phase sold one way, or the better of two,** renders only
   with phases on and the refinery off, and **the water-liberation step with
   the term off** only on a water-fed ISRU mission; a scratch cell of each
