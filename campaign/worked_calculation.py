@@ -970,6 +970,7 @@ def run_winner(path, designation=None):
     row.attrs["population"] = int(len(usable))
     row.attrs["rows"] = int(len(frame))
     row.attrs["source"] = os.path.basename(path)
+    row.attrs["path"] = os.path.abspath(path)
     # ✅  THE FILE ANSWERS WHAT THE ROW CANNOT.  A run's `use_beneficiation`
     # is invisible in a row that declined to concentrate -- see `run_setting`
     # -- but a RAW run's catalog contains no concentrating row at all, and a
@@ -1049,6 +1050,7 @@ def archived_winner(cell, designation):
     row.attrs["population"] = total
     row.attrs["rows"] = total
     row.attrs["source"] = os.path.basename(path)
+    row.attrs["path"] = os.path.abspath(path)
     return row
 
 
@@ -1401,6 +1403,19 @@ def reference_tables(dest, archived=None):
               "read from it, and a body that moved between catalogs will "
               "DIFFER on its own columns" % release)
     return {
+        # The file each path dial names, as THIS page found it: chosen by the
+        # row's provenance, which is not always where the config points.
+        "files": {
+            "input_dir": cfg.input_dir,
+            "asteroid_catalog_file": os.path.join(
+                ROOT, "asteroid_pipeline", "asteroid_catalog.csv"),
+            "mineral_catalog_file": minerals_path,
+            "transportation_subdir": tdir,
+            "launch_vehicles_file": os.path.join(tdir, cfg.launch_vehicles_file),
+            "propellants_file": os.path.join(tdir, cfg.propellants_file),
+            "operational_costs_file": os.path.join(
+                tdir, cfg.operational_costs_file),
+        },
         "minerals_from": minerals_from,
         "transport_from": transport_from,
         "provenance": input_provenance(archived, manifest, minerals_path,
@@ -4406,6 +4421,11 @@ def build(archived, label, body=None, run_beneficiated=None):
     # Which Stage 2 and Stage 3 tables priced this page; see `run_could_read`.
     C["inputs_from"] = (tables["minerals_from"], tables["transport_from"])
     C["provenance"] = tables["provenance"]
+    C["files"] = dict(tables["files"])
+    source = (getattr(archived, "attrs", None) or {}).get("path")
+    if source:
+        C["files"]["output_filename"] = source
+        C["files"]["output_dir"] = os.path.dirname(source)
     # Before anything is derived: what the ROW charges decides what the
     # derivation charges.  See `terms_in_force`.
     C["terms"] = terms_in_force(archived, C["cfg"])
@@ -5465,6 +5485,7 @@ def rows_for(path, designations, population=None):
             row.attrs["population"] = int(population)
             row.attrs["rows"] = int(population)
         row.attrs["source"] = os.path.basename(path)
+        row.attrs["path"] = os.path.abspath(path)
         out[des] = row
     return out
 

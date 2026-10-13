@@ -1362,13 +1362,37 @@ def part_dials(S, out):
                      cited("%s <b>%s</b>"
                            % (trim(definition(doc.get("help") or "")),
                               D.esc(line)))])
+    # The FILE dials, tabulated against the files this page actually read.
+    # They hold no number the arithmetic spends; what a reader needs from
+    # them is which file each table came from, and the page chose those by
+    # the row's provenance rather than through the config, so both are shown.
+    files = C.get("files", {})
+    rows.append([cited("<b>Files</b>"), "", "", "", ""])
+    for name in paths:
+        read = files.get(name)
+        if read:
+            what = "this page read it as <b>%s</b>" % D.esc(
+                os.path.relpath(read, ROOT).replace(os.sep, "/")
+                if os.path.isabs(read) else read)
+        elif name == "delta_v_segments_file":
+            what = ("this page reads no file through it: every Delta-v leg "
+                    "is the model's own function of the body's orbit, worked "
+                    "out in its own part")
+        else:
+            raise AssertionError("no file recorded for the path dial %s"
+                                 % name)
+        rows.append(["<i>%s</i>" % D.esc(name),
+                     dial_value(getattr(cfg, name)),
+                     cited("this process's config; the file is chosen by the "
+                           "row's provenance, as the header card says"),
+                     '<span class="uses">-</span>',
+                     cited("%s <b>%s</b>" % (what, D.esc(field_line(name)))
+                           )])
     S.block(D.table(["dial", "value used", "how this page knows it", "tag",
                      "what it is (the field's own comment)"], rows, "wide"))
-    S.prose("Not tabulated: %s, which are where the run's files were, and "
-            "the header card names the files actually read.  Stages 2 and 3 "
-            "reach this page only through the tables they wrote, and every "
-            "row of those tables that a step spends is an input with its own "
-            "citation." % ", ".join("<i>%s</i>" % D.esc(p) for p in paths))
+    S.prose("Stages 2 and 3 reach this page only through the tables they "
+            "wrote, and every row of those tables that a step spends is an "
+            "input with its own citation.")
 
 
 # ------------------------------------------------------- 0. the constants
@@ -1864,13 +1888,39 @@ def part_ratios(S, out):
                "max(0.5, %s * %s)" % (P(W.TAU_CRUISE_FIT_YR_PER_M_S),
                                       P(DV["dv_out"])),
                M["boiloff_outbound_yr"], "yr", ["tau", "dv_out"])
+        # Worked from its two operands rather than printed: the previous
+        # pass's dig plus the window wait, or on the first pass the floor
+        # plus the wait.  Both are derived later on the page, so they are
+        # registered here as quantities derived on this page, citing where.
+        passes = M["passes"]
+        wait = out["DV"]["window_wait"]
+        prev = passes[-2]["dig"] if len(passes) >= 2 else None
+        if prev is not None and prev + wait == M["boiloff_stay_yr"]:
+            first, first_sym, first_what, first_src = (
+                prev, "t_dig,prev", "the dig the previous pass sized",
+                "the previous pass's row of the fixed point's table in %s"
+                % ref("fixed_point"))
+        elif (C["cfg"].station_keeping_floor_yr + wait
+              == M["boiloff_stay_yr"]):
+            first, first_sym, first_what, first_src = (
+                C["cfg"].station_keeping_floor_yr, "t_floor",
+                "the station-keeping floor, which is the first pass's stay",
+                cite_config("station_keeping_floor_yr"))
+        else:
+            raise AssertionError("the stay estimate %r is neither the "
+                                 "previous dig plus the wait nor the floor "
+                                 "plus the wait" % M["boiloff_stay_yr"])
+        S.put("stay_dig", first_sym, first_what, first, "yr",
+              first_src if first_sym == "t_floor" else
+              "<b>Derived on this page</b>: " + first_src)
+        S.put("stay_wait", "t_wait", "the launch-window wait", wait, "yr",
+              "<b>Derived on this page</b>: half the synodic period, worked "
+              "out in %s" % ref("clock"))
         S.step("stay_hold", "t_stay,est", "the stay the converging pass "
-               "assumed", "the previous pass's dig plus the window wait, or "
-               "the floor plus the wait on the first pass",
-               P(M["boiloff_stay_yr"]), M["boiloff_stay_yr"], "yr", [],
-               "the last row of the fixed point's table in %s, which is "
-               "where the propellant is still sitting in its tank"
-               % ref("fixed_point"))
+               "assumed", "%s + t_wait" % first_sym,
+               "%s + %s" % (P(first), P(wait)), M["boiloff_stay_yr"], "yr",
+               ["stay_dig", "stay_wait"],
+               "where the propellant is still sitting in its tank")
         S.step("hold_yr", "t_hold", "how long the return propellant sits "
                "in its tank", "t_out + t_stay,est",
                "%s + %s" % (P(M["boiloff_outbound_yr"]),
@@ -2373,7 +2423,8 @@ def part_settled(S, out):
                       "concentrate's own water, not the body's fraction"
                       % ref("hold"))
         S.step("water", "water", "water in the hold",
-               "the water phase of the hold's mix", P(M["water"]),
+               "the water phase of the hold's mix" if M["water"] else
+               "0: the hold's mix has no water phase", P(M["water"]),
                M["water"], "kg", ["m_pay", "eps_rec"], water_note)
     else:
         S.step("feed", "feed", "rock dug", "feed = m_pay on run-of-mine ore",
@@ -2905,8 +2956,9 @@ def part_clock(S, out):
     # destination's, so a formula without it is wrong exactly there.
     if not (0.05 < C["a_au"] < 100.0) or DV["a_dest"] <= 0:
         S.step("synodic", "S_syn", "synodic period",
-               "1, outside the geometry the term covers", "1",
-               DV["synodic"], "yr", ["a"])
+               "1: a = %s AU lies outside 0.05 < a < 100 AU, the geometry "
+               "calc's synodic term covers, and it answers one year there"
+               % P(C["a_au"]), "1", DV["synodic"], "yr", ["a"])
     else:
         S.step("synodic", "S_syn", "synodic period",
                "min(1 / |1 / T_ast - 1 / T_dest|, 10)",
@@ -3494,7 +3546,10 @@ def part_searches(S, out):
         mark = " <b>argmin</b>" if r["f"] == out["P"]["f"] else ""
         obj = S.claim("%s / %s" % (P(r["cost"]["total"]), P(r["expected"])),
                       r["obj"], "objective at F = %d" % r["f"])
-        rows.append([str(r["f"]), P(r["n"], 6), P(r["rev"]["window"], 7),
+        rows.append([str(r["f"]), P(r["n"], 6),
+                     P(r["rev"]["window"], 7)
+                     if math.isfinite(r["rev"]["window"]) else
+                     "none: %s has no ceiling" % D.esc(r["rev"]["mode"]),
                      P(r["rev"]["clearing"], 7),
                      P(r["rev"]["surplus"] + r["rev"]["unsold"], 6),
                      P(r["cost"]["total"], 12), P(r["expected"], 12),
@@ -3816,9 +3871,18 @@ def part_cost(S, out):
            + ins_keys + ([] if C["isru"] else ["L_rprop"])
            + (["L_tps"] if "L_tps" in S.tag else []))
     ongoing_lines = K["ops"] + (lines["rprop"] if C["isru"] else 0.0)
-    S.step("ongoing_lines", "ongoing", "money spent across the mission",
-           "operations" + (" + rprop" if C["isru"] else ""),
-           P(ongoing_lines), ongoing_lines, "$", ["L_ops"])
+    # On an ISRU mission the made propellant is billed across the mission, so
+    # the sum is shown with both terms; it printed the total alone, citing
+    # only the operations line it had added something to.
+    if C["isru"]:
+        S.step("ongoing_lines", "ongoing", "money spent across the mission",
+               "operations + rprop",
+               "%s + %s" % (P(K["ops"]), P(lines["rprop"])), ongoing_lines,
+               "$", ["L_ops", "L_rprop"])
+    else:
+        S.step("ongoing_lines", "ongoing", "money spent across the mission",
+               "operations", P(ongoing_lines), ongoing_lines, "$",
+               ["L_ops"])
     S.put("zeta", "zeta", "contingency reserve",
           C["cfg"].contingency_fraction, "-",
           cite_config("contingency_fraction"))
@@ -4247,17 +4311,16 @@ def report_dials(html, quiet=False):
     import master
     fields = [f.name for f in dataclasses.fields(master.CALC_CONFIG)]
     tabulated, paths, dupes = ledger_on_page(html)
-    missing = [f for f in fields if f not in tabulated and f not in paths]
+    missing = [f for f in fields if f not in tabulated]
     blank = [f for f, (value, how, meaning) in tabulated.items()
              if not value or not how or not meaning]
     stray = [f for f in list(tabulated) + paths if f not in fields]
     bad = missing + blank + stray + dupes
     if not quiet:
-        print("  dials      %d of %d Stage 4 config fields on the page: %d "
-              "tabulated with a value, how it is known and a definition, "
-              "%d named as file paths; %d missing, %d blank, %d not a field, %d twice"
-              % (len(fields) - len(missing), len(fields),
-                 len(tabulated) - len(blank), len(paths), len(missing),
+        print("  dials      %d of %d Stage 4 config fields tabulated on the "
+              "page, each with a value, how it is known and what it is; %d "
+              "missing, %d blank, %d not a field, %d twice"
+              % (len(fields) - len(missing), len(fields), len(missing),
                  len(blank), len(stray), len(dupes)))
         for name in bad:
             print("     ! %s" % name)
@@ -4280,6 +4343,171 @@ def dial_self_test(html):
         return 0
     print("  self-test  *** DELETING THE %s ROW WENT UNNOTICED ***" % name)
     return 1
+
+
+def page_tables(html):
+    """Every <table> on the page as (headers, rows of cell text), NESTED
+    TABLES KEPT APART: a worksheet block is a table inside the register's
+    table, and a regex over the markup merges their columns."""
+    from html.parser import HTMLParser
+
+    class Parser(HTMLParser):
+        """Collect each table's own header and data cells."""
+
+        def __init__(self):
+            """An empty stack of open tables, and none finished yet."""
+            HTMLParser.__init__(self, convert_charrefs=True)
+            self.stack, self.done = [], []
+
+        def handle_starttag(self, tag, _attrs):
+            """Open a table, a row or a cell on the innermost open table."""
+            if tag == "table":
+                self.stack.append({"heads": [], "rows": [], "cell": None,
+                                   "row": None})
+            elif self.stack and tag == "tr":
+                self.stack[-1]["row"] = []
+            elif self.stack and tag in ("td", "th"):
+                self.stack[-1]["cell"] = [tag, ""]
+
+        def handle_endtag(self, tag):
+            """Close a cell, a row or a table, filing it where it belongs."""
+            if not self.stack:
+                return
+            top = self.stack[-1]
+            if tag in ("td", "th") and top["cell"]:
+                kind, text = top["cell"]
+                text = " ".join(text.split())
+                (top["heads"] if kind == "th" else
+                 top["row"] if top["row"] is not None else []).append(text)
+                top["cell"] = None
+            elif tag == "tr" and top["row"] is not None:
+                if top["row"]:
+                    top["rows"].append(top["row"])
+                top["row"] = None
+            elif tag == "table":
+                self.done.append(self.stack.pop())
+
+        def handle_data(self, data):
+            """Text belongs to the innermost table's open cell, if any."""
+            if self.stack and self.stack[-1]["cell"]:
+                self.stack[-1]["cell"][1] += data
+
+    parser = Parser()
+    parser.feed(html)
+    return [(t["heads"], t["rows"]) for t in parser.done]
+
+
+PLACEHOLDER_TEXT = re.compile(
+    r"\b(?:TODO|TBD|FIXME|XXX|lorem ipsum|nan|NaN|inf)\b"
+    r"|no row named|chosen here rather than measured|\(empty: none")
+BARE = re.compile(r"\$?-?[\d,]+(?:\.\d+)?(?:[eE][-+]?\d+)?")
+
+
+def placeholders(sheet, html):
+    """Every line of the page that answers without showing how.
+
+    Four kinds, each read off what the page actually carries:
+
+      text     a stand-in phrase, or a value printed as nan or inf;
+      empty    a step with no formula or no substitution;
+      static   a step whose working is a bare number that is neither the
+               value of a key it cites, nor a figure worked out in a table
+               on this page, nor stated with its reason (a formula that
+               opens "1: revenue is not discounted on this run");
+      cell     a cell in a "worked out" column that is empty or a bare
+               number, so the table states a figure and calls it working.
+    """
+    bad, counted = [], {"steps": 0, "cells": 0}
+    text = D.html.unescape(re.sub(r"<[^>]+>", " ", html))
+    seen = set()
+    for m in PLACEHOLDER_TEXT.finditer(text):
+        if m.group(0) in seen:
+            continue
+        seen.add(m.group(0))
+        bad.append(("text", m.group(0), " ".join(
+            text[max(0, m.start() - 50):m.end() + 30].split())))
+    key_of = {tag: key for key, tag in sheet.tag.items()}
+    for part in sheet.parts:
+        for row in part["rows"]:
+            if row[0] != "step":
+                continue
+            counted["steps"] += 1
+            _k, tag, symbol, _q, formula, sub, value, _u, tags, _n = row
+            if not str(formula).strip() or not str(sub).strip():
+                bad.append(("empty", tag, symbol))
+                continue
+            if not BARE.fullmatch(str(sub).strip()):
+                continue
+            copies = any(
+                isinstance(sheet.value.get(key_of.get(t)), (int, float))
+                and float(sheet.value[key_of[t]]) == float(value)
+                for t in tags)
+            worked = any(isinstance(v, (int, float)) and float(v) == float(value)
+                         for _w, v, _what in sheet.claims)
+            lead = str(formula).split(":", 1)[0].strip()
+            reasoned = (":" in str(formula) and BARE.fullmatch(lead)
+                        and float(lead.replace(",", "").lstrip("$"))
+                        == float(value))
+            if not (copies or worked or reasoned):
+                bad.append(("static", tag, "%s = %s" % (symbol, sub)))
+    for heads, rows in page_tables(html):
+        cols = [i for i, h in enumerate(heads) if "worked out" in h]
+        for r in rows:
+            for i in cols:
+                if i >= len(r):
+                    continue
+                counted["cells"] += 1
+                cell = r[i].strip()
+                if not cell or BARE.fullmatch(cell):
+                    bad.append(("cell", heads[i], " | ".join(r[:3])[:80]))
+    return bad, counted
+
+
+def report_placeholders(sheet, html, quiet=False):
+    """Print the placeholder check, and return the number of findings."""
+    bad, counted = placeholders(sheet, html)
+    if not quiet:
+        print("  static     %d step(s) and %d 'worked out' cell(s) read, and "
+              "the page text: %d answer(s) stated without showing how "
+              "(stand-in text, empty steps, uncited bare numbers, empty or "
+              "bare cells)" % (counted["steps"], counted["cells"], len(bad)))
+        for kind, what, where in bad:
+            print("     ! %-6s %s  ... %s" % (kind, what, where))
+    return len(bad)
+
+
+def placeholder_self_test(sheet, html):
+    """Plant one of each kind of placeholder and confirm each is caught."""
+    import copy
+    caught = []
+    text = html.replace("</h2>", "</h2><p>TBD</p>", 1)
+    caught.append(("stand-in text", report_placeholders(sheet, text, True)))
+    planted = copy.deepcopy(sheet)
+    for part in planted.parts:
+        for n, row in enumerate(part["rows"]):
+            if row[0] == "step" and not BARE.fullmatch(str(row[5]).strip()):
+                value = float(row[6]) * 1.317 + 1.0
+                part["rows"][n] = row[:5] + (P(value), value) + row[7:]
+                break
+        else:
+            continue
+        break
+    caught.append(("an uncited bare number",
+                   report_placeholders(planted, html, True)))
+    blanked = html.replace(
+        "</h2>", "</h2>" + D.table(["quantity", "how it is worked out",
+                                    "value"], [["planted", "", "42"]]), 1)
+    caught.append(("an empty worked-out cell",
+                   report_placeholders(sheet, blanked, True)))
+    missed = [what for what, found in caught if not found]
+    if missed:
+        print("  self-test  *** PLANTED %s WENT UNNOTICED ***"
+              % ", ".join(missed).upper())
+        return 1
+    print("  self-test  planted stand-in text, an uncited bare number and an "
+          "empty worked-out cell are each caught: the placeholder check can "
+          "fail")
+    return 0
 
 
 def report_untraced(sheet, html, quiet=False):
@@ -4948,6 +5176,7 @@ def sweep(args):
                    + report_origins(sheet, quiet=True)
                    + report_untraced(sheet, html, quiet=True)
                    + report_dials(html, quiet=True)
+                   + report_placeholders(sheet, html, quiet=True)
                    + report_monochrome(quiet=True)
                    + report_furniture(stylesheet(DEFAULT_PT), html,
                                       quiet=True))
@@ -4967,6 +5196,7 @@ def sweep(args):
             report_origins(sheet)
             report_untraced(sheet, html)
             report_dials(html)
+            report_placeholders(sheet, html)
             if loose_in:
                 print("     ! unspent: %s"
                       % ", ".join(sorted(sheet.tag[k] + " " + k
@@ -5010,6 +5240,10 @@ def sweep(args):
     # the PAGE that never rendered cannot hide among them.
     checks = {"report_substitutions", "report_origins", "report_untraced",
               "report_dials", "ledger_on_page", "dial_self_test",
+              "report_placeholders", "placeholders", "page_tables",
+              "placeholder_self_test",
+              "Parser", "handle_starttag", "handle_endtag", "handle_data",
+              "__init__",
               "report_monochrome", "report_furniture", "check_substitutions",
               "untraced", "is_traced", "as_number", "evaluable", "monochrome",
               "print_furniture", "footer", "branch_test", "patched",
@@ -5122,9 +5356,11 @@ def main(argv=None):
     html = document(out, sheet, args.font)
     bad = (report_substitutions(sheet) + report_origins(sheet)
            + report_untraced(sheet, html) + report_dials(html)
+           + report_placeholders(sheet, html)
            + report_monochrome()
            + report_furniture(stylesheet(args.font), html))
     if args.self_test and (self_test(sheet) + dial_self_test(html)
+                           + placeholder_self_test(sheet, html)
                            + branch_test(winner, label)):
         return 1
     if bad:

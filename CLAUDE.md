@@ -4351,7 +4351,11 @@ a step spends it, found by reading which inputs cite the field. ✅  **And
 `--check` reads the ledger back off the rendered page and holds it to the
 dataclass**, because a ledger built by walking the fields is a construction,
 not a proof: a `continue` added for one kind of field would leave a page that
-reads complete and is not.
+reads complete and is not. ⚠️  **Nested tables defeat a regex over the
+markup**: a worksheet block is a table inside the register's table, and the
+first probe for bare "worked out" cells merged their headers and reported
+column 2 of one table under the header of another. `page_tables` parses them
+apart, and the placeholder check is built on it.
 
 ⚠️  **A PRODUCT SOLD AS ONE IS PRICED FROM ITS MEMBERS, NOT FROM ITS NAME.**
 On a detailed-phase body the hold's "nickel-iron" is kamacite and taenite,

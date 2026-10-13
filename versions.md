@@ -365,10 +365,29 @@ missions:
   regolith, and its winner's page passes every check.
 - **The ledger is checked, not only built.** `--check` reads the RENDERED
   dial ledger and holds it to `dataclasses.fields(CalcConfig)`: every field
-  must be a row with a value, how the page knows it and its own comment's
-  definition, or be named as a file path. On every Stage 4 output on disk it
-  reads 84 of 84 (74 tabulated, 10 paths), and `--self-test` deletes a row and
-  watches it fail.
+  must be a row with a value, how the page knows it and what it is. The file
+  dials are rows too, each naming the file THIS page read for it, which the
+  row's provenance chooses (an archived cell's prices come from a frozen
+  table, not from where the config points). On every Stage 4 output on disk
+  it reads 84 of 84, and `--self-test` deletes a row and watches it fail.
+- **No line states an answer without showing how, checked directly.**
+  `--check` reads every step and every cell of every "worked out" column
+  (nested tables parsed apart) and fails on stand-in text, a value printed as
+  nan or inf, an empty step, a bare number that is neither a cited value, a
+  figure worked out in a table on the page, nor stated with its reason, and
+  an empty or bare "worked out" cell. Run over every Stage 4 output on disk
+  it and the sweep found six, none of which any earlier check could see:
+
+  | line | what the page did | now |
+  |---|---|---|
+  | the hold's water | a bare number | the knapsack's own row, or "0: no water phase" |
+  | the reliability factor | a bare 1 | "1: revenue is not discounted on this run" |
+  | `ongoing` on an ISRU mission | printed operations plus return propellant as one number, citing operations only | both terms, both cited |
+  | the stay the boil-off hold assumed | a bare number read off the fixed point's table | the previous pass's dig plus the window wait (or the floor plus the wait), each registered |
+  | the programme ladder's window under `unbounded` and `single_mission` | `inf` | "none: this market has no ceiling" |
+  | the synodic period of a body outside 0.05-100 AU (2025 NK497, 806 AU) | a bare 1 | "1: a = 806 AU lies outside ..., and it answers one year there" |
+
+  `--self-test` plants one of each kind and watches it fail.
 - **The price of a phase sold one way, or the better of two,** renders only
   with phases on and the refinery off, and **the water-liberation step with
   the term off** only on a water-fed ISRU mission; a scratch cell of each
