@@ -4338,6 +4338,81 @@ still fails a planted value. **Check a page against a row where the clamps
 BIND, not against the best case, because the best case is chosen for not
 binding.**
 
+🚨  **AND A PAGE THAT PASSES EVERY CHECK CAN STILL HIDE MOST OF ITS DIALS.**
+2026-10-08: the derivation read 84 calc config fields and the sheet
+registered 17 as inputs, so `model_tank_mass`, `model_launch_windows`,
+`use_aerocapture_return`, `max_fleet_ships`, `surplus_price_fraction` and the
+rest shaped the answer without appearing. Every check passed, because each
+asks about a number that IS on the page. The sheet's part 1 is now a ledger of
+every `CalcConfig` field, walked off the dataclass rather than a typed list.
+It gives the value used, how the page knows it (the row's column or this
+process's config, from `worked_calculation.dials_in_force`), and the tag where
+a step spends it, found by reading which inputs cite the field. ✅  **And
+`--check` reads the ledger back off the rendered page and holds it to the
+dataclass**, because a ledger built by walking the fields is a construction,
+not a proof: a `continue` added for one kind of field would leave a page that
+reads complete and is not. ⚠️  **Nested tables defeat a regex over the
+markup**: a worksheet block is a table inside the register's table, and the
+first probe for bare "worked out" cells merged their headers and reported
+column 2 of one table under the header of another. `page_tables` parses them
+apart, and the placeholder check is built on it.
+
+⚠️  **A PRODUCT SOLD AS ONE IS PRICED FROM ITS MEMBERS, NOT FROM ITS NAME.**
+On a detailed-phase body the hold's "nickel-iron" is kamacite and taenite,
+merged by `_INSEPARABLE`. The sheet priced it, and its refining energy, from
+nickel-iron's own Stage 2 row, and cited a "nickel-iron entry" in
+`comp_phases_detailed` that does not exist. On 2018 DT that was right to the
+bit, only because every alloy row shares one utility. **A coincidence that
+holds on the best case is the defect class this section names.**
+
+✅  **`verification_sheet.py --sweep` builds a worksheet for one mission per
+architecture**, from `worked_calculation`'s own cover, and holds each page to
+every check a single page gets. Its first run found five defects the best case
+could not show:
+
+| what | why the best case hid it |
+|---|---|
+| an RTG plant printed the solar derate as its value, and an electric RTG mission could not render | the best case flies solar |
+| `earth_surface` wrote P_L as c_LEO x 1 | no chain is not an empty chain, the defect `delivery_chain` already records |
+| Stage 2's zero floor on a net price was missing from the formula | only phosphorus at `leo` is floored |
+| a mineral with one route printed `max(x)` | cislunar minerals have two |
+| the route choice subtracted two near-equal prices at twelve figures | the gap is wide on the best case |
+
+🚨  **AND THE DERIVATION ITSELF HAD FOUR ROWS IT COULD NOT REPRODUCE,
+which no best case shows.** They are tabulated in versions.md. The one to
+know before touching either file: **calc sizes an ISRU mission's electric
+stage on a PLACEHOLDER**, the empty stack's outbound propellant with no return
+propellant, which its ISRU cascade returns and `_ep_stage_kg` reads. The
+derivation mirrors that (`m_prop_ep`) and the page says it is not the load
+flown. Do not "fix" the derivation to the real load; that is a model change,
+and it needs a release.
+
+⚠️  **Never edit `verification_sheet.py` while a sweep runs.** The coverage
+report maps the lines it traced onto the source as it is when the report is
+printed, so an edit in between assigns every hit to the wrong function.
+
+🚨  **A COVER OF ARCHITECTURES IS STILL NOT EVERY WINNER, AND THE WINNERS
+FOUND WHAT THE COVER COULD NOT.** `--check` on the winner of every Stage 4
+output on disk turned up three dials the derivation still read from this
+process (the depletion cap, bound-water liberation, and which Stage 2 epoch
+a row older than every frozen table gets), and a column the model reports
+through a fast path the derivation did not take. None is an architecture,
+so no cover asks for them. The epoch one is worth knowing by shape: **"fall
+back to the oldest table" is right for Stage 3, whose oldest set carries a
+refetch date after the runs that read it, and wrong for Stage 2, whose
+oldest set is a later pricing.** The same sentence in two functions meant
+two different things. A row older than every Stage 2 table now refuses by
+name. ⚠️  **And look in `asteroid_pipeline/_inputs_backup_*` before writing
+"not kept anywhere"**: the 2026-08 cislunar prices were sitting there, and
+froze as `campaign/stage2/mineral_value-1.7.1/`, which made four archive cells
+derive bit-exact. Its recorded quotes then rebuilt the other four
+destinations through Stage 2 as it was (`replay.py` beside them), and the
+archived rows proved those prices: all twenty cells derive. **A table that
+recorded its inputs is a table that can be rebuilt; a row that recorded its
+outputs is the test of the rebuild.** Two more release rules surfaced on them that no current row
+could show: a row with no `market_model` column flew the demand curve, and
+before calc 1.21.2 the residual did not pool onto silicates.
+
 ### Splitting a phase splits every bound that reads ONE phase
 
 calc `1.26.0`, and it is [splitting a quantity finds every reader that took it

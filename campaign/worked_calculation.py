@@ -584,7 +584,7 @@ def terms_in_force(row, cfg):
     not carry the price it fetched.  That one still comes from the config, and
     it only matters on a row that actually sold a surplus.
 
-    🚨  EIGHT MORE DIALS ARE STILL READ FROM THE LIVE CONFIG, AND THE REASON
+    🚨  THE DIALS BELOW ARE STILL READ FROM THE LIVE CONFIG, AND THE REASON
     THAT IS SAFE IS NOT THAT THEY NEVER MOVE.  It is that every one of them has
     a column in the compared set, so a config that disagrees with the row
     fails the check loudly instead of producing a confident wrong document.
@@ -593,9 +593,7 @@ def terms_in_force(row, cfg):
     remove it:
 
       dial                        the column that catches a disagreement
-      model_launch_windows        launch_window_wait_yr
       model_propellant_boiloff    boiloff_factor
-      model_water_liberation      water_liberated_kg
       model_programme_calendar    programme_calendar_multiplier
       max_fleet_ships             programme_options_priced
       programme_search_steps      programme_options_priced
@@ -610,7 +608,9 @@ def terms_in_force(row, cfg):
     Read from the ROW and therefore incapable of disagreeing: the destination,
     the market model, insurance, reliability, the learning curve, the cost of
     capital, the surplus flag, the programme search, `model_tank_mass` (via
-    `tank_mass_frac`), `model_eclipse_power` (via `array_oversize_factor`) and
+    `tank_mass_frac`), `model_eclipse_power` (via `array_oversize_factor`),
+    `model_launch_windows` (via `launch_window_wait_yr`),
+    `model_water_liberation` (via `water_liberated_kg`, in `context`) and
     `model_low_thrust_time` (via `ep_thrust_yr`).  `model_rig_service_life` is
     refused by name, because off it is a different programme rather than a dial.
 
@@ -649,8 +649,20 @@ def terms_in_force(row, cfg):
     # Deriving one against another moves the revenue on every row and the
     # objective with it, and the only column that would notice is
     # `saturation_multiplier`, which is identically 1.0 in three of the four.
-    market = (str(row["market_model"]) if "market_model" in row
-              and not pd.isna(row["market_model"]) else "capacity_cap")
+    #
+    # ⚠️  A ROW OLDER THAN THE COLUMN (calc 1.21.0) HAD ONE MARKET TERM, THE
+    # DEMAND CURVE, behind `model_market_saturation`.  The curve bends every
+    # finite market below 1.0, so `saturation_multiplier` settles it: below 1
+    # is `elasticity`, exactly 1 is the term switched off, which bounds
+    # nothing and is `unbounded`.  Defaulting these to `capacity_cap` derived
+    # the 2026-08 campaign's revenue 29-43% high.
+    if "market_model" in row and not pd.isna(row["market_model"]):
+        market = str(row["market_model"])
+    elif col("saturation_multiplier") is not None:
+        market = ("elasticity" if col("saturation_multiplier") < 1.0
+                  else "unbounded")
+    else:
+        market = "capacity_cap"
     # Insurance is two lines and either of them being non-zero is proof the
     # flag was on.  Absent columns mean a row too old to carry them, which is
     # the same thing as not charging them.
@@ -711,6 +723,151 @@ def terms_in_force(row, cfg):
         "stamp": (str(row["pipeline_version"])
                   if "pipeline_version" in row else "unknown"),
     }
+
+
+def declared_default(cfg, field):
+    """The dataclass default of `field`, read off the class, not typed."""
+    import dataclasses
+    for f in dataclasses.fields(cfg):
+        if f.name == field:
+            return (f.default if f.default is not dataclasses.MISSING
+                    else f.default_factory())
+    raise KeyError(field)
+
+
+def calc_stamp(archived):
+    """The row's calc release as a tuple, or None when it does not parse."""
+    if archived is None or not hasattr(archived, "get"):
+        return None
+    try:
+        return tuple(int(x) for x in
+                     str(archived.get("pipeline_version")).split("."))
+    except (TypeError, ValueError):
+        return None
+
+
+def old_mining_default(archived):
+    """Whether the row's calc predates 1.23.0, when the depletion cap was 0.05.
+
+    Only a stamp that PARSES counts: a row with no readable stamp says nothing
+    about its release, and is derived at this process's value.
+    """
+    if archived is None or not hasattr(archived, "get"):
+        return False
+    try:
+        key = tuple(int(x) for x in
+                    str(archived.get("pipeline_version")).split("."))
+    except (TypeError, ValueError):
+        return False
+    return key < (1, 23, 0)
+
+
+def dials_in_force(C):
+    """{field: (value, how)} for every calc dial this derivation SETTLED
+    OFF THE ROW rather than reading from this process's config.
+
+    ONE DEFINITION WITH TWO READERS.  `terms_in_force` and `context` already
+    decide each of these from the row; the verification sheet's dial ledger
+    has to print the value that was used and say how it is known, and a
+    second copy of those inferences there would be a second opinion about
+    which run the page describes.  A field absent from this dict was read
+    from the config in `C["cfg"]`, and the ledger says so.
+
+    The `how` strings name the column that settles each one, because "read
+    off the row" is a claim a reader can only check by knowing which column.
+    """
+    terms = C["terms"]
+    out = {
+        "delivery_destination": (C["destination"], "the row's own "
+                                 "<i>delivery_destination</i> column"),
+        "pipeline_version": (terms["stamp"], "the row's own "
+                             "<i>pipeline_version</i> stamp, the calc that "
+                             "wrote it; not this file's"),
+        "market_model": (terms["market"], "the row's <i>market_model</i> "
+                         "column"),
+        "charge_insurance": (terms["insurance"], "<i>liability_cost_usd</i> "
+                             "and <i>launch_insurance_cost_usd</i> on the "
+                             "row: either one non-zero means it was charged"),
+        "model_reliability": (terms["reliability"], "<i>p_success</i> on the "
+                              "row: exactly 1.0 means revenue was not "
+                              "discounted"),
+        "model_learning_curve": (terms["learning"], "<i>learning_curve_factor"
+                                 "</i> on the row: exactly 1.0 means no curve "
+                                 "was applied (and is also what one at N = 1 "
+                                 "gives, where the two readings agree)"),
+        "apply_wacc_compounding": (terms["wacc"], "<i>wacc_multiplier_upfront"
+                                   "</i> on the row: exactly 1.0 means a zero "
+                                   "rate"),
+        "sell_surplus_at_discount": (terms["surplus_frac"] > 0.0,
+                                     "<i>unsold_payload_kg</i> and "
+                                     "<i>surplus_payload_kg</i> on the row, "
+                                     "which are exclusive: mass in the first "
+                                     "means the run abandoned it.  Where no "
+                                     "ceiling bound, both readings load and "
+                                     "sell the same hold"),
+        "optimise_programme_scale": (terms["searched"],
+                                     "<i>programme_options_priced</i> on the "
+                                     "row: more than one rung priced means the "
+                                     "ladder ran"),
+        "use_beneficiation": (C["run_beneficiated"], "the run's setting, which "
+                              "the row alone cannot carry: a row that "
+                              "concentrated settles it, then the caller, then "
+                              "the file it came from (a raw run has no "
+                              "concentrating row anywhere)"),
+        "model_mineral_phases": (C["phased"], "the row's <i>mineral_phases"
+                                 "</i> column"),
+        "model_detailed_phases": (C.get("phases_col") == DETAILED_COL,
+                                  "the row's <i>detailed_phases</i> column"),
+        "model_refinery": (C["refinery"], "<i>refinery_kg</i> on the row: a "
+                           "flown refinery always has a plant"),
+        "repair_settled_overshoot": (C["repair"], "the row carries "
+                                     "<i>settle_repairs</i> (calc 1.27.0 and "
+                                     "later) and the config allows it"),
+        "damp_sizing_loop": (C["damp"], "the row carries <i>sizing_damped</i> "
+                             "(calc 1.28.0 and later) and the config allows "
+                             "it"),
+        "launch_capacity_rtol": (C["launch_rtol"], "the row's calc stamp: "
+                                 "before 1.29.0 the test was strict, whatever "
+                                 "the config says"),
+        "model_launch_windows": (C["windows"], "<i>launch_window_wait_yr</i> "
+                                 "on the row: a synodic period is never zero, "
+                                 "so a zero wait means the term was off"),
+        "model_water_liberation": (bool(C["cfg"].model_water_liberation),
+                                   "<i>water_liberated_kg</i> on the row, "
+                                   "less the ISRU feed's water "
+                                   "(<i>isru_propellant_kg</i> times the "
+                                   "feed ratio): anything left is the hold's "
+                                   "water, baked only with the term on.  "
+                                   "Where nothing is left both readings bake "
+                                   "the same nothing"),
+        "model_tank_mass": (C["tank_frac"] > 0.0, "<i>tank_mass_frac</i> on "
+                            "the row"),
+        "model_eclipse_power": (C["oversize"] != 1.0,
+                                "<i>array_oversize_factor</i> on the row"),
+        "model_low_thrust_time": (C["electric"], "<i>ep_thrust_yr</i> on the "
+                                  "row: positive means an electric stage was "
+                                  "sized"),
+        "model_rig_trip_limit": (C["rig_trip_limit"], "<i>trips_per_ship</i> "
+                                 "on the row: above Module 3's own maximum "
+                                 "means the duty-cycle cap was not applied"),
+    }
+    if C["cfg"].max_mining_fraction == 0.05 and C.get("mining_old_default"):
+        out["max_mining_fraction"] = (
+            0.05, "the row's calc stamp, %s: before 1.23.0 the default was "
+            "0.05, and this derivation takes the run's default rather than "
+            "this process's" % terms["stamp"])
+    if terms["surplus_frac"] > 0.0:
+        out["surplus_price_fraction"] = (
+            terms["surplus_frac"], "this process's config, clamped to [0, 1]: "
+            "a mass does not carry the price it fetched, so the fraction is "
+            "not recoverable from the row; the compared columns "
+            "<i>surplus_payload_kg</i> and <i>market_clearing_fraction</i> "
+            "hold it to the run")
+    if not terms["searched"]:
+        out["nre_amortization_missions"] = (
+            terms["n_fixed"], "<i>programme_missions</i> on the row: with the "
+            "search off the programme is this fixed size")
+    return out
 
 
 def _rig_life_modelled(row):
@@ -812,6 +969,8 @@ def run_winner(path, designation=None):
     # case" is not a measurement until the page says what it beat.
     row.attrs["population"] = int(len(usable))
     row.attrs["rows"] = int(len(frame))
+    row.attrs["source"] = os.path.basename(path)
+    row.attrs["path"] = os.path.abspath(path)
     # ✅  THE FILE ANSWERS WHAT THE ROW CANNOT.  A run's `use_beneficiation`
     # is invisible in a row that declined to concentrate -- see `run_setting`
     # -- but a RAW run's catalog contains no concentrating row at all, and a
@@ -890,6 +1049,8 @@ def archived_winner(cell, designation):
     # is the evaluable population and not the catalog.
     row.attrs["population"] = total
     row.attrs["rows"] = total
+    row.attrs["source"] = os.path.basename(path)
+    row.attrs["path"] = os.path.abspath(path)
     return row
 
 
@@ -1052,6 +1213,28 @@ def run_could_read(archived, path):
     return str(row_date) >= table_date
 
 
+# 🚨  WHERE A DATE CANNOT SAY WHICH TABLE A RUN READ, THE RUN'S RECORD DOES.
+# A table carries the DATE it was written and no time, so a run that ended at
+# 05:12 and a table re-priced that afternoon share one, and `run_could_read`
+# reads an equal date as "could have" -- picking the newer table.  The
+# lunar_surface calc 1.27.0 cell is that case: it ran 2026-10-06 01:29-05:12
+# on mineral_value 1.12.2 and spacecost 0.5.0 (versions.md, "The full
+# `lunar_surface` cell at this release"), and 1.13.0 and spacecost 0.6.0 were
+# frozen the same day, so 2021 CX5 derived against them and DIFFERed by 1e-6 on
+# every price.  Keyed by the archive's file name, since that is what a page
+# names as its source; the dates still decide every row not listed here.
+RUN_INPUTS = {
+    "lunar_surface__benef__search-on__calc-1.27.0__spacecost-0.5.0.csv.gz":
+        ("mineral_value-1.12.2", "spacecost-0.5.0"),
+}
+
+
+def recorded_inputs(archived):
+    """(Stage 2 set, Stage 3 set) the run's own record names, or None."""
+    attrs = getattr(archived, "attrs", None) or {}
+    return RUN_INPUTS.get(attrs.get("source"))
+
+
 def mineral_catalog_for(dest, archived=None):
     """The Stage 2 catalog priced for `dest`, and a note saying where it came from.
 
@@ -1073,6 +1256,13 @@ def mineral_catalog_for(dest, archived=None):
     is a refusal rather than a substitution.
     """
     import master
+    rec = recorded_inputs(archived)
+    if rec:
+        path = os.path.join(CAMP, "stage2", rec[0],
+                            "mineral_value_catalog.%s.csv" % dest)
+        if os.path.exists(path):
+            return path, ("campaign/stage2/%s, the table this run's record "
+                          "names" % rec[0])
     live = os.path.join(ROOT, "asteroid_pipeline",
                         master.CALC_CONFIG.mineral_catalog_file)
     if os.path.exists(live):
@@ -1100,7 +1290,22 @@ def mineral_catalog_for(dest, archived=None):
     if sets:
         sets.sort(key=lambda st: st[2] or "")
         readable = [st for st in sets if run_could_read(archived, st[0])]
-        chosen = readable[-1] if readable else sets[0]
+        # 🚨  A ROW OLDER THAN EVERY TABLE IS A REFUSAL, NOT THE OLDEST TABLE.
+        # Stage 3 falls back to its oldest set on purpose (that set's date is
+        # a refetch after the runs that read it); Stage 2's oldest set is the
+        # 2026-09-09 pricing, and a 2026-08 campaign row priced at 2026-08-23
+        # quotes that no file here keeps.  Falling back derived those rows'
+        # revenue at the wrong epoch, 0.9% to 43% off, and named the table as
+        # though the run had read it.
+        if not readable:
+            sys.exit("no Stage 2 table on disk is one this row's run could "
+                     "have read.\n  the row's run ended %s; the oldest table "
+                     "priced for %r was written %s (%s).\n  The prices it "
+                     "sold at are not kept anywhere, so no derivation of it "
+                     "can reproduce its revenue."
+                     % (archived.get("catalog_date"), dest, sets[0][2],
+                        sets[0][1]))
+        chosen = readable[-1]
         return chosen[0], chosen[1]
     frozen = os.path.join(root, name)
     sys.exit("no Stage 2 catalog priced for %r.\n"
@@ -1134,6 +1339,12 @@ def transport_tables_for(archived=None):
     """
     import master
     cfg = master.CALC_CONFIG
+    rec = recorded_inputs(archived)
+    if rec and os.path.exists(os.path.join(CAMP, "stage3", rec[1],
+                                           cfg.launch_vehicles_file)):
+        return (os.path.join(CAMP, "stage3", rec[1]),
+                "campaign/stage3/%s, the tables this run's record names"
+                % rec[1])
     live = os.path.join(ROOT, "asteroid_pipeline", cfg.transportation_subdir)
     if run_could_read(archived, os.path.join(live, cfg.launch_vehicles_file)):
         return live, "the live Stage 3 tables"
@@ -1192,6 +1403,19 @@ def reference_tables(dest, archived=None):
               "read from it, and a body that moved between catalogs will "
               "DIFFER on its own columns" % release)
     return {
+        # The file each path dial names, as THIS page found it: chosen by the
+        # row's provenance, which is not always where the config points.
+        "files": {
+            "input_dir": cfg.input_dir,
+            "asteroid_catalog_file": os.path.join(
+                ROOT, "asteroid_pipeline", "asteroid_catalog.csv"),
+            "mineral_catalog_file": minerals_path,
+            "transportation_subdir": tdir,
+            "launch_vehicles_file": os.path.join(tdir, cfg.launch_vehicles_file),
+            "propellants_file": os.path.join(tdir, cfg.propellants_file),
+            "operational_costs_file": os.path.join(
+                tdir, cfg.operational_costs_file),
+        },
         "minerals_from": minerals_from,
         "transport_from": transport_from,
         "provenance": input_provenance(archived, manifest, minerals_path,
@@ -1355,6 +1579,11 @@ def phase_table(body, minerals, phased=False):
 
     phases, total, ways = [], 0.0, {}
     _HOW.clear()
+    # 🚨  PER DERIVATION, LIKE RATE_LOG.  `merge_inseparable` clears this, but
+    # only a phased row reaches it, so a four-fraction row derived after a
+    # detailed-phase one in the same process inherited the previous body's
+    # merge: a sweep printed 2018 DT's kamacite and taenite on 2016 PN38.
+    _MERGED.clear()
     # calc v1.25.0: with the refinery flown (`gross_minerals` was applied),
     # every phase also carries the energy the refinery spends on a kilogram
     # of it, by the route it is sold by, and the route is chosen on NET prices.
@@ -2080,6 +2309,19 @@ def context(body, archived, tables):
     if cfg.delivery_destination != dest:
         import dataclasses
         cfg = dataclasses.replace(cfg, delivery_destination=dest)
+    # 🚨  THE DEPLETION CAP FOLLOWS THE ROW'S RELEASE, NOT THIS PROCESS.  calc
+    # 1.23.0 moved `max_mining_fraction`'s default from 0.05 to 1.0, so a row
+    # an older calc wrote ran at 0.05 unless somebody configured otherwise,
+    # and every page about the 2026-09 campaign needed --max-mining-fraction
+    # typed by hand -- one value per process, so no single sweep could hold
+    # both the campaign and a current cell.  Read off the row's stamp, like
+    # `launch_capacity_rtol`; a value set on the command line is not the
+    # default and is left alone, and the compared columns still guard it.
+    if (old_mining_default(archived)
+            and cfg.max_mining_fraction == declared_default(cfg,
+                                                            "max_mining_fraction")):
+        import dataclasses
+        cfg = dataclasses.replace(cfg, max_mining_fraction=0.05)
     benef = shape["beneficiated"]
     rows = set(ops["category"])
 
@@ -2110,7 +2352,13 @@ def context(body, archived, tables):
 
     # Eclipse-derated specific power for the plant that stands on the body, and
     # the bare 1/r^2 figure for the array that never leaves sunlight.
-    w_bare = val("Power system specific mass") / (a_au * a_au)
+    # 🚨  WITH calc's GUARD: a distance outside 0.1-100 AU falls back to the
+    # 1 AU rating (`solar_specific_power_w_per_kg`) rather than producing
+    # free power or none.  Without it a body at a = 806 AU (2025 NK497) got
+    # 9e-5 W/kg, a two-billion-kilogram plant, and a refusal the run never
+    # made.
+    w_bare = (val("Power system specific mass") / (a_au * a_au)
+              if 0.1 < a_au < 100.0 else val("Power system specific mass"))
     rot_h = body.get("rotation_period_h")
     rot_h = (float(rot_h) if rot_h is not None and not pd.isna(rot_h)
              else cfg.default_rotation_period_h)
@@ -2184,6 +2432,24 @@ def context(body, archived, tables):
                      "feed material this body can supply.\n"
                      "  material %r, ice fraction %g" % (
                          str(archived["propellant"]), material, ice_frac))
+    # 🚨  `model_water_liberation` IS SETTLED BY THE ROW, NOT BY THIS PROCESS.
+    # calc writes `water_liberated_kg` as the ISRU feed's water plus, only
+    # with the flag on, the water in the hold.  The first is the row's own
+    # `isru_propellant_kg` times the Module 3 ratio above, so anything past it
+    # is the hold's water, and its presence is positive proof the flag was on.
+    # Where there is none the two readings bake the same nothing and either is
+    # right.  Read from the config, a run with the term off was derived with a
+    # 29,585 kg bake it never paid for, and 39 columns DIFFERed.
+    row_lib = archived.get("water_liberated_kg")
+    if row_lib is not None and not pd.isna(row_lib):
+        row_isru = archived.get("isru_propellant_kg")
+        row_isru = (0.0 if row_isru is None or pd.isna(row_isru)
+                    else float(row_isru))
+        liberation_on = (float(row_lib) - row_isru * isru_water_per_kg
+                         > UNSOLD_FLOOR_KG)
+        if liberation_on != bool(cfg.model_water_liberation):
+            import dataclasses
+            cfg = dataclasses.replace(cfg, model_water_liberation=liberation_on)
     # The launch cost avoided, which is where an in-space price comes from.
     # Read as the leg chain rather than as one number so the document can show
     # the stage that produces it; one `burn` leg for a cislunar depot.
@@ -2842,6 +3108,19 @@ def _cascade(C, R, hardware_kg, struct_frac):
         m_at = (hardware_kg + d0 + struct_frac * m_pay + m_tps
                 + t * m_rprop + m_rprop)
     m_oprop = m_at * k_out * (R["R_out"] - 1.0)
+    # 🚨  THE LOAD THE ELECTRIC STAGE IS SIZED ON IS NOT THE LOAD FLOWN, UNDER
+    # ISRU.  calc's ISRU cascade returns a PLACEHOLDER -- the outbound
+    # propellant of the EMPTY stack, (m_hw + k s d0)(k_out R_out - 1), and no
+    # return propellant -- and `_ep_stage_kg` sizes the stage off exactly that
+    # dict.  This used the real load, so every ISRU electric mission came out
+    # with a stage several times too heavy and a different answer: 2016 YK at
+    # `geo` DIFFERed on 62 columns and refused the run's own ratio outright.
+    # Reproduced as the model associates it, and the page says so.
+    if C["isru"]:
+        empty = hardware_kg + k_ret * s_tps * d0
+        m_prop_ep = (empty * k_out * R["R_out"] - empty) + 0.0
+    else:
+        m_prop_ep = m_oprop + m_rprop
     # The one coefficient both branches turn on, reported rather than left for
     # a reader to reassemble.  `coef` is what multiplies the returning stack:
     # k_ret * s_tps, times R_ret when the return propellant is carried up from
@@ -2850,7 +3129,8 @@ def _cascade(C, R, hardware_kg, struct_frac):
     # rather than two, and it is the line the document shows.
     return dict(m_pay=m_pay, denom=denom, bracket=bracket, m_after=m_after,
                 m_rprop=m_rprop, m_at=m_at, m_oprop=m_oprop, m_tps=m_tps,
-                m_prop=m_oprop + m_rprop, s_tps=s_tps, d0=d0,
+                m_prop=m_oprop + m_rprop, m_prop_ep=m_prop_ep,
+                s_tps=s_tps, d0=d0,
                 struct_frac=struct_frac, hardware_kg=hardware_kg,
                 coef=(k_ret * s_tps if C["isru"]
                       else k_ret * s_tps * R["R_ret"]))
@@ -2982,6 +3262,9 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
     stay_est = cfg.station_keeping_floor_yr + DV["window_wait"]
     dv_ret_eff = DV["dv_ret"]
     boiloff_factor = 1.0
+    # The hold the LAST pass's boil-off was taken over, kept so the page can
+    # write the factor out rather than assert it.
+    hold_yr = boiloff_stay = 0.0
     passes, cas, ep, R = [], None, None, None
     # calc v1.28.0, `damp_sizing_loop`: a pass after the first that does not
     # close steps the state back toward the last one that did, halving the
@@ -3025,6 +3308,7 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
             # that term by the boil-off factor is exactly
             # R_eff = 1 + (R_ret - 1) * k, and the closed form is untouched.
             hold_yr = outbound_yr + stay_est
+            boiloff_stay = stay_est
             boiloff_factor = math.exp(C["boiloff_pct"] / 100.0 * hold_yr * 365.25)
             r_ret_raw = math.exp(DV["dv_ret"] / C["ve"])
             dv_ret_eff = C["ve"] * math.log(1.0 + (r_ret_raw - 1.0) * boiloff_factor)
@@ -3039,7 +3323,7 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
             if back_off("the mass cascade does not converge at this hardware mass") is None:
                 return None
             continue
-        ep = _ep_stage(C, cas["m_prop"])
+        ep = _ep_stage(C, cas["m_prop_ep"])
         trial_pay = min(cas["m_pay"], B["mineable"],
                         max(0.0, throughput - isru_feed))
         # calc v1.27.0: a repair's payload ceiling; see the refusal below.
@@ -3164,6 +3448,10 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
     # before any ore is loaded, which is the cost of ISRU and the part a flat
     # $/kg charge left out.
     vol_cap = 0.25 * C["fairing_m3"] * 1000.0 * C["rho"]
+    # The ISRU feed the PAYLOAD was netted against is the loop's, and the one
+    # reported below is re-settled on the stack actually flown; the page
+    # shows both, so it keeps the first under its own name.
+    isru_feed_loop, isru_prop_loop = isru_feed, isru_prop
     ore_throughput = max(0.0, throughput - isru_feed)
     ore_mineable = max(0.0, B["mineable"] - isru_feed)
     demand = min(cas["m_pay"], ore_mineable)
@@ -3294,7 +3582,11 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
             "cadence": cadence, "calendar_cap": calendar_cap, "trips": trips,
             "t_out": t_out, "t_back": t_back, "isru_prop": isru_prop,
             "isru_feed": isru_feed, "isru_water": isru_water,
+            "isru_feed_loop": isru_feed_loop,
+            "isru_prop_loop": isru_prop_loop,
             "liberated": liberated, "boiloff_factor": boiloff_factor,
+            "boiloff_hold_yr": hold_yr, "boiloff_stay_yr": boiloff_stay,
+            "boiloff_outbound_yr": outbound_yr,
             "dv_ret_eff": dv_ret_eff, "repairs": depth, "payload_cap": cap,
             "repair": attempt,
             # calc v1.28.0: the back-offs this solve and any it was repaired
@@ -3414,7 +3706,20 @@ def revenue(C, M, n_missions, fleet):
     # association moves this column from "differs by 100%" -- 0.0 against a
     # residue is a relative error of 1.0 however small the residue -- to
     # bit-exact.
-    lost = (capped["unsold"] if "unsold" in capped
+    #
+    # 🚨  AND WHERE NO CEILING BINDS THE MODEL NEVER RUNS THE SUBTRACTION.
+    # Its fast path pools the uncapped load by market, and when no pool is
+    # past its allowance it reports the load whole, 0.0 unsold, without
+    # calling the knapsack at all.  Taking the subtraction there anyway left
+    # 1.455e-11 kg against the row's 0.0 on lunar 2005 QP87.  The test is the
+    # model's, term for term: pooled kilograms against `market_kg * window`.
+    pooled = {}
+    for name, kg in free["mix"].items():
+        key = keys.get(name, C["market_keys"].get(name, name))
+        pooled[key] = kg + pooled[key] if key in pooled else kg
+    binds = any(kg > caps.get(key, float("inf"))
+                for key, kg in pooled.items())
+    lost = (0.0 if not binds else capped["unsold"] if "unsold" in capped
             else max(0.0, sum(free["mix"].values()) - capped["loaded"]))
     return {"window": window, "allow": caps, "capped": capped, "mode": mode,
             "gross_base": free["value"], "surplus_frac": frac,
@@ -4041,6 +4346,51 @@ CHROME = [
 ]
 
 
+# Columns a Stage 4 row repeats from its Stage 1 row that are provenance
+# rather than properties of the body, and so never stand in for it.
+_NOT_BODY = ("designation", "pipeline_version", "catalog_date")
+
+
+def body_as_the_run_read_it(archived, body):
+    """The body with every column the ROW carries taken from the row, when the
+    installed catalog postdates the run; and {column: installed value} for
+    every column that moved.
+
+    🚨  A RUN OLDER THAN THE INSTALLED CATALOG READ A DIFFERENT BODY, and the
+    row is the only surviving record of it.  The 2026-09 campaign cells were
+    run on the 2026-08-11 build, which is not on disk, so 2021 CX5 came out
+    0.0644 km across from the installed release against the 0.0817 km its run
+    used, and every page about those cells refused.  A body's diameter,
+    density and composition are INPUTS the run recorded beside its answer,
+    the same way a propellant price is recovered from the row's cost and mass
+    (`run_propellant_price`), not outputs read back to fit it.  Only columns
+    the row actually carries move, and the page names each one.
+    """
+    manifest = os.path.join(ROOT, "asteroid_pipeline", "catalog_manifest.json")
+    if (body is None or not os.path.exists(manifest)
+            or run_could_read(archived, manifest)):
+        return body, {}
+    body = body.copy()
+    moved = {}
+    for col in archived.index:
+        if col in _NOT_BODY or col not in body.index:
+            continue
+        value = archived[col]
+        if value is None or (not isinstance(value, str) and pd.isna(value)):
+            continue
+        old = body[col]
+        same = (old == value) if isinstance(value, str) or isinstance(old, str)             else (not pd.isna(old) and float(old) == float(value))
+        if not same:
+            body[col] = value
+            moved[col] = old
+    if "diameter_km" in moved:
+        # The row's diameter is a GIVEN, not a sizing from H and an albedo:
+        # both renderers branch on this label (`diameter_from_h`).
+        moved["diameter_source"] = body.get("diameter_source")
+        body["diameter_source"] = "run_row"
+    return body, moved
+
+
 def build(archived, label, body=None, run_beneficiated=None):
     """Derive one winner end to end, and check it against its own row.
 
@@ -4060,14 +4410,22 @@ def build(archived, label, body=None, run_beneficiated=None):
     # calc v1.26.0: the installed catalog carries both phase columns, and the
     # row's run read one.  Trimmed before anything reads the body.
     body = body_for_run(archived, body)
+    body, body_from_row = body_as_the_run_read_it(archived, body)
     # The prices have to be chosen before anything is derived, and they are
     # chosen by the ROW's destination rather than by the config, for the same
     # reason the legs are.  See `mineral_catalog_for`.
     tables = reference_tables(row_destination(archived), archived)
     C = context(body, archived, tables)
+    C["body_from_row"] = body_from_row
+    C["mining_old_default"] = old_mining_default(archived)
     # Which Stage 2 and Stage 3 tables priced this page; see `run_could_read`.
     C["inputs_from"] = (tables["minerals_from"], tables["transport_from"])
     C["provenance"] = tables["provenance"]
+    C["files"] = dict(tables["files"])
+    source = (getattr(archived, "attrs", None) or {}).get("path")
+    if source:
+        C["files"]["output_filename"] = source
+        C["files"]["output_dir"] = os.path.dirname(source)
     # Before anything is derived: what the ROW charges decides what the
     # derivation charges.  See `terms_in_force`.
     C["terms"] = terms_in_force(archived, C["cfg"])
@@ -4129,6 +4487,21 @@ def build(archived, label, body=None, run_beneficiated=None):
     C["rare_metals"] = set(_m.RARE_METAL_ELEMENTS)
     C["kappa"] = float(body.get("comp_pgm_enrichment") or 1.0)
     C["bulk"] = sum(f * p for _n, f, p in phases)
+    # ⚠️  THE RESIDUAL'S MARKET FOLLOWS THE ROW'S RELEASE.  Before calc
+    # 1.21.1 a phase with no Stage 2 row of its own (the composition residual,
+    # `other (bulk silicate)`) sold into no ceiling at all; 1.21.1 gave it the
+    # silicates ceiling as a COPY of its own; 1.21.2 pooled the two into one
+    # allowance, which is what `alias` says today.  Deriving a 2026-08 raw row
+    # with the pool put its demand-curve multiplier 11% low.
+    stamp = calc_stamp(archived)
+    C["residual_market"] = "pooled"
+    if stamp is not None and stamp < (1, 21, 2):
+        C["residual_market"] = "copy" if stamp >= (1, 21, 1) else "none"
+        caps = dict(caps)
+        for n, _f, _p in phases:
+            if n not in caps and n in alias and stamp >= (1, 21, 1):
+                caps[n] = caps.get(alias[n], float("inf"))
+        alias = {}
     C["market_kg"] = caps
     C["market_keys"] = {n: (n if n in caps else alias.get(n, n))
                         for n, _f, _p in phases}
@@ -5111,6 +5484,8 @@ def rows_for(path, designations, population=None):
         if population is not None:
             row.attrs["population"] = int(population)
             row.attrs["rows"] = int(population)
+        row.attrs["source"] = os.path.basename(path)
+        row.attrs["path"] = os.path.abspath(path)
         out[des] = row
     return out
 

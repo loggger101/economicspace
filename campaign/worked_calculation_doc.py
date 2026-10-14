@@ -390,6 +390,11 @@ _DIAMETER_NOT_FROM_H = {
     "measured": "a measured diameter",
     "derived_mass": "derived by Stage 1 from the body's MEASURED mass at its "
                     "class density",
+    # Set by `worked_calculation.body_as_the_run_read_it`, never by Stage 1:
+    # the run read a catalog build that is not installed, and its row is the
+    # only record of the diameter it used.
+    "run_row": "the diameter this run's own row recorded, because the "
+               "catalog build it read is not installed",
 }
 
 
