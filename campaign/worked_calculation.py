@@ -4538,17 +4538,49 @@ def build(archived, label, body=None, run_beneficiated=None):
             "terms": C["terms"]}
 
 
-def render_pdf(html_path, pdf_path):
-    """Print the document with headless Chrome, which is what made the first."""
+def render_pdf(html_path, pdf_path, extra=(), wait_s=120.0):
+    """Print the document with headless Chrome, which is what made the first.
+
+    🚨  THE LAUNCHER RETURNS BEFORE THE PRINT LANDS, AND THE OLD FILE ANSWERED
+    FOR THE NEW ONE.  On Windows `msedge.exe` hands the job to a child and
+    exits, so the PDF appears a second or two after `subprocess.run` returns.
+    This used to test `os.path.exists` at once: on a machine that had printed
+    the document before, the PREVIOUS file passed that test and the run said
+    "wrote" over a page it had not written; on a clean one it said nothing was
+    written while the print was still on its way.  Found 2026-10-13 when a
+    browser update made the hand-off slow enough to lose every race.  So the
+    target is removed first and the file is waited for until it is complete:
+    present, ending in `%%EOF`, and the same size on two looks.
+    """
+    import time
     exe = next((p for p in CHROME if os.path.exists(p)), None)
     if exe is None:
         print("  no Chrome or Edge found; the HTML is written, print it by hand")
         return False
+    if os.path.exists(pdf_path):
+        os.remove(pdf_path)
     subprocess.run([exe, "--headless", "--disable-gpu", "--no-sandbox",
-                    "--no-pdf-header-footer",
-                    "--print-to-pdf=%s" % pdf_path, html_path],
+                    "--no-pdf-header-footer"] + list(extra)
+                   + ["--print-to-pdf=%s" % pdf_path, html_path],
                    check=True, capture_output=True)
-    return os.path.exists(pdf_path)
+    deadline, last = time.time() + wait_s, -1
+    while time.time() < deadline:
+        size = os.path.getsize(pdf_path) if os.path.exists(pdf_path) else -1
+        if size > 0 and size == last:
+            with open(pdf_path, "rb") as fh:
+                fh.seek(max(0, size - 64))
+                if b"%%EOF" in fh.read():
+                    return True
+        last = size
+        time.sleep(0.5)
+    print("  the browser did not finish %s within %.0f s" % (pdf_path, wait_s))
+    return False
+
+
+def pdf_pages(pdf_path):
+    """How many pages a PDF has, counted off its page objects."""
+    with open(pdf_path, "rb") as fh:
+        return len(re.findall(rb"/Type\s*/Page[^s]", fh.read()))
 
 
 def describe_terms(terms):

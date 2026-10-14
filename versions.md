@@ -272,6 +272,60 @@ passes at v0.10.0 and `verify_docs.py` is clean.
 - The Stage 3 tables it replaced are backed up under
   `asteroid_pipeline/_inputs_backup_2026-10-07_pre-v1.53.0/`.
 
+### The worksheet fits its paper, and says how many pages it is (2026-10-13, no stamp)
+
+`campaign/verification_sheet.py` had been printing every page at about 79%
+of the size its stylesheet asks for, and nothing said so.
+
+- **The dial ledger ran off the paper.** File-path dials printed as absolute
+  Windows paths, and with field names that is a table no narrower than
+  941 px against 763 px of printable Letter. A browser shrinks the WHOLE
+  document to fit its widest element, so every table printed near 5.7pt
+  instead of 7.2pt, and the `--font` setting stopped moving the page count:
+  23 pages at every size from 6.8 to 8.6pt. Paths now print relative to the
+  repository (which also keeps the user's home folder off the page), and the
+  ledger may break inside a long word. At the size the stylesheet asks for
+  the document is **31 pages** on Letter and 30 on A4; the run prints the
+  count rather than a comment promising one.
+- **Every measurement assumed A4; every PDF was Letter** (MediaBox
+  612 x 792). `@page` now declares the size, `--paper` chooses it (Letter by
+  default, because that is what every PDF has been), and the printable box
+  is derived from the size and the stylesheet's own margins.
+- **The paper is checked on every PDF run.** The "0 elements past the edge"
+  measurement was taken once by hand on 2026-09-19 and recorded in a
+  docstring; the ledger broke it on 2026-10-08. `report_paper` lays the
+  print stylesheet out in the browser at the paper's printable width and
+  fails on anything past the edge or any table row taller than a sheet. It
+  runs with `--pdf`, `--print-test`, `--self-test` and on every page of a
+  `--sweep`; `--self-test` plants a block twice the paper's width and
+  watches it fail. On the page built before the fix it reports 123 elements
+  past the edge and the widest at 941 px.
+- **Its first sweep found a row no page break can split.** The
+  learning-curve factor writes every term of its mean out, because an
+  ellipsis would be arithmetic the check cannot evaluate, and at N = 320 (every
+  searched `earth_surface` page) that was one row 1,484 px tall against a
+  996 px sheet. Past twenty terms the sum is now a table of groups, each a
+  checked claim with its terms written out, and the step adds the subtotals:
+  2016 PN38's page checks 551 of 551 substitutions and fits the paper.
+- **`render_pdf` reported a stale file as written.** It tested
+  `os.path.exists` the moment the browser returned, and Edge's launcher
+  returns before the print lands: after a browser update made that hand-off
+  slow, every new print lost the race and the previous PDF answered for it.
+  It now removes the target first and waits for a complete file. The
+  narrative document shares the function.
+- **`--every-winner` is a flag now**, not a script in a scratch directory:
+  it runs `--check` on the winner of every Stage 4 output on disk (the live
+  catalog, every archived cell and archive, and any `--source`), each in its
+  own process, and exits 1 if any is not clean.
+- Stale text corrected: the `--self-test` and `--check` help, the `--check`
+  OK line (which omitted the dial and placeholder checks), a docstring saying
+  file dials are not tabulated, and the dial check's parser for the sentence
+  that used to name them. A paragraph below that had been separated from the
+  table it numbers is back beside it.
+
+These are campaign scripts, so no `pipeline_version` moves and `master.py` is
+untouched.
+
 ### The worksheet shows every dial, and derives what its best case never took (2026-10-08, no stamp)
 
 `campaign/verification_sheet.py` is meant to let a reader redo the answer by
@@ -329,7 +383,14 @@ the run, so neither document could be built for those rows:
 | pooled the composition residual onto silicates whatever the release | before 1.21.1 the residual sold into no ceiling; 1.21.1 gave it a copy of the silicates one; 1.21.2 pooled them | the same raw cells, multiplier 11% low |
 
 The first two now mirror calc, and the ISRU page says the stage is sized on the
-placeholder rather than on the load flown. The depletion cap and the
+placeholder rather than on the load flown. The third is a register of
+recorded run inputs (`RUN_INPUTS`), keyed by archive name and cited to this
+file. The fourth takes each body column the row carries from the row when the
+installed catalog postdates the run, and the page cites those as the run's own
+values beside the installed ones. ⚠️  **The ISRU sizing is a finding about the
+model, not fixed here**: calc's electric stage on an ISRU mission is sized on
+a load smaller than the one it flies. Changing that moves results and needs a
+release of its own. The depletion cap and the
 water-liberation flag are read off the row (its stamp, and its own
 `water_liberated_kg`), the unsold column follows the model's fast path, and
 a row older than every frozen Stage 2 table is now **refused by name** rather
@@ -403,14 +464,7 @@ missions:
   definition line, or dial help that failed to scrape, now stops the build**
   rather than printing a stand-in such as "A dial: chosen here rather than
   measured." The sweep lists every unrun line of the page, apart from the
-  lines that run only when a check finds something or a page is refused. The third is a register of
-recorded run inputs (`RUN_INPUTS`), keyed by archive name and cited to this
-file. The fourth takes each body column the row carries from the row when the
-installed catalog postdates the run, and the page cites those as the run's own
-values beside the installed ones. ⚠️  **The ISRU sizing is a finding about the
-model, not fixed here**: calc's electric stage on an ISRU mission is sized on
-a load smaller than the one it flies. Changing that moves results and needs a
-release of its own.
+  lines that run only when a check finds something or a page is refused.
 
 These are campaign scripts, so no `pipeline_version` moves and `master.py` is
 untouched. The default best case still derives 90 of 90 bit-exact.

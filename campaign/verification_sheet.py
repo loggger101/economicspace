@@ -1280,6 +1280,20 @@ def part_prices(S, out):
 
 
 # --------------------------------------------------------- the dial ledger
+def repo_path(path):
+    """A path as the page prints it: relative to the repository when inside it.
+
+    The config holds absolute paths, which name the machine rather than the
+    file and cannot wrap; relative, they say which file to open in a clone.
+    """
+    path = str(path)
+    if os.path.isabs(path):
+        rel = os.path.relpath(path, ROOT)
+        if not rel.startswith(".."):
+            return rel.replace(os.sep, "/")
+    return path
+
+
 def dial_value(value):
     """One dial's value as the ledger prints it, quoted rather than claimed."""
     if isinstance(value, bool):
@@ -1303,8 +1317,10 @@ def part_dials(S, out):
     terms were on.
 
     THE LIST IS THE DATACLASS, NOT A LIST OF FIELDS TYPED HERE, so a dial
-    added to `CalcConfig` tomorrow joins this table with no edit.  Paths are
-    named and not tabulated: the header card says which files were read.
+    added to `CalcConfig` tomorrow joins this table with no edit.  The file
+    dials are tabulated too, against the files this page actually read, and
+    every path is shown relative to the repository: an absolute path is the
+    one token the ledger cannot wrap, and it printed the user's home folder.
     The tag column is FOUND, by reading which inputs cite each field, so it
     cannot claim a dial is registered when it is not.
     """
@@ -1371,9 +1387,7 @@ def part_dials(S, out):
     for name in paths:
         read = files.get(name)
         if read:
-            what = "this page read it as <b>%s</b>" % D.esc(
-                os.path.relpath(read, ROOT).replace(os.sep, "/")
-                if os.path.isabs(read) else read)
+            what = "this page read it as <b>%s</b>" % D.esc(repo_path(read))
         elif name == "delta_v_segments_file":
             what = ("this page reads no file through it: every Delta-v leg "
                     "is the model's own function of the body's orbit, worked "
@@ -1382,7 +1396,7 @@ def part_dials(S, out):
             raise AssertionError("no file recorded for the path dial %s"
                                  % name)
         rows.append(["<i>%s</i>" % D.esc(name),
-                     dial_value(getattr(cfg, name)),
+                     dial_value(repo_path(getattr(cfg, name))),
                      cited("this process's config; the file is chosen by the "
                            "row's provenance, as the header card says"),
                      '<span class="uses">-</span>',
@@ -3728,10 +3742,36 @@ def part_cost(S, out):
         # Every term written out, however many: an ellipsis is a Python
         # literal, so "1 ^ b + ... + 320 ^ b" PARSED, and the check rightly
         # called it wrong rather than abbreviated.
+        #
+        # 🚨  BUT NOT ON ONE LINE.  At N = 320 the substitution was a single
+        # table row 1,484 px tall against a 996 px sheet, which no page break
+        # can split, on every searched `earth_surface` page; the paper check
+        # found it on its first sweep.  Past LC_GROUP terms the sum is laid
+        # out in groups, each a checked claim that writes its own terms out,
+        # and the step adds the groups' subtotals: every term is still on the
+        # page and every line is still arithmetic.
+        terms = ["%d ^ %s" % (k, exact(expo)) for k in range(1, n_m + 1)]
+        if n_m <= LC_GROUP:
+            sub = "(%s) / %d" % (" + ".join(terms), n_m)
+        else:
+            rows, subtotals = [], []
+            for lo in range(0, n_m, LC_GROUP):
+                group = terms[lo:lo + LC_GROUP]
+                total = sum(k ** expo
+                            for k in range(lo + 1, lo + len(group) + 1))
+                rows.append([S.claim(" + ".join(group), total,
+                                     "learning-curve terms",
+                                     uses=["lc_exp"]),
+                             P(total, 12)])
+                subtotals.append(exact(total))
+            S.prose("The mean below runs over every unit of the "
+                    "programme, so its terms are added here in groups, each "
+                    "written out in full, and the step adds the groups.")
+            S.block(D.table(["how it is worked out", "subtotal"], rows,
+                            "wide"))
+            sub = "(%s) / %d" % (" + ".join(subtotals), n_m)
         S.step("lc", "LC", "learning-curve factor",
-               "mean over k = 1..N of k ^ beta_LC",
-               "(%s) / %d" % (" + ".join("%d ^ %s" % (k, exact(expo))
-                                         for k in range(1, n_m + 1)), n_m),
+               "mean over k = 1..N of k ^ beta_LC", sub,
                K["lc"], "-", ["lc_exp", "N"],
                "Wright's law: each doubling of units costs b_LC of the last")
     else:
@@ -4270,12 +4310,12 @@ def untraced(sheet, html):
 
 
 def ledger_on_page(html):
-    """(tabulated {name: (value, definition)}, path names, duplicates), READ
-    OFF THE RENDERED PAGE rather than off the code that built it, so the
-    check below cannot agree with the ledger by construction."""
+    """(tabulated {name: (value, how, definition)}, duplicates), READ OFF THE
+    RENDERED PAGE rather than off the code that built it, so the check below
+    cannot agree with the ledger by construction."""
     head = html.find('<h2 id="p%d"' % part_no("dials"))
     if head < 0:
-        return {}, [], []
+        return {}, []
     tail = html.find("<h2 id=", head + 1)
     part = html[head:tail if tail > 0 else len(html)]
     tabulated, dupes = {}, []
@@ -4289,10 +4329,7 @@ def ledger_on_page(html):
         if name in tabulated:
             dupes.append(name)
         tabulated[name] = (text[1], text[2], text[4])
-    prose = part[part.find("Not tabulated:"):]
-    prose = prose[:prose.find("</p>")] if "</p>" in prose else prose
-    paths = re.findall(r"<i>([a-z0-9_]+)</i>", prose)
-    return tabulated, paths, dupes
+    return tabulated, dupes
 
 
 def report_dials(html, quiet=False):
@@ -4303,18 +4340,19 @@ def report_dials(html, quiet=False):
     a `continue` added for some class of field, or a renderer that drops a
     row, would leave a page that reads complete and is not.  This reads the
     RENDERED ledger and holds it to `dataclasses.fields(CalcConfig)`: every
-    field must be a row with a value and its own comment's definition, or be
-    named as one of the file paths the page does not tabulate.  A row naming
-    no field, or a field listed twice, is a finding too.
+    field must be a row with a value, how the page knows it and its own
+    comment's definition.  A row naming no field, or a field listed twice, is
+    a finding too.  (File paths used to be named in a sentence rather than
+    tabulated, and this read that sentence; they are rows now.)
     """
     import dataclasses
     import master
     fields = [f.name for f in dataclasses.fields(master.CALC_CONFIG)]
-    tabulated, paths, dupes = ledger_on_page(html)
+    tabulated, dupes = ledger_on_page(html)
     missing = [f for f in fields if f not in tabulated]
     blank = [f for f, (value, how, meaning) in tabulated.items()
              if not value or not how or not meaning]
-    stray = [f for f in list(tabulated) + paths if f not in fields]
+    stray = [f for f in tabulated if f not in fields]
     bad = missing + blank + stray + dupes
     if not quiet:
         print("  dials      %d of %d Stage 4 config fields tabulated on the "
@@ -4329,7 +4367,7 @@ def report_dials(html, quiet=False):
 
 def dial_self_test(html):
     """Delete one ledger row from the page and confirm the check notices."""
-    tabulated, _paths, _dupes = ledger_on_page(html)
+    tabulated, _dupes = ledger_on_page(html)
     if not tabulated:
         print("  self-test  *** NO DIAL LEDGER TO PERTURB ***")
         return 1
@@ -4663,6 +4701,14 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.03em;
       margin:.4rem 0 .5rem;}
 .card table{margin:0;font-size:.76rem;}
 .card td{border:0;padding:.03rem .5rem .03rem 0;}
+/* A WIDE TABLE MUST BE ALLOWED TO BREAK ITS LONGEST WORD.  The dial ledger
+   carries field names and file paths with no space in them, and a table
+   cannot be narrower than its widest unbreakable token: it ran to 941px
+   against 741px of paper, so the browser shrank EVERY page to 79%% to fit
+   it, and the --font setting stopped moving the page count at all.
+   `anywhere` (not `break-word`) is the value that lets the column's
+   minimum width shrink. */
+.wide td{overflow-wrap:anywhere;}
 /* `D.h` attaches a self-link to every anchored heading.  It is useful on
    screen and is furniture on paper, so it fades in on hover and is removed
    outright from the print rules -- which the narrative document next door
@@ -4691,27 +4737,56 @@ a{color:inherit;}
   .tw{overflow:visible;}
   a{color:inherit;text-decoration:none;}
 }
-@page{margin:8mm 7mm;}
+@page{size:%(paper)s;margin:8mm 7mm;}
 """
 
 
 # THE PAGE COUNT IS SET BY THE TABLE, NOT BY THE BODY TEXT.  Almost every
-# line of this document is inside a table, so raising the BASE font from
-# 7.4pt to 8.6pt left the count where it was, and raising the TABLE font
-# across the same span moved it five pages.  Measured, because the opposite
-# was the obvious guess, and re-measured after the citations stopped being
-# truncated, because a curve is only true of the content it was taken on:
-# 6.8 -> 14, 7.0 -> 15, 7.2 -> 15, 7.4 -> 16, 8.0 -> 18, 8.6 -> 19.
-# 7.2 is the default because it is the larger of the two sizes that still
-# fit fifteen, and legibility is free up to the point where a page turns.
+# line of this document is inside a table, so raising the BASE font leaves the
+# count where it was and raising the TABLE font moves it.
+#
+# 🚨  THE CURVE THAT USED TO SIT HERE WAS TYPED, AND IT ROTTED TWICE.  It
+# was re-measured once after the citations stopped being truncated, and then
+# the dial ledger arrived, ran off the edge of the paper, and the browser
+# shrank every page to fit: 23 pages at EVERY table size from 6.8 to 8.6pt,
+# against a curve promising 14 to 19.  So the count is not stated here; every
+# PDF run prints it, and `report_paper` fails a page that would be shrunk.
 DEFAULT_PT = 7.2
 
+# How many terms of the learning-curve mean one line of the page carries.
+# Twenty keeps a group to a few lines of the narrow working column; the
+# point is only that N terms never become ONE row taller than a sheet.
+LC_GROUP = 20
 
-def stylesheet(pt=DEFAULT_PT):
+# THE PAPER IS DECLARED, BECAUSE THE BROWSER'S DEFAULT WAS NOT THE ONE THIS
+# FILE ASSUMED.  Every comment here measured against A4; every PDF this file
+# has ever written was US Letter (MediaBox 612 x 792), which is wider and
+# shorter.  `@page` now names the size and the measurement reads the same
+# name, so the two cannot disagree again.  Letter stays the default because
+# it is what every PDF so far has actually been.
+PAPER_MM = {"letter": (215.9, 279.4), "A4": (210.0, 297.0)}
+DEFAULT_PAPER = "letter"
+
+
+def stylesheet(pt=DEFAULT_PT, paper=DEFAULT_PAPER):
     """The stylesheet, with the print sizes scaled off one table size."""
     return CSS % {"t": pt, "th": pt - 0.9, "work": pt - 0.2,
                   "org": pt - 0.3, "uses": pt - 0.6, "note": pt - 0.5,
-                  "prose": pt + 1.4}
+                  "prose": pt + 1.4, "paper": paper}
+
+
+def paper_px(paper=DEFAULT_PAPER):
+    """The paper's printable box in CSS px, from the size and the @page margin.
+
+    Derived rather than typed: the margins are read out of the stylesheet's
+    own `@page` rule, so changing them moves the measurement with them.
+    """
+    vert, horiz = (float(x) for x in re.search(
+        r"@page\{size:%\(paper\)s;margin:([\d.]+)mm ([\d.]+)mm;\}",
+        CSS).groups())
+    w_mm, h_mm = PAPER_MM[paper]
+    return (round((w_mm - 2 * horiz) * 96 / 25.4),
+            round((h_mm - 2 * vert) * 96 / 25.4))
 
 
 def render_row(row):
@@ -4894,7 +4969,7 @@ def build_sheet(out):
 _PAGE = {}
 
 
-def document(out, sheet=None, pt=DEFAULT_PT):
+def document(out, sheet=None, pt=DEFAULT_PT, paper=DEFAULT_PAPER):
     """Assemble the whole worksheet as one HTML page."""
     sheet = build_sheet(out) if sheet is None else sheet
     body = [header(out)]
@@ -4929,7 +5004,7 @@ def document(out, sheet=None, pt=DEFAULT_PT):
         "<p class='sub'>Every number behind %s x, with its source, in the "
         "order the model works them out.</p>%s<p class='blurb'>%s</p>"
         "%s%s</div></body></html>"
-        % (D.esc(out["designation"]), stylesheet(pt),
+        % (D.esc(out["designation"]), stylesheet(pt, paper),
            D.esc(out["designation"]),
            P(out["P"]["obj"], 6), header(out),
            " &middot; ".join(contents),
@@ -5040,15 +5115,139 @@ def print_variant(html):
     can be asked with a viewport and four lines of JavaScript instead of
     guessed at.
 
-    A4 at this file's own 8mm/7mm margins is 196 x 281mm of content, which
-    is 741 x 1062 CSS px.  Measured at that size on 2026-09-19: zero
-    elements overflow, zero rows exceed a page, and the tallest single block
-    is 524px, half a sheet.  The tables still do not overflow at 500px, so
-    the margin against a printer that enforces wider margins is large.
+    🚨  THAT QUESTION WAS ASKED ONCE, BY HAND, AND THEN NOT AGAIN.  Measured
+    on 2026-09-19 at "A4's 741 x 1062 px": nothing overflowed.  The dial
+    ledger arrived on 2026-10-08 and ran 200px off the edge, and nothing said
+    so for five days, because the measurement was a sentence in this
+    docstring rather than code -- and it was taken on A4 while every PDF was
+    Letter.  `report_paper` asks it on every PDF run now, at the size
+    `@page` declares.
     """
     i = html.index("@media print{")
     j = html.index(chr(125) + chr(10) + "@page", i)
     return html[:i] + html[i + len("@media print{"):j] + html[j + 1:]
+
+
+# Run in the page once it has laid out: pin the body to the paper's printable
+# width, then record what runs past that edge and which table row (one that
+# holds no table of its own) is taller than a sheet.  The answer goes in the
+# document TITLE, which the browser writes into the PDF's metadata, so it can
+# be read back with nothing but a regex -- `--dump-dom` would be the obvious
+# route and writes nothing to a redirected stdout on Windows.
+_MEASURE_JS = """<script>addEventListener('load',function(){
+var W=%(w)d,H=%(h)d,de=document.documentElement,b=document.body;
+de.style.margin='0';b.style.margin='0';b.style.width=W+'px';
+var x0=b.getBoundingClientRect().left,all=b.querySelectorAll('*'),over=[],
+widest=W;
+for(var i=0;i<all.length;i++){var r=all[i].getBoundingClientRect().right-x0;
+ if(r>widest)widest=r;if(r>W+0.5)over.push(all[i]);}
+var set=new Set(over),leaf=over.filter(function(e){
+ for(var c=e.firstElementChild;c;c=c.nextElementSibling)if(set.has(c))
+ return false;return true;});
+var rows=[].filter.call(document.querySelectorAll('tr'),function(t){
+ return !t.querySelector('table')&&t.getBoundingClientRect().height>H;});
+function d(e,v){return [e.tagName.toLowerCase()+(e.className?'.'+
+ String(e.className).split(' ')[0]:''),Math.round(v),
+ (e.textContent||'').replace(/\\s+/g,' ').trim().slice(0,50)];}
+document.title='MEASURE '+JSON.stringify({w:W,h:H,widest:Math.round(widest),
+ over:leaf.length,tall:rows.length,
+ overs:leaf.slice(0,6).map(function(e){
+  return d(e,e.getBoundingClientRect().right-x0);}),
+ talls:rows.slice(0,3).map(function(e){
+  return d(e,e.getBoundingClientRect().height);})});});</script>"""
+
+
+def _pdf_title(data):
+    """The /Title of a PDF's info dictionary, decoded; None if it has none."""
+    m = re.search(rb"/Title\s*(<[0-9A-Fa-f\s]*>|\((?:\\.|[^\\)])*\))", data)
+    if not m:
+        return None
+    raw = m.group(1)
+    if raw.startswith(b"<"):
+        b = bytes.fromhex(re.sub(rb"\s", b"", raw[1:-1]).decode("ascii"))
+        return (b[2:].decode("utf-16-be") if b[:2] == b"\xfe\xff"
+                else b.decode("latin-1"))
+    body = raw[1:-1]
+    return re.sub(rb"\\(.)", rb"\1", body).decode("latin-1")
+
+
+def paper_layout(html, paper=DEFAULT_PAPER):
+    """Lay the PRINT variant out at the paper's width in a real browser.
+
+    Returns the measurement as a dict, or None when no browser is installed.
+    """
+    import json
+    import tempfile
+    w, h = paper_px(paper)
+    page = print_variant(html)
+    cut = page.rfind("</body>")
+    page = (page[:cut] + _MEASURE_JS % {"w": w, "h": h} + page[cut:]
+            if cut >= 0 else page + _MEASURE_JS % {"w": w, "h": h})
+    if not any(os.path.exists(p) for p in W.CHROME):
+        return None
+    scratch = tempfile.mkdtemp(prefix="vs_paper_")
+    try:
+        src = os.path.join(scratch, "measure.html")
+        pdf = os.path.join(scratch, "measure.pdf")
+        with open(src, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(page)
+        if not W.render_pdf(src, pdf, extra=["--window-size=%d,%d"
+                                             % (w + 400, h),
+                                             "--hide-scrollbars"]):
+            raise AssertionError("the browser wrote no measurement page")
+        with open(pdf, "rb") as fh:
+            title = _pdf_title(fh.read()) or ""
+    finally:
+        import shutil
+        shutil.rmtree(scratch, ignore_errors=True)
+    if not title.startswith("MEASURE "):
+        raise AssertionError("the measurement page came back without its "
+                             "measurement (title %r)" % title[:80])
+    return json.loads(title[len("MEASURE "):])
+
+
+def report_paper(html, paper=DEFAULT_PAPER, quiet=False):
+    """Does the page fit the paper it declares?  Returns the findings.
+
+    Two ways to fail: anything past the printable width, which makes the
+    browser shrink EVERY page to fit and silently cancels the font setting;
+    and a single table row taller than a sheet, which no page break can hold.
+    """
+    m = paper_layout(html, paper)
+    if m is None:
+        if not quiet:
+            print("  paper      no Chrome or Edge installed: the print layout "
+                  "is NOT measured")
+        return 0
+    bad = m["over"] + m["tall"]
+    if not quiet:
+        print("  paper      %s, %d x %d px printable: the widest element "
+              "reaches %d px; %d run past the edge, %d row(s) taller than a "
+              "sheet" % (paper, m["w"], m["h"], m["widest"], m["over"],
+                         m["tall"]))
+        for what, px, text in m["overs"]:
+            print("     ! %-16s reaches %d px  %s" % (what, px, text))
+        for what, px, text in m["talls"]:
+            print("     ! %-16s %d px tall  %s" % (what, px, text))
+    return bad
+
+
+def paper_self_test(html, paper=DEFAULT_PAPER):
+    """Plant a block wider than the paper and confirm the check notices."""
+    w, _h = paper_px(paper)
+    cut = html.rfind("</div></body>")
+    planted = (html[:cut] + '<div style="width:%dpx">planted</div>' % (2 * w)
+               + html[cut:])
+    if paper_layout(planted, paper) is None:
+        print("  self-test  *** no Chrome or Edge: the paper check's "
+              "self-test did NOT run ***")
+        return 0
+    if report_paper(planted, paper, quiet=True):
+        print("  self-test  a block twice the paper's width is caught: the "
+              "paper check can fail")
+        return 0
+    print("  self-test  *** A BLOCK TWICE THE PAPER'S WIDTH WENT UNNOTICED ***")
+    return 1
 
 
 def sheet_lines():
@@ -5179,7 +5378,8 @@ def sweep(args):
                    + report_placeholders(sheet, html, quiet=True)
                    + report_monochrome(quiet=True)
                    + report_furniture(stylesheet(DEFAULT_PT), html,
-                                      quiet=True))
+                                      quiet=True)
+                   + report_paper(html, quiet=True))
         finally:
             sys.settrace(None)
         loose_in, _loose_step = sheet.unspent()
@@ -5197,6 +5397,7 @@ def sweep(args):
             report_untraced(sheet, html)
             report_dials(html)
             report_placeholders(sheet, html)
+            report_paper(html)
             if loose_in:
                 print("     ! unspent: %s"
                       % ", ".join(sorted(sheet.tag[k] + " " + k
@@ -5241,7 +5442,11 @@ def sweep(args):
     checks = {"report_substitutions", "report_origins", "report_untraced",
               "report_dials", "ledger_on_page", "dial_self_test",
               "report_placeholders", "placeholders", "page_tables",
-              "placeholder_self_test",
+              "placeholder_self_test", "report_paper", "paper_layout",
+              "paper_self_test", "_pdf_title", "paper_px",
+              # `--every-winner` drives `--check` in child processes; it is
+              # a runner, not a page, and a sweep never calls it.
+              "every_winner", "every_winner_sources", "one",
               "Parser", "handle_starttag", "handle_endtag", "handle_data",
               "__init__",
               "report_monochrome", "report_furniture", "check_substitutions",
@@ -5287,17 +5492,26 @@ def main(argv=None):
                     help="also render the HTML with headless Chrome")
     ap.add_argument("--font", type=float, default=DEFAULT_PT, metavar="PT",
                     help="print size of the tables, which is what sets the "
-                         "page count: 6.8 gives 14 pages, 7.2 (the default) "
-                         "15, 7.4 gives 16, 8.6 gives 19")
+                         "page count; a PDF run prints the count it got "
+                         "(default: %(default)s)")
+    ap.add_argument("--paper", choices=sorted(PAPER_MM),
+                    default=DEFAULT_PAPER,
+                    help="the paper the page is laid out and measured for "
+                         "(default: %(default)s)")
     ap.add_argument("--print-test", action="store_true",
                     help="also write <out>.print.html, the same page with "
                          "the print rules always on, for measuring what "
                          "actually reaches the paper")
     ap.add_argument("--check", action="store_true",
-                    help="evaluate every substitution and write nothing")
+                    help="run every check on the page and write nothing")
     ap.add_argument("--self-test", action="store_true",
-                    help="prove the substitution check can fail, by "
-                         "perturbing one printed value")
+                    help="prove each check can fail, by planting a defect "
+                         "it exists to find")
+    ap.add_argument("--every-winner", action="store_true",
+                    dest="every_winner",
+                    help="--check the winner of every Stage 4 output on disk "
+                         "(the live catalog, every archived cell, and any "
+                         "--source), each in its own process")
     ap.add_argument("--sweep", action="store_true",
                     help="build and check a worksheet for one mission per "
                          "architecture on disk; writes nothing")
@@ -5308,8 +5522,11 @@ def main(argv=None):
                     dest="max_shapes",
                     help="worksheets a sweep builds (default: 10)")
     ap.add_argument("--source", action="append", metavar="CSV",
-                    help="another Stage 4 output for --sweep to scan first; "
-                         "repeatable")
+                    help="another Stage 4 output for --sweep or "
+                         "--every-winner to take first; repeatable")
+    ap.add_argument("--workers", type=int, default=3, metavar="N",
+                    help="processes --every-winner runs at once (default: "
+                         "3; each holds a catalog in memory)")
     ap.add_argument("--also", action="append", metavar="CSV|DESIGNATION[|F]",
                     help="a named mission for --sweep to build as well, with "
                          "an optional depletion cap for that row alone; "
@@ -5325,6 +5542,8 @@ def main(argv=None):
         master.CALC_CONFIG.max_mining_fraction = args.max_mining_fraction
     if args.sweep:
         return sweep(args)
+    if args.every_winner:
+        return every_winner(args)
 
     told = None
     if args.cell:
@@ -5353,14 +5572,18 @@ def main(argv=None):
         print("\n*** THE DERIVATION AND THE MODEL DISAGREE ***")
         return 1
     sheet = build_sheet(out)
-    html = document(out, sheet, args.font)
+    html = document(out, sheet, args.font, args.paper)
     bad = (report_substitutions(sheet) + report_origins(sheet)
            + report_untraced(sheet, html) + report_dials(html)
            + report_placeholders(sheet, html)
            + report_monochrome()
-           + report_furniture(stylesheet(args.font), html))
+           + report_furniture(stylesheet(args.font, args.paper), html))
+    # The paper needs a browser, so it is measured on the runs that print.
+    if args.pdf or args.print_test or args.self_test:
+        bad += report_paper(html, args.paper)
     if args.self_test and (self_test(sheet) + dial_self_test(html)
                            + placeholder_self_test(sheet, html)
+                           + paper_self_test(html, args.paper)
                            + branch_test(winner, label)):
         return 1
     if bad:
@@ -5370,7 +5593,8 @@ def main(argv=None):
     if args.check:
         print("  OK  every substitution reproduces the value beside it, "
               "every input names where it came from, every number on the "
-              "page comes from one of them, and it prints in black")
+              "page comes from one of them, every dial is tabulated, no "
+              "answer is stated without its working, and it prints in black")
         return 0
     html_path = args.out + ".html"
     with open(html_path, "w", encoding="utf-8", newline="\n") as fh:
@@ -5381,11 +5605,82 @@ def main(argv=None):
         with open(test_path, "w", encoding="utf-8",
                   newline=chr(10)) as fh:
             fh.write(print_variant(html))
-        print("  wrote     %s  (open at 741x1062 to measure the page)"
-              % test_path)
+        print("  wrote     %s  (open at %d x %d px to measure the page)"
+              % ((test_path,) + paper_px(args.paper)))
     if args.pdf and W.render_pdf(html_path, args.out + ".pdf"):
-        print("  wrote     %s" % (args.out + ".pdf"))
+        print("  wrote     %s  (%d pages, %s)"
+              % (args.out + ".pdf", W.pdf_pages(args.out + ".pdf"),
+                 args.paper))
     return 0
+
+
+def every_winner_sources(extra=None):
+    """Every Stage 4 output on disk: named ones, the live catalog, the cells.
+
+    Found rather than listed, so an archive added tomorrow is checked with no
+    edit: the campaign's cells, every release-suffixed re-measurement beside
+    them, and every archived campaign under `cells/archive-*`.
+    """
+    import glob
+    found = list(extra or [])
+    if os.path.exists(W.CATALOG):
+        found.append(W.CATALOG)
+    cells = os.path.join(ROOT, "campaign", "cells")
+    found += sorted(glob.glob(os.path.join(cells, "*.csv.gz")))
+    found += sorted(glob.glob(os.path.join(cells, "archive-*", "*.csv.gz")))
+    for path in found:
+        if not os.path.exists(path):
+            sys.exit("no Stage 4 output at %s" % path)
+    return found
+
+
+def every_winner(args):
+    """`--check` the best case of every Stage 4 output on disk.
+
+    🚨  THIS WAS A SCRIPT IN A SCRATCH DIRECTORY, RUN BY HAND AND THROWN
+    AWAY, and it is the check that found what no other could: three dials the
+    derivation still read from this process, a fast path the model takes that
+    the derivation did not, and a Stage 2 epoch rule that was right for Stage
+    3 and wrong here.  None is an architecture, so `--sweep` cannot ask for
+    them; only the winners of every run ever made reach them.  A check that
+    finds defects every time it is run and is then discarded is the habit
+    `verify.py`'s header is a list of the cost of.
+
+    Each source runs in its own process, because a derivation adopts the
+    row's configuration and a shared process would carry one run's dials
+    into the next.  Exit 1 if any source is not clean.
+    """
+    import subprocess
+    from concurrent.futures import ThreadPoolExecutor
+    keys = ("best case", "derived", "arithmetic", "origins", "traced",
+            "dials", "static", "OK  every", "!", "***", "Traceback",
+            "Error")
+    extra = (["--max-mining-fraction", str(args.max_mining_fraction)]
+             if args.max_mining_fraction is not None else [])
+
+    def one(path):
+        """One source's --check, in its own process: (path, exit, lines)."""
+        proc = subprocess.run(
+            [sys.executable, os.path.abspath(__file__), "--check",
+             "--catalog", path] + extra,
+            cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+            errors="replace")
+        lines = [l.strip() for l in (proc.stdout + proc.stderr).splitlines()
+                 if any(k in l for k in keys)]
+        return path, proc.returncode, lines
+
+    sources = every_winner_sources(args.source)
+    print("  every winner: %d Stage 4 output(s) on disk\n" % len(sources))
+    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+        results = list(pool.map(one, sources))
+    bad = 0
+    for path, code, lines in results:
+        print("  %s  exit %d" % (repo_path(path), code))
+        for line in lines:
+            print("      " + line[:200])
+        bad += code != 0
+    print("\n  %d source(s), %d not clean" % (len(results), bad))
+    return 1 if bad else 0
 
 
 def self_test(sheet):
