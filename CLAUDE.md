@@ -3079,15 +3079,30 @@ costs vertical space the page has and not information it does not.
 ✅  **What reaches the paper is measured rather than assumed, and it needs the
 PRINT stylesheet to be measured at all.** The screen and print rules here
 differ by about a third in every font size, so a layout checked on screen says
-nothing. `--print-test` lifts the `@media print` block out of its query, which
-gives a page a browser lays out exactly as the printer does: at A4's 741 x 1062
-CSS px of content, **0 elements past the right edge and 0 rows taller than a
-sheet**, with the tables still not overflowing when squeezed to 500px.
+nothing. `print_variant` lifts the `@media print` block out of its query, which
+gives a page a browser lays out exactly as the printer does.
 
-⚠️  **A page-count curve is only true of the content it was taken on.** The
-one recorded for `--font` was measured before the citations stopped being
-truncated and was two pages low at every point within the hour. Re-measured,
-and the comment beside the constant says which document it belongs to.
+🚨  **AND A MEASUREMENT TAKEN ONCE IS A SENTENCE, NOT A CHECK.** It was taken
+on 2026-09-19 ("0 elements past the right edge") and written into a docstring.
+The dial ledger arrived on 2026-10-08 with absolute paths in it and ran to
+941 px against 763 of paper, and **a browser shrinks the whole document to its
+widest element**, so every page printed at 79% and the `--font` setting
+stopped moving the page count. Nothing said so for five days. The measurement
+had also been taken on A4 while every PDF was Letter. `report_paper` now lays
+the page out in the browser at the printable width of the paper `@page`
+declares, on every PDF run and every sweep page, and fails on overflow.
+⚠️  **Its tell, for any document printed through a browser: the page count
+does not move when the font does.** That is the shrink, not a plateau.
+
+⚠️  **A page-count curve is only true of the content it was taken on**, and
+this one rotted twice: two pages low after the citations stopped being
+truncated, then eight pages high once the shrink began. It is not stated in
+the code any more; every PDF run prints the count.
+
+⚠️  **The browser's launcher returns before the PDF exists.** `render_pdf`
+removes the old file first and waits for a complete one; testing
+`os.path.exists` at once let the previous run's PDF answer for a print still in
+flight, and after an Edge update every print lost that race.
 
 🚨  **AND THE THIRD PASS FOUND THE GAP BETWEEN THE FIRST TWO CHECKS, WHICH IS
 WHERE NINETY-TWO NUMBERS WERE LIVING.** `origins` asks whether every INPUT
