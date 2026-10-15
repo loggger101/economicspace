@@ -281,6 +281,36 @@ is not a destination ranking, and no full `gto` cell has been run.
   runs above used the same commit installed from the local branch before the
   tag was pushed.
 
+### A stale spacecost is reinstalled at import, not discovered in Stage 2 (2026-10-15, no stamp)
+
+The install blocks (master's header, and the two stage modules that import
+`spacecost`) asked only whether each package IMPORTS. An interpreter holding
+spacecost 0.1.1 passed that check, printed `OK  All packages present`, and then
+died inside Stage 2 with `module 'spacecost' has no attribute
+'LEO_LAUNCH_USD_PER_KG'`, naming neither the package nor the pin. That was
+the interpreter `_START HERE.vbs` falls back to on the reference machine once
+the `py` launcher's registration broke, so the dashboard could not start.
+
+- **A git-pinned package is now held to its tag**, read off the module that
+  actually imports (its `__version__`, falling back to pip's metadata), so a
+  stale copy earlier on `sys.path` cannot pass for a correct install.
+- **A stale install is replaced in place with `--force-reinstall --no-deps`**
+  and evicted from `sys.modules` before any stage imports it. `--no-deps` is
+  the point: a plain reinstall once moved numpy and pandas off the measured
+  host. An editable install is refused rather than overwritten, and a failed
+  reinstall raises with the exact pip command.
+- No output byte moves, so no stamp moves; `master.py` is rebuilt.
+
+**Verified.** Under the stale interpreter, importing `master` printed
+`PKG  spacecost 0.1.1 is installed and this build pins 0.11.0`, reinstalled,
+and finished the import in the same process with all eight destinations; numpy
+2.5.2, pandas 3.0.5, yfinance 1.7.0 and requests 2.34.2 were the same before
+and after. Under an interpreter already at v0.11.0 the block prints only `OK`.
+Both refusals were run against v0.11.0 with the pin forced to a tag that does
+not exist: the editable branch raises before pip runs, the reinstall branch
+raises when git cannot check the tag out, and v0.11.0 is still installed after
+each. `verify_docs.py` and `verify_stage3.py` pass.
+
 ## master v1.53.0 / transportation v1.22.0
 
 **Krypton costs $794/kg, the geometric centre of the band its two sources

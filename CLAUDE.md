@@ -5828,6 +5828,20 @@ so that drift cannot be committed:
 | the **pin itself** | every typed copy, found rather than listed | `verify_docs.py` check 7 |
 | the **contract** | this module's stamp against `spacecost.DATA_VERSION` | `verify_stage3.py` check 2 |
 
+🚨  **EVERY ROW OF THAT TABLE IS A HARNESS, AND THE PIPELINE ITSELF ONLY ASKED
+WHETHER `spacecost` IMPORTS.** So an interpreter holding 0.1.1 printed
+`OK  All packages present` and then died inside Stage 2 on a missing
+attribute, naming neither the package nor the pin. It was not hypothetical:
+the `py` launcher's registration broke on 2026-10-15, `_START HERE.vbs` fell
+back to an interpreter with 0.1.1, and the dashboard could not start. **An
+import check is a presence check; a pin is a claim about a VERSION**, so the
+install blocks (master's header and both stage modules) now hold a git-pinned
+package to its tag, and replace a stale one with `--force-reinstall --no-deps`
+before any stage imports it. ⚠️  Read the version off the module that IMPORTS,
+not off pip's metadata: a stale copy earlier on `sys.path` shadows a correct
+install, and only the first reading sees it. See
+[the release note](versions.md#a-stale-spacecost-is-reinstalled-at-import-not-discovered-in-stage-2-2026-10-15-no-stamp).
+
 🚨  **THE PIN WAS TYPED TWICE AND COMPARED NOWHERE, UNTIL 2026-09-15.** The
 tagged git URL lives in `requirements.txt`, which `pip install -r` reads, and
 in `_MASTER_PIP_SPEC` in `build_master.py`, which is written into `master.py`

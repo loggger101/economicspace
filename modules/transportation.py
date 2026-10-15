@@ -175,6 +175,76 @@ for _pkg in _REQUIRED_PKGS:
     except ImportError:
         _missing.append(_PIP_SPEC.get(_pkg, _pkg))
 
+# A PINNED package that imports at the WRONG TAG is as broken as a missing one,
+# and fails later and less legibly: an interpreter holding spacecost 0.1.1 dies
+# inside Stage 2 with "module 'spacecost' has no attribute
+# 'LEO_LAUNCH_USD_PER_KG'", which names neither the package nor the pin.  So a
+# git-pinned package is held to its tag here, read off the module that actually
+# IMPORTS rather than off pip's metadata, since a stale copy earlier on sys.path
+# shadows a correct install.  A stale install is replaced IN PLACE with
+# --no-deps, because a plain reinstall once dragged numpy and pandas off the
+# measured host (CLAUDE.md, "--no-deps when repinning spacecost"); an EDITABLE
+# one is somebody's checkout and is refused rather than overwritten.  The probe
+# above has already imported the stale copy, so it is evicted from sys.modules
+# before anything below imports it for real.
+import importlib as _importlib
+import importlib.metadata as _metadata
+import json as _json
+
+
+def _pinned_pkg_version(name):
+    """The version of `name` as it imports, falling back to pip's metadata."""
+    found = getattr(__import__(name), "__version__", None)
+    if found is None:
+        try:
+            found = _metadata.version(name)
+        except _metadata.PackageNotFoundError:
+            pass
+    return found
+
+
+def _pinned_pkg_editable(name):
+    """True when pip installed `name` editable, i.e. it is somebody's checkout."""
+    try:
+        text = _metadata.distribution(name).read_text("direct_url.json")
+    except _metadata.PackageNotFoundError:
+        return False
+    return bool(_json.loads(text or "{}").get("dir_info", {}).get("editable"))
+
+
+for _pkg, _spec in _PIP_SPEC.items():
+    if _spec in _missing:
+        continue
+    _want = _spec.rsplit("@", 1)[-1].lstrip("v")
+    _have = _pinned_pkg_version(_pkg)
+    if _have == _want:
+        continue
+    _fix = [sys.executable, "-m", "pip", "install", "--force-reinstall",
+            "--no-deps", _spec]
+    if _pinned_pkg_editable(_pkg):
+        raise RuntimeError(
+            f"{_pkg} {_have} is an editable install, and this file pins "
+            f"{_want}.  Check out v{_want} there, or replace it with:  "
+            + " ".join(_fix))
+    print(f"PKG  {_pkg} {_have} is installed and this file pins {_want}; "
+          f"reinstalling with --no-deps ...")
+    try:
+        subprocess.check_call(_fix[:4] + ["-q"] + _fix[4:])
+    except (OSError, subprocess.CalledProcessError) as _err:
+        raise RuntimeError(
+            f"{_pkg} {_have} is installed, this file pins {_want}, and the "
+            f"reinstall failed.  Run:  " + " ".join(_fix)) from _err
+    for _name in [n for n in sys.modules
+                  if n == _pkg or n.startswith(_pkg + ".")]:
+        del sys.modules[_name]
+    _importlib.invalidate_caches()
+    _have = _pinned_pkg_version(_pkg)
+    if _have != _want:
+        raise RuntimeError(
+            f"{_pkg} still imports as {_have} after reinstalling {_want}; "
+            f"another copy shadows it on sys.path.")
+    print(f"OK  {_pkg} {_want} installed")
+
 if _missing:
     print(f"PKG  Installing: {_missing} ...")
     subprocess.check_call(
