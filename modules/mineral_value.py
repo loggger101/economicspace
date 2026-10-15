@@ -52,7 +52,7 @@ _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 # name in the install list would resolve to nothing.  The tag is typed in
 # several places in this repo; verify_docs check 7 finds and holds them all.
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.10.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.11.0",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -60,6 +60,76 @@ for _pkg in _REQUIRED_PKGS:
         __import__(_pkg)
     except ImportError:
         _missing.append(_PIP_SPEC.get(_pkg, _pkg))
+
+# A PINNED package that imports at the WRONG TAG is as broken as a missing one,
+# and fails later and less legibly: an interpreter holding spacecost 0.1.1 dies
+# inside Stage 2 with "module 'spacecost' has no attribute
+# 'LEO_LAUNCH_USD_PER_KG'", which names neither the package nor the pin.  So a
+# git-pinned package is held to its tag here, read off the module that actually
+# IMPORTS rather than off pip's metadata, since a stale copy earlier on sys.path
+# shadows a correct install.  A stale install is replaced IN PLACE with
+# --no-deps, because a plain reinstall once dragged numpy and pandas off the
+# measured host (CLAUDE.md, "--no-deps when repinning spacecost"); an EDITABLE
+# one is somebody's checkout and is refused rather than overwritten.  The probe
+# above has already imported the stale copy, so it is evicted from sys.modules
+# before anything below imports it for real.
+import importlib as _importlib
+import importlib.metadata as _metadata
+import json as _json
+
+
+def _pinned_pkg_version(name):
+    """The version of `name` as it imports, falling back to pip's metadata."""
+    found = getattr(__import__(name), "__version__", None)
+    if found is None:
+        try:
+            found = _metadata.version(name)
+        except _metadata.PackageNotFoundError:
+            pass
+    return found
+
+
+def _pinned_pkg_editable(name):
+    """True when pip installed `name` editable, i.e. it is somebody's checkout."""
+    try:
+        text = _metadata.distribution(name).read_text("direct_url.json")
+    except _metadata.PackageNotFoundError:
+        return False
+    return bool(_json.loads(text or "{}").get("dir_info", {}).get("editable"))
+
+
+for _pkg, _spec in _PIP_SPEC.items():
+    if _spec in _missing:
+        continue
+    _want = _spec.rsplit("@", 1)[-1].lstrip("v")
+    _have = _pinned_pkg_version(_pkg)
+    if _have == _want:
+        continue
+    _fix = [sys.executable, "-m", "pip", "install", "--force-reinstall",
+            "--no-deps", _spec]
+    if _pinned_pkg_editable(_pkg):
+        raise RuntimeError(
+            f"{_pkg} {_have} is an editable install, and this file pins "
+            f"{_want}.  Check out v{_want} there, or replace it with:  "
+            + " ".join(_fix))
+    print(f"PKG  {_pkg} {_have} is installed and this file pins {_want}; "
+          f"reinstalling with --no-deps ...")
+    try:
+        subprocess.check_call(_fix[:4] + ["-q"] + _fix[4:])
+    except (OSError, subprocess.CalledProcessError) as _err:
+        raise RuntimeError(
+            f"{_pkg} {_have} is installed, this file pins {_want}, and the "
+            f"reinstall failed.  Run:  " + " ".join(_fix)) from _err
+    for _name in [n for n in sys.modules
+                  if n == _pkg or n.startswith(_pkg + ".")]:
+        del sys.modules[_name]
+    _importlib.invalidate_caches()
+    _have = _pinned_pkg_version(_pkg)
+    if _have != _want:
+        raise RuntimeError(
+            f"{_pkg} still imports as {_have} after reinstalling {_want}; "
+            f"another copy shadows it on sys.path.")
+    print(f"OK  {_pkg} {_want} installed")
 
 if _missing:
     print(f"PKG  Installing: {_missing} ...")
@@ -153,6 +223,12 @@ class MineralValueConfig:
     #                     cost it avoids ($2,555/kg); precious metals are
     #                     worth nothing, because no orbital market for them
     #                     exists.  Favours water- and metal-rich bulk.
+    #   "gto"           - sold at a refuelling depot in geostationary transfer
+    #                     orbit ($5,168/kg), topping up GEO-bound satellites
+    #                     before their apogee burn.  The first leg of the GEO
+    #                     chain, so it is the cheaper of the two to supply
+    #                     from Earth; it serves GEO's customers one burn
+    #                     earlier, so it takes GEO's utility profile.
     #   "geo"           - sold at a geostationary servicing depot
     #                     ($8,462/kg).  The only destination in this model
     #                     with a paying customer TODAY: ~610 active
@@ -227,7 +303,7 @@ class MineralValueConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 2 changelog
-    pipeline_version: str = "1.15.0"
+    pipeline_version: str = "1.16.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview
@@ -444,12 +520,19 @@ def _entry_survival_pct(key) -> float:
 
 def _build_destination_notes() -> Dict[str, str]:
     """The per-destination sentence, with every chain figure interpolated."""
-    geo, cis = _burns("geo"), _burns("cislunar")
+    gto, geo, cis = _burns("gto"), _burns("geo"), _burns("cislunar")
     lun, m_o, m_s = _burns("lunar_surface"), _burns("mars_orbit"), _burns("mars_surface")
     plane_change = geo[1] - _GEO_COPLANAR_GTO_BURN_M_S
     return {
         "leo":           f"{spacecost.LEO_LAUNCH_VEHICLE} $/kg-to-LEO, "
                          "straight off Module 3.",
+        "gto":           f"LEO -> GTO ({gto[0]:,.0f} m/s), the perigee burn "
+                         "alone, into a "
+                         f"{_PARKING_INCLINATION_DEG:.1f} deg transfer orbit "
+                         "with its apogee at GEO.  The depot sits in the plane "
+                         "the launch puts it in, so no plane change is paid, "
+                         "and this is the first leg of the geo chain: a GTO "
+                         "kilogram is never the dearer of the two.",
         "geo":           f"LEO -> GTO ({geo[0]:,.0f} m/s), then an apogee burn "
                          f"of {geo[1]:,.0f} m/s that circularises and removes "
                          f"{_PARKING_INCLINATION_DEG:.1f} deg of "
@@ -879,6 +962,16 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
     },
 }
 
+# v1.16.0.  gto TAKES GEO's PROFILE, BY REFERENCE, AND THAT IS THE ARGUMENT
+# RATHER THAN A SHORTCUT.  A refuelling depot in GTO serves exactly the
+# customers the GEO depot does, the GEO-bound satellites, one burn earlier:
+# no factory, no crew, no construction, and a business that is propellant.  So
+# GEO's case for every override above holds here word for word, and a second
+# typed copy of the block would be two judgements waiting to disagree.  What
+# differs between the two is the price (the rocket equation) and the depth of
+# the market (IN_SPACE_ANNUAL_DEMAND_KG), not what a kilogram substitutes for.
+IN_SPACE_UTILITY_BY_DESTINATION["gto"] = IN_SPACE_UTILITY_BY_DESTINATION["geo"]
+
 
 # v1.12.0: the rule the comment above states, asserted.  An override that ran
 # UPWARD would be a way to manufacture viability, and this table grows by
@@ -1003,6 +1096,17 @@ IN_SPACE_ANNUAL_DEMAND_KG: Dict[str, float] = {
     # inert and 100% of rows run to the fleet ceiling, and nothing anchored
     # the other end.
     "geo":            44_600.0,
+    # v1.16.0.  Anchored on what is LAUNCHED into GTO rather than on what sits
+    # there, because nothing stays: 34 launches to GTO in 2025 (McDowell,
+    # "Space Activities in 2025", Table 14(e)), each carrying a chemically
+    # propelled comsat of ~6 t (Toson et al., D-Orbit, IAC-16-C4.6), whose
+    # apogee propellant is 40-50% of the mass injected into GTO (Byers, NASA
+    # TM-103174).  At the low end of that band, 34 x 6,000 x 0.40 = 81,600
+    # kg/yr: propellant a depot could hand over instead of it being launched.
+    # The low end because all-electric buses carry far less and the table runs
+    # conservative.  Deeper than GEO's row, which counts station-keeping on the
+    # standing fleet; this counts one orbit raise per new satellite.
+    "gto":            81_600.0,
     # Anchors for when these two are revisited, not a re-pin: Kornuta et al.
     # 2019 (Commercial Lunar Propellant Architecture) put near-term demand for
     # lunar-derived propellant at 450 t/yr, ~4.5x the cislunar row, with 100
@@ -1022,6 +1126,18 @@ IN_SPACE_ANNUAL_DEMAND_KG: Dict[str, float] = {
     "mars_orbit":     60_000.0,
     "mars_surface":   20_000.0,
 }
+
+# v1.16.0: asserted rather than defaulted.  `annual_market_kg` treats a
+# destination missing from the table above as TERRESTRIAL, i.e. unbounded,
+# which is right for earth_surface and silently wrong for anything in space: a
+# new destination that forgot its row would sell every kilogram at full price.
+# The same defect shape calc 1.19.2 fixed for launch windows, closed the same
+# way: the destination table names its members, and this row must cover them.
+_NO_CEILING = sorted(k for k, d in DELIVERY_DESTINATIONS.items()
+                     if d["usd_per_kg"] > 0.0 and k not in IN_SPACE_ANNUAL_DEMAND_KG)
+assert not _NO_CEILING, (
+    "in-space destinations with no IN_SPACE_ANNUAL_DEMAND_KG row: %s" % _NO_CEILING)
+del _NO_CEILING
 
 
 # ─── WHAT THE BUDGET IS SPENT ON  (v1.7.0) ───────────────────────────────────

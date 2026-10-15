@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0](#master-v1540--calc-v1310--mineral_value-v1160)
 - [master v1.53.0 / transportation v1.22.0](#master-v1530--transportation-v1220)
 - [master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0](#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210)
 - [master v1.51.0 / calc v1.29.0](#master-v1510--calc-v1290)
@@ -105,10 +106,10 @@ one that does not say is not to be used.
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
-| 2 | `modules/mineral_value.py` | **1.15.0** | v1.15.0, the `lunar_surface` prices and downleg re-derived through spacecost v0.9.0's lunar chain; no Stage 2 code moved (v1.13.0 was the last to move a row) |
+| 2 | `modules/mineral_value.py` | **1.16.0** | v1.16.0, an eighth destination, `gto`: its note, `geo`'s utility profile by reference, a sourced 81.6 t/yr demand ceiling, and an import-time check that every in-space destination has one; no existing row moved (v1.13.0 was the last to move a row) |
 | 3 | `modules/transportation.py` | **1.22.0** | v1.22.0, krypton's price a band ($300-$2,100/kg, centred at $794) where it was an unsourced $300: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.30.0** | v1.30.0, the NRHO-to-lunar-surface Delta-v at Apollo's 2,050 m/s descent; v1.29.0 had made a stack the overshoot repair solved at capacity fly (`launch_capacity_rtol`) |
-| - | `master.py` | **1.53.0** | a literal in `build_master.py`, in **two** places |
+| 4 | `modules/calc.py` | **1.31.0** | v1.31.0, an eighth destination, `gto`: the `ret_gto_prop` / `ret_gto_aero` legs and its delivery architecture; v1.30.0 had put the NRHO-to-lunar-surface Delta-v at Apollo's 2,050 m/s descent |
+| - | `master.py` | **1.54.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -123,7 +124,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Twenty-six stamps so far have moved without moving a number:
+Twenty-eight stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -153,17 +154,19 @@ Twenty-six stamps so far have moved without moving a number:
 | transportation `1.17.3` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 | transportation `1.18.1` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 | transportation `1.19.0` | **two launch rows no mission can fly** | bit-identical, verified |
+| calc `1.31.0` | **an eighth destination** | bit-identical, verified |
+| mineral_value `1.16.0` | **an eighth destination** | bit-identical, verified |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
 together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0`,
 `transportation 1.14.0`, `transportation 1.15.0`, `transportation 1.17.2`,
-`mineral_value 1.12.3`, `transportation 1.17.3`, `transportation 1.18.1` and
-`transportation 1.19.0`.
+`mineral_value 1.12.3`, `transportation 1.17.3`, `transportation 1.18.1`,
+`transportation 1.19.0` and `mineral_value 1.16.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and eighteen are not, and that split rotted in prose
+rows are performance stamps and twenty are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -187,6 +190,126 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
+
+**An eighth destination, `gto`: a refuelling depot in geostationary transfer
+orbit.** It tops up GEO-bound satellites before their apogee burn, so it
+serves `geo`'s customers one burn earlier. No existing number moved; the four
+cislunar cells are bit-identical, and `gto` itself has not been run on the
+full catalog.
+
+### The three decisions, and what each is
+
+| | chosen | the alternative, and why not |
+|---|---|---|
+| market | a refuelling depot: `geo`'s utility profile **by reference**, its own demand ceiling | copying `geo`'s ceiling would assert a GTO market as deep as station-keeping for the standing fleet, which has no anchor |
+| price | the LEO -> GTO tug leg alone, the first leg of `geo`'s chain | pricing off each vehicle's $/kg to GTO is a different method from every other destination, so the two would not compare |
+| geometry | a 28.5 deg GTO, 200 km perigee, apogee at GEO; capture binds it at perigee, **no plane change** | charging the ecliptic-to-28.5 deg change at apogee, or an equatorial GTO paying the full 23.44 deg as `geo` does |
+
+⚠️  **No plane change is optimistic for a high-inclination arrival.** An
+arrival can be targeted into any plane containing its asymptote, so one whose
+asymptote lies within 28.5 deg of the equator reaches the depot's plane for
+free; near-ecliptic arrivals do, and a steep one may not. Written down in
+`_gto_capture_dv_km_s` rather than charged.
+
+### What moved upstream (spacecost 0.11.0)
+
+New code, no new data: the data contract stays **1.22.0**, `build_catalog()`
+writes the same CSVs byte for byte, and **Stage 3 was not re-run**.
+
+- `DELIVERY_CHAINS["gto"]`: one burn, the existing **LEO -> GTO (perigee
+  burn)** row, 2,455 m/s. **$5,168/kg** delivered, $414 of it the expended
+  tug, 1.86 kg in LEO per kg. Under the cheapest open direct GTO launch,
+  Falcon Heavy (expendable) at $6,105/kg, which a new spacecost test holds it
+  to; a second test holds it below `geo`.
+- `DOWNLEG_DEPARTURE_DV_M_S["gto"]` = **16 m/s, typed**: lowering perigee from
+  200 km to an entry at ~50 km, taken at apogee (vis-viva, 15.9 m/s). No row
+  exists for it, as none does for the LEO deorbit. Downleg $24,837/kg.
+
+### What moves here
+
+- **mineral_value 1.16.0**: the `gto` note; `geo`'s utility overrides by
+  reference; `IN_SPACE_ANNUAL_DEMAND_KG["gto"]` = **81,600 kg/yr**, which is
+  34 launches to GTO in 2025 (McDowell, *Space Activities in 2025*, Table
+  14(e)) x a ~6 t chemical comsat (Toson et al., D-Orbit, IAC-16-C4.6) x the
+  low end of the 40-50% of GTO-injected mass that is apogee propellant
+  (Byers, NASA TM-103174). And an **import-time assertion** that every
+  in-space destination has a demand row: a missing one used to fall through to
+  the unbounded terrestrial market.
+- **calc 1.31.0**: `_gto_capture_dv_km_s`, the `ret_gto_prop` and
+  `ret_gto_aero` legs (the second at the aerobrake trim, conservative against
+  the ~11 m/s a perigee raise at GTO apogee costs), and a depot entry in
+  `DELIVERY_ARCHITECTURES`. At v_inf = 3 km/s the propulsive capture is 1.17
+  km/s, against cislunar's 0.94 and LEO's 3.63.
+- **transportation 1.22.0 does not move**; the spacecost pin does, to
+  `v0.11.0`.
+- `run.bat` (option 8), `run.sh`, the worked calculation, the verification
+  sheet and the document's leg labels all know `gto`. `MEASURED_DEST_SECONDS`
+  does not: nothing has measured a `gto` cell.
+
+### Measured (a sample, not a cell)
+
+A 400-row stride sample of the default cell (beneficiated, searched) at `gto`,
+priced from a Stage 2 table **replayed from the live table's recorded quotes**
+into a scratch folder (the cislunar table rebuilt the same way equals the live
+one in all 24 columns but the stamp and date). 358 of 400 rows evaluable, all
+unviable; best 2014 CN13 (C) at **15.2242x**, New Glenn on xenon,
+aerocaptured; 84% of rows choose aerocapture. THE SAMPLING RULE applies: this
+is not a destination ranking, and no full `gto` cell has been run.
+
+### Verified
+
+- `verify.py check` against `.verify/baseline-1.53.0`: **all four cislunar
+  cells MATCH**, `26da59a4a0e60b37` / `f0a8a28fa60dfb91` / `bded3ad7998d1a9a`
+  / `da745840931dcf86`, pruned and unpruned, serial and parallel; the mass
+  ledger, never-worse, Stage 2 recompute and ceiling checks pass. ⚠️  The run
+  printed **NOT VERIFIED** on provenance alone: the baseline was taken after
+  `modules/mineral_value.py` had been edited but before `master.py` was
+  rebuilt, so it ran the old model. What settles it is that its four hashes
+  are byte for byte the ones committed above for master v1.53.0, on a clean
+  tree.
+- spacecost's suite: 260 passed, every older destination's delivered and
+  downleg price pinned unchanged.
+- The `gto` sample's winner (aerocaptured) and its best propulsive row
+  (380974, 18.7848x) derive with **0 DIFFER** of 92 quantities through
+  `campaign/worked_calculation.py --audit`, and `verification_sheet.py
+  --check` passes on both. Its first run on the propulsive row caught a typed
+  "28.5" in the new step's note, now gone.
+- `verify_stage3.py` passes all six checks with spacecost installed from the
+  pinned `v0.11.0` tag (`1ac054c`). The `verify.py` and worked-calculation
+  runs above used the same commit installed from the local branch before the
+  tag was pushed.
+
+### A stale spacecost is reinstalled at import, not discovered in Stage 2 (2026-10-15, no stamp)
+
+The install blocks (master's header, and the two stage modules that import
+`spacecost`) asked only whether each package IMPORTS. An interpreter holding
+spacecost 0.1.1 passed that check, printed `OK  All packages present`, and then
+died inside Stage 2 with `module 'spacecost' has no attribute
+'LEO_LAUNCH_USD_PER_KG'`, naming neither the package nor the pin. That was
+the interpreter `_START HERE.vbs` falls back to on the reference machine once
+the `py` launcher's registration broke, so the dashboard could not start.
+
+- **A git-pinned package is now held to its tag**, read off the module that
+  actually imports (its `__version__`, falling back to pip's metadata), so a
+  stale copy earlier on `sys.path` cannot pass for a correct install.
+- **A stale install is replaced in place with `--force-reinstall --no-deps`**
+  and evicted from `sys.modules` before any stage imports it. `--no-deps` is
+  the point: a plain reinstall once moved numpy and pandas off the measured
+  host. An editable install is refused rather than overwritten, and a failed
+  reinstall raises with the exact pip command.
+- No output byte moves, so no stamp moves; `master.py` is rebuilt.
+
+**Verified.** Under the stale interpreter, importing `master` printed
+`PKG  spacecost 0.1.1 is installed and this build pins 0.11.0`, reinstalled,
+and finished the import in the same process with all eight destinations; numpy
+2.5.2, pandas 3.0.5, yfinance 1.7.0 and requests 2.34.2 were the same before
+and after. Under an interpreter already at v0.11.0 the block prints only `OK`.
+Both refusals were run against v0.11.0 with the pin forced to a tag that does
+not exist: the editable branch raises before pip runs, the reinstall branch
+raises when git cannot check the tag out, and v0.11.0 is still installed after
+each. `verify_docs.py` and `verify_stage3.py` pass.
 
 ## master v1.53.0 / transportation v1.22.0
 
@@ -8715,6 +8838,16 @@ prices and every downleg moved; the six other tables are 1.14.0's but for the
 stamp, which `campaign/worked_calculation.py` reads to choose the chain an
 archived lunar table was priced through. No config field or column moved.
 
+**`1.16.0`  an eighth destination, `gto`.** Full write-up: [master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0](#master-v1540--calc-v1310--mineral_value-v1160).
+`delivery_destination` accepts `gto`, a refuelling depot in a 28.5 deg
+geostationary transfer orbit, priced through spacecost v0.11.0's one-leg
+chain ($5,168/kg). It takes `geo`'s utility profile by reference and an
+81,600 kg/yr row in `IN_SPACE_ANNUAL_DEMAND_KG`, and the module now asserts
+at import that every in-space destination has such a row (a missing one used
+to fall through to the unbounded terrestrial market). No existing row, config
+field or column moved; every other destination's table is 1.15.0's but for
+the stamp.
+
 ## Stage 3 changelog: `modules/transportation.py`
 
 🚨  **THIS RECORD MOVED WITH THE TABLES IT DESCRIBES, AND
@@ -9701,6 +9834,14 @@ field is added, and it defaults to a tolerance.
 `DV_NRHO_TO_LUNAR_SURFACE_KM_S` is 0.730 + 2.050 km/s, where it was 0.730 +
 1.870, following spacecost v0.9.0's descent row. It moves `lunar_surface` and
 nothing else. No config field or column moved.
+
+**`1.31.0`  an eighth destination, `gto`.** Full write-up: [master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0](#master-v1540--calc-v1310--mineral_value-v1160).
+`delivery_destination` accepts `gto`: `_gto_capture_dv_km_s` binds the
+GTO ellipse at LEO perigee, `ret_gto_prop` and `ret_gto_aero` (the
+aerobrake trim) are two more return legs, and `DELIVERY_ARCHITECTURES`
+gains a depot entry. No plane change is charged, which is optimistic for a
+high-inclination arrival. No config field or output column moved, and
+`MEASURED_DEST_SECONDS` has no `gto` row: nothing has measured one.
 
 # Measurement history
 

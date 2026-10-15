@@ -51,7 +51,7 @@ else
   exit 127
 fi
 
-DESTINATIONS="cislunar lunar_surface leo mars_surface earth_surface mars_orbit geo"
+DESTINATIONS="cislunar lunar_surface leo mars_surface earth_surface mars_orbit geo gto"
 
 usage() {
   cat <<'EOF'
@@ -77,8 +77,8 @@ usage() {
 EOF
   echo "    $DESTINATIONS"
   echo
-  echo "  Omitted, it defaults to cislunar, which is the model's best case and"
-  echo "  the destination the catalog on disk is normally priced for."
+  echo "  Omitted, it defaults to cislunar, the destination the catalog on disk"
+  echo "  is normally priced for."
   echo
 }
 
