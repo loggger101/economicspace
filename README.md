@@ -189,7 +189,7 @@ compared byte for byte. **The invariants, and what fails when each breaks, are
 in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)**, which is
 where the editing rules live.
 
-**spacecost is pinned to a tagged release**, `v0.10.0`, in all seven places
+**spacecost is pinned to a tagged release**, `v0.11.0`, in all seven places
 that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
 `build_master.py`, and in `_PIP_SPEC` in both `modules/transportation.py` and
 `modules/mineral_value.py` (what a standalone module run installs from, and
@@ -256,9 +256,9 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.8.1 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
-| 2 | `modules/mineral_value.py` | 1.15.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
+| 2 | `modules/mineral_value.py` | 1.16.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.22.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
-| 4 | `modules/calc.py` | 1.30.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.31.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -1512,11 +1512,25 @@ actually be flown.
 |-------------|--------------------|------------------|-------|
 | `earth_surface` *(default)* | - | - | Terrestrial commodity prices |
 | `leo` | $2,555/kg | 1.00 | Falcon Heavy (expendable) $/kg-to-LEO |
+| `gto` | $5,168/kg ($414 of it stage hardware) | 1.86 | LEO to GTO (2,455 m/s), the perigee burn alone, no plane change |
 | `geo` | $8,462/kg ($937 of it stage hardware) | 2.95 | LEO to GTO (2,455 m/s), then 1,836 m/s to circularise and remove 28.5 deg |
 | `cislunar` | $7,236/kg ($742 of it stage hardware) | 2.54 | TLI + NRHO insertion (3,600 m/s), cryo tug |
 | `lunar_surface` | $48,226/kg ($34,737 of it stage hardware) | 5.28 | TLI + LOI (4,050 m/s) tug, then 2,050 m/s lander |
 | `mars_orbit` | $9,154/kg ($1,046 of it stage hardware) | 3.17 | TMI (3,600 m/s) + MOI (900 m/s) into the 1-sol staging orbit |
 | `mars_surface` | $186,306/kg ($159,209 of it stage hardware) | 10.61 | TMI (3,600 m/s), aeroentry at 30% surviving mass, 800 m/s retroprop |
+
+`gto` is a refuelling depot in a standard 28.5 deg transfer orbit, topping up
+GEO-bound satellites before their apogee burn. Its chain is the first leg of
+`geo`'s, so a kilogram there is never the dearer of the two, and it sits
+under the cheapest direct launch to GTO, which spacecost tests. It serves
+GEO's customers one burn earlier, so it takes `geo`'s utility profile by
+reference rather than a second copy; what differs is the price and the
+market, whose ceiling is anchored on the apogee propellant of a year's
+launches to GTO rather than on station-keeping for the standing fleet.
+Capture only binds the ellipse at perigee, as at cislunar, and no plane
+change is charged, which is optimistic for a high-inclination arrival; see
+`_gto_capture_dv_km_s`. It is wired in and has **not** been through a
+campaign: no cell in the matrices below is a `gto` cell.
 
 `geo` is a geostationary servicing depot, and it is the only destination in
 this model with a **paying customer today**: roughly 610 active satellites,
@@ -2003,7 +2017,8 @@ invariants are in
 
 The six other destinations' default cells were run on the same inputs on
 2026-10-01/03, so the seven together are the current answer to "where is it
-best to deliver":
+best to deliver". `gto`, added at master v1.54.0, has no cell here and has
+never been run on the full catalog, so it is not ranked:
 
 | destination | cost / revenue | winner | median body |
 |---|---|---|---|
@@ -2117,8 +2132,8 @@ says which.
 
 ### Current results: the complete 28-cell matrix
 
-Every destination × both settings of beneficiation × both settings of the
-programme search, on the full 1,555,667-row catalog, 12 workers, **63.2 h of
+Every destination the model then had (seven; `gto` came at master v1.54.0) ×
+both settings of beneficiation × both settings of the programme search, on the full 1,555,667-row catalog, 12 workers, **63.2 h of
 compute, zero failed measurements**. `master.py` rebuilt from the modules with a
 clean `git status`; `verify_docs.py`, `verify_stage3.py` and `platform_check.py`
 all green before the start. Stage 2 priced for all seven destinations in one

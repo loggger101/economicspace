@@ -51,7 +51,7 @@ else
   exit 127
 fi
 
-DESTINATIONS="cislunar lunar_surface leo mars_surface earth_surface mars_orbit geo"
+DESTINATIONS="cislunar lunar_surface leo mars_surface earth_surface mars_orbit geo gto"
 
 usage() {
   cat <<'EOF'

@@ -2807,6 +2807,17 @@ def _geo_capture(v_inf):
     return direct if direct < oberth else oberth
 
 
+def _gto_capture(v_inf):
+    """Propulsive capture into a GTO depot: the Oberth route without its end.
+
+    The depot IS the transfer ellipse, so the perigee burn that binds it is the
+    whole capture and no apogee burn follows.  No plane change is charged: the
+    depot sits in the 28.5 deg plane its customers are launched into, and an
+    arrival can be targeted into any plane containing its asymptote.
+    """
+    return max(0.0, math.sqrt(V_ESC_LEO ** 2 + v_inf ** 2) - V_GTO_PERIGEE)
+
+
 def _mars_legs(C, r_target):
     """The Mars return legs, which are a different journey and not a discount.
 
@@ -2896,6 +2907,7 @@ def _legs(C, r_target):
                                escape velocity as well as the excess
         LEO, aerobraked        drag does the whole job bar a 100 m/s trim
         GEO                    two capture geometries, neither always cheaper
+        GTO                    bind the transfer ellipse at perigee, and stop
         earth surface, aero    direct entry: no capture burn AT ALL, the
                                arrival energy goes into a heat shield
         earth surface, prop    capture into LEO, then a deorbit burn
@@ -2925,6 +2937,7 @@ def _legs(C, r_target):
     leo_capture = v_hyp - v_leo
     cislunar_capture = max(0.0, v_hyp - v_ell) + DV_NRHO
     geo_capture = _geo_capture(v_inf)
+    gto_capture = _gto_capture(v_inf)
     legs = dict(a_t=a_t, v_t=v_t, cos_i=cos_i, v_inf_sq=v_inf_sq,
                 v_inf_canon=math.sqrt(max(v_inf_sq, 0.0)), v_inf=v_inf,
                 v_leo=v_leo, v_esc=v_esc, v_hyp=v_hyp, a_ell=a_ell,
@@ -2933,6 +2946,7 @@ def _legs(C, r_target):
                 match=match, depart=v_hyp - v_leo,
                 out=v_hyp - v_leo + match,
                 leo_capture=leo_capture, geo_capture=geo_capture,
+                gto_capture=gto_capture,
                 cap=cislunar_capture,
                 ret_cislunar_prop=match + cislunar_capture,
                 ret_lunar_surface_prop=(match + cislunar_capture
@@ -2941,6 +2955,8 @@ def _legs(C, r_target):
                 ret_leo_aero=match + DV_AEROBRAKE_TRIM,
                 ret_geo_prop=match + geo_capture,
                 ret_geo_aero=match + DV_GEO_AEROCAPTURE_ARRIVAL,
+                ret_gto_prop=match + gto_capture,
+                ret_gto_aero=match + DV_AEROBRAKE_TRIM,
                 ret_earth_surface_aero=match,
                 ret_earth_surface_prop=match + leo_capture + DV_LEO_DEORBIT)
     legs["arrival"] = {
@@ -2968,6 +2984,13 @@ def _legs(C, r_target):
             ("asteroid departure, apsis match burn", match),
             ("circularise at GEO after aerocapture",
              DV_GEO_AEROCAPTURE_ARRIVAL)],
+        "ret_gto_prop": [
+            ("asteroid departure, apsis match burn", match),
+            ("capture: bind the GTO ellipse at low perigee", gto_capture)],
+        "ret_gto_aero": [
+            ("asteroid departure, apsis match burn", match),
+            ("periapsis raise out of the atmosphere after aerocapture",
+             DV_AEROBRAKE_TRIM)],
         "ret_earth_surface_aero": [
             ("asteroid departure, apsis match burn", match)],
         "ret_earth_surface_prop": [

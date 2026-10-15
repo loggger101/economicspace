@@ -347,7 +347,7 @@ echo   Where is the material sold?
 echo     [1] cislunar  (default -- the best case)   [2] lunar_surface
 echo     [3] leo                                    [4] mars_surface
 echo     [5] earth_surface                          [6] mars_orbit
-echo     [7] geo
+echo     [7] geo                                    [8] gto
 
 REM  Written as "default, then override" rather than one `if` per branch with
 REM  an `& exit` on the end: in batch, `if cond A & B` runs B UNCONDITIONALLY,
@@ -362,6 +362,7 @@ if "%D%"=="4" set "DEST=mars_surface"
 if "%D%"=="5" set "DEST=earth_surface"
 if "%D%"=="6" set "DEST=mars_orbit"
 if "%D%"=="7" set "DEST=geo"
+if "%D%"=="8" set "DEST=gto"
 exit /b 0
 
 REM ---------------------------------------------------------------------------

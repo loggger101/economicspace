@@ -352,6 +352,8 @@ LEG_LABEL = {
     "ret_leo_aero": "aerocapture and aerobraking into LEO",
     "ret_geo_prop": "a propulsive capture into GEO",
     "ret_geo_aero": "aerocapture into a GEO-apogee ellipse",
+    "ret_gto_prop": "a propulsive capture into a GTO depot ellipse",
+    "ret_gto_aero": "aerocapture onto a GTO depot ellipse",
     "ret_earth_surface_aero": "direct entry at Earth",
     "ret_earth_surface_prop": "a propulsive capture into LEO and a deorbit burn",
     "ret_mars_surface_aero": "aeroentry and retropropulsion to the Mars surface",

@@ -1687,6 +1687,33 @@ def return_leg_steps(S, out, leg):
                                                   P(a_ae)),
                v_a, "km/s", ["mu_E", "R_GEO", "a_aero"])
         keys.append(circularise("capGEOa", v_a, "v_aeroA"))
+    elif name == "ret_gto_prop":
+        if "R_GEO" not in S.tag:
+            S.put("R_GEO", "R_GEO", "geostationary radius", W.R_GEO, "km",
+                  cite_here("R_GEO"))
+        S.step("a_GTO", "a_GTO", "the GTO depot ellipse",
+               "(r_LEO + R_GEO) / 2", "(%s + %s) / 2" % (P(W.R_LEO),
+                                                         P(W.R_GEO)),
+               W.A_GTO, "km", ["r_LEO", "R_GEO"])
+        S.step("v_GTOp", "v_GTO,peri", "its perigee speed",
+               "sqrt(mu_E (2 / r_LEO - 1 / a_GTO))",
+               "sqrt(%s * (2 / %s - 1 / %s))" % (P(W.MU_EARTH), P(W.R_LEO),
+                                                  P(W.A_GTO)),
+               W.V_GTO_PERIGEE, "km/s", ["mu_E", "r_LEO", "a_GTO"])
+        S.step("capGTO", "dv_cap,GTO", "capture: bind the GTO ellipse at "
+               "perigee", "max(0, v_hyp - v_GTO,peri)",
+               "max(0, %s - %s)" % (exact(leg["v_hyp"]),
+                                    exact(W.V_GTO_PERIGEE)),
+               leg["gto_capture"], "km/s", ["v_hyp", "v_GTOp"],
+               "the depot IS the ellipse, so no apogee burn follows, and "
+               "it sits in the plane its customers are launched into, so "
+               "no plane change is charged")
+        keys.append("capGTO")
+    elif name == "ret_gto_aero":
+        keys.append(const("dv_trim", "dv_trim", "periapsis raise after "
+                          "aerocapture onto the GTO ellipse",
+                          W.DV_AEROBRAKE_TRIM, "km/s", "DV_AEROBRAKE_TRIM",
+                          "Charged at the Earth aerobrake trim."))
     elif name == "ret_earth_surface_aero":
         pass
     else:

@@ -73,6 +73,7 @@ through. Skim for the section that names what you are about to change.
 - [One definition with two readers imposes the stricter reader on both](#one-definition-with-two-readers-imposes-the-stricter-reader-on-both)
 - [`y * 365.25 * 24.0` is not `y * 8766.0`](#y--36525--240-is-not-y--87660)
 - [A Stage 2 catalog is priced for ONE destination](#a-stage-2-catalog-is-priced-for-one-destination-and-so-are-its-ceilings)
+- [A destination a table has no row for is answered by its default](#a-destination-a-table-has-no-row-for-is-answered-by-its-default)
 - [A bit-identical WINNER is not a bit-identical CELL](#a-bit-identical-winner-is-not-a-bit-identical-cell)
 - [Splitting a quantity finds every reader that took it as its largest part](#splitting-a-quantity-finds-every-reader-that-took-it-as-its-largest-part)
 - [A mineral has two prices, and a walk that read one was right only while nothing walked it](#a-mineral-has-two-prices-and-a-walk-that-read-one-was-right-only-while-nothing-walked-it)
@@ -210,8 +211,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.8.1`, mineral_value `1.15.0`, transportation `1.22.0`,
-calc `1.30.0`, master `1.53.0` (the master version is a literal in
+Current: catalog `1.8.1`, mineral_value `1.16.0`, transportation `1.22.0`,
+calc `1.31.0`, master `1.54.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -233,7 +234,7 @@ Apollo's (spacecost v0.9.0), and to `1.22.0` when krypton's price became a
 band (spacecost v0.10.0). **So it follows a repin, and a repin follows it: the two
 are one number in two repositories.**
 
-ℹ️  **TWENTY-SIX stamps so far do NOT mean the numbers moved.** The rule
+ℹ️  **TWENTY-EIGHT stamps so far do NOT mean the numbers moved.** The rule
 is one-directional: *changing a number means bumping; bumping does not mean a
 number changed*, and reading a version as evidence that a result moved is the
 mistake this table exists to prevent.
@@ -241,8 +242,8 @@ mistake this table exists to prevent.
 ⚠️  Most rows are **calc** stamps. The exceptions are `mineral_value 1.7.1`,
 `mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0`,
 `transportation 1.14.0`, `transportation 1.15.0`, `transportation 1.17.2`,
-`mineral_value 1.12.3`, `transportation 1.17.3`, `transportation 1.18.1` and
-`transportation 1.19.0`, so read the module and not just the number: `1.7.1`
+`mineral_value 1.12.3`, `transportation 1.17.3`, `transportation 1.18.1`,
+`transportation 1.19.0` and `mineral_value 1.16.0`, so read the module and not just the number: `1.7.1`
 and `1.17.1` are different modules and unrelated releases, and so are `1.14.0`
 and `1.19.0`, which shipped together.
 
@@ -274,13 +275,15 @@ and `1.19.0`, which shipped together.
 | transportation `1.17.3` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 | transportation `1.18.1` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 | transportation `1.19.0` | **two launch rows no mission can fly** | bit-identical, verified |
+| `1.31.0` | **an eighth destination** | bit-identical, verified |
+| mineral_value `1.16.0` | **an eighth destination** | bit-identical, verified |
 
-**Every measured cell in this file stands unaltered across all twenty-six; do not
+**Every measured cell in this file stands unaltered across all twenty-eight; do not
 re-measure anything on account of any of them.** Each release's own section
 carries its verification.
 
 ⚠️  **Derive the taxonomy from the table above, not from a count in prose.**
-Eight rows are *performance* stamps; the other eighteen are `1.17.0` (a default
+Eight rows are *performance* stamps; the other twenty are `1.17.0` (a default
 flip), `1.17.3` (a cleanup), `1.17.7` (a memory bound), `1.17.8` (a new
 upstream check), `1.19.1` (that same check, fixed), `1.7.1` (a silent default
 closed in another module), transportation `1.17.2`, `1.17.3` and `1.18.1`
@@ -288,7 +291,8 @@ and mineral_value `1.12.3` (citations only), transportation `1.19.0` (two
 launch rows no mission flies), and two
 trios that each add a delivery destination without touching any existing one:
 `1.18.0` / `1.8.0` / `1.13.0` for `mars_orbit` and `1.19.0` / `1.9.0` /
-`1.14.0` for `geo`. See
+`1.14.0` for `geo`, plus a pair, `1.31.0` / `1.16.0`, for `gto`, whose
+Stage 3 half moved no stamp (spacecost v0.11.0 kept the data contract). See
 [calc v1.17.0](versions.md#calc-v1170) for the one of those that changes what a
 configure-nothing run answers.
 
@@ -2432,7 +2436,7 @@ already:
 | "a `replicated` device wins exactly one cell" | it wins **two** as of 2026-09: both raw `mars_surface` cells, N = 1 included |
 | "2021 CX5 takes 10 of the 20 cells" | an `elasticity` claim; on 28 cells it takes **8**, and sweeps no destination |
 | "cislunar is the best case by a factor of 1.72" | true of the 2026-09 campaign only; at master v1.40.0 it is **fourth** of seven on the default cell |
-| "the campaign is five destinations and the model has seven" | **all seven are measured** as of 2026-09 |
+| "the campaign is five destinations and the model has seven" | **all seven are measured** as of 2026-09; the model has **eight** since master v1.54.0, and `gto` has never had a cell |
 | "`W < trips` on 2,077 rows" | an `elasticity` figure; under `capacity_cap` it is ~146,000 at cislunar |
 | "the optimum N is *provably* a multiple of the rig's trip life" | only *usually*; programme calendar time pushes back inside a band |
 | "the cycle bound retires almost every rig" | **`cislunar` raw** only; the calendar bound does 42% at `cislunar` beneficiated and **80.79%** at `mars_surface` |
@@ -3639,6 +3643,31 @@ campaign's frozen `campaign/stage2/mineral_value_catalog.<dest>.csv` is what
 makes that possible without a Stage 2 run. **If you write anything that reads a
 catalog to interpret a result, ask which destination the result was for before
 you ask anything else.**
+
+### A destination a table has no row for is answered by its default
+
+2026-10-15, adding `gto` (master v1.54.0). Two destination-keyed tables of
+Stage 2 have no rule that a destination must appear in them, and a missing row
+does not raise. `in_space_utility` falls back to the base profile, which
+OVERVALUES a narrow market. `annual_market_kg` falls back to TERRESTRIAL
+production, which is unbounded for most commodities, so a new depot with no
+demand row would have sold every kilogram at full price, ceilings
+silently off. Nothing about the resulting cell would look wrong.
+
+✅  **The demand table is asserted total now**, against `DELIVERY_DESTINATIONS`,
+at import: an in-space destination with no row fails to load. That is calc
+1.19.2's `window_phasing_au` fix again, for a second table: **when a
+destination is added, every table keyed by destination is either asserted
+total or is a default somebody chose.** The utility table stays a default
+deliberately (an empty override means "the base profile", which is `leo`,
+`cislunar` and `mars_orbit`'s answer), so a new destination must decide its
+row rather than inherit one by omission.
+
+⚠️  **`gto` takes `geo`'s utility BY REFERENCE, not as a copy.** The two
+depots serve the same customers one burn apart, so a second typed block would
+be two judgements waiting to disagree. Do not "tidy" the reference into a
+literal, and do not give the two different overrides without a reason that is
+about GTO rather than about GEO.
 
 ### A number is calibrated FOR a term, and swapping the term re-reads it
 
@@ -5740,7 +5769,7 @@ passing, which is exactly why nobody deletes them.
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
-[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.10.0`.
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.11.0`.
 **Do not state the row count here**; the adapter's ready banner prints it on
 every import, and this sentence carried "all 141 of them" into a release that
 added a whole table.

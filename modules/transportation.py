@@ -166,7 +166,7 @@ import subprocess, sys
 # the two to each other.
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.10.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.11.0",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
