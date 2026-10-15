@@ -24,7 +24,8 @@ REM  so a scripted run never has to answer a prompt:
 REM
 REM      run.bat rerun leo
 REM
-REM  With no second argument it uses cislunar, the model's best case.
+REM  With no second argument it uses cislunar, which the catalog on disk is
+REM  normally priced for.
 REM  Launched from the menu it asks instead.
 REM
 REM  It is a launcher and nothing more: every run goes through run_pipeline.py
@@ -323,8 +324,10 @@ REM ---------------------------------------------------------------------------
 REM  Stage 2 decides what a kilogram sells for and Stage 4 decides the
 REM  architecture that puts it there. They MUST agree, so one prompt sets
 REM  both -- run_pipeline.py writes them through MASTER_CONFIG together.
-REM  cislunar is the default because it is the model's best case and the
-REM  destination the catalog on disk is normally priced for.
+REM  cislunar is the default because it is the destination the catalog on
+REM  disk is normally priced for. It is NOT the model's best case any more:
+REM  it was in the 2026-09 campaign, and on today's inputs it is fourth (see
+REM  README, "What a configure-nothing run answers today").
 :ask_destination
 REM  A scripted run must not prompt. It takes the destination as the second
 REM  argument (`run.bat rerun leo`) and otherwise defaults, because `set /p`
@@ -344,7 +347,7 @@ if defined ARG1 (
 
 echo.
 echo   Where is the material sold?
-echo     [1] cislunar  (default -- the best case)   [2] lunar_surface
+echo     [1] cislunar  (default)                    [2] lunar_surface
 echo     [3] leo                                    [4] mars_surface
 echo     [5] earth_surface                          [6] mars_orbit
 echo     [7] geo                                    [8] gto

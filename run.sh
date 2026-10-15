@@ -77,8 +77,8 @@ usage() {
 EOF
   echo "    $DESTINATIONS"
   echo
-  echo "  Omitted, it defaults to cislunar, which is the model's best case and"
-  echo "  the destination the catalog on disk is normally priced for."
+  echo "  Omitted, it defaults to cislunar, the destination the catalog on disk"
+  echo "  is normally priced for."
   echo
 }
 
