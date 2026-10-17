@@ -346,7 +346,11 @@ already removes hydrolox ISRU from every row it touched.
   ISRU row (2015 KQ57) still derives with 0 DIFFER against its frozen Stage 2
   and Stage 3 epochs, $50/kg included.
 - spacecost's suite (264 passed); `verify_docs.py` clean; `verify_stage3.py`
-  against the pinned `v0.12.0` tag: STAGE3_PENDING.
+  against the pinned `v0.12.0` tag: all six checks pass, installed from the
+  tag at `e0f1328` (`--no-deps`), byte-identical through both paths and
+  matching spacecost's committed CSVs. The fast `verify.py check` was re-run
+  after the `mars_surface` and `geo` cells and reproduced 149 of 149 on all
+  four cells, the same four hashes.
 
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
