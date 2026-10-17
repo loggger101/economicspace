@@ -298,7 +298,7 @@ identical, sha256 MATCH**.
 **Do not re-measure a single-mission cell on account of either release**, and
 do not read any table as covering an `optimise_programme_scale = True` run
 unless it says so; the searched columns of
-[the 28-cell matrix](README.md#current-results-the-complete-28-cell-matrix) are
+[the 28-cell matrix](README.md#older-full-matrices) are
 the ones that do. The N = 10 / N = 100 curve **does** move, and is now a
 `1.14.0` measurement of a model superseded twice.
 
@@ -513,20 +513,20 @@ or more distinctive numbers across two files:
 
 | the shared measurement | in README under | here under |
 |---|---|---|
-| the winners: 2021 CX5 taking **8 of 28** cells and 2018 DT 6, 2016 PN38 sweeping `earth_surface` | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "Winners, and what 28 cells did to the claim" |
-| the lunar staging figures: 6,100 m/s, and 12.81 against 5.28 kg in LEO per kg landed | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" (and again in `versions.md`, mineral_value `1.4.0`) |
-| the `replicated` win: 13.4% clear, 6,667 kg of thruster for 96.7 kW | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "RETIRED TWICE: a `replicated` device wins TWO cells now" |
-| the Mars cadence, **3.7-4.5 yr** against ~1.37 everywhere else, now covering BOTH Mars destinations | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "The rig's two bounds, and the cadence, at every destination (2026-09)" |
-| everything older than `1.17.7` being high by 1.78-4.32x | [Current results](README.md#current-results-the-complete-28-cell-matrix) | "Runtime, and the three quantities a sample cannot predict" |
-| the four cislunar wall clocks, 733 / 1,253 / 3,424 / 5,692 s | [Beneficiation](README.md#beneficiation) | "Runtime, and the three quantities a sample cannot predict" |
-| why `mars_orbit` takes the BASE utility profile: the crust is 4,100 m/s of ascent away, against the 3,600 m/s of TMI that delivered the cargo | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
-| the base in-space utility profile itself: water 1.00, structural metals 0.70, silicates 0.25, carbon 0.40, and the Mars overrides against it | [What a kilogram is worth](README.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
-| the insurance premiums: 2.4-4.3% of total cost against 5.5-9.6% of the answer, and liability alone at 0.03-0.05% | [What the model deliberately does not charge for](README.md#what-the-model-deliberately-does-not-charge-for) | "The corrections the model accumulated" |
-| the median raw cislunar cadence, **1.384 yr**, used to argue the ceilings bind where the results actually sit | [What the model charges for](README.md#what-the-model-charges-for) | "The rig's two bounds, and the cadence, at every destination (2026-09)"; the cadence reproduces unchanged, the fleet median beside it did not |
-| the in-space absorption ceilings: LEO **500 t/yr**, cislunar 100 t, `geo` 44.6 t/yr (40 until mineral_value 1.13.0) | [What the model charges for](README.md#what-the-model-charges-for) | "Model assumptions that are load-bearing" |
-| 🚨  **the four cislunar cell objectives, now 15.3937 / 9.5435 / 14.1071 / 6.6622** -- the project's headline answer, and the pair this register missed for longest | [Current results](README.md#current-results-the-complete-28-cell-matrix), **and again** under [Programme scale](README.md#programme-scale) | the 28-cell matrix section |
-| 🚨  **the winner-against-population table: 39.4 / 39.5 / -8.4, 66.1 / 63.8 / -36.5, 77.7 / -6.5** -- the 2026-09 campaign's most reusable finding, and deliberately in both files because README needs the result and this file needs the warning | [The winner moved far more than the population did](README.md#the-winner-moved-far-more-than-the-population-did) | the 28-cell matrix section |
-| the 28-cell wall clocks, 947 / 2,888 / 4,967 / 9,878 s at cislunar | [Beneficiation](README.md#beneficiation) | **this row itself**, which said "not quoted here" while quoting all four until 2026-09-15; check 9 now pins README's whole seven-row table AND this row to `MEASURED_DEST_SECONDS` |
+| the winners: 2021 CX5 taking **8 of 28** cells and 2018 DT 6, 2016 PN38 sweeping `earth_surface` | [Current results](README.md#older-full-matrices) | "Winners, and what 28 cells did to the claim" |
+| the lunar staging figures: 6,100 m/s, and 12.81 against 5.28 kg in LEO per kg landed | [What a kilogram is worth](MODEL.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" (and again in `versions.md`, mineral_value `1.4.0`) |
+| the `replicated` win: 13.4% clear, 6,667 kg of thruster for 96.7 kW | [Current results](README.md#older-full-matrices) | "RETIRED TWICE: a `replicated` device wins TWO cells now" |
+| the Mars cadence, **3.7-4.5 yr** against ~1.37 everywhere else, now covering BOTH Mars destinations | [Current results](README.md#older-full-matrices) | "The rig's two bounds, and the cadence, at every destination (2026-09)" |
+| everything older than `1.17.7` being high by 1.78-4.32x | [Current results](README.md#older-full-matrices) | "Runtime, and the three quantities a sample cannot predict" |
+| the four cislunar wall clocks, 733 / 1,253 / 3,424 / 5,692 s | [What a first run costs](README.md#what-a-first-run-costs) | "Runtime, and the three quantities a sample cannot predict" |
+| why `mars_orbit` takes the BASE utility profile: the crust is 4,100 m/s of ascent away, against the 3,600 m/s of TMI that delivered the cargo | [What a kilogram is worth](MODEL.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
+| the base in-space utility profile itself: water 1.00, structural metals 0.70, silicates 0.25, carbon 0.40, and the Mars overrides against it | [What a kilogram is worth](MODEL.md#what-a-kilogram-is-worth) | "Model assumptions that are load-bearing" |
+| the insurance premiums: 2.4-4.3% of total cost against 5.5-9.6% of the answer, and liability alone at 0.03-0.05% | [What the model deliberately does not charge for](MODEL.md#what-the-model-deliberately-does-not-charge-for) | "The corrections the model accumulated" |
+| the median raw cislunar cadence, **1.384 yr**, used to argue the ceilings bind where the results actually sit | [What the model charges for](MODEL.md#what-the-model-charges-for) | "The rig's two bounds, and the cadence, at every destination (2026-09)"; the cadence reproduces unchanged, the fleet median beside it did not |
+| the in-space absorption ceilings: LEO **500 t/yr**, cislunar 100 t, `geo` 44.6 t/yr (40 until mineral_value 1.13.0) | [What the model charges for](MODEL.md#what-the-model-charges-for) | "Model assumptions that are load-bearing" |
+| 🚨  **the four cislunar cell objectives, now 15.3937 / 9.5435 / 14.1071 / 6.6622** -- the project's headline answer, and the pair this register missed for longest | [Current results](README.md#older-full-matrices), **and again** under [Programme scale](MODEL.md#programme-scale) | the 28-cell matrix section |
+| 🚨  **the winner-against-population table: 39.4 / 39.5 / -8.4, 66.1 / 63.8 / -36.5, 77.7 / -6.5** -- the 2026-09 campaign's most reusable finding, and deliberately in both files because README needs the result and this file needs the warning | [The winner moved far more than the population did](campaign/FINDINGS.md#the-winner-moved-far-more-than-the-population-did) | the 28-cell matrix section |
+| the 28-cell wall clocks, 947 / 2,888 / 4,967 / 9,878 s at cislunar | [What a first run costs](README.md#what-a-first-run-costs) | **this row itself**, which said "not quoted here" while quoting all four until 2026-09-15; check 9 now pins README's whole seven-row table AND this row to `MEASURED_DEST_SECONDS` |
 
 ✅  **Re-run on 2026-09-07 for calc `1.21.0`, and it found TWO new pairs,
 both created by that release's README section**: the cislunar cadence and the
@@ -551,7 +551,7 @@ most familiar in the project, so the eye reads them as *the answer* rather than
 as a duplicate. **A hunt for copies is defeated by the copy you have
 memorised.** Read its output looking for what you recognise, not for what you
 do not. The README-internal copy under
-[Programme scale](README.md#programme-scale) is a fourth instance, kept
+[Programme scale](MODEL.md#programme-scale) is a fourth instance, kept
 deliberately because the sentence there is an argument about what the search
 buys and reads as nothing without the figures, but it is on the row now, so it
 moves with the rest.
@@ -943,7 +943,7 @@ see calc `1.13.0`) for anything interactive.
 > the whole `1.17.x` line landing at once, measured on the full catalog for the
 > first time: `cislunar` reads **733 / 1,253 / 3,424 / 5,692 s** for raw-N1 /
 > raw-searched / benef-N1 / benef-searched, and all twenty cells are tabulated
-> in [README.md](README.md#beneficiation). **Every wall clock below is
+> in [README.md](README.md#what-a-first-run-costs). **Every wall clock below is
 > superseded**; they are kept because the *reasons* the timings moved are the
 > point of the section.
 
@@ -1235,7 +1235,7 @@ different population does not even have a reliable **sign**.
 ## The corrections the model accumulated
 
 Every model listed under
-[What the model charges for](README.md#what-the-model-charges-for) moved every
+[What the model charges for](MODEL.md#what-the-model-charges-for) moved every
 number when it landed. They are corrections, not options; the flags exist to
 isolate an effect, not to be left off. **That list lives in README because it
 describes what the model currently does**, and it is not repeated here.
@@ -1270,7 +1270,7 @@ capital (`apply_wacc_compounding`), mission reliability (`model_reliability`)
 and the learning curve (`model_learning_curve`) all fail the membership test in
 the same direction insurance does: each is a real charge a real programme pays,
 and each prices something that is not a mass, a Delta-v or a kilowatt. Read
-their sections in [README](README.md#what-the-model-deliberately-does-not-charge-for);
+their sections in [README](MODEL.md#what-the-model-deliberately-does-not-charge-for);
 what belongs here is the three things that will bite an editor:
 
 ⚠️  **`apply_wacc_compounding` SILENCES `model_programme_calendar`, which is
@@ -1307,7 +1307,7 @@ identical:
 The test that separates them: **would the charge be correct if you levied it
 today?** The tanker charge would not; insurance would. So this one gets a
 README section of its own,
-[what the model deliberately does not charge for](README.md#what-the-model-deliberately-does-not-charge-for),
+[what the model deliberately does not charge for](MODEL.md#what-the-model-deliberately-does-not-charge-for),
 rather than a line on the corrections list, and it must not be added to that
 list by a later reader tidying up.
 

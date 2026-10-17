@@ -7,7 +7,8 @@ is in [LESSONS.md](LESSONS.md) under a heading of the same name (frozen
 
 | file | is the authority for |
 |---|---|
-| [`README.md`](README.md) | what the pipeline is, how to run it, and the **current** numbers |
+| [`README.md`](README.md) | what the pipeline is, how to run and verify it, and the **current** numbers |
+| [`MODEL.md`](MODEL.md) | what the model does, charges for, declines and cannot capture |
 | [`versions.md`](versions.md) | every release, every superseded number, the per-module changelogs |
 | [`CITATIONS.md`](CITATIONS.md) | where each source came from and what it obliges (references, never values: a value's source is cited on the row that carries it in `modules/*.py`) |
 | **this file** | how to edit safely |
@@ -16,7 +17,7 @@ is in [LESSONS.md](LESSONS.md) under a heading of the same name (frozen
 | [`AsteroidCatalog`](https://github.com/loggger101/AsteroidCatalog) | builds and publishes the Stage 1 catalog |
 
 **Keeping this file small is a rule, not a preference.** It quotes no
-measurement README carries (`verify_docs.py` check 12 fails on a shared one),
+measurement README or MODEL.md carries (`verify_docs.py` check 12 fails on a shared one),
 types no count it cannot check, and carries no release history. A release
 adds its notes to `versions.md` and, if it teaches something, one line here.
 
@@ -128,7 +129,7 @@ Traps in that table:
   reproduction that checks only those passes without it.
 - Insurance is off for **scope** (correct and not asked), the tanker charge
   (`charge_tanker_flights` with `escape_direct_launch`) is gated off because it
-  is **wrong** here. Never add either to README's corrections list.
+  is **wrong** here. Never add either to MODEL.md's corrections list.
 - An upfront cost line is worth about twice its face (contingency and the
   upfront WACC multiplier); an end-of-mission line its face.
 
@@ -278,7 +279,7 @@ Traps in that table:
 | tool | what | notes |
 |---|---|---|
 | `verify.py baseline / check / invariants` | the release checks; list in its own header | full `check` ~30 min; `--skip prune parallel` ~5 min |
-| `verify_docs.py` | the docs checks; list in its docstring | ~1 s; `--before OLD.md README.md CLAUDE.md versions.md LESSONS.md` audits a reorganisation for dropped numbers |
+| `verify_docs.py` | the docs checks; list in its docstring | ~1 s; `--before OLD.md README.md MODEL.md CLAUDE.md versions.md LESSONS.md` audits a reorganisation for dropped numbers |
 | `verify_stage1.py` | pinned catalog release vs data contract, and the bytes on disk | never writes the catalog |
 | `verify_stage3.py` | this repo's adapter vs the installed spacecost | temp dir, no baseline |
 | `tree_check.py` | disk content vs git index | run first by every harness |
@@ -467,7 +468,7 @@ lists every file it touched.
    `IN_SPACE_ANNUAL_DEMAND_KG` row (asserted for in-space destinations).
 4. `campaign/worked_calculation.py`, `verification_sheet.py` and
    `worked_calculation_doc.py`: the return legs and their labels.
-5. `run.bat`, `run.sh` menus, and README's destination table (check 17). The
+5. `run.bat`, `run.sh` menus, and MODEL.md's destination table (check 17). The
    entry points and dashboard derive from `DELIVERY_DESTINATIONS`.
 6. Not until a cell is measured: `MEASURED_DEST_SECONDS`, campaign `DESTS`.
 

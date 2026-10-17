@@ -148,127 +148,29 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       provenance columns Stage 1 writes, and the config comment `ui_meta`
       already scrapes for the dashboard's help text.
 
-      🚨  IT CARRIES A CHECK NOTHING ELSE IN THE REPO MAKES, AND THE CHECK
-      FOUND FOUR DEFECTS ON ITS FIRST RUN.  `--check` parses every
-      substitution on the page, evaluates it, and holds it to the value
-      printed beside it.  That is a question about the PAGE rather than the
-      model: a substitution can omit a term or round an operand past the
-      point where it reproduces its own answer while every derived quantity
-      is still exactly right, and the column-by-column comparison cannot see
-      it.  Four lines did exactly that, three by truncating operands and one
-      -- `budget - m_at` -- because the subtraction cancels five leading
-      digits, so twelve significant figures in leaves seven out.  147 of 147
-      match now; the two that are prose rather than arithmetic are named in
-      the footer rather than passed over.  `--self-test` perturbs a printed
-      value and confirms the check goes red, because a matcher nobody has
-      seen fail is a matcher nobody has seen.
+      It carries three checks on the PAGE rather than the model, because a
+      substitution can omit a term or round an operand past reproducing its
+      own answer while every derived quantity is still right.  `--check`
+      evaluates every substitution and holds it to the value printed beside
+      it; it requires every input to name a file and a row, column or field;
+      and it traces every number on the page to a tagged input, a step's
+      value, an operand or a `claim()`ed table cell, at the precision it is
+      printed to.  The five tables that are the document re-run at another
+      setting (the fixed point's earlier passes, the concentration ladder,
+      the programme ladders) are excused by name on the page and in the
+      count.  `--self-test` perturbs a printed value and confirms the check
+      goes red.
 
-      ✅  AND EVERY INPUT IS ASSERTED TO NAME AN ORIGIN A READER COULD
-      FOLLOW, not merely to have one.  A citation naming a file and then a
-      sentence is a file you can open and a value you then have to hunt for,
-      so the check refuses an origin with no row, column or field in it --
-      which is how the nine module constants that cited
-      `worked_calculation.py` without naming `G0`, `R_MOON` or
-      `TAU_CRUISE_FIT_YR_PER_M_S` were found.  82 of 82 name one.
-
-      🚨  IT IS SET FOR PAPER, AND THE PAGE COUNT IS SET BY THE TABLE FONT
-      RATHER THAN THE BODY FONT.  The first version came out at 49 pages,
-      which is a document nobody prints and therefore nobody checks by hand
-      -- the one use it was written for.  One line per step instead of four,
-      the origin flowing beside the value rather than stacked under it, and
-      the row-level Stage 1 provenance stated once instead of on all seven
-      body inputs: **16 pages, with nothing removed and every calculation shown**.  Raising the BODY
-      font from 7.4pt to 8.6pt left the count unchanged, because almost
-      every line is inside a table; raising the TABLE font moves it five
-      pages across the same span.  Measured on the FINAL, untruncated document, because the
-      curve moves when the content does: 6.8 -> 14, 7.0 -> 15,
-      7.2 -> 15, 7.4 -> 16, 8.0 -> 18, 8.6 -> 19.  `--font` takes
-      the trade.
-
-      ⚠️  AND SCREEN FURNITURE MUST NOT PRINT.  `D.h` gives every anchored
-      heading a pilcrow self-link, which is useful on screen and a smudge
-      on paper; the narrative document hides it in its print rules and this
-      stylesheet did not, so a paragraph mark printed beside all seventeen
-      headings.  `print_furniture()` checks the other direction, because
-      nothing in the markup says which elements are decorative: any element
-      carrying one of a short list of glyphs that are never data here has
-      to be hidden by the print block.  Confirmed the way the printer sees
-      it -- 17 pilcrows in the markup, **0 painted**.
-
-      ✅  AND IT PRINTS IN BLACK.  Every colour on a printed page is a
-      cost, and two kinds of it were being spent for nothing: a fill is ink
-      over the whole area rather than over the glyphs, and a grey that is
-      not NEUTRAL is mixed from three cartridges on an inkjet instead of
-      being struck in black -- the secondary text was `#545b66`, which is a
-      blue.  The row shading, the card fill, the blue tags and the brown
-      notes are gone; two neutral levels are left, and an input row is
-      marked by a rule down its edge rather than by a fill.  `monochrome()`
-      holds it there: a hex must satisfy R = G = B and the only fill
-      allowed is the page itself.  Proved by planting a blue and a fill,
-      and confirmed against what the BROWSER resolved rather than what the
-      stylesheet says -- 10 distinct rendered colours, 0 non-neutral, 0
-      fills.
-
-      ⚠️  THE PROSE IS CUT TO WHAT A READER WORKING ON PAPER NEEDS.  A
-      sentence earns its place only if a number cannot be reproduced
-      without it: a formula a table depends on stays, an ordering rule
-      stays, a warning about a value that will not reproduce stays.  Scene-
-      setting, motivation and anything the heading already says goes --
-      12,627 characters of it became 8,894, and the part 1 blurb went from
-      a paragraph reciting the whole Stage 1 row provenance to two clauses,
-      because every input beneath it already cites its own column.
-
-      🚨  AND NOTHING IS TRUNCATED, WHICH COST TWO PAGES AND IS WORTH THEM.
-      The citation formatter cut free text at 320 characters, which had
-      quietly clipped THIRTY citations -- and a reference note is where the
-      numbers behind a number live: "Reference $150k/kg = ~$4,700/oz; gold
-      ran from $3,335 (May 2025) to $4,732 (May 2026)" is the whole
-      provenance of the gold price and it was ending in an ellipsis.  A
-      citation that stops mid-sentence is not a shorter citation, it is a
-      missing one, and the reader cannot tell which.  15 pages, 0 markers.
-
-      ✅  WHAT REACHES THE PAPER IS MEASURED, NOT ASSUMED.  `--print-test`
-      writes the same page with the print rules lifted out of their
-      `@media` query, so a browser lays it out exactly as the printer does
-      and the two clipping questions can be asked directly.  A4 at this
-      file's 8mm/7mm margins is 196 x 281mm of content = 741 x 1062 CSS px.
-      Measured there: **0 elements past the right edge, 0 rows taller than a
-      sheet**, tallest single block 524px (half a page), and the tables
-      still do not overflow when squeezed to 500px, so a printer enforcing
-      wider margins has room to spare.
-
-      🚨  AND THE THIRD CHECK IS THE ONE THAT TIES THE OTHER TWO TOGETHER:
-      EVERY NUMBER ON THE PAGE, BACK TO WHERE IT CAME FROM.  `origins` says
-      every INPUT names a file and a row; the arithmetic check says every
-      STEP reproduces its own result; neither notices a number that is
-      neither -- a table cell the renderer computed on the way past, a
-      factor quoted in a note, a ratio in a caption.  Those are exactly the
-      numbers a reader cannot follow, because there is nothing to follow
-      them to.  A number is TRACED when it is a correct rounding, at the
-      precision it is printed to, of a tagged input, a step's value, an
-      operand inside a substitution, or a table claim.  **343 of 343.**
-
-      It found ninety-two on its first honest run, and closing them is most
-      of what this pass was: a `claim()` so a TABLE ROW is checked exactly
-      like a step, and then working columns on the phase table, the element
-      yields, the knapsack walk, the market allowances, the tiered sale and
-      both ladders -- every one of which used to print a computed number
-      with nothing beside it.  237 substitutions became 240, and the two
-      that were prose became arithmetic: the alloy price is written out
-      term by term, and the apsis choice states its factor.
-
-      ⚠️  FIVE TABLES ARE THIS DOCUMENT RE-RUN AT ANOTHER SETTING and are
-      excused BY NAME, on the page and in the count.  The fixed point's
-      earlier passes, the concentration ladder and the programme ladders
-      are not one-line substitutions and never can be: each row is parts 6
-      to 15 evaluated again at that row's hardware, ratio or fleet, which
-      is a true answer and the only true one.  Each says so directly above
-      itself, and the run prints how many it excused beside how many it
-      checked, so a register that quietly grew would be visible.
+      It is set for A4 and prints in black: the page count follows the TABLE
+      font, not the body font, `--font` takes that trade, nothing is
+      truncated, screen furniture is hidden by the print rules
+      (`print_furniture()`), and `monochrome()` refuses a non-neutral colour
+      or a fill.  `--print-test` lays the page out as the printer does, so
+      clipping is measured rather than assumed.
 
 ```
 py campaign/verification_sheet.py --check       # every line, every origin, every number
-py campaign/verification_sheet.py --pdf         # and render it, 16 pages
+py campaign/verification_sheet.py --pdf         # and render it
 py campaign/verification_sheet.py --pdf --font 8.6   # larger type, more pages
 py campaign/verification_sheet.py --print-test  # the page as the printer lays it out
 ```
@@ -279,20 +181,10 @@ py campaign/verification_sheet.py --print-test  # the page as the printer lays i
       single-mission document and a beneficiated searched one are different
       documents rather than one with blanks in it.
 
-      🚨  `SECTION_ORDER` IS THE ONE PLACE A SECTION'S NUMBER, TITLE AND
-      ANCHOR LIVE, and it is worth knowing why it had to become one.  All
-      three used to be typed into the `h(2, ...)` call inside the section,
-      again into the contents list under a different wording, and again into
-      every sentence elsewhere saying "see section 6"; three sections have
-      early-return branches that repeated their own heading, so one section
-      carried up to FOUR copies of its own identity with nothing holding them
-      to each other.  Inserting a section renumbered the headings and left
-      every cross-reference pointing one short, silently.  The number is the
-      POSITION now, `sec()` writes the heading, `ref()` writes a
-      cross-reference as a real link, and `document()` asserts that every
-      section emitted its own anchor exactly once -- which is what catches a
-      branch that forgot its heading, or kept a stale one and rendered under
-      the wrong number.
+      `SECTION_ORDER` is the one place a section's number, title and anchor
+      live: `sec()` writes the heading, `ref()` writes a cross-reference as a
+      real link, and `document()` asserts every section emitted its own anchor
+      exactly once.
 
   ✅  It covers every destination and every architecture the search can
   choose: seven destinations, both ore states, both programme settings,
@@ -335,10 +227,6 @@ py campaign/verification_sheet.py --print-test  # the page as the printer lays i
   only in the salvage credit.  Do not "fix" it by trying both and keeping
   whichever matches.
 
-  A refusal or a red check is the correct outcome in every case above.  A
-  document that quietly describes the wrong mission is the failure all of this
-  exists to prevent.
-
   ✅  **AND WHICH MISSIONS IT HAS EVER BEEN RUN ON IS A MEASUREMENT NOW,
   NOT A RITUAL.** `--sweep` streams every Stage 4 output on disk once, keeps
   the cheapest mission of each distinct ARCHITECTURE, and derives a greedy
@@ -369,13 +257,9 @@ py campaign/worked_calculation.py --sweep --audit   # and audit every page it re
   sweep over `cells/` will ever render them. `--source` takes a Stage 4 output
   built with those terms ON, which is a 400-row cell written into a scratch
   directory in about a minute, and the sweep scans it ahead of everything else.
-
-  🚨  `--max-sources` CAPS WHAT THE SWEEP DISCOVERED, NEVER WHAT YOU NAMED.
-  It used to slice the whole list, and named sources come first -- so
-  `--max-sources 1` with four `--source` arguments swept one of them and
-  reported a clean cover of a space it had never opened. `--max-sources 0` is
-  useful now: the named sources and nothing else, which skips the 1.1 GB live
-  catalog and every archive, and is what makes the optional-term sweep cheap:
+  `--max-sources` caps what the sweep DISCOVERED, never what you named, so
+  `--max-sources 0` sweeps only the named sources and skips the live catalog
+  and every archive:
 
 ```
 py campaign/worked_calculation.py --sweep --audit --max-sources 0 \
@@ -398,110 +282,29 @@ py campaign/worked_calculation.py --sweep --audit --max-sources 0 \
   vehicle, and the refusal used to blame the concentration ladder. It names the
   guard now and prints the arithmetic that points at the dial.
 
-  🚨  AND THE OTHER DIRECTION IS THE QUIET ONE. A cap that is too LOOSE
-  refuses; one that is too TIGHT still closes a mission, just a smaller one, and
-  writes a confident document about it. Measured on a 158-row insurance cell
-  swept at 0.05 against rows run at 1.0: 53 columns DIFFER with every MASS
-  agreeing to 5.7e-05, which is a search landing elsewhere rather than
-  arithmetic going wrong. `mining_cap_note` now names the dial whenever the
-  row's own feed exceeds what this process is allowed to dig -- a one-sided test
-  and airtight in that direction, because the run actually dug that much, so its
-  cap permitted it.
+  A cap that is too TIGHT still closes a mission, just a smaller one, so
+  `mining_cap_note` names the dial whenever the row's own feed exceeds what
+  this process may dig. One `--max-mining-fraction` covers every source, so a
+  sweep mixing archived and current cells cannot be right for both.
 
-  ⚠️  One `--max-mining-fraction` covers every source, so a sweep mixing
-  archived cells with current ones cannot be right for both. That note is the
-  compensation, not a fix.
+  ⚠️  WHAT THE DERIVATION BORROWS FROM THE MODEL IS DERIVED, NOT TYPED.
+  `BORROWED` is the register, `model_borrows` walks the file's own AST against
+  it, and the footer prints what it finds; `verify_docs.py` check 16 fails on a
+  borrow on no row and on a row matching no borrow. The programme ladder's
+  rungs are borrowed on purpose: every value at every rung is priced here.
 
-  🚨  AND THE PAGE'S CLAIM ABOUT ITS OWN INDEPENDENCE WAS TYPED, AND
-  FALSE. The Verification footer told every reader that what this derivation
-  reads from the model is "reference data and table accessors". It also called
-  the model's night-side derate, its synodic period and its delivered price --
-  and two of those sit inside things the same sentence NAMES as written out
-  here, the plant and the clock. The module docstring carried the same denial
-  while `programme_ladder`'s own docstring, twelve hundred lines below,
-  explained why borrowing the ladder's SHAPE is deliberate.
-
-  Nothing could see it. Check 14 fails on any DIGIT reaching prose; a sentence
-  about which functions a file calls carries none. So the derate and the
-  synodic period are written out, the delivered price is compared rather than
-  printed, and the claim is DERIVED: `BORROWED` is the register,
-  `model_borrows` walks the file's own AST against it, and the footer prints
-  what it finds. `verify_docs.py` check 16 fails on a borrow that is on no row
-  AND on a row that matches no borrow -- both halves proved by planting one of
-  each.
-
-  ⚠️  WHAT IS LEFT IS DISCLOSED RATHER THAN DENIED. The ladder's rungs are
-  read from the model on purpose: reproducing which programmes the search
-  proposed would be a second opinion about what it offered rather than a check
-  on what it concluded. Every value at every rung is priced here.
-
-  🚨  A STAGE 3 TABLE ON DISK IS NOT THE TABLE THE RUN READ, AND THE
-  PROPELLANT PRICE WAS THE LAST INPUT STILL TAKEN FROM IT. Three live-priced
-  propellants were refetched on 2026-09-17, so every archived CHEMICAL mission
-  stopped reproducing: on `earth_surface__raw__search-on`, 2005 TH50 came out
-  **7 columns DIFFER** -- the two propellant lines by 1.660e-03 relative and
-  five totals downstream of them by ~1.5e-08. The price was recoverable from
-  the row all along, because a Stage 4 output carries both the cost and the
-  mass, and their ratio is constant per propellant across a cell. It is read
-  off the row now, the table still wins where the two agree so an unmoved cell
-  stays bit-exact, and the run SAYS SO when it substitutes:
-
-```
-  propellant methalox  (LCH4 / LOX) priced off the ROW at 0.186202302606 $/kg;
-             the Stage 3 table on disk now says 0.185893237684, so it has been
-             refetched since this run
-```
-
-  ⚠️  THE OUTBOUND LEG, NEVER THE RETURN. Propellant made on site is billed
-  at `isru_processing_usd_per_kg` and not at the propellant's price at all, so
-  the return pair recovers the wrong number on exactly the missions ISRU exists
-  for.
-
-  🚨  `--designation` BYPASSED THE ONE FUNCTION THAT ATTACHES A ROW'S
-  PROVENANCE. Three things are properties of the FILE and not of the row -- the
-  evaluable population, its size, and whether the run had beneficiation on --
-  and this path re-read the catalog with a bare `read_csv`, which attaches
-  none. `run_setting` then fell through its file source to its LAST resort, the
-  live config, whose `use_beneficiation` is True: a named row out of a RAW
-  catalog was derived against the beneficiated purity bound, `5.28x` out on
-  `best_phase_usd_per_kg`, and the page told the reader the best case beat a
-  population of zero. `run_winner` picks the row either way now, so a caller
-  cannot get one without the other -- and it drops a second read of a file the
-  function had already loaded.
-
-  🚨  ON ITS FIRST AUDITED RUN THE PAGE WAS CLEAN AT CISLUNAR AND AT NO
-  OTHER DESTINATION. `leo` refused outright -- the derivation read an EMPTY
-  delivery chain (`[]`, nothing above LEO) as a MISSING one (`None`,
-  `earth_surface`, which avoids no launch) and returned 0 $/kg where Module 2
-  returns 4,253. An RTG page hid the solar array it was chosen over, three
-  output columns and three rates with it. A dense in-space hold rendered as
-  "0.02 m3" because the volume was printed to two decimal places. And a
-  chemical mission was reported incomplete for a power-processing rate no
-  chemical page can show. All fixed; re-run the command rather than trusting
-  this paragraph.
-
-  ⚠️  IT HAS TO BE AFFORDABLE OR IT IS ANOTHER RITUAL. The first
-  version scanned with `csv.reader`, parsing every field of every row to
-  look at eight of them, and then re-streamed the whole source once per
-  MISSION to fetch each row. It scans with pandas over the axis columns
-  only and fetches the chosen rows in one pass per source; the rewrite was
-  compared against the old one on a real archive, architecture by
-  architecture, before it was trusted.
+  ⚠️  THE PROPELLANT PRICE IS READ OFF THE ROW, from the OUTBOUND leg's cost
+  over its mass, because three live-priced propellants were refetched on
+  2026-09-17 and a Stage 3 table on disk is not the table an archived run
+  read. The table still wins where the two agree, so an unmoved cell stays
+  bit-exact, and the run says so when it substitutes. Never the return leg:
+  propellant made on site is not billed at the propellant's price.
 
   ⚠️  A REFUSAL AND AN UNCOVERED AXIS VALUE ARE BOTH RESULTS. The guard in
   `context` declines shapes the cascade does not cover, by name, and finding
   out which those are is half of what the sweep is for; an axis value that
   exists on disk and went underived is reported rather than passed over. Both
   make the run exit 1.
-
-  🚨  IT FOUND A DEFECT ON ITS FIRST RUN. `best_phase_usd_per_kg` came out
-  61% low on an RTG, ISRU, chemical, raw mission, because the model writes that
-  column from the RUN's `use_beneficiation` and the derivation read the ROW's
-  own `beneficiation`. Those agree on every row except one that declined to
-  concentrate inside a beneficiated run -- 15.8% of bodies, and never the
-  winner, which is why a document about the best case could not see it. See
-  `run_setting`, which carries the measurement: such a row is identical to the
-  same body's raw row in 142 of 143 columns.
 
   ✅  COMPLETENESS IS MEASURED SEPARATELY, BY `--audit`, because a clean
   check says the page is CORRECT and says nothing about whether it is whole:
@@ -520,40 +323,12 @@ py campaign/worked_calculation.py --sweep --audit --max-sources 0 \
   every reference-table read is logged as it happens, so a rate added to the
   cascade joins the audit with no edit here.
 
-  🚨  AND THE THIRD QUESTION IS ABOUT THE PROSE, WHICH NEITHER OF THE OTHER
-  TWO CAN SEE.  Every FIGURE on the page is derived and compared; the
-  sentences around them are ordinary writing, and two of them asserted values
-  nothing derived -- that Module 1's taxonomy fractions "sum to between 0.73
-  and 0.96", and that solar and a radioisotope source "cross near 3.46 AU".
-  Both were correct when written, neither was ever executed, and the first
-  pair had already been WRONG at birth elsewhere in this repo.  A column audit
-  cannot see either, because no column is missing: the page is complete and
-  one of its sentences is simply untrue.
-
-  Both derive now, off `taxonomy_fraction_span()` and `crossover_au()`, and
-  what stops the third one is a register: any digit reaching `para` or `note`
-  has to be on `TYPED_OK` with a reason it cannot rot, and a register row
-  nothing matches is a finding too, because an allowlist nobody reads has
-  stopped being a decision.  ⚠️  It reads the RENDERER'S SOURCE rather than
-  the page, because a derived number and a typed one render identically --
-  which is the whole difficulty -- and it covers prose rather than arithmetic,
-  since a substitution exists to show `365.25 * 24 * 3600` and flagging that
-  would be asking the page to stop being a derivation.
-
-  ✅  SO IT RUNS IN `verify_docs.py` AS CHECK 14 AS WELL, in about a second
-  and with no catalog, no `master` and no run.  A check that can only fire
-  after a three-minute build against 868 MB of inputs is a check CI cannot
-  have, and this is the one half of the audit that does not need any of it.
-
-  🚨  AND THE AUDIT MEASURES ITSELF ON EVERY RUN, which is not decoration.
-  Its first version tested only that a page number was consistent with a
-  column at the precision it was printed to, and that is not sufficient: a
-  bare `0` on the page is consistent with any cost in the model once the
-  audit may look in millions and billions.  Moving every number by a third
-  left 99 of 100 columns still matching, i.e. a check that could not fail.
-  A match must now pin the value to within a percent or be exact, and the
-  `matcher` line reports what the same perturbation does today -- one figure
-  is the answer and the one below it is what the answer is worth.
+  The prose has its own check: a digit reaching `para` or `note` must be on
+  `TYPED_OK` with a reason it cannot rot, and a register row nothing matches is
+  a finding too. It reads the renderer's source, not the page, so it runs as
+  `verify_docs.py` check 14 with no catalog and no run. The audit reports on
+  every run what perturbing every number by a third does to its own matcher, so
+  a check that could not fail would show.
 
 Per cell: `profitability_catalog.csv` is archived gzipped to `cells/` and one
 row is appended to `results.csv`.

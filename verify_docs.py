@@ -31,7 +31,7 @@ counts-in-prose failure this file was written to catch:
                      appears somewhere in the docs afterwards
    11. docstrings    every module, class and function in the repo's own Python
                      carries one
-   12. pairs         no measurement is quoted in BOTH README and CLAUDE.md
+   12. pairs         no measurement is quoted in CLAUDE.md and in README or MODEL.md
                      (CLAUDE.md quotes none; README is the current answer)
    13. scope         which checks `verify.py` runs, against every sentence in
                      either file that says -- its own docstring list, README's
@@ -47,7 +47,7 @@ counts-in-prose failure this file was written to catch:
                      the footer's claim about what it borrows is derived from
                      that scan rather than typed, because it was typed once and
                      was false in four places
-   17. dest table    README's destination table -- the price, its stage-
+   17. dest table    MODEL.md's destination table -- the price, its stage-
                      hardware share, the kg-in-LEO ratio and every delta-v its
                      chain column quotes -- against
                      `master.DELIVERY_DESTINATIONS`.  Check 9 on a different
@@ -158,7 +158,10 @@ REPO = os.path.dirname(os.path.abspath(__file__))
 # LESSONS.md is the frozen long form behind CLAUDE.md (2026-10-17): it is
 # link-, structure- and dash-checked like the other docs, and claims to be
 # current about nothing, so the pairs and pin-prose checks do not read it.
-DOCS = ["README.md", "versions.md", "CLAUDE.md", "LESSONS.md"]
+# MODEL.md is README's model half, split out on 2026-10-17: what the model does,
+# with the propulsion counts check 3 reads and the destination table check 17
+# reads.  It is current, so check 12 reads it beside README.
+DOCS = ["README.md", "MODEL.md", "versions.md", "CLAUDE.md", "LESSONS.md"]
 
 # Markdown that is not one of the three authorities but is still prose a reader
 # is sent to.  The campaign pair spent a whole measurement campaign outside
@@ -560,13 +563,16 @@ def check_row_counts(mods) -> bool:
         (r"(\d+)\s*launch vehicles \(incl\. non-rocket concepts\)", "vehicles"),
         (r"(\d+)\s*propellants with storage class", "propellants"),
     ]
-    readme = read(os.path.join(REPO, "README.md"))
+    # README carries the Stage table's two claims, MODEL.md the section ones.
+    readme = "\n".join(read(os.path.join(REPO, d))
+                       for d in ("README.md", "MODEL.md")
+                       if os.path.exists(os.path.join(REPO, d)))
     bad, n = [], 0
     for pat, key in CLAIMS:
         for m in re.finditer(pat, readme):
             n += 1
             if int(m.group(1)) != sizes[key]:
-                bad.append("README claims %s %s, module has %d"
+                bad.append("README/MODEL claims %s %s, module has %d"
                            % (m.group(1), key, sizes[key]))
 
     # status breakdowns:  | operational | 23 | ... |
@@ -580,7 +586,7 @@ def check_row_counts(mods) -> bool:
         if m:
             n += 1
             if int(m.group(1)) != want:
-                bad.append("README propellant status '%s' says %s, module has %d"
+                bad.append("MODEL propellant status '%s' says %s, module has %d"
                            % (status, m.group(1), want))
 
     # ---- DERIVED counts: the size of the SEARCH GRID, not of a table -------
@@ -628,15 +634,15 @@ def check_row_counts(mods) -> bool:
         .split())}
     NUM = r"(\d+|[a-z]+)"
     DERIVED_CLAIMS = [
-        ("README.md", r"Only the %s operational rows are in the default search"
+        ("MODEL.md", r"Only the %s operational rows are in the default search"
                       % NUM, "operational propellants"),
-        ("README.md", r"default search, and only %s of those" % NUM,
+        ("MODEL.md", r"default search, and only %s of those" % NUM,
          "usable propellants"),
         ("modules/calc.py", r"%s propellants' worth of answers" % NUM,
          "usable propellants"),
-        ("README.md", r"%s operational and Earth-based \(the default search\)"
+        ("MODEL.md", r"%s operational and Earth-based \(the default search\)"
                       % NUM, "operational vehicles"),
-        ("README.md", r"took that from \d+ to %s" % NUM,
+        ("MODEL.md", r"took that from \d+ to %s" % NUM,
          "operational vehicles"),
     ]
     for gone in absent([r for r, _, _ in DERIVED_CLAIMS]):
@@ -1534,7 +1540,7 @@ def check_docstrings() -> bool:
 # on purpose and is not an oversight: every section there names the release and
 # the catalog it belongs to, so a superseded figure in it is correct rather than
 # stale.  What makes a copy hazardous is two files that both assert TODAY.
-CURRENT_DOCS = ("README.md", "CLAUDE.md")
+CURRENT_DOCS = ("README.md", "MODEL.md", "CLAUDE.md")
 
 # The register's own table header, verbatim.  Its rows are the allowlist, so
 # they must not also be counted as one side of a pair; a register entry quotes
@@ -1606,10 +1612,14 @@ def check_pairs() -> bool:
             rows.append((i, raw, _figures(raw)))
         lines[doc] = rows
 
-    a, b = CURRENT_DOCS
+    # CLAUDE.md against each document that carries numbers.  README and
+    # MODEL.md are one current answer split in two, so they are not paired
+    # with each other: a result quoting the model's own figure is not a copy.
+    b = CURRENT_DOCS[-1]
     unregistered, n_pairs = [], 0
     seen = set()
-    for ia, la, fa in lines.get(a, ()):
+    for a, ia, la, fa in [(d,) + row for d in CURRENT_DOCS[:-1]
+                          for row in lines.get(d, ())]:
         if len(fa) < 3:
             continue
         for ib, lb, fb in lines.get(b, ()):
@@ -2091,7 +2101,7 @@ def check_model_borrows() -> bool:
 
 
 def check_destination_table() -> bool:
-    """README's destination table, against `master.DELIVERY_DESTINATIONS`.
+    """MODEL.md's destination table, against `master.DELIVERY_DESTINATIONS`.
 
     The same argument as check 9, on a different table, and found the same way.
     Every in-space price in the model comes out of one derivation; README then
@@ -2125,9 +2135,9 @@ def check_destination_table() -> bool:
         print("17. dest table SKIPPED (%s: %s)" % (type(exc).__name__, exc))
         return True
 
-    readme_p = os.path.join(REPO, "README.md")
+    readme_p = os.path.join(REPO, "MODEL.md")
     if not os.path.exists(readme_p):
-        print("17. dest table README.md is not on disk")
+        print("17. dest table MODEL.md is not on disk")
         return False
     text = read(readme_p)
     header = "| Destination | Launch cost avoided | kg in LEO per kg | Chain |"
@@ -2156,9 +2166,9 @@ def check_destination_table() -> bool:
     extra = sorted(set(rows) - set(model))
     n += 1
     for k in missing:
-        problems.append("README's destination table has no row for %r" % k)
+        problems.append("MODEL.md's destination table has no row for %r" % k)
     for k in extra:
-        problems.append("README tabulates %r and the model has no such "
+        problems.append("MODEL.md tabulates %r and the model has no such "
                         "destination" % k)
 
     for key, cells in sorted(rows.items()):
@@ -2170,14 +2180,14 @@ def check_destination_table() -> bool:
         if usd == 0.0:
             n += 1
             if cells[1].strip("* ") != "-" or cells[2].strip("* ") != "-":
-                problems.append("%s avoids no launch, so README should show "
+                problems.append("%s avoids no launch, so MODEL.md should show "
                                 "'-' for both numbers, not %r / %r"
                                 % (key, cells[1], cells[2]))
             continue
         n += 1
         want_usd = "$%s/kg" % format(round(usd), ",d")
         if want_usd not in cells[1]:
-            problems.append("%s: README says %s, the model derives %s"
+            problems.append("%s: MODEL.md says %s, the model derives %s"
                             % (key, cells[1], want_usd))
         # spacecost v0.4.0 charges what the expended stages cost to BUILD on
         # top of launching their mass, so the price is no longer the LEO $/kg
@@ -2189,13 +2199,13 @@ def check_destination_table() -> bool:
             n += 1
             want_hw = "$%s of it" % format(round(hardware), ",d")
             if want_hw not in cells[1]:
-                problems.append("%s: README's price cell should say %s stage "
+                problems.append("%s: MODEL.md's price cell should say %s stage "
                                 "hardware, and says %r"
                                 % (key, want_hw, cells[1]))
         n += 1
         want_ratio = "%.2f" % _sc.delivery_mass_ratio(key)
         if want_ratio not in cells[2]:
-            problems.append("%s: README says %s kg in LEO per kg, the model "
+            problems.append("%s: MODEL.md says %s kg in LEO per kg, the model "
                             "derives %s" % (key, cells[2], want_ratio))
         # Every delta-v quoted in the chain prose must be in THIS chain.
         chain = {float(l[1]) for l in (_m._DELIVERY_LEGS.get(key) or [])
@@ -2204,7 +2214,7 @@ def check_destination_table() -> bool:
             n += 1
             val = float(quoted.replace(",", ""))
             if val not in chain:
-                problems.append("%s: README's chain quotes %s m/s, which is "
+                problems.append("%s: MODEL.md's chain quotes %s m/s, which is "
                                 "not a burn in that chain (%s)"
                                 % (key, quoted,
                                    ", ".join("%.0f" % d for d in sorted(chain))))

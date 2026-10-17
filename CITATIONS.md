@@ -9,15 +9,17 @@ from, and what each one obliges you to do.
 standing rule is that two copies of one measurement is a bug, so this file does
 **not** restate what any source says. A propellant density, a vehicle price or
 a Delta-v figure is cited inline, in the `notes` field of the row that carries
-it in `modules/transportation.py`, and that row stays the authority for the
-number. What lives here is the bibliographic reference, the licence, and the
+it (in [spacecost](https://github.com/loggger101/spacecost) for Stage 3's
+tables, in `modules/*.py` for the rest), and that row stays the authority for
+the number. What lives here is the bibliographic reference, the licence, and the
 attribution obligation.
 
 | you want | read |
 |---|---|
-| which number came from where | the `notes` field on the row, in `modules/*.py` |
+| which number came from where | the `notes` field on the row: spacecost's tables, or `modules/*.py` |
 | how to cite a source, or what it obliges | **this file** |
 | what the pipeline currently answers | [`README.md`](README.md) |
+| what the model does with a number | [`MODEL.md`](MODEL.md) |
 | what a number used to be | [`versions.md`](versions.md) |
 
 ⚠️  **Two sources ask to be cited and it is a condition of use, not a
@@ -128,7 +130,7 @@ acknowledged by name rather than through a single paper
 
 ### Assumptions named rather than modelled
 
-Cited in README's [What the model does not capture](README.md#what-the-model-does-not-capture)
+Cited in README's [What the model does not capture](MODEL.md#what-the-model-does-not-capture)
 to say what a held-fixed assumption ignores; neither reaches a value.
 
 - **Terzi, F. & Nicoli, F. (2026)**, *From Sputnik to Starship: Estimating the
