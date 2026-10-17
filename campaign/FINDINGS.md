@@ -105,12 +105,11 @@ so a mixed payload is carrying cargo the market will not pay for.
 
 `geo` is 5th as a single raw mission and 3rd as a beneficiated programme,
 overtaking two destinations. **"Which destination is best" is only answerable
-per configuration**, which is a stronger form of the caution CLAUDE.md already
-carries about propellant shares.
+per configuration**.
 
 ### A `replicated`-scaling FEEP device now wins TWO cells, not one
 
-CLAUDE.md retired its "a `replicated` device never wins anywhere" law on one
+The "a `replicated` device never wins anywhere" law was retired on one
 cell -- `mars_surface` raw searched -- and warned the margin was thin enough
 that a modest change could flip it. It flipped the other way: **2014 YN on FEEP
 (indium field emission) now wins both raw `mars_surface` cells**, where in
@@ -122,12 +121,6 @@ conventional Hall thrusters on different bodies (krypton on 9992, iodine on
 of thruster stops paying, which is consistent with the gate being a mass
 penalty rather than a threshold. Zero FEEP winners in the other **26** cells,
 and zero at the other six destinations on any setting.
-
-⚠️  That read "the other 22 cells" until 2026-09-14 and was wrong under every
-reading: 28 cells minus the 2 FEEP wins is 26, and excluding `mars_surface`
-entirely is 24. Counted from `population/`, which gates on the `thrust_scaling`
-column. **A count spelled out in prose is a number waiting to rot**, and this
-one rotted inside the campaign's own findings.
 
 🚨  **And the beneficiated `mars_surface` cells are closer than "does not
 survive" suggests**: the best FEEP mission sits at **rank 2, margin 1.00x and
@@ -168,7 +161,7 @@ whole evaluable population; the winner column is one row's change against its
 ⚠️  **The population medians are nearly UNCHANGED from 2026-08**, while the
 winner rows moved by 8-69%. So `capacity_cap` and the insurance removal
 reshaped the TOP of the distribution and left the middle where it was. That is
-the sharpest instance in this project of CLAUDE.md's rule that *a diagnostic
+the sharpest instance in this project of the rule that *a diagnostic
 describes the winner, not the search that produced it*: a headline that moves
 50% over a median that moves 0.1 pp is a statement about one row.
 
@@ -217,17 +210,17 @@ Fleet median **and** max both 64, N median 320, `W < trips` on 0.270% of rows.
 
 🚨  **`11,606.8561x` and `7,074.1975x` are therefore NOT optima**; they are the
 value at `max_fleet_ships`, and raising that cap keeps improving them.
-CLAUDE.md's warning survives the market-model change: terrestrial ceilings are
+The warning survives the market-model change: terrestrial ceilings are
 finite under `capacity_cap` and still far too large to bind, against a
 programme delivering ~10^7 kg into markets running 10^12-10^15 kg/yr.
 
 ✅  Consistent with `earth_surface` being the destination LEAST changed by this
 campaign: every cell moved -6.5%, where others moved -11% to -69%. Saturation is
 numerically inert there, so the market-model switch does nothing and the whole
-delta is the insurance removal -- inside the 5.5-9.6% band CLAUDE.md predicts
+delta is the insurance removal -- inside the 5.5-9.6% band measured
 for it.
 
-## Two questions this campaign closed
+## A question this campaign closed
 
 **`market_clearing_fraction` and `unsold_payload_kg` are not inconsistent.**
 `geo` raw N=1 reports 0.9807 clearing beside 8,019 kg unsold of a 61,835 kg
@@ -235,12 +228,6 @@ payload -- 1.9% against 13%. They measure different things, deliberately split
 in calc v1.21.0 so neither column carries two meanings: clearing is the share of
 the load's **gross VALUE** that cleared, unsold is **MASS**. Low value in high
 mass is exactly the GEO story.
-
-**The `650,516` evaluable count in CLAUDE.md is not a discrepancy with either
-campaign.** Both the 2026-08 and 2026-09 campaigns report **650,921** for
-cislunar raw, identically. 650,516 belongs to a calc `1.15.0` run on a
-**1,554,353-row** catalog snapshot, against the 1,555,667-row one both campaigns
-used. Different catalog, not different code.
 
 ## What is NOT in this campaign
 
@@ -258,9 +245,7 @@ used. Different catalog, not different code.
 
 ## Where these findings went
 
-✅  **Promoted into the main documents on 2026-09-13.** The matrix itself came
-back here when README stopped carrying superseded cells. That is the split
-this project runs on: name one authority, or you have two.
+This file is the authority for the matrix; the rest went to:
 
 | finding | now lives in |
 |---|---|
@@ -270,19 +255,14 @@ this project runs on: name one authority, or you have two.
 | the invariants and the retired claims | [versions.md](../versions.md#the-complete-28-cell-matrix-is-measured-calc-1212-2026-09-1113) |
 | the per-destination population tables, derived 2026-09-14 rather than promoted | [versions.md](../versions.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09), from `population/` |
 
-✅  **WHAT WAS NOT PROMOTED HAS NOW BEEN DERIVED: CLOSED 2026-09-14.** The
-per-destination propellant, vehicle, rig-bound, cadence and saturation tables in
-CLAUDE.md were still 2026-08 `elasticity` measurements with insurance charged,
-because this campaign extracted the winner row and ran the invariants and
-nothing else. `population.py` read the archived cells under `cells/` and
-derived all of them in **one pass, about ten minutes, with no stage re-run**.
-Per-cell JSON is under `population/`; the tables are in
+✅  **What was not promoted was derived on 2026-09-14**: `population.py` read
+the archived cells under `cells/` in one pass, about ten minutes, with no stage
+re-run. Per-cell JSON is under `population/`; the tables are in
 [versions.md](../versions.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09)
 and the superseded 2026-08 ones in
 [versions.md](../versions.md#the-population-re-derivation-2026-09-14).
 
-🚨  **It changed four documented CONCLUSIONS, not four levels**, which is the
-argument against ever leaving that kind of gap open: `mars_surface` stopped
+🚨  **It changed four documented conclusions, not four levels**: `mars_surface` stopped
 being the exception to the beneficiated dig/window inversion, `saturation_multiplier`
 turned out to be **identically 1.0 on all 28 cells** and therefore dead as a
 diagnostic, "ISRU tracks hydrolox to within 0.03 pp" failed at three
@@ -292,9 +272,3 @@ destinations, and iodine went from winning two beneficiated cells to three.
 plus every winner body, the `W < trips` values and the fleet-cap percentages,
 which is what makes it a measurement rather than another harness to have to
 trust.
-
-⚠️  **The cheapest open item in the project stayed open for three days anyway.**
-The campaign cost 47 h of queue time and archived 20 GB precisely so questions
-like these would not need a re-run. The data was never missing; the reader was.
-**When a section says "not re-derived", check whether the inputs are already on
-disk before believing the cost.**

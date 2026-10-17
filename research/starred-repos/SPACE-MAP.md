@@ -8,9 +8,8 @@ is worth more than most of the permissively-licensed repositories combined.**
 | | |
 |---|---|
 | licence | **AGPL-3.0** |
-| stars | 2 |
 | live at | spacemap.co |
-| last commit | 2026-09-03, i.e. actively developed |
+| audited | 2026-09-03 |
 | shape | `data/` Python ingest pipeline, `frontend/` Svelte + WebGL renderer |
 
 🚨  **Nothing here is copied.** AGPL would make this pipeline AGPL. Everything
@@ -102,9 +101,9 @@ never thought of that field" into a line of output. It is the same shape as
 `schema_check()` and `stamp_check()`, one level further upstream: those two
 verify what arrived, this verifies what was *asked for*.
 
-⚠️  It belongs in `verify_docs.py` or a standalone probe, **not** in Stage 1's
-hot path. It is a fetch, and this repo has a rule about running fetches to test
-unrelated things.
+⚠️  Stage 1's fetch now lives in
+[AsteroidCatalog](https://github.com/loggger101/AsteroidCatalog), so that is
+where this check belongs, beside its gates and not in the fetch's hot path.
 
 ---
 
@@ -116,29 +115,16 @@ reconciling against the remote spkid list to catch deletions (merged
 designations) and **spkid migrations when an unnumbered body becomes
 numbered**.
 
-That last one is a real hazard here. This catalog joins on `designation`, and
-a body's designation *changes* when it is numbered. `_extract_canonical_designation`
-already exists because designation handling has bitten this project before;
-`spkid` is the stable key and the catalog already carries it as `spk_id`.
+That last one is a real hazard: the catalog joins on `designation`, which
+*changes* when a body is numbered, while `spkid` is stable and the catalog
+already carries it as `spk_id`.
 
-The relevance is bigger than tidiness. CLAUDE.md says the thing that stops a
-second host first is that `asteroid_pipeline/` is not in git and Stage 1
-re-fetches a *different* catalog every day, so a rebuilt catalog is comparable
-with nothing already measured. A local mirror with incremental sync makes the
-catalog a **pinned artefact** that can be resynced deliberately rather than a
-fresh download every time.
-
-Practical details worth keeping from their implementation, all of which are
-operational facts rather than code:
-
-- page at 5,000 rows with a pause between pages, rather than one 435 MB request
-- `soln_date` filters are **date-only**; the API rejects a time component, so
-  overlap the window by a couple of days and rely on upserts
-- past roughly 200,000 changed records, delta pagination is slower than a full
-  resync, because deep offsets on a filtered query degrade badly
-
-⚠️  This is a **design**, not a patch. It restructures Stage 1's contract and
-should not be done casually.
+The rest of the case for a mirror is answered here: Stage 1 now downloads a
+pinned, sha256-checked catalog release that AsteroidCatalog builds, which is
+the pinned artefact this section argued for. Their operational facts belong to
+that repo: page at 5,000 rows with a pause between pages; `soln_date` filters
+are date-only, so overlap the window by a couple of days and rely on upserts;
+past roughly 200,000 changed records, a full resync beats delta pagination.
 
 ---
 
@@ -172,24 +158,13 @@ remove it, and that bound is currently unknown in both directions.
 
 ## 5. What is genuinely not useful here
 
-Said plainly, because the first pass was too quick to dismiss the whole repo
-and being wrong in the other direction would be no better:
-
-- **The frontend.** 763 files of Svelte and WebGL for rendering the solar
-  system. `frontend/src/lib/scene/minor-body-position.ts` is a nice GPU
-  formulation, but [spacekit](https://github.com/typpo/spacekit) does the same
-  job under MIT, so there is no reason to look at an AGPL version.
-- **Chebyshev ephemeris compression** (`chebyshev_benchmark.py`). Correct
-  technique for a renderer that needs positions at arbitrary times. This
-  pipeline needs positions at no times at all: its Δv model is date-free, and
-  F4's oracle deliberately scans a synodic period precisely so it does not need
-  an epoch.
-- **`generate_small_body_colors.py`**. Bus-DeMeo chroma scaled by measured
-  albedo, for rendering. It reconstructs colour from reflectance spectra, which
-  sounds adjacent to the taxonomy problem in F2, but colour is the *output*
-  there and taxonomy the input; it adds no classification evidence.
-- **The probe/spacecraft machinery.** Around 20 scripts for mission kernels and
-  trajectory events. Nothing to do with asteroid economics.
+- **The frontend** (Svelte and WebGL): spacekit does the same job under MIT.
+- **Chebyshev ephemeris compression**: a renderer needs positions at arbitrary
+  times; this pipeline's Δv model is date-free and needs none.
+- **`generate_small_body_colors.py`**: colour is its output, where taxonomy is
+  F2's input; it adds no classification evidence.
+- **The probe and spacecraft machinery**: nothing to do with asteroid
+  economics.
 
 ---
 

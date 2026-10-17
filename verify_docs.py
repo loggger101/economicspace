@@ -168,6 +168,9 @@ DOCS = ["README.md", "MODEL.md", "versions.md", "CLAUDE.md", "LESSONS.md"]
 # every check here, which is exactly how the docs drifted before any of these
 # existed: a file nothing checks is a file that is clean until it is not.
 CAMPAIGN_DOCS = ["campaign/FINDINGS.md", "campaign/README.md",
+                 # The 2026-08 campaign's record.  It links into the main docs,
+                 # and two of those links broke unseen when CLAUDE.md was cut.
+                 "campaign/archive-2026-08_calc-1.17.7/FINDINGS.md",
                  # Not a campaign doc, but the same argument: it is prose a
                  # reader is sent to, it quotes measured figures (the GPU
                  # result, the memory peaks, the CRLF hashes), and a file

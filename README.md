@@ -866,7 +866,7 @@ subset that needs no catalog runs on every push and pull request, in
 
 | step | why it can run there |
 |---|---|
-| `master.py` is in sync with `modules/` | rebuild, then `git diff --exit-code`. CLAUDE.md has always named this as the sync check and nothing automated it |
+| `master.py` is in sync with `modules/` | rebuild, then `git diff --exit-code`; it needs no inputs |
 | `verify_docs.py` | reads the docs and the dataclasses; builds no stage |
 | `verify_stage3.py` | builds into a temp dir, needs no network, and CI checks out `spacecost` at the pinned tag so its reference check RUNS rather than skipping |
 | `platform_check.py` | **report only, never a gate** |

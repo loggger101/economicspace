@@ -130,7 +130,7 @@ acknowledged by name rather than through a single paper
 
 ### Assumptions named rather than modelled
 
-Cited in README's [What the model does not capture](MODEL.md#what-the-model-does-not-capture)
+Cited in MODEL.md's [What the model does not capture](MODEL.md#what-the-model-does-not-capture)
 to say what a held-fixed assumption ignores; neither reaches a value.
 
 - **Terzi, F. & Nicoli, F. (2026)**, *From Sputnik to Starship: Estimating the
@@ -357,20 +357,20 @@ This file does not duplicate them. It says where they are.
 | commodity prices and market depths | per-commodity in `modules/mineral_value.py` |
 | taxonomy to composition | `TAXONOMY_COMPOSITION` in `asteroid_catalog/taxonomy.py`; Stage 1 installs the copy each catalog release was built with, as `catalog_taxonomy.json` |
 | the delivery LEG CHAINS and the downleg (tug and lander dry-mass fractions, the Mars entry survival fraction) | `spacecost/delivery.py`, since master v1.30.0; `modules/mineral_value.py` re-exports them and cites nothing itself |
-| delivery architectures and utility factors | `modules/mineral_value.py` and `modules/calc.py`; these are **engineering judgements**, not measurements, and README says so |
+| delivery architectures and utility factors | `modules/mineral_value.py` and `modules/calc.py`; these are **engineering judgements**, not measurements, and MODEL.md says so |
 
 ⚠️  **The utility factors are the softest assumption in the pipeline** and have
-no citation because there is nothing to cite. They are a dial. README's "What a
-kilogram is worth" says this, and it is repeated here so that nobody reads a
-gap in this file as an oversight.
+no citation because there is nothing to cite. They are a dial (MODEL.md,
+[What a kilogram is worth](MODEL.md#what-a-kilogram-is-worth)); this note is
+here so that nobody reads the gap in this file as an oversight.
 
 ---
 
 ## 8. Citing this pipeline
 
-There is no published paper, and **no LICENSE file**, so no licence is granted
-by default: all rights are reserved until one is added. Anyone relying on this
-should raise that first.
+There is no published paper. The code is MIT ([`LICENSE`](LICENSE)); the
+data it fetches and the code adapted into it are licensed as sections 1 to 3
+say.
 
 If a result from it is quoted, the reproducible identifiers are the
 `pipeline_version` and `catalog_date` stamped into every output CSV, plus the
