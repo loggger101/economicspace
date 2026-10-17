@@ -97,6 +97,7 @@ versions.md            What changed in which release, what numbers used to be,
 CITATIONS.md           Every source, dataset and borrowed line, and what each
                        obliges. Two of them require citation as a condition of use
 CLAUDE.md              Working notes: the traps and invariants. Read before editing
+LESSONS.md             The long form behind each CLAUDE.md rule, frozen 2026-10-17
 ```
 
 **The split between these documents is deliberate**, because the recurring
@@ -108,7 +109,8 @@ is the list; its length is deliberately not spelled out beside it:
 | `README.md` | what the pipeline is, how to run it, what the model does, and the **current** numbers | the current answer |
 | [`versions.md`](versions.md) | what changed in which release, what every number used to be, and the per-module changelogs | the measurement history |
 | [`CITATIONS.md`](CITATIONS.md) | where every source, dataset and borrowed line came from, and what each obliges | references and attribution |
-| [`CLAUDE.md`](CLAUDE.md) | the traps, the invariants, and the reasoning behind decisions that look wrong | how to edit it safely |
+| [`CLAUDE.md`](CLAUDE.md) | the traps, the invariants, and the decisions that look wrong, one rule at a time | how to edit it safely |
+| [`LESSONS.md`](LESSONS.md) | how each of those rules was learned, word for word as of 2026-10-17, and maintained as current about nothing | why a rule exists |
 | the [`spacecost`](https://github.com/loggger101/spacecost) repo | Stage 3's reference tables, their citations, their release history, and the delivery chains Stage 2 prices through | every launch, propellant, delta-v, operational and storage row, and what a kilogram costs to deliver or return |
 | the [`General_Research`](https://github.com/loggger101/General_Research) repo | the peer-reviewed and tiered-authoritative sources behind the model's weakest-sourced cells, with one extracted-data CSV per source | what backs a number, and how strongly |
 
@@ -188,7 +190,7 @@ made that expensive was that nothing checked it, so this one is arranged so that
 drift cannot be committed rather than merely being unlikely: the data is
 single-sourced, the ten config dials are compared at import, and the output is
 compared byte for byte. **The invariants, and what fails when each breaks, are
-in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)**, which is
+in [CLAUDE.md](CLAUDE.md#stage-1-and-stage-3-live-in-other-repositories)**, which is
 where the editing rules live.
 
 **spacecost is pinned to a tagged release**, `v0.12.0`, in all seven places
@@ -595,7 +597,7 @@ full `master.py` at least once, or run stages 1-3 individually first.
   The first full-catalog default cell on it ran its second 1% of rows in
   **9.5 minutes**, where the same cell on the old grid averaged **1.7 minutes
   per 1%** over its whole run. A slice of one run is not a budget
-  ([THE SAMPLING RULE](CLAUDE.md#the-sampling-rule)), and this one was not
+  ([THE SAMPLING RULE](CLAUDE.md#reading-a-result-without-fooling-yourself)), and this one was not
   one: **measured whole, the default cell took 16,862 s on `v0.4.0`
   (2026-09-24) and 12,062 s on master v1.40.0 (2026-09-30)**, about 2.8 and
   2.0 minutes per 1%, so the slice overstated it 3.4-fold. Budget a default
@@ -755,7 +757,7 @@ assert sys.modules.get("master") is m and m.__spec__ is not None
 ```
 
 If your driver script re-runs itself once per worker, that is why; the full
-account is in [CLAUDE.md](CLAUDE.md#entry-points).
+account is in [LESSONS.md](LESSONS.md#entry-points).
 
 ## Rebuilding master.py
 
@@ -843,7 +845,7 @@ they cannot move a number, and failing on them would be the cry-wolf shape this
 repo records twice. ⚠️  And the dirtiness test is `git diff`, never
 `git status`, because on a Google Drive working copy `status` reports files as
 modified without reading them; see
-[the Drive stat-cache trap](CLAUDE.md#google-drive-makes-the-tree-look-dirty-run-the-hooks).
+[the Drive stat-cache trap](LESSONS.md#google-drive-makes-the-tree-look-dirty-run-the-hooks).
 A baseline written before this field existed reports `not recorded` and is
 allowed through, since nothing can be inferred about a tree that is gone.
 
@@ -878,7 +880,7 @@ those harnesses rather than another one to have to trust. **Add to that list
 rather than starting another harness.**
 
 ⚠️  **Read that list before writing any comparison of your own**; see
-[the harness table in CLAUDE.md](CLAUDE.md#the-verification-harness-is-committed-now).
+[the harness table in LESSONS.md](LESSONS.md#the-verification-harness-is-committed-now).
 The short version is that a broken checker looks exactly like a broken release,
 which is why the report prints **both** a hash and a column diff: when the two
 disagree, the hash is the one that is right, and the disagreement is itself the
@@ -1085,17 +1087,17 @@ py verify_docs.py
 | # | check | catches |
 |---|---|---|
 | 1 | defaults | a documented default that no longer matches its dataclass field |
-| 2 | versions | the Stage/Version table or CLAUDE.md's `Current:` line drifting from `pipeline_version`, and the "moved without moving a number" tables drifting from the count spelled out beside them, in any doc that quotes it, including one holding no table of its own |
+| 2 | versions | the Stage/Version table or CLAUDE.md's `Current:` line drifting from `pipeline_version`, and versions.md's "moved without moving a number" table drifting from the count spelled out beside it, in any doc that quotes it, including one holding no table of its own |
 | 3 | row counts | "40 propellants" after a row was added |
 | 4 | links | a markdown anchor that does not resolve |
 | 5 | structure | unbalanced fences, ragged tables, heading-level jumps, duplicate h1/h2, in every markdown file in the repo |
 | 6 | dashes | an em- or en-dash creeping back into prose a reader sees, or a line left opening with a bare comma by the pass that removed them: the docs, the root scripts, the campaign scripts, and comments in `modules/` |
 | 7 | manifests | a list documented in one place drifting from the list defined in another: `requirements.txt` against `_MASTER_REQUIRED`, the pinned catalog release against every document that names it, and the `run.bat` block above against run.bat's own dispatcher |
 | 8 | help | a config dial the dashboard renders with no help text, because the UI scrapes its help from the field's own comment |
-| 9 | runtime | the **whole twenty-eight-cell** wall-clock table above drifting from `calc.MEASURED_DEST_SECONDS`; also CLAUDE.md's copy of the cislunar row, `calc.MEASURED_CELL_SECONDS` (the cislunar cells at the current release, which every banner and `--help` string derives its cost ratios from) against the `campaign/logs/` JSON that measured it, and every "N h at &lt;destination&gt;" in `run.bat`, `run.sh` and this file, which are typed because shell cannot import `master` |
+| 9 | runtime | the **whole twenty-eight-cell** wall-clock table above drifting from `calc.MEASURED_DEST_SECONDS`; also `calc.MEASURED_CELL_SECONDS` (the cislunar cells at the current release, which every banner and `--help` string derives its cost ratios from) against the `campaign/logs/` JSON that measured it, and every "N h at &lt;destination&gt;" in `run.bat`, `run.sh` and this file, which are typed because shell cannot import `master` |
 | 10 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md …` |
 | 11 | docstrings | a module, class or function in the repo's own Python with no docstring |
-| 12 | pairs | one measurement quoted in BOTH README and CLAUDE.md without a row on CLAUDE.md's register of known copies |
+| 12 | pairs | one measurement quoted in BOTH README and CLAUDE.md, which quotes none |
 | 13 | scope | a document disagreeing with `verify.py` about which checks it runs: its own docstring list, the check table above, and the four sentences in either file that say what `invariants` or `--skip prune parallel` covers. All four omitted check 7 for a release, in the file CLAUDE.md names as the authority for counting them |
 | 15 | guards | a FETCHING stage module that would overwrite its own inputs when run directly, with no question asked. `run_pipeline.py` has guarded that since 2026-08-23 and `py modules/transportation.py` never did: on 2026-09-17 it re-fetched three live propellant prices over the campaign's frozen tables while somebody smoke-tested an import. The guard is mirrored into all three fetching modules, because a stage module is standalone and cannot import a helper, so this holds the copies to each other, to the call, and to the `sys.exit` between the refusal and the build |
 | 14 | prose | a number typed into a sentence the worked calculation renders, where every figure beside it is derived and compared against the model. It shipped two: Module 1's taxonomy fractions "sum to between 0.73 and 0.96" and the solar/RTG crossover "near 3.46 AU", both correct when written and neither ever executed. Both derive now, and a survivor needs a row on the register in `campaign/worked_calculation.py` saying why it cannot rot. It reads the renderer's source, so it needs no run and no inputs, which is what lets it live here rather than in that script's own `--audit` |
@@ -1173,14 +1175,12 @@ shape `verify.py`'s header argues against, and it had the same consequence: the
 run that finally committed it turned up a pair the table had missed since the
 table was written, and it was **the project's four headline numbers**.
 
-The register table is the **allowlist**, not the target. A pair is fine when it
-is written down, because CLAUDE.md's job is the reasoning and this file's is
-the answer, and the reasoning reads badly with the answer removed. What is not
-fine is a pair nobody has recorded, because nobody will move both. So check 12
-goes red on an *unregistered* pair only, and either remedy clears it: cut one
-copy, or add the row. `versions.md` is deliberately outside it, because every
-section there names the release it belongs to, so a superseded figure in it is
-correct rather than stale.
+Since 2026-10-17 CLAUDE.md quotes **no** measurement at all: it carries
+rules, this file carries the numbers, and its register of agreed copies went
+with the copies. A pair check 12 finds is therefore always cut from CLAUDE.md.
+`versions.md` and `LESSONS.md` are deliberately outside it, because every
+section there names the release or the date it belongs to, so a superseded
+figure in them is correct rather than stale.
 
 ⚠️  **It checks that a documented *configuration* matches the code; not that a
 documented *measurement* is current.** A stale number passes everything in it.
@@ -1683,7 +1683,7 @@ does, and the volatiles that once carried the Mars result rise least, water at
 Mars is 2.7× its LEO price now against 11× before. **Every override runs
 downward**, deliberately; why that constraint exists, and why a PGM settlement
 market was considered and rejected, are in
-[CLAUDE.md](CLAUDE.md#model-assumptions-that-are-load-bearing).
+[CLAUDE.md](CLAUDE.md#the-model-load-bearing-assumptions-do-not-fix).
 
 **The import budget is split per commodity class.** One shared depot budget
 meant a 20 t/yr Mars base absorbing 20 t of water *and* 20 t of platinum *and*

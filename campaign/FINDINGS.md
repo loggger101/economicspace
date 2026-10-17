@@ -261,8 +261,8 @@ this project runs on: name one authority, or you have two.
 | the 28-cell cost/revenue matrix, the two new destinations, the ranking, the FEEP win | [README.md, Results](../README.md#current-results-the-complete-28-cell-matrix) |
 | the 28-cell wall clocks | [README.md, Beneficiation](../README.md#beneficiation), pinned to `MEASURED_CELL_SECONDS` by `verify_docs.py` check 9 |
 | the superseded 20-cell matrix, the per-cell wall clocks, the price-epoch evidence | [versions.md](../versions.md#the-28-cell-campaign-2026-09) |
-| the invariants and the retired claims | [CLAUDE.md](../CLAUDE.md#the-complete-28-cell-matrix-is-measured-calc-1212-2026-09-1113) |
-| the per-destination population tables, derived 2026-09-14 rather than promoted | [CLAUDE.md](../CLAUDE.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09), from `population/` |
+| the invariants and the retired claims | [CLAUDE.md](../versions.md#the-complete-28-cell-matrix-is-measured-calc-1212-2026-09-1113) |
+| the per-destination population tables, derived 2026-09-14 rather than promoted | [CLAUDE.md](../versions.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09), from `population/` |
 
 ✅  **WHAT WAS NOT PROMOTED HAS NOW BEEN DERIVED: CLOSED 2026-09-14.** The
 per-destination propellant, vehicle, rig-bound, cadence and saturation tables in
@@ -271,7 +271,7 @@ because this campaign extracted the winner row and ran the invariants and
 nothing else. `population.py` read the archived cells under `cells/` and
 derived all of them in **one pass, about ten minutes, with no stage re-run**.
 Per-cell JSON is under `population/`; the tables are in
-[CLAUDE.md](../CLAUDE.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09)
+[CLAUDE.md](../versions.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09)
 and the superseded 2026-08 ones in
 [versions.md](../versions.md#the-population-re-derivation-2026-09-14).
 

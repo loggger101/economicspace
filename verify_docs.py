@@ -11,9 +11,8 @@ counts-in-prose failure this file was written to catch:
                      the dataclass field it names
     2. versions      the Stage/Version table and CLAUDE.md's "Current:" line,
                      against each module's `pipeline_version`; and every count
-                     spelled out in prose beside a "moved without moving a
-                     number" table, in any doc that quotes one, against the
-                     rows of the table itself
+                     spelled out in prose about versions.md's "moved without
+                     moving a number" table, against the rows of the table
     3. row counts    documented reference-table sizes, against the tables
     4. links         every markdown anchor resolves, in all three files
     5. structure     balanced fences, no ragged tables, no heading-level jumps,
@@ -26,14 +25,14 @@ counts-in-prose failure this file was written to catch:
                      and README's `run.bat` block vs run.bat's own dispatcher
     8. help          every config dial the dashboard renders carries the
                      comment it shows as help text
-    9. runtime       README's cislunar wall clock, against the
-                     MEASURED_CELL_SECONDS every banner now derives from
+    9. runtime       README's wall-clock tables and the launchers' hours,
+                     against MEASURED_CELL_SECONDS / MEASURED_DEST_SECONDS
    10. transfer      every distinctive number in a --before snapshot still
                      appears somewhere in the docs afterwards
    11. docstrings    every module, class and function in the repo's own Python
                      carries one
    12. pairs         no measurement is quoted in BOTH README and CLAUDE.md
-                     without a row on CLAUDE.md's register of known copies
+                     (CLAUDE.md quotes none; README is the current answer)
    13. scope         which checks `verify.py` runs, against every sentence in
                      either file that says -- its own docstring list, README's
                      table, and the four claims about what a subcommand covers
@@ -156,7 +155,10 @@ def _force_utf8_stdout() -> None:
 _force_utf8_stdout()
 
 REPO = os.path.dirname(os.path.abspath(__file__))
-DOCS = ["README.md", "versions.md", "CLAUDE.md"]
+# LESSONS.md is the frozen long form behind CLAUDE.md (2026-10-17): it is
+# link-, structure- and dash-checked like the other docs, and claims to be
+# current about nothing, so the pairs and pin-prose checks do not read it.
+DOCS = ["README.md", "versions.md", "CLAUDE.md", "LESSONS.md"]
 
 # Markdown that is not one of the three authorities but is still prose a reader
 # is sent to.  The campaign pair spent a whole measurement campaign outside
@@ -505,7 +507,9 @@ def check_versions(mods) -> bool:
     # while both tables held thirteen rows, and this check never looked at it.
     # A file with no table of its own is scored against the canonical one.
     canonical = None
-    for doc in ("versions.md", "CLAUDE.md"):
+    # CLAUDE.md carried a second copy until 2026-10-17; versions.md is the
+    # only one now, which is the fix this loop used to police.
+    for doc in ("versions.md",):
         rows = _stamp_table(read(os.path.join(REPO, doc)))
         if rows is None:
             bad.append("%s: no `| stamp | why it moved |` table found" % doc)
@@ -1263,15 +1267,6 @@ DEST_ROW = re.compile(
     r"\s*\*{0,2}([\d,]+)\s*s\*{0,2}[^|]*\|"
     r"\s*\*{0,2}([\d,]+)\s*s\*{0,2}[^|]*\|", re.M)
 
-# CLAUDE.md's copy lives in the cross-document pairs register, which is by
-# definition the list of copies the repo has agreed to keep CURRENT, so it is
-# the one line in that file safe to pin.  Anchored on the row's own text rather
-# than on a bare four-number pattern, deliberately: CLAUDE.md quotes the
-# superseded 1.17.7 figures (733 / 1,253 / 3,424 / 5,692) in the same file on
-# purpose, and a check that flagged those would be crying wolf at the history
-# this project keeps on purpose.
-CLAUDE_REGISTER = re.compile(r"^\|.*28-cell wall clocks.*\|$", re.M)
-
 # `run.bat` and `run.sh` quote the default cell in HOURS before starting a
 # multi-hour run, and shell cannot import `master` to derive it.  So it is
 # typed, and therefore checked: every "N h at <destination>" in either launcher
@@ -1437,24 +1432,6 @@ def check_runtime() -> bool:
                 bad.append("README %-14s %-15s says %s s, "
                            "MEASURED_DEST_SECONDS says %d s"
                            % (dest, lab, got_s, exp))
-
-    # -- CLAUDE.md's register row ---------------------------------------------
-    claude = read(os.path.join(REPO, "CLAUDE.md"))
-    reg = CLAUDE_REGISTER.search(claude)
-    if reg is None:
-        bad.append("CLAUDE.md's pairs register has no 28-cell wall-clock row")
-    else:
-        got = re.findall(r"[\d,]+(?=\s*(?:/|s\b))", reg.group(0))
-        if len(got) != 4:
-            bad.append("CLAUDE.md's wall-clock register row does not quote "
-                       "four figures: %s" % reg.group(0).strip()[:70])
-        else:
-            for got_s, exp, lab in zip(got, dests["cislunar"], labels):
-                n += 1
-                if int(got_s.replace(",", "")) != exp:
-                    bad.append("CLAUDE.md register %-15s says %s s, "
-                               "MEASURED_DEST_SECONDS says %d s"
-                               % (lab, got_s, exp))
 
     # -- the launchers and README's copy of their menus ---------------------
     # README tabulates both launchers' option lists, hours included, so the
@@ -1659,8 +1636,8 @@ def check_pairs() -> bool:
         print("         %s:%d  %s" % (fa, ia, la.strip()[:110]))
         print("         %s:%d  %s" % (fb, ib, lb.strip()[:110]))
     if unregistered:
-        print("       Cut one copy, or add a row to CLAUDE.md's register table")
-        print("       under \"AND CHECK THE OTHER FILE\".")
+        print("       Cut the CLAUDE.md copy: it carries rules, README carries")
+        print("       the numbers.")
     return not unregistered and not missing_current
 
 

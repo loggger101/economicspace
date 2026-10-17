@@ -643,7 +643,7 @@ hand, and it could not, for three reasons.
 `verification_sheet.py --sweep` builds and checks a worksheet for one mission
 per architecture on disk. It found the RTG, `earth_surface`, net-price floor,
 single-route and cancellation defects CLAUDE.md lists under
-[a checker run only on the best case](CLAUDE.md#a-checker-run-only-on-the-best-case-has-never-run-on-the-rest),
+[a checker run only on the best case](LESSONS.md#a-checker-run-only-on-the-best-case-has-never-run-on-the-rest),
 plus one in the derivation: `phase_table` only cleared its merge register on a
 phased row, so a four-fraction row derived after a detailed-phase one carried
 the previous body's merge. That bit the narrative document too, and it now
@@ -816,7 +816,7 @@ them is a refusal.** Probed on 2007 WU3: Falcon Heavy on iodine is searched to
 xenon at 3.638x. The same vehicle and propellant land on a different
 concentration and programme, which is the non-exhaustive search CLAUDE.md
 records under
-[the fleet search is coarse-then-refine](CLAUDE.md#the-fleet-search-is-coarse-then-refine-so-tightening-a-constraint-can-improve-a-row),
+[the fleet search is coarse-then-refine](LESSONS.md#the-fleet-search-is-coarse-then-refine-so-tightening-a-constraint-can-improve-a-row),
 and the ceiling is not involved (surplus 0, clearing 1.0). Before calc 1.29.0
 the same measurement showed 137 such bodies and a winner that took the cell
 under a HIGHER descent; that one was a refusal, and it is
@@ -1163,7 +1163,7 @@ against the loop and not against the existence of a mission.
   EMPTY return vehicle's, less the loop's 1%. Every converged state flies at
   least that stage, so the refusal is still sound; under ISRU pass 1's stage is
   already the floor. See CLAUDE.md,
-  [a pre-filter proven sound against an iteration](CLAUDE.md#a-pre-filter-proven-sound-against-an-iteration-is-not-proven-sound-against-the-problem).
+  [a pre-filter proven sound against an iteration](LESSONS.md#a-pre-filter-proven-sound-against-an-iteration-is-not-proven-sound-against-the-problem).
 - **The concentration search refines around the best undamped coarse rung**
   as well as the unrepaired and the overall one. The undamped winner is calc
   1.27.0's overall winner, so every candidate 1.27.0 priced is still priced.
@@ -1460,7 +1460,7 @@ Both are fixed. All four `.verify/baseline-1.40.0` cells and a repaired lunar
 row now check clean, and `--self-test` still fails a planted value. These are
 campaign scripts, so no `pipeline_version` moves and `master.py` is untouched.
 See
-[a checker run only on the best case](CLAUDE.md#a-checker-run-only-on-the-best-case-has-never-run-on-the-rest).
+[a checker run only on the best case](LESSONS.md#a-checker-run-only-on-the-best-case-has-never-run-on-the-rest).
 
 ## master v1.43.0 / calc v1.27.0
 
@@ -1870,7 +1870,7 @@ been re-run at this release.
 
 ⚠️  **Some bodies got BETTER from a price that only fell**, by up to 5.03%,
 and one got 2.02x worse. Both are
-[splitting a phase splits every bound that reads ONE phase](CLAUDE.md#splitting-a-phase-splits-every-bound-that-reads-one-phase)
+[splitting a phase splits every bound that reads ONE phase](LESSONS.md#splitting-a-phase-splits-every-bound-that-reads-one-phase)
 again: schreibersite was the best-priced phase, so it set the purity bound and
 the concentration ceiling, and moving it moved the non-exhaustive
 concentration search onto different rungs. Nothing about either is a defect in
@@ -2014,7 +2014,7 @@ valuation functions: S and Q +34%, the C complex +24-61%, K +58%, E and Xe
 priced), V -2.4%, every class with no source within 0.4%, L +3.2% (its
 perovskite's titanium).
 
-These are samples; [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) applies.
+These are samples; [THE SAMPLING RULE](LESSONS.md#the-sampling-rule) applies.
 
 ### What was verified
 
@@ -2209,7 +2209,7 @@ of rows in 9.5 minutes, against 1.7 minutes per 1% on the old grid, and that
 "a factor of about five is not rounding". **Measured whole, the two cells on
 the wide grid averaged 2.8 and 2.0 minutes per 1%**, against the 1.7 of the
 `data-2026-09-23` cell on the old grid. The slice was 3.4x the run it came
-from. That is [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) for a slice of
+from. That is [THE SAMPLING RULE](LESSONS.md#the-sampling-rule) for a slice of
 rows in catalog ORDER rather than a stride sample, and it failed the same way.
 
 ⚠️  **The three wall clocks are three sessions, three releases and two grids**,
@@ -2246,7 +2246,7 @@ overwritten, and each read its own Stage 2 table.
 **Those Stage 2 tables were REPLAYED, not fetched.** The live table records
 the five yfinance quotes it was priced from (2026-09-29), and feeding them back
 in as the live frame priced the six other destinations with the network
-untouched, which is [the replay this release introduced](CLAUDE.md#a-stage-2-table-can-be-rebuilt-without-being-re-fetched).
+untouched, which is [the replay this release introduced](LESSONS.md#a-stage-2-table-can-be-rebuilt-without-being-re-fetched).
 Rebuilding cislunar the same way reproduces every price on all 59 rows; the
 one input that differs is silver's recorded quote, by one ULP
 (`1969.55468079172` against `1969.5546807917196`), which the replay's own
@@ -2472,7 +2472,7 @@ the evaluable set.  Traced: with the refinery off, the Falcon Heavy candidate
 fails the settle-up's launch-mass recheck, because the fixed point carries its
 last pass rather than re-solving at its settled hardware; the refinery adds a
 term to the stopping test, the loop stops on a different pass, and the stack
-fits.  That is [a fixed point that carries its last pass](CLAUDE.md#a-fixed-point-that-carries-its-last-pass-makes-the-stopping-test-an-answer),
+fits.  That is [a fixed point that carries its last pass](LESSONS.md#a-fixed-point-that-carries-its-last-pass-makes-the-stopping-test-an-answer),
 pre-existing, and not a refinery effect.
 
 ⚠️  **A lever left unmodelled, deliberately**: the refinery is sized to put
@@ -2485,7 +2485,7 @@ pairs of `verify.py` check 5, where 13 did at v1.24.0.  The refinery is cheap
 on concentrate and dear on raw ore, so concentrating now wins everywhere it is
 priced, by at least 15% (`max 0.852676`).
 
-These are samples; [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) applies.
+These are samples; [THE SAMPLING RULE](LESSONS.md#the-sampling-rule) applies.
 
 ### What was verified
 
@@ -2600,7 +2600,7 @@ rock is worth cents, so chromite (Cr) becomes the best phase of S, V and A
 types, and the sulfur, CO2 and trace metals lift C, D and P bodies 25-60% from
 a very low base. Measured on the valuation functions directly, not on a cell.
 
-These are samples, and [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule)
+These are samples, and [THE SAMPLING RULE](LESSONS.md#the-sampling-rule)
 applies to them. No full-catalog cell has been run at 1.24.0.
 
 ### On disk
@@ -2691,9 +2691,9 @@ grew, and beneficiation almost removes the effect because a concentrated load
 rarely fills a fairing. ⚠️  **Thirteen raw rows get WORSE under a looser
 cap**, which is possible here because the haul is derived from whichever
 constraint binds rather than searched; see
-[a constraint that rarely binds can still be sizing your answer](CLAUDE.md#a-constraint-that-rarely-binds-can-still-be-sizing-your-answer).
+[a constraint that rarely binds can still be sizing your answer](LESSONS.md#a-constraint-that-rarely-binds-can-still-be-sizing-your-answer).
 That mechanism was not chased row by row. These are samples, and
-[THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) applies to them.
+[THE SAMPLING RULE](LESSONS.md#the-sampling-rule) applies to them.
 
 ### On disk
 
@@ -2822,7 +2822,7 @@ long before the body does, now that a mission may take the whole body. The rows
 that do move are the new rules at work: 2016 UW222, typed D by orbit and
 darker, leaves the raw evaluable set and gets 9.3x worse on the default cell;
 2026 ES125 (210 AU) and two V-to-S retypings move 2-26%. That is a sample, and
-[THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) applies to it.
+[THE SAMPLING RULE](LESSONS.md#the-sampling-rule) applies to it.
 
 ### The redundancies removed
 
@@ -2928,7 +2928,7 @@ tables Stages 2 and 3 build on `v0.4.0`, both in a scratch directory:
 | commonest vehicle | Falcon Heavy (reusable side cores) | Falcon Heavy (expendable) |
 | paired new / old, median | | **1.580x** (0.737 to 4.041) |
 
-⚠️  **A sample, so read [THE SAMPLING RULE](CLAUDE.md#the-sampling-rule)
+⚠️  **A sample, so read [THE SAMPLING RULE](LESSONS.md#the-sampling-rule)
 before quoting it for the full catalog**, and the runtime of the two runs is
 deliberately not quoted: a wider grid costs more per row, and a 300-row cell is
 the construction this project has four times failed to budget from. The best
@@ -2942,7 +2942,7 @@ worth a decision; it is not a defect in the tables.
   term and **chooses the pricing model off the Stage 2 table's own stamp**,
   holding the choice to every `used in space` price in that table. Without it
   every archived cell would have been refused the moment the pin moved. See
-  [A pricing MODEL can change under an archived row](CLAUDE.md#a-pricing-model-can-change-under-an-archived-row-not-only-a-price).
+  [A pricing MODEL can change under an archived row](LESSONS.md#a-pricing-model-can-change-under-an-archived-row-not-only-a-price).
   `worked_calculation_doc.py` and `verification_sheet.py` show the per-leg
   build cost; the sheet's `m_LEO` substitution also stops dropping the Mars
   entry leg, which printed `1 / 1.0` where the value divided by 0.30.
@@ -3071,7 +3071,7 @@ data-2026-09-23 cell above, on the same catalog and the 357-combination grid,
 averaged **102 s per 1%** over its whole 10,249 s.
 
 ⚠️  **That is one slice of one run, not a budget**, and
-[THE SAMPLING RULE](CLAUDE.md#the-sampling-rule) is about exactly this
+[THE SAMPLING RULE](LESSONS.md#the-sampling-rule) is about exactly this
 extrapolation: the per-row cost varies along the catalog's order, and nobody
 has measured how. What it does establish is that the wall clocks in
 `MEASURED_CELL_SECONDS` and `MEASURED_DEST_SECONDS`, and every banner, help
@@ -3135,7 +3135,7 @@ input epochs earlier. It is superseded by
   (`catalog_date` against the table's), and otherwise `campaign/stage2/` and
   the newly committed `campaign/stage3/`: **88 quantities, 0 DIFFER**, as
   before. Stage 1 has no frozen copy and is disclosed instead. See
-  [a live table is only evidence about a run that could have read it](CLAUDE.md#a-live-table-is-only-evidence-about-a-run-that-could-have-read-it).
+  [a live table is only evidence about a run that could have read it](LESSONS.md#a-live-table-is-only-evidence-about-a-run-that-could-have-read-it).
 - **`campaign/run_cell.py` would have overwritten the live Stage 2 catalog**
   with a 0.3.x one and run a hybrid cell under a campaign cell's name. It
   refuses before the copy now.
@@ -4236,7 +4236,7 @@ were right and every designation was not.
 ✅  **The correction changes what the table SAYS, not only what it prints: the
 winner does not move in any of the four cells.** The four defaults are worth
 51-65% of the objective and re-rank nothing at the top, which is
-[the winner moved and the population did not](CLAUDE.md#what-the-model-currently-says-and-what-that-retired)
+[the winner moved and the population did not](#the-2026-09-campaign-population-detail)
 arriving inverted -- the level moved and the winner did not. A table whose
 winner column was read off the wrong row could not have said so.
 
@@ -4272,7 +4272,7 @@ clearing fraction, because a discounted kilogram is worth half and the
 programme that maximises the objective is now willing to sell more of them.
 **A clearing fraction is a property of the programme the search chose, not a
 measure of how hard the ceiling is biting** -- which is
-[a diagnostic describes the WINNER](CLAUDE.md#a-diagnostic-describes-the-winner-not-the-search-that-produced-it)
+[a diagnostic describes the WINNER](LESSONS.md#a-diagnostic-describes-the-winner-not-the-search-that-produced-it)
 arriving in the column that lesson was first written about.
 
 ### Which flag did what
@@ -10029,6 +10029,1125 @@ The current answers are in the README:
 [Results](README.md#current-results-the-complete-28-cell-matrix) for the model,
 [Beneficiation](README.md#beneficiation) for the wall clock.
 
+## The 2026-09 campaign: population detail
+
+Moved here from CLAUDE.md on 2026-10-17. Every figure below is the 2026-09 campaign (calc 1.21.2) or older, as each paragraph says; none of it is what a default run answers today, which is README's.
+
+Everything from here to "When a number changes" is **measurement**, not
+guidance.
+
+Read it before re-measuring anything, and before "fixing" a result that looks
+wrong: that is what it is for. **The headline numbers themselves are
+[README.md's](README.md#current-results-the-complete-28-cell-matrix)**; what is
+here and not there is the per-destination detail, the invariants, and the
+claims each cell retired.
+
+### ✅ THE COMPLETE 28-CELL MATRIX IS MEASURED (calc `1.21.2`, 2026-09-11/13)
+
+🚨  **AND EVERY CELL BELOW WAS PRICED ON spacecost 0.3.x, WHICH master
+`1.35.0` REPINNED PAST.** spacecost `v0.4.0` re-audited the launch table and
+changed the delivered-price model, so Stage 2 and Stage 3 both re-price and no
+flag in this repo restores the old tables: reproducing a cell here needs the
+2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
+tables now frozen under `campaign/stage3/`. ⚠️  **The live
+`asteroid_pipeline/` has held spacecost `v0.12.0`'s tables since 2026-10-17,
+a mineral_value 1.15.0 Stage 2 since 2026-10-07, and the `data-2026-09-29c`
+catalog since 2026-09-29** (the earlier Stage 2 tables are frozen under
+`campaign/stage2/mineral_value-*/`; the `v0.4.0` tables it held from
+2026-09-24, the `v0.5.0` ones from 2026-09-28, the `v0.6.0` ones from
+2026-10-06, the `v0.7.0`, `v0.8.0` and `v0.9.0` ones from earlier on
+2026-10-07 and the `v0.10.0` ones from later that day (`v0.11.0` changed no
+table) are frozen under `campaign/stage3/spacecost-0.4.0/`, `-0.5.0/`,
+`-0.6.0/`, `-0.7.0/`, `-0.8.0/`, `-0.9.0/` and `-0.10.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
+a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
+grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
+default configuration measured the repricing at a median **1.58x worse**
+objective on the same bodies, best row 5.71x to 9.10x; that is a sample, and
+[THE SAMPLING RULE](#the-sampling-rule) applies to it. See
+[master v1.35.0](versions.md#master-v1350--mineral_value-v1100--transportation-v1160).
+
+🚨  **AND AS OF calc `1.22.0` IT IS NO LONGER WHAT A CONFIGURE-NOTHING RUN
+ANSWERS.** Four defaults moved on 2026-09-14 and every cell below predates
+them: the surplus past a market ceiling was **abandoned** rather than sold at
+half price, and reliability, the learning curve and the cost of capital were
+all **charged**. Set `sell_surplus_at_discount` False, `model_reliability`
+True, `model_learning_curve` True and `apply_wacc_compounding` True to
+reproduce anything in this section.
+
+⚠️  **AND calc `1.23.0` ADDS A FIFTH: `max_mining_fraction` is 1.0
+now, not 0.05.** Set it back to reproduce this section. It is the mildest of
+the five and the easiest to forget, because it is bit-identical on both
+BENEFICIATED cislunar cells and moves the raw N = 1 cell 5.11%; a reproduction
+that checks a beneficiated cell and stops will pass without it.
+
+🚨  **AND calc `1.24.0` ADDS A SIXTH, AND IT IS NOT A DIAL BUT A DIFFERENT
+COMPOSITION: `model_mineral_phases` is True.** A body is sold as the minerals
+Stage 1's `comp_phases` says it is made of, so troilite, chromite, magnetite and
+CO2 ice are cargo that did not exist when this section was measured. Set it
+False to reproduce anything here; it is bit-identical to 1.23.0 when you do.
+It moves the median body by several percent and in BOTH directions by class
+(D-types get worse), so it is the least safe of the six to scale by; the
+measurement is in [calc v1.24.0](versions.md#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240).
+
+🚨  **AND calc `1.25.0` ADDS A SEVENTH: `model_refinery` is True**, and it
+moves raw and concentrated cells in OPPOSITE directions, so no single factor
+covers it either. Set it False as well; it is bit-identical to 1.24.0 when you
+do. See [calc v1.25.0](versions.md#master-v1390--calc-v1250).
+
+⚠️  **AND calc `1.26.0` ADDS AN EIGHTH: `model_detailed_phases` is True**, the
+catalog's `comp_phases_detailed` (the alloy as kamacite, taenite, tetrataenite
+and cohenite; the sulfide by species; phosphates and CAI oxides named). It is
+the mildest of the eight in space, within 0.08% of every cislunar body on the
+`verify.py` cells, and far from mild at `earth_surface` (median 25-33% better).
+Set it False as well; it is bit-identical to 1.25.0 when you do. See
+[calc v1.26.0](versions.md#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260).
+
+✅  **THE CURRENT ANSWER IS SEVEN FULL CELLS, AND IT IS README'S, NOT THIS
+SECTION'S.** The default cell was run over the whole catalog at master v1.40.0
+at every destination, cislunar on 2026-09-30 and the other six on
+2026-10-01/03: see
+[what a configure-nothing run answers today](README.md#what-a-configure-nothing-run-answers-today),
+[the cislunar record](versions.md#the-full-catalog-default-cell-at-this-release-2026-09-30)
+and [the other six](versions.md#the-six-other-destinations-at-this-release-2026-10-0103).
+🚨  **They reorder the destinations**: the two surfaces lead and cislunar is
+fourth, because spacecost `v0.4.0` made a kilogram on a surface dearer to
+replace and one in orbit cheaper. Every "cislunar is the best case" below is a
+2026-09 campaign statement.
+⚠️  **It is not a ninth flag on this section.** Everything here also flew the
+2026-08-11 catalog and the spacecost 0.3.x tables, and the catalog's 1.5.0
+correction alone moves the median cislunar body by about a third, so no
+setting of the eight flags reproduces a cell below on today's inputs.
+
+⚠️  **DO NOT SCALE THESE CELLS BY A SINGLE RATIO.** On the capped cislunar
+sample cells the four together are worth 2.6x on raw ore and 2.1x on the
+default cell, the cost of capital alone is 42-52% of it, and the learning
+curve runs the OTHER way and is exactly inert at N = 1. The decomposition is in
+[calc v1.22.0](versions.md#calc-v1220). What is below is a measurement of the
+model it names, which is why it is kept: it is still the only seven-destination
+measurement the project has.
+
+✅  **THE WHOLE CISLUNAR 2x2 HAS NOW BEEN MEASURED AT THOSE DEFAULTS.** All
+four cells were re-run over the full catalog on 2026-09-16: **5.3483x /
+3.9218x / 4.5298x / 3.1822x**, which is 2.09x to 3.11x better than this
+section's cislunar row. Both evaluable counts reproduce exactly, and the
+never-worse pairings hold on roughly 650,000 paired rows each with zero
+exceptions. The population detail is in
+[the full-catalog cislunar 2x2 at these defaults](versions.md#the-full-catalog-cislunar-2x2-at-these-defaults-2026-09-16).
+
+🚨  **DO NOT RESCALE THIS SECTION BY ANY OF THOSE FOUR FACTORS.** They are
+`cislunar` factors, they span 2.09x to 3.11x ACROSS the square, and the six
+other destinations have not been re-run at all. The capped-sample projection
+that the paragraph above quotes landed within 0.3% on the default cell and
+**10.7% low on raw ore**, so even the release's own decomposition is not a
+single number. Every other statement in this section is still a `1.21.2`
+statement.
+
+⚠️  **And the projection that held was the NARROW kind.** A capped sample
+predicting a MODEL ratio over identical rows is not the same act as predicting
+a wall clock, which is what THE SAMPLING RULE is about.
+
+🚨  **The headline matrix and the result highlights are in
+[README.md](README.md#current-results-the-complete-28-cell-matrix), and are not
+copied here**, for the reason this file gives everywhere else: name one
+authority or you have two. What follows is the part a README should not carry:
+per-destination depth, the invariants, and the claims each cell retired. The
+campaign's own record, including what it cost and what it cannot support, is
+[`campaign/FINDINGS.md`](campaign/FINDINGS.md).
+
+**Seven destinations are measured now**, not five. `mars_orbit` and `geo` had
+never had a cell run at either until this campaign, so every "at every
+destination" sentence below means one of two things and you have to check which:
+the **2026-09** campaign measured the objective, the evaluable set, the winner
+and the invariants at all seven, and nothing else at any of them.
+
+✅  **THAT GAP IS CLOSED AS OF 2026-09-14: EVERY SECTION BELOW IS NOW A 2026-09
+`capacity_cap` MEASUREMENT.** The 2026-09 campaign extracted the winner row and
+ran the invariants and nothing more, so the propellant shares, the vehicle
+shares, the rig's two bounds, the cadence and the saturation diagnostics
+remained 2026-08 `elasticity` figures with insurance charged for three days.
+`campaign/population.py` re-derived all of them from the archived cells under
+`campaign/cells/`, which carry every column needed: **one pass, about ten
+minutes, and no stage re-run.** See
+[the population re-derivation](versions.md#the-population-re-derivation-2026-09-14).
+
+🚨  **RE-READING A CELL IS THE CHEAPEST MEASUREMENT IN THIS PROJECT AND IT WENT
+UNTAKEN FOR THREE DAYS WHILE FIVE SECTIONS CARRIED A WARNING INSTEAD.** The
+campaign cost 26 hours of compute and archived 11 GB precisely so that questions
+like these would not need a re-run; the tables above sat stale because nobody
+had written the reader, not because the data was missing. **When a section says
+"not re-derived", check whether the inputs are already on disk before believing
+the cost.**
+
+⚠️  **Four of the five sections changed a documented CONCLUSION, not just a
+level**, which is the argument against leaving such a gap open: `mars_surface`
+stopped being the exception to the beneficiated inversion, `saturation_multiplier`
+turned out to be identically 1.0 and therefore dead as a diagnostic, "ISRU tracks
+hydrolox to within 0.03 pp" failed at three destinations, and iodine went from
+winning two beneficiated cells to three.
+
+Two facts everything below leans on: **`cislunar` was the best case on all
+four settings of this campaign** (it is not at master v1.40.0; see the banner
+above), though `mars_orbit` was within 11% of it on the default cell,
+and **the programme search never changes the evaluable set** at any of the seven
+destinations, as it must not, since N enters nothing in the mass cascade.
+
+🚨  **THE 28-CELL MATRIX IS NOT COMPARABLE CELL-FOR-CELL WITH THE 20-CELL ONE,
+AND FOUR THINGS MOVED AT ONCE**, so no single delta can be attributed to any
+one of them:
+
+| what moved | from | to |
+|---|---|---|
+| destinations | five | **seven** |
+| `market_model` | `elasticity` | **`capacity_cap`** |
+| `charge_insurance` | True | **False** |
+| price epoch | 2026-08-23 | **2026-09-09** |
+
+The superseded matrix, the per-cell wall clocks and what the campaign cannot
+support are in
+[the 28-cell campaign](versions.md#the-28-cell-campaign-2026-09).
+
+🚨  **AND THE THING TO INTERNALISE IS THAT THE WINNER MOVED AND THE POPULATION
+DID NOT.** Winner rows moved 8-69% between the two campaigns; the beneficiation
+population medians moved **0.1 to 2.3 percentage points**:
+
+| destination | benef, winner row | benef population median, 2026-09 | the same, 2026-08 |
+|---|---|---|---|
+| `cislunar` | -8.4% | **+39.4%** | +39.5% |
+| `lunar_surface` | -36.5% | **+66.1%** | +63.8% |
+| `earth_surface` | -6.5% | **+77.7%** | +77.7% |
+
+⚠️  The columns use opposite conventions and are not each other's negation; the
+median is `median(1 - r)` over the evaluable population, which is the committed
+convention, and the winner column is one row against its 2026-08 counterpart.
+
+✅  **This is the sharpest instance in the project of the rule under
+[A diagnostic describes the WINNER](LESSONS.md#a-diagnostic-describes-the-winner-not-the-search-that-produced-it).**
+`capacity_cap` and the insurance removal reshaped the TOP of the distribution
+and left the middle where it was. **A headline that moves 50% over a median that
+moves 0.1 pp is a statement about one asteroid**, and this file is full of
+headline numbers. Quote a median before claiming the model changed.
+
+#### What the two new destinations settled
+
+⚠️  **They are not two more of the same thing, and that is why they were worth
+adding together.** `mars_orbit` is the control on the ISRU discount: it takes
+the base utility profile, so it isolates how much of the `mars_surface` result
+is the crust rather than the distance. `geo` is the control on the other end,
+the smallest in-space market in the model at 40 t/yr, where `earth_surface` is
+the one whose market is so deep that saturation is numerically inert.
+
+✅  **`mars_orbit` came second at all four settings and is the most reachable
+destination in the model**, 956,090 evaluable bodies beneficiated against
+`cislunar`'s 660,253. **So the ISRU discount that carries the `mars_surface`
+result is a property of being ON Mars, not of Mars**, which is exactly what an
+empty override dict was put there to test. Distance is an advantage here: a
+main-belt body is cheaper to deliver to Mars than to Earth.
+
+🚨  **`geo` IS WORST RAW AND THIRD BEST BENEFICIATED, SO THE DESTINATION
+RANKING DEPENDS ON THE CONFIGURATION.** It is 5th of the in-space five as a
+single raw mission and 3rd as a beneficiated programme. This file already says
+every propellant-share claim is a statement about a configuration rather than
+about the model; that caution now reaches **which destination is best**.
+
+The mechanism is the utility table and not delivery cost: `geo` is priced at
+$12,526/kg on spacecost 0.3.x (and $8,046 on `v0.4.0`, $8,462 on `v0.8.0`,
+still), *above*
+cislunar, and still loses at N = 1, because it is the first
+destination whose overrides run downward on **metals and rock** rather than
+volatiles. Concentrating is therefore worth more at `geo` (-58.3%) than
+anywhere else measured, which extends rather than contradicts this file's
+standing finding that `cislunar` is the WORST place to concentrate: the value
+of beneficiation tracks how little the destination pays for what you would
+otherwise ship.
+
+🚨  **AND THE FIRST THING A `mars_orbit` CELL WOULD HAVE MEASURED WAS A DEFECT,
+WHICH IS WHY IT IS WORTH RUNNING A DESTINATION EARLY.** `synodic_period_yr`'s
+second argument was chosen by a conditional testing `== "mars_surface"`, written
+in two places, so the destination added one release later took the `else` branch
+and waited on Earth/Mars alignment that a 1-sol Mars depot does not fly to.
+Wrong on **99.97%** of a 38,892-row stride sample. Fixed in calc `1.19.2`, which
+reads the figure off `DELIVERY_ARCHITECTURES` instead.
+
+⚠️  **The lesson is the one this file already states about branches, arriving
+from the other side.** "An unreachable branch is not a verified branch" is about
+a branch nothing fires; this is a branch that fires for **the wrong member of a
+family**, and it is invisible for exactly the same reason: no cell of the
+affected destination had been run. The general shape is **a conditional that
+names one member of a set instead of asking the set a question**, and the
+defence is the one taken here: put the answer in the table where a destination
+already declares what it is, and assert the field is total.
+
+#### Reproduction, and the one thing that did reproduce exactly
+
+🚨  **THE 2026-09 CAMPAIGN CANNOT REPRODUCE THE 2026-08 CELLS AND WAS NEVER
+GOING TO**, because all four of the things in the table above moved. What it
+can be held to is narrower and was checked:
+
+| what | result |
+|---|---|
+| evaluable rows, every destination measured in both campaigns | **identical**, all five |
+| `earth_surface` evaluable, raw / benef | **784,242 / 912,846**, the committed figures |
+| `leo`'s winners, all four cells | **identical**, 2018 DT at N = 1 becoming 2021 CX5 searched |
+| a capped smoke cell against the committed `capacity_cap` sample | **25.7233x, 2017 KJ5, Falcon Heavy on iodine at 97,875 kg**, exact |
+
+✅  **`leo` reproducing its structural signature is the strongest of these.**
+This file records `leo` as the one destination where the best single mission and
+the best programme are DIFFERENT BODIES. That held under a different market
+model with insurance off, which is a stronger test than the measurement it
+reproduces.
+
+✅  **And the evaluable sets being identical across a market-model change is
+the invariant it looks like.** Which rows are evaluable falls out of the mass
+cascade, and neither N nor any price enters it. Had those counts moved, the
+ceiling would have been reaching the SIZING path, which is the one thing the
+`caps=None` guard exists to prevent.
+
+⚠️  **`650,516` IS NOT A DISAGREEMENT WITH EITHER CAMPAIGN, AND THIS FILE USED
+TO IMPLY IT WAS.** Both campaigns report **650,921** for cislunar raw,
+identically. 650,516 belongs to a calc `1.15.0` run on a **1,554,353-row**
+catalog snapshot rather than the 1,555,667-row one both campaigns used.
+Different catalog, not different code. **A count quoted without its catalog is
+not a measurement**, which is the same rule this file applies to wall clocks and
+releases.
+
+#### Invariants: clean on all twenty-eight cells
+
+**70 checks, 0 failures**, from `campaign/analyse.py` over the archived cells:
+
+- **never-worse**: **28 pairings, zero exceptions**, every max <= 1.000000,
+  beneficiated <= raw and searched <= N = 1, at all seven destinations
+- **mass ledger**: `max |error| 0.000000000 kg` on all 28 cells
+- **programme structure**: **N = F x W on every row** of all fourteen searched
+  cells, and **W > `trips` never**
+
+🚨  **THE STRUCTURAL CHANGE IS THAT PROGRAMMES NOW DECLINE THE RIG'S LAST
+TRIPS, BY TWO ORDERS OF MAGNITUDE.** `W < trips`, raw searched:
+
+| destination | 2026-09 | 2026-08 |
+|---|---|---|
+| `mars_orbit` | **35.99%** | never measured |
+| `mars_surface` | 32.73% | 3.71% |
+| `cislunar` | 20.86% | **0.319%** |
+| `lunar_surface` | 16.07% | 0.225% |
+| `geo` | 12.97% | never measured |
+| `leo` | 8.09% | 0.161% |
+| `earth_surface` | 0.270% | 0.234% |
+
+⚠️  **`geo`'s row was missing from this table until 2026-09-14**, which is the
+seven-destinations-in-a-six-row-table failure this file warns about everywhere
+else: the table beside it lists all seven, so the two disagreed about the size of
+the campaign. Filled from `campaign/population/`, not re-run.
+
+Under a hard ceiling the extra campaign cannot be **SOLD**, where under a demand
+curve it could always be sold at a worse price. Fleet and programme sizes moved
+with it: `cislunar` **beneficiated searched** went from a fleet median of 2 to 6
+and an N median of 10 to 30. ⚠️  **Name the cell.** The RAW searched medians are
+**3 and 12**, and this sentence sitting in a paragraph about raw searched rows
+is what put "a median searched fleet of 2" into README's ceiling argument, where
+it was both the wrong cell and the wrong campaign.
+
+⚠️  **So this file's statement that "2,077 bodies decline to use up the rig" is
+an `elasticity` claim**, and under `capacity_cap` it is ~146,000. It is the
+same mechanism reported against a different market term, not a new one.
+
+Bodies declining to concentrate, and the population medians, on the 2026-09
+campaign:
+
+| destination | declining | benef median | search median |
+|---|---|---|---|
+| `cislunar` | 108,985 (16.7%) | +39.4% | +48.3% |
+| `leo` | 86,090 (11.1%) | +41.2% | +59.6% |
+| `mars_orbit` | 60,908 (7.4%) | +33.0% | +41.4% |
+| `geo` | 55,171 (7.8%) | +47.4% | +37.4% |
+| `lunar_surface` | 22,972 (3.9%) | +66.1% | +51.3% |
+| `earth_surface` | 8,500 (1.1%) | +77.7% | +67.2% |
+| `mars_surface` | 4,219 (0.6%) | +73.6% | +47.0% |
+
+⚠️  **The decline counts are close to the 2026-08 figures and the ordering is
+unchanged**, which is the population result again: `lunar_surface` 22,972
+against 22,781, `earth_surface` 8,500 against 8,340. The market model barely
+touches which bodies refuse to concentrate.
+
+### 🚨 `earth_surface`'s SEARCHED CELLS ARE NOT OPTIMA, UNDER EITHER MARKET MODEL
+
+✅  **Re-confirmed on the 2026-09 campaign, and it is the same answer for a
+DIFFERENT reason, which is the part worth having.** Under `elasticity` the
+price never moved because terrestrial markets run 10¹²-10¹⁵ kg/yr; under
+`capacity_cap` the ceilings are finite and still far too large for a programme
+delivering ~10⁷ kg to reach. Measured: **100.000% of rows at
+`max_fleet_ships`**, both searched cells, exactly as before, against
+`cislunar`'s **9.99% raw and 17.77% beneficiated**.
+
+🚨  **So `11,606.86x` and `7,074.20x` are the value at the ladder's TOP RUNG,
+not optima.** Raise `max_fleet_ships` and they keep improving.
+
+⚠️  **And the cislunar figure moved by a factor of 25**, from 0.37-0.40% under
+`elasticity`, so this diagnostic now counts a larger and partly different
+population: a row sits at the ceiling either because no finite market bounds it
+**or** because its payload is too small to reach one. That is the warning under
+[A wall does not blend](LESSONS.md#a-wall-does-not-blend-so-a-diagnostic-can-change-meaning-under-you)
+arriving on schedule, at a destination it was not written about.
+
+🚨  **RE-DERIVED 2026-09-14, AND `saturation_multiplier` IS IDENTICALLY 1.0 ON
+ALL TWENTY-EIGHT CELLS.** Min, median and max, every destination, every setting.
+The column is not stale here; it is **inert**. `capacity_cap` does not bend a
+price as a market fills, so the multiplier that expressed `elasticity`'s
+haircut has nothing left to express and the whole table this section used to
+carry has no information in it.
+
+⚠️  **THE REASON CHANGED IN calc `1.22.0` AND THE CONCLUSION DID NOT, WHICH IS
+WORTH READING CAREFULLY.** This paragraph used to say the multiplier is 1.0
+because the ceiling "refuses the sale". It no longer refuses it: the surplus
+past a ceiling SELLS, at `surplus_price_fraction` of full price. The multiplier
+is still identically 1.0 -- `verify.py` check 7 asserts it on every cell -- but
+now it is because the discount is applied **in the sale and in the knapsack**
+rather than through the elasticity multiplier, not because no sale happens. A
+diagnostic that stays constant across a model change for a DIFFERENT reason is
+the subtlest version of this section's own lesson.
+
+✅  **THE LIVE DIAGNOSTIC IS `market_clearing_fraction`**, which says what
+fraction of an assembled load actually cleared, with `unsold_payload_kg`
+alongside it. Searched cells:
+
+🚨  **AND THE COMPANION COLUMN MOVED IN calc `1.22.0`: IT IS
+`surplus_payload_kg` NOW, AND `unsold_payload_kg` READS 0.0.** Mass past a
+ceiling is sold at a discount rather than abandoned, so it lands in the new
+column and the old one goes quiet. The two are exclusive by construction and
+check 7 asserts it. **The `unsold rows` column in the table below is therefore
+a v1.21.2 measurement**, and a harness that kept counting `unsold_payload_kg`
+across the flip would report zero everywhere and read as "nothing is ever lost
+to a ceiling", which is false -- ceilings still bind on 18 to 96% of rows at
+the six in-space destinations. That is this section's own lesson happening to
+this section: **when you swap a model term, check whether the diagnostics that
+watched it still VARY.**
+
+🚨  **AND THE `unsold rows` COLUMN WAS COUNTED WITH A BARE `> 0` UNTIL
+2026-09-16, WHICH IS WRONG ON EVERY BENEFICIATED CELL.** calc forms that column
+on the beneficiated path as `sum(payload_mix.values())` minus the knapsack's
+`loaded_kg`, and `loaded_kg` is an accumulated `payload_kg - remaining`: two
+associations of one quantity, so a hold the ceilings did not shrink leaves one
+ULP rather than zero. Six of the seven beneficiated figures below were
+therefore high, by 1% at `cislunar` and **12% at `mars_surface`** (6,977
+against 6,136). Corrected off `campaign/population.py`, which takes the same
+milligram floor `verify.py` check 7 already took. ⚠️  **The raw column is
+untouched and always was right**: the raw path accumulates `unsold` directly
+rather than subtracting two sums, so there is no residue to mistake.
+
+⚠️  **The same bare test would have been a real defect on a v1.22.0 cell, not
+a 1% one.** It reports **1,891** unsold rows against a true **0**, and
+**1,769 of those 1,891 carry a genuine surplus**, so anything inferring "this
+run hard-walled" from a positive `unsold_payload_kg` reads those rows exactly
+backwards. `campaign/worked_calculation.py` did, in the one line that decides
+which market tier a whole document is derived against. **A threshold on a
+column the model builds by subtraction is a threshold on float residue.**
+
+| cell | rows at fleet cap | clearing min | clearing median | rows bound | unsold rows |
+|---|---|---|---|---|---|
+| `cislunar` raw | 65,037 (9.99%) | 0.578190 | 1.000000 | 30.07% | 195,723 |
+| `cislunar` benef | 117,314 (17.77%) | 0.679429 | 1.000000 | 30.27% | 64,759 |
+| `lunar_surface` raw | 64,397 (10.99%) | 0.491063 | **0.833930** | **70.18%** | 411,271 |
+| `lunar_surface` benef | 37,532 (6.19%) | 0.637028 | 1.000000 | 38.80% | 25,546 |
+| `geo` raw | 7,673 (1.09%) | 0.465097 | 0.965855 | **73.47%** | 518,014 |
+| `geo` benef | 28,961 (4.07%) | 0.730985 | 1.000000 | 27.07% | 66,605 |
+| `mars_orbit` raw | 22,962 (2.80%) | 0.560660 | 0.996629 | 54.48% | 447,323 |
+| `mars_orbit` benef | 133,854 (14.00%) | 0.814357 | 1.000000 | 34.76% | 69,432 |
+| `leo` raw | 33,826 (4.35%) | 0.888516 | 1.000000 | 23.33% | 181,238 |
+| `leo` benef | 275,537 (31.22%) | 0.834402 | 1.000000 | 20.05% | 33,642 |
+| `mars_surface` raw | 25,687 (3.51%) | 0.590189 | **0.848755** | **96.25%** | 703,876 |
+| `mars_surface` benef | 132,801 (14.88%) | 0.763270 | 1.000000 | 18.12% | 6,136 |
+| **`earth_surface` raw** | **784,242 (100.00%)** | **1.000000** | **1.000000** | **0.00%** | **0** |
+| **`earth_surface` benef** | **912,846 (100.00%)** | **1.000000** | **1.000000** | **0.00%** | **0** |
+
+🚨  **A CEILING BINDS ON 18 TO 96% OF ROWS AT THE SIX IN-SPACE DESTINATIONS,
+AND ON EXACTLY ZERO AT `earth_surface`.** That is the cleanest statement the
+project has of what `capacity_cap` does, and it is the same conclusion the
+`elasticity` table reached by a different route: terrestrial markets run
+10^12 to 10^15 kg/yr against a programme delivering ~10^7 kg, so nothing
+bounds them at any fleet size the ladder can reach. Under a demand curve the
+`earth_surface` multiplier departed from 1.0 by a median of 2.3e-11; under a
+hard wall it does not depart at all, and **zero kilograms go unsold on
+1,697,088 rows.**
+
+⚠️  **THE `mars_surface` RAW CELL IS THE OPPOSITE POLE AND IT IS WORTH
+KNOWING.** 96.25% of its rows are bound and 703,876 of them leave payload
+unsold: a Mars base importing 20 t/yr is the shallowest market in the model
+against the largest deliveries, so almost nothing clears whole. `lunar_surface`
+raw (70.18%) and `geo` raw (73.47%) are the other two where the median row is
+bound rather than clearing.
+
+✅  **BENEFICIATION RELIEVES THE CEILING EVERYWHERE EXCEPT `cislunar`.** Bound
+rows fall from 70.18% to 38.80% at `lunar_surface`, 96.25% to 18.12% at
+`mars_surface`, 73.47% to 27.07% at `geo`, and unsold rows fall by one to two
+orders of magnitude. Concentrating is exactly the way to sell the same value in
+fewer kilograms, so it is the lever that gets a load under a wall. `cislunar` is
+the exception at 30.07% to 30.27%, which is consistent with its standing
+position as the worst place in the model to concentrate.
+
+🚨  **AND THIS IS WHY THE DIAGNOSTIC HAD TO BE SWAPPED RATHER THAN
+RE-MEASURED.** This file already warns, under
+[A wall does not blend](LESSONS.md#a-wall-does-not-blend-so-a-diagnostic-can-change-meaning-under-you),
+that "a diagnostic inherits the shape of the term it was written against". That
+note was about a row COUNT changing meaning. This is the harder version: the
+column went **constant**, so a harness that kept reporting it would have printed
+1.000000 forever and read as a clean result rather than a dead one. **When you
+change a model term, check whether the diagnostics that watched it still VARY**,
+not only whether their levels moved.
+
+⚠️  **Rows at `max_fleet_ships` now range over two orders of magnitude**, from
+`geo` raw at 1.09% to `earth_surface` at 100%, and `leo` beneficiated at 31.22%
+is the highest of the in-space cells. The 2026-08 `elasticity` campaign put
+`cislunar` at 0.37-0.40%; it is 9.99-17.77% now, the factor of 25 this file
+already records, and the reason is the one given there: under a wall a row sits
+at the ceiling either because no finite market bounds it **or** because its
+payload is too small to reach one.
+
+It also re-scopes mineral_value `1.7.1`'s "measured and declined" note on
+`nickel-iron` having no terrestrial market ceiling. That item was costed at
+**7.7e-8 relative on a SINGLE MISSION's multiplier**: correct, and the wrong
+scope. With the search on, a missing ceiling changes the **shape** of the
+objective in N rather than its level, and a shape change has no size. ⚠️  It is
+now a `capacity_cap` question rather than an `elasticity` one, and the
+`earth_surface` column above is the measurement of it: a commodity with no
+ceiling is a commodity that never refuses a sale, which is exactly the 0.00%
+bound and 0 unsold that destination reports.
+
+### 🚨 RETIRED TWICE: a `replicated` device wins TWO cells now, at `mars_surface`
+
+This file's standing claim is "**A `replicated` device never wins anywhere**; 
+eight cells, zero wins", qualified by its own warning that "on half the cells
+it holds by a few percent, not by a factor, and a modest change to thruster
+mass or to the population could flip one."
+
+✅  **THE 2026-09 CAMPAIGN WIDENED IT RATHER THAN FLIPPING IT BACK.**
+**2014 YN on FEEP now wins BOTH raw `mars_surface` cells**, at N = 1 as well as
+searched, where at N = 1 in 2026-08 the best FEEP mission sat at rank 5 and
+1.06x off. So the claim retired below was retired for one cell and is now wrong
+for two, and it took `capacity_cap` plus the insurance removal rather than a
+change to the gate.
+
+⚠️  **It does not survive beneficiation at either setting.** Both beneficiated
+`mars_surface` cells go to conventional Hall thrusters on different bodies
+entirely, krypton on 9992 and iodine on 2003 RS1. Concentrating changes the mass
+budget enough that 6.7 tonnes of thruster stops paying, which is the gate
+behaving as a mass penalty exactly as designed. **Zero FEEP winners at the other
+six destinations**, on any setting.
+
+✅  **RE-DERIVED 2026-09-14 ON ALL TWENTY-EIGHT CELLS** by
+`campaign/population.py`, off the `thrust_scaling` column rather than by
+matching propellant names, which is the authoritative gate and covers a
+technology nobody thought to list. Best `replicated` mission per cell, rank and
+margin against the cell's winner:
+
+| destination | raw N = 1 | raw searched | benef N = 1 | benef searched |
+|---|---|---|---|---|
+| `cislunar` | 54 (1.43x) | 365 (1.95x) | 147 (1.52x) | 2,202 (1.92x) |
+| `lunar_surface` | **none** | **none** | **none** | **none** |
+| `geo` | 91 (1.70x) | 15,904 (4.75x) | 1,687 (1.83x) | 38,047 (2.77x) |
+| `mars_orbit` | 28 (1.41x) | **15 (1.36x)** | 51,532 (2.29x) | 3,889 (1.60x) |
+| `leo` | **8 (1.15x)** | 47 (1.28x) | 43 (1.26x) | 5,744 (2.09x) |
+| **`mars_surface`** | **1, WINS** | **1, WINS** | **2 (1.00x)** | **2 (1.01x)** |
+| `earth_surface` | 6 (1.07x) | 5 (1.08x) | 10 (1.11x) | 10 (1.16x) |
+
+✅  **`lunar_surface` STILL HAS ZERO SURVIVORS IN ALL FOUR CELLS**, across a
+market-model change, an insurance removal and a new price epoch. That is the
+single most durable statement in this section and it reproduces exactly.
+
+🚨  **`mars_surface` BENEFICIATED IS NOW A ROUNDING AWAY FROM FLIPPING TOO.**
+Both beneficiated cells put the best FEEP mission at **rank 2, margin 1.00x and
+1.01x**, where the 2026-08 campaign had them at rank 73 (1.11x) and rank 14
+(1.06x). So the claim retired here is not merely retired at Mars, it is close to
+being retired at all four Mars surface cells at once, and the thing standing
+between is under one percent. This file's own lesson applies to its successor:
+*a margin of a few percent is not a law.*
+
+⚠️  **`mars_orbit` IS THE SECOND DESTINATION WHERE THE SEARCH HELPS A FEEP
+MISSION RATHER THAN HURTING IT**, going rank 28 to rank 15 between N = 1 and
+searched on raw ore. Everywhere else the programme search pushes FEEP *down* the
+ranking, by a factor of 7 at `cislunar` and 175 at `geo`, because a ladder that
+buys more, smaller missions cannot amortise 4 to 17 tonnes of thruster.
+
+⚠️  **THE DIRECTION SURVIVES A RELEASE AND THE FACTOR DOES NOT.** At the calc
+`1.22.0` defaults the cislunar figure is rank 11 to rank 18, a factor of
+**1.6** rather than 7, and the worst margin across the four cells narrows from
+1.92x to 1.53x while still never winning there. **A factor quoted without its
+release reads as a property of the model**, which is the rule this file applies
+to wall clocks and applies here too. See
+[the population at these defaults](versions.md#the-population-at-these-defaults-re-derived-2026-09-16).
+
+✅  **EVERY SURVIVOR IN EVERY CELL IS STILL FEEP.** Across all 28 cells and
+every `replicated` row in them, the only technology that appears is **FEEP
+(indium field emission)**: not one PPT and not one electrospray row survives
+anywhere, at any destination, ore state or programme size. Only the lightest of
+the three (2,500 kg/N against 5,000 and 10,000) ever closes a mass budget, and
+that is now checked on seven destinations rather than five.
+
+⚠️  **The survivor COUNT moved a long way and still proves nothing**, which is
+the point of the next paragraph. Counts now run from **zero** at
+`lunar_surface` to **6,220** at `earth_surface` raw searched, with `cislunar` at
+76-515 and `leo` at 3,696-5,346. `geo` and `mars_orbit`, measured for the first
+time, land at 723-976 and 134-270.
+
+**The 2026-08 measurement that first retired the claim** is kept below because
+it is the one that names the mechanism, and its architecture detail was not
+re-extracted:
+
+```
+rank 1   2014 YN     (M)  41.8068x   FEEP (indium field emission)   H3 (24L)       N = 5
+rank 2   2015 BM510  (M)  47.4127x   methalox                       Falcon Heavy   N = 5
+```
+
+It won by **13.4%**, carrying **6,667 kg of thruster for 96.7 kW**.
+
+✅  **The gate is not broken and must not be "fixed".** `thruster_kg_per_n` is
+a mass penalty rather than a threshold, that was the whole design argument,
+and this mission pays 6.7 tonnes of thruster and wins anyway, which is the
+mechanism working, not leaking. What is retired is the **claim**. The lesson is
+the one v1.14.0 already wrote down for the RTG branch: *a margin of a few
+percent is not a law*, and here one new search axis was enough to close it.
+
+🚨  **SURVIVAL WAS NEVER THE TEST, AND THE COUNT IS THE REASON.** The
+survivor count spans from **zero to 6,220 across destinations on one model, one
+catalog and one release**. A claim built on a count is a statement about the
+**population**, not about the gate, which is how "zero survive anywhere"
+survived as a law for a release; it was measured on 15,566 rows.
+**Test whether one WINS.**
+
+Two facts about the survivors that do not change with the population:
+
+- **Every survivor in every cell is FEEP.** Not one PPT and not one
+  electrospray row survives anywhere, at any destination or programme size,
+  where the pre-gate model had PPT winning **31.8%** of cislunar rows and
+  electrospray **24.3%**. Only the lightest of the three `replicated`
+  technologies (2,500 kg/N against 5,000 and 10,000) ever closes a mass budget.
+  ✅  Re-checked on all 28 cells 2026-09-14, and it holds; the row count that
+  used to be quoted here was a 2026-08 total over twenty cells and is deliberately
+  gone, because **the claim is about which technology, never about how many
+  rows**, which is the mistake the paragraph above it exists to name.
+- **They close by being enormous, not by being efficient.** Survivors carry
+  **4.4 to 16.7 tonnes** of thruster (median 13.2 t raw) for ~5 N, and close
+  only because their payloads are 70-128 t and can absorb it.
+
+### Runtime, and the three quantities a sample cannot predict
+
+🚨  **THE 2026-09 CAMPAIGN RE-MEASURED EVERY WALL CLOCK AND THE DIRECTION
+REVERSED.** A default cislunar run is **~2.7 h**, not 1.6 h: v1.21.0's capacity
+ceilings are priced inside the payload knapsack and cost **1.29x to 2.31x**,
+landing hardest where a programme LADDER exists, which is the opposite shape to
+the v1.17.x line that had made everything faster. The twenty-eight-cell wall
+clock is in [README.md](README.md#beneficiation) and the per-cell table is in
+[the 28-cell campaign](versions.md#the-28-cell-campaign-2026-09).
+
+⚠️  **So the sentence below is now wrong in BOTH directions depending on the
+release you are reading**, which is exactly why it is left standing rather than
+quietly edited: everything older than `1.17.7` is high by 1.78-4.32x, and
+everything older than `1.21.0` is LOW by 1.29-2.31x. A wall clock in this
+project is only ever true of the release it names.
+
+**Wall clocks and cost ratios live in
+[versions.md](versions.md#what-the-v117x-line-was-worth)**, which measured the
+whole `1.17.x` line on the full catalog at once; the twenty-cell wall clock is
+in [README.md](README.md#beneficiation). Neither is repeated here. The three
+things that are *guidance* rather than record:
+
+🚨  **A default cislunar run is now ~1.6 h, not 6.8 h**, and **every timing or
+cost ratio in this project older than calc `1.17.7` is high by 1.78-4.32×.**
+Five committed ratios moved as a consequence, including the two most quoted:
+beneficiation costs **4.67×** rather than 7.1×, and the programme search
+**1.71×** rather than 2.98×. ⚠️  Those are `cislunar` figures; `leo`,
+`mars_surface` and `earth_surface` cost 2.1-2.7× more per cell.
+
+⚠️  **The forbidden arithmetic was finally scored, and the prohibition held on
+direction while being generous on magnitude.** Compounding the five releases'
+stride-sample ratios lands within 3% on three cells and **20% low on the
+default cell**, i.e. the only cell anybody runs and the one you were trying to
+budget. Compounding understates; it is not permission to compound.
+
+✅  **Memory is the third quantity under THE SAMPLING RULE**, after wall clocks
+and ratios. Peak RSS tracks **output size**, not ladder traffic: 8.2 GB at
+`lunar_surface` beneficiated up to **10.4 GB** at `leo` beneficiated N = 1, the
+cell with the most evaluable rows, against 30.4 GB of system use. The rise
+within a cell is the parent accumulating result rows. ⚠️  Two apparent peaks of
+11.54 and 10.74 GB are **measurement contamination**, the two cells that
+overlapped an analysis process; attributing your own harness to the thing you
+are measuring is how a clean result becomes a false alarm.
+
+### The rig's two bounds, and the cadence, at every destination (2026-09)
+
+✅  **RE-DERIVED 2026-09-14 ON ALL TWENTY-EIGHT CELLS**, by
+`campaign/population.py`, which reads the archived cells rather than re-running
+anything. Every figure below is `capacity_cap` with insurance OFF, and is
+directly comparable with the rest of the 28-cell campaign. ⚠️  **And with calc
+`1.21.2`, not with a default run today**: `1.22.0` sells the surplus past a
+ceiling at half price and turns reliability, the learning curve and the cost of
+capital off. See the banner on the 28-cell section. The superseded
+`elasticity` tables are in
+[the 28-cell campaign](versions.md#the-28-cell-campaign-2026-09).
+
+✅  **ONE DESTINATION HAS BEEN RE-DERIVED AT THE `1.22.0` DEFAULTS**, cislunar,
+from its four archived cells:
+[the population at these defaults](versions.md#the-population-at-these-defaults-re-derived-2026-09-16).
+Three rows of the tables below move enough to matter there -- the calendar bound
+takes the MAJORITY of beneficiated rigs, the dig-bound share rises to 73.84%,
+and `W < trips` falls to single figures -- and the other six destinations have
+not been re-run. ⚠️  **It is not a scale factor for them.**
+
+⚠️  **The denominator is not a choice here, and this file's own warning about
+two right answers does not reach these tables.** An archived cell holds
+evaluable rows ONLY, because `run_cell.py` archives what
+`build_profitability_catalog` returns and that is already filtered: cislunar raw
+searched is 650,921 rows and 650,921 evaluable. Every percentage below is over
+the population every headline is quoted over.
+
+**Which bound retires the rig** (cycle = `max_trips`, calendar = `life / stay`):
+
+| destination | raw N=1 | raw ON | benef N=1 | benef ON |
+|---|---|---|---|---|
+| `cislunar` | 95.97 / 4.03 | 97.51 / 2.49 | 57.51 / 42.49 | 75.98 / 24.02 |
+| `lunar_surface` | 95.92 / 4.08 | 96.36 / 3.64 | 70.62 / 29.38 | 90.97 / 9.03 |
+| `geo` | 98.80 / 1.20 | 98.92 / 1.08 | 63.04 / 36.96 | 84.15 / 15.85 |
+| **`mars_orbit`** | **60.63 / 39.37** | **62.76 / 37.24** | **21.87 / 78.13** | **25.84 / 74.16** |
+| `leo` | 98.64 / 1.36 | 98.90 / 1.10 | 47.58 / 52.42 | 77.28 / 22.72 |
+| **`mars_surface`** | **80.37 / 19.63** | **85.37 / 14.63** | **18.34 / 81.66** | **20.15 / 79.85** |
+| `earth_surface` | 98.64 / 1.36 | 98.76 / 1.24 | 29.43 / 70.57 | 48.01 / 51.99 |
+
+**What sets the pace** (window = synodic period, dig = mining rate), and the
+median cadence:
+
+| destination | raw N=1 | benef N=1 | cadence raw | cadence benef |
+|---|---|---|---|---|
+| `cislunar` | 91.98 / 8.02 | 34.34 / 65.66 | 1.384 yr | 2.100 yr |
+| `lunar_surface` | 96.08 / 3.92 | 37.66 / 62.34 | 1.384 yr | 1.792 yr |
+| `geo` | 98.07 / 1.93 | 16.98 / 83.02 | 1.375 yr | 2.277 yr |
+| **`mars_orbit`** | **99.93 / 0.07** | 34.70 / 65.30 | **3.742 yr** | **4.497 yr** |
+| `leo` | 86.80 / 13.20 | 23.46 / 76.54 | 1.369 yr | 2.860 yr |
+| **`mars_surface`** | **99.93 / 0.07** | **46.24 / 53.76** | **3.798 yr** | **4.228 yr** |
+| `earth_surface` | 86.45 / 13.55 | 16.96 / 83.04 | 1.368 yr | 3.326 yr |
+
+🚨  **THE MARS EXCEPTION IS GONE, AND IT IS THE MOST REUSABLE THING IN THIS
+RE-DERIVATION.** This file said, of the beneficiated inversion: *"`mars_surface`
+is the exception that proves the mechanism: its window is so long (99.95%
+binding on raw, still 63.18% beneficiated) that even concentrating cannot make
+the dig the slower half."* Beneficiated `mars_surface` is now **46.24 / 53.76**,
+so the dig IS the slower half, and **the inversion is universal: all seven
+destinations are window-bound raw (86.45 to 99.93%) and dig-bound beneficiated
+(53.76 to 83.04%)**. A claim whose whole rhetorical shape was "the one
+exception" turned out to be a claim about a market term, and closing it took no
+change to the launch-window model at all.
+
+🚨  **`mars_orbit` IS THE SECOND CALENDAR-BOUND DESTINATION, AND IT INVERTS
+WHERE NOTHING ELSE DOES: ON RAW ORE AT N = 1.** Its calendar bound retires
+**39.37%** of rigs on the raw single-mission cell, against 1.20 to 4.08%
+everywhere except `mars_surface`, which manages 19.63%. So a depot in Mars orbit
+is *twice* as calendar-bound on raw ore as the surface below it, and both Mars
+destinations run 74 to 82% calendar beneficiated. The cause is in the cadence
+column and it is the same one: a Mars campaign repeats every **3.7 to 4.5
+years** against ~1.37 for everywhere else, because the Earth/Mars synodic period
+is 2.14 yr and the transfer is a separate heliocentric leg.
+
+⚠️  **So "the cycle bound is what retires almost every rig" is now wrong three
+ways, not two.** It fails on beneficiated `cislunar` (42.49% calendar), it fails
+at `mars_surface` (81.66%), and it fails at `mars_orbit` (78.13%), which did not
+exist as a destination when the claim was written. It survives only as a
+statement about **raw** ore at the five non-Mars destinations.
+
+**Programme structure**, searched cells only. `W < trips` is meaningless without
+the search on, because at N = 1, W = 1 and `trips` is 2-5, so those cells report
+~100% trivially:
+
+| destination | W < trips raw | W < trips benef | fleet med raw/benef | N med raw/benef | span raw/benef |
+|---|---|---|---|---|---|
+| `cislunar` | 20.86% | 22.14% | 3 / 6 | 12 / 30 | 11.4 / 13.8 yr |
+| `lunar_surface` | 16.07% | 18.23% | **26** / 6 | **130** / 25 | 12.3 / 13.2 yr |
+| `geo` | 12.97% | 18.15% | 1 / 3 | 5 / 12 | 11.1 / 14.1 yr |
+| `mars_orbit` | **35.99%** | 18.44% | 2 / 6 | 10 / 20 | **19.4** / 17.5 yr |
+| `leo` | 8.09% | 9.22% | 12 / **34** | 60 / **130** | 10.7 / 14.2 yr |
+| `mars_surface` | 32.73% | **23.59%** | 12 / 3 | 60 / 12 | **20.1** / 17.6 yr |
+| `earth_surface` | 0.27% | 0.33% | **64 / 64** | **320 / 320** | 10.7 / 16.5 yr |
+
+⚠️  **`W > trips` is zero on every row of all fourteen searched cells**, which
+is an invariant rather than a measurement, and it holds.
+
+⚠️  **A FLEET MEDIAN IS NOT A PROPERTY OF A DESTINATION, AND THE TWO
+BENEFICIATION COLUMNS PROVE IT BY DISAGREEING ABOUT THE DIRECTION.**
+Concentrating *raises* the chosen fleet at `leo` (12 to 34), `geo` (1 to 3) and
+`cislunar` (3 to 6), and *lowers* it at `lunar_surface` (26 to 6) and
+`mars_surface` (12 to 3). Quoting one of these as "the model's fleet size" is
+the same error as quoting a propellant share without its configuration, and
+`earth_surface` is the reminder of what a pinned column looks like: 64 and 320
+are the ladder's top rung, not a choice.
+
+⚠️  **This is where README's "a median searched fleet of 2" came from, and it
+was a 2026-08 figure standing in a 2026-09 argument.** The raw cislunar searched
+median is **3**; the 6 quoted in the campaign's own invariants block is the
+BENEFICIATED cell. Both are right about different cells, which is exactly why
+the cell has to be named. Corrected in README on 2026-09-14.
+
+**Programme span** follows the cadence, and the searched cells run long
+everywhere: median 10.7 yr (`earth_surface`, `leo` raw) to **20.1 yr**
+(`mars_surface` raw), and 13.2-17.6 yr beneficiated. Both Mars destinations are
+**two-decade** commitments on raw ore, and `mars_orbit` at 19.4 yr is within a
+year of the surface.
+
+### Propellant and vehicle shares, all twenty-eight cells (2026-09)
+
+✅  **RE-DERIVED 2026-09-14 BY `campaign/population.py`**, off the archived
+cells, so these are `capacity_cap` with insurance OFF and include the two
+destinations that had never had a share table at all. ⚠️  **calc `1.21.2`, not
+a default run today**; see the banner on the 28-cell section for the four flags
+`1.22.0` moved. The superseded 2026-08
+`elasticity` shares are in
+[the 28-cell campaign](versions.md#the-28-cell-campaign-2026-09).
+
+**Propellant, % of evaluable rows.** Columns are raw N=1 / raw ON / benef N=1 /
+benef ON; anything under 0.20% in all four is dropped:
+
+| | raw N=1 | raw ON | benef N=1 | benef ON |
+|---|---|---|---|---|
+| **`cislunar`** | | | | |
+| xenon | 43.93 | 40.18 | 60.61 | **38.99** |
+| iodine | 23.97 | 26.21 | 15.90 | **36.24** |
+| water ion | 15.53 | 17.78 | 12.55 | 13.94 |
+| hydrolox | 8.17 | 5.94 | 10.31 | 9.65 |
+| krypton | 8.01 | 9.30 | 0.42 | 0.50 |
+| **`lunar_surface`** | | | | |
+| xenon | 42.89 | 37.64 | 52.30 | **34.05** |
+| krypton | 22.59 | 26.31 | 3.28 | 10.31 |
+| water ion | 20.57 | 20.86 | 19.48 | 19.80 |
+| iodine | 9.73 | 11.16 | 22.57 | **33.23** |
+| hydrolox | 3.87 | 3.59 | 2.08 | 2.23 |
+| **`geo`** | | | | |
+| xenon | 72.88 | 68.07 | 67.57 | **40.46** |
+| iodine | 14.90 | 19.50 | 21.34 | **47.79** |
+| water ion | 6.67 | 6.50 | 4.45 | 4.32 |
+| hydrolox | 3.18 | 3.38 | 5.13 | 5.65 |
+| krypton | 1.70 | 1.84 | 0.23 | 0.27 |
+| **`mars_orbit`** | | | | |
+| xenon | 83.73 | 76.20 | 77.02 | 46.71 |
+| iodine | 12.63 | 19.73 | 8.09 | 37.81 |
+| **methalox** | 1.76 | 1.78 | **14.55** | **14.48** |
+| hydrolox | 1.07 | 1.09 | 0.17 | 0.26 |
+| MMH/NTO | 0.32 | 0.32 | - | - |
+| **`leo`** | | | | |
+| xenon | 76.28 | 69.26 | 75.21 | **40.65** |
+| iodine | 13.32 | 16.35 | 11.41 | **44.41** |
+| krypton | 4.36 | 5.20 | 0.10 | 0.26 |
+| **methalox** | 1.76 | 1.90 | **11.07** | **11.38** |
+| hydrolox | 1.95 | 2.13 | 1.18 | 1.55 |
+| argon | 0.94 | 3.63 | 0.01 | 0.13 |
+| FEEP | 0.62 | 0.69 | 0.42 | 0.44 |
+| **`mars_surface`** | | | | |
+| xenon | 61.03 | 47.99 | 72.78 | 51.21 |
+| iodine | 16.78 | 29.49 | 5.10 | 22.02 |
+| krypton | 15.43 | 14.62 | 1.79 | 1.46 |
+| **methalox** | 1.60 | 1.61 | **15.22** | **15.15** |
+| argon | 1.70 | 2.81 | 2.77 | 5.98 |
+| hydrolox | 2.05 | 2.06 | 0.68 | 0.78 |
+| water ion | 0.83 | 0.84 | 1.52 | 3.26 |
+| **`earth_surface`** | | | | |
+| xenon | 74.77 | 71.13 | 63.71 | **34.43** |
+| iodine | 13.34 | 16.30 | 20.35 | **48.33** |
+| krypton | 5.48 | 5.69 | 0.95 | 1.36 |
+| **methalox** | 1.73 | 1.77 | **12.26** | **12.46** |
+| hydrolox | 1.92 | 2.02 | 0.20 | 0.37 |
+| argon | 1.39 | 1.60 | 0.16 | 0.34 |
+| FEEP | 0.71 | 0.79 | 0.50 | 0.44 |
+
+🚨  **IODINE NOW WINS THREE BENEFICIATED SEARCHED CELLS OUTRIGHT, AND THE TWO IT
+LOSES IT LOSES BY UNDER THREE POINTS.** It takes `earth_surface` (48.33 against
+xenon's 34.43), `geo` (47.79 against 40.46) and `leo` (44.41 against 40.65), and
+at `cislunar` (36.24 against 38.99) and `lunar_surface` (33.23 against 34.05) it
+is within 2.75 and 0.82 points of the lead. In 2026-08 it took two cells. The
+mechanism is the one the programme-scale curve predicted long before there was a
+population to check it on: iodine takes over at scale.
+
+⚠️  **Every propellant-share claim in this file remains a statement about a
+configuration rather than about the model**, and this table is the proof: xenon
+runs 43.93% of `cislunar` raw single missions and 38.99% of its beneficiated
+programmes, and iodine goes 23.97% to 36.24% on the same rock population.
+
+🚨  **THE CISLUNAR WINNER FLIES A PROPELLANT 0.12% OF ITS OWN POPULATION USES.**
+The best beneficiated cislunar programme is 2021 CX5 on **argon**, at 6.6622x,
+and argon is 0.12% of that cell's rows. This is
+[a diagnostic describes the WINNER](LESSONS.md#a-diagnostic-describes-the-winner-not-the-search-that-produced-it)
+arriving in the share tables: a headline architecture can sit in the tail of
+every distribution the same run reports, so **a share table is not a sanity
+check on a winner and must never be read as one.**
+
+⚠️  **AT calc `1.22.0` THE SAME BODY WINS THE SAME CELL ON IODINE, WHICH
+20.70% OF THAT POPULATION FLIES**, so the instance above is a `1.21.2` fact
+rather than a standing one. **The lesson is not weakened by that, it is the
+argument for it**: one body, one cell, two releases, and the winner's
+propellant sat in the tail of the distribution in the first and near the mode
+in the second. A share table did not check the winner in either case, and a
+reader who had used it as a sanity check would have been reassured by the
+wrong one.
+
+⚠️  **Chemical propulsion holds 11-15% of FOUR destinations now, not three.**
+`methalox` goes 1.6-1.8% raw to **11.07-15.22%** beneficiated at `mars_orbit`,
+`mars_surface`, `leo` and `earth_surface`. `mars_orbit` is the new one, and it
+arrives at the level the other three already sat at. The mechanism is unchanged:
+beneficiation drives mass ratio up, which is where v1.11.0's tank term bites,
+and methalox stores at 0.83 kg/L against xenon's COPV, so it is the propellant
+that *gains* when the tank starts to matter. Krypton moves the opposite way for
+the same reason (12.5% tankage): 22.59% to 3.28% at `lunar_surface`, 15.43% to
+1.79% at `mars_surface`, 4.36% to 0.10% at `leo`.
+
+🚨  **"ISRU TRACKS HYDROLOX TO WITHIN 0.03 pp AT EVERY DESTINATION" IS RETIRED,
+AND IT WAS A FIVE-DESTINATION CLAIM MEASURED ON FIVE DESTINATIONS.** It still
+holds at `cislunar` (0.0014 to 0.0068 pp), `lunar_surface` (0.0000 to 0.0015),
+`geo` (0.0009 to 0.0250) and `mars_surface` (0.0003 to 0.0133). It fails at
+three:
+
+| destination | worst gap | which way |
+|---|---|---|
+| `earth_surface` benef ON | **+0.3668 pp** | hydrolox exceeds ISRU |
+| `leo` benef ON | **+0.2885 pp** | hydrolox exceeds ISRU |
+| `mars_orbit` raw N=1 | **-0.0630 pp** | ISRU exceeds hydrolox |
+
+✅  **The residual still runs both ways, exactly as this file already said, but
+the sharpest case is new and is a mechanism rather than a rounding.** At
+`earth_surface` **beneficiated**, ISRU is 0.0005% and 0.0044% of rows while
+hydrolox is 0.2012% and 0.3711%: ISRU essentially *vanishes* while hydrolox
+does not, so nearly every hydrolox mission delivering concentrate to Earth
+**buys its propellant on Earth rather than making it**. The near-equality was
+never a law; it was hydrolox being the ISRU route the search usually takes, and
+at one destination and one setting it stops taking it.
+
+**Launch vehicle, % of evaluable rows.** Same column order; under 0.30% in all
+four is dropped:
+
+| | raw N=1 | raw ON | benef N=1 | benef ON |
+|---|---|---|---|---|
+| **`cislunar`** | | | | |
+| Falcon Heavy | 65.47 | 58.09 | 66.39 | 40.02 |
+| SLS Block 1B | 32.62 | 25.67 | 30.92 | 24.75 |
+| **New Glenn** | 1.62 | 15.77 | 2.41 | **32.53** |
+| **`lunar_surface`** | | | | |
+| Falcon Heavy | 67.57 | 71.65 | 51.97 | 52.71 |
+| SLS Block 1B | 31.45 | 26.02 | 38.07 | 24.10 |
+| **New Glenn** | 0.57 | 1.93 | 7.70 | **17.01** |
+| Vulcan VC6 | 0.19 | 0.19 | 0.86 | 2.80 |
+| Long March 5 | 0.02 | 0.04 | 0.39 | 1.58 |
+| **`geo`** | | | | |
+| Falcon Heavy | 78.80 | **44.40** | 71.44 | 67.44 |
+| SLS Block 1B | 18.02 | 16.22 | 22.68 | 19.47 |
+| **New Glenn** | 2.96 | **39.06** | 4.97 | 10.66 |
+| **`mars_orbit`** | | | | |
+| Falcon Heavy | 77.94 | 77.25 | 59.76 | 53.37 |
+| SLS Block 1B | 16.03 | 9.05 | 28.48 | 24.20 |
+| **New Glenn** | 4.92 | 11.68 | 11.52 | **21.62** |
+| Vulcan VC6 | 0.72 | 1.48 | 0.11 | 0.49 |
+| **`leo`** | | | | |
+| Falcon Heavy | 67.39 | 75.01 | 62.56 | 60.73 |
+| SLS Block 1B | 23.54 | 14.67 | 28.74 | 20.04 |
+| New Glenn | 8.75 | 9.97 | 8.18 | 15.28 |
+| Vulcan VC6 | 0.24 | 0.19 | 0.41 | 2.85 |
+| **`mars_surface`** | | | | |
+| Falcon Heavy | 77.52 | 80.50 | 57.98 | 46.08 |
+| SLS Block 1B | 14.63 | 9.96 | 23.75 | 23.27 |
+| **New Glenn** | 5.12 | 5.72 | 16.96 | **27.57** |
+| Vulcan VC6 | 1.77 | 2.76 | 0.44 | 1.57 |
+| Ariane 6 | 0.41 | 0.51 | 0.21 | 0.36 |
+| **`earth_surface`** | | | | |
+| Falcon Heavy | 66.21 | 71.56 | 37.73 | 46.60 |
+| SLS Block 1B | 23.62 | 18.14 | 20.71 | 18.98 |
+| **New Glenn** | 9.85 | 10.07 | **29.92** | 25.80 |
+| Ariane 6 | 0.01 | 0.03 | 2.72 | 1.59 |
+| Vulcan VC6 | 0.25 | 0.10 | 2.66 | 1.93 |
+| Falcon 9 | 0.00 | 0.04 | 2.03 | 1.37 |
+| Long March 5 | 0.02 | 0.02 | 1.71 | 0.92 |
+| H3 (24L) | 0.02 | 0.03 | 1.67 | 1.90 |
+
+✅  **New Glenn's rise is the saturation mechanism, and it is now visible at all
+seven destinations at once.** It is a *smaller* vehicle than Falcon Heavy (45 t
+against 57 t), and it goes 1.62 to 32.53% at `cislunar`, 0.57 to 17.01% at
+`lunar_surface`, 5.12 to 27.57% at `mars_surface`, 4.92 to 21.62% at
+`mars_orbit`. A ceiling punishes volume, so at programme scale the model prefers
+**more, smaller missions**, which is the same thing the winner's payload does.
+
+🚨  **`geo` MOVES ON THE SEARCH AXIS INSTEAD, AND IT IS THE ONLY DESTINATION
+THAT DOES.** New Glenn goes 2.96% to **39.06%** between raw N=1 and raw
+SEARCHED, with Falcon Heavy falling 78.80% to 44.40%, while the beneficiation
+axis barely moves it (4.97 to 10.66%). Everywhere else the flip is driven by
+concentrating. `geo` is the model's smallest in-space market at 40 t/yr, so its
+ceiling binds on programme size alone and does not need a denser payload to do
+it. **Which axis a share moves on is itself a measurement**, and reading these
+tables only down the beneficiation column would have missed this one entirely.
+
+⚠️  **`earth_surface` beneficiated carries the most diverse fleet in the
+campaign**, with eight vehicles above 0.3% including Ariane 6, Falcon 9, Long
+March 5 and H3. Everywhere else three vehicles take 95%+. A market that never
+saturates does not push the search toward any particular size, so the choice is
+made on price alone and far more of the grid is competitive.
+
+⚠️  `mars_surface` remains the outlier the 2026-08 matrix describes, with the
+least SLS (14.63% against 16-32% elsewhere) and the most Vulcan, because a Mars
+delivery pays no Earth capture, so its stacks are lighter and a mid-class
+vehicle closes missions that need SLS anywhere else.
+
+### Winners, and what 28 cells did to the claim
+
+✅  **RE-DERIVED IN 2026-09, and the sweep is gone.** **2021 CX5 takes 8 of the
+28 cells and 2018 DT 6**, but neither sweeps a destination the way 2021 CX5
+swept two of them in 2026-08. Only `earth_surface` still has one winner across
+all four cells (**2016 PN38**); `mars_surface` and `mars_orbit` change winner on
+three of four axes.
+
+| destination | raw N=1 | raw searched | benef N=1 | benef searched |
+|---|---|---|---|---|
+| `cislunar` | 2018 DT | 2014 WE121 | 2014 WE121 | 2021 CX5 |
+| `mars_orbit` | 2018 DT | 2018 DT | 2015 BM510 | 2006 YF |
+| `geo` | 2016 GS2 | 2021 CX5 | 2021 CX5 | 2021 CX5 |
+| `lunar_surface` | 2018 DT | 2014 WE121 | 2018 DT | 2021 CX5 |
+| `mars_surface` | 2014 YN | 2014 YN | 9992 | 2003 RS1 |
+| `leo` | 2018 DT | 2021 CX5 | 2021 CX5 | 2021 CX5 |
+| `earth_surface` | 2016 PN38 | 2016 PN38 | 2016 PN38 | 2016 PN38 |
+
+⚠️  **"2021 CX5 takes 10 of the 20 cells" is retired as a claim about the
+model**; it was a claim about `elasticity` with insurance charged. The body is
+still the commonest winner, and it now wins only where the levers are doing the
+most work.
+
+✅  **`leo` reproduced its structural signature exactly**, the one destination
+where the best single mission and the best programme are different bodies:
+2018 DT at N = 1 becoming 2021 CX5 searched, in both campaigns.
+
+⚠️  Everything below is the 2026-08 statement of this section, kept for the
+per-destination detail that has not been re-derived.
+
+#### The 2026-08 winners (superseded)
+
+**2021 CX5 (D) takes 10 of the 20 cells**: all four at `cislunar`, all four at
+`lunar_surface`, and two at `leo`. One body winning eight of eight across two
+destinations, on all four settings, is a far stronger statement about that
+target than any single ratio. **2016 PN38 (M)** takes all four `earth_surface`
+cells.
+
+`mars_surface` is the only destination whose winner moves on every axis: 8651
+(M) at N = 1, **2014 YN (M)** on both searched settings, and **2001 UU92 (T)**
+beneficiated at N = 1, which is the **first T-type winner anywhere in this
+project's record**.
+
+⚠️  **`leo` is where the best single mission and the best programme are
+DIFFERENT BODIES**: 2018 DT (M) on xenon at N = 1 becomes **2021 CX5 (D) on
+hydrolox** at N = 20. That is the argument for searching N *jointly* rather
+than at a pivot; this file has always made it about architecture, and here it
+changes the **target**.
+
+**Aerocapture and ISRU, % of evaluable rows**, re-derived 2026-09-14 across all
+seven destinations. Each cell is aerocapture / ISRU:
+
+| destination | raw N=1 | raw ON | benef N=1 | benef ON |
+|---|---|---|---|---|
+| `cislunar` | **0.00** / 8.17 | **0.00** / 5.94 | **0.00** / 10.31 | **0.00** / 9.65 |
+| `lunar_surface` | **0.00** / 3.87 | **0.00** / 3.59 | **0.00** / 2.08 | **0.00** / 2.23 |
+| `geo` | 90.70 / 3.18 | 92.57 / 3.39 | **78.66** / 5.13 | 93.64 / 5.63 |
+| **`mars_orbit`** | **40.71** / 1.14 | **37.69** / 1.14 | **50.54** / 0.18 | **49.95** / 0.27 |
+| `leo` | 95.03 / 1.93 | 90.10 / 1.96 | 97.41 / 1.11 | 98.36 / 1.26 |
+| `mars_surface` | 82.24 / 2.06 | 83.14 / 2.07 | 86.14 / 0.68 | 90.00 / 0.78 |
+| `earth_surface` | 95.79 / 1.89 | 91.83 / 1.91 | 96.44 / **0.00** | 97.45 / **0.00** |
+
+✅  **The airless half holds exactly: 0.00% at `cislunar` and `lunar_surface` in
+all four cells.** Nobody asserts it, the airless destinations ignore the flag and
+the search declines it, which is the physics resolving itself per destination
+rather than a switch being set.
+
+🚨  **"82-98% ELSEWHERE" IS RETIRED, AND `mars_orbit` IS WHY.** The real range is
+**37.69 to 98.36%**, because a Mars-orbit depot declines aerocapture about half
+the time: 37.69-50.54% against 78-98% at every other atmospheric destination. It
+is the only destination in the model where the choice is close to even, and that
+is the v1.10.0 design working. Aerocapture is priced per asteroid against the
+propulsive return, and arriving at a **1-sol orbit** rather than a surface means
+the Delta-v saved is small while the heat shield still has to be hauled out and
+pushed back, so on a slow-arriving target it does not pay.
+
+🚨  **"RISING UNDER BENEFICIATION AT EVERY ATMOSPHERIC DESTINATION" IS RETIRED
+TOO, BY ONE CELL.** `geo` **falls** from 90.70% to 78.66% at N = 1, where the
+other four rise. It recovers to 93.64% once the search is on, so the exception is
+specific to the single-mission beneficiated cell, which is exactly the kind of
+qualification a five-destination claim could not carry.
+
+**ISRU still tracks hydrolox closely at four destinations and no longer at
+three.** It holds at `cislunar` (0.0014 to 0.0068 pp), `lunar_surface` (0.0000
+to 0.0015), `geo` (0.0009 to 0.0250) and `mars_surface` (0.0003 to 0.0133), and
+fails at `earth_surface` (**+0.3668 pp**), `leo` (+0.2885) and `mars_orbit`
+(-0.0630). The near-equality was never a law; it is hydrolox being the ISRU route
+the search usually takes, and the residual runs both ways, as this file already
+said.
+
+🚨  **`earth_surface` BENEFICIATED MAKES NO PROPELLANT AT ALL: ISRU IS 0.0005%
+AND 0.0044% OF ROWS**, against a hydrolox share of 0.2012% and 0.3711%. So
+nearly every hydrolox mission delivering concentrate to Earth **buys its
+propellant on Earth rather than making it**, which is the sharpest single
+statement of the residual's mechanism the project has, and it only became
+visible once the shares were kept in full rather than truncated to the
+commonest few.
+
+⚠️  **The water-ion share is still not where to look for the residual**:
+`cislunar` runs 15.53% water ion against 8.17% ISRU, so most water-propelled
+missions are carrying their water up from Earth.
+
+### Programme structure on the full population (2026-08; see the 28-cell invariants above)
+
+⚠️  **The 2026-09 figures are in the invariants block above and they moved a
+long way**: `W < trips` went 0.319% to **20.86%** at cislunar raw searched, the
+fleet median 2 to 6 and the N median 10 to 30. What is below is the 2026-08
+`elasticity` population, kept because its *invariant* statements are the ones
+the checks were built from.
+
+The tables above are the current 20-cell campaign. The **cislunar 2x2** that
+preceded it (calc `1.16.0`, 2026-08-11) was the first time both flags were
+measured together on a full catalog, and all four of its model values reproduce
+exactly in the campaign above; its cells, its winner and its superseded runtime
+ratios are in
+[the full cislunar 2x2](versions.md#the-full-cislunar-2x2-calc-v1160-2026-08-11).
+What is kept here is the population detail that is an **invariant to re-check**
+rather than a number to quote.
+
+Every structural invariant `1.15.0` and `1.16.0` assert, on the full cislunar
+population:
+
+| | raw + search | benef + search |
+|---|---|---|
+| N = F × W on every row | ✅ | ✅ |
+| W > `trips` ever | never | never |
+| **W < `trips`** | **2,077 (0.319%)** | **1,389 (0.210%)** |
+| fleet median / max | 2 / 64 | 2 / 64 |
+| at `max_fleet_ships` | 2,383 (0.37%) | 2,610 (0.40%) |
+| N median / max | 10 / 320 | 10 / 320 |
+| calendar multiplier median / max | 1.3236 / 3.4551 | 1.4832 / 2.8409 |
+| programme span median | 11.49 yr | 14.84 yr |
+| programmes priced per mission | 40 | 40 |
+
+🚨  **`W < trips` on 2,077 rows is what retires `1.16.0`'s own conclusion that
+"the 2-D search is necessary but not yet load-bearing here".** That was read
+off 168 sampled rows where W came out at the band top every time. On the real
+population 2,077 bodies decline to use up the rig, because the calendar charge
+outweighs what another campaign buys. **A sample is a good estimator of the
+middle of this distribution and a bad one of its edge**: the medians held to
+three decimals while the maxima did not (calendar multiplier 3.4551 against the
+sample's 2.093, span 34.34 yr against 25.3).
+
+Never-worse on the same population, all four pairings:
+
+```
+search ON vs OFF, raw           pairs 650,921 | max 1.000000 | worse 0 | median +42.4%
+search ON vs OFF, beneficiated  pairs 660,253 | max 0.996770 | worse 0 | median +38.2%
+beneficiated vs raw, search OFF pairs 650,921 | max 1.000000 | worse 0 | declined 102,765
+beneficiated vs raw, search ON  pairs 650,921 | max 1.000000 | worse 0 | declined 102,427
+```
+
+The two declined counts are **15.79%** and **15.73%** of bodies refusing to
+concentrate, against the committed 15.8%.
+
+⚠️  **Two rows are unchanged on the RAW search axis and none on the
+beneficiated one, which looks backwards and is not.** An unchanged row is a
+body whose calendar cap is a single trip, so N = 1 is the only programme on its
+ladder; beneficiation *lengthens* the stay, so it should produce more of them,
+not fewer. It produces none because those two bodies are not in the
+beneficiated evaluable set at all. **Do not read the 0 as a stronger result
+than the 2.**
+
 ## Cost/revenue matrices
 
 ### The 28-cell campaign, 2026-09
@@ -10305,7 +11424,7 @@ and `earth_surface` (hydrolox exceeding ISRU) and **2.0606 against 2.0522** at
 **37.69-98.36%** because `mars_orbit` declines it about half the time and `geo`
 FALLS under beneficiation at N = 1, and the ISRU near-equality fails at
 `earth_surface`, `leo` and `mars_orbit`. The current figures are in
-[CLAUDE.md](CLAUDE.md#winners-and-what-28-cells-did-to-the-claim).
+[CLAUDE.md](#winners-and-what-28-cells-did-to-the-claim).
 
 **Best `replicated` mission per cell**, rank and margin:
 
@@ -10319,7 +11438,7 @@ FALLS under beneficiation at N = 1, and the ISRU near-equality fails at
 
 **Propellant, % of evaluable rows.** Two destinations per row-block, left and
 right. This is the table CLAUDE.md carried until 2026-09-14; the current one is
-in [CLAUDE.md](CLAUDE.md#propellant-and-vehicle-shares-all-twenty-eight-cells-2026-09).
+in [CLAUDE.md](#propellant-and-vehicle-shares-all-twenty-eight-cells-2026-09).
 
 | | raw N=1 | raw ON | benef N=1 | benef ON | | raw N=1 | raw ON | benef N=1 | benef ON |
 |---|---|---|---|---|---|---|---|---|---|
@@ -10443,7 +11562,7 @@ the two dicts -- **32 cells against 4**. Proved to fail in three directions
 before being trusted: a changed dict value, a changed README figure, and a
 deleted README row. That is the finding underneath the finding, and it is in
 CLAUDE.md as
-[the cheapest-destination claim](CLAUDE.md#the-cheapest-destination-claim-survived-because-one-row-of-seven-was-pinned):
+[the cheapest-destination claim](LESSONS.md#the-cheapest-destination-claim-survived-because-one-row-of-seven-was-pinned):
 **a check that reads one row of a table is a check on that row.**
 
 ### The docs harness stopped passing on files it never read, 2026-09-15
@@ -10493,7 +11612,7 @@ Somebody had the right thought one line too deep.
 baseline-less `ALL CHECKS PASSED`, `verify_docs.py`'s `SyntaxError`-as-skip, and
 `verify_stage3.py` check 4's skip that fired on 100% of runs. This is the first
 with no skip message at all. See
-[a skip with no message at all](CLAUDE.md#a-skip-with-no-message-at-all-the-file-that-is-simply-not-there).
+[a skip with no message at all](LESSONS.md#a-skip-with-no-message-at-all-the-file-that-is-simply-not-there).
 
 ### The stale working tree became checkable, 2026-09-15
 
