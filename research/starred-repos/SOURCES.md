@@ -1,8 +1,7 @@
 # Per-repository inventory
 
 The 17 non-agent-tooling stars, each read against this pipeline rather than
-against its own README. `mattpocock/skills` and `NousResearch/hermes-agent`
-were excluded as requested.
+against its own README.
 
 **Read the verdict column first.** Five of these are worth real work, five are
 worth a specific narrow thing, and seven are worth less to this project than
@@ -38,12 +37,9 @@ rolls with `requests`.
 
 Two things matter:
 
-- ✅ **`Irsa.query_tap(..., async_job=True)` is the fix for the NEOWISE
-  outage.** CLAUDE.md records IRSA returning `502 Proxy Error` all evening and
-  contributing 0 rows to the committed cislunar 2x2. `_NEOWISE_TAP_URL` is
-  posted **synchronously**, so a slow or proxied query dies as a 502. Async TAP
-  submits a job, polls, and collects, which is what the IRSA service is built
-  for at this row count. This is a small, self-contained change to one fetcher.
+- ✅ **Applied: async TAP for `fetch_neowise`** (catalog `1.2.0`, now in
+  AsteroidCatalog). The synchronous query died as a `502 Proxy Error` under
+  load, and once contributed 0 rows to a committed cell.
 - ⚠️  **`jplsbdb` will not replace `fetch_jpl_sbdb`.** Its `query_async` takes a
   single `targetid`; the pipeline uses the bulk `sbdb_query.api`, which
   astroquery does not wrap. Keep the hand-rolled bulk fetcher.
@@ -64,14 +60,9 @@ four-source small-body ingestion problem, and publishing frozen Parquet.
 | `scripts/update-neowise.py` | ditto for NEOWISE |
 | `LICENSE_AUDIT.md` | a per-dataset licence audit, which this repo does not have and arguably needs |
 
-The datasets are on HuggingFace as Parquet with no API keys. That is directly
-relevant to CLAUDE.md's "THE INPUTS ARE NOT IN GIT, AND THAT IS WHAT STOPS A
-SECOND HOST FIRST": a frozen, versioned, redistributable mirror is a better
-answer for the Spark host than copying 868 MB by hand.
-
-⚠️  It does **not** solve the reproducibility problem on its own. Those
-datasets auto-update on a schedule, so pinning a revision is mandatory if they
-are ever used as a campaign input.
+The datasets are on HuggingFace as Parquet with no API keys. Stage 1 now
+downloads a pinned catalog release, so a second host no longer needs them; if
+one is ever a campaign input, pin a revision, because they auto-update.
 
 ### skyfielders/python-skyfield, MIT
 
@@ -107,13 +98,10 @@ hot path would destroy the bit-identity every release here is argued from.
 
 ### Z3Prover/z3, MIT
 
-The only star that speaks to CLAUDE.md's one open structural item, and it
-speaks to the hard half of it.
-
-> "Branch-and-bound on the objective ... needs an **admissible** upper bound on
-> `selection_key` ... a bound that is occasionally too tight silently drops
-> winners, and it drops them **without changing the row count**, which is the
-> one failure mode none of `verify.py`'s checks would catch."
+The only star that speaks to the one open structural item, branch-and-bound
+on the objective, and to its hard half: it needs a provably admissible bound on
+`selection_key`, because a bound that is occasionally too tight drops winners
+without changing the row count, which no check here would see.
 
 Z3's `nlsat` is a complete decision procedure for polynomial real arithmetic,
 so a candidate bound can be **proved** admissible over a bounded domain rather
@@ -154,42 +142,10 @@ asserted.
 
 | repo | licence | verdict |
 |---|---|---|
-| **pola-rs/polars** | MIT | 🚨 **the bit-identity trap applies.** CLAUDE.md already measured `pd.read_csv(engine="pyarrow")` at 4.8x and **rejected** it because its float parser rounds differently in the last ULP, moving `estimated_mass_kg` by 1e-13 relative. Polars has its own Rust CSV parser and lands in the same place. The 862 MB load is real cost and Parquet was already measured at 19.7 s to 2.1 s and declined for contract reasons, so polars is buying a saving the repo has already decided it does not want at that price |
+| **pola-rs/polars** | MIT | 🚨 **the bit-identity trap applies.** This repo measured `pd.read_csv(engine="pyarrow")` at 4.8x and **rejected** it because its float parser rounds differently in the last ULP, moving `estimated_mass_kg` by 1e-13 relative. Polars has its own Rust CSV parser and lands in the same place. The 862 MB load is real cost and Parquet was already measured at 19.7 s to 2.1 s and declined for contract reasons, so polars is buying a saving the repo has already decided it does not want at that price |
 | **cuspaceflight/CamPyRoS** | **GPL-3.0** | ⚠️ **weakest physics match in the set.** `campyros/heating.py` is 1,776 lines of real aerothermodynamics, but it is **ascent regime**: Prandtl-Meyer, oblique shocks, ideal-gas air. No Sutton-Graves, no Tauber-Sutton. Aerocapture from an asteroid return arrives at 8 to 12 km/s where dissociation and ionisation dominate and ideal-gas correlations are simply wrong. Using it for TPS sizing would be worse than the current mass fraction. Also GPL |
 | **CelestiaProject/Celestia** | GPL-2.0 | the repo ships the renderer, not the catalogs. Only `test/data/nearstars.stc`. The asteroid `.ssc` data lives in separate content repos. Little here, and GPL |
 | **julie-dujardin/space-map** | **AGPL-3.0** | 🚨 **this row was wrong; see [SPACE-MAP.md](SPACE-MAP.md).** Audited properly it is the most valuable star of the seventeen: its SBDB mirror discovers the field list via `?info=field` instead of hardcoding it, which is how `condition_code` was found missing. The code stays unusable (AGPL); the API knowledge does not carry a licence |
 | **duncaneddy/brahe** | MIT | good library, wrong domain: Earth-orbit operations, ground stations, EOP, TLEs, space weather. Nothing heliocentric. `brahe/constants.py` is the only file worth a look |
-| **mesa/mesa** | Apache-2.0 | agent-based modelling. The honest hook is that `saturation_price_multiplier` is a static elasticity with a single seller, and the `earth_surface` cells show it going numerically inert (multiplier 1.0 to within 2.3e-11, 100% of rows at the fleet ceiling). Multiple competing miners is a real question. But it is a **different model**, not an improvement to this one, and this repo's whole discipline is bit-identity, which an agent simulation does not have |
+| **mesa/mesa** | Apache-2.0 | agent-based modelling. The honest hook is that `saturation_price_multiplier` is a static elasticity with a single seller (the `elasticity` market model, no longer the default), and the `earth_surface` cells show it going numerically inert (multiplier 1.0 to within 2.3e-11, 100% of rows at the fleet ceiling). Multiple competing miners is a real question. But it is a **different model**, not an improvement to this one, and this repo's whole discipline is bit-identity, which an agent simulation does not have |
 | **OpenSCvx/OpenSCvx** | Apache-2.0 | successive convexification on a JAX backend, with `examples/abstract/impulsive.py`. Permissively licensed and genuinely capable, but the examples are robotics and aircraft; there is no orbital transfer example, and JAX is a heavy dependency for a project with six. pykep's Sims-Flanagan gets to the same place with less |
-
----
-
-## Files pulled during this pass
-
-Working copies are in the session scratchpad, not committed, since most are
-large or copyleft. Everything is re-fetchable with the commands below.
-
-```bash
-# astroquery small-body clients
-curl -sL https://raw.githubusercontent.com/astropy/astroquery/HEAD/astroquery/ipac/irsa/core.py
-curl -sL https://raw.githubusercontent.com/astropy/astroquery/HEAD/astroquery/jplhorizons/core.py
-
-# skyfield element handling
-curl -sL https://raw.githubusercontent.com/skyfielders/python-skyfield/HEAD/skyfield/keplerlib.py
-curl -sL https://raw.githubusercontent.com/skyfielders/python-skyfield/HEAD/skyfield/data/mpc.py
-
-# space-datasets: the SDSS PDS3 column specs
-curl -sL https://raw.githubusercontent.com/juliensimon/space-datasets/HEAD/scripts/update-sdss-taxonomy.py
-
-# spacekit GPU Kepler propagation
-curl -sL https://raw.githubusercontent.com/typpo/spacekit/HEAD/src/KeplerParticles.ts
-
-# the SDSS taxonomy archive itself (7.5 MB, static, no key)
-curl -sL https://sbnarchive.psi.edu/pds3/non_mission/EAR_A_I0035_5_SDSSTAX_V1_1/data/sdsstax_ast_table.tab
-```
-
-⚠️  Every URL above is a **fetch**, and none of them touches
-`asteroid_pipeline/`. None is a Stage 1, 2 or 3 run, so none invalidates a
-`.verify` baseline. That distinction is the one CLAUDE.md spends a whole
-section on and it is worth restating: reading somebody's source is free,
-re-running a stage is not.

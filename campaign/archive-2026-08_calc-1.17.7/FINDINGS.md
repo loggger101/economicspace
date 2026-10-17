@@ -1,9 +1,8 @@
 # Campaign findings - 2026-08-23/24 - COMPLETE
 
 The 20-cell full-matrix campaign finished on 2026-08-24. **Its findings have
-been promoted into the three main documents and are not repeated here**, for
-the reason CLAUDE.md gives everywhere else: name one authority, or you have
-two. This file is now the campaign's own record, not a copy of the results.
+been promoted into the main documents and are not repeated here**: name one
+authority, or you have two. This file is now the campaign's own record, not a copy of the results.
 
 Code under measurement: catalog `1.1.1` | mineral_value `1.7.1` |
 transportation `1.12.1` | calc `1.17.7` | master `1.20.8`. `master.py` rebuilt
@@ -16,11 +15,11 @@ every cell is comparable. 12 workers, 26.1 h of compute, zero failures.
 
 | finding | now lives in |
 |---|---|
-| the 20-cell cost/revenue matrix | [versions.md, the 28-cell campaign](../versions.md#the-28-cell-campaign-2026-09) |
-| per-destination propellant, vehicle, rig-bound and cadence tables | [CLAUDE.md, What the model currently says](../CLAUDE.md#what-the-model-currently-says-and-what-that-retired) |
-| the `1.17.x` runtime and cost-ratio measurements | [versions.md, What the v1.17.x line was worth](../versions.md#what-the-v117x-line-was-worth) |
-| the wall clock for all twenty cells | [README.md, What a first run costs](../README.md#what-a-first-run-costs) |
-| claims the campaign retired | [CLAUDE.md, The older matrices](../CLAUDE.md#the-older-matrices-and-the-claims-they-retired) |
+| the 20-cell cost/revenue matrix | [versions.md, the 28-cell campaign](../../versions.md#the-28-cell-campaign-2026-09) |
+| per-destination propellant, vehicle, rig-bound and cadence tables | [versions.md, the population re-derivation](../../versions.md#the-population-re-derivation-2026-09-14), as the superseded 2026-08 tables |
+| the `1.17.x` runtime and cost-ratio measurements | [versions.md, What the v1.17.x line was worth](../../versions.md#what-the-v117x-line-was-worth) |
+| the wall clock for all twenty cells | [README.md, What a first run costs](../../README.md#what-a-first-run-costs) |
+| claims the campaign retired | [LESSONS.md, The older matrices](../../LESSONS.md#the-older-matrices-and-the-claims-they-retired) |
 
 ## What the campaign established, in one line each
 
@@ -63,8 +62,9 @@ procedure is `run_queue.py`'s own docstring, which is the thing that implements
 it: it skips every cell already in `results.csv` with `rc == 0`, so the queue is
 safe to kill and restart and loses at most the in-flight cell.
 
-⚠️  **Do not re-run Stage 1, 2 or 3 to re-check anything here.** Stage 2
-re-fetches live prices and Stage 1 re-fetches a catalog JPL adds to daily;
-either invalidates every cell in `results.csv` and every `.verify` baseline.
+⚠️  **Do not re-run Stage 1, 2 or 3 to re-check anything here.** Each
+overwrites the only copy of its CSVs, and Stages 2 and 3 re-fetch live prices;
+any of them invalidates every cell in `results.csv` and every `.verify`
+baseline.
 The frozen inputs are backed up at
 `asteroid_pipeline/_inputs_backup_2026-08-23/`.

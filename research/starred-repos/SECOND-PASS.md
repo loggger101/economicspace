@@ -125,27 +125,15 @@ selection effect, because no ranking change removes it.
 U <= 4 against 0.585 at U >= 5. Part of the disagreement with JPL is the
 orbits, not the model.
 
-### 🚨 The first reading of this was wrong, and the reason is worth keeping
+### 🚨 The first reading priced one apsis
 
-The first run of this probe priced **aphelion only**, copying
-[`probe_plane_change.py`](probe_plane_change.py), which does the same and is
-correct to do so because it is comparing placements of a plane change and holds
-the apsis fixed on both sides.
-
-It reported **43 violations and a rank agreement of 0.4006**, and the violators
-looked like a beautiful finding: every one an interior NEO with `a` under 1 au.
-
-They were an artefact. `asteroid_transfer_dv_km_s` prices both apsides and the
-architecture search takes the winner, and **perihelion wins on 23.4% of the
-NEO population**, which is exactly the interior bodies. Pricing both apsides
-drops the violations to 14 and lifts the agreement to 0.5976.
-
-⚠️  Both numbers reproduced the docstring's five reference bodies to four
-decimals, because **all five of those resolve to aphelion**. The reference
-check passed on a probe that was measuring the wrong model. That is this
-repo's own rule arriving with a new example: *reproducing the validated figures
-is necessary and not sufficient*, and a broken checker looks exactly like a
-broken release.
+The first run priced aphelion only, as `probe_plane_change.py` does, and
+reported 43 violations and a rank agreement of 0.4006. The shipped estimator
+prices both apsides, and perihelion wins on 23.4% of the NEO population (the
+interior bodies the violators were); pricing both gives 14 and 0.5976. Both
+runs reproduced the docstring's five reference bodies, because all five
+resolve to aphelion: reproducing the validated figures is necessary and not
+sufficient.
 
 ---
 
@@ -173,21 +161,17 @@ cached, at a few hundred kilobytes. So the two-body error in F4's oracle can be
 bounded on the bodies F4 actually sampled, rather than on whichever 373 bodies
 JPL chose to pre-integrate.
 
-✅  **It installs on this host.** `brahe` 1.7.0 on PyPI ships a
-`cp314-cp314-win_amd64` wheel, and `platform_check.py` reports this machine at
-Python 3.14.6. No Rust toolchain and no CSPICE build.
+✅  `brahe` 1.7.0 on PyPI ships a `cp314-cp314-win_amd64` wheel: no Rust
+toolchain and no CSPICE build.
 
 ⚠️  **Offline validation harness only, never a pipeline dependency**, for the
 reason SPACE-MAP.md already gives and one more: it is a compiled extension, and
 this project's bit-identity argument does not want a second libm in the room.
 It belongs beside `verify.py`, not in `_MASTER_REQUIRED`.
 
-⚠️  **This is the "measured and declined" list's own lesson inverted.** That
-list exists so nobody re-derives an item that was already priced. A *verdict*
-is not a measurement and does not keep: brahe's verdict was correct when
-written and had rotted by the time it was read, because the repository moved.
-**Re-read a rejected star before trusting the rejection**, which is the whole
-premise of this second pass.
+⚠️  A verdict is not a measurement and does not keep: brahe's was correct
+when written and had rotted by the time it was read, because the repository
+moved. Re-read a rejected star before trusting the rejection.
 
 ---
 
@@ -209,7 +193,7 @@ pipeline's softest numbers are asserted without.
 | `update-bus-demeo.py` | Bus-DeMeo taxonomy, 371 asteroids plus principal-component scores | F2. The *reference* taxonomy that defines the classes `TAXONOMY_COMPOSITION` keys on |
 | `update-lcdb.py` | the asteroid lightcurve database: rotation periods, family codes, taxonomy | rotation bears on whether a rubble pile can be anchored to and dug at all, which the model assumes |
 | `update-launch-cost.py` | 63 launch vehicles, cost per kg to LEO, 2024 USD, **cited per row** | **the most load-bearing external number in the project.** In-space value is dominated by launch-cost-avoided |
-| `update-lunar-geochemistry.py` | Astromat and EarthChem lunar sample geochemistry | `IN_SPACE_UTILITY_BY_DESTINATION`'s lunar overrides, which CLAUDE.md calls engineering judgements and the softest assumption in the pipeline |
+| `update-lunar-geochemistry.py` | Astromat and EarthChem lunar sample geochemistry | `IN_SPACE_UTILITY_BY_DESTINATION`'s lunar overrides, which MODEL.md calls engineering judgements and the softest assumption in the pipeline |
 | `update-meteorites.py` | Wikidata meteorite classes and masses | ground truth for the metal and carbon fractions in `TAXONOMY_COMPOSITION` |
 | `update-ssodnet.py` | a second implementation of the SsODNet fetch | worth diffing against `fetch_ssodnet`, which lost an entire source for four releases to a column rename |
 
@@ -218,12 +202,10 @@ pipeline's softest numbers are asserted without.
 `asterank-asteroid-mining`. The Bus-DeMeo tables were fetched directly from
 the PDS Small Bodies Node and are 371 rows each.
 
-⚠️  **`update-launch-cost.py` disagrees with this model's own vehicle table and
-that disagreement is worth an hour.** It puts Falcon Heavy at 63,800 kg
-expendable and 50,000 kg reusable; CLAUDE.md quotes 57 t. New Glenn agrees at
-45,000 kg. The pipeline's numbers may well be the better ones, and a cited
-independent table is the cheapest way to find out which rows were never
-checked.
+✅  **`update-launch-cost.py` disagreed with the vehicle table, and the table
+has since been re-audited.** It put Falcon Heavy at 63,800 kg expendable and
+50,000 kg reusable against the 57 t this repo then used; spacecost v0.4.0's
+re-audit took the reusable figure to 30 t. New Glenn agreed at 45,000 kg.
 
 ℹ️  **This also half-rehabilitates `pds4_tools`.** `SOURCES.md` says it is
 "useful only if a PDS4 small-body archive is ever wanted". Bus-DeMeo is a PDS4
@@ -300,9 +282,8 @@ better fetched from NAIF than from an AGPL repository. **spacekit** and
    do not require a decision about re-measuring the campaign. The rank
    disagreement with JPL is a corroboration of F4's direction and is not a
    second estimate of its size.
-2. **Run the pipeline's own vehicle table against `update-launch-cost.py`.**
-   An afternoon, no model change, and it checks the number the entire in-space
-   valuation rests on against a cited independent compilation.
+2. ~~Run the vehicle table against `update-launch-cost.py`.~~ Done by
+   spacecost v0.4.0's launch-table re-audit (F8).
 3. **Add NEODyS covariance to the top of the ranking** (F9). It converts
    SPACE-MAP.md's open modelling decision into an error bar and needs no cutoff
    to be argued for.

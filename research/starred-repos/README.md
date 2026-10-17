@@ -11,7 +11,7 @@ them runs Stage 1, 2 or 3, so none can invalidate a `.verify` baseline.
 
 | file | what it is |
 |---|---|
-| [`FINDINGS.md`](FINDINGS.md) | **start here.** Five findings, each a measurement on this repo's own catalog, with the recommendations at the end |
+| [`FINDINGS.md`](FINDINGS.md) | **start here.** Five findings, each a measurement on this repo's own catalog, and what became of each |
 | [`SOURCES.md`](SOURCES.md) | per-repository inventory: licence, the specific files worth reading, and a verdict. Several stars are worth less here than they look |
 | [`../../CITATIONS.md`](../../CITATIONS.md) | **the authority for every reference and attribution obligation in this repo**, including what was adapted from whom here |
 | [`SPACE-MAP.md`](SPACE-MAP.md) | a focused re-audit of one repo the first pass got wrong. It found the orbit-quality gap |

@@ -3,35 +3,26 @@
 A pass over the 17 non-agent-tooling repositories starred on `loggger101`,
 read against this pipeline's actual code rather than against their READMEs.
 
-**The five findings below are measurements taken on this repo's own catalog,
+**The findings below are measurements taken on this repo's own catalog,
 not summaries of somebody else's project.** Each has a probe script beside this
 file that reproduces it. The per-repository inventory, with licences and the
 specific files worth reading, is in [`SOURCES.md`](SOURCES.md).
 
-✅  **APPLIED 2026-09-03 as catalog `1.2.0` / master `1.23.0`.** F5 and the
-NEOWISE async patch landed in `modules/catalog.py`, and moved with the
-builder to [AsteroidCatalog](https://github.com/loggger101/AsteroidCatalog)
-at master `1.31.0` (`neowise_use_async`, `epoch` in `_JPL_FIELDS`); the patch
-file itself was deleted at master `1.36.0`.  F3's gap is closed by
-`probe_pandas_dtypes` in `platform_check.py`; F3's stale prose is corrected in
-CLAUDE.md; F4's headline is now a documented limitation in README. See
-[versions.md > catalog v1.2.0](../../versions.md#catalog-v120).
+## What happened to each finding
 
-🚨  **F1 WAS NOT APPLIED, DELIBERATELY.** F4 measures it as making the model
-worse in every inclination band. See the reversal table in F4.
+| finding | outcome |
+|---|---|
+| F1, the whole plane change charged at departure | **not applied, deliberately**: F4 measures it making the estimator worse in every inclination band |
+| F2, taxonomy guessed for most NEOs | open. The SDSS table is committed here as a check; composition is still a point estimate |
+| F3, pandas 3 dtype inference unprobed | closed by `probe_pandas_dtypes` in `platform_check.py` |
+| F4, the estimator optimistic by ~11% | open; a documented limitation in [MODEL.md](../../MODEL.md) |
+| F5, `mean_anomaly_deg` stored without its epoch | applied in catalog `1.2.0` (master `1.23.0`); the builder is now [AsteroidCatalog](https://github.com/loggger101/AsteroidCatalog) |
 
-🚨  **AND VERIFYING THE NEOWISE PATCH FOUND A THIRD DEFECT THAT WAS ON NO
-PLAN.** Its `ORDER BY` named only `asteroid_number`, which is not total over a
-table holding 183,408 rows for 143,318 bodies, so `deduplicate_catalog`'s
-stable sort resolved **27,802 bodies by arrival order alone**, with a median
-diameter spread of 11.6% and a maximum of 86.3%. Diameter cubes into mass. It
-surfaced only because the patch was verified by comparing both transports
-rather than by reasoning that they must agree; the two returned the same
-content hash in a different order. Fixed in the same release, and it is the
-only item in it that moves a number. Full write-up in `versions.md`.
-
-The rest of this document is the audit as written before any of that, kept as
-the measurement record.
+The async-TAP NEOWISE fetcher landed in the same release, and verifying it
+found a non-total `ORDER BY` that resolved 27,802 bodies by arrival order; see
+[versions.md > catalog v1.2.0](../../versions.md#catalog-v120). The rest of
+this document is the audit as written on 2026-09-03, kept as the measurement
+record.
 
 ---
 
@@ -111,14 +102,11 @@ all three real bodies (Bennu 4.64 against ~5.1, Eros 6.10 against ~6.5, Itokawa
 4.14 against ~4.6). Model C widens that gap rather than closing it, so this
 change cannot be sold as "closer to the published numbers".
 
-🚨  **This paragraph originally explained that gap as "a free two-impulse
+🚨  **The obvious explanation of that gap is wrong.** A free two-impulse
 optimum should beat a real mission, which pays for fixed launch dates and
-finite burns". F4 measured it and that explanation is WRONG.** A free
-two-impulse optimum with real geometry comes out **above** the published figure
-on all three bodies, not below it. The estimator is not beating real missions
-by being unconstrained; it is understating the transfer. The correction is kept
-visible rather than quietly rewritten, because a plausible mechanism asserted
-without measurement is exactly what this repo's own notes warn about.
+finite burns; but F4 measured a free optimum with real geometry and it comes
+out **above** the published figure on all three bodies. The estimator is not
+beating real missions by being unconstrained; it is understating the transfer.
 
 ⚠️  **It moves every number in the model.** Δv feeds the mass cascade, so a
 median 4.87% cut to `dv_out` changes payload, cost, ratio, and ranking on
@@ -129,8 +117,7 @@ not a point release.
 THIS CHANGE ON ITS OWN. IT MAKES THE MODEL WORSE.** F1 is a real overcharge, but the
 estimator carries a larger *under*charge of opposite sign, and the two
 partially cancel. Removing only the overcharge exposes the undercharge in full.
-See F4, which measures both on the same bodies. **This paragraph supersedes the
-recommendation this document originally made.**
+See F4, which measures both on the same bodies.
 
 ### What the starred repos add here
 
@@ -210,68 +197,6 @@ of that star that survives contact with this codebase: put a categorical prior
 over `spectral_type` for `albedo_assumed` rows, propagate it through the value
 model, and report the ranking with a credible interval instead of a number.
 The 33.9% cross-survey disagreement is the calibration data for that prior.
-
----
-
-## F3. The interpreter and pandas moved under the repo, and CLAUDE.md's correction is now itself stale
-
-Found incidentally: a script of mine failed with
-`ArrowNotImplementedError: ... (large_string, double)`, which is a pandas 3.0
-Arrow-backed string dtype, not a pandas 2.x object dtype.
-
-CLAUDE.md's Environment section carries a 🚨 block, dated 2026-09-03, asserting
-that the section wrongly said 3.14 and that **"3.14 HAS NEVER BEEN INSTALLED ON
-THIS MACHINE"**, with `py -0` quoted as evidence. On this host, right now:
-
-```
-py -c "import sys; print(sys.version)"  ->  3.14.6
-py -0                                   ->  -V:3.14 *        Python 3.14 (64-bit)
-                                            -V:Astral/CPython3.11.16
-```
-
-**3.13 is not installed at all any more**, and `py` resolves to 3.14.6.
-
-| | `platform_reference.json` | live now |
-|---|---|---|
-| python | 3.13.9 | **3.14.6** |
-| numpy | 2.2.6 | **2.5.2** |
-| pandas | 2.3.3 | **3.0.5** |
-| cpu_count | 12 | **14** |
-
-`requirements-lock.txt` and the `Dockerfile` both still pin 3.13.9 / numpy
-2.2.6 / pandas 2.3.3.
-
-### The good news is real, and it is the repo's own tool that says so
-
-```
-py platform_check.py
-  ALL PROBES MATCH.  Cell hashes computed on this host are
-  directly comparable with the ones committed in versions.md.
-```
-
-Every libm probe, every numpy probe, the CSV CRLF pin and the float round-trip
-hash all match across a two-minor-version interpreter jump and a **major**
-pandas version. That vindicates `platform_check.py` exactly as designed.
-
-### The gap it cannot see
-
-⚠️  `platform_check.py` probes libm, numpy kernels, and CSV float round-trip.
-It does **not** probe pandas dtype inference, and pandas 3.0's headline change
-is precisely that: object columns now infer as Arrow-backed `str`. That is the
-same surface as three traps CLAUDE.md already documents by name:
-
-- `.astype(bool)` reading `"False"` and `NaN` as `True`, whose whole premise is
-  that **"the dtype is inferred from the data"**
-- the empty string that is not `NaN` "except that in a CSV it is", trap 3 of the
-  three that produced one identical symptom in `verify.py`
-- `_truthy(series, default=...)`, which exists to make the missing-value case
-  explicit
-
-**Suggested, and not applied:** add three probes to `platform_check.py`, an
-all-empty object column written and re-read, a bool column with one missing
-value, and a float column round-tripped through `to_csv`/`read_csv` at default
-precision. Those are the three that would go quiet under a dtype change, and
-they are cheap.
 
 ---
 
@@ -412,51 +337,13 @@ optimum is epoch-independent. The epoch matters the moment anyone wants a
 
 ---
 
-## What I would do, in order
-
-1. **Correct CLAUDE.md's Environment section** (F3). It is the one fact the
-   machine answers in a second, the retraction block is now wrong in the other
-   direction, and it is the second time this paragraph has rotted. Consider
-   deleting the version from prose entirely and pointing at `platform_check.py`,
-   which derives it. Decide separately whether to re-pin the lockfile and the
-   Dockerfile to 3.14.6, or to reinstall 3.13.9 and keep the reference host.
-2. **Add the three pandas dtype probes** to `platform_check.py` (F3). Cheap,
-   and it closes the one blast radius the current probes miss.
-3. **Take the SDSS table as a committed input** (F2). 7.5 MB, fixed-width, no
-   dependency, no API key, and it never changes, so it does not have the
-   "Stage 1 refetch changes the catalog" problem. It buys a measured
-   disagreement rate, which is the input to any honest error bar.
-4. **Add `epoch` to the SBDB field list** (F5). One line in `_JPL_FIELDS`, one
-   in `_JPL_RENAME`. It changes no number in a run, and without it
-   `mean_anomaly_deg` is dead weight in every CSV the pipeline has ever
-   written. Doing it now means the next Stage 1 run captures it; doing it later
-   means another full refetch.
-5. **Apply the async-TAP NEOWISE fetcher** (the patch file, since applied and deleted),
-   which falls back to the current sync path, so its worst case is today's
-   behaviour. Measured byte-identical output against the live service.
-6. 🚨  **Do NOT ship F1 on its own.** F4 measures it against an external truth
-   and it makes the estimator worse in every inclination band. If the Δv model
-   is opened at all, both terms move together, and the target is the oracle,
-   not the model's own internal consistency. That is a research project, not a
-   release: the honest interim position is that **the pipeline's Δv is
-   optimistic by roughly 0.4 to 1.3 km/s and the entire campaign inherits
-   that**, which is worth writing down in `README.md` whether or not anything
-   is fixed.
-7. Everything else in `SOURCES.md` is optional, and several of the stars are
-   worth less to this project than they look. Read the verdict column before
-   spending time.
-
-⚠️  **Items 1 to 5 are all cheap and none of them moves a number a run
-produces.** Item 6 is the opposite on both counts. That split is deliberate:
-this pass found one thing worth a lot and several things worth a little, and
-the expensive one is the one that needs a decision rather than a patch.
-
 ## Licence hazard, one paragraph
 
-This repo has **no LICENSE file**. Four of the seventeen stars are copyleft:
+This repo's code is MIT ([`LICENSE`](../../LICENSE)). Four of the seventeen
+stars are copyleft:
 **nyx** and **julie-dujardin/space-map** are AGPL-3.0, **CamPyRoS** is GPL-3.0,
-**Celestia** is GPL-2.0. Copying code from any of them makes this pipeline
-copyleft. Physics is not copyrightable and reimplementing a published algorithm
+**Celestia** is GPL-2.0. Copying code from any of them would make this
+pipeline copyleft. Physics is not copyrightable and reimplementing a published algorithm
 from its equations is fine; lifting a function body is not. Everything else
 starred is MIT, BSD-3, Apache-2.0 or MPL-2.0 and is safe to vendor with
 attribution. Per-repo detail is in `SOURCES.md`.
