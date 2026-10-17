@@ -2180,19 +2180,21 @@ def part_fixed_point(S, out):
     prev = M["passes"][-2] if len(M["passes"]) > 1 else None
     blended = last.get("step", 1.0) < 1.0
     with_ref = prev is not None and last.get("refinery_in", 0.0) > 0
+    # calc v1.32.0: the ISRU plant, at the propellant and stay that pass ran at.
+    with_iplant = prev is not None and last.get("isru_plant_in", 0.0) > 0
     S.step("hw_solved", "m_hw,solved", "the hardware the last solve ran at",
-           "m_rig + plant + EP stage%s, %s"
+           "m_rig + plant + EP stage%s%s, %s"
            % (" + refinery" if with_ref else "",
+              " + ISRU plant" if with_iplant else "",
               "%s of the way from the state the previous pass was solved "
               "at to the sizing it computed" % P(last["step"]) if blended
               else "at the PREVIOUS pass"),
-           (("%s + %s + %s + %s" % (P(C["cfg"].mining_hardware_kg),
-                                    P(last["plant_in"]), P(last["ep_in"]),
-                                    P(last["refinery_in"])))
-            if with_ref else
-            ("%s + %s + %s" % (P(C["cfg"].mining_hardware_kg),
-                               P(last["plant_in"]), P(last["ep_in"]))
-             if prev is not None else P(last["hw_in"]))),
+           (" + ".join(P(v) for v in
+                       [C["cfg"].mining_hardware_kg, last["plant_in"],
+                        last["ep_in"]]
+                       + ([last["refinery_in"]] if with_ref else [])
+                       + ([last["isru_plant_in"]] if with_iplant else []))
+            if prev is not None else P(last["hw_in"])),
            M["hw_solved"], "kg", ["m_rig"],
            "the last row's 'hardware in' column above, and NOT the "
            "hardware the mission actually flies; %s is built on that"
@@ -2590,11 +2592,15 @@ def part_settled(S, out):
     d3 = 0.0
     if M.get("refine_draw", 0.0) > 0:
         d3 = part_refinery(S, C, M, hrs)
+    d4 = 0.0
+    if M.get("isru_draw", 0.0) > 0:
+        d4 = part_isru_plant(S, C, M, hrs)
+    names = (["P_dig", "P_H2O"] + (["P_ref"] if d3 else [])
+             + (["P_ISRU"] if d4 else []))
+    nums = [d1, d2] + ([d3] if d3 else []) + ([d4] if d4 else [])
     S.step("draw", "P", "the continuous processing draw",
-           "P_dig + P_H2O + P_ref" if d3 else "P_dig + P_H2O",
-           ("%s + %s + %s" % (P(d1), P(d2), P(d3))) if d3
-           else "%s + %s" % (P(d1), P(d2)), M["draw"], "W",
-           ([k for k in ("P_dig", "P_lib", "P_ref") if k in S.tag]
+           " + ".join(names), " + ".join(P(v) for v in nums), M["draw"], "W",
+           ([k for k in ("P_dig", "P_lib", "P_ref", "P_isru") if k in S.tag]
             or ["hrs"]))
     S.step("m_plant", "m_plant", "plant mass", "P / w_plant",
            "%s / %s" % (P(M["draw"]), P(C["plant_w_per_kg"])),
@@ -2718,7 +2724,16 @@ def part_settled(S, out):
                "%s + %s + %s" % (P(ep["array"]), P(ep["ppu"]),
                                  P(ep["thruster"])),
                ep["mass"], "kg", ["ep_array", "ep_ppu", "ep_thr"])
-    if M.get("refinery", 0.0) > 0:
+    if M.get("isru_plant", 0.0) > 0:
+        S.step("m_hw", "m_hw", "hardware, as flown",
+               "m_rig + m_plant + m_EP + m_ref + m_iplant",
+               "%s + %s + %s + %s + %s" % (P(C["cfg"].mining_hardware_kg),
+                                           P(M["plant"]), P(M["ep"]["mass"]),
+                                           P(M.get("refinery", 0.0)),
+                                           P(M["isru_plant"])),
+               M["hw"], "kg", ["m_rig", "m_plant", "m_EP", "m_iplant"]
+               + (["m_ref"] if M.get("refinery", 0.0) > 0 else []))
+    elif M.get("refinery", 0.0) > 0:
         S.step("m_hw", "m_hw", "hardware, as flown",
                "m_rig + m_plant + m_EP + m_ref",
                "%s + %s + %s + %s" % (P(C["cfg"].mining_hardware_kg),
@@ -2734,6 +2749,32 @@ def part_settled(S, out):
 
 
 # ------------------------------------------------------- 8. the flown stack
+def part_isru_plant(S, C, M, hrs):
+    """calc v1.32.0: what making the propellant costs in watts and in plant.
+    Returns the draw, which the caller adds to the processing total."""
+    S.prose("Hydrolox made on site is split and both gases liquefied.  Module 3 "
+            "states that as an energy per kilogram MADE, on top of liberating "
+            "the water, and sizes the plant that does it from a throughput.")
+    S.put("e_isru", "e_ISRU", "processing energy per kg of propellant made",
+          C["isru_wh"], "Wh/kg",
+          cite_table_row(C["pro"], "propellants.csv", C["pro"].raw("name"),
+                         ("isru_processing_wh_per_kg",)))
+    S.step("P_isru", "P_ISRU", "the propellant plant's draw",
+           "e_ISRU * m_rprop / hours",
+           "%s * %s / %s" % (P(C["isru_wh"]), P(M["isru_prop"]), P(hrs)),
+           M["isru_draw"], "W", ["e_isru", "m_rprop", "hrs"])
+    S.put("r_isru", "r_ISRU", "ISRU plant throughput", C["isru_plant_rate"],
+          "kg/yr per kg of plant",
+          cite_ops(C, "ISRU propellant plant throughput"))
+    S.step("m_iplant", "m_iplant", "the ISRU plant",
+           "m_rprop / (t_dig * r_ISRU)",
+           "%s / (%s * %s)" % (P(M["isru_prop"]), P(M["dig_yr"]),
+                               P(C["isru_plant_rate"])),
+           M["isru_plant"], "kg", ["m_rprop", "r_isru"],
+           "it rides with the rig and is costed as the rig is")
+    return M["isru_draw"]
+
+
 def part_refinery(S, C, M, hrs):
     """The flown refinery's energy, draw and plant (calc v1.25.0).  Returns
     the draw, which the caller adds to the processing total."""
@@ -3694,13 +3735,15 @@ def part_cost(S, out):
            "%s * %s" % (P(M["m_oprop"]), P(C["prop_usd_per_kg"])),
            lines["oprop"], "$", ["m_oprop", "c_prop"])
     if C["isru"]:
-        S.put("c_isru", "c_ISRU", "processing cost of propellant made on "
-              "site", C["cfg"].isru_processing_usd_per_kg, "$/kg",
-              cite_config("isru_processing_usd_per_kg"))
+        S.put("c_isru", "c_ISRU", "flat processing cost of propellant made "
+              "on site", C["isru_opex"], "$/kg",
+              cite_config("isru_processing_usd_per_kg")
+              if C["isru_opex_how"].startswith("this process")
+              else C["isru_opex_how"])
     S.step("L_rprop", "C_rprop", "return propellant",
            "m_rprop * %s" % ("c_ISRU" if C["isru"] else "c_prop"),
            "%s * %s" % (P(M["m_rprop"]),
-                        P(C["cfg"].isru_processing_usd_per_kg if C["isru"]
+                        P(C["isru_opex"] if C["isru"]
                           else C["prop_usd_per_kg"])),
            lines["rprop"], "$", ["m_rprop", "c_isru" if C["isru"]
                                  else "c_prop"],
@@ -3709,7 +3752,17 @@ def part_cost(S, out):
     S.put("c_rig", "c_rig", "mining rig recurring cost",
           C["val"]("Mining payload recurring cost", used=False), "$/kg",
           cite_ops(C, "Mining payload recurring cost"))
-    if M.get("refinery", 0.0) > 0:
+    if M.get("isru_plant", 0.0) > 0:
+        S.step("C_rig_total", "C_rig", "one rig and the plants on it, built once",
+               "(m_rig + m_ref + m_iplant) * c_rig",
+               "(%s + %s + %s) * %s" % (P(C["cfg"].mining_hardware_kg),
+                                        P(M.get("refinery", 0.0)),
+                                        P(M["isru_plant"]),
+                                        P(C["val"]("Mining payload recurring cost",
+                                                   used=False))),
+               K["rig_total"], "$", ["m_rig", "m_iplant", "c_rig"]
+               + (["m_ref"] if M.get("refinery", 0.0) > 0 else []))
+    elif M.get("refinery", 0.0) > 0:
         S.step("C_rig_total", "C_rig", "one rig and its refinery, built once",
                "(m_rig + m_ref) * c_rig",
                "(%s + %s) * %s" % (P(C["cfg"].mining_hardware_kg),

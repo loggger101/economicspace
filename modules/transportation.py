@@ -112,6 +112,13 @@ No delivered price moves, so Stage 2 stays 1.15.0.  The 1.21.0 set is
 frozen under `campaign/stage3/spacecost-0.9.0/`.  See
 [master v1.53.0](../versions.md#master-v1530--transportation-v1220).
 
+v0.12.0 TOOK IT 1.22.0 -> 1.23.0 AND ADDED WHAT MAKING ISRU PROPELLANT COSTS:
+an `isru_processing_wh_per_kg` column (hydrolox 15,200 Wh/kg, the rows that
+burn their feed as it comes 0.0) and an "ISRU propellant plant throughput" ops
+row (7.28 kg/yr per kg).  No existing value moved; v0.11.0 had moved no table.
+The 1.22.0 set is frozen under `campaign/stage3/spacecost-0.10.0/`.  See
+[master v1.55.0](../versions.md#master-v1550--calc-v1320--transportation-v1230).
+
 RE-RUN STAGE 3 WHEN A ROW CHANGES, NOT WHEN A STAMP DOES.  A repin does not
 require a restamp: Stage 4 reads no column this contract moved, so leaving the
 CSVs at the older stamp costs one `stamp_check()` line and nothing else, where
@@ -166,7 +173,7 @@ import subprocess, sys
 # the two to each other.
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
 _PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.11.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.12.0",
 }
 _missing = []
 for _pkg in _REQUIRED_PKGS:
@@ -385,7 +392,7 @@ class TransportConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 3 changelog
-    pipeline_version: str = "1.22.0"
+    pipeline_version: str = "1.23.0"
     preview_rows:     int = 15   # rows per table in the end-of-run preview
 
 CONFIG = TransportConfig()

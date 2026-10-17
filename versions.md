@@ -25,6 +25,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.55.0 / calc v1.32.0 / transportation v1.23.0](#master-v1550--calc-v1320--transportation-v1230)
 - [master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0](#master-v1540--calc-v1310--mineral_value-v1160)
 - [master v1.53.0 / transportation v1.22.0](#master-v1530--transportation-v1220)
 - [master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0](#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210)
@@ -107,9 +108,9 @@ one that does not say is not to be used.
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.16.0** | v1.16.0, an eighth destination, `gto`: its note, `geo`'s utility profile by reference, a sourced 81.6 t/yr demand ceiling, and an import-time check that every in-space destination has one; no existing row moved (v1.13.0 was the last to move a row) |
-| 3 | `modules/transportation.py` | **1.22.0** | v1.22.0, krypton's price a band ($300-$2,100/kg, centred at $794) where it was an unsourced $300: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.31.0** | v1.31.0, an eighth destination, `gto`: the `ret_gto_prop` / `ret_gto_aero` legs and its delivery architecture; v1.30.0 had put the NRHO-to-lunar-surface Delta-v at Apollo's 2,050 m/s descent |
-| - | `master.py` | **1.54.0** | a literal in `build_master.py`, in **two** places |
+| 3 | `modules/transportation.py` | **1.23.0** | v1.23.0, an ISRU processing energy on every propellant row that can be made on site (hydrolox 15,200 Wh/kg) and an ISRU plant throughput row; no existing value moved: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 4 | `modules/calc.py` | **1.32.0** | v1.32.0, ISRU hydrolox pays for its electrolysis and liquefaction (energy through the array, plant with the rig), and the flat $50/kg is retired; v1.31.0 had added an eighth destination, `gto` |
+| - | `master.py` | **1.55.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -190,6 +191,162 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## master v1.55.0 / calc v1.32.0 / transportation v1.23.0
+
+**Making ISRU propellant costs energy and a plant, and the flat $50/kg that
+stood in for both is retired.** Hydrolox made at an asteroid paid for liberating
+its water, and for everything after that (splitting it and liquefying both
+gases) a flat, unsourced $50/kg with no watt and no kilogram behind it: defect
+class 1 the other way round, a price with no mass. It now pays in energy
+through the array and in a plant on the rig, from sourced Stage 3 rows. **On
+the samples below it makes one row worse**, the one hydrolox ISRU winner, and
+the rows that fly water ISRU a fraction of a percent better, because the $50/kg
+had been billed on them too. That is a finding about the population: see
+[what the ISRU share was](#what-the-isru-share-was).
+
+### What moved upstream (spacecost 0.12.0)
+
+Data contract **1.22.0 -> 1.23.0**: a new column and a new row, and no existing
+value moves.
+
+- **`isru_processing_wh_per_kg`** (propellants): energy per kg of propellant
+  MADE, on top of liberating the water. **Hydrolox 15,200 Wh/kg**, the low end
+  of a band, by owner decision:
+
+  | term | source | per kg at O/F 6 |
+  |---|---|---:|
+  | electrolysis | DOE HFTO, *Technical Targets for PEM Electrolysis*, system 55 kWh/kg H2 (2022 status) | 7.86 kWh |
+  | H2 liquefaction | W. Johnson (NASA GRC), AIAA ASCEND 2023, NTRS 20230014839: 35 kW for 0.3 kg/h through one 20 K cryocooler, up to 3x less pre-cooled | 5.56 to 16.7 kWh |
+  | O2 liquefaction | same, under 2 kW for about 0.96 kg/h | at most 1.79 kWh |
+  | band | | **15.2 to 26.3 kWh** |
+  | cross-check | Kleinhenz & Paz, *A Lunar Water ISRU System Study for Human-Scale Propellant Production*, PTMSS/SRR 2021, NTRS 20210016820: 46 kW to make 10 t of O2 and 1.67 t of H2 in 225 days | 21.3 kWh |
+
+  The rows that burn their feed as it comes (resistojet, water ion,
+  solar-thermal steam, mass driver) state **0.0**; ALICE states NaN, its metal
+  half having no source, and is gated out. An ISRU row with no entry raises.
+- **ISRU propellant plant throughput** (ops): **7.28 kg of propellant per year
+  per kg of plant**, band 7.28-13.3. It is the electrolysis and liquefaction
+  half of the same lunar study (2.6 t for 11.67 t in 0.616 yr), excavation
+  excluded because the rig already is that, and tanks included, so an upper
+  bound on mass, taken by owner decision over a radiator-only floor. The high
+  end is Kleinhenz & Paz 2017 (AIAA 2017-0423), a whole Mars CH4/O2 plant.
+
+### What moves here
+
+- **calc 1.32.0**: `model_isru_processing` (True) adds the energy to the
+  processing draw over the stay, in the sizing loop and at the settle-up, and
+  flies the plant in `hardware_total_kg`, costed at the rig's rate exactly as
+  v1.25.0's refinery is. The loop derives the plant from the propellant made and
+  the stay, both already in its state, so the state tuple whose order is
+  load-bearing is untouched. `isru_processing_usd_per_kg` goes **50.0 -> 0.0**.
+  New columns `isru_plant_kg` and `isru_processing_power_w`. Both settings join
+  `verify.py`'s reset list, and the mass ledger counts the plant.
+- **transportation 1.23.0**: the stamp follows the data contract.
+- **The worked calculation and the verification sheet** derive the plant and
+  its draw, and settle both settings off the ROW: a charged plant is always
+  positive, so `isru_plant_kg` > 0 says the term ran, and the flat $/kg a run
+  billed is `return_prop_cost_usd` over `m_return_prop_kg`, which keeps every
+  archived ISRU row deriving at $50.
+- **Stage 3 on disk**: rebuilt by replaying the three fuel quotes the live
+  `propellants.csv` recorded (2026-09-28), no network. Against the live set it
+  differs in exactly the stamp, the date, the new column and the new row, in
+  all seven files, the 84,132-row summary included. The 1.22.0 set is frozen as
+  `campaign/stage3/spacecost-0.10.0/` and backed up under
+  `asteroid_pipeline/_inputs_backup_2026-10-17_pre-v1.55.0/`. Stage 2 did not
+  move.
+
+### Measured
+
+Stage 4 at calc 1.31.0 (the model before) against calc 1.32.0 (the defaults
+after), on the same bodies: a 20,000-row cislunar raw stride and 4,000-row
+strides elsewhere, each destination priced from its frozen mineral_value 1.15.0
+table (the cislunar one is byte-identical to the live table). `median` is among
+the bodies that moved, as `median(r - 1)` with `r` the after objective over the
+before. THE SAMPLING RULE applies: these are samples.
+
+| destination | cell | rows | ISRU before (hydrolox) | ISRU after (hydrolox) | moved | better | worse | median among moved | largest | winner |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `cislunar` | raw N=1 | 17,644 | 1 (1) | 0 (0) | 1 | 0 | 1 | +26.609% | 26.609% | 510529 12.9075x, unchanged |
+| `cislunar` | default | 3,517 | 0 (0) | 0 (0) | 0 | 0 | 0 | - | - | 356991 7.39609x, unchanged |
+| `leo` | raw N=1 | 3,533 | 21 (0) | 21 (0) | 21 | 21 | 0 | -0.035% | 0.067% | 356991 48.5461x, unchanged |
+| `leo` | default | 3,533 | 50 (0) | 50 (0) | 50 | 50 | 0 | -0.065% | 0.124% | 356991 19.8366x, unchanged |
+| `earth_surface` | raw N=1 | 3,532 | 2 (0) | 2 (0) | 2 | 2 | 0 | -0.042% | 0.060% | 356991 23309.2x, unchanged |
+| `earth_surface` | default | 3,533 | 0 (0) | 0 (0) | 0 | 0 | 0 | - | - | 356991 6447.04x, unchanged |
+| `lunar_surface` | raw N=1 | 3,508 | 0 (0) | 0 (0) | 0 | 0 | 0 | - | - | 356991 12.21x, unchanged |
+| `lunar_surface` | default | 3,508 | 0 (0) | 0 (0) | 0 | 0 | 0 | - | - | 181771 3.65372x, unchanged |
+| `mars_orbit` | raw N=1 | 3,530 | 4 (0) | 4 (0) | 4 | 4 | 0 | -0.032% | 0.054% | 99932 15.1743x -> 99932 15.1661x |
+| `mars_orbit` | default | 3,530 | 2 (0) | 2 (0) | 2 | 2 | 0 | -0.061% | 0.078% | 99932 5.62109x, unchanged |
+| `mars_surface` | raw N=1 | 3,529 | 5 (0) | 5 (0) | 5 | 5 | 0 | -0.030% | 0.032% | 356991 4.02474x, unchanged |
+| `mars_surface` | default | 3,529 | 3 (0) | 3 (0) | 3 | 3 | 0 | -0.040% | 0.041% | 356991 1.29408x, unchanged |
+| `geo` | raw N=1 | 3,523 | 1 (0) | 1 (0) | 1 | 1 | 0 | -0.043% | 0.043% | 672947 49.6394x, unchanged |
+| `geo` | default | 3,523 | 5 (0) | 5 (0) | 5 | 5 | 0 | -0.062% | 0.127% | 2025 WG14 9.17387x -> 2025 WG14 9.16846x |
+
+What moves is the flat $50/kg coming off water ISRU (better, by at most
+0.13%) and the one hydrolox ISRU winner getting worse; every winner is the same
+body, and the two whose objective moves fly water ISRU. `mars_surface` and
+`geo` were measured the same way on 2026-10-17, after the rest.
+
+### What the ISRU share was
+
+The brief that started this quoted ISRU at 6-10% of the 2026-09 cislunar
+population, and the live calc 1.26.0 default cell has hydrolox ISRU on 17% of
+its rows. **At calc 1.31.0 it wins none of a 3,517-row default sample and one
+raw row in 17,644.** The 241 bodies of that sample that flew it at 1.26.0 all
+fly xenon now, at a median 0.044x their 1.26.0 objective: they were hopeless
+rows (median 345x) whose electric candidates were refused by the cliffs calc
+1.27.0-1.29.0 removed. Reverting all three (`repair_settled_overshoot`,
+`damp_sizing_loop`, `launch_capacity_rtol = 0.0`) on the same sample gives back
+the same 1,520 evaluable rows and **241 hydrolox ISRU winners (15.86%)**, which
+is what says so; which of the three carries it was not isolated.
+
+**In that counterfactual the charge is load-bearing**: all 241 lose ISRU, 78
+leave the evaluable set (ISRU was the only mission that closed), and the other
+163 get worse by a median **+76.66%** (p10 +23.52%, p90 +3,128%), switching to
+water ion (117), methalox (45) and krypton (1). The cell's best does not move.
+With the flag off and $50 restored, the new code reproduces the original
+model on all 18 compared columns of all 1,520 rows.
+
+Also measured before the decision, with the energy alone: 15.2, 21.3 and
+26.3 kWh/kg, and the two plant-mass ends, all moved exactly the same rows by
+exactly the same amounts at the current release, because the energy alone
+already removes hydrolox ISRU from every row it touched.
+
+### Not charged, and recorded
+
+- **ISRU boil-off.** calc exempts ISRU propellant from boil-off because it is
+  "made on departure"; it is made over the whole stay, so the first hydrogen is
+  held for about a year and boils or needs a 20 K cryocooler the whole time.
+  Inert while charged hydrolox ISRU wins nothing, and a zero-boil-off cooling
+  model needs a source of its own. In README beside the boil-off model.
+- **ISRU methalox** stays declined (CLAUDE.md, "Measured and declined"). The
+  other condition its row named, pricing the plant for hydrolox, is met here
+  and only strengthens the decline.
+
+### Verified
+
+- `verify.py check` against `.verify/baseline-1.54.0`: all four cislunar cells
+  are identical on **149 of 149 shared columns**; the hash differs only because
+  the frame gained two columns (`a95b5788fd9a4fed` / `7ba9578e8ec2b9dd` /
+  `ee9836ea14224e80` / `1d004d5625a75183` are the new full-frame hashes).
+  Pruned and unpruned search MATCH on all four, so the pre-filter is still
+  sound with the plant in the hardware; serial and parallel MATCH; the mass
+  ledger, never-worse, Stage 2 and ceiling checks pass. ⚠️  It prints **NOT
+  VERIFIED** on provenance alone: the baseline was taken over the uncommitted
+  methalox comments in `modules/calc.py` and `master.py`, and its four hashes
+  are byte for byte the ones committed for v1.53.0 above.
+- No row of any sample flies hydrolox ISRU at the defaults, so the plant was
+  exercised on a forced cell: hydrolox the only propellant and the architecture
+  search off, which flies ISRU wherever the rock has water. Body 181771 carries
+  a 585 kg plant and a 7.38 kW processing draw (1,065 kg made at the 0.25-year
+  stay floor). It derives with **0 DIFFER of 94 quantities** through
+  `worked_calculation.py --audit`, every non-zero column and all 36 reference
+  rates shown, and `verification_sheet.py --check --self-test` reproduces all
+  370 substitutions and tabulates all 85 config dials. An archived calc 1.26.0
+  ISRU row (2015 KQ57) still derives with 0 DIFFER against its frozen Stage 2
+  and Stage 3 epochs, $50/kg included.
+- spacecost's suite (264 passed); `verify_docs.py` clean; `verify_stage3.py`
+  against the pinned `v0.12.0` tag: STAGE3_PENDING.
 
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
@@ -9842,6 +9999,21 @@ aerobrake trim) are two more return legs, and `DELIVERY_ARCHITECTURES`
 gains a depot entry. No plane change is charged, which is optimistic for a
 high-inclination arrival. No config field or output column moved, and
 `MEASURED_DEST_SECONDS` has no `gto` row: nothing has measured one.
+
+**`1.32.0`  making ISRU propellant costs energy and a plant.** Full write-up: [master v1.55.0 / calc v1.32.0 / transportation v1.23.0](#master-v1550--calc-v1320--transportation-v1230).
+- **New field**: `model_isru_processing` (default **True**): Module 3's
+  `isru_processing_wh_per_kg` is added to the processing draw over the stay,
+  in the sizing loop and at the settle-up, and the plant that makes the
+  propellant (`refinery_plant_kg` at Module 3's "ISRU propellant plant
+  throughput") flies in `hardware_total_kg` and is costed at the rig's rate.
+  The loop does not carry the plant in its state: it is derived from the
+  propellant made and the stay, which it does carry. A propellant whose
+  processing energy is NaN is refused for ISRU. `False` is v1.31.0 to the bit.
+- **Default moved**: `isru_processing_usd_per_kg` **50.0 -> 0.0**, retired;
+  `50.0` with `model_isru_processing = False` reproduces v1.31.0.
+- **New output columns**: `isru_plant_kg`, `isru_processing_power_w`.
+- **Schema guard**: `schema_check` names the new propellant column and the
+  new ops row, with what their absence reverts.
 
 # Measurement history
 

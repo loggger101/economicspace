@@ -260,6 +260,8 @@ RESET_FIELDS = (
     "model_detailed_phases",     # v1.26.0: the detailed phases are A/B'd against comp_phases
     "repair_settled_overshoot",  # v1.27.0: the settle-up repair is A/B'd against the refusal
     "damp_sizing_loop",          # v1.28.0: the damped loop is A/B'd against the pass-2 refusal
+    "model_isru_processing",     # v1.32.0: ISRU energy and plant are A/B'd against none
+    "isru_processing_usd_per_kg",  # v1.32.0: the retired $50/kg is A/B'd against 0.0
 )
 
 
@@ -489,7 +491,10 @@ def _read_baseline(pd, path):
 # -----------------------------------------------------------------------------
 def check_mass_ledger(m, frames: Dict[str, Any]) -> bool:
     """hardware_total_kg == mining_hardware_kg + power_system_kg + ep_system_kg
-    + refinery_kg.
+    + refinery_kg + isru_plant_kg.
+
+    calc v1.32.0 adds the ISRU plant, on the rig beside the refinery; a frame
+    older than that has no `isru_plant_kg` column and contributes nothing.
 
     calc v1.25.0 adds the refinery plant, which flies with the rig; a frame
     older than that has no `refinery_kg` column and the identity is the
@@ -513,9 +518,12 @@ def check_mass_ledger(m, frames: Dict[str, Any]) -> bool:
             continue
         refinery = (df["refinery_kg"] if "refinery_kg" in df.columns
                     else 0.0)
+        # calc v1.32.0: the ISRU plant flies with the rig the same way.
+        isru_plant = (df["isru_plant_kg"] if "isru_plant_kg" in df.columns
+                      else 0.0)
         err = float((df["hardware_total_kg"] - rig
                      - df["power_system_kg"] - df["ep_system_kg"]
-                     - refinery).abs().max())
+                     - refinery - isru_plant).abs().max())
         good = err < 1e-6
         ok &= good
         print(f"  {name:13s} max |error| {err:.9f} kg  {'OK' if good else 'FAIL'}")

@@ -875,10 +875,25 @@ class CalcConfig:
     # be modelling every mission as having declined an option a real programme
     # would evaluate.
     use_isru_return_propellant:    bool  = True
-    # Electrolysis, liquefaction and cryo storage OPEX per kg of propellant
-    # made.  The mining, hauling and water-liberation energy are NOT in here; 
-    # they are charged through the feed, the dig time and the power plant.
-    isru_processing_usd_per_kg:    float = 50.0
+    # v1.32.0: making the propellant costs ENERGY and a PLANT, and both are now
+    # flown.  Module 3's `isru_processing_wh_per_kg` (hydrolox 15,200 Wh/kg:
+    # electrolysis and liquefaction, on top of liberating the water) is added
+    # to the power plant the array is sized for, and the electrolysis and
+    # liquefaction plant rides on the rig at Module 3's "ISRU propellant plant
+    # throughput", costed at the rig's rate exactly as the refinery is.  A
+    # propellant used as it comes (water, steam, rock) states 0.0 and pays
+    # nothing here.  False restores the v1.31.0 model, in which neither existed.
+    model_isru_processing:         bool  = True
+
+    # A flat OPEX per kg of propellant made.  It was $50/kg until v1.32.0 and
+    # carried no source; its comment said it paid for electrolysis,
+    # liquefaction and cryo storage, which `model_isru_processing` now charges
+    # as the energy and the plant they are, and it was billed on water ISRU,
+    # which does none of the three.  RETIRED at 0.0, and kept so a v1.31.0 run
+    # reproduces with 50.0.  The mining, hauling and water-liberation energy
+    # were never in it; they are charged through the feed, the dig time and the
+    # power plant.
+    isru_processing_usd_per_kg:    float = 0.0
 
     # ─── COST AMORTISATION & FINANCIAL ───────────────────────────────────────
     # Spacecraft development NRE (~$588M for OSIRIS-REx class).  If 1, the
@@ -1156,7 +1171,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.31.0"
+    pipeline_version: str = "1.32.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1800,6 +1815,7 @@ _MODULE3_REQUIRED = {
         "propellantless": "sails are not excluded and report an unbounded payload",
         "thruster_kg_per_n":   "the electric stage is sized on POWER alone — micronewton devices (PPT, electrospray, FEEP) fly as multi-tonne cargo tugs",
         "thruster_efficiency": "every electric thruster reverts to one shared 60% efficiency; a PPT is really ~8% and needs ~9x the array",
+        "isru_processing_wh_per_kg": "ISRU hydrolox is electrolysed and liquefied for FREE — no energy, no array, no plant",
     },
     "vehicles": {
         "tanker_flights_for_escape": "orbital refuelling is not charged; a refuelled escape payload is priced at one launch",
@@ -1835,6 +1851,9 @@ _MODULE3_REQUIRED_OPS = {
     "Mining rig maximum trips":
         "the rig wears out on a calendar alone — 12 consecutive campaigns at a short stay, "
         "so the fleet never has to grow and programme scale is bounded by nothing",
+    "ISRU propellant plant throughput":
+        "the electrolysis and liquefaction plant is sized at a guessed 7.28 kg/yr per kg "
+        "instead of Module 3's figure",
 }
 
 
@@ -4749,10 +4768,24 @@ def asteroid_dv_options(
 #   "regolith"  the propellant IS bulk rock (a mass driver's reaction mass), so
 #               the ratio is already regolith per kg and no water is required.
 #
-# Methalox is still deliberately excluded even though C-types carry both carbon
-# and water.  It needs a Sabatier loop and a carbon-reduction step that no
-# study has costed for asteroid regolith, and asserting a yield for it would be
-# inventing a number rather than deriving one.
+# Methalox is still deliberately excluded, and since 2026-10-16 that is a
+# measurement rather than a caution (CLAUDE.md, "Measured and declined").
+# Two routes were tried as a scratch propellant row on a 3,035-body cislunar
+# subset (P, D, Z, T, X, Xc), Stage 4 only:
+#   CO2 ice + water   CO2 + 2 H2O -> CH4 + 2 O2.  At O/F 3.6 a kg of methalox
+#                     takes 0.596 kg CO2 and 0.488 kg water; with the comet ice
+#                     mix (water 0.892, CO2 0.102; Rubin et al. 2019, MNRAS 489,
+#                     594) that is 5.85 kg of ice against hydrolox's 1.44.  The
+#                     feed overruns the rig's throughput cap on most missions,
+#                     so it improved 0 rows in every cell.
+#   organics + water  C + 2 H2O -> CH4 + O2, plus water split for oxidiser:
+#                     0.881 kg water and 0.163 kg carbon per kg.  Improved 0
+#                     rows in the full search, 31% only with electric
+#                     propulsion excluded, and its carbon-reduction step has no
+#                     source; it was charged nothing.
+# Reactor scale: Kleinhenz & Paz, AIAA 2017-0423 (NTRS 20170005179), a 1.7 t,
+# 35-52 kW CH4/O2 plant for Mars.  Re-open with a sourced carbon-reduction
+# process, not by asserting a yield.
 _HYDROLOX_OF_RATIO         = 6.0
 WATER_KG_PER_KG_HYDROLOX   = 9.0 / (1.0 + _HYDROLOX_OF_RATIO)
 _ISRU_PROPELLANTS          = ("hydrolox",)
@@ -6611,8 +6644,10 @@ def _mission_cost_prologue(
     # rig's cost does -- shared across the campaigns a ship flies, salvaged,
     # compounded on the programme calendar.  `+ 0.0` when it does not fly,
     # which leaves this product the one it always was.
+    # v1.32.0: the ISRU plant is on the rig too, and costed the same way.
     mining_rig_cost_total   = ((config.mining_hardware_kg
-                                + float(mass_cascade.get("refinery_kg", 0.0)))
+                                + float(mass_cascade.get("refinery_kg", 0.0))
+                                + float(mass_cascade.get("isru_plant_kg", 0.0)))
                                * hw_per_kg)
 
     # v1.17.1: `rig_trips` is `(ops_df, config, stay_yr)` and nothing else, and
@@ -7386,6 +7421,22 @@ def _evaluate_combo_at_ratio(
         elif propellant.get("isru_feed_material") is None:
             isru_water_per_kg_prop = WATER_KG_PER_KG_HYDROLOX   # pre-v1.9.0 row
 
+    # v1.32.0, `model_isru_processing`: the electrical energy to turn the feed
+    # INTO propellant (Module 3's `isru_processing_wh_per_kg`, Wh per kg made),
+    # on top of liberating the water.  Hydrolox splits the water and liquefies
+    # both gases; a propellant burnt as it comes states 0.0.  NaN is a row
+    # whose processing has no source, and Module 3 promises every one is gated
+    # out, so flying ISRU on it would be flying it free: refused.  A row
+    # predating the column reads 0.0, and `schema_check` says so.
+    isru_process_wh_per_kg = 0.0
+    if isru and config.model_isru_processing:
+        wh = propellant.get("isru_processing_wh_per_kg")
+        if wh is not None:
+            wh = float(wh)
+            if math.isnan(wh):
+                return None
+            isru_process_wh_per_kg = wh
+
     # ── Per-body constants (v1.14.1) ─────────────────────────────────────────
     # Mineable mass, the throughput cap, the launch-window wait, the ops-table
     # constants, the dark period and the eclipse-corrected specific power are
@@ -7560,6 +7611,14 @@ def _evaluate_combo_at_ratio(
     refinery_rate   = (_ops_value(ops_df, "In-space processing plant throughput",
                                   default=100.0)
                        if refinery is not None else 0.0)
+    # v1.32.0: the plant that makes ISRU propellant, sized like the refinery,
+    # as what it must put through over the stay against its throughput.  It is
+    # not carried in the loop's state: it is a function of two members that
+    # are (the propellant made and the stay), so it moves with them, blends
+    # with them when the loop damps, and converges when they do.
+    isru_plant_rate = (_ops_value(ops_df, "ISRU propellant plant throughput",
+                                  default=7.28)
+                       if isru_process_wh_per_kg > 0 else 0.0)
     ep_power_watts  = 0.0
     ep_thrust_yr    = 0.0
     ep_thrust_n     = 0.0
@@ -7614,7 +7673,11 @@ def _evaluate_combo_at_ratio(
             dv_out_m_s      = dv_out_m_s,
             dv_ret_m_s      = dv_ret_eff,
             hardware_kg     = (config.mining_hardware_kg + power_system_kg
-                               + ep_system_kg + refinery_kg),
+                               + ep_system_kg + refinery_kg
+                               + (refinery_plant_kg(isru_prop_kg,
+                                                    stay_est_yr - window_wait_yr,
+                                                    isru_plant_rate)
+                                  if isru_plant_rate > 0 else 0.0)),
             dry_return_kg   = config.return_vehicle_dry_kg,
             tps_frac        = tps_frac,
             isru_return     = isru,
@@ -7762,6 +7825,12 @@ def _evaluate_combo_at_ratio(
             )
             new_refinery_kg = refinery_plant_kg(trial_payload, trial_dur,
                                                 refinery_rate)
+        if isru_process_wh_per_kg > 0 and trial_dur > 0:
+            # v1.32.0: splitting the water and liquefying the gases, over the
+            # same stay the propellant is made in.
+            processing_power_watts += (
+                isru_process_wh_per_kg * new_isru_prop / (trial_dur * 365.25 * 24.0)
+            )
 
         if processing_power_watts > 0:
             # v1.14.0: the SOURCE is fixed by `power_mode` before the loop, so
@@ -7818,7 +7887,11 @@ def _evaluate_combo_at_ratio(
     if damped_here and not converged:
         return None
     hardware_total_kg = (config.mining_hardware_kg + power_system_kg + ep_system_kg
-                         + refinery_kg)
+                         + refinery_kg
+                         + (refinery_plant_kg(isru_prop_kg,
+                                              stay_est_yr - window_wait_yr,
+                                              isru_plant_rate)
+                            if isru_plant_rate > 0 else 0.0))
 
     # ── Volume cap ───────────────────────────────────────────────────────────
     # Cargo volume = payload mass / bulk density.  Asteroid bulk density
@@ -8017,6 +8090,14 @@ def _evaluate_combo_at_ratio(
         refinery_power_watts = refine_wh / (mining_yr * 365.25 * 24.0)
         processing_power_watts += refinery_power_watts
         refinery_kg = refinery_plant_kg(m_payload, mining_yr, refinery_rate)
+    # v1.32.0: the ISRU plant and its draw, at the propellant actually made.
+    isru_process_power_watts = 0.0
+    isru_plant_kg = 0.0
+    if isru_process_wh_per_kg > 0 and isru_prop_kg > 0 and mining_yr > 0:
+        isru_process_power_watts = (isru_process_wh_per_kg * isru_prop_kg
+                                    / (mining_yr * 365.25 * 24.0))
+        processing_power_watts += isru_process_power_watts
+        isru_plant_kg = refinery_plant_kg(isru_prop_kg, mining_yr, isru_plant_rate)
     if processing_power_watts > 0:
         # The settled draw is the one that has to fit under the Pu-238 ceiling,
         # since the liberation term is a real addition to it.  Re-checked here
@@ -8029,7 +8110,7 @@ def _evaluate_combo_at_ratio(
     else:
         power_system_kg = 0.0
     hardware_total_kg = (config.mining_hardware_kg + power_system_kg + ep_system_kg
-                         + refinery_kg)
+                         + refinery_kg + isru_plant_kg)
 
     (m_at_asteroid, m_outbound_prop,
      m_tank_outbound, m_launch) = _downstream_of_hardware(hardware_total_kg)
@@ -8091,6 +8172,8 @@ def _evaluate_combo_at_ratio(
         "m_tank_outbound": m_tank_outbound,
         # v1.25.0: the refinery plant, costed as mining hardware.
         "refinery_kg":     refinery_kg,
+        # v1.32.0: the ISRU plant, costed the same way.
+        "isru_plant_kg":   isru_plant_kg,
     }
 
     # ── Delivered $/kg, the best load assemblable from this rock ────────────
@@ -8704,6 +8787,11 @@ def _evaluate_combo_at_ratio(
         # and so of `power_system_kg`.  Reported apart so neither is hidden.
         "refinery_kg":              refinery_kg,
         "refinery_power_w":         refinery_power_watts,
+        # v1.32.0: the ISRU plant and its draw, reported apart the same way:
+        # the plant is in `hardware_total_kg` and the rig's cost, the draw in
+        # `processing_power_w`.  Both 0.0 unless the propellant is processed.
+        "isru_plant_kg":            isru_plant_kg,
+        "isru_processing_power_w":  isru_process_power_watts,
         # v1.27.0: how many times the settle-up re-solved this payload because
         # the settled stack overshot the vehicle; 0 for a mission that fit.
         # See `repair_settled_overshoot`.

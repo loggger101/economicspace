@@ -1547,6 +1547,8 @@ def s_cascade(out):
     ]
     if M.get("refinery", 0.0) > 0:
         ledger.append(("refinery plant", fmt(M["refinery"], 1, "kg")))
+    if M.get("isru_plant", 0.0) > 0:
+        ledger.append(("ISRU plant", fmt(M["isru_plant"], 1, "kg")))
     ledger += [
         ("<strong>hardware total</strong>",
          "<strong>%s</strong>" % fmt(M["hw"], 1, "kg")),
@@ -2068,6 +2070,34 @@ def refinery_block(C, M):
     ]
 
 
+def isru_plant_block(C, M):
+    """calc v1.32.0: what making the propellant costs in watts and in plant."""
+    return [
+        h(3, "Making the propellant"),
+        para("Propellant made on site is not free once the water is out of the "
+             "rock. Hydrolox has to be split and both gases liquefied, each at its "
+             "own boiling point: the transport tables state that as an energy per kilogram MADE, on "
+             "top of liberating the water, and sizes the plant that does it "
+             "from a throughput, the way the refinery's is sized. The plant "
+             "rides with the rig and is costed as the rig is."),
+        deriv([
+            ("m_isru", "= %s kg" % prec(M["isru_prop"], 12),
+             "the return propellant made on site"),
+            ("m_iplant", "= m_isru / (t_dig * r_isru) = %s / (%s * %s) = %s kg"
+             % (prec(M["isru_prop"], 12), prec(M["dig_yr"], 12),
+                prec(C["isru_plant_rate"], 6), prec(M["isru_plant"], 12)),
+             "the electrolysis and liquefaction plant that makes it in the stay"),
+        ]),
+        kv([("processing energy", fmt(C["isru_wh"], 1,
+                                      "Wh per kg of propellant made")),
+            ("plant throughput", fmt(C["isru_plant_rate"], 2,
+                                     "kg of propellant per year per kg of plant")),
+            ("<strong>ISRU plant</strong>",
+             "<strong>%s</strong>" % fmt(M["isru_plant"], 1, "kg")),
+            ("ISRU processing draw", fmt(M["isru_draw"], 1, "W"))]),
+    ]
+
+
 def s_power(out):
     """Section 5: the processing plant, which only some missions need."""
     M, C = out["M"], out["C"]
@@ -2181,6 +2211,12 @@ def s_power(out):
              % (prec(hrs, 12), prec(M["refine_wh"], 12), prec(hrs, 12),
                 prec(M["refine_draw"], 12)),
              "the refinery, below"))
+    if M.get("isru_draw", 0.0) > 0:
+        draw_terms.append(
+            ("P_isru", "= e_isru * m_isru / %s = %s * %s / %s = %s W"
+             % (prec(hrs, 12), prec(C["isru_wh"], 6), prec(M["isru_prop"], 12),
+                prec(hrs, 12), prec(M["isru_draw"], 12)),
+             "splitting the water and liquefying the gases, below"))
     draw_terms += [
         ("hours", "= (t_dig * 365.25) * 24 = (%s * 365.25) * 24 = %s h"
          % (prec(M["dig_yr"], 12), prec(hrs, 12)),
@@ -2217,6 +2253,8 @@ def s_power(out):
     ]
     if M.get("refinery", 0.0) > 0:
         html_out += refinery_block(C, M)
+    if M.get("isru_plant", 0.0) > 0:
+        html_out += isru_plant_block(C, M)
     if a["power"] == "rtg":
         html_out.append(note(
             "key",
@@ -2961,7 +2999,7 @@ def s_cost(out):
                     usd(C["prop_usd_per_kg"], 0) + "/kg"),
         "rprop": "%s kg x %s"
                  % (fmt(M["m_rprop"], 1),
-                    usd(C["cfg"].isru_processing_usd_per_kg if a["isru"]
+                    usd(C["isru_opex"] if a["isru"]
                         else C["prop_usd_per_kg"], 0) + "/kg"),
         "rig": "%s over %d campaign(s)"
                % (musd(cst["rig_total"] - cst["terminal"]), cst["share"]),
@@ -3048,12 +3086,19 @@ def s_cost(out):
             prec(C["val"]("Mining payload recurring cost"), 8),
             usd(cst["rig_total"], 2)),
          "one rig, built once")
-        if not M.get("refinery") else
+        if not (M.get("refinery") or M.get("isru_plant")) else
         ("C_rig", "= (m_rig + m_ref) * c_rig = (%s + %s) * %s = %s"
          % (prec(C["cfg"].mining_hardware_kg, 8), prec(M["refinery"], 12),
             prec(C["val"]("Mining payload recurring cost"), 8),
             usd(cst["rig_total"], 2)),
-         "one rig and the refinery on it, built once"),
+         "one rig and the refinery on it, built once")
+        if not M.get("isru_plant") else
+        ("C_rig", "= (m_rig + m_ref + m_iplant) * c_rig = (%s + %s + %s) * %s = %s"
+         % (prec(C["cfg"].mining_hardware_kg, 8), prec(M.get("refinery", 0.0), 12),
+            prec(M["isru_plant"], 12),
+            prec(C["val"]("Mining payload recurring cost"), 8),
+            usd(cst["rig_total"], 2)),
+         "one rig and the plants on it, built once"),
         ("util", "= %s" % prec(cst["used"], 12),
          "how much of the rig's life this programme uses"),
         # A single mission is credited nothing, whatever is left of the rig:
