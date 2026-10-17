@@ -7,9 +7,7 @@ through NVIDIA AI Workbench.
 The short version: **the code runs there, everything that would have broken it
 is fixed, one thing cannot be guaranteed by anyone and has to be measured
 instead, and one thing is not broken at all but will still stop you on the
-first day.** Count the table below rather than trusting a number in this
-sentence; it said "three things" above four rows until 2026-09-03, which is the
-counts-in-prose failure CLAUDE.md catalogues.
+first day.**
 
 Three commands, in this order, and none of them takes longer than a minute:
 
@@ -57,10 +55,6 @@ touching:
 writes LF, so **a byte-perfect run would have reported DIFFER on every cell**,
 with every float identical and nothing wrong with the model.
 
-That is this project's most expensive recurring failure arriving in a new
-costume. `verify.py`'s header already carries eleven harness bugs, three of
-which produced a wrong conclusion that was written down before being caught,
-and three of the last five are the same symptom from three different causes.
 A broken comparator looks exactly like a broken release.
 
 It is pinned to CRLF now rather than LF, because CRLF is what the committed
@@ -270,14 +264,11 @@ killing it costs at most the in-flight cell.
 ./run.sh campaign --only cislunar leo
 ```
 
-The queue is the **twenty** cells of the 2026-08 campaign: five destinations
-times raw/beneficiated times search off/on. `mars_orbit` and `geo` are in the
-model and are **not in the queue**, and adding them is not a one-line edit to
-`DESTS`: there is no frozen Stage 2 catalog for either under `campaign/stage2/`,
-and making one means a live Stage 2 run at today's metal prices, which is not
-the 2026-08-23 pricing the other twenty share. Those eight cells are a decision
-about methodology, not a portability gap, so they are left out of this file
-deliberately.
+The queue is the **28** cells of the 2026-09 campaign: seven destinations
+times raw/beneficiated times search off/on (`DESTS` in `campaign/run_queue.py`).
+`gto` is in the model and not in the queue: it has no frozen Stage 2 catalog
+under `campaign/stage2/`, and making one means a live Stage 2 run at today's
+prices, which is a decision about methodology rather than a portability gap.
 
 The Stage 2 catalogs the queue does use travel with the repo: they are
 committed under `campaign/stage2/`, are **never re-fetched**, and `run_cell.py`
@@ -311,14 +302,14 @@ factor of five. Measure one cheap cell on the Spark and scale from that.
 
 ### Disk
 
-Budget **~10 GB** for a full twenty-cell run, which is more than the inputs and
-is the part that is easy to miss:
+Budget **over 20 GB** for a full 28-cell run, which is far more than the inputs
+and is the part that is easy to miss:
 
 | | size |
 |---|---|
 | the inputs Stage 4 reads | 868 MB |
 | `profitability_catalog.csv`, rewritten per cell | 350-500 MB |
-| `campaign/cells/`, one gzipped archive per cell | 8.1 GB for twenty |
+| `campaign/cells/`, one gzipped archive per cell | 20 GB for the 28 cells of 2026-09; 8.1 GB for the twenty of 2026-08 |
 
 `campaign/cells/` is gitignored and regenerable, so it is the thing to delete
 if the disk gets tight; the measurements taken from those archives live in
@@ -328,7 +319,7 @@ every cell already recorded `rc == 0` and loses at most the in-flight one.
 
 ### Memory
 
-Peak RSS across the twenty measured cells ran 8.2 GB to 10.4 GB, against a
+Peak RSS across the twenty cells of the 2026-08 campaign ran 8.2 GB to 10.4 GB, against a
 128 GB unified pool on the Spark, so memory is not a constraint. Two apparent
 peaks of 11.54 and 10.74 GB in the record are measurement contamination from an
 analysis process that overlapped the run, not the pipeline.
@@ -403,32 +394,8 @@ fetches nothing. That is deliberate and it matters more here than at home: a
 tick in the wrong box re-prices Stage 2 against live quotes and overwrites the
 only copy of the catalog you just spent an hour copying over.
 
-## The interpreter, which CLAUDE.md had wrong
-
-**Fixed in CLAUDE.md on 2026-09-03; this section is the record of why it
-mattered here rather than a live correction.** From 2026-09-02 its Environment
-section said the reference host runs **Python 3.14 (3.14.6)** and that "3.13 is
-no longer installed at all". Both halves were wrong:
-
-```
-py -0
- -V:3.13 *        Python 3.13 (64-bit)
- -V:Astral/CPython3.11.16 CPython 3.11.16 (64-bit)
-
-py -3.14 -c "import sys"
-No suitable Python runtime found
-```
-
-It is worth keeping because it is the failure this whole exercise is about,
-one layer up. Provisioning a second host to match the documented interpreter
-would have meant matching a machine that does not exist, and interpreter
-version is one of the few things that has already invalidated a measured figure
-in this project (the `builtins.max` row of CLAUDE.md's "Measured and declined"
-was re-measured from ~6x to 1.2-2.4x for exactly that reason). The wrong number
-had also grown an alarm beneath it telling the reader that every performance
-figure in the file predated the running interpreter. That is now retracted.
+## The interpreter
 
 The `Dockerfile` and `requirements-lock.txt` pin **3.13.9**, which is what the
 numbers were actually measured on, and `platform_check.py` prints the running
-version beside the reference host's on every run. Three copies that derive it,
-against one sentence that typed it.
+version beside the reference host's on every run.

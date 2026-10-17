@@ -3897,7 +3897,7 @@ class CalcConfig:
     # ⚠️  "All default ON" was also true until v1.22.0 and is not now.  The
     # learning curve below defaults OFF, for a reason that is about SCOPE and
     # not about correctness; it is on the second list, with insurance, the cost
-    # of capital and mission reliability.  See README, "what the model
+    # of capital and mission reliability.  See MODEL.md, "what the model
     # deliberately does not charge for".
     #
     # LOW-THRUST TRIP TIME.  Electric propulsion paid a Δv penalty but flew
@@ -4651,7 +4651,7 @@ class CalcConfig:
 # ═════════════════════════════════════════════════════════════════════════════
 # Wall clock for all twenty-eight cells of the 2026-09 campaign, full
 # 1,555,667-row catalog, six physical cores / 12 workers, calc 1.21.2, measured
-# 2026-09-11/13.  The same table is in README.md under "Beneficiation", and
+# 2026-09-11/13.  The same table is in README.md under "What a first run costs", and
 # `verify_docs.py` check 9 holds every cell of it to this dict.
 #
 # 🚨  EVERY user-facing quote of these ratios DERIVES from here: the --help text

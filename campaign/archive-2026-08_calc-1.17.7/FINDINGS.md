@@ -16,10 +16,10 @@ every cell is comparable. 12 workers, 26.1 h of compute, zero failures.
 
 | finding | now lives in |
 |---|---|
-| the 20-cell cost/revenue matrix | [README.md, Results](../README.md#current-results-the-complete-20-cell-matrix) |
+| the 20-cell cost/revenue matrix | [versions.md, the 28-cell campaign](../versions.md#the-28-cell-campaign-2026-09) |
 | per-destination propellant, vehicle, rig-bound and cadence tables | [CLAUDE.md, What the model currently says](../CLAUDE.md#what-the-model-currently-says-and-what-that-retired) |
 | the `1.17.x` runtime and cost-ratio measurements | [versions.md, What the v1.17.x line was worth](../versions.md#what-the-v117x-line-was-worth) |
-| the wall clock for all twenty cells | [README.md, Beneficiation](../README.md#beneficiation) |
+| the wall clock for all twenty cells | [README.md, What a first run costs](../README.md#what-a-first-run-costs) |
 | claims the campaign retired | [CLAUDE.md, The older matrices](../CLAUDE.md#the-older-matrices-and-the-claims-they-retired) |
 
 ## What the campaign established, in one line each

@@ -56,6 +56,12 @@ Cost / revenue, lower is better, 1.0 = breakeven.
 | leo | 58.5181x | 24.2815x | 42.9440x | 13.6875x |
 | earth_surface | 40,147.9077x | 11,606.8561x | 24,169.7195x | 7,074.1975x |
 
+Evaluable rows, raw / beneficiated: 650,921 / 660,253 (`cislunar`), 821,078 /
+956,090 (`mars_orbit`), 705,030 / 712,306 (`geo`), 586,054 / 606,304
+(`lunar_surface`), 731,322 / 892,563 (`mars_surface`), 776,755 / 882,429
+(`leo`), 784,242 / 912,846 (`earth_surface`). The programme search never changes
+the evaluable set, at any destination.
+
 No cell is profitable, at any destination, on any setting. That remains the
 correct answer rather than a regression.
 
@@ -252,17 +258,17 @@ used. Different catalog, not different code.
 
 ## Where these findings went
 
-✅  **Promoted into the three main documents on 2026-09-13, so this file is the
-campaign's own record and not a second copy of the results.** That is the split
+✅  **Promoted into the main documents on 2026-09-13.** The matrix itself came
+back here when README stopped carrying superseded cells. That is the split
 this project runs on: name one authority, or you have two.
 
 | finding | now lives in |
 |---|---|
-| the 28-cell cost/revenue matrix, the two new destinations, the ranking, the FEEP win | [README.md, Results](../README.md#current-results-the-complete-28-cell-matrix) |
-| the 28-cell wall clocks | [README.md, Beneficiation](../README.md#beneficiation), pinned to `MEASURED_CELL_SECONDS` by `verify_docs.py` check 9 |
+| the 28-cell cost/revenue matrix, the two new destinations, the ranking, the FEEP win | this file: README now carries the current cells and [points here](../README.md#older-full-matrices) |
+| the 28-cell wall clocks | [README.md, What a first run costs](../README.md#what-a-first-run-costs), pinned to `MEASURED_CELL_SECONDS` by `verify_docs.py` check 9 |
 | the superseded 20-cell matrix, the per-cell wall clocks, the price-epoch evidence | [versions.md](../versions.md#the-28-cell-campaign-2026-09) |
-| the invariants and the retired claims | [CLAUDE.md](../versions.md#the-complete-28-cell-matrix-is-measured-calc-1212-2026-09-1113) |
-| the per-destination population tables, derived 2026-09-14 rather than promoted | [CLAUDE.md](../versions.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09), from `population/` |
+| the invariants and the retired claims | [versions.md](../versions.md#the-complete-28-cell-matrix-is-measured-calc-1212-2026-09-1113) |
+| the per-destination population tables, derived 2026-09-14 rather than promoted | [versions.md](../versions.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09), from `population/` |
 
 ✅  **WHAT WAS NOT PROMOTED HAS NOW BEEN DERIVED: CLOSED 2026-09-14.** The
 per-destination propellant, vehicle, rig-bound, cadence and saturation tables in
@@ -271,7 +277,7 @@ because this campaign extracted the winner row and ran the invariants and
 nothing else. `population.py` read the archived cells under `cells/` and
 derived all of them in **one pass, about ten minutes, with no stage re-run**.
 Per-cell JSON is under `population/`; the tables are in
-[CLAUDE.md](../versions.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09)
+[versions.md](../versions.md#the-rigs-two-bounds-and-the-cadence-at-every-destination-2026-09)
 and the superseded 2026-08 ones in
 [versions.md](../versions.md#the-population-re-derivation-2026-09-14).
 

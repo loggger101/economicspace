@@ -5,15 +5,14 @@ each release superseded. It was split out of `README.md` in 2026-08 because the
 version record had grown to roughly half that file and was burying the parts
 you need to actually run the thing.
 
-- **`README.md`**: what the pipeline is, how to run it, what the model does,
-  and the **current** numbers.
+- **`README.md`**: what the pipeline is, how to run it, and the **current**
+  numbers; **`MODEL.md`**: what the model does.
 - **this file**: what changed and when, what the numbers used to be, and the
   per-module changelogs.
-- **`CLAUDE.md`**: the working notes: the traps, the invariants, and the
-  reasoning behind decisions that look wrong. It is the deepest record of the
-  three and the one to read before editing.
+- **`CLAUDE.md`**: the rules for editing safely; **`LESSONS.md`**: how each
+  was learned, frozen on 2026-10-17.
 
-Where the two overlap, `README.md` is the current answer and this file is the
+Where they overlap, `README.md` is the current answer and this file is the
 history of how it got there.
 
 ## Contents
@@ -180,7 +179,7 @@ while bit-identical); both were choices the rule permits, not obligations.
 ## What "no number" claims rest on
 
 Almost every release below is argued from **bit-identity**: not "the numbers
-look right" but "these are the same floats, and here is the hash." The six
+look right" but "these are the same floats, and here is the hash." The
 checks are committed as `verify.py`; see
 [Verifying a change](README.md#verifying-a-change).
 
@@ -191,6 +190,77 @@ below quotes a hash, it was produced by a harness that no longer exists; the
 four cell hashes `verify.py` prints reproduce the ones committed for v1.17.4
 and v1.17.6 exactly, which is what makes it a replacement for those rather than
 a twelfth one to have to trust.
+
+## Releases
+
+Newest first. Each heading names every module whose `pipeline_version`
+moved in that release.
+
+| release | date | what it was |
+|---|---|---|
+| [master v1.55.0 / calc v1.32.0 / transportation v1.23.0](#master-v1550--calc-v1320--transportation-v1230) | 2026-10-17 | **making ISRU propellant costs energy and a plant**: hydrolox pays 15,200 Wh/kg through the array and a plant with the rig, and the flat $50/kg is retired; the one sampled hydrolox ISRU winner gets worse and the water ISRU rows a fraction of a percent better |
+| [master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0](#master-v1540--calc-v1310--mineral_value-v1160) | 2026-10-15 | **an eighth destination, `gto`**: a refuelling depot in geostationary transfer orbit; no existing number moved, and `gto` has not been run on the full catalog |
+| [master v1.53.0 / transportation v1.22.0](#master-v1530--transportation-v1220) | 2026-10-07 | **krypton becomes a band, $794/kg** where it was an unsourced $300: the 149 of 23,100 sampled bodies that flew it get worse by up to 1.1%, no other body moves, and the sampled `cislunar` winner 2018 DT moves to iodine (4.5983x -> 4.61562x) |
+| [master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0](#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210) | 2026-10-07 | **the lunar descent is Apollo's 2,050 m/s**: the lunar price $43,338 -> $48,226/kg, every sampled lunar body better by a median 9.0%, 2014 YN 2.86091x -> 2.61433x; no other destination moves |
+| [master v1.51.0 / calc v1.29.0](#master-v1510--calc-v1290) | 2026-10-07 | **a stack the repair solved at capacity flies**: the overshoot repair refused its own solutions by 2.9e-11 kg; 8-328 sampled bodies per destination improve by a median 1-18%, none enters or leaves a set, and the `lunar_surface` winner becomes 2014 YN |
+| [master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0](#master-v1500--mineral_value-v1140--transportation-v1200) | 2026-10-07 | **Falcon Heavy (expendable)'s band reaches NASA's $178M, and the LEO price anchor moves $2,414 -> $2,555/kg**: every sampled in-space body better by 0.45-5.04%, `earth_surface` unmoved at the median; no winner changed body |
+| [master v1.49.0 / transportation v1.19.0](#master-v1490--transportation-v1190) | 2026-10-07 | **spacecost `v0.7.0`: Electron and Pegasus XL become the bands their sources give**: Rocket Lab's reported revenue per launch, and a list price up to NASA's ICON price; neither flies a mission, and every Stage 4 cell is bit-identical |
+| [master v1.48.0 / transportation v1.18.1](#master-v1480--transportation-v1181) | 2026-10-07 | **spacecost `v0.6.1`: four citations corrected, no value moved**: the reliability growth exponent cites MIL-HDBK-189C's Table II, Starship's $90M the Voyager prospectus, and the hypergolics quote DLA's FY2025 prices beside a basis that can no longer be checked; Stage 4 reads no notes |
+| [master v1.47.0 / calc v1.28.0](#master-v1470--calc-v1280) | 2026-10-07 | **a pass that overshoots backs the sizing loop off instead of refusing the mission**: evaluable bodies 1.6-2.4x on every destination's catalog stride, a sixth to two fifths of existing bodies better, none worse, no winner moved |
+| [master v1.46.0 / mineral_value v1.13.0 / transportation v1.18.0](#master-v1460--mineral_value-v1130--transportation-v1180) | 2026-10-06 | **sixteen values re-pinned to their sources, two candidates declined**: nickel, iron, iridium, ruthenium, titanium, gallium and ammonia priced from USGS, the World Bank, LBMA and Johnson Matthey; GEO's market recounted; Atlas V 551 in 2026 dollars. `earth_surface` moves 10.3% on the median sampled body; nothing else moves 2% |
+| [master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3](#master-v1450--mineral_value-v1123--transportation-v1173) | 2026-10-06 | **spacecost `v0.5.3` and one Stage 2 note: five citations corrected, no value moved**: Psyche, Didymos and two Mars delta-v rows upstream, tungsten's price note here; Stage 4 reads no notes |
+| [master v1.44.0 / transportation v1.17.2](#master-v1440--transportation-v1172) | 2026-10-06 | **spacecost `v0.5.2`: twenty-three citations corrected, no value moved**: the repin carries 0.5.1 and 0.5.2's notes; Stage 4 reads no notes, so the tables on disk stay at 1.17.0 |
+| [master v1.43.0 / calc v1.27.0](#master-v1430--calc-v1270) | 2026-10-06 | **a mission 0.1% over its vehicle is flown lighter, not refused**: v1.42.0's knapsack diagnosis corrected; about two bodies in five were scored on the wrong mission, and no headline moved |
+| [master v1.42.0 / mineral_value v1.12.2](#master-v1420--mineral_value-v1122) | 2026-10-05 | **a metal with a local ore is priced as that place's iron**: titanium and chromium at Mars, chromium at the Moon; the measurement found the payload knapsack ignores the flown refinery |
+| [master v1.41.0 / mineral_value v1.12.1](#master-v1410--mineral_value-v1121) | 2026-10-05 | **every Stage 2 price held to its rule, at every destination**: schreibersite at the Moon priced with the alloy, a floored row's gross price fixed, and the `lunar_surface` winner moves |
+| [master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260) | 2026-09-29 | **the alloy and the sulfides are the minerals they are**: catalog `data-2026-09-29c` resolves nickel-iron and troilite and names the phosphates and CAI oxides, Stage 2 prices thirteen new minerals, and Stage 4 reads them, selling the intergrown alloys as one metal |
+| [master v1.39.0 / calc v1.25.0](#master-v1390--calc-v1250) | 2026-09-29 | **the refinery is flown**: energy through the array, plant with the rig, prices before Stage 2's refining deduction |
+| [master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240) | 2026-09-29 | **the minerals are extracted, not the four fractions**: catalog `data-2026-09-29` carries every class's mineral phases, Stage 2 prices what they yield, and Stage 4 loads, concentrates and sells each one |
+| [master v1.36.0 / catalog v1.4.0](#master-v1360--catalog-v140) | 2026-09-25 | **Stage 1 repins to `data-2026-09-25`**, data contract 1.4.0, and the redundancies around the Stage 1 and Stage 3 seams go from all three repositories |
+| [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160) | 2026-09-23 | **spacecost v0.4.0**: the launch table re-audited and the delivered-price model changed, so Stages 2 and 3 both re-price |
+| [master v1.34.0](#master-v1340-stage-1-installs-a-published-catalog) | 2026-09-23 | **Stage 1 installs a published catalog** rather than building one: one pinned `data-YYYY-MM-DD` release, sha256-checked, the same bytes on every host |
+| [master v1.33.0 / catalog v1.3.0](#master-v1330--catalog-v130) | 2026-09-23 | **asteroid_catalog v0.2.0**: bodies joined across sources, and every source validated against its service |
+| [master v1.32.0](#master-v1320) | 2026-09-22 | the redundancies the Stage 1 split left, closed from both sides of the seam |
+| [master v1.31.0](#master-v1310) | 2026-09-22 | **Stage 1's builder moves to `asteroid_catalog`**, proved in process on 107,521 values because Stage 1 cannot be re-run |
+| [master v1.30.0](#master-v1300) | 2026-09-21 | **spacecost v0.3.0**: Stage 2's delivery chains move to the package, and the sentence explaining why they were duplicated had expired at the split |
+| [transportation v1.15.0 / master v1.29.0](#transportation-v1150--master-v1290) | 2026-09-17 | **spacecost v0.2.0**: a sixth reference table, and the guard a stage module run directly never had |
+| [calc v1.23.0](#calc-v1230) | 2026-09-17 | **the depletion cap comes off**: `max_mining_fraction` 0.05 -> 1.0, and a constraint that bound on 2% of bodies was sizing the mission on them |
+| [calc v1.22.0](#calc-v1220) | 2026-09-14 | **four defaults moved**: the surplus past a ceiling sells at half price, and reliability, the learning curve and the cost of capital come off |
+| [calc v1.21.2](#calc-v1212) | 2026-09-08 | **one market, two allowances**: the composition residual and the `silicates` phase each drew the full silicates ceiling, on 100% of bodies |
+| [calc v1.21.1](#calc-v1211) | 2026-09-08 | **the ceilings recalibrated: the levels do not move, and the composition residual gets the ceiling it was already priced against** |
+| [calc v1.21.0](#calc-v1210) | 2026-09-07 | **prices are constant and quantity is what binds**: the market term becomes a four-valued `market_model`, and the ceilings go into the payload knapsack |
+| [calc v1.20.0](#calc-v1200) | 2026-09-04 | **both insurance premiums are off**: a transfer priced off an underwriter's book, in a model that prices masses |
+| [catalog v1.2.0](#catalog-v120) | 2026-09-03 | **NEOWISE dedup decided by row order on 27,802 bodies**; the ranking could not see orbit quality; `ma` had no epoch; async TAP |
+| [calc v1.19.2](#calc-v1192) | 2026-09-03 | **`mars_orbit` waited for the wrong planet** |
+| [calc v1.19.1](#calc-v1191) | 2026-09-02 | a version check had been comparing every catalog against Module 3 |
+| [calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0](#calc-v1190--mineral_value-v190--transportation-v1140) | 2026-09-02 | **a seventh destination: a geostationary servicing depot** |
+| [calc v1.18.0 / mineral_value v1.8.0 / transportation v1.13.0](#calc-v1180--mineral_value-v180--transportation-v1130) | 2026-09-02 | **a sixth destination: a Mars-orbit depot** |
+| [calc v1.17.8](#calc-v1178) | 2026-08-27 | the loader now checks the Stage 3 stamp, not just its columns |
+| [mineral_value v1.7.1](#mineral_value-v171) | 2026-08-21 | three PGM ore minerals were falling through a silent default |
+| [calc v1.17.7 / transportation v1.12.1](#calc-v1177--transportation-v1121) | 2026-08-21 | a cache grew without bound; `.astype(bool)` on a nullable flag |
+| [calc v1.17.6](#calc-v1176) | 2026-08-21 | composition derived per row instead of per taxonomy |
+| [calc v1.17.5](#calc-v1175) | 2026-08-20 | one cache entry carries the whole campaigns-per-ship block |
+| [calc v1.17.4 / catalog v1.1.1](#calc-v1174--catalog-v111) | 2026-08-20 | the catalog load, and 74.3% of the search dying on pass 2 |
+| [calc v1.17.3](#calc-v1173) | 2026-08-12 | dead code, and a de-duplication note that was not true |
+| [calc v1.17.2](#calc-v1172) | 2026-08-12 | the cost cascade's N-independent half, hoisted out of the ladder |
+| [calc v1.17.1](#calc-v1171) | 2026-08-12 | the default flip multiplied every cost-model per-call cost by forty |
+| [calc v1.17.0](#calc-v1170) | 2026-08-11 | **two defaults flipped**: beneficiation and the programme search |
+| [calc v1.16.0](#calc-v1160) | 2026-08-11 | **a programme took decades and was charged for none of them** |
+| [calc v1.15.0 / transportation v1.12.0](#calc-v1150--transportation-v1120) | 2026-08-11 | **the rig wore out on a calendar; programme size became searched** |
+| [calc v1.14.2](#calc-v1142) | 2026-08-10 | the model's arithmetic was going through numpy, one scalar at a time |
+| [calc v1.14.1](#calc-v1141) | 2026-08-10 | ~90% of the search was proving missions infeasible the expensive way |
+| [calc v1.14.0 / transportation v1.11.0](#calc-v1140--transportation-v1110) | 2026-08-08 | **containment, eclipse power, the RTG objective, saturation vs N** |
+| [catalog v1.1.0 / calc v1.13.0](#catalog-v110--calc-v1130) | 2026-08-08 | **89,367 asteroids became 1,554,400**: the population, not the model |
+| [calc v1.12.0 / transportation v1.10.0](#calc-v1120--transportation-v1100) | 2026-08-08 | **the thruster was never modelled, only the propellant** |
+| [calc v1.11.0 / transportation v1.9.0](#calc-v1110--transportation-v190) | 2026-08-08 | **tankage, the RTG row, and 16 flown propellants that were missing** |
+| [calc v1.10.1](#calc-v1101) | 2026-08-07 | the first performance-only stamp, the process pool |
+| [calc v1.10.0](#calc-v1100) | 2026-08-07 | **the EP stage and the return structure flew free; the search optimised the wrong thing** |
+| [Earlier releases](#earlier-releases) | - | v1.9.0 and earlier, summarised |
+
+⚠️  **A release section says what the release DID. It does not list the config
+fields and output columns the release added**; that is the schema history, and
+it lives in [Module changelogs](#module-changelogs) below, one section per
+module in numeric order.
 
 ## master v1.55.0 / calc v1.32.0 / transportation v1.23.0
 
@@ -2095,7 +2165,7 @@ Ls (0.903), A (0.912), K (0.933), D (0.985) and B (0.985).
 
 🚨  **SO THE HEADLINE MOVED ONE WAY AND THE MIDDLE MOVED THE OTHER.** The best
 case improved 5.6% while the median body got 19.3% worse, which is
-[the winner moving more than the population](README.md#the-winner-moved-far-more-than-the-population-did)
+[the winner moving more than the population](campaign/FINDINGS.md#the-winner-moved-far-more-than-the-population-did)
 with the sign of the two disagreeing as well as the size. Quote the median
 before claiming the model got better.
 
@@ -3766,75 +3836,6 @@ commits past it. Proved by repinning one copy alone: it goes red and names the
 file.
 
 
-## Releases
-
-Newest first. Each heading names every module whose `pipeline_version`
-moved in that release.
-
-| release | date | what it was |
-|---|---|---|
-| [master v1.53.0 / transportation v1.22.0](#master-v1530--transportation-v1220) | 2026-10-07 | **krypton becomes a band, $794/kg** where it was an unsourced $300: the 149 of 23,100 sampled bodies that flew it get worse by up to 1.1%, no other body moves, and the sampled `cislunar` winner 2018 DT moves to iodine (4.5983x -> 4.61562x) |
-| [master v1.52.0 / calc v1.30.0 / mineral_value v1.15.0 / transportation v1.21.0](#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210) | 2026-10-07 | **the lunar descent is Apollo's 2,050 m/s**: the lunar price $43,338 -> $48,226/kg, every sampled lunar body better by a median 9.0%, 2014 YN 2.86091x -> 2.61433x; no other destination moves |
-| [master v1.51.0 / calc v1.29.0](#master-v1510--calc-v1290) | 2026-10-07 | **a stack the repair solved at capacity flies**: the overshoot repair refused its own solutions by 2.9e-11 kg; 8-328 sampled bodies per destination improve by a median 1-18%, none enters or leaves a set, and the `lunar_surface` winner becomes 2014 YN |
-| [master v1.50.0 / mineral_value v1.14.0 / transportation v1.20.0](#master-v1500--mineral_value-v1140--transportation-v1200) | 2026-10-07 | **Falcon Heavy (expendable)'s band reaches NASA's $178M, and the LEO price anchor moves $2,414 -> $2,555/kg**: every sampled in-space body better by 0.45-5.04%, `earth_surface` unmoved at the median; no winner changed body |
-| [master v1.49.0 / transportation v1.19.0](#master-v1490--transportation-v1190) | 2026-10-07 | **spacecost `v0.7.0`: Electron and Pegasus XL become the bands their sources give**: Rocket Lab's reported revenue per launch, and a list price up to NASA's ICON price; neither flies a mission, and every Stage 4 cell is bit-identical |
-| [master v1.48.0 / transportation v1.18.1](#master-v1480--transportation-v1181) | 2026-10-07 | **spacecost `v0.6.1`: four citations corrected, no value moved**: the reliability growth exponent cites MIL-HDBK-189C's Table II, Starship's $90M the Voyager prospectus, and the hypergolics quote DLA's FY2025 prices beside a basis that can no longer be checked; Stage 4 reads no notes |
-| [master v1.47.0 / calc v1.28.0](#master-v1470--calc-v1280) | 2026-10-07 | **a pass that overshoots backs the sizing loop off instead of refusing the mission**: evaluable bodies 1.6-2.4x on every destination's catalog stride, a sixth to two fifths of existing bodies better, none worse, no winner moved |
-| [master v1.46.0 / mineral_value v1.13.0 / transportation v1.18.0](#master-v1460--mineral_value-v1130--transportation-v1180) | 2026-10-06 | **sixteen values re-pinned to their sources, two candidates declined**: nickel, iron, iridium, ruthenium, titanium, gallium and ammonia priced from USGS, the World Bank, LBMA and Johnson Matthey; GEO's market recounted; Atlas V 551 in 2026 dollars. `earth_surface` moves 10.3% on the median sampled body; nothing else moves 2% |
-| [master v1.45.0 / mineral_value v1.12.3 / transportation v1.17.3](#master-v1450--mineral_value-v1123--transportation-v1173) | 2026-10-06 | **spacecost `v0.5.3` and one Stage 2 note: five citations corrected, no value moved**: Psyche, Didymos and two Mars delta-v rows upstream, tungsten's price note here; Stage 4 reads no notes |
-| [master v1.44.0 / transportation v1.17.2](#master-v1440--transportation-v1172) | 2026-10-06 | **spacecost `v0.5.2`: twenty-three citations corrected, no value moved**: the repin carries 0.5.1 and 0.5.2's notes; Stage 4 reads no notes, so the tables on disk stay at 1.17.0 |
-| [master v1.43.0 / calc v1.27.0](#master-v1430--calc-v1270) | 2026-10-06 | **a mission 0.1% over its vehicle is flown lighter, not refused**: v1.42.0's knapsack diagnosis corrected; about two bodies in five were scored on the wrong mission, and no headline moved |
-| [master v1.42.0 / mineral_value v1.12.2](#master-v1420--mineral_value-v1122) | 2026-10-05 | **a metal with a local ore is priced as that place's iron**: titanium and chromium at Mars, chromium at the Moon; the measurement found the payload knapsack ignores the flown refinery |
-| [master v1.41.0 / mineral_value v1.12.1](#master-v1410--mineral_value-v1121) | 2026-10-05 | **every Stage 2 price held to its rule, at every destination**: schreibersite at the Moon priced with the alloy, a floored row's gross price fixed, and the `lunar_surface` winner moves |
-| [master v1.40.0 / catalog v1.8.1 / mineral_value v1.12.0 / calc v1.26.0](#master-v1400--catalog-v181--mineral_value-v1120--calc-v1260) | 2026-09-29 | **the alloy and the sulfides are the minerals they are**: catalog `data-2026-09-29c` resolves nickel-iron and troilite and names the phosphates and CAI oxides, Stage 2 prices thirteen new minerals, and Stage 4 reads them, selling the intergrown alloys as one metal |
-| [master v1.39.0 / calc v1.25.0](#master-v1390--calc-v1250) | 2026-09-29 | **the refinery is flown**: energy through the array, plant with the rig, prices before Stage 2's refining deduction |
-| [master v1.38.0 / catalog v1.7.0 / mineral_value v1.11.0 / calc v1.24.0](#master-v1380--catalog-v170--mineral_value-v1110--calc-v1240) | 2026-09-29 | **the minerals are extracted, not the four fractions**: catalog `data-2026-09-29` carries every class's mineral phases, Stage 2 prices what they yield, and Stage 4 loads, concentrates and sells each one |
-| [master v1.36.0 / catalog v1.4.0](#master-v1360--catalog-v140) | 2026-09-25 | **Stage 1 repins to `data-2026-09-25`**, data contract 1.4.0, and the redundancies around the Stage 1 and Stage 3 seams go from all three repositories |
-| [master v1.35.0 / mineral_value v1.10.0 / transportation v1.16.0](#master-v1350--mineral_value-v1100--transportation-v1160) | 2026-09-23 | **spacecost v0.4.0**: the launch table re-audited and the delivered-price model changed, so Stages 2 and 3 both re-price |
-| [master v1.34.0](#master-v1340-stage-1-installs-a-published-catalog) | 2026-09-23 | **Stage 1 installs a published catalog** rather than building one: one pinned `data-YYYY-MM-DD` release, sha256-checked, the same bytes on every host |
-| [master v1.33.0 / catalog v1.3.0](#master-v1330--catalog-v130) | 2026-09-23 | **asteroid_catalog v0.2.0**: bodies joined across sources, and every source validated against its service |
-| [master v1.32.0](#master-v1320) | 2026-09-22 | the redundancies the Stage 1 split left, closed from both sides of the seam |
-| [master v1.31.0](#master-v1310) | 2026-09-22 | **Stage 1's builder moves to `asteroid_catalog`**, proved in process on 107,521 values because Stage 1 cannot be re-run |
-| [master v1.30.0](#master-v1300) | 2026-09-21 | **spacecost v0.3.0**: Stage 2's delivery chains move to the package, and the sentence explaining why they were duplicated had expired at the split |
-| [transportation v1.15.0 / master v1.29.0](#transportation-v1150--master-v1290) | 2026-09-17 | **spacecost v0.2.0**: a sixth reference table, and the guard a stage module run directly never had |
-| [calc v1.23.0](#calc-v1230) | 2026-09-17 | **the depletion cap comes off**: `max_mining_fraction` 0.05 -> 1.0, and a constraint that bound on 2% of bodies was sizing the mission on them |
-| [calc v1.22.0](#calc-v1220) | 2026-09-14 | **four defaults moved**: the surplus past a ceiling sells at half price, and reliability, the learning curve and the cost of capital come off |
-| [calc v1.21.2](#calc-v1212) | 2026-09-08 | **one market, two allowances**: the composition residual and the `silicates` phase each drew the full silicates ceiling, on 100% of bodies |
-| [calc v1.21.1](#calc-v1211) | 2026-09-08 | **the ceilings recalibrated: the levels do not move, and the composition residual gets the ceiling it was already priced against** |
-| [calc v1.21.0](#calc-v1210) | 2026-09-07 | **prices are constant and quantity is what binds**: the market term becomes a four-valued `market_model`, and the ceilings go into the payload knapsack |
-| [calc v1.20.0](#calc-v1200) | 2026-09-04 | **both insurance premiums are off**: a transfer priced off an underwriter's book, in a model that prices masses |
-| [catalog v1.2.0](#catalog-v120) | 2026-09-03 | **NEOWISE dedup decided by row order on 27,802 bodies**; the ranking could not see orbit quality; `ma` had no epoch; async TAP |
-| [calc v1.19.2](#calc-v1192) | 2026-09-03 | **`mars_orbit` waited for the wrong planet** |
-| [calc v1.19.1](#calc-v1191) | 2026-09-02 | a version check had been comparing every catalog against Module 3 |
-| [calc v1.19.0 / mineral_value v1.9.0 / transportation v1.14.0](#calc-v1190--mineral_value-v190--transportation-v1140) | 2026-09-02 | **a seventh destination: a geostationary servicing depot** |
-| [calc v1.18.0 / mineral_value v1.8.0 / transportation v1.13.0](#calc-v1180--mineral_value-v180--transportation-v1130) | 2026-09-02 | **a sixth destination: a Mars-orbit depot** |
-| [calc v1.17.8](#calc-v1178) | 2026-08-27 | the loader now checks the Stage 3 stamp, not just its columns |
-| [mineral_value v1.7.1](#mineral_value-v171) | 2026-08-21 | three PGM ore minerals were falling through a silent default |
-| [calc v1.17.7 / transportation v1.12.1](#calc-v1177--transportation-v1121) | 2026-08-21 | a cache grew without bound; `.astype(bool)` on a nullable flag |
-| [calc v1.17.6](#calc-v1176) | 2026-08-21 | composition derived per row instead of per taxonomy |
-| [calc v1.17.5](#calc-v1175) | 2026-08-20 | one cache entry carries the whole campaigns-per-ship block |
-| [calc v1.17.4 / catalog v1.1.1](#calc-v1174--catalog-v111) | 2026-08-20 | the catalog load, and 74.3% of the search dying on pass 2 |
-| [calc v1.17.3](#calc-v1173) | 2026-08-12 | dead code, and a de-duplication note that was not true |
-| [calc v1.17.2](#calc-v1172) | 2026-08-12 | the cost cascade's N-independent half, hoisted out of the ladder |
-| [calc v1.17.1](#calc-v1171) | 2026-08-12 | the default flip multiplied every cost-model per-call cost by forty |
-| [calc v1.17.0](#calc-v1170) | 2026-08-11 | **two defaults flipped**: beneficiation and the programme search |
-| [calc v1.16.0](#calc-v1160) | 2026-08-11 | **a programme took decades and was charged for none of them** |
-| [calc v1.15.0 / transportation v1.12.0](#calc-v1150--transportation-v1120) | 2026-08-11 | **the rig wore out on a calendar; programme size became searched** |
-| [calc v1.14.2](#calc-v1142) | 2026-08-10 | the model's arithmetic was going through numpy, one scalar at a time |
-| [calc v1.14.1](#calc-v1141) | 2026-08-10 | ~90% of the search was proving missions infeasible the expensive way |
-| [calc v1.14.0 / transportation v1.11.0](#calc-v1140--transportation-v1110) | 2026-08-08 | **containment, eclipse power, the RTG objective, saturation vs N** |
-| [catalog v1.1.0 / calc v1.13.0](#catalog-v110--calc-v1130) | 2026-08-08 | **89,367 asteroids became 1,554,400**: the population, not the model |
-| [calc v1.12.0 / transportation v1.10.0](#calc-v1120--transportation-v1100) | 2026-08-08 | **the thruster was never modelled, only the propellant** |
-| [calc v1.11.0 / transportation v1.9.0](#calc-v1110--transportation-v190) | 2026-08-08 | **tankage, the RTG row, and 16 flown propellants that were missing** |
-| [calc v1.10.1](#calc-v1101) | 2026-08-07 | the first performance-only stamp, the process pool |
-| [calc v1.10.0](#calc-v1100) | 2026-08-07 | **the EP stage and the return structure flew free; the search optimised the wrong thing** |
-| [Earlier releases](#earlier-releases) | - | v1.9.0 and earlier, summarised |
-
-⚠️  **A release section says what the release DID. It does not list the config
-fields and output columns the release added**; that is the schema history, and
-it lives in [Module changelogs](#module-changelogs) below, one section per
-module in numeric order.
-
 ## calc v1.23.0
 
 🚨  **A MISSION MAY NOW TAKE THE WHOLE BODY.** `max_mining_fraction`
@@ -4073,7 +4074,7 @@ than a wall.
 
 ### The membership test, and which side each of these is on
 
-[README's corrections list](README.md#what-the-model-charges-for) turns on one
+[README's corrections list](MODEL.md#what-the-model-charges-for) turns on one
 question, **"was the model getting something for free?"**, and everything on it
 defaults ON. v1.20.0 added a second list for the opposite case, and insurance
 was its only entry. It has three more:
@@ -4088,7 +4089,7 @@ was its only entry. It has three more:
 ⚠️  **None of this says the risk is not real or the money is not spent.** It
 says a default run answers *what it costs to move a kilogram if it works*,
 which is the framing that already makes the two surface delivery prices
-[marginal-transport lower bounds](README.md#what-a-kilogram-is-worth). Every
+[marginal-transport lower bounds](MODEL.md#what-a-kilogram-is-worth). Every
 one of the four flags turns back on individually.
 
 ⚠️  **`apply_wacc_compounding` takes `model_programme_calendar` with it.** The
@@ -5872,7 +5873,7 @@ flag in the module. `charge_tanker_flights` is gated because the charge is
 are correct, real, and **out of scope**: this pipeline prices the marginal
 physics and hardware of moving a kilogram, on the same framing that makes the
 two surface delivery prices
-[marginal-transport lower bounds](README.md#what-a-kilogram-is-worth) with no
+[marginal-transport lower bounds](MODEL.md#what-a-kilogram-is-worth) with no
 NRE-style programme overhead in them. A premium is priced off an underwriter's
 book. It is not a mass, a Delta-v or a kilowatt, and nothing else in the
 cascade is priced that way.
@@ -7917,13 +7918,13 @@ the return structure cost.
 
 If a change suddenly improves these by an order of magnitude, suspect it has
 switched one of the twenty models off rather than found something. See
-[What the model charges for](README.md#what-the-model-charges-for).
+[What the model charges for](MODEL.md#what-the-model-charges-for).
 
 ## Earlier releases
 
 These predate the per-release notes above and are summarised rather than
 written out. What each one started charging for is described in full under
-[What the model charges for](README.md#what-the-model-charges-for), which is
+[What the model charges for](MODEL.md#what-the-model-charges-for), which is
 organised by model rather than by release.
 
 **mineral_value v1.7.0; destination pricing, and the release that moved Mars
@@ -7936,7 +7937,7 @@ import budget split per commodity class instead of every commodity getting the
 whole thing; and `annual_market_kg` **routed**, so a commodity flown home is
 bounded by terrestrial production rather than a depot's import budget. Measured
 effect: [the v1.7.0 pricing matrix](#the-v170-pricing-matrix). Mechanism:
-[Where the material is sold](README.md#where-the-material-is-sold).
+[Where the material is sold](MODEL.md#where-the-material-is-sold).
 
 **catalog v1.0.9; SsODNet had been downloaded and discarded on every run.**
 ssoBFT renamed its identity columns, the column projection tolerated the loss,
@@ -8821,7 +8822,7 @@ New output column: `in_space_processing_usd_per_kg`.
 Summary and the measured pricing matrix:
 [Earlier releases](#earlier-releases) and
 [the v1.7.0 pricing matrix](#the-v170-pricing-matrix). Mechanism:
-[Where the material is sold](README.md#where-the-material-is-sold).
+[Where the material is sold](MODEL.md#where-the-material-is-sold).
 
 - `IN_SPACE_UTILITY_BY_DESTINATION` overrides the base table per destination.
   LEO and cislunar keep the base profile unchanged, because nothing is available
@@ -10026,8 +10027,8 @@ relearning about predicting them. **Every table here names the release and the
 catalog it belongs to. If one does not say, do not use it.**
 
 The current answers are in the README:
-[Results](README.md#current-results-the-complete-28-cell-matrix) for the model,
-[Beneficiation](README.md#beneficiation) for the wall clock.
+[Results](README.md#older-full-matrices) for the model,
+[What a first run costs](README.md#what-a-first-run-costs) for the wall clock.
 
 ## The 2026-09 campaign: population detail
 
@@ -10038,7 +10039,7 @@ guidance.
 
 Read it before re-measuring anything, and before "fixing" a result that looks
 wrong: that is what it is for. **The headline numbers themselves are
-[README.md's](README.md#current-results-the-complete-28-cell-matrix)**; what is
+[README.md's](README.md#older-full-matrices)**; what is
 here and not there is the per-destination detail, the invariants, and the
 claims each cell retired.
 
@@ -10147,7 +10148,7 @@ predicting a MODEL ratio over identical rows is not the same act as predicting
 a wall clock, which is what THE SAMPLING RULE is about.
 
 🚨  **The headline matrix and the result highlights are in
-[README.md](README.md#current-results-the-complete-28-cell-matrix), and are not
+[README.md](README.md#older-full-matrices), and are not
 copied here**, for the reason this file gives everywhere else: name one
 authority or you have two. What follows is the part a README should not carry:
 per-destination depth, the invariants, and the claims each cell retired. The
@@ -10634,7 +10635,7 @@ REVERSED.** A default cislunar run is **~2.7 h**, not 1.6 h: v1.21.0's capacity
 ceilings are priced inside the payload knapsack and cost **1.29x to 2.31x**,
 landing hardest where a programme LADDER exists, which is the opposite shape to
 the v1.17.x line that had made everything faster. The twenty-eight-cell wall
-clock is in [README.md](README.md#beneficiation) and the per-cell table is in
+clock is in [README.md](README.md#what-a-first-run-costs) and the per-cell table is in
 [the 28-cell campaign](versions.md#the-28-cell-campaign-2026-09).
 
 ⚠️  **So the sentence below is now wrong in BOTH directions depending on the
@@ -10646,7 +10647,7 @@ project is only ever true of the release it names.
 **Wall clocks and cost ratios live in
 [versions.md](versions.md#what-the-v117x-line-was-worth)**, which measured the
 whole `1.17.x` line on the full catalog at once; the twenty-cell wall clock is
-in [README.md](README.md#beneficiation). Neither is repeated here. The three
+in [README.md](README.md#what-a-first-run-costs). Neither is repeated here. The three
 things that are *guidance* rather than record:
 
 🚨  **A default cislunar run is now ~1.6 h, not 6.8 h**, and **every timing or
@@ -11160,7 +11161,7 @@ transportation `1.14.0` / catalog `1.2.0` / master `1.26.0`, 12 workers.
 Measured at the **current defaults**: `market_model` `capacity_cap`,
 `charge_insurance` False, `use_beneficiation` and `optimise_programme_scale`
 True. The current matrix is
-[README's](README.md#current-results-the-complete-28-cell-matrix); what is here
+[README's](README.md#older-full-matrices); what is here
 is the matrix it replaced and what the difference was worth.
 
 Wall clock per cell, seconds, at 12 workers:
@@ -11297,7 +11298,7 @@ The headline number of each release, newest first. Lower is better and 1.0
 would be breakeven; none of them reaches it.
 
 🚨 **Every matrix in this section is superseded** by
-[the 28-cell matrix](README.md#current-results-the-complete-28-cell-matrix),
+[the 28-cell matrix](README.md#older-full-matrices),
 which measures every destination × ore × programme-search setting on the full
 1,555,667-row catalog on calc v1.21.2. **They are kept for their structure, not
 their numbers**, which destination wins and why, what beneficiation does, which
@@ -11735,7 +11736,7 @@ against this cell's 659,847.
 release**: estimated at 10 to 20 hours each on six cores, and not run. ✅  They
 were measured on 2026-08-24 on calc v1.17.7, where they took **2.0-2.5 h each**
 rather than the 10-20 estimated, and the numbers are in
-[the 28-cell matrix](README.md#current-results-the-complete-28-cell-matrix).
+[the 28-cell matrix](README.md#older-full-matrices).
 Until then the v1.11.0 table below was the last figure they had, three releases
 and a 17× population behind, which is why it must be read for structure and
 never as a number.
@@ -12019,7 +12020,7 @@ the project derives from it: `run_pipeline.py`'s `--help` and run banner,
 own Stage 4 preview, and `ui.py`'s runtime estimate. They were five hand-copied
 literals until 2026-08-25 and had gone stale together. **Re-measure here, edit
 the dict, and every banner moves with it**; `verify_docs.py` check 9 holds
-[README's wall-clock table](README.md#beneficiation) to the same values.
+[README's wall-clock table](README.md#what-a-first-run-costs) to the same values.
 
 | cell | v1.16.0 | **v1.17.7** | speed-up |
 |---|---|---|---|
@@ -12080,7 +12081,7 @@ workers, one Stage 1/2/3 pass.
 These superseded the cislunar row of the **v1.14.0 destination matrix above**,
 which they also reproduce. ✅  **All four MODEL values then reproduced exactly
 again on calc v1.17.7** and now live in
-[the 28-cell matrix](README.md#current-results-the-complete-28-cell-matrix);
+[the 28-cell matrix](README.md#older-full-matrices);
 only the runtimes here are superseded.
 
 | | search OFF (N = 1) | search ON |
@@ -12163,7 +12164,7 @@ better than it predicts a *resource*.
 
 ## Runtime history
 
-Current wall clocks are in [Beneficiation](README.md#beneficiation); what
+Current wall clocks are in [What a first run costs](README.md#what-a-first-run-costs); what
 follows is what they used to be. **The reasons they moved are the point of this
 section**: a wall-clock number in this repo tells you nothing on its own, and
 they have now moved for twelve unrelated reasons, only some of which were the
@@ -12257,7 +12258,7 @@ wall clock was measured on.**
 ### The old beneficiation decline figures
 
 Superseded by the full-catalog per-destination figures in
-[Beneficiation](README.md#beneficiation), and kept because they are the
+[What a first run costs](README.md#what-a-first-run-costs), and kept because they are the
 measurement the never-worse invariant was first checked against.
 
 Measured 2026-08-07 on the old catalog at cislunar: beneficiation **declines on
@@ -12278,7 +12279,7 @@ superseded by the next. The current answer is that the question is resolved
 **per body inside one run**: `optimise_programme_scale` searches fleet size
 and campaigns-per-ship jointly with every other architecture axis, so a curve
 against a *forced* programme size is no longer how the model is read. See
-[Programme scale](README.md#programme-scale).
+[Programme scale](MODEL.md#programme-scale).
 
 ### Calc v1.10.0, cislunar, beneficiated (2026-08-07)
 
