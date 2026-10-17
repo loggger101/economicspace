@@ -82,6 +82,7 @@ through. Skim for the section that names what you are about to change.
 - [No source means no change](#no-source-means-no-change)
 - [A Stage 2 table can be rebuilt without being re-fetched](#a-stage-2-table-can-be-rebuilt-without-being-re-fetched)
 - [A cost amortised over a plant's life is not the cost of a plant flown for a stay](#a-cost-amortised-over-a-plants-life-is-not-the-cost-of-a-plant-flown-for-a-stay)
+- [A share measured under a defect is the defect's share](#a-share-measured-under-a-defect-is-the-defects-share)
 - [Durable lessons from the release history](#durable-lessons-from-the-release-history)
 - [The verification harness is committed now](#the-verification-harness-is-committed-now)
 - [A comment explaining a duplicate is not a reason it still has to exist](#a-comment-explaining-a-duplicate-is-not-a-reason-it-still-has-to-exist)
@@ -211,8 +212,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.8.1`, mineral_value `1.16.0`, transportation `1.22.0`,
-calc `1.31.0`, master `1.54.0` (the master version is a literal in
+Current: catalog `1.8.1`, mineral_value `1.16.0`, transportation `1.23.0`,
+calc `1.32.0`, master `1.55.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -231,7 +232,9 @@ became bands (spacecost v0.7.0), and to `1.20.0` when Falcon Heavy
 (expendable)'s band reached NASA's price and moved the LEO price anchor
 (spacecost v0.8.0), and to `1.21.0` when the lunar descent was re-pinned to
 Apollo's (spacecost v0.9.0), and to `1.22.0` when krypton's price became a
-band (spacecost v0.10.0). **So it follows a repin, and a repin follows it: the two
+band (spacecost v0.10.0), and to `1.23.0` when the propellant table gained an
+ISRU processing energy and the ops table an ISRU plant row (spacecost v0.12.0).
+**So it follows a repin, and a repin follows it: the two
 are one number in two repositories.**
 
 ℹ️  **TWENTY-EIGHT stamps so far do NOT mean the numbers moved.** The rule
@@ -468,14 +471,15 @@ changed the delivered-price model, so Stage 2 and Stage 3 both re-price and no
 flag in this repo restores the old tables: reproducing a cell here needs the
 2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
 tables now frozen under `campaign/stage3/`. ⚠️  **The live
-`asteroid_pipeline/` has held spacecost `v0.10.0`'s tables and a
-mineral_value 1.15.0 Stage 2 since 2026-10-07, and the `data-2026-09-29c`
+`asteroid_pipeline/` has held spacecost `v0.12.0`'s tables since 2026-10-17,
+a mineral_value 1.15.0 Stage 2 since 2026-10-07, and the `data-2026-09-29c`
 catalog since 2026-09-29** (the earlier Stage 2 tables are frozen under
 `campaign/stage2/mineral_value-*/`; the `v0.4.0` tables it held from
 2026-09-24, the `v0.5.0` ones from 2026-09-28, the `v0.6.0` ones from
-2026-10-06 and the `v0.7.0`, `v0.8.0` and `v0.9.0` ones from earlier on
-2026-10-07 are frozen under `campaign/stage3/spacecost-0.4.0/`, `-0.5.0/`,
-`-0.6.0/`, `-0.7.0/`, `-0.8.0/` and `-0.9.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
+2026-10-06, the `v0.7.0`, `v0.8.0` and `v0.9.0` ones from earlier on
+2026-10-07 and the `v0.10.0` ones from later that day (`v0.11.0` changed no
+table) are frozen under `campaign/stage3/spacecost-0.4.0/`, `-0.5.0/`,
+`-0.6.0/`, `-0.7.0/`, `-0.8.0/`, `-0.9.0/` and `-0.10.0/`), and `campaign/run_cell.py` refuses to run a campaign cell against them. Two things below are now wrong about the MODEL rather than about
 a level: **SLS Block 1B (Cargo)** is `concept` and has left the search, and the
 grid it left is 48 vehicles, not 17. A 300-row cislunar stride sample on the
 default configuration measured the repricing at a median **1.58x worse**
@@ -4542,6 +4546,52 @@ settle-up's launch recheck, not to refining.  **When a new term makes a
 mission close that did not before, trace the refusal before believing the
 gain**: adding mass can never make a mission fit.
 
+### A share measured under a defect is the defect's share
+
+calc `1.32.0`, which charged ISRU hydrolox for its electrolysis and
+liquefaction. The question that started it was whether a flat $/kg was
+under-charging propellant made on site, and the sizing began from the share
+of the population ISRU wins: the 2026-09 tables, and the live calc-1.26.0
+catalog, where hydrolox ISRU flew about a sixth of the default cell.
+
+🚨  **AT THE CURRENT RELEASE IT WINS NOTHING, AND THE SHARE NEVER WAS
+PHYSICS.** At calc 1.31.0, no sampled default-cell row at any of the seven
+measured destinations, and one row in the 63,472 sampled across both cells, a
+raw cislunar one. The bodies that flew it at 1.26.0 fly xenon now, an
+order of magnitude better: they were hopeless rows on which every electric
+candidate had been refused by the settle-up and pass-2 cliffs calc
+1.27.0-1.29.0 closed, and hydrolox ISRU was what was left standing. Reverting
+those three fixes on the same sample brings the share back to the body, which
+is the measurement that settles it.
+
+✅  **Re-measure the population at the current release before sizing a change
+by it**, and when a share has collapsed, find the release that collapsed it
+before reading the collapse as a result. A share is a statement about the
+model that produced it, defects included, which is
+[a diagnostic describes the WINNER](#a-diagnostic-describes-the-winner-not-the-search-that-produced-it)
+arriving at a whole population.
+
+✅  **The counterfactual is how to size a term that is inert today.** Revert
+the fixes that moved the population, apply the term there, and the term's
+latent weight is visible: here every hydrolox ISRU winner goes, and the rows
+that lose it get several tens of percent worse. That is the argument for
+taking the correction anyway, and it is
+[an unreachable branch is not a verified branch](#the-older-matrices-and-the-claims-they-retired)
+from the side of a cost: a free lunch nobody is eating today is still free.
+
+⚠️  **A flat $/kg in a model that prices watts and kilograms is a stand-in,
+and the question is for what.** Defect class 1 is a mass with no price; this
+was the inverse, a price with no mass and no energy, unsourced, and billed on
+water ISRU that processes nothing. Replacing it is the same move the refinery
+made at calc 1.25.0: energy through the array, plant with the rig.
+
+⚠️  **The boil-off exemption beside it is the same shape and is still open.**
+calc exempts ISRU propellant from boil-off because it is "made on departure";
+it is made over the whole stay, so the first hydrogen is held for about a
+year. Inert while charged hydrolox ISRU wins nothing, and recorded in README
+rather than charged, because a zero-boil-off cooling model needs a source of
+its own.
+
 ### A ratio taken across a session is a measurement of the session
 
 calc `1.22.0`, and it is THE SAMPLING RULE arriving from a direction that rule
@@ -4728,6 +4778,7 @@ assume it is bigger than it looks.
 | Parquet instead of CSV for the catalog | 19.7 s to **2.1 s** | real and free, and not taken: it changes Module 1's output contract and no measured cell would move detectably |
 | **quarter ceilings** (`Qm/4`, the wall matching the curve's maximum revenue) | raw searched 18.57x to **27.29x**, beneficiated fleet median 7 to 2, rows at the fleet cap 11 to 2 | **declined.** It measures well and is wrong: it contradicts the table's own anchors and calibrates to a desired output. See the lesson above |
 | `nickel-iron`'s missing market ceiling | **7.7e−8** relative on one mission, 7.7e−5 at N = 100 | declined; it would break bit-identity on a destination not re-measured since `1.14.0`. Take it in that pass if `earth_surface` is ever re-run |
+| **ISRU methalox** (2026-10-16): Sabatier from CO2 ice + water, and a carbon route from organics + water | cislunar, 3,035-body P/D/Z/T/X/Xc stride subset, Stage 4 only, paired A/B. **CO2 route: 0 rows improved** in raw N = 1, the default cell and both chemical-only cells. It needs 5.85 kg of ice per kg against hydrolox's 1.44 (CO2 is 11% of the 67P water mass and limits the route), so its feed is a median ~548 t against the rig's 219 t throughput cap. **Carbon route: 0 rows** in the full search; 91 of 294 (31%) improve only with electric propulsion excluded | **declined.** The CO2 route is bound by the rig cap, not by price, and breaks even only near 59% CO2 to water. The carbon route's gain is an upper bound: gasifying organics to methane feed has **no source** and was charged nothing. Re-open only with a sourced carbon-reduction process. The other condition this row named, pricing the ISRU plant's power and mass for hydrolox, was met at calc 1.32.0, and it only strengthens the decline: a Sabatier route would carry that plant too. Sources on calc's ISRU comment block |
 
 ⚠️  **Two of those figures went stale while being quoted forward, in opposite
 directions**, which is the argument for re-measuring rather than inheriting.
@@ -5769,7 +5820,7 @@ passing, which is exactly why nobody deletes them.
 ## Stage 3 lives in another repository now, and so does part of Stage 2
 
 `modules/transportation.py` is an adapter. Every reference row is in
-[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.11.0`.
+[`spacecost`](https://github.com/loggger101/spacecost), pinned to tag `v0.12.0`.
 **Do not state the row count here**; the adapter's ready banner prints it on
 every import, and this sentence carried "all 141 of them" into a release that
 added a whole table.

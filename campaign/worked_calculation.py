@@ -850,6 +850,12 @@ def dials_in_force(C):
         "model_rig_trip_limit": (C["rig_trip_limit"], "<i>trips_per_ship</i> "
                                  "on the row: above Module 3's own maximum "
                                  "means the duty-cycle cap was not applied"),
+        "model_isru_processing": (C["isru_processing"], "<i>isru_plant_kg</i> "
+                                  "on the row: a charged ISRU plant is always "
+                                  "positive.  Zero or absent (before calc "
+                                  "1.32.0) is derived with no plant, which is "
+                                  "what that run flew either way"),
+        "isru_processing_usd_per_kg": (C["isru_opex"], C["isru_opex_how"]),
     }
     if C["cfg"].max_mining_fraction == 0.05 and C.get("mining_old_default"):
         out["max_mining_fraction"] = (
@@ -3236,6 +3242,65 @@ def refinery_plant(C, hold, stay_yr):
     return hold / (stay_yr * rate)
 
 
+def isru_plant(C, prop_kg, stay_yr):
+    """calc v1.32.0: the plant that makes `prop_kg` of propellant in
+    `stay_yr`, at Module 3's "ISRU propellant plant throughput".  The same
+    formula as the refinery, `refinery_plant_kg`, at a different rate."""
+    rate = C.get("isru_plant_rate", 0.0)
+    if prop_kg <= 0 or stay_yr <= 0 or rate <= 0:
+        return 0.0
+    return prop_kg / (stay_yr * rate)
+
+
+ISRU_OPEX_BEFORE_V132 = 50.0     # calc's flat $/kg until 1.32.0 retired it
+
+
+def isru_processing_terms(C, archived):
+    """calc v1.32.0's two ISRU settings, settled off the ROW.
+
+    THE PLANT AND ITS ENERGY.  calc charges them only for a propellant Module 3
+    says must be processed (hydrolox), and a charged plant is always positive,
+    so `isru_plant_kg` > 0 on the row is positive proof the term ran.  A row
+    with the column at 0.0 made nothing that needs processing or ran with
+    `model_isru_processing` off, and a row without it predates the term; all
+    three are derived with no plant, which is what each run flew.
+
+    THE FLAT $/kg.  It was $50 until 1.32.0 retired it, and a mass does not
+    carry its price, but `return_prop_cost_usd` over `m_return_prop_kg` does:
+    on an ISRU row that line is the propellant made times the rate.  The
+    recovered rate snaps to this process's config or to the old $50 where it
+    agrees to 1e-9, because dividing introduces a rounding the run never made;
+    otherwise it is used as recovered.  The page says which.
+    """
+    cfg = C["cfg"]
+    row = archived if archived is not None else {}
+    plant = row.get("isru_plant_kg") if hasattr(row, "get") else None
+    on = (C["isru"] and plant is not None and not pd.isna(plant)
+          and float(plant) > 0.0)
+    C["isru_processing"] = on
+    C["isru_wh"] = (float(C["pro"]["isru_processing_wh_per_kg"]) if on else 0.0)
+    C["isru_plant_rate"] = (C["val"]("ISRU propellant plant throughput")
+                            if on else 0.0)
+    opex, how = float(cfg.isru_processing_usd_per_kg), "this process's config"
+    if C["isru"] and hasattr(row, "get"):
+        cost, mass = row.get("return_prop_cost_usd"), row.get("m_return_prop_kg")
+        if (cost is not None and mass is not None and not pd.isna(cost)
+                and not pd.isna(mass) and float(mass) > 0):
+            got = float(cost) / float(mass)
+            for want, said in ((float(cfg.isru_processing_usd_per_kg),
+                                "this process's config, which the row agrees with"),
+                               (ISRU_OPEX_BEFORE_V132,
+                                "calc's flat $50/kg, retired at 1.32.0; the row "
+                                "was billed it")):
+                if abs(got - want) <= 1e-9 * max(abs(want), 1.0):
+                    opex, how = want, said
+                    break
+            else:
+                opex, how = got, ("recovered from the row: <i>return_prop_cost_usd"
+                                  "</i> over <i>m_return_prop_kg</i>")
+    C["isru_opex"], C["isru_opex_how"] = opex, how
+
+
 def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
                    damped0=0):
     """The coupled sizing loop, then the mission actually flown.
@@ -3335,7 +3400,12 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
             boiloff_factor = math.exp(C["boiloff_pct"] / 100.0 * hold_yr * 365.25)
             r_ret_raw = math.exp(DV["dv_ret"] / C["ve"])
             dv_ret_eff = C["ve"] * math.log(1.0 + (r_ret_raw - 1.0) * boiloff_factor)
-        hw_in = cfg.mining_hardware_kg + plant_kg + ep_kg + refinery_kg
+        # calc v1.32.0: the ISRU plant, derived from the propellant made and
+        # the stay rather than carried, so it moves and blends with them.
+        iplant_in = (isru_plant(C, isru_prop, stay_est - DV["window_wait"])
+                     if C.get("isru_plant_rate", 0.0) > 0 else 0.0)
+        hw_in = (cfg.mining_hardware_kg + plant_kg + ep_kg + refinery_kg
+                 + iplant_in)
         R = _ratios(C, DV["dv_out"], dv_ret_eff)
         if R is None:
             if back_off("the tank cannot close: delta (R - 1) >= 1 on this propellant") is None:
@@ -3412,6 +3482,9 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
         if refine > 0 and trial_dig > 0:
             draw += refine / hours(trial_dig)
             new_refinery = refinery_plant(C, trial_pay, trial_dig)
+        # calc v1.32.0: splitting the water and liquefying the gases.
+        if C.get("isru_wh", 0.0) > 0 and trial_dig > 0:
+            draw += C["isru_wh"] * new_isru_prop / hours(trial_dig)
         # A radioisotope plant is not expensive over the ceiling, it is
         # UNAVAILABLE: DOE produces about 1.5 kg of Pu-238 a year, roughly one
         # flagship RTG for the whole world.
@@ -3430,7 +3503,8 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
                        # and the step it was blended at (1.0 for a pass
                        # that took the previous pass's sizing whole).
                        "plant_in": plant_kg, "ep_in": ep_kg,
-                       "refinery_in": refinery_kg, "step": step})
+                       "refinery_in": refinery_kg,
+                       "isru_plant_in": iplant_in, "step": step})
         # Five tests, in the model's own order and with its own tolerances:
         # three masses and the stay relative at 1%, the containment fraction
         # absolute at 1e-4 because it is a fraction and not a mass.
@@ -3535,10 +3609,17 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
         refine_draw = refine / hours(dig_yr)
         draw += refine_draw
         refinery_kg = refinery_plant(C, m_pay, dig_yr)
+    # calc v1.32.0: the ISRU plant and its draw, at the propellant made.
+    isru_draw = isru_plant_kg = 0.0
+    if C.get("isru_wh", 0.0) > 0 and isru_prop > 0 and dig_yr > 0:
+        isru_draw = C["isru_wh"] * isru_prop / hours(dig_yr)
+        draw += isru_draw
+        isru_plant_kg = isru_plant(C, isru_prop, dig_yr)
     if C["power_source"] == "rtg" and draw > cfg.rtg_max_power_w:
         return refuse("the radioisotope plant exceeds `rtg_max_power_w`")
     plant_kg = draw / C["plant_w_per_kg"] if draw > 0 else 0.0
-    hw = cfg.mining_hardware_kg + plant_kg + ep["mass"] + refinery_kg
+    hw = (cfg.mining_hardware_kg + plant_kg + ep["mass"] + refinery_kg
+          + isru_plant_kg)
 
     # Under ISRU only the empty tank rides the outbound leg; the propellant is
     # made at the far end.
@@ -3596,6 +3677,7 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
             "c_frac": c_frac, "f_eff": f_eff, "m_containment": c_frac * m_pay,
             "plant": plant_kg, "draw": draw, "hw": hw, "m_dry": m_dry,
             "refinery": refinery_kg, "refine_draw": refine_draw,
+            "isru_plant": isru_plant_kg, "isru_draw": isru_draw,
             "refine_wh": refine,
             "m_after": m_after, "m_rprop": m_rprop, "m_tank_ret": m_tank_ret,
             "m_at": m_at, "m_oprop": m_oprop, "m_tank_out": m_tank_out,
@@ -3866,7 +3948,9 @@ def cost(C, M, n_missions, per_ship):
               for k in range(1, n_missions + 1)) / n_missions
           if terms["learning"] else 1.0)
     # calc v1.25.0: the refinery plant rides with the rig and is costed as it.
-    rig_total = ((cfg.mining_hardware_kg + M.get("refinery", 0.0))
+    # calc v1.32.0: the ISRU plant rides with the rig and is costed as it.
+    rig_total = ((cfg.mining_hardware_kg + M.get("refinery", 0.0)
+                  + M.get("isru_plant", 0.0))
                  * val("Mining payload recurring cost"))
     share = max(1, min(per_ship, M["trips"]))
     # 🚨  TWO WAYS TO USE UP A RIG, AND THE SECOND ONE IS GATED WITH THE CAP
@@ -3898,7 +3982,9 @@ def cost(C, M, n_missions, per_ship):
         # paid for at year zero either: it is manufactured at the asteroid over
         # the mining duration, so it is an ONGOING line rather than an up-front
         # one and misses the full up-front compounding.
-        "rprop": M["m_rprop"] * (cfg.isru_processing_usd_per_kg if C["isru"]
+        # calc v1.32.0 retired the flat $/kg; the rate the RUN billed is
+        # settled off the row by `isru_processing_terms`.
+        "rprop": M["m_rprop"] * (C["isru_opex"] if C["isru"]
                                  else prop_cost),
         "rig": rig_share,
         # The vehicle that meets the cargo: a lander, a re-entry capsule or a
@@ -4264,6 +4350,9 @@ def comparable(C, B, DV, M, P, ladder):
         "hardware_total_kg": M["hw"], "mining_duration_yr": M["dig_yr"],
         # calc v1.25.0; absent before it, and reported skipped then.
         "refinery_kg": M["refinery"], "refinery_power_w": M["refine_draw"],
+        # calc v1.32.0; absent before it, and reported skipped then.
+        "isru_plant_kg": M["isru_plant"],
+        "isru_processing_power_w": M["isru_draw"],
         # calc v1.27.0; absent before it, and reported skipped then.
         "settle_repairs": M["repairs"],
         # calc v1.28.0; absent before it, and reported skipped then.
@@ -4480,6 +4569,7 @@ def build(archived, label, body=None, run_beneficiated=None):
     # used: before 1.29.0 the strict one, whatever this process's config says.
     C["launch_rtol"] = (float(getattr(C["cfg"], "launch_capacity_rtol", 0.0))
                         if run_calc_at_least(archived, (1, 29, 0)) else 0.0)
+    isru_processing_terms(C, archived)
     if C["refinery"]:
         tables["minerals"] = gross_minerals(tables["minerals"])
         C["minerals"] = tables["minerals"]

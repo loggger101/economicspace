@@ -169,7 +169,9 @@ on 2026-10-07 the same way, with the `1.18.0` set frozen under
 `1.19.0` set frozen under `campaign/stage3/spacecost-0.7.0/`, and `v0.9.0`
 after it, with the `1.20.0` set frozen under
 `campaign/stage3/spacecost-0.8.0/`, and `v0.10.0` after that, with the
-`1.21.0` set frozen under `campaign/stage3/spacecost-0.9.0/`. See
+`1.21.0` set frozen under `campaign/stage3/spacecost-0.9.0/`, and `v0.12.0`
+on 2026-10-17, with the `1.22.0` set frozen under
+`campaign/stage3/spacecost-0.10.0/`. See
 [master v1.37.0](versions.md#master-v1370--transportation-v1170--catalog-v160)
 and [the data on disk adopts it](versions.md#the-data-on-disk-adopts-it-2026-09-28).
 Two checks say the seam is sound, and both are cheap:
@@ -189,7 +191,7 @@ compared byte for byte. **The invariants, and what fails when each breaks, are
 in [CLAUDE.md](CLAUDE.md#stage-3-lives-in-another-repository-now-and-so-does-part-of-stage-2)**, which is
 where the editing rules live.
 
-**spacecost is pinned to a tagged release**, `v0.11.0`, in all seven places
+**spacecost is pinned to a tagged release**, `v0.12.0`, in all seven places
 that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
 `build_master.py`, and in `_PIP_SPEC` in both `modules/transportation.py` and
 `modules/mineral_value.py` (what a standalone module run installs from, and
@@ -257,8 +259,8 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.8.1 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
 | 2 | `modules/mineral_value.py` | 1.16.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.22.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
-| 4 | `modules/calc.py` | 1.31.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 3 | `modules/transportation.py` | 1.23.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](#the-propulsion-and-storage-catalog) |
+| 4 | `modules/calc.py` | 1.32.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 ⚠️  That version column is checked against the modules' own `pipeline_version`
 fields, and it has rotted before: it read catalog 1.1.0 / transportation 1.12.0
@@ -641,6 +643,8 @@ that actually move the answer:
 | `.calc.max_mining_fraction` | `1.0` | Share of asteroid mass one mission may remove. `1.0` puts the whole body on the table and leaves the dig rate, the capsule volume and the rocket equation to bound the haul. Was `0.05`, which bound rarely and, where it bound, sized the mission by accident |
 | `.calc.use_aerocapture_return` | `True` | Makes aerocapture *available*. Trades return Δv for a TPS mass penalty (15% of payload); Stage 4 prices both and flies whichever pays, per asteroid |
 | `.calc.use_isru_return_propellant` | `True` | Makes ISRU *available* at bodies whose composition supplies the propellant, with the extra rock dug, timed and charged |
+| `.calc.model_isru_processing` | `True` | Charge the energy and the plant that turn the feed into propellant: Stage 3's `isru_processing_wh_per_kg` (hydrolox 15,200 Wh/kg, electrolysis and liquefaction) goes through the array, and the plant (Stage 3's "ISRU propellant plant throughput") rides with the rig at the rig's rate. **Default since calc v1.32.0**; `False` is the earlier model to the bit. See [What the model charges for](#what-the-model-charges-for) |
+| `.calc.isru_processing_usd_per_kg` | `0.0` | A flat $/kg on propellant made on site. **Retired at calc v1.32.0**: it was an unsourced `50.0` that `model_isru_processing` now charges as energy and plant, and it was billed on water ISRU, which processes nothing. `50.0` with `model_isru_processing = False` reproduces v1.31.0 |
 | `.calc.operational_propellants_only` | `True` | Restrict the search to propellants that have flown. `False` admits Stage 3's development and concept rows: nuclear thermal, VASIMR, fusion, Orion pulse |
 | `.calc.model_tank_mass` | `True` | Put propellant tankage in the rocket equation. Tank mass scales with volume, so this is what stops low-density propellants flying their tanks for free |
 | `.calc.allow_rtg_power` | `True` | Let the processing plant use radioisotope power where it is lighter than solar (past 3.46 AU), capped by `rtg_max_power_w` |
@@ -684,6 +688,13 @@ propellant** against hydrolox's 1.286, with no electrolyser, no liquefaction
 and no cryogenic tank, and buys that at 190 s of specific impulse against 452.
 Which trade wins varies by body, so it is resolved in the per-asteroid search.
 Stage 3 states the feed ratio and the feed material on each propellant row.
+
+Since calc v1.32.0 it also states what turning the feed into propellant
+costs, and hydrolox pays it: **15.2 kWh per kg** to split the water and
+liquefy both gases, on top of the 3.2 kWh/kg of liberating it, and a plant
+the size of **one kilogram per 7.28 kg of propellant a year**. Charged, it
+wins no sampled row at any destination. The ISRU that wins is water burnt as
+it comes. See [What the model charges for](#what-the-model-charges-for).
 
 🚨  **The dangerous corner is ISRU on *and* aerocapture off**, and what closes
 it is `return_structure_frac_of_payload`. Without a payload-proportional term
@@ -1276,6 +1287,7 @@ The ones to look at first:
 | `aerocapture_return`, `isru_return` | The architecture the search chose **for this asteroid**. Both used to be catalog-wide settings |
 | `rendezvous_apsis` | `aphelion`, `perihelion` or `reference`, which apsis the transfer meets the target at, resolved against the destination |
 | `isru_propellant_kg`, `isru_feed_kg` | Return propellant made on site, and the rock dug to make it. That feed comes off the throughput and mineable-mass budgets before any ore is loaded |
+| `isru_plant_kg`, `isru_processing_power_w` | The plant that makes that propellant, and its draw (calc v1.32.0). The plant is in `hardware_total_kg` and the rig's cost; the draw is in `processing_power_w`. Both 0.0 unless the propellant has to be processed, which is hydrolox |
 | `dv_out_m_s`, `dv_ret_m_s` | Per-asteroid Δv from its own orbital elements, including any low-thrust penalty |
 | `dv_penalty_factor` | 1.0 for chemical, 1.5 for electric; electric can't fly impulsive burns |
 | `max_payload_kg` | Material actually returned, after the mining-fraction, rocket-equation, volume and throughput caps |
@@ -2653,6 +2665,26 @@ dehydroxylation plus the enthalpy of dehydration plus vaporisation, and
 matching the 1-3 kWh/kg in the ISRU literature. It had been extracted free and
 sold at full launch-cost-avoided.
 
+**Making ISRU propellant** (`model_isru_processing`, calc v1.32.0). Liberating
+the water was the only processing an ISRU mission paid for in energy; splitting
+it into hydrogen and oxygen and liquefying both was a flat, unsourced $50/kg
+with no watt and no kilogram behind it. Stage 3 now states it per propellant
+row: **hydrolox 15,200 Wh per kg made**, the low end of a 15.2-26.3 kWh/kg band
+built from DOE's PEM electrolysis system figure (55 kWh/kg H2) and a NASA Glenn
+20 K liquefier study (Johnson, AIAA ASCEND 2023), cross-checked by a whole lunar
+water-to-hydrolox plant at 21.3 kWh/kg (Kleinhenz & Paz 2021). That goes through
+the array. The plant that does it rides with the rig and is costed as the rig
+is, at **7.28 kg of propellant a year per kg of plant**, which is that lunar
+study's electrolysis-and-liquefaction half (tanks included, so an upper bound on
+mass). Water burnt as it comes (resistojet, water ion, steam) states 0 and pays
+nothing, and the flat $/kg is retired. ⚠️  **It moves almost nothing, and that
+is a finding about the population, not about the term.** Hydrolox ISRU won 17%
+of the calc 1.26.0 default cell only because electric missions were being
+refused by the sizing-loop cliffs calc 1.27.0-1.29.0 removed; with those fixes
+reverted on a sample the share returns, and this charge takes it to zero and
+makes those rows a median 77% worse. See
+[master v1.55.0](versions.md#master-v1550--calc-v1320--transportation-v1230).
+
 **Learning curve** (`model_learning_curve`, **off** since calc v1.22.0;
 `learning_curve_rate` 0.85). Wright's law on the per-mission articles,
 capsule/lander and power system. The amortised mining rig is **excluded**,
@@ -2885,7 +2917,12 @@ per kg actually burned:
 Folded into an effective return Δv, which leaves the closed-form cascade exact:
 since `m_return_prop` scales with `(R−1)`, inflating that term by `k` is
 `R_eff = 1 + (R−1)k`. ISRU return propellant is exempt; it is manufactured at
-the asteroid on departure.
+the asteroid on departure. ⚠️  **That exemption is optimistic and not yet
+charged**: the propellant is made over the whole stay (a median 1.27 yr on the
+ISRU rows measured for calc v1.32.0), so the first hydrogen made is held that
+long and either boils or needs a 20 K cryocooler running the whole time. It is
+inert today, because charged hydrolox ISRU wins no sampled row, and it is an
+open item rather than a decision.
 
 **In-space manufacturing** (Stage 2). Raw Fe-Ni is not a pressure vessel, and
 the gap used to hide inside the 0.70 utility factor: the refinery was assumed
