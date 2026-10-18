@@ -980,6 +980,30 @@ def check_manifests() -> bool:
                 bad.append("requirements.txt %s != _MASTER_REQUIRED %s"
                            % (sorted(req), sorted(master)))
 
+            # run.bat's dependency probe (`%PY% -c "import a,b,..."`) is the
+            # third copy of this list.  It still demanded `pyarrow` two years
+            # of releases after `pyarrow` left `_MASTER_REQUIRED` (master
+            # v1.36.0), and did not ask for `spacecost`: a machine without
+            # pyarrow was offered the same install on every launch, and the
+            # install, from requirements.txt, never brought it.
+            bat_p = os.path.join(REPO, "run.bat")
+            if os.path.exists(bat_p):
+                # Anchored on `%PY%` at the start of a line: the interpreter
+                # probes above it (`py -3 -c "import sys"`) have the same shape.
+                probe = re.search(r'^%PY%\s+-c\s+"import\s+([A-Za-z0-9_, ]+)"',
+                                  io.open(bat_p, encoding="utf-8",
+                                          errors="replace").read(), re.M)
+                n += 1
+                if probe is None:
+                    bad.append("run.bat: no `-c \"import ...\"` dependency "
+                               "probe found")
+                else:
+                    got = [x.strip() for x in probe.group(1).split(",")
+                           if x.strip()]
+                    if sorted(map(_norm, got)) != sorted(map(_norm, master)):
+                        bad.append("run.bat probes %s != _MASTER_REQUIRED %s"
+                                   % (sorted(got), sorted(master)))
+
     # README's `run.bat` block <-> the words run.bat's dispatcher accepts.
     bat_p = os.path.join(REPO, "run.bat")
     readme_p = os.path.join(REPO, "README.md")
@@ -1452,7 +1476,10 @@ def check_runtime() -> bool:
             bad.append("%s quotes a launcher runtime and is not on disk" % fn)
             continue
         for got_s, dest in LAUNCHER_HOURS.findall(read(path)):
-            if dest not in dests:
+            # The model's destination list, not `dests`: that is the measured
+            # ones, and an unmeasured destination (`gto`) is a destination
+            # with no figure, which `expected_cell_seconds` says below.
+            if dest not in getattr(_m, "DELIVERY_DESTINATIONS", dests):
                 bad.append("%s quotes a runtime for %r, which is not a "
                            "destination" % (fn, dest))
                 continue
@@ -1462,7 +1489,12 @@ def check_runtime() -> bool:
             # newest figure the destination has.  It is a LEVEL per row and
             # never a ratio between rows, which is the one thing that accessor
             # refuses to be used for.
-            want = round(_m.expected_cell_seconds(dest, True, True) / 3600.0, 1)
+            secs = _m.expected_cell_seconds(dest, True, True)
+            if secs is None:
+                bad.append("%s says %s h at %s, which has never been run on "
+                           "the full catalog" % (fn, got_s, dest))
+                continue
+            want = round(secs / 3600.0, 1)
             if abs(float(got_s) - want) > 0.05:
                 bad.append("%s says %s h at %s, expected_cell_seconds says "
                            "%.1f h" % (fn, got_s, dest, want))

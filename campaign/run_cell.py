@@ -99,7 +99,9 @@ def extract(path, dest, ore, search):
     caught it.
     """
     import pandas as pd
-    p = pd.read_csv(path, low_memory=False)
+    # `designation` as text: the winner's goes into the committed ledger, and
+    # a capped smoke-test cell of numbered bodies would otherwise infer it.
+    p = pd.read_csv(path, low_memory=False, dtype={"designation": str})
     p["_obj"] = p["total_cost_usd"] / p["gross_value_usd"]
     ok = p[p["_obj"].notna() & (p["_obj"] > 0)]
     b = ok.nsmallest(1, "_obj").iloc[0]

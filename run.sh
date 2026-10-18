@@ -244,7 +244,7 @@ cmd_verify() {
   echo
 
   # verify.py defaults to `--tag head`, and there is usually no baseline-head,
-  # which would silently turn the most important of the six checks into a hash
+  # which would silently turn the most important of the checks into a hash
   # print.  Use the newest baseline actually on disk.
   local tag=""
   if [ -d .verify ]; then
@@ -323,7 +323,7 @@ case "$ACTION" in
   full)
     pick_destination "${1:-}"
     echo
-    echo "  THE PIPELINE DEFAULTS: every one of 1.55 million rows,"
+    echo "  THE PIPELINE DEFAULTS: every row of the catalog,"
     echo "  beneficiated, with the programme search on.  This preset overrides"
     echo "  nothing; it is what a configure-nothing run does.  Measured"
     echo "  2026-09 on the reference host: Stage 4 alone is"

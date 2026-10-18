@@ -455,6 +455,48 @@ identical and MATCH on every cell, and checks 4 to 7 pass. `verify_docs.py`,
 `verify_stage1.py`, `verify_stage3.py` and `tree_check.py` pass; the dashboard
 renders headless under `streamlit.testing` with no exception.
 
+### A second pass: launchers, campaign readers, Stage 1's manifest, verdicts (2026-10-18, no stamp)
+
+- **`run.bat` probed for `pyarrow`**, which left `_MASTER_REQUIRED` at master
+  v1.36.0, and not for `spacecost`, so a machine without pyarrow was offered
+  the install on every launch and the install never brought it. The probe is
+  `_MASTER_REQUIRED`'s import names now, and `verify_docs.py` check 7 holds it
+  there. The same block prompted and paused before dispatch, so `run.bat
+  quick` on a host missing a package would hang a scheduled job; with an
+  argument it now installs without asking and fails with a code.
+- **`run_pipeline.py`'s long-run prompt** said the default cell "has never
+  been measured end to end -- budget days, not hours". It quotes the cell's
+  measured time now, read off `expected_cell_seconds`, which returns None for
+  `gto` instead of raising.
+- **`campaign/analyse.py`'s mass ledger was the three-term identity** from
+  before the flown refinery, so every calc 1.26.0 archive read as a defect
+  class 1 failure (574 kg on the `lunar_surface` re-measurement). It is
+  `verify.py` check 4's identity now; that archive reads 0 kg, and so does
+  the 2026-09 cislunar 2x2, whose cells carry neither new column.
+- **Stage 1 read its manifest at import and raised on a truncated one**, so
+  `import master` failed, the reinstall included. An unreadable manifest now
+  means nothing is installed; the manifest is written in the staging
+  directory and moved into place; a release with no rejects file removes the
+  previous release's.
+- **Three verdicts hid a skip.** `verify.py` printed ALL CHECKS PASSED under
+  `--skip prune parallel`, `verify_stage3.py` printed VERIFIED with check 4
+  skipped, and `verify_stage1.py` showed its skip only as a smaller count.
+  Each now names what it skipped (exit codes unchanged), and `verify.py`
+  check 6 fails rather than passes when there is no Stage 2 catalog.
+- Stage 2's closing banner counts the prices quoted live and warns when a
+  live source was on and quoted none; the dashboard's runtime blurb counts
+  its destinations and names the one never run.
+
+**Verified.** `verify.py check --skip prune parallel` against the same clean
+baseline: 151 of 151 columns identical and MATCH on all four cells, checks 4
+to 7 pass, and the verdict names checks 2 and 3 as skipped. Each fix was shown
+failing first: `run.bat` under `cmd` with a missing package planted (the
+argument path now exits 1 with no prompt, the menu path still asks), check 7
+against the old probe, a 40-byte manifest against the import, a fake 5-row
+release against the install path, and the calc 1.26.0 archive against the
+ledger. `verify_docs.py`, `verify_stage1.py` and `verify_stage3.py` pass; the
+dashboard renders headless with no exception.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer

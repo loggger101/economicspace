@@ -8,7 +8,9 @@ Definitions are the ones CLAUDE.md pins down, and each has cost someone an hour:
   median improvement median(1 - r), the fractional REDUCTION -- not
                      median(1/r - 1), which reads 74.0% for a 42.5% result
   mass ledger        hardware_total_kg == 2000 (CONFIG constant, not a column)
-                     + power_system_kg + ep_system_kg
+                     + power_system_kg + ep_system_kg + refinery_kg
+                     + isru_plant_kg (the last two from calc 1.25.0 and
+                     1.32.0; an older cell has neither column)
 
     py campaign/analyse.py <destination>
     py campaign/analyse.py --all
@@ -52,7 +54,10 @@ def load(dest, ore, search, tag=None):
     if not os.path.exists(p):
         return None
     with gzip.open(p, "rb") as fh:
-        df = pd.read_csv(fh, low_memory=False, float_precision="round_trip")
+        # `designation` as text: `never_worse` joins two cells on it, and a
+        # dtype inferred per file can differ between the two sides.
+        df = pd.read_csv(fh, low_memory=False, float_precision="round_trip",
+                         dtype={"designation": str})
     df["_obj"] = df["total_cost_usd"] / df["gross_value_usd"]
     return df
 
@@ -87,7 +92,14 @@ def never_worse(lo, hi, label):
 
 
 def mass_ledger(df, label):
-    """Assert `hardware_total_kg == rig + power_system_kg + ep_system_kg`, exactly.
+    """Assert `hardware_total_kg == rig + power + ep + refinery + ISRU plant`.
+
+    The same identity as `verify.py` check 4, read the same way: the
+    refinery (calc 1.25.0) and the ISRU plant (calc 1.32.0) fly with the rig,
+    and a cell older than either has no column for it and contributes
+    nothing.  This said three terms until 2026-10-18 and so reported every
+    calc 1.26.0 archive as broken: 574 kg of refinery on the
+    `lunar_surface` re-measurement, read as a defect class 1 failure.
 
     The one-line check for CLAUDE.md's first defect class, a mass in one cascade
     with no price in the other. ⚠️  `mining_hardware_kg` is NOT a column: the rig
@@ -101,7 +113,10 @@ def mass_ledger(df, label):
         return f"  {label:34s} -- missing"
     if df.empty:
         return f"  !! {label:32s} EMPTY -- not a pass"
-    err = (df["hardware_total_kg"] - RIG_KG - df["power_system_kg"] - df["ep_system_kg"]).abs()
+    refinery = df["refinery_kg"] if "refinery_kg" in df.columns else 0.0
+    isru_plant = df["isru_plant_kg"] if "isru_plant_kg" in df.columns else 0.0
+    err = (df["hardware_total_kg"] - RIG_KG - df["power_system_kg"]
+           - df["ep_system_kg"] - refinery - isru_plant).abs()
     mx = err.max()
     flag = "OK " if mx < 1e-6 else "!! "
     return f"  {flag}{label:32s} rows {len(df):>8,} | max |error| {mx:.9f} kg"
@@ -169,7 +184,7 @@ def report(dest, tag=None):
     print(never_worse(cells[("raw", "on")], cells[("raw", "off")], "search ON <= OFF, raw"))
     print(never_worse(cells[("benef", "on")], cells[("benef", "off")], "search ON <= OFF, benef"))
 
-    print("\n  mass ledger  hardware_total == 2000 + power + ep")
+    print("\n  mass ledger  hardware_total == 2000 + power + ep + refinery + ISRU plant")
     for (o, s), df in sorted(have.items()):
         print(mass_ledger(df, f"{o}, search {s}"))
 

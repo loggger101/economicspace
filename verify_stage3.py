@@ -97,6 +97,10 @@ TABLES = ["launch_vehicles.csv", "propellants.csv", "delta_v_segments.csv",
           "operational_costs.csv", "storage_systems.csv", "environments.csv"]
 SUMMARY = "transportation_summary.csv"
 
+# Checks that returned True without running, named in the verdict so it cannot
+# read as a full pass.
+SKIPPED = []
+
 
 def _sha(path: str) -> str:
     """Hash of a file's RAW bytes, provenance columns included.
@@ -356,6 +360,7 @@ def check_against_committed_reference(t, tmp) -> bool:
         print("     spacecost's repo root, not inside the package, so it is")
         print("     never copied into site-packages. Clone spacecost beside")
         print("     this repo, or set SPACECOST_SOURCE, to run it.")
+        SKIPPED.append("4 (no spacecost source checkout)")
         return True
 
     built = os.path.join(tmp, "adapter", "transportation")
@@ -689,6 +694,11 @@ def main() -> int:
         check_installed_revision(t),
     ]
     print("-" * 70)
+    if all(results) and SKIPPED:
+        # A skip is not a pass, and the verdict is the line that gets quoted.
+        print("  OK  STAGE 3 VERIFIED EXCEPT check %s, which SKIPPED"
+              % ", ".join(SKIPPED))
+        return 0
     if all(results):
         print("  OK  STAGE 3 VERIFIED - the split has not drifted")
         return 0

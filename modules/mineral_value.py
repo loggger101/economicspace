@@ -2758,11 +2758,25 @@ def build_mineral_value_catalog(
 
     # ── Summary ──────────────────────────────────────────────────────────────
     elapsed = (datetime.now() - t0).total_seconds()
+    # A live-source outage does not fail this stage: every price falls back to
+    # its reference row and the run still COMPLETES, so the per-ticker FAIL
+    # lines far above were the only sign.  Count the live quotes here, in the
+    # banner people read, from `live_price_source` (set by the merge and never
+    # rewritten, where `price_basis` is repriced per destination).
+    n_live = (int(catalog["live_price_source"].notna().sum())
+              if "live_price_source" in catalog.columns else 0)
+    live_on = bool(config.use_yfinance or (
+        config.use_metals_api and config.metals_api_key not in ("", "DEMO")))
     print("\n" + "=" * 65)
     print("  OK  MINERAL VALUE CATALOG COMPLETE")
     print(f"      Entries  : {len(catalog):,}")
+    print(f"      Live     : {n_live:,} quoted today, the rest reference rows")
     print(f"      Columns  : {len(catalog.columns)}")
     print(f"      Elapsed  : {elapsed:.1f}s")
+    if live_on and n_live == 0:
+        print("  WARN  a live price source was on and quoted NOTHING: every price")
+        print("        is a reference row.  Read the FAIL/WARN lines above before")
+        print("        quoting a level from this catalog.")
     print("=" * 65)
 
     return catalog

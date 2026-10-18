@@ -438,12 +438,23 @@ def _fetch_manifest(config: "CatalogConfig") -> dict:
 
 
 def installed_manifest(config: "CatalogConfig" = CATALOG_CONFIG) -> Optional[dict]:
-    """The manifest of the release on disk, or None when there is none."""
+    """The manifest of the release on disk, or None when there is none.
+
+    An UNREADABLE manifest is None too: it vouches for nothing, so Stage 1
+    reinstalls, which is safe because a pinned release is the same bytes on
+    every host.  It used to raise, and this runs at import, so one truncated
+    manifest made `import master` fail -- including the run that would have
+    repaired it.
+    """
     path = os.path.join(config.output_dir, config.manifest_filename)
     if not os.path.isfile(path):
         return None
-    with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            manifest = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return manifest if isinstance(manifest, dict) else None
 
 
 def release_on_disk(config: "CatalogConfig" = CATALOG_CONFIG) -> bool:
@@ -560,11 +571,21 @@ def build_asteroid_catalog(config: CatalogConfig = CATALOG_CONFIG) -> pd.DataFra
                                          config.manifest_filename)
             if os.path.exists(manifest_path):
                 os.remove(manifest_path)
+            # A release that ships no rejects file must not leave the previous
+            # release's beside it, looking like this one's.
+            rejected_path = os.path.join(config.output_dir,
+                                         config.rejected_filename)
+            if _ASSET_REJECTED not in files and os.path.exists(rejected_path):
+                os.remove(rejected_path)
             for src, dst in moves:
                 os.replace(src, dst)
-            with open(manifest_path, "w", encoding="utf-8", newline="\n") as fh:
+            # Written in the staging directory and MOVED into place, so an
+            # interrupted write can never leave a half-written manifest.
+            manifest_stage = os.path.join(stage, config.manifest_filename)
+            with open(manifest_stage, "w", encoding="utf-8", newline="\n") as fh:
                 json.dump(manifest, fh, indent=2)
                 fh.write("\n")
+            os.replace(manifest_stage, manifest_path)
         finally:
             shutil.rmtree(stage, ignore_errors=True)
         print("  OK  installed %s -> %s" % (config.catalog_release, catalog_path))
@@ -3222,11 +3243,25 @@ def build_mineral_value_catalog(
 
     # ── Summary ──────────────────────────────────────────────────────────────
     elapsed = (datetime.now() - t0).total_seconds()
+    # A live-source outage does not fail this stage: every price falls back to
+    # its reference row and the run still COMPLETES, so the per-ticker FAIL
+    # lines far above were the only sign.  Count the live quotes here, in the
+    # banner people read, from `live_price_source` (set by the merge and never
+    # rewritten, where `price_basis` is repriced per destination).
+    n_live = (int(catalog["live_price_source"].notna().sum())
+              if "live_price_source" in catalog.columns else 0)
+    live_on = bool(config.use_yfinance or (
+        config.use_metals_api and config.metals_api_key not in ("", "DEMO")))
     print("\n" + "=" * 65)
     print("  OK  MINERAL VALUE CATALOG COMPLETE")
     print(f"      Entries  : {len(catalog):,}")
+    print(f"      Live     : {n_live:,} quoted today, the rest reference rows")
     print(f"      Columns  : {len(catalog.columns)}")
     print(f"      Elapsed  : {elapsed:.1f}s")
+    if live_on and n_live == 0:
+        print("  WARN  a live price source was on and quoted NOTHING: every price")
+        print("        is a reference row.  Read the FAIL/WARN lines above before")
+        print("        quoting a level from this catalog.")
     print("=" * 65)
 
     return catalog
@@ -4763,13 +4798,18 @@ def measured_cell_provenance(current_version: str = None) -> str:
 
 
 def expected_cell_seconds(destination: str, beneficiated: bool = True,
-                          search: bool = True) -> int:
+                          search: bool = True) -> Optional[int]:
     """Best available wall clock for one cell, per destination.
 
-    Cislunar comes from `MEASURED_CELL_SECONDS` (the current release) and every
-    other destination from `MEASURED_DEST_SECONDS` (the 2026-09 campaign),
-    because that is the newest measurement each one has.  This is what the
-    launcher menus quote before somebody commits an afternoon.
+    Cislunar comes from `MEASURED_CELL_SECONDS` (calc `MEASURED_CELL_CALC`) and
+    every other destination from `MEASURED_DEST_SECONDS` (the 2026-09
+    campaign), because that is the newest measurement each one has.  This is
+    what the launcher menus quote before somebody commits an afternoon.
+
+    None for a destination that has never been run on the full catalog (`gto`
+    at master v1.54.0): it has no row, by the rule that a row is added only
+    once a cell is measured, and a KeyError here would crash the reader that
+    asked instead of letting it say there is no figure.
 
     🚨  NEVER TAKE A RATIO OF TWO OF THESE.  Two destinations can come back
     from different releases, and a cross-release ratio is the arithmetic this
@@ -4779,6 +4819,8 @@ def expected_cell_seconds(destination: str, beneficiated: bool = True,
     """
     if destination == "cislunar":
         return MEASURED_CELL_SECONDS[(bool(beneficiated), bool(search))]
+    if destination not in MEASURED_DEST_SECONDS:
+        return None
     i = (2 if beneficiated else 0) + (1 if search else 0)
     return MEASURED_DEST_SECONDS[destination][i]
 

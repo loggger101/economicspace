@@ -217,6 +217,11 @@ def _cell_time(beneficiated, searched):
 # definition with several readers is the whole point, and a private copy of the
 # span here would be the second copy of exactly the table this replaced.
 _DEST_LO, _DEST_HI = master.dest_cost_span(True, True)   # the default cell
+# Counted rather than typed, and the destinations never run named: the picker
+# offers every destination, and `gto` has no measured cell to quote.
+_N_MEASURED = len(master.MEASURED_DEST_SECONDS)
+_UNMEASURED = [d for d in master.DELIVERY_DESTINATIONS
+               if d not in master.MEASURED_DEST_SECONDS]
 
 
 STAGES = [
@@ -240,20 +245,24 @@ STAGES = [
           "%s with optimise_programme_scale, %s with use_beneficiation, and "
           "%s with both, and both of those flags DEFAULT ON as of calc "
           "v1.17.0, so budget for the %s unless you turn one off. Destination "
-          "changes that: the other six span %.2f-%.2fx cislunar on that cell "
-          "(%s is FASTER, %s dearest), so the default elsewhere runs %.1f-%.1f "
-          "h. Seconds with eval_row_cap set low. That span is the 2026-09 "
-          "campaign's, which is the only seven-destination measurement there "
-          "is, so it is one release older than the cislunar cells it is "
-          "applied to: read it as the shape of the difference, not as a "
-          "second measurement of the other six."
+          "changes that: the other %d measured destinations span %.2f-%.2fx "
+          "cislunar on that cell (%s is FASTER, %s dearest), so the default "
+          "elsewhere runs %.1f-%.1f h%s. Seconds with eval_row_cap set low. "
+          "That span is the 2026-09 campaign's, the only %d-destination "
+          "measurement there is, so it is one release older than the cislunar "
+          "cells it is applied to: read it as the shape of the difference, "
+          "not as a second measurement of the others."
           % (master.MEASURED_CELL_CALC,
              _cell_time(False, False), _cell_time(False, True),
              _cell_time(True, False), _cell_time(True, True),
              _cell_time(True, True),
+             _N_MEASURED - 1,
              _DEST_LO[0], _DEST_HI[0], _DEST_LO[1], _DEST_HI[1],
              master.MEASURED_CELL_SECONDS[(True, True)] * _DEST_LO[0] / 3600.0,
-             master.MEASURED_CELL_SECONDS[(True, True)] * _DEST_HI[0] / 3600.0)),
+             master.MEASURED_CELL_SECONDS[(True, True)] * _DEST_HI[0] / 3600.0,
+             (" (%s: never run on the full catalog, so no figure)"
+              % ", ".join(_UNMEASURED)) if _UNMEASURED else "",
+             _N_MEASURED)),
 ]
 
 

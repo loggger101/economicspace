@@ -160,8 +160,9 @@ def derive(path):
         # round_trip is mandatory in anything that compares or reproduces a
         # committed figure: the default float parser is fast rather than
         # correctly rounded and returns a float64 one ULP from the one written.
+        # `designation` as text, so `str()` below never writes "69260.0".
         d = pd.read_csv(fh, low_memory=False, float_precision="round_trip",
-                        usecols=COLS)
+                        usecols=COLS, dtype={"designation": str})
 
     obj = d["total_cost_usd"] / d["gross_value_usd"]
     evaluable = int((obj.notna() & (obj > 0)).sum())
