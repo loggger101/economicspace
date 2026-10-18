@@ -68,7 +68,7 @@ PORT_FIRST = 8501
 PORT_TRIES = 12
 
 # Cold start imports master.py, which is ~1 MB and pulls pandas, numpy and
-# yfinance behind it. On a Drive File Stream working copy that read is slow and
+# yfinance behind it. On a synced-folder working copy that read is slow and
 # serialises, so this is minutes rather than seconds the first time.
 BOOT_TIMEOUT_S = 300.0
 

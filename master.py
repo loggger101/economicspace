@@ -3343,7 +3343,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Dict
 
-import numpy as np
 import pandas as pd
 
 import spacecost
@@ -3482,7 +3481,7 @@ os.makedirs(os.path.join(TRANSPORT_CONFIG.output_dir, TRANSPORT_CONFIG.subdir), 
 #
 # So it is asserted rather than trusted, and THAT is what makes this split safe
 # where the project's own parallel-repo divergence was not.  The DATA is
-# single-sourced and cannot drift; the ten-field dial surface is mirrored under
+# single-sourced and cannot drift; the dial surface is mirrored under
 # a check that fails the import rather than the run.
 def _check_config_surface() -> None:
     """Fail loudly if this module's dials and spacecost's have diverged."""

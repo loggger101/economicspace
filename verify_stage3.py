@@ -16,7 +16,7 @@ rather than merely unlikely:
 
     the DATA           single-sourced.  There is one copy of every reference
                        row, in spacecost, and this repo holds none
-    the DIALS          mirrored, ten fields, and asserted at import time by
+    the DIALS          mirrored field for field, and asserted at import time by
                        `_check_config_surface()` in the adapter, which raises
                        rather than warns
     the OUTPUT         checked here, byte for byte
@@ -170,7 +170,7 @@ def _load_adapter():
 
 
 def check_config_surface(t) -> bool:
-    """The ten dials this repo owns still match the ones the package accepts."""
+    """The dials this repo owns still match the ones the package accepts."""
     import spacecost
     mine = {f.name for f in dataclasses.fields(t.TransportConfig)}
     theirs = {f.name for f in dataclasses.fields(spacecost.SpacecostConfig)}

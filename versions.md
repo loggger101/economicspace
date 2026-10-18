@@ -497,6 +497,55 @@ release against the install path, and the calc 1.26.0 archive against the
 ledger. `verify_docs.py`, `verify_stage1.py` and `verify_stage3.py` pass; the
 dashboard renders headless with no exception.
 
+### A third pass: the build header, the run banner, checks that cover their copies (2026-10-18, no stamp)
+
+- **`master.py`'s header named the module versions it was built from, typed
+  into `build_master.py`**, and they were seven to thirteen releases stale
+  (calc 1.19.2 against 1.32.0, Stage 1's contract 1.3.0 against 1.8.1). The
+  build reads each module's `pipeline_version` now and fails if a module
+  declares none or the header loses a slot.
+- **CLAUDE.md's rename table listed `merge_sources -> merge_mineral_sources`**,
+  a rename `build_master.py` dropped at master v1.36.0. `verify_docs.py`
+  check 7 now holds the table to the build's `word_replace` calls in both
+  directions.
+- **`run_pipeline.py`'s banner left out the four calc 1.22.0 flags**, so a
+  run with `--reliability`, `--learning-curve`, `--cost-of-capital` or a
+  surplus override could print "Every setting above is the pipeline default"
+  (Stage 4's own banner names them, but prints at import, before a flag is
+  set). Each is a banner row now, marked against its dataclass default.
+- **The launchers' destination menus were checked by nothing**; check 17 now
+  holds `run.bat`'s and `run.sh`'s lists to `DELIVERY_DESTINATIONS`.
+- **`tree_check.py` run standalone printed `OK  TREE VERIFIED` and exited 0
+  on a skip**, so CI's step, whose stated job is to show the skip path is not
+  the one running, could not have told. A skip now prints NOT VERIFIED and
+  exits 2; harness callers still pass through it. `verify_stage1.py`'s count
+  stops counting the tree check as a numbered one.
+- **`launch_ui.py` without tkinter opened the browser and reported the
+  dashboard up** whether the server had answered, died at import or timed
+  out. It reports which, with the log tail, and exits 1.
+- **`campaign/memwatch.py` died on another account's python process**:
+  `psutil.process_iter` fills a denied attribute with None rather than
+  raising, and `None.rss` is not one of the exceptions it caught.
+- Typed sizes went with the catalog that had them: the pinned release unpacks
+  to 2.2 GB, and code, CI and docs still said 862 MB, 868 MB, 0.9 GB or
+  1.2 GB in the present tense. Each now says what it means without a figure,
+  except SPARK_SETUP.md's budget table, which names the release; the
+  historical accounts keep theirs. `run.bat` said the first run downloads
+  ~500 MB (the asset is 325 MB). Unchecked counts in prose (the CSV writers,
+  Stage 3's dials) became the lists they count, and stale reasons in
+  `run.sh`, `master.py`'s console note and `ui_meta.py`'s `PATH_FIELDS` went.
+
+**Verified.** `verify.py check --skip prune parallel` against the same clean
+baseline: 151 of 151 columns identical and MATCH on all four cells (the
+v1.55.0 hashes), checks 4 to 7 pass, checks 2 and 3 named as skipped. Each fix
+was shown failing first: the build against a malformed `pipeline_version` and
+a missing header slot; check 7 against the real stale row and a planted rename;
+check 17 against menus missing `gto` and `leo`; the old and new banners under
+`--surplus-fraction 0.25`; the old and new `tree_check.py` outside a repo; the
+old and new `launch_ui.py` with tkinter blocked and a server that dies or
+hangs; the old and new `memwatch.py` against a denied process.
+`verify_docs.py`, `verify_stage1.py` and `verify_stage3.py` pass.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer
