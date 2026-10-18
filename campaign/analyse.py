@@ -24,13 +24,10 @@ import pandas as pd
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CELLS = os.path.join(ROOT, "campaign", "cells")
 RIG_KG = 2000.0
-# All seven the model has.  `mars_orbit` and `geo` were added to the model after
-# the 2026-08 campaign and had no cells to analyse until the 2026-09 one
-# measured them; the comment that used to stand here said so, and went stale the
-# moment those cells landed.  Order is cheapest-destination-first, matching
-# run_queue.py.
-DESTS = ["cislunar", "lunar_surface", "geo", "mars_orbit",
-         "leo", "mars_surface", "earth_surface"]
+# The campaign's destinations, in its order, from the one list the queue
+# runs: a copy here once said "all seven" while the model had eight.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from run_queue import DESTS  # noqa: E402
 
 
 def load(dest, ore, search, tag=None):
@@ -208,6 +205,12 @@ def main():
     tags = [a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--tag=")]
     tag = tags[0] if tags else None
     targets = DESTS if (not args or args[0] == "--all") else args
+    # A misspelt destination reads as "no cells archived yet", which is also
+    # the true answer for a destination never run; only one of them is.
+    unknown = [d for d in targets if d not in DESTS]
+    if unknown:
+        print(f"unknown destination {' '.join(unknown)}; one of: {' '.join(DESTS)}")
+        return 2
     for d in targets:
         report(d, tag)
     return 0

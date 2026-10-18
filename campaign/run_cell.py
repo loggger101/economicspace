@@ -6,8 +6,9 @@ only, times it, extracts the headline + population statistics, archives the
 output CSV gzipped, and appends one row to campaign/results.csv.
 
 Stages 1 and 3 are NEVER run here.  Stage 2 is never re-fetched -- it is copied
-from campaign/stage2/, which was priced once on 2026-08-23 for all five
-destinations with verified-identical live prices.
+from campaign/stage2/, which was priced once for every destination the
+campaign flies, from one set of live prices (each file's `catalog_date` says
+when).
 
     python campaign/run_cell.py <destination> <raw|benef> <off|on>
 """
@@ -25,7 +26,7 @@ OUT = os.path.join(ROOT, "asteroid_pipeline", "profitability_catalog.csv")
 STAGE2_LIVE = os.path.join(ROOT, "asteroid_pipeline", "mineral_value_catalog.csv")
 LEDGER = os.path.join(CAMP, "results.csv")
 
-# The 20-cell campaign was measured at 12 workers, so 12 is what the wall
+# Both campaigns were measured at 12 workers, so 12 is what the wall
 # clocks in the ledger mean and it stays the default.  CAMPAIGN_WORKERS
 # overrides it for a host with a different core count -- the DGX Spark has 20.
 # Worker count cannot move a RESULT (verify.py check 3 holds serial and
@@ -212,6 +213,39 @@ def stage2_code_stamp():
     sys.exit(f"no pipeline_version field in {src}")
 
 
+def ledger_header_problem(path=None):
+    """Why a row in today's FIELDS cannot be appended to `path`, or None.
+
+    `DictWriter` writes by position under whatever header the file already
+    has, so a ledger started under an older FIELDS takes a newer row shifted
+    one column per added field: every value past the first new column lands
+    under its neighbour's name, and every reader (`run_queue.py` and
+    `worked_calculation.py` read by name) takes them as given. `surplus_kg`
+    joined FIELDS the day after the 2026-09 campaign finished, so its ledger
+    is one such file. A ledger is a single-release record, so the answer is
+    a new one, never a widened one; checked before the run, not after it.
+    """
+    path = path or LEDGER
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return None
+    with open(path, newline="", encoding="utf-8") as fh:
+        header = next(csv.reader(fh), [])
+    if header == FIELDS:
+        return None
+    missing = [f for f in FIELDS if f not in header]
+    extra = [f for f in header if f not in FIELDS]
+    detail = "; ".join(part for part in (
+        "lacks " + ", ".join(missing) if missing else "",
+        "has " + ", ".join(extra) + " that FIELDS does not" if extra else "",
+        "orders its columns differently" if not (missing or extra) else "",
+    ) if part)
+    return (f"{os.path.relpath(path, ROOT)} was started under a different"
+            f" FIELDS: it {detail}.\n  A row appended now would land under the"
+            f" wrong column names. Move the ledger beside its campaign's"
+            f" archive (as campaign/archive-2026-08_calc-1.17.7/ holds its"
+            f" own) and start a new one.")
+
+
 def main():
     """Copy the frozen Stage 2 catalog into place, run Stage 4, archive, record.
 
@@ -226,6 +260,10 @@ def main():
     dest, ore, search = sys.argv[1], sys.argv[2], sys.argv[3]
     assert ore in ("raw", "benef") and search in ("off", "on")
     cell = f"{dest}__{ore}__search-{search}"
+
+    problem = ledger_header_problem()
+    if problem:
+        sys.exit(problem)
 
     src2 = os.path.join(CAMP, "stage2", f"mineral_value_catalog.{dest}.csv")
     if not os.path.exists(src2):
@@ -276,8 +314,13 @@ def main():
             row.update(extract(OUT, dest, ore, search))
         except Exception as exc:                      # noqa: BLE001
             print(f"  !! extraction failed: {exc}", flush=True)
-        print(f"  best {row['best_obj']}x | evaluable {row['evaluable']:,} | "
-              f"winner {row['winner']} ({row['spectral']}) | archive {row['archive']}", flush=True)
+        else:
+            # Formatted only after extract() succeeded: a failed extraction
+            # leaves "" here, `:,` on "" raises, and the ledger row below
+            # would never be written for a cell that ran and was archived.
+            print(f"  best {row['best_obj']}x | evaluable {row['evaluable']:,} | "
+                  f"winner {row['winner']} ({row['spectral']}) | archive {row['archive']}",
+                  flush=True)
     else:
         print(f"  !! cell FAILED (rc={rc}); see {log}", flush=True)
 

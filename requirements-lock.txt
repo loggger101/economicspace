@@ -70,10 +70,13 @@ tzdata==2026.4
 streamlit==1.61.1
 
 # --- campaign tooling, which the pipeline itself never imports ---------------
-# campaign/memwatch.py only.  Deliberately NOT in requirements.txt: that file
+# campaign/memwatch.py, and campaign/_supervisor.py's guard against starting a
+# second queue (it imports psutil at the top, so without it the supervisor
+# starts nothing).  Deliberately NOT in requirements.txt: that file
 # asserts in its own first line that it mirrors _MASTER_REQUIRED, and
 # verify_docs.py check 7 holds it to that, so adding psutil there would make
 # every Colab paste pip-install a process inspector it never calls.  It is here
-# because a second host standing the campaign up wants the memory curve, and
-# discovering the import error after the first cell is the wrong time.
+# because a second host standing the campaign up needs the supervisor and wants
+# the memory curve, and discovering the import error after the first cell is the
+# wrong time.
 psutil==7.1.0

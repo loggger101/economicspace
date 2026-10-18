@@ -546,6 +546,55 @@ old and new `launch_ui.py` with tkinter blocked and a server that dies or
 hangs; the old and new `memwatch.py` against a denied process.
 `verify_docs.py`, `verify_stage1.py` and `verify_stage3.py` pass.
 
+### A fourth pass: the campaign harness, and checks shown to fail (2026-10-18, no stamp)
+
+- **`campaign/results.csv` was started under an older `run_cell.py` FIELDS**:
+  `surplus_kg` joined the list the day after the 2026-09 campaign finished,
+  and `DictWriter` writes by position under whatever header the file has, so
+  the next row appended would have put every value from `surplus_kg` on one
+  column to the right of its name. `run_cell.py` now refuses, before the
+  run, to append to a ledger whose header is not its FIELDS, and says to
+  start a new one.
+- **A cell whose extraction failed died in its own summary line** (`:,` on
+  the blank it left), after the run and the archive and before the ledger
+  row, so `run_queue.py` would have re-run it forever. The summary prints
+  only after a successful extraction.
+- **`run_queue.py --only` with a misspelt destination ran nothing and printed
+  "nothing outstanding"**, exit 0; `analyse.py` read a misspelt name as "no
+  cells archived yet". Both refuse an unknown name. `analyse.py` and
+  `population.py` import the queue's `DESTS` instead of typing a third and
+  second copy, one of which said "all seven" while the model had eight.
+- **README's `delivery_destination` row listed seven destinations, without
+  `gto`.** Check 17 now reads that row too.
+- **Check 3's two prose patterns matched nothing**: README's wording had
+  moved, so its surviving table-size claim was unread while the check
+  reported "0 wrong". The patterns follow the current sentence, and a
+  pattern with no match is now a failure.
+- **CLAUDE.md said check 12 fails on one shared measurement**; it needs a line
+  sharing three distinctive figures, by design. The sentence says so.
+- Smaller: `SPARK_SETUP.md` described running a campaign the guards now
+  refuse (it says why, and what a new campaign needs), "the four writers"
+  and "a twenty-cell campaign"; `CITATIONS.md` put psutil in
+  `requirements-ui.txt`, which carries only streamlit; the lock file's psutil
+  note missed `_supervisor.py`; README counted Stage 3's CSVs as six (check 3
+  of `verify_stage3.py` compares seven) and its dials as ten, unchecked;
+  `verify_docs.py`'s docstring had check 4 on "all three files" and check 17
+  on "seven rows"; `run_cell.py`'s docstring named the 2026-08 epoch.
+
+**Verified.** `verify.py check --skip prune parallel` against the same clean
+baseline: 151 of 151 columns identical and MATCH on all four cells (the v1.55.0 hashes), checks 4 to 7 pass, checks 2 and 3 named as skipped. No module changed, and `build_master.py` leaves
+`master.py` as committed. Each fix was shown failing first: the old and new
+`run_cell.py` driven in a sandbox with a cell that has no evaluable row and
+with the committed ledger's header; the old and new `run_queue.py --only
+cislunr` and `analyse.py cislunr`; check 17 against the real README row and
+one missing `leo`; check 3 against a wrong count and a reworded sentence.
+Every `verify_docs.py` check except 10, 14 and 16 was then fed one planted
+defect in a scratch copy of the tree, and each failed except check 12 on a
+single shared figure, which is the case it is built to let through.
+`campaign/worked_calculation.py --verify` (90 quantities bit-exact) and
+`campaign/verification_sheet.py --check --self-test` pass, as do
+`verify_docs.py`, `verify_stage1.py`, `verify_stage3.py` and `tree_check.py`.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer
