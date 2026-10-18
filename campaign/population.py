@@ -52,6 +52,7 @@ import glob
 import gzip
 import json
 import os
+import sys
 
 import pandas as pd
 
@@ -59,11 +60,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CELLS = os.path.join(ROOT, "campaign", "cells")
 OUT = os.path.join(ROOT, "campaign", "population")
 
-# Cheapest destination first, matching run_queue.py and analyse.py.  Reading the
-# order off a list rather than sorting keeps the rendered tables in the order the
-# docs already present them in.
-DESTS = ["cislunar", "lunar_surface", "geo", "mars_orbit",
-         "leo", "mars_surface", "earth_surface"]
+# Reading the order off the queue's list rather than sorting keeps the rendered
+# tables in the order the docs already present them in.
+# The campaign's destinations, in its order, from the one list the queue
+# runs: a copy here once said "all seven" while the model had eight.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from run_queue import DESTS  # noqa: E402
 
 # Only what a table below actually reads.  `usecols` is what keeps a cell at
 # ~17 s rather than minutes, and it RAISES on a column the file does not have,

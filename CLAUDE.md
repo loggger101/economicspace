@@ -17,7 +17,8 @@ is in [LESSONS.md](LESSONS.md) under a heading of the same name (frozen
 | [`AsteroidCatalog`](https://github.com/loggger101/AsteroidCatalog) | builds and publishes the Stage 1 catalog |
 
 **Keeping this file small is a rule, not a preference.** It quotes no
-measurement README or MODEL.md carries (`verify_docs.py` check 12 fails on a shared one),
+measurement README or MODEL.md carries (`verify_docs.py` check 12 fails on a
+line sharing three distinctive figures with one of them; a lone number gets past it),
 types no count it cannot check, and carries no release history. A release
 adds its notes to `versions.md` and, if it teaches something, one line here.
 

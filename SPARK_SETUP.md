@@ -44,7 +44,7 @@ touching:
 |---|---|---|
 | the interpreter was hardcoded as `py` | `campaign/run_cell.py`, `campaign/run_queue.py` | the campaign runner would not start at all; `py` is the Windows launcher |
 | output directories assumed to exist | `campaign/run_cell.py` | `campaign/cells/` is gitignored, so a fresh clone dies on the archive step AFTER paying for the whole cell |
-| the CSV line terminator followed the platform | the four writers, and `verify.py` | see below; the dangerous one |
+| the CSV line terminator followed the platform | every CSV writer, and `verify.py` | see below; the dangerous one |
 | no POSIX entry point | repo root | `run.bat` and `_START HERE.vbs` are the only launchers |
 | printed instructions said `py` | `run_pipeline.py`, `verify.py`, `modules/catalog.py` | the message telling you which stage to run next named the Windows launcher, on the host that most needs the advice |
 
@@ -270,6 +270,15 @@ times raw/beneficiated times search off/on (`DESTS` in `campaign/run_queue.py`).
 under `campaign/stage2/`, and making one means a live Stage 2 run at today's
 prices, which is a decision about methodology rather than a portability gap.
 
+⚠️ **That campaign is finished, so the queue has nothing to run today.**
+`campaign/results.csv` records every cell at `rc == 0`, and `run_cell.py`
+refuses a cell whose frozen Stage 2 catalog was priced by a different
+mineral_value than the code it would run under (each catalog's
+`pipeline_version` column says which), and refuses to append to a ledger
+started under different columns. A cell on this host is therefore a new
+campaign: re-freeze `campaign/stage2/` at the current code, start a new
+ledger, and expect numbers comparable with nothing committed.
+
 The Stage 2 catalogs the queue does use travel with the repo: they are
 committed under `campaign/stage2/`, are **never re-fetched**, and `run_cell.py`
 copies the right one into place per cell. The rest of what a cell reads does
@@ -384,8 +393,8 @@ tmux new -s spark          # start, or: tmux attach -t spark
 ```
 
 Ctrl-B then D detaches and leaves it running; `tmux attach -t spark` picks it
-back up from anywhere, including after a reboot of the laptop. A twenty-cell
-campaign is a day of work and the queue is resumable, so a dropped connection
+back up from anywhere, including after a reboot of the laptop. A full campaign
+runs for days and the queue is resumable, so a dropped connection
 costs at most the in-flight cell either way, but watching it is easier than
 re-reading a log.
 

@@ -141,7 +141,7 @@ py verify_stage3.py
 ⚠️  **The seam is arranged so drift cannot be committed**, because a split is
 what caused this project's worst recorded incident
 ([the parallel-repo divergence](versions.md#the-parallel-repo-divergence)):
-the data is single-sourced, the ten config dials are compared at import, and
+the data is single-sourced, the config dials are compared at import, and
 the output is compared byte for byte. The invariants are in
 [CLAUDE.md](CLAUDE.md#stage-1-and-stage-3-live-in-other-repositories).
 
@@ -580,7 +580,7 @@ that actually move the answer:
 | Knob | Default | Effect |
 |------|---------|--------|
 | `MASTER_CONFIG.output_dir` | platform-dependent | Where everything lands |
-| `MASTER_CONFIG.delivery_destination` | `"earth_surface"` | **Read [Where the material is sold](MODEL.md#where-the-material-is-sold) before changing.** Sets every price *and* the mission architecture. One of `earth_surface`, `leo`, `geo`, `cislunar`, `lunar_surface`, `mars_orbit`, `mars_surface`. Writes Stage 2 and Stage 4 together, never set the two sub-configs separately |
+| `MASTER_CONFIG.delivery_destination` | `"earth_surface"` | **Read [Where the material is sold](MODEL.md#where-the-material-is-sold) before changing.** Sets every price *and* the mission architecture. One of `earth_surface`, `leo`, `gto`, `geo`, `cislunar`, `lunar_surface`, `mars_orbit`, `mars_surface`. Writes Stage 2 and Stage 4 together, never set the two sub-configs separately |
 | `.calc.use_beneficiation` | `True` | Return concentrate instead of run-of-mine ore. Charges the extra dig time, processing energy and solar-array mass. **Default since calc v1.17.0**; almost every historical table is `False`. See [Beneficiation](MODEL.md#beneficiation) |
 | `.calc.beneficiation_recovery` | `0.90` | Fraction of the valuable phase reporting to concentrate |
 | `.calc.max_concentration_ratio` | `50.0` | Safety cap on feed:concentrate. The purity bound normally binds first |
@@ -824,9 +824,9 @@ it needs no baseline and no network, and it takes a few seconds:
 py verify_stage3.py
 ```
 
-It asserts six things: the ten config dials match the package's field for
+It asserts six things: `TransportConfig`'s dials match the package's field for
 field, the `pipeline_version` this repo stamps is the package's data-contract
-version, the six CSVs are byte identical whether built through the adapter or
+version, every CSV Stage 3 writes is byte identical whether built through the adapter or
 through the package directly, the reference tables match the CSVs spacecost commits
 under `reference/`, Stage 3's `validate()` still covers a propellant row that
 omits its `propellantless` flag, and the spacecost that is actually INSTALLED

@@ -14,7 +14,8 @@ counts-in-prose failure this file was written to catch:
                      spelled out in prose about versions.md's "moved without
                      moving a number" table, against the rows of the table
     3. row counts    documented reference-table sizes, against the tables
-    4. links         every markdown anchor resolves, in all three files
+    4. links         every markdown link and anchor resolves, in DOCS and
+                     CAMPAIGN_DOCS
     5. structure     balanced fences, no ragged tables, no heading-level jumps,
                      no duplicate h1/h2, in every markdown file in the repo
     6. dashes        no em- or en-dash in prose a reader sees, and no line left
@@ -52,7 +53,7 @@ counts-in-prose failure this file was written to catch:
                      hardware share, the kg-in-LEO ratio and every delta-v its
                      chain column quotes -- against
                      `master.DELIVERY_DESTINATIONS`.  Check 9 on a different
-                     table: seven rows of typed markdown restating a
+                     table: a row of typed markdown per destination restating a
                      derivation, which is the third copy of the in-space
                      prices and the one nothing read; and the destination
                      menus in run.bat and run.sh, against the same keys
@@ -565,16 +566,24 @@ def check_row_counts(mods) -> bool:
         (r"###\s*Propellants\s*[-:—–]\s*(\d+)\s*rows", "propellants"),
         (r"###\s*Launch vehicles\s*[-:—–]\s*(\d+)\s*rows", "vehicles"),
         (r"###\s*Storage systems\s*[-:—–]\s*(\d+)\s*rows", "storage"),
-        (r"(\d+)\s*launch vehicles \(incl\. non-rocket concepts\)", "vehicles"),
-        (r"(\d+)\s*propellants with storage class", "propellants"),
+        (r"(\d+)\s+launch vehicles\b", "vehicles"),
+        (r"(\d+)\s+propellants with (?:their\s+)?storage", "propellants"),
     ]
-    # README carries the Stage table's two claims, MODEL.md the section ones.
+    # README carries the two prose claims, MODEL.md the section headings.
     readme = "\n".join(read(os.path.join(REPO, d))
                        for d in ("README.md", "MODEL.md")
                        if os.path.exists(os.path.join(REPO, d)))
     bad, n = [], 0
     for pat, key in CLAIMS:
-        for m in re.finditer(pat, readme):
+        hits = list(re.finditer(pat, readme))
+        # A pattern nothing matches is a check on nothing.  The two prose
+        # patterns here matched README's Stage table until its wording moved,
+        # and then went on reporting "0 wrong" while README's one surviving
+        # count (in "Stage 3's tables live in another repository") went
+        # unread.  Reword a claim, reword its pattern.
+        if not hits:
+            bad.append("no README/MODEL sentence matches %r any more" % pat)
+        for m in hits:
             n += 1
             if int(m.group(1)) != sizes[key]:
                 bad.append("README/MODEL claims %s %s, module has %d"
@@ -2255,6 +2264,14 @@ def check_destination_table() -> bool:
     if os.path.exists(bat_p):
         menus["run.bat's menu"] = set(re.findall(r'set "DEST=([a-z_]+)"',
                                                  read(bat_p)))
+    # README's Tuning row for the dial itself spells out what it accepts, and
+    # left `gto` off for as long as `gto` existed.
+    rd_p = os.path.join(REPO, "README.md")
+    if os.path.exists(rd_p):
+        m_rd = re.search(r"^\|\s*`MASTER_CONFIG\.delivery_destination`.*?"
+                         r"One of ([^.]*)\.", read(rd_p), re.M)
+        menus["README's delivery_destination row"] = (
+            set(re.findall(r"`([a-z_]+)`", m_rd.group(1))) if m_rd else set())
     for where, offered in sorted(menus.items()):
         n += 1
         if not offered:
