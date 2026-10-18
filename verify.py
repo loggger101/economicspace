@@ -732,8 +732,11 @@ def check_stage2(m) -> bool:
     path = os.path.join(m.MINERAL_CONFIG.output_dir,
                         m.MINERAL_CONFIG.catalog_filename)
     if not os.path.exists(path):
-        print(f"  (no Stage 2 catalog at {path} -- skipped)")
-        return True
+        # A check that cannot run never says it passed: this returned True,
+        # and the verdict read ALL CHECKS PASSED over a check 6 that read
+        # nothing.
+        print(f"  no Stage 2 catalog at {path} -- NOT CHECKED  FAIL")
+        return False
 
     d = pd.read_csv(path, float_precision="round_trip")
     dest = str(d["delivery_destination"].iloc[0])
@@ -1140,8 +1143,23 @@ def cmd_check(args) -> int:
         print("\n*** NOT VERIFIED: the baseline was taken over a modified "
               "model path, so check 1 cannot mean what it says. See above.")
         return 1
-    print("\n" + ("ALL CHECKS PASSED" if ok else "*** FAILURES ABOVE ***"))
-    return 0 if ok else 1
+    if not ok:
+        print("\n*** FAILURES ABOVE ***")
+        return 1
+    # A skipped check is not a passed one, and this line is the one people
+    # quote.  It printed ALL CHECKS PASSED under `--skip prune parallel` too,
+    # beside two checks that never ran; the exit code stays 0 so the fast loop
+    # is still usable, and the verdict says what it did not cover.
+    skipped = {"prune": "2", "parallel": "3"}
+    missed = [skipped[s] for s in ("prune", "parallel") if s in args.skip]
+    if missed:
+        print("\nALL CHECKS RUN PASSED -- check%s %s SKIPPED (--skip %s); "
+              "drop --skip before a release"
+              % ("s" if len(missed) > 1 else "", " and ".join(missed),
+                 " ".join(s for s in ("prune", "parallel") if s in args.skip)))
+    else:
+        print("\nALL CHECKS PASSED")
+    return 0
 
 
 def cmd_invariants(args) -> int:

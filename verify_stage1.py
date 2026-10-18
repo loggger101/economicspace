@@ -591,7 +591,11 @@ def main() -> int:
 
     print("-" * 70)
     if all(results):
-        print("  OK  STAGE 1 VERIFIED - %d checks" % len(results))
+        # The skip used to show only as a smaller count, and the verdict is
+        # the line people quote; a skipped check is not a passed one.
+        print("  OK  STAGE 1 VERIFIED - %d checks%s"
+              % (len(results), "" if os.path.isfile(CATALOG) else
+                 "; 3, 4 and 8 SKIPPED (no installed catalog)"))
         return 0
     print("  *** NOT VERIFIED *** - see the failing check above")
     return 1
