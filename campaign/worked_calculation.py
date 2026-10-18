@@ -2025,7 +2025,7 @@ def run_propellant_price(pro, archived):
     output carries the cost and the mass, so their ratio IS the input:
     measured constant per propellant across a cell, and the round trip is
     bit-exact on 3,916 of 4,000 rows and inside 1e-12 on the other 84.  This
-    is CLAUDE.md's "an input you cannot recover from a backup may still be
+    is LESSONS.md's "an input you cannot recover from a backup may still be
     recoverable from an output that was priced with it", taken from a one-off
     rescue to the normal path.
 

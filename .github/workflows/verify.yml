@@ -7,13 +7,15 @@
 # everything that needs no catalog: that `master.py` still matches the modules
 # it is generated from, that the docs still describe the code, that the
 # pinned catalog release exists at our data contract, and that the Stage 3
-# split has not drifted.  Those are exactly the three that were
-# hand-run until 2026-09-15 and therefore run only when somebody remembered.
+# split has not drifted.  All but the Stage 1 check (added with the pinned
+# release, 2026-09-23) were hand-run until 2026-09-15, and therefore ran only
+# when somebody remembered.
 #
 # platform_check.py is deliberately NOT a gate.  A GitHub runner is glibc on
 # x86-64 and the reference host is the Windows UCRT, so a libm probe DIFFERING
-# here is the expected answer rather than a finding -- CLAUDE.md's rule is "do
-# not file the deltas as regressions".  A gate that is red by construction is
+# here is the expected answer rather than a finding -- CLAUDE.md's rule is
+# "bit-identity across hosts is not promised; platform_check.py says whether
+# hashes are comparable".  A gate that is red by construction is
 # the cry-wolf failure this repo already records twice, so it runs for the
 # report and cannot fail the job.
 name: verify
@@ -84,8 +86,8 @@ jobs:
         run: python tree_check.py
 
       # CLAUDE.md names this as the sync check and nothing automated it:
-      # "git status immediately after a build is the sync check: clean means
-      # master.py matches the modules".  An edit made in master.py directly, or
+      # "`git status` clean after a build is the sync check".  An edit made in
+      # master.py directly, or
       # a module edit committed without a rebuild, is invisible until a run
       # behaves differently.
       - name: master.py is in sync with modules/

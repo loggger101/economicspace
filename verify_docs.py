@@ -61,7 +61,7 @@ counts-in-prose failure this file was written to catch:
 WHY THIS FILE EXISTS
 --------------------
 The recurring failure in this repo is not a missing table, it is a stale
-sentence -- CLAUDE.md's "When a number changes, grep the prose too" records an
+sentence -- LESSONS.md's "When a number changes, grep the prose too" records an
 audit that found four releases' worth of rot in committed-clean files.  Every
 one of the checks below was written by hand during one such audit and would
 otherwise have been thrown away, which is the same mistake `verify.py` exists
@@ -1578,7 +1578,7 @@ def _figures(line: str) -> set:
 def check_pairs() -> bool:
     """No measurement is quoted in BOTH current-claiming docs off the register.
 
-    CLAUDE.md prescribes this hunt in prose ("hunting sentences that share
+    LESSONS.md prescribes this hunt in prose ("hunting sentences that share
     three or more distinctive numbers across two files") and carries a table of
     the pairs it found.  Until 2026-09-08 the hunt itself was rebuilt from that
     description each time somebody ran it, which is the same "written from
@@ -1961,7 +1961,7 @@ def check_overwrite_guards() -> bool:
     """A stage module run DIRECTLY still refuses to overwrite its own inputs.
 
     WHY THIS EXISTS.  `run_pipeline.py` has asked before Stages 1-3 overwrite a
-    CSV since 2026-08-23, and CLAUDE.md's "RUNNING STAGE 2 OR STAGE 3 DESTROYS
+    CSV since 2026-08-23, and LESSONS.md's "RUNNING STAGE 2 OR STAGE 3 DESTROYS
     EVERY BASELINE YOU HOLD" is written as though that guard were the only door.
     It is not: `py modules/transportation.py` runs the stage with no guard
     anywhere in the path, and on 2026-09-17 that re-fetched three live
