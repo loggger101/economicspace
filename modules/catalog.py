@@ -303,12 +303,23 @@ def _fetch_manifest(config: "CatalogConfig") -> dict:
 
 
 def installed_manifest(config: "CatalogConfig" = CONFIG) -> Optional[dict]:
-    """The manifest of the release on disk, or None when there is none."""
+    """The manifest of the release on disk, or None when there is none.
+
+    An UNREADABLE manifest is None too: it vouches for nothing, so Stage 1
+    reinstalls, which is safe because a pinned release is the same bytes on
+    every host.  It used to raise, and this runs at import, so one truncated
+    manifest made `import master` fail -- including the run that would have
+    repaired it.
+    """
     path = os.path.join(config.output_dir, config.manifest_filename)
     if not os.path.isfile(path):
         return None
-    with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            manifest = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return manifest if isinstance(manifest, dict) else None
 
 
 def release_on_disk(config: "CatalogConfig" = CONFIG) -> bool:
@@ -425,11 +436,21 @@ def build_catalog(config: CatalogConfig = CONFIG) -> pd.DataFrame:
                                          config.manifest_filename)
             if os.path.exists(manifest_path):
                 os.remove(manifest_path)
+            # A release that ships no rejects file must not leave the previous
+            # release's beside it, looking like this one's.
+            rejected_path = os.path.join(config.output_dir,
+                                         config.rejected_filename)
+            if _ASSET_REJECTED not in files and os.path.exists(rejected_path):
+                os.remove(rejected_path)
             for src, dst in moves:
                 os.replace(src, dst)
-            with open(manifest_path, "w", encoding="utf-8", newline="\n") as fh:
+            # Written in the staging directory and MOVED into place, so an
+            # interrupted write can never leave a half-written manifest.
+            manifest_stage = os.path.join(stage, config.manifest_filename)
+            with open(manifest_stage, "w", encoding="utf-8", newline="\n") as fh:
                 json.dump(manifest, fh, indent=2)
                 fh.write("\n")
+            os.replace(manifest_stage, manifest_path)
         finally:
             shutil.rmtree(stage, ignore_errors=True)
         print("  OK  installed %s -> %s" % (config.catalog_release, catalog_path))
