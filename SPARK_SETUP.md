@@ -20,7 +20,7 @@ Three commands, in this order, and none of them takes longer than a minute:
 The second is the thing that cannot be guaranteed, and it answers in about ten
 seconds instead of twenty-six hours. The third is the thing that is not broken:
 `asteroid_pipeline/` is gitignored, so a fresh clone has the code and none of
-the ~868 MB the model reads. See
+the gigabytes the model reads. See
 [the inputs git does not carry](#the-inputs-git-does-not-carry).
 
 ## What was already portable
@@ -215,7 +215,7 @@ knapsack with a `sorted()` in it.
 **This is the one that will stop you, and it stops you before anything else
 does.** The whole of `asteroid_pipeline/` is gitignored, because everything in
 it is regenerated per run, so a fresh clone has the code, the frozen Stage 2
-prices under `campaign/stage2/`, and **none of the roughly 868 MB that Stage 4
+prices under `campaign/stage2/`, and **none of the gigabytes that Stage 4
 actually reads**:
 
 | file | stage that writes it | size |
@@ -307,7 +307,7 @@ and is the part that is easy to miss:
 
 | | size |
 |---|---|
-| the inputs Stage 4 reads | 868 MB |
+| the inputs Stage 4 reads | 2.2 GB on `data-2026-09-29c`, nearly all of it the catalog; `run_pipeline.py --check-inputs` prints each file |
 | `profitability_catalog.csv`, rewritten per cell | 350-500 MB |
 | `campaign/cells/`, one gzipped archive per cell | 20 GB for the 28 cells of 2026-09; 8.1 GB for the twenty of 2026-08 |
 

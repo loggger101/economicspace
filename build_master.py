@@ -103,6 +103,26 @@ m2 = read(M2_PATH)
 m3 = read(M3_PATH)
 m4 = read(M4_PATH)
 
+def module_version(label, content):
+    """The one `pipeline_version` default a module declares.
+
+    Read here so the header below can name it: the header typed all four until
+    2026-10-18 and had them seven to thirteen releases stale (calc 1.19.2
+    against 1.32.0), in the docstring at the top of the file people paste.
+    """
+    found = re.findall(r'^\s*pipeline_version:\s*str\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"',
+                       content, re.M)
+    check(len(found) == 1,
+          f"{label}: expected one `pipeline_version: str = \"X.Y.Z\"` default, "
+          f"found {len(found)}")
+    return found[0]
+
+
+VERSIONS = {"@CATALOG@": module_version("catalog", m1),
+            "@MINERAL@": module_version("mineral_value", m2),
+            "@TRANSPORT@": module_version("transportation", m3),
+            "@CALC@": module_version("calc", m4)}
+
 for label, before in (("catalog", m1), ("mineral_value", m2),
                       ("transportation", m3), ("calc", m4)):
     check("# INSTALLATION" in before, f"{label}: no INSTALLATION block to strip")
@@ -181,17 +201,17 @@ single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom - the orchestrator at the bottom executes everything.
 
     Stage 1  ->  Asteroid Catalog        (modules/catalog.py, data contract
-                 1.3.0) downloads a pinned, published release of the
+                 @CATALOG@) downloads a pinned, published release of the
                  AsteroidCatalog build: JPL SBDB + MP3C + SsODNet + NEOWISE,
                  cross-matched, with per-spectral-type composition
-    Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.9.0)
+    Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py @MINERAL@)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
                 + destination pricing for EVERY commodity
-    Stage 3  ->  Transportation Data     (modules/transportation.py 1.14.0)
+    Stage 3  ->  Transportation Data     (modules/transportation.py @TRANSPORT@)
                 Launch vehicles + propellants + dv segments + ops costs
                 (UNCREWED autonomous mining - no crew costs)
-    Stage 4  ->  Profitability Calc      (modules/calc.py 1.19.2)
+    Stage 4  ->  Profitability Calc      (modules/calc.py @CALC@)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2x, V-type 0.2x)
                 + delivery architecture: earth_surface / leo / gto / geo /
@@ -211,7 +231,7 @@ kilogram sells for; Stage 4 decides what it costs to put it there, and the
 answer is only meaningful when they agree.  Stage 4 checks and warns.
 
 Output tree (under MASTER_CONFIG.output_dir):
-    asteroid_catalog.csv               <- Stage 1 (~0.9 GB, the pinned release)
+    asteroid_catalog.csv               <- Stage 1 (the pinned release, unpacked)
     rejected_entries.csv               <- Stage 1 (the build's validation rejects)
     catalog_manifest.json              <- Stage 1 (which release is installed)
     catalog_taxonomy.json              <- Stage 1 (the build's composition tables)
@@ -236,7 +256,7 @@ Tuning:
         MASTER_CONFIG.calc.use_isru_return_propellant (make ISRU available)
         MASTER_CONFIG.calc.optimise_architecture_per_asteroid
                                                     (search return mode + ISRU
-                                                     per target; ~2x runtime)
+                                                     per target)
         MASTER_CONFIG.calc.eval_row_cap             (limit Stage 4 evaluations)
     Or set any sub-config field directly before run_full_pipeline() fires.
 
@@ -247,8 +267,9 @@ build_master.py; edit the modules and re-run that script.
 # -----------------------------------------------------------------------------
 # CONSOLE ENCODING
 # -----------------------------------------------------------------------------
-# Windows consoles default to cp1252, which cannot encode the emoji used in
-# this file's progress output.  Must happen before the first print().
+# Windows consoles default to cp1252.  Every print in this file is ASCII, so
+# this is for what the source does not control: tqdm's bars, a traceback
+# quoting a non-ASCII path, data reaching stdout.  Before the first print().
 
 import sys as _sys
 for _stream in (_sys.stdout, _sys.stderr):
@@ -635,6 +656,13 @@ def section_banner(name):
 # -----------------------------------------------------------------------------
 # WRITE OUTPUT
 # -----------------------------------------------------------------------------
+for _token, _version in VERSIONS.items():
+    check(MASTER_HEADER.count(_token) == 1,
+          f"MASTER_HEADER carries {_token} {MASTER_HEADER.count(_token)} times, not once")
+    MASTER_HEADER = MASTER_HEADER.replace(_token, _version)
+check(not re.search(r"@[A-Z]+@", MASTER_HEADER),
+      "MASTER_HEADER has an @TOKEN@ nothing substitutes")
+
 with open(OUT_PATH, "w", encoding="utf-8", newline="") as f:
     f.write(MASTER_HEADER)
     f.write(section_banner("MODULE 1 - ASTEROID CATALOG BUILDER"))

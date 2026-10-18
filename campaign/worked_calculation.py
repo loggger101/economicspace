@@ -1061,7 +1061,7 @@ def archived_winner(cell, designation):
 
 
 def catalog_body(designation):
-    """The Stage 1 catalog row for one body, streamed out of the 862 MB CSV.
+    """The Stage 1 catalog row for one body, streamed out of the full catalog CSV.
 
     🚨  `designation` IS READ AS A STRING, EXPLICITLY.  A numbered asteroid's
     designation looks like an integer, so when every line this streams back
@@ -1075,11 +1075,11 @@ def catalog_body(designation):
 
 
 def catalog_bodies(designations):
-    """The Stage 1 rows for SEVERAL bodies, in one pass over the 862 MB CSV.
+    """The Stage 1 rows for SEVERAL bodies, in one pass over the full catalog CSV.
 
     🚨  A PASS PER BODY IS THE COST THAT DECIDES WHETHER A SWEEP IS AFFORDABLE.
     One document reads one body and the pass is the price of admission; a
-    covering sweep reads eight, and eight passes over 862 MB is most of the
+    covering sweep reads eight, and eight passes over gigabytes is most of the
     run.  The file is streamed once and every needle is matched against the
     same line, which costs no more than the first body did.
 
@@ -4515,7 +4515,7 @@ def build(archived, label, body=None, run_beneficiated=None):
     # The rate log belongs to THIS derivation; see RATE_LOG.
     del RATE_LOG[:]
     # `body` is passed in by `--sweep`, which reads every body it needs in ONE
-    # pass over the 862 MB catalog rather than one pass each; see
+    # pass over the full catalog rather than one pass each; see
     # `catalog_bodies`.  A single document still just asks for its own.
     if body is None:
         body = catalog_body(designation)

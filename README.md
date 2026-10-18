@@ -278,7 +278,7 @@ both "no argument" and "stdin is a terminal"; the test is
 
 [`SPARK_SETUP.md`](SPARK_SETUP.md) is the long version: what was already
 portable, what was not, the one thing that cannot be guaranteed on a second
-host and has to be measured instead, and the ~868 MB of input CSVs that git
+host and has to be measured instead, and the gigabytes of input CSVs that git
 does not carry.
 
 ### On Windows, from a terminal: `run.bat`
@@ -872,8 +872,8 @@ subset that needs no catalog runs on every push and pull request, in
 | `platform_check.py` | **report only, never a gate** |
 
 🚨  **`verify.py` is NOT in CI and cannot be.** `asteroid_pipeline/` is
-gitignored in full, so a fresh clone has the code and none of the ~868 MB Stage
-4 reads, and `.verify/` is gitignored too, so there is no baseline to compare
+gitignored in full, so a fresh clone has the code and none of the gigabytes
+Stage 4 reads, and `.verify/` is gitignored too, so there is no baseline to compare
 against either. Bit-identity stays a local pre-commit discipline. **CI going
 green says the docs and the seams are intact; it says nothing whatever about a
 number.**

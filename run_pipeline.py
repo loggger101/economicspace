@@ -30,10 +30,9 @@ THREE THINGS IT HAS TO GET RIGHT, all of them traps this repo has already hit:
      decides the architecture that puts it there; setting them apart prices the
      cargo at a depot while paying to land it in Utah.
 
-ON THE PRESETS.  The pipeline's own defaults are the full 1.55 M-row catalog,
-beneficiated, with the programme search on, at earth_surface -- measured at
-21,860 s (6.1 h) in the 2026-09 28-cell campaign; see README.md's Results.
-(It read 13,581 s / 3.8 h until 2026-09-15, which was the 2026-08-24 figure.)
+ON THE PRESETS.  The pipeline's own defaults are the full catalog,
+beneficiated, with the programme search on, at earth_surface -- hours, per
+`MEASURED_DEST_SECONDS` in calc.py (`--help` prints the span, derived).
 That is the right default for the model and a hostile default for someone who
 has just double-clicked something, so `--preset` names three runs by what they
 cost, and `--preset full` is the one that reproduces the pipeline's own
@@ -89,9 +88,7 @@ def _force_utf8_stdout() -> None:
 
 _force_utf8_stdout()
 
-# Runtime notes on each preset.  The timings are order-of-magnitude, read off
-# the measured cells in README.md's Results; the row cap is what makes them
-# differ.
+
 def _market_models():
     """The legal `market_model` values, from the module that owns them.
 
@@ -117,6 +114,9 @@ def _surplus_default():
     return master.CALC_CONFIG.surplus_price_fraction
 
 
+# Runtime notes on each preset.  The timings are order-of-magnitude, read off
+# the measured cells in README.md's Results; the row cap is what makes them
+# differ.  `full`'s is derived, in `preset_blurb`.
 PRESETS = {
     "quick": dict(
         rows=400, raw=True, search=False,
@@ -558,7 +558,7 @@ def report_inputs(cfg, stages) -> int:
     `--check-inputs`.  It exists because NONE of these files is in git: the
     whole of `asteroid_pipeline/` is gitignored, being regenerable per run, so
     a fresh clone on a second host has the code and the frozen Stage 2 prices
-    and none of the ~868 MB Stage 4 actually reads.  `preflight` already
+    and none of the gigabytes Stage 4 actually reads.  `preflight` already
     refuses that run in a second rather than dying inside the loader, which is
     the important half; this is the half that answers the question BEFORE a
     campaign is queued, and prints the sizes so a copy can be checked.
@@ -618,7 +618,7 @@ def preflight(cfg, stages, destination_given: bool) -> list:
 
       1. A stage is skipped and its output is not on disk. Stage 4 otherwise
          dies inside the loader on a bare file-not-found -- and if the missing
-         file is one of Module 3's, it dies AFTER the 862 MB catalog load.
+         file is one of Module 3's, it dies AFTER the full catalog load.
 
       2. Stage 4 flies to one destination while the Stage 2 catalog on disk
          priced the cargo for another. The run completes, every profit number
@@ -704,7 +704,7 @@ def preflight(cfg, stages, destination_given: bool) -> list:
 def _stamped_destination(path):
     """The destination Module 2 priced for, read from its CSV's first row.
 
-    One column of one row, so the whole 31-row file is not worth loading, and
+    One column of one row, so the whole file is not worth loading, and
     this must not import pandas at module scope -- master.py has not been
     imported yet when the parser is built.  Returns None when the column is
     absent (a pre-v1.3.0 catalog), which Stage 4's own check reports.
@@ -738,6 +738,11 @@ def print_banner(args, settings, cfg, stages) -> None:
     d_search = declared_default(cfg.calc,    "optimise_programme_scale")
     d_dest   = declared_default(cfg.mineral, "delivery_destination")
     d_market = declared_default(cfg.calc,    "market_model")
+    d_surp   = declared_default(cfg.calc,    "sell_surplus_at_discount")
+    d_frac   = declared_default(cfg.calc,    "surplus_price_fraction")
+    d_rel_m  = declared_default(cfg.calc,    "model_reliability")
+    d_learn  = declared_default(cfg.calc,    "model_learning_curve")
+    d_wacc   = declared_default(cfg.calc,    "apply_wacc_compounding")
 
     # The banner formatters. Each renders ONE setting as the banner shows it;
     # `fmt_rows` exists mostly to say what 0 MEANS: "no cap", which would
@@ -793,6 +798,27 @@ def print_banner(args, settings, cfg, stages) -> None:
             "unbounded":      "constant prices, NOTHING bounds programme size",
         }.get(v, v)
 
+    # The calc v1.22.0 flags.  Off the banner until 2026-10-18, so a run with
+    # `--reliability` printed "Every setting above is the pipeline default"
+    # with the setting that moves its answer nowhere above; Stage 4's own
+    # banner, which does name them, prints at import, before a flag is set.
+    def fmt_surplus(pair):
+        """(sell_surplus_at_discount, surplus_price_fraction) as one row."""
+        on, frac = pair
+        if not on:
+            return "abandoned past a market ceiling"
+        return "sold at %.0f%% of price past a ceiling" % (frac * 100.0)
+
+    def fmt_onoff(on_text, off_text):
+        """A formatter for a boolean term, in this banner's own words."""
+        return lambda v: on_text if v else off_text
+
+    fmt_rel = fmt_onoff("charged (revenue x P(success))", "not charged")
+    fmt_learn = fmt_onoff("Wright's law on recurring hardware", "not applied")
+    fmt_wacc = fmt_onoff("compounded at Module 3's WACC", "not charged")
+    surplus = (cfg.calc.sell_surplus_at_discount,
+               cfg.calc.surplus_price_fraction)
+
     def mark(current, default, fmt):
         """[default] if it matches the dataclass, else what the default was."""
         if current == default:
@@ -812,6 +838,14 @@ def print_banner(args, settings, cfg, stages) -> None:
          mark(settings["search"], d_search, fmt_prog)),
         ("Market",       fmt_market(cfg.calc.market_model),
          mark(cfg.calc.market_model, d_market, fmt_market)),
+        ("Surplus",      fmt_surplus(surplus),
+         mark(surplus, (d_surp, d_frac), fmt_surplus)),
+        ("Reliability",  fmt_rel(cfg.calc.model_reliability),
+         mark(cfg.calc.model_reliability, d_rel_m, fmt_rel)),
+        ("Learning",     fmt_learn(cfg.calc.model_learning_curve),
+         mark(cfg.calc.model_learning_curve, d_learn, fmt_learn)),
+        ("Capital cost", fmt_wacc(cfg.calc.apply_wacc_compounding),
+         mark(cfg.calc.apply_wacc_compounding, d_wacc, fmt_wacc)),
     ]
 
     print()

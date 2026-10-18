@@ -142,7 +142,7 @@ echo                                same thing: double-click "_START HERE.vbs",
 echo                                which never opens a terminal at all
 echo.
 echo    [2]  Quick run              all four stages, 400-row sample
-echo                                (first run downloads ~500 MB)
+echo                                (first run downloads a few hundred MB)
 echo    [3]  Quick re-run           Stage 4 only, reuses catalogs on disk
 echo    [4]  Standard run           Stage 4 only, 20,000-row sample
 echo    [5]  Full run               THE PIPELINE DEFAULTS - every row,

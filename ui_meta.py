@@ -61,7 +61,7 @@ SECTION_LABELS: Dict[str, str] = {
 # overwrites every sub-config's copy from the master, so editing one here would
 # be silently discarded.
 PATH_FIELDS = {
-    "input_dir", "output_dir", "cache_dir", "subdir", "transportation_subdir",
+    "input_dir", "output_dir", "subdir", "transportation_subdir",
     "catalog_filename", "rejected_filename", "output_filename",
     "asteroid_catalog_file", "mineral_catalog_file",
     "launch_vehicles_file", "propellants_file",

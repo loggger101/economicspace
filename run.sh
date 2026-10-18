@@ -163,20 +163,18 @@ cmd_setup() {
     # not there, the pin has already failed and the loose set is the answer.
     # The git-pinned packages are NOT in the lock file and cannot be: each is
     # a tagged git URL, which --only-binary refuses by construction. So the
-    # lock install alone produces a venv where `import transportation` and
-    # `import catalog` both fail, and the only reason that has never been seen
-    # is that master.py auto-installs whatever is missing at import -- a git
-    # fetch, at run time, inside the environment whose whole purpose is to be
-    # the one the numbers were measured on. They are installed here instead,
-    # from the lines requirements.txt already carries, so each tag is still
-    # pinned in exactly one place.
+    # lock install alone produces a venv without `spacecost`, where Stages 2
+    # and 3 both fail, and the only reason that has never been seen is that
+    # master.py auto-installs whatever is missing at import -- a git fetch, at
+    # run time, inside the environment whose whole purpose is to be the one
+    # the numbers were measured on. They are installed here instead, from the
+    # lines requirements.txt already carries, so each tag is still pinned in
+    # exactly one place.
     #
-    # ⚠️  EVERY DIRECT REFERENCE IS TAKEN, NOT A NAMED ONE. This grepped for
-    # `^spacecost` until Stage 1's builder moved out to `asteroid_catalog` as
-    # well, at which point a named grep would have installed one of two and
-    # left a strict setup unable to run Stage 1 -- the same "a check that reads
-    # one row of a table" shape this repo keeps recording, in a shell script.
-    # A PEP 508 direct reference is `name @ url`, so the form is the test.
+    # ⚠️  EVERY DIRECT REFERENCE IS TAKEN, NOT A NAMED ONE. There is one today;
+    # there were two while Stage 1 built its own catalog from a git-pinned
+    # package, and a named grep then installed one of the two. A PEP 508
+    # direct reference is `name @ url`, so the form is the test.
     if "$vpy" -m pip install --only-binary=:all: -r requirements-lock.txt; then
       specs=$(grep -E '^[A-Za-z0-9._-]+[[:space:]]*@[[:space:]]*[a-z+]+:' \
               requirements.txt || true)

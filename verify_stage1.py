@@ -592,9 +592,11 @@ def main() -> int:
     print("-" * 70)
     if all(results):
         # The skip used to show only as a smaller count, and the verdict is
-        # the line people quote; a skipped check is not a passed one.
+        # the line people quote; a skipped check is not a passed one.  The
+        # count leaves out results[0], the tree check, which has no number:
+        # it read "7 checks" over six numbered ones.
         print("  OK  STAGE 1 VERIFIED - %d checks%s"
-              % (len(results), "" if os.path.isfile(CATALOG) else
+              % (len(results) - 1, "" if os.path.isfile(CATALOG) else
                  "; 3, 4 and 8 SKIPPED (no installed catalog)"))
         return 0
     print("  *** NOT VERIFIED *** - see the failing check above")

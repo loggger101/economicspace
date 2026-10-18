@@ -1,7 +1,7 @@
 # The checks this repo can run WITHOUT the pipeline's inputs.
 #
 # WHAT IS HERE AND WHAT IS NOT.  `asteroid_pipeline/` is gitignored in full, so
-# a fresh clone has the code and none of the ~868 MB Stage 4 reads.  That rules
+# a fresh clone has the code and none of the gigabytes Stage 4 reads.  That rules
 # out `verify.py`, whose checks 1-5 all build cells; it stays a local
 # pre-commit harness run against a `.verify` baseline.  What CI can prove is
 # everything that needs no catalog: that `master.py` still matches the modules
@@ -80,7 +80,7 @@ jobs:
       # The control case for tree_check.py. On a plain clone this can only
       # pass, which is the point: it proves the check itself still works and
       # that its skip path is NOT what CI is exercising. The failure it guards
-      # is a Drive File Stream mount serving stale or absent bytes, which no
+      # is a synced-folder mount serving stale or absent bytes, which no
       # runner has, so this is the only place its clean answer is ever seen.
       - name: Working tree matches the index
         run: python tree_check.py
@@ -100,7 +100,7 @@ jobs:
       # this pipeline's data contract, and ships sound composition tables.
       # They read only the release's manifest and taxonomy.json, so they run
       # here and catch a pin that names nothing before anybody runs Stage 1.
-      # Checks 3, 4 and 6 to 8 need the installed ~1.2 GB catalog, which is
+      # Checks 3, 4 and 8 need the installed catalog, which is
       # gitignored, so they skip here and say so.
       - name: Stage 1 catalog release
         run: python verify_stage1.py

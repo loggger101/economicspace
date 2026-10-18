@@ -56,7 +56,7 @@ Name collisions are renamed by `word_replace()`:
 | module | renames |
 |---|---|
 | catalog | `CONFIG`->`CATALOG_CONFIG`, `build_catalog`->`build_asteroid_catalog` |
-| mineral_value | `CONFIG`->`MINERAL_CONFIG`, `merge_sources`->`merge_mineral_sources`, `validate`->`validate_minerals` |
+| mineral_value | `CONFIG`->`MINERAL_CONFIG`, `validate`->`validate_minerals` |
 | transportation | `CONFIG`->`TRANSPORT_CONFIG`, `validate`->`validate_transport` |
 | calc | `CONFIG`->`CALC_CONFIG` |
 
@@ -468,8 +468,9 @@ lists every file it touched.
    `IN_SPACE_ANNUAL_DEMAND_KG` row (asserted for in-space destinations).
 4. `campaign/worked_calculation.py`, `verification_sheet.py` and
    `worked_calculation_doc.py`: the return legs and their labels.
-5. `run.bat`, `run.sh` menus, and MODEL.md's destination table (check 17). The
-   entry points and dashboard derive from `DELIVERY_DESTINATIONS`.
+5. `run.bat` and `run.sh` menus, and MODEL.md's destination table; check 17
+   holds all three. The entry points and dashboard derive from
+   `DELIVERY_DESTINATIONS`.
 6. Not until a cell is measured: `MEASURED_DEST_SECONDS`, campaign `DESTS`.
 
 ## Stage 1 and Stage 3 live in other repositories

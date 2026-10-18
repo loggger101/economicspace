@@ -1061,7 +1061,7 @@ def load_results(path: str, token: float) -> pd.DataFrame:
 def _taxonomy_counts(path: str, mtime: float) -> Dict[str, int]:
     """`spectral_type_source` value counts from the catalog, for the provenance panel.
 
-    Reads ONE column of a file that runs to 862 MB, which is what makes this
+    Reads ONE column of a file that runs to gigabytes, which is what makes this
     cheap enough to do on every page render. `mtime` is a cache-key argument as
     in `_read_name_column`.
     """
@@ -1453,7 +1453,7 @@ _ELEMENT_COLUMNS = ["designation", "semi_major_axis_au", "eccentricity",
                     "arg_perihelion_deg"]
 
 # HOW WELL THE ORBIT ABOVE IS KNOWN, which catalog v1.2.0 added and which no
-# catalog built before it carries. Optional for exactly that reason: an 862 MB
+# catalog built before it carries. Optional for exactly that reason: a catalog
 # CSV written by an older Stage 1 has none of these columns, and naming a
 # missing column in `usecols` is a ValueError rather than a NaN.
 #
@@ -1500,7 +1500,7 @@ def orbit_elements(path: str, mtime: float,
                    designations: Tuple[str, ...]) -> pd.DataFrame:
     """The elements for the given bodies, out of the Stage 1 catalog.
 
-    Six columns of an 862 MB CSV is a ~7 s read, so it is filtered down to the
+    Six columns of the catalog CSV take seconds to read, so it is filtered to the
     bodies actually on screen and cached on the file's mtime. `mtime` is a
     cache key and is not read in the body, as in `_read_name_column`.
     """
