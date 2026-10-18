@@ -299,7 +299,7 @@ def run(force, tag=None):
         # working tree would read as modified forever after: the Drive
         # stat-cache symptom this repo already has a hook for, arriving from a
         # second direction.  Nothing here is hashed, so this is tidiness rather
-        # than the CRLF pin the five CSV writers carry for the opposite reason.
+        # than the CRLF pin every CSV writer carries for the opposite reason.
         with open(dest, "w", encoding="utf-8", newline="\n") as fh:
             json.dump(stats, fh, indent=1, sort_keys=True)
         print(f"  OK    {name:42s} {stats['evaluable']:>9,} rows  "

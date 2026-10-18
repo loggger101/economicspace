@@ -54,7 +54,8 @@ counts-in-prose failure this file was written to catch:
                      `master.DELIVERY_DESTINATIONS`.  Check 9 on a different
                      table: seven rows of typed markdown restating a
                      derivation, which is the third copy of the in-space
-                     prices and the one nothing read
+                     prices and the one nothing read; and the destination
+                     menus in run.bat and run.sh, against the same keys
 
     py verify_docs.py                       # every check except 10
     py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 10
@@ -2240,6 +2241,30 @@ def check_destination_table() -> bool:
     for k in extra:
         problems.append("MODEL.md tabulates %r and the model has no such "
                         "destination" % k)
+
+    # The launchers' destination menus, which type the same list again.  A
+    # destination added to the model and not to a menu cannot be chosen from
+    # it, and nothing said so: "Adding a destination" in CLAUDE.md lists the
+    # menus as a manual step, which is a request for this check.
+    menus = {}
+    sh_p = os.path.join(REPO, "run.sh")
+    if os.path.exists(sh_p):
+        m_sh = re.search(r'^DESTINATIONS="([^"]*)"', read(sh_p), re.M)
+        menus["run.sh's DESTINATIONS"] = set(m_sh.group(1).split()) if m_sh else set()
+    bat_p = os.path.join(REPO, "run.bat")
+    if os.path.exists(bat_p):
+        menus["run.bat's menu"] = set(re.findall(r'set "DEST=([a-z_]+)"',
+                                                 read(bat_p)))
+    for where, offered in sorted(menus.items()):
+        n += 1
+        if not offered:
+            problems.append("%s: no destination list this check can read" % where)
+            continue
+        for k in sorted(set(model) - offered):
+            problems.append("%s does not offer %r" % (where, k))
+        for k in sorted(offered - set(model)):
+            problems.append("%s offers %r and the model has no such "
+                            "destination" % (where, k))
 
     for key, cells in sorted(rows.items()):
         if key not in model:
