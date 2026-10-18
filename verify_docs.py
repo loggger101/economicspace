@@ -980,6 +980,30 @@ def check_manifests() -> bool:
                 bad.append("requirements.txt %s != _MASTER_REQUIRED %s"
                            % (sorted(req), sorted(master)))
 
+            # run.bat's dependency probe (`%PY% -c "import a,b,..."`) is the
+            # third copy of this list.  It still demanded `pyarrow` two years
+            # of releases after `pyarrow` left `_MASTER_REQUIRED` (master
+            # v1.36.0), and did not ask for `spacecost`: a machine without
+            # pyarrow was offered the same install on every launch, and the
+            # install, from requirements.txt, never brought it.
+            bat_p = os.path.join(REPO, "run.bat")
+            if os.path.exists(bat_p):
+                # Anchored on `%PY%` at the start of a line: the interpreter
+                # probes above it (`py -3 -c "import sys"`) have the same shape.
+                probe = re.search(r'^%PY%\s+-c\s+"import\s+([A-Za-z0-9_, ]+)"',
+                                  io.open(bat_p, encoding="utf-8",
+                                          errors="replace").read(), re.M)
+                n += 1
+                if probe is None:
+                    bad.append("run.bat: no `-c \"import ...\"` dependency "
+                               "probe found")
+                else:
+                    got = [x.strip() for x in probe.group(1).split(",")
+                           if x.strip()]
+                    if sorted(map(_norm, got)) != sorted(map(_norm, master)):
+                        bad.append("run.bat probes %s != _MASTER_REQUIRED %s"
+                                   % (sorted(got), sorted(master)))
+
     # README's `run.bat` block <-> the words run.bat's dispatcher accepts.
     bat_p = os.path.join(REPO, "run.bat")
     readme_p = os.path.join(REPO, "README.md")

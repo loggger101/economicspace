@@ -85,29 +85,39 @@ if not defined PY (
   echo   Install Python 3.11 or newer from https://www.python.org/downloads/
   echo   and tick "Add python.exe to PATH" in the installer.
   echo.
-  pause
+  if not defined ARG1 pause
   exit /b 1
 )
 
 REM -- Check the pipeline's dependencies --------------------------------------
-%PY% -c "import requests,pandas,numpy,yfinance,tqdm,pyarrow" >nul 2>&1
+REM  The import names of _MASTER_REQUIRED in build_master.py; verify_docs.py
+REM  check 7 holds this line to it. It asked for pyarrow, which left that list
+REM  at master v1.36.0, and not for spacecost, so a machine without pyarrow
+REM  was offered the install on every launch and the install never brought it.
+REM  With an argument nothing may prompt or pause (a scheduled job would hang
+REM  there): a scripted run installs without asking, which master.py does at
+REM  import anyway, and a failure exits with a code instead of a pause.
+%PY% -c "import requests,pandas,numpy,yfinance,tqdm,spacecost" >nul 2>&1
 if errorlevel 1 (
   echo.
   echo   Some required packages are missing:
-  echo     requests  pandas  numpy  yfinance  tqdm  pyarrow
+  echo     requests  pandas  numpy  yfinance  tqdm  spacecost
   echo.
-  set /p "INSTALL=  Install them now? [Y/n] "
-  if /i "!INSTALL!"=="n" (
-    echo   Cannot run without them. Exiting.
-    pause
-    exit /b 1
+  if not defined ARG1 (
+    set "INSTALL="
+    set /p "INSTALL=  Install them now? [Y/n] "
+    if /i "!INSTALL!"=="n" (
+      echo   Cannot run without them. Exiting.
+      pause
+      exit /b 1
+    )
   )
   echo.
   %PY% -m pip install -r requirements.txt
   if errorlevel 1 (
     echo.
     echo   Install failed. Try running this from a terminal to see why.
-    pause
+    if not defined ARG1 pause
     exit /b 1
   )
 )
@@ -255,7 +265,7 @@ goto done
 :full
 call :ask_destination
 echo.
-echo   THE PIPELINE DEFAULTS: every one of 1.55 million rows, beneficiated,
+echo   THE PIPELINE DEFAULTS: every row of the catalog, beneficiated,
 echo   with the programme search on. This preset overrides nothing -- it is
 echo   what a configure-nothing run does. Measured 2026-09: Stage 4 alone
 echo   is 3.2 h at cislunar and 6.1 h at earth_surface, the config default.
@@ -269,7 +279,7 @@ goto done
 :verify
 REM  verify.py defaults to `--tag head`, and there is no baseline-head -- so
 REM  check 1 would compare against nothing and say so in one line nobody
-REM  reads, silently turning the most important of the six into a hash print.
+REM  reads, silently turning the most important check into a hash print.
 REM  Use the newest baseline actually on disk. /o-d sorts newest first.
 set "TAG="
 for /f "delims=" %%d in ('dir /b /ad /o-d ".verify\baseline-*" 2^>nul') do (
@@ -282,7 +292,7 @@ if defined TAG (
 ) else (
   echo   No baseline under .verify\ -- check 1 has nothing to compare
   echo   against, so it reports NOT VERIFIED and exits 1. That is not
-  echo   a failure of this build: checks 2-6 still run and still count.
+  echo   a failure of this build: the other checks still run and count.
   echo.
   echo   To make one, run this on a CLEAN tree BEFORE editing anything:
   echo       py verify.py baseline --tag mytag
