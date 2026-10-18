@@ -942,17 +942,38 @@ def confirm_overwrite(cfg, stages) -> bool:
         return False
 
 
-def confirm_long_run() -> bool:
-    """Ask before an uncapped Stage 4, which runs for hours.
+def confirm_long_run(cfg, rows) -> bool:
+    """Ask before a Stage 4 over the full catalog, or over 50,000 rows of it.
+
+    The time it quotes is read off `expected_cell_seconds` for the cell this
+    run is, never typed.  This prompt used to say the default cell "has never
+    been measured end to end -- budget days, not hours", long after every
+    destination's default cell had been measured at a few hours: a stale
+    claim, printed at exactly the moment somebody decides whether to wait.
 
     Refusing on EOF is the right default for a run measured in hours, but it has
     to say WHY: a bare "Cancelled." plus a non-zero exit reads as a run that
     failed, which is the trap the `run.bat` destination prompt fell into.
     """
+    m = _loaded_master()
+    dest = str(cfg.delivery_destination)
+    benef = bool(cfg.calc.use_beneficiation)
+    search = bool(cfg.calc.optimise_programme_scale)
+    secs = m.expected_cell_seconds(dest, benef, search)
     print()
-    print("  WARNING: an uncapped Stage 4 over the full catalog runs for")
-    print("  hours, and beneficiated with the programme search on has never")
-    print("  been measured end to end -- budget days, not hours.")
+    if rows:
+        print("  WARNING: a Stage 4 over %s rows runs for a long time." % format(rows, ","))
+    else:
+        print("  WARNING: an uncapped Stage 4 over the full catalog runs for hours.")
+    if secs is None:
+        print("  `%s` has never been run on the full catalog, so there is no" % dest)
+        print("  measured time for this setting there.")
+    else:
+        source = ((m.measured_cell_provenance() or " (at this release)")
+                  if dest == "cislunar" else " (the 2026-09 campaign)")
+        print("  The full catalog at this setting at %s measured %s%s;"
+              % (dest, human(secs), source))
+        print("  a wall clock is true only of the release that measured it.")
     print("  Ctrl-C is safe: each stage writes its CSV before the next starts.")
     try:
         return input("\n  Type 'run' to continue: ").strip().lower() == "run"
@@ -960,7 +981,7 @@ def confirm_long_run() -> bool:
         return False
     except EOFError:
         # No console to answer on -- a scheduled job, or stdin redirected.
-        # Refusing is the right default for a run measured in days, but it has
+        # Refusing is the right default for a run measured in hours, but it has
         # to say WHY: a bare "Cancelled." and a non-zero exit reads as a run
         # that failed. Same trap as the destination prompt in run.bat, which
         # made a successful `run.bat quick` report 255.
@@ -1047,7 +1068,7 @@ def main() -> int:
 
     rows = settings["rows"]
     if 4 in stages and (not rows or rows > 50_000) and not args.yes:
-        if not confirm_long_run():
+        if not confirm_long_run(cfg, rows):
             print("  Cancelled.")
             return 1
 

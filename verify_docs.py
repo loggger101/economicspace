@@ -1452,7 +1452,10 @@ def check_runtime() -> bool:
             bad.append("%s quotes a launcher runtime and is not on disk" % fn)
             continue
         for got_s, dest in LAUNCHER_HOURS.findall(read(path)):
-            if dest not in dests:
+            # The model's destination list, not `dests`: that is the measured
+            # ones, and an unmeasured destination (`gto`) is a destination
+            # with no figure, which `expected_cell_seconds` says below.
+            if dest not in getattr(_m, "DELIVERY_DESTINATIONS", dests):
                 bad.append("%s quotes a runtime for %r, which is not a "
                            "destination" % (fn, dest))
                 continue
@@ -1462,7 +1465,12 @@ def check_runtime() -> bool:
             # newest figure the destination has.  It is a LEVEL per row and
             # never a ratio between rows, which is the one thing that accessor
             # refuses to be used for.
-            want = round(_m.expected_cell_seconds(dest, True, True) / 3600.0, 1)
+            secs = _m.expected_cell_seconds(dest, True, True)
+            if secs is None:
+                bad.append("%s says %s h at %s, which has never been run on "
+                           "the full catalog" % (fn, got_s, dest))
+                continue
+            want = round(secs / 3600.0, 1)
             if abs(float(got_s) - want) > 0.05:
                 bad.append("%s says %s h at %s, expected_cell_seconds says "
                            "%.1f h" % (fn, got_s, dest, want))

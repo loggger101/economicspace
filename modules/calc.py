@@ -1291,13 +1291,18 @@ def measured_cell_provenance(current_version: str = None) -> str:
 
 
 def expected_cell_seconds(destination: str, beneficiated: bool = True,
-                          search: bool = True) -> int:
+                          search: bool = True) -> Optional[int]:
     """Best available wall clock for one cell, per destination.
 
-    Cislunar comes from `MEASURED_CELL_SECONDS` (the current release) and every
-    other destination from `MEASURED_DEST_SECONDS` (the 2026-09 campaign),
-    because that is the newest measurement each one has.  This is what the
-    launcher menus quote before somebody commits an afternoon.
+    Cislunar comes from `MEASURED_CELL_SECONDS` (calc `MEASURED_CELL_CALC`) and
+    every other destination from `MEASURED_DEST_SECONDS` (the 2026-09
+    campaign), because that is the newest measurement each one has.  This is
+    what the launcher menus quote before somebody commits an afternoon.
+
+    None for a destination that has never been run on the full catalog (`gto`
+    at master v1.54.0): it has no row, by the rule that a row is added only
+    once a cell is measured, and a KeyError here would crash the reader that
+    asked instead of letting it say there is no figure.
 
     🚨  NEVER TAKE A RATIO OF TWO OF THESE.  Two destinations can come back
     from different releases, and a cross-release ratio is the arithmetic this
@@ -1307,6 +1312,8 @@ def expected_cell_seconds(destination: str, beneficiated: bool = True,
     """
     if destination == "cislunar":
         return MEASURED_CELL_SECONDS[(bool(beneficiated), bool(search))]
+    if destination not in MEASURED_DEST_SECONDS:
+        return None
     i = (2 if beneficiated else 0) + (1 if search else 0)
     return MEASURED_DEST_SECONDS[destination][i]
 
