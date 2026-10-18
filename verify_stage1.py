@@ -95,7 +95,7 @@ FRACTIONS = ("metal_fraction", "silicate_fraction", "carbon_fraction",
 # compared only when the file says it is that build, and merely REPORTED
 # otherwise.
 #
-# 149,590 and 105,905 are the figures CLAUDE.md quotes; note they come from
+# 149,590 and 105,905 are the figures versions.md quotes; note they come from
 # `diameter_source` while its third figure, 171,007, comes from
 # `spectral_type_source`.  Reading all three off one column is the obvious
 # misreading and it is why they are written out per column here.

@@ -422,6 +422,39 @@ already removes hydrolox ISRU from every row it touched.
   after the `mars_surface` and `geo` cells and reproduced 149 of 149 on all
   four cells, the same four hashes.
 
+### An audit of the tooling around the model (2026-10-18, no stamp)
+
+A sweep of everything that is not the model: the campaign readers, the
+dashboard, the git hooks, and the comments that point readers somewhere.
+
+- **`campaign/population.py`'s `truthy` (and `rig_bounds.py`'s copy) tested
+  `dtype == object`**, which pandas 3 answers False for a text column, so a
+  flag column read back as `str` fell through to `.astype(bool)` and read
+  every row True: `[True, False, False]` came back `[True, True, True]`. Both
+  now test `dtype.kind in "OU"`, the idiom CLAUDE.md prescribes. Unreachable
+  from today's callers, which read without `dtype=str`.
+- **`.githooks/drive-restat.sh` looped over `$(git ls-files -m)`**, which word
+  splitting cut `_START HERE.vbs` into two names that both failed `-f`: the one
+  tracked path with a space in it could never be repaired, and the hook said
+  nothing. It reads one path per line now. Planted in a scratch repo with git
+  shimmed to report the path as modified: the old hook repairs nothing, the
+  new one repairs it, and a genuine edit to the same file is left alone.
+- **`ui.py` reads `designation` as text** in both catalog loads, and the orbit
+  join compares text with text; an uncapped run's estimate is costed over
+  `MEASURED_CELL_ROWS`, the catalog the measured rates are per row of, where it
+  used a typed 2026-08-08 count of JPL's table.
+- **Comments that pointed into CLAUDE.md** for text it moved to LESSONS.md or
+  here on 2026-10-17 now point there, and the Dockerfile and CI header no
+  longer argue with claims CLAUDE.md stopped making. Two unused imports go.
+
+**Verified.** `modules/calc.py` and `master.py` are AST-identical to the
+release with docstrings stripped (the diff is comments), so no stamp moves.
+`verify.py check --skip prune parallel` against a baseline taken on the clean
+tree before any edit, whose four hashes are the four above: 151 of 151 columns
+identical and MATCH on every cell, and checks 4 to 7 pass. `verify_docs.py`,
+`verify_stage1.py`, `verify_stage3.py` and `tree_check.py` pass; the dashboard
+renders headless under `streamlit.testing` with no exception.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer

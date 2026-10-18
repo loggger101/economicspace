@@ -579,11 +579,12 @@ def _stage_minutes(key: str) -> float:
     if key == "transport":
         return 0.01              # ~0.5 s: pure reference tables, no network
 
-    # Full size of the JPL asteroid table, measured 2026-08-08: the size of an
-    # uncapped Stage 4, below.  Needed as a literal because `eval_row_cap = 0`
-    # means "every row", and `or 50_000` would have quietly estimated the
-    # largest possible run as the smallest one.
-    _JPL_FULL_ROWS = 1_554_321
+    # What an uncapped Stage 4 (`eval_row_cap = 0`, "every row") is costed as:
+    # the catalog the measured cells below ran over, so a full run's estimate
+    # IS the measured wall clock.  This used to be a typed 1_554_321 (JPL's
+    # table on 2026-08-08), a second copy of a count `master` carries.  Never
+    # `or 50_000`: that estimates the largest possible run as the smallest.
+    _FULL_ROWS = master.MEASURED_CELL_ROWS
 
     if key == "catalog":
         # Stage 1 installs a pinned release: a download of a few hundred MB,
@@ -600,7 +601,7 @@ def _stage_minutes(key: str) -> float:
     # 0 means "every row" here too, and against a v1.1.0 catalog that is ~1.55 M
     # rows rather than the 35,000 this used to assume.
     rows = st.session_state.get("cfg::calc::eval_row_cap",
-                                MASTER.calc.eval_row_cap) or _JPL_FULL_ROWS
+                                MASTER.calc.eval_row_cap) or _FULL_ROWS
     benef = st.session_state.get("cfg::calc::use_beneficiation",
                                  MASTER.calc.use_beneficiation)
     # BOTH axes, because both default ON as of calc v1.17.0 and each costs
@@ -609,13 +610,14 @@ def _stage_minutes(key: str) -> float:
     # contradicted by this stage's own blurb four lines of sidebar away, which
     # already carried the right figure. A stale estimate beside a correct
     # sentence is the exact failure CLAUDE.md is written to catch. (Both
-    # numbers are calc 1.16.0; on 1.17.7 the same cell is 1.6 h, which is what
-    # the blurb and _SECONDS_PER_ROW now carry.)
+    # numbers are calc 1.16.0; the blurb and _SECONDS_PER_ROW now read the
+    # measured cells off master rather than carrying a figure.)
     search = st.session_state.get("cfg::calc::optimise_programme_scale",
                                   MASTER.calc.optimise_programme_scale)
 
     # Seconds per row, read straight off `master.MEASURED_CELL_SECONDS` --
-    # the four cislunar cells at the CURRENT release (calc.MEASURED_CELL_CALC),
+    # the four cislunar cells at the newest release that measured them
+    # (calc.MEASURED_CELL_CALC; the banner names it when it is behind),
     # not README's twenty-eight, which are the 2026-09 campaign one release
     # back.  The two disagree about this cell on purpose; see the block above
     # the constant.  12 workers, over
@@ -628,7 +630,7 @@ def _stage_minutes(key: str) -> float:
     # 1.17.7 values (733 / 1,253 / 3,424 / 5,692), and went on doing so after
     # the constant it documents moved to 947 / 2,888 / 4,967 / 9,878.  A
     # comment that restates the values of the dict on the next line is a copy
-    # like any other; the current figures are in `MEASURED_DEST_SECONDS` and
+    # like any other; the current figures are in `MEASURED_CELL_SECONDS` and
     # are deliberately not repeated here.
     #
     # The old pair of rates carried a beneficiated:raw ratio of 3.12x, taken
@@ -1033,7 +1035,10 @@ def load_results(path: str, token: float) -> pd.DataFrame:
     configurations, so profit is approximately -cost and ranking by it
     degenerates into a Δv table wearing a profit label.
     """
-    df = pd.read_csv(path, low_memory=False)
+    # `designation` as text from the start: a capped run whose sample is all
+    # numbered bodies would otherwise infer an int column, and one blank would
+    # make it float ("69260.0"), which joins nothing in `orbit_elements`.
+    df = pd.read_csv(path, low_memory=False, dtype={"designation": str})
     if {"gross_value_usd", "total_cost_usd"} <= set(df.columns):
         gross = pd.to_numeric(df["gross_value_usd"], errors="coerce")
         cost = pd.to_numeric(df["total_cost_usd"], errors="coerce")
@@ -1499,10 +1504,11 @@ def orbit_elements(path: str, mtime: float,
                        if c in available]
         if not set(_ELEMENT_COLUMNS) <= available:
             return pd.DataFrame(columns=_ELEMENT_COLUMNS)
-        df = pd.read_csv(path, usecols=wanted_cols, low_memory=False)
+        df = pd.read_csv(path, usecols=wanted_cols, low_memory=False,
+                         dtype={"designation": str})
     except Exception:
         return pd.DataFrame(columns=_ELEMENT_COLUMNS)
-    wanted = df["designation"].astype(str).isin(set(designations))
+    wanted = df["designation"].isin(set(designations))
     return df.loc[wanted].drop_duplicates("designation").reset_index(drop=True)
 
 
@@ -1873,7 +1879,7 @@ def _render_drilldown(ranked: pd.DataFrame) -> None:
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _runtime_estimate(selected: Sequence[str]) -> str:
-    """Rough wall-clock estimate, from the timings recorded in CLAUDE.md."""
+    """Rough wall-clock estimate, from the timings `master` records."""
     minutes = sum(_stage_minutes(k) for k in selected)
     if minutes < 1:
         return "under a minute"

@@ -886,7 +886,7 @@ def _dirty_model_paths() -> Optional[List[str]]:
     """Files under MODEL_PATHS that differ from HEAD; None if git cannot say.
 
     🚨  `git diff`, NEVER `git status`, and on this working copy that is not a
-    style preference.  CLAUDE.md's "Google Drive makes the tree look dirty"
+    style preference.  LESSONS.md's "Google Drive makes the tree look dirty"
     section documents Drive File Stream reporting a placeholder size of 16384
     bytes when git stats a file just after checkout: `status` then calls it
     modified WITHOUT READING IT, while `diff` compares content and shows

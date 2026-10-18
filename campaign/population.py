@@ -28,7 +28,7 @@ THE DENOMINATOR IS THE EVALUABLE POPULATION, AND IT IS NOT A CHOICE HERE.
 already filtered, so an archived cell holds evaluable rows ONLY: cislunar raw
 searched is 650,921 rows and 650,921 evaluable.  Every percentage below is
 therefore over the same population every headline in the docs is quoted over,
-and CLAUDE.md's warning about the two right answers for "bodies declining to
+and LESSONS.md's warning about the two right answers for "bodies declining to
 concentrate" does not reach these tables.  Do not add an `_obj > 0` filter
 believing it changes something; it is kept only as the assertion that it does
 not.
@@ -120,7 +120,11 @@ def truthy(s):
     it is object and the naive read is silently wrong for exactly the rows most
     likely to be new.  Same trap as the pipeline's own `_truthy`.
     """
-    if s.dtype == object:
+    # `dtype.kind in "OU"`, never `dtype == object`: pandas 3 reads a text
+    # column back as `str`, which is not `object`, and that test sent a column
+    # of "True"/"False" strings to `.astype(bool)` below, where every one of
+    # them is True.
+    if s.dtype.kind in "OU":
         return s.astype(str).str.lower().isin(["true", "1", "1.0"])
     return s.fillna(False).astype(bool) if s.isna().any() else s.astype(bool)
 

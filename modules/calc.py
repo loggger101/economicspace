@@ -921,9 +921,9 @@ class CalcConfig:
     # and N together.  Two different answers to two different questions, and
     # the flag is how you say which you are asking.
     #
-    # ⚠️  READ THIS BEFORE QUOTING ANY OLDER TABLE.  Almost every figure in
-    # CLAUDE.md and the README predates this default and is N = 1, so a default
-    # run no longer reproduces them; set this False to do that.  This comment
+    # ⚠️  READ THIS BEFORE QUOTING ANY OLDER TABLE.  Almost every table in
+    # versions.md older than calc 1.17.0 is N = 1, so a default run no longer
+    # reproduces them; set this False to do that.  This comment
     # used to argue the flip would "silently retire every committed figure at
     # once with no way to reproduce them", and the second half of that was the
     # real objection: the two settings had never been measured side by side on
@@ -1826,7 +1826,7 @@ _MODULE3_REQUIRED = {
 # ── Module 3 ops ROWS this version needs  (v1.14.0) ──────────────────────────
 # The ops table is keyed by category, not by column, so a missing figure is a
 # missing ROW and `schema_check` above, which tests columns, cannot see it.
-# CLAUDE.md names that hole explicitly ("schema_check() checks COLUMNS, not
+# LESSONS.md names that hole explicitly ("schema_check() checks COLUMNS, not
 # VALUES, and that is a real hole"), and it has already cost one full
 # measurement pass: the v1.12.0 argon tables were rewritten, Stage 3 was
 # re-run, the CSV did not land, and two full-catalog runs were measured against
@@ -3937,7 +3937,7 @@ R_LEO_KM         = 6_378.14 + 200.0    # 200-km circular parking orbit
 # Every quantity here is a constant of the ORBIT, so all of it is resolved once
 # at import.  `_geo_capture_dv_km_s` runs twice per catalog row on every
 # destination, and re-deriving a per-destination constant per call is defect
-# class 3 in CLAUDE.md.
+# class 3 in LESSONS.md.
 R_GEO_KM = 42_164.14                   # geostationary radius
 # Asteroid arrivals are near the ecliptic and GEO is equatorial, so the
 # capture burn buys 23.44 deg of plane change as well as the speed change.
@@ -4020,7 +4020,7 @@ DV_MARS_POWERED_DESCENT_KM_S = 4.100
 #
 # Both velocities below are constants of the DEPOT, not of the arriving
 # candidate, so they are resolved once here rather than per call.  That is
-# defect class 3 in CLAUDE.md, "a quantity asked at a finer granularity than it
+# defect class 3 in LESSONS.md, "a quantity asked at a finer granularity than it
 # has answers", and this function runs twice per catalog row.
 R_MARS_1SOL_PERIAPSIS_KM = 3_396.2 +    250.0
 R_MARS_1SOL_APOAPSIS_KM  = 3_396.2 + 33_793.0
@@ -4597,7 +4597,7 @@ def window_phasing_au(destination: str) -> float:
     semi-major axes, that is the wrong answer on 99.97% of rows, and it is too
     SHORT on 99.46% of them: the median synodic period goes 1.2976 yr against
     Earth to 3.3033 yr against Mars.
-    The `mars_surface` cadence CLAUDE.md records, 3.798 yr raw against ~1.37
+    The `mars_surface` cadence versions.md records, 3.798 yr raw against ~1.37
     everywhere else, is the same term doing the same thing one leg further
     down, which is what makes the old value visibly wrong rather than merely
     different.

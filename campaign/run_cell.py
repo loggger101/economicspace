@@ -13,7 +13,6 @@ destinations with verified-identical live prices.
 """
 import csv
 import gzip
-import json
 import os
 import shutil
 import subprocess

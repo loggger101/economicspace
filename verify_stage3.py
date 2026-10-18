@@ -39,7 +39,7 @@ derivation chain, which has no harness anywhere.
 ⚠️  IT NEVER TOUCHES THE REAL PIPELINE DIRECTORY.  Everything is built into a
 temporary directory.  Running Stage 3 against `asteroid_pipeline/` would
 re-fetch live fuel prices and overwrite the only copy of the catalogs every
-`.verify` baseline was measured against -- the mistake CLAUDE.md documents
+`.verify` baseline was measured against -- the mistake LESSONS.md documents
 under "RUNNING STAGE 2 OR STAGE 3 DESTROYS EVERY BASELINE YOU HOLD".  This
 script also passes `use_yfinance=False` so it needs no network and is
 deterministic, and pins `catalog_date` so midnight cannot read as a defect.
@@ -446,7 +446,7 @@ def _probe_still_discriminates(prop) -> bool:
     flag: the first reads NaN as True and drops the row, the second reads it as
     "has a mass ratio" and keeps it. A pandas release that changed
     `astype(bool)` on a NaN would make the two agree, and this check would then
-    pass forever while testing nothing -- the dead-diagnostic shape CLAUDE.md
+    pass forever while testing nothing -- the dead-diagnostic shape LESSONS.md
     records under "A diagnostic can go CONSTANT, and a constant reads exactly
     like a clean result". So it is asserted rather than assumed.
 
