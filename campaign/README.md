@@ -270,7 +270,7 @@ py campaign/worked_calculation.py --sweep --audit --max-sources 0 \
   ⚠️  BUILD THOSE CELLS WITH `output_dir` REPOINTED AND `input_dir` LEFT
   ALONE. `build_profitability_catalog` WRITES `<output_dir>/profitability_catalog.csv`
   as a side effect, so a builder that leaves that field alone replaces the live
-  Stage 4 catalog with its 158-row sample; `input_dir` carries the ~868 MB of
+  Stage 4 catalog with its 158-row sample; `input_dir` carries the gigabytes of
   inputs and redirecting it makes every cell fail to LOAD instead. Reset every
   field a cell can differ on, in both directions, or the second cell inherits
   the first one's.

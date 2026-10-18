@@ -1080,7 +1080,7 @@ class CalcConfig:
     #
     # ⚠️  DO NOT BUDGET BY SCALING A SMALL RUN.  Scaling a 20,000-row sample
     # predicted 2.2 h for a raw run that took 42 minutes -- a 3.1x
-    # overestimate.  Fixed costs (worker startup, loading a 0.88 GB catalog)
+    # overestimate.  Fixed costs (worker startup, loading the catalog)
     # dominate a small run, and parallel efficiency is much better on a large
     # one, so per-row cost falls sharply with size.  It is not linear.
     #

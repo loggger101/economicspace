@@ -56,7 +56,7 @@ Name collisions are renamed by `word_replace()`:
 | module | renames |
 |---|---|
 | catalog | `CONFIG`->`CATALOG_CONFIG`, `build_catalog`->`build_asteroid_catalog` |
-| mineral_value | `CONFIG`->`MINERAL_CONFIG`, `merge_sources`->`merge_mineral_sources`, `validate`->`validate_minerals` |
+| mineral_value | `CONFIG`->`MINERAL_CONFIG`, `validate`->`validate_minerals` |
 | transportation | `CONFIG`->`TRANSPORT_CONFIG`, `validate`->`validate_transport` |
 | calc | `CONFIG`->`CALC_CONFIG` |
 

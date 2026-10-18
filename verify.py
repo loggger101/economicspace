@@ -308,7 +308,7 @@ def run_cell(m, name: str, *, workers: int = 1, **override):
     # them answering about the sample, and nothing says so.
     #
     # ⚠️  `input_dir` is a SEPARATE field and is deliberately not touched:
-    # Stage 4 reads its ~868 MB of inputs through that one, and redirecting it
+    # Stage 4 reads its gigabytes of inputs through that one, and redirecting it
     # would make every cell here fail to load rather than fail to save.  This
     # is the narrowest possible redirection -- one field, one side effect.
     C.output_dir = _SCRATCH
@@ -838,7 +838,7 @@ def check_parallel(m, names: List[str], workers: int = 8) -> bool:
     PER PROCESS, and several are attached to the propellant and vehicle dicts
     that get pickled across the boundary.
 
-    More workers is not always faster.  On a small cap the 862 MB catalog load
+    More workers is not always faster.  On a small cap the full catalog load
     and ~1.1 s per-worker startup dominate, and 8 workers regularly comes out
     SLOWER than serial.  The hash is what this check is for; the wall clock is
     not a result.

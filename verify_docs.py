@@ -22,7 +22,8 @@ counts-in-prose failure this file was written to catch:
                      the docs, the root scripts and the campaign scripts
     7. manifests     a list documented in one place, against the list actually
                      defined in another: requirements.txt vs _MASTER_REQUIRED,
-                     and README's `run.bat` block vs run.bat's own dispatcher
+                     README's `run.bat` block vs run.bat's own dispatcher, and
+                     CLAUDE.md's rename table vs build_master.py's renames
     8. help          every config dial the dashboard renders carries the
                      comment it shows as help text
     9. runtime       README's wall-clock tables and the launchers' hours,
@@ -1226,6 +1227,40 @@ def check_manifests() -> bool:
             bad.append("README documents './run.sh %s', dispatcher rejects it"
                        % extra)
 
+    # CLAUDE.md's rename table <-> the `word_replace` calls `build_master.py`
+    # makes.  The table is what an editor reads before naming something in a
+    # module, and it listed `merge_sources -> merge_mineral_sources` for two
+    # releases' worth of audits after master v1.36.0 dropped that rename, so a
+    # reader avoiding a collision was avoiding one that no longer existed.
+    if os.path.exists(bm_p):
+        _bm = read(bm_p)
+        _labels = {"m1": "catalog", "m2": "mineral_value",
+                   "m3": "transportation", "m4": "calc"}
+        built: Dict[str, set] = {v: set() for v in _labels.values()}
+        for var, old, new in re.findall(
+                r'^(m[1-4])\s*=\s*word_replace\(\s*\1\s*,\s*"(\w+)"\s*,\s*"(\w+)"\s*\)',
+                _bm, re.M):
+            built[_labels[var]].add((old, new))
+        claude_txt = read(os.path.join(REPO, "CLAUDE.md"))
+        table: Dict[str, set] = {}
+        for label, cell in re.findall(
+                r"^\|\s*(catalog|mineral_value|transportation|calc)\s*\|(.*)\|\s*$",
+                claude_txt, re.M):
+            table.setdefault(label, set()).update(
+                re.findall(r"`(\w+)`\s*->\s*`(\w+)`", cell))
+        n += 1
+        if not any(built.values()):
+            bad.append("build_master.py: no `mN = word_replace(mN, \"old\", "
+                       "\"new\")` call this check can read")
+        for label in sorted(built):
+            for old, new in sorted(built[label] - table.get(label, set())):
+                bad.append("build_master.py renames %s->%s in %s; CLAUDE.md's "
+                           "rename table does not list it" % (old, new, label))
+            for old, new in sorted(table.get(label, set()) - built[label]):
+                bad.append("CLAUDE.md's rename table lists %s->%s in %s; "
+                           "build_master.py makes no such rename"
+                           % (old, new, label))
+
     print("7. manifests   %d manifests checked, %d mismatched" % (n, len(bad)))
     for b in bad:
         print("     ! " + b)
@@ -1909,7 +1944,7 @@ def check_prose_numbers() -> bool:
     Both are derivations now.  This is the checker that stops the third one,
     and it is here rather than in `--audit` because it is the half that needs
     no model, no catalog and no run: it reads the renderer's source.  A check
-    that can only run after a three-minute build against 868 MB of inputs is a
+    that can only run after a three-minute build against gigabytes of inputs is a
     check CI cannot have.
 
     ⚠️  PROSE, NOT ARITHMETIC.  A substitution block exists to show
@@ -1929,7 +1964,7 @@ def check_prose_numbers() -> bool:
         print("14. prose      ! campaign/worked_calculation.py is not on disk")
         return False
     # Imported by source rather than by `import`, because importing that
-    # module pulls in `master` and 868 MB of catalogs, and this check exists
+    # module pulls in `master` and gigabytes of catalogs, and this check exists
     # precisely to be runnable without them.
     namespace: dict = {"os": os, "re": re,
                        "CAMP": os.path.join(REPO, "campaign")}
@@ -2097,7 +2132,7 @@ def check_model_borrows() -> bool:
     decision -- the same rule check 14 holds `TYPED_OK` to.
 
     Source-only, like check 14 and for the same reason: importing that module
-    pulls in `master` and 868 MB of catalogs, and this has to be runnable on a
+    pulls in `master` and gigabytes of catalogs, and this has to be runnable on a
     clone with no inputs at all.
     """
     rel = "campaign/worked_calculation.py"

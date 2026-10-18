@@ -6,17 +6,17 @@ single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom - the orchestrator at the bottom executes everything.
 
     Stage 1  ->  Asteroid Catalog        (modules/catalog.py, data contract
-                 1.3.0) downloads a pinned, published release of the
+                 1.8.1) downloads a pinned, published release of the
                  AsteroidCatalog build: JPL SBDB + MP3C + SsODNet + NEOWISE,
                  cross-matched, with per-spectral-type composition
-    Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.9.0)
+    Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.16.0)
                 yfinance live + USGS/LME reference + mineralogy
                 + sperrylite / laurite / awaruite / native-pgm phases
                 + destination pricing for EVERY commodity
-    Stage 3  ->  Transportation Data     (modules/transportation.py 1.14.0)
+    Stage 3  ->  Transportation Data     (modules/transportation.py 1.23.0)
                 Launch vehicles + propellants + dv segments + ops costs
                 (UNCREWED autonomous mining - no crew costs)
-    Stage 4  ->  Profitability Calc      (modules/calc.py 1.19.2)
+    Stage 4  ->  Profitability Calc      (modules/calc.py 1.32.0)
                 Rocket eq cascade + cost cascade + per-asteroid ranking
                 + PGM enrichment applied per asteroid (M-type 2x, V-type 0.2x)
                 + delivery architecture: earth_surface / leo / gto / geo /
@@ -36,7 +36,7 @@ kilogram sells for; Stage 4 decides what it costs to put it there, and the
 answer is only meaningful when they agree.  Stage 4 checks and warns.
 
 Output tree (under MASTER_CONFIG.output_dir):
-    asteroid_catalog.csv               <- Stage 1 (~0.9 GB, the pinned release)
+    asteroid_catalog.csv               <- Stage 1 (the pinned release, unpacked)
     rejected_entries.csv               <- Stage 1 (the build's validation rejects)
     catalog_manifest.json              <- Stage 1 (which release is installed)
     catalog_taxonomy.json              <- Stage 1 (the build's composition tables)
@@ -61,7 +61,7 @@ Tuning:
         MASTER_CONFIG.calc.use_isru_return_propellant (make ISRU available)
         MASTER_CONFIG.calc.optimise_architecture_per_asteroid
                                                     (search return mode + ISRU
-                                                     per target; ~2x runtime)
+                                                     per target)
         MASTER_CONFIG.calc.eval_row_cap             (limit Stage 4 evaluations)
     Or set any sub-config field directly before run_full_pipeline() fires.
 
@@ -72,8 +72,9 @@ build_master.py; edit the modules and re-run that script.
 # -----------------------------------------------------------------------------
 # CONSOLE ENCODING
 # -----------------------------------------------------------------------------
-# Windows consoles default to cp1252, which cannot encode the emoji used in
-# this file's progress output.  Must happen before the first print().
+# Windows consoles default to cp1252.  Every print in this file is ASCII, so
+# this is for what the source does not control: tqdm's bars, a traceback
+# quoting a non-ASCII path, data reaching stdout.  Before the first print().
 
 import sys as _sys
 for _stream in (_sys.stdout, _sys.stderr):
@@ -4587,7 +4588,7 @@ class CalcConfig:
     #
     # ⚠️  DO NOT BUDGET BY SCALING A SMALL RUN.  Scaling a 20,000-row sample
     # predicted 2.2 h for a raw run that took 42 minutes -- a 3.1x
-    # overestimate.  Fixed costs (worker startup, loading a 0.88 GB catalog)
+    # overestimate.  Fixed costs (worker startup, loading the catalog)
     # dominate a small run, and parallel efficiency is much better on a large
     # one, so per-row cost falls sharply with size.  It is not linear.
     #
