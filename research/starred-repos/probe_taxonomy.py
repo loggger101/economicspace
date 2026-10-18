@@ -41,7 +41,6 @@ import argparse
 import json
 import os
 
-import numpy as np
 import pandas as pd
 
 SDSS_URL = ("https://sbnarchive.psi.edu/pds3/non_mission/"

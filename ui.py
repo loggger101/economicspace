@@ -1035,7 +1035,10 @@ def load_results(path: str, token: float) -> pd.DataFrame:
     configurations, so profit is approximately -cost and ranking by it
     degenerates into a Δv table wearing a profit label.
     """
-    df = pd.read_csv(path, low_memory=False)
+    # `designation` as text from the start: a capped run whose sample is all
+    # numbered bodies would otherwise infer an int column, and one blank would
+    # make it float ("69260.0"), which joins nothing in `orbit_elements`.
+    df = pd.read_csv(path, low_memory=False, dtype={"designation": str})
     if {"gross_value_usd", "total_cost_usd"} <= set(df.columns):
         gross = pd.to_numeric(df["gross_value_usd"], errors="coerce")
         cost = pd.to_numeric(df["total_cost_usd"], errors="coerce")
@@ -1501,10 +1504,11 @@ def orbit_elements(path: str, mtime: float,
                        if c in available]
         if not set(_ELEMENT_COLUMNS) <= available:
             return pd.DataFrame(columns=_ELEMENT_COLUMNS)
-        df = pd.read_csv(path, usecols=wanted_cols, low_memory=False)
+        df = pd.read_csv(path, usecols=wanted_cols, low_memory=False,
+                         dtype={"designation": str})
     except Exception:
         return pd.DataFrame(columns=_ELEMENT_COLUMNS)
-    wanted = df["designation"].astype(str).isin(set(designations))
+    wanted = df["designation"].isin(set(designations))
     return df.loc[wanted].drop_duplicates("designation").reset_index(drop=True)
 
 
