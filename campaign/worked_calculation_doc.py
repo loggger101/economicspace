@@ -115,7 +115,12 @@ def prec(value, digits=12, unit=""):
     # Outside this band a fixed-point rendering is unreadable rather than
     # precise: a yield of 1.5e-06 does not want thirteen leading zeros.
     if exponent > digits + 3 or exponent < -4:
-        return ("%.*e" % (digits - 1, value)) + (" " + unit if unit else "")
+        # Trailing zeros go from the mantissa as they do from a fixed-point
+        # figure below: `3.00000000000e-06` is the same float as `3e-06`.
+        mantissa, power = ("%.*e" % (digits - 1, value)).split("e")
+        if "." in mantissa:
+            mantissa = mantissa.rstrip("0").rstrip(".")
+        return mantissa + "e" + power + (" " + unit if unit else "")
     text = "{:,.{p}f}".format(value, p=max(0, min(15, digits - 1 - exponent)))
     if "." in text:
         text = text.rstrip("0").rstrip(".")
@@ -3345,10 +3350,14 @@ def s_footer(out):
              "made here."),
         para("The two are then compared column by column against the row the "
              "run actually produced, and %s: <strong>%d quantities, %d "
-             "bit-exact, %d within %s, %d differing</strong>, worst "
-             "relative difference %s on <code>%s</code>."
+             "bit-exact, %d within %s, %d differing</strong>, %s."
              % (status, c["n"], c["exact"], c["close"], "%g" % c["tol"],
-                len(c["bad"]), "%.3e" % c["worst"], esc(c["worst_name"]))),
+                len(c["bad"]),
+                # Nothing is worst when nothing differs, and the sentence
+                # used to end "on ."
+                "worst relative difference %.3e on <code>%s</code>"
+                % (c["worst"], esc(c["worst_name"])) if c["worst_name"]
+                else "and not one of them differs in any bit")),
         # A count on its own cannot be read: 71 against 72 is the difference
         # between an archived cell and a current one, and saying so is the
         # whole reason the check returns the names.

@@ -291,7 +291,32 @@ def trim(text, limit=None):
     the page has, where truncation costs information, which it does not.
     """
     text = " ".join(str(text).split())
-    return "" if text in ("", "nan", "None") else D.esc(text)
+    if text in ("", "nan", "None"):
+        return ""
+    # A comment's ⚠️ asks for the COLOUR glyph by name (VARIATION SELECTOR-16),
+    # which prints yellow whatever the stylesheet says; selector 15 asks for
+    # the same character in text, which prints in the ink around it.  A code
+    # span written `like_this` is set as code rather than printing its marks.
+    text = D.esc(text.replace(_VS_EMOJI, _VS_TEXT))
+    return _BACKTICKS.sub(r"<code>\1</code>", text)
+
+
+_VS_EMOJI, _VS_TEXT = "\ufe0f", "\ufe0e"
+_BACKTICKS = re.compile(r"`([^`<>]+)`")
+
+
+def join_clauses(bits):
+    """Join citation fragments as sentences, without doubling a full stop.
+
+    Each fragment is a clause the joiner ends; a quoted note already ends
+    its own, and "... on departure.. reference year 2026" printed under
+    every operational-costs row whose notes close with a stop.
+    """
+    out = bits[0] if bits else ""
+    for bit in bits[1:]:
+        ended = _TAGS.sub("", out).rstrip().endswith((".", "!", "?"))
+        out += ("  " if ended else ".  ") + bit
+    return out
 
 
 def cited(html):
@@ -363,7 +388,7 @@ def cite_ops(C, category):
     year = row.get("reference_year")
     if year is not None and not pd.isna(year):
         bits.append("reference year %s" % D.esc(int(year)))
-    return ".  ".join(bits)
+    return join_clauses(bits)
 
 
 def cite_table_row(row, table, name, fields=()):
@@ -382,7 +407,7 @@ def cite_table_row(row, table, name, fields=()):
     note = trim(row.raw("notes") if hasattr(row, "raw") else row.get("notes"))
     if note:
         bits.append("<span class='src'>%s</span>" % note)
-    return ".  ".join(bits)
+    return join_clauses(bits)
 
 
 def cite_mineral(C, name, label=None):
@@ -414,7 +439,7 @@ def cite_mineral(C, name, label=None):
     note = trim(row.get("notes"))
     if note:
         bits.append("<span class='src'>%s</span>" % note)
-    return ".  ".join(bits)
+    return join_clauses(bits)
 
 
 def cite_body(C, column, what=""):
@@ -463,7 +488,7 @@ def cite_body(C, column, what=""):
             break
     bits += ["%s %s" % (field, D.esc(body.get(field)))
              for field in fields if present(body.get(field))]
-    return ".  ".join(bits)
+    return join_clauses(bits)
 
 
 def body_stamp(C):
@@ -779,6 +804,17 @@ def part_body(S, out):
 
 
 # -------------------------------------------- 2. what a kilogram is worth
+# What a utility factor is, printed under the first phase's and pointed at by
+# the rest.
+UTILITY_NOTE = (
+    "<span class='src'>How much of the launch cost avoided this commodity "
+    "captures.  The utility factors are engineering judgements rather than "
+    "measurements and are the softest assumption in the pipeline; "
+    "CITATIONS.md says outright that there is nothing to cite, because they "
+    "are a dial.  Every per-destination override runs DOWNWARD, against what "
+    "the destination can dig up for itself.</span>")
+
+
 def part_prices(S, out):
     """The launch cost avoided, the per-commodity price, and the phase table."""
     C = out["C"]
@@ -943,7 +979,7 @@ def part_prices(S, out):
     as_had = []
     for name, frac, price in C["phases"]:
         as_had.extend(merged.get(name, [(name, frac, price)]))
-    seen = []
+    seen, first_u = [], None
     for name, frac, price in as_had:
         base = "silicates" if name.startswith("other") else name
         pp = parts.get(base)
@@ -963,15 +999,14 @@ def part_prices(S, out):
               "<b>mineral_value_catalog.csv</b>, row <i>%s</i>, column "
               "<i>in_space_utility</i>, written by "
               "<b>modules/mineral_value.py</b>'s "
-              "<i>IN_SPACE_UTILITY_BY_DESTINATION</i> for %s.  "
-              "<span class='src'>How much of the launch cost avoided this "
-              "commodity captures.  The utility factors are engineering "
-              "judgements rather than measurements and are the softest "
-              "assumption in the pipeline; CITATIONS.md says outright that "
-              "there is nothing to cite, because they are a dial.  Every "
-              "per-destination override runs DOWNWARD, against what the "
-              "destination can dig up for itself.</span>"
-              % (D.esc(base), D.esc(C["destination"])))
+              "<i>IN_SPACE_UTILITY_BY_DESTINATION</i> for %s.  %s"
+              % (D.esc(base), D.esc(C["destination"]), UTILITY_NOTE
+                 if first_u is None else
+                 # Said in full once: it is the same five lines under
+                 # every phase, a dozen times on an S-type.
+                 "<span class='src'>The same judgement as %s's, above."
+                 "</span>" % D.esc(first_u)))
+        first_u = first_u or base
         # A mineral with NO terrestrial quote (the alloy, troilite,
         # schreibersite) is priced by Stage 2 at a terrestrial price of zero:
         # `apply_delivery_destination` reads a missing quote as None and
@@ -1030,6 +1065,9 @@ def part_prices(S, out):
 
     # The element price table, once, for every element a yield-priced phase
     # reads.  Every one of these used to be a bare product inside a sum.
+    # A table with a worked-out column prints its cells at the working's
+    # precision: rounded to ten figures, `230.4205643` sat beside a working
+    # that spent `230.420564301`, and a reader checking it saw two numbers.
     elements = []
     yields_by_mineral = []
     if C["yields"]:
@@ -1055,7 +1093,7 @@ def part_prices(S, out):
             pp = parts.get(element)
             if pp is None:
                 rows.append([D.esc(element), "-", "-", "-", "-", "-",
-                             "$" + P(price, 10), "-", "-",
+                             "$" + P(price), "-", "-",
                              cited(cite_mineral(C, element))])
                 net_of[element] = price
                 continue
@@ -1066,12 +1104,12 @@ def part_prices(S, out):
                                    % (P(p_t), P(pp["utility"]), P(C["p_l"]),
                                       P(pp["refining"])), pp["delivered"],
                                    "%s net price" % element)
-                cost_col = "c_ref " + P(pp["refining"], 10)
+                cost_col = "c_ref " + P(pp["refining"])
             else:
                 net_work = S.claim("max(0, %s - %s)"
                                    % (P(p_t), P(pp["downleg"])),
                                    pp["delivered"], "%s price" % element)
-                cost_col = "c_down " + P(pp["downleg"], 10)
+                cost_col = "c_down " + P(pp["downleg"])
             if refinery and pp["route"] == "used in space":
                 gross_work = S.claim("%s + %s" % (P(pp["delivered"]),
                                                   P(pp["refining"])), price,
@@ -1081,10 +1119,10 @@ def part_prices(S, out):
             else:
                 gross_work = "-"
             net_of[element] = pp["delivered"]
-            rows.append([D.esc(element), D.esc(pp["route"]), P(p_t, 10),
+            rows.append([D.esc(element), D.esc(pp["route"]), P(p_t),
                          P(pp["utility"], 6), cost_col, net_work,
-                         "$" + P(pp["delivered"], 10), gross_work,
-                         ("$" + P(price, 10)) if refinery else "-",
+                         "$" + P(pp["delivered"]), gross_work,
+                         ("$" + P(price)) if refinery else "-",
                          cited(cite_mineral(C, element))])
         S.block(D.table(["element", "route", "p $/kg", "u", "cost $/kg",
                          "net price worked out", "net $/kg",
@@ -1113,14 +1151,14 @@ def part_prices(S, out):
             n_terms.append("%s%s * %s" % (P(float(fraction)), k_txt,
                                           P(float(net_of.get(element, price)))))
             g_work = S.claim(g_terms[-1], g, "%s in %s" % (element, mineral))
-            row = [D.esc(element), P(float(fraction), 10),
+            row = [D.esc(element), P(float(fraction)),
                    ("x " + P(C["kappa"])) if rare else "-",
-                   "$" + P(float(price), 10), g_work, "$" + P(g, 10)]
+                   "$" + P(float(price)), g_work, "$" + P(g)]
             if refinery:
                 n_work = S.claim(n_terms[-1], n, "%s net in %s"
                                  % (element, mineral))
-                row += ["$" + P(float(net_of.get(element, price)), 10),
-                        n_work, "$" + P(n, 10)]
+                row += ["$" + P(float(net_of.get(element, price))),
+                        n_work, "$" + P(n)]
             rows.append(row)
         return gross, net, g_terms, n_terms, rows
 
@@ -1221,10 +1259,14 @@ def part_prices(S, out):
         keys = [k for k in keys if k in S.tag]
         frac = sum(f for _m, f, _v in group)
         value = next(p for n, _f, p in C["phases"] if n == product)
-        S.prose("%s are one grain no separation takes apart, so calc sells "
-                "them as one product, <i>%s</i>, at their fraction-weighted "
-                "value (<i>_INSEPARABLE</i> in <b>modules/calc.py</b>)."
-                % (", ".join(D.esc(m) for m, _f, _v in group), D.esc(product)))
+        names = [D.esc(m) for m, _f, _v in group]
+        S.prose("%s are one grain that no separation takes apart, so calc "
+                "sells them as one product, <i>%s</i>, at their "
+                "fraction-weighted value (<i>_INSEPARABLE</i> in "
+                "<b>modules/calc.py</b>)."
+                % (" and ".join([", ".join(names[:-1]), names[-1]]
+                                if len(names) > 1 else names),
+                   D.esc(product)))
         S.step("f_%s" % short, "f_%s" % product, "%s, as the hold carries it"
                % product, "sum of its members' fractions",
                " + ".join(P(f) for _m, f, _v in group), frac, "-", [],
@@ -1263,8 +1305,8 @@ def part_prices(S, out):
                                   "water": "ice"}.get(name, name))
         work = S.claim("%s * %s" % (P(frac), P(price)), frac * price,
                        "%s contribution" % name)
-        rows.append([D.esc(name), P(frac, 8), "$" + P(price, 10), work,
-                     "$" + P(frac * price, 10), cited(column)])
+        rows.append([D.esc(name), P(frac, 8), "$" + P(price), work,
+                     "$" + P(frac * price), cited(column)])
     S.block(D.table(["phase", "mass fraction f_c", "$/kg P_c",
                      "contribution worked out", "contribution $/kg",
                      "where the fraction comes from"], rows, "wide"))
@@ -1402,22 +1444,27 @@ def part_dials(S, out):
     # them is which file each table came from, and the page chose those by
     # the row's provenance rather than through the config, so both are shown.
     files = C.get("files", {})
-    rows.append([cited("<b>Files</b>"), "", "", "", ""])
+    # Said once in the heading: on every row it filled four lines of the
+    # narrowest column eleven times over.
+    rows.append([cited("<b>Files</b>: each value is this process's config; "
+                       "the file a table was read from is chosen by the "
+                       "row's provenance, as the header card says"),
+                 "", "", "", ""])
     for name in paths:
         read = files.get(name)
         if read:
-            what = "this page read it as <b>%s</b>" % D.esc(repo_path(read))
+            what = ("this page read it as <code>%s</code>."
+                    % D.esc(repo_path(read)))
         elif name == "delta_v_segments_file":
             what = ("this page reads no file through it: every Delta-v leg "
                     "is the model's own function of the body's orbit, worked "
-                    "out in its own part")
+                    "out in its own part.")
         else:
             raise AssertionError("no file recorded for the path dial %s"
                                  % name)
         rows.append(["<i>%s</i>" % D.esc(name),
                      dial_value(repo_path(getattr(cfg, name))),
-                     cited("this process's config; the file is chosen by the "
-                           "row's provenance, as the header card says"),
+                     cited("this process's config, as the heading says"),
                      '<span class="uses">-</span>',
                      cited("%s <b>%s</b>" % (what, D.esc(field_line(name)))
                            )])
@@ -3172,9 +3219,9 @@ def part_hold(S, out):
                              "%s supply" % w["phase"])
             take = S.claim("min(%s, %s)" % (P(w["supply"]), P(w["hold"])),
                            w["take"], "%s taken" % w["phase"])
-            rows.append([ordinal(n), D.esc(w["phase"]), "$" + P(w["price"], 10),
-                         P(frac[w["phase"]], 8), supply, P(w["supply"], 10),
-                         P(w["hold"], 10), take, P(w["take"], 10),
+            rows.append([ordinal(n), D.esc(w["phase"]), "$" + P(w["price"]),
+                         P(frac[w["phase"]], 8), supply, P(w["supply"]),
+                         P(w["hold"]), take, P(w["take"]),
                          "hold full" if w["take"] <= 0
                          else ("hold ran out" if w["take"] < w["supply"]
                                else "all the feed had")])
@@ -3192,7 +3239,7 @@ def part_hold(S, out):
             kg = M["load"]["mix"][name]
             work = S.claim("%s * %s / %s" % (P(M["m_pay"]), P(f), P(f_sum)),
                            kg, "%s in the raw hold" % name)
-            rows.append([D.esc(name), P(f, 10), work, P(kg, 10)])
+            rows.append([D.esc(name), P(f), work, P(kg)])
         S.block(D.table(["phase", "f_c", "kg worked out (m_pay f_c / sum f)",
                          "kg"], rows))
     S.step("hold_value", "V_hold", "what the load is worth, unbounded",
@@ -3222,19 +3269,27 @@ def part_hold(S, out):
 def market_inputs(S, C, markets):
     """Register each market's absorption ceiling once; return their keys."""
     keys = {}
+    first = getattr(S, "first_cap", None)
     for market in markets:
         cap = C["market_kg"].get(market)
         if cap is None:
             continue
         key = "cap_%s" % market.replace(" ", "_").replace("-", "_")
         if key not in S.tag:
+            # The routing rule is said under the first ceiling only; it was
+            # the same sentence under all nine, and again in part 18.
             S.put(key, "Cap_%s" % market, "%s absorption ceiling" % market,
                   cap, "kg/yr",
                   "<b>mineral_value_catalog.csv</b> &middot; row <i>%s</i> "
-                  "&middot; column <i>annual_market_kg</i>, which Module 2 "
-                  "ROUTES: a commodity sold at the depot is bounded by that "
-                  "depot's import budget and one flown home by world annual "
-                  "production.  " % D.esc(market) + cite_mineral(C, market))
+                  "&middot; column <i>annual_market_kg</i>, %s.  "
+                  % (D.esc(market),
+                     "which Module 2 ROUTES: a commodity sold at the depot "
+                     "is bounded by that depot's import budget and one flown "
+                     "home by world annual production" if first is None else
+                     "routed as the %s ceiling above is"
+                     % D.esc(first))
+                  + cite_mineral(C, market))
+            first = S.first_cap = first or market
         keys[market] = key
     return keys
 
@@ -3337,8 +3392,8 @@ def part_market(S, out):
                                     [keys.get(market, "eps_d"), "eps_d"])
             else:
                 mult_work = "1: the market does not feel it"
-            rows.append([D.esc(market), P(kg, 10), rate_work, P(rate, 10),
-                         P(cap, 10) if cap else "-", mult_work,
+            rows.append([D.esc(market), P(kg), rate_work, P(rate),
+                         P(cap) if cap else "-", mult_work,
                          P(mult, 12)])
         S.block(D.table(["market", "pooled kg", "rate worked out",
                          "Q (kg/yr)", "Qm (kg/yr)", "multiplier worked out",
@@ -3365,7 +3420,7 @@ def part_market(S, out):
             work = S.claim("%s * %s" % (P(cap), P(rev["window"])), allow,
                            "%s allowance" % market,
                            [keys[market], "window"])
-            rows.append([D.esc(market), P(cap, 10), work, P(allow, 10)])
+            rows.append([D.esc(market), P(cap), work, P(allow)])
         S.block(D.table(["market", "ceiling (kg/yr)", "allowance worked out",
                          "allowance (kg)"], rows))
         surplus_frac = rev["surplus_frac"]
@@ -3407,7 +3462,7 @@ def part_market(S, out):
                 key = C["market_keys"].get(step["phase"], step["phase"])
                 allow_txt = ("-" if allowance is None
                              or allowance == float("inf")
-                             else P(allowance, 10))
+                             else P(allowance))
                 if key in drawn and allow_txt != "-":
                     prev_allow, prev_sold = drawn[key]
                     allow_txt = S.claim("%s - %s" % (P(prev_allow),
@@ -3418,7 +3473,7 @@ def part_market(S, out):
                 # The mass past the ceiling is the hold less the allowance,
                 # shown as such: on a run that abandoned the surplus it was a
                 # bare number, the one cell of this table with no working.
-                over_kg = P(step["over"], 10)
+                over_kg = P(step["over"])
                 if step["over"] > 0 and allowance not in (None, float("inf")):
                     over_kg = S.claim("%s - %s" % (P(step["hold"]),
                                                    P(allowance)),
@@ -3426,15 +3481,15 @@ def part_market(S, out):
                                       "%s past its ceiling" % step["phase"])
                 # A phase that sold past its ceiling is worth two tiers, and
                 # the cell says so: it was a bare sum, untraced, on 2014 YN.
-                value_cell = "$" + P(full_value + over_value, 10)
+                value_cell = "$" + P(full_value + over_value)
                 if over_value > 0:
                     value_cell = "%s = %s" % (
                         S.claim("%s + %s" % (P(full_value), P(over_value)),
                                 full_value + over_value,
                                 "%s value" % step["phase"]), value_cell)
-                rows.append([D.esc(step["phase"]), "$" + P(step["price"], 10),
-                             P(step["hold"], 10), allow_txt,
-                             P(step["full"], 10), full_work,
+                rows.append([D.esc(step["phase"]), "$" + P(step["price"]),
+                             P(step["hold"]), allow_txt,
+                             P(step["full"]), full_work,
                              over_kg, over_work, value_cell])
             S.block(D.table(["phase", "$/kg", "in the hold (kg)",
                              "allowance (kg)", "sold at full (kg)",
@@ -3469,12 +3524,12 @@ def part_market(S, out):
                                 "%s tier %d value" % (step["phase"], i))
                 rows.append([ordinal(i), D.esc(step["phase"]),
                              "full" if step["full"] else "surplus",
-                             price_work, "$" + P(step["price"], 10),
-                             P(step["supply"], 10),
+                             price_work, "$" + P(step["price"]),
+                             P(step["supply"]),
                              "-" if step["allowance"] is None
-                             else P(step["allowance"], 10),
-                             P(step["take"], 10), value,
-                             "$" + P(step["take"] * step["price"], 10)])
+                             else P(step["allowance"]),
+                             P(step["take"]), value,
+                             "$" + P(step["take"] * step["price"])])
             S.block(D.table(["#", "phase", "tier", "price worked out", "$/kg",
                              "supply (kg)", "allowance (kg)", "sold (kg)",
                              "value worked out", "value"], rows, "wide"))
@@ -4691,8 +4746,17 @@ def part_checks(S, out):
         """
         gap = S.claim("abs(%s - %s)" % (exact(left), exact(right)),
                       abs(left - right), "%s residual" % what)
+        # A non-zero residual under the last bit of the largest number a
+        # route subtracts is rounding, and says so: the launch margin is
+        # two differences of masses near the vehicle's capacity, and its
+        # bare 5.95e-13 read as a failure on a table titled "must agree".
+        big = keys[0]
+        rounding = (left != right and big in S.value
+                    and abs(left - right) < math.ulp(abs(S.value[big])))
         rows.append([what, left_label, P(left, 12), right_label,
-                     P(right, 12), gap, P(abs(left - right), 3),
+                     P(right, 12), gap, P(abs(left - right), 3)
+                     + (", under one bit of %s" % D.esc(big)
+                        if rounding else ""),
                      '<span class="uses">%s</span>'
                      % ", ".join(S.cited([k for k in keys if k in S.tag]))])
 
@@ -5635,12 +5699,15 @@ def footer(out, sheet):
         "<code>campaign/worked_calculation.py</code> and then compared, "
         "column by column, against the row the pipeline actually produced: "
         "<span class='ok'>%d quantities, %d bit-exact, %d within %g, "
-        "%d differing</span>, worst relative difference %.3e on "
-        "<code>%s</code>.  The worksheet adds no arithmetic of its own; it "
-        "changes the order things are said in and cites where each input "
-        "came from.</p>"
+        "%d differing</span>, %s.  The worksheet adds no arithmetic of its "
+        "own; it changes the order things are said in and cites where each "
+        "input came from.</p>"
         % (c["n"], c["exact"], c["close"], c["tol"], len(c["bad"]),
-           c["worst"], D.esc(c["worst_name"])))
+           # Nothing is worst when nothing differs: the comparator names no
+           # quantity, and the sentence used to end "on ."
+           "worst relative difference %.3e on <code>%s</code>"
+           % (c["worst"], D.esc(c["worst_name"])) if c["worst_name"]
+           else "and not one of them differs in any bit"))
     if out["borrows"]:
         # `borrowed_shape` returns (name, why) pairs and the footer prints
         # what it finds, so a borrowing added tomorrow discloses itself
@@ -5680,12 +5747,14 @@ def footer(out, sheet):
     flags = getattr(sheet, "backing", {})
     need = sorted((t for t, s in flags.items() if s == "needs"),
                   key=lambda t: (t[0], int(t[1:])))
+    # The list is the inputs, so it sits beside them: after the steps it read
+    # as the steps' tags.
     bits.append("<p>%s rows marked <b>(needs backing)</b>: %d inputs nothing "
-                "outside this repository stands behind, and %d steps that "
-                "spend one (%s).  Each is listed with its reason in %s.</p>"
+                "outside this repository stands behind (%s), and %d steps "
+                "that spend one.  Each is listed with its reason in %s.</p>"
                 % (len(need), sum(1 for t in need if t.startswith("I")),
-                   sum(1 for t in need if t.startswith("S")),
                    ", ".join(t for t in need if t.startswith("I")) or "none",
+                   sum(1 for t in need if t.startswith("S")),
                    ref("backing")))
     loose_in, loose_step = sheet.unspent()
     bits.append("<p>%d inputs and %d steps.  %s  %d steps are cited by "
@@ -5852,6 +5921,31 @@ def monochrome(css):
     return bad
 
 
+_COLOUR_GLYPH = re.compile("[\ufe0f\U0001F000-\U0001FAFF]")
+
+
+def colour_glyphs(html):
+    """Characters the page would print as colour emoji, as findings.
+
+    THE STYLESHEET IS NOT THE ONLY INK.  A field comment's ⚠️ carries
+    VARIATION SELECTOR-16, which asks the browser for the colour glyph, and
+    six of them printed yellow while `monochrome` passed, because it reads
+    the CSS and the colour was in the text.  `trim` turns the selector into
+    its text twin; this asks the page whether anything still requests a
+    colour glyph, or is one (the supplementary emoji planes have no text
+    form to ask for).
+    """
+    body = re.sub(r"(?is)<(style|script)\b.*?</\1>", " ", html)
+    bad = []
+    for match in _COLOUR_GLYPH.finditer(body):
+        start = max(0, match.start() - 40)
+        context = " ".join(_TAGS.sub(" ", body[start:match.start()]).split())
+        bad.append(("U+%04X" % ord(match.group()),
+                    "a colour glyph, after ...%s" % context[-30:].encode(
+                        "ascii", "replace").decode()))
+    return bad
+
+
 FURNITURE = ("&#182;", "¶")
 
 
@@ -5896,13 +5990,15 @@ def report_furniture(css, html, quiet=False):
     return len(bad)
 
 
-def report_monochrome(quiet=False):
+def report_monochrome(html, quiet=False):
     """Print the ink check, and return the number of findings."""
-    bad = monochrome(CSS)
+    glyphs = colour_glyphs(html)
+    bad = monochrome(CSS) + glyphs
     if not quiet:
         print("  ink        %d colour(s) in the stylesheet, %d that would "
-              "cost more than black" % (len(set(_HEX.findall(_CSS_COMMENT.sub(" ", CSS)))),
-                 len(bad)))
+              "cost more than black; %d colour glyph(s) in the text"
+              % (len(set(_HEX.findall(_CSS_COMMENT.sub(" ", CSS)))),
+                 len(bad) - len(glyphs), len(glyphs)))
         for what, why in bad:
             print("     ! %-12s %s" % (what, why))
     return len(bad)
@@ -6180,7 +6276,7 @@ def sweep(args):
                    + report_untraced(sheet, html, quiet=True)
                    + report_dials(html, quiet=True)
                    + report_placeholders(sheet, html, quiet=True)
-                   + report_monochrome(quiet=True)
+                   + report_monochrome(html, quiet=True)
                    + report_furniture(stylesheet(DEFAULT_PT), html,
                                       quiet=True)
                    + report_paper(html, quiet=True))
@@ -6253,7 +6349,8 @@ def sweep(args):
               "every_winner", "every_winner_sources", "one",
               "Parser", "handle_starttag", "handle_endtag", "handle_data",
               "__init__",
-              "report_monochrome", "report_furniture", "check_substitutions",
+              "report_monochrome", "colour_glyphs", "report_furniture",
+              "check_substitutions",
               "untraced", "is_traced", "as_number", "evaluable", "monochrome",
               "print_furniture", "footer", "branch_test", "patched",
               "cited", "_claim", "report_backing", "backing_self_test",
@@ -6381,7 +6478,7 @@ def main(argv=None):
            + report_untraced(sheet, html) + report_dials(html)
            + report_placeholders(sheet, html)
            + report_backing(sheet, html)
-           + report_monochrome()
+           + report_monochrome(html)
            + report_furniture(stylesheet(args.font, args.paper), html))
     # The paper needs a browser, so it is measured on the runs that print.
     if args.pdf or args.print_test or args.self_test:

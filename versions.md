@@ -706,6 +706,55 @@ still catches a planted block twice the paper's width. `verify_docs.py` and
 ledger, the step tables, the payload, market and search tables, and the
 backing part.
 
+### The verification worksheet's text: one number one way, no colour glyphs, nothing said twice (2026-10-19, no stamp)
+
+A read of all 44 printed pages found defects in what the worksheet says, not
+in its layout. Changes, in `campaign/verification_sheet.py` unless named:
+
+- **A worked-out table prints its cells at the working's precision.** Cells
+  were rounded to ten figures beside a working that spent twelve, so a row
+  showed `230.4205643` in one cell and `230.420564301` in the next. The
+  element, yield, phase-value, hold, market and sale tables now match their
+  workings; the fixed-point and payload-cap tables have no working and keep
+  their rounding. `prec` (in `worked_calculation_doc.py`, so both documents)
+  drops a mantissa's trailing zeros as it does a fixed figure's:
+  `3.000000000e-06` is `3e-06`.
+- **No colour glyph prints.** A field comment's ⚠️ carries variation
+  selector 16 and printed yellow in six places while the ink check passed,
+  because that check read only the stylesheet. `trim` swaps in selector 15
+  (the text glyph), and the ink check now also reads the page
+  (`colour_glyphs`). `trim` also sets a backticked span as code.
+- **No doubled full stop.** The citation joiners added `.` after a note that
+  already ended in one, so "... on departure.. reference year 2026" printed
+  under 24 operational-costs rows (`join_clauses`).
+- **Said once.** The five-line utility judgement printed under every phase,
+  and the market-routing sentence under every ceiling and again in part 18;
+  each later row now points back to the first. The file dials' "how this page
+  knows it" moved into their group heading.
+- **Sentences that read wrong.** The footer ended "worst relative difference
+  0.000e+00 on ." when nothing differed; it now says no quantity differs in
+  any bit, and `worked_calculation_doc.py`'s footer had the same sentence. Its
+  list of tags needing backing now sits beside the inputs it lists.
+  "kamacite, taenite are one grain no separation takes apart" now reads
+  "kamacite and taenite are one grain that no separation takes apart". The
+  launch-margin cross-check's non-zero residual, smaller than one bit of
+  `M_LEO`, says so: on a table that says the routes must agree, the bare
+  figure read as a failure.
+
+**Measured** on the default winner (2018 DT): the PDF is 43 pages on letter
+(was 44). The traced count is now 448 distinct numbers (was 512), because
+the rounded copies of operands are gone, not because anything stopped being
+traced. Every other count is unchanged.
+
+**Verified.** `--pdf --self-test` passes with the same counts as before (394
+of 394 substitutions, 131 of 131 origins, 85 of 85 dials, 337 of 337 backing
+entries), and the paper check finds nothing past the edge. `colour_glyphs`
+was fed a selector-16 warning sign and a supplementary-plane emoji and caught
+both, and passed a selector-15 sign and a glyph inside `<style>`. `--sweep`
+builds the 7 mission shapes on disk with no page finding.
+`worked_calculation.py --audit` shows all 120 non-zero columns and all 36
+rates. `verify_docs.py` and `tree_check.py` pass.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer
