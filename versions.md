@@ -666,6 +666,46 @@ failed on the "NEXT-C." split before it was fixed. `--every-winner` fails
 only the six LEO cells on `c_ISRU`'s origin, which it failed before this
 change.
 
+### The verification worksheet's layout: words break at joints, tables are not nested (2026-10-19, no stamp)
+
+The printed worksheet split 552 words across lines, most mid-letter
+(`max_mini` / `ng_fractio` / `n`, `THROUG` / `HPUT`). The cause was
+`overflow-wrap:anywhere` on the wide tables, there so the dial ledger's
+unspaced field names and paths could not push the table past the paper. It
+also let every column shrink to one letter, and the browser gave the width to
+the longest description. Changes, all in `campaign/verification_sheet.py`:
+
+- **Break points are in the markup.** `typeset()` marks them in the page that
+  is written and measured, never in the one the text checks read (those
+  strip tags to a space). A token over 20 characters may break after `_`,
+  `/` or `\` that leaves at least 5 characters on each side, so there is no
+  `duration_` / `yr`. A shorter hyphenated token (a date, `E-chondrite`)
+  does not break. It raises if it changed any visible character. The wide
+  tables use `break-word`, which breaks only a token with no joint.
+- **Blocks sit between the step tables, not inside a row of one.** Nested,
+  a table lost the tag column's width and wore the step header over
+  columns that did not match it on every page it reached. Rows are kept
+  whole in print, so the dial ledger was also pushed to page 2, leaving a
+  third of page 1 blank. Prose before a part's first step or after its
+  last is set as a paragraph, so the header sits on a step.
+- The dial ledger's group headings span the row (`grouped()`); the header
+  card's labels and each contents entry stay on one line; the value
+  header is right-aligned over its values.
+
+**Measured** on the default winner (2018 DT): in the print layout at
+letter's 763 px, 0 words now break mid-letter, 223 break at a marked joint
+and 10 at a hyphen inside a long token. The PDF is 44 pages on letter
+(was 48).
+
+**Verified.** `--pdf --print-test --self-test` passes every check with the
+same counts as before (394 of 394 substitutions, 131 of 131 origins, 512 of
+512 traced, 85 of 85 dials, 337 of 337 backing entries), and the paper check
+finds nothing past the edge and no row taller than a sheet. Its self-test
+still catches a planted block twice the paper's width. `verify_docs.py` and
+`tree_check.py` pass. The PDF was rasterised and its pages read for the
+ledger, the step tables, the payload, market and search tables, and the
+backing part.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer
