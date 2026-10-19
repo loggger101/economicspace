@@ -161,6 +161,18 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       count.  `--self-test` perturbs a printed value and confirms the check
       goes red.
 
+      Its last part, "Backing, row by row", gives every tagged row an entry:
+      where it was read from, the published source it rests on (the
+      sentences of its citation that name one, quoted), and how the page
+      verifies it (which steps spend it, whether its substitution
+      re-evaluates, which of the run's columns it equals).  An input nothing
+      outside the repo stands behind (a setting, a judgement, an
+      unreferenced constant, a value not measured for this body) is marked
+      **(needs backing)**, as is a step that spends one; the flag is printed
+      on the row too, and `--check` holds the two in step.  A source the
+      installed spacecost release has withdrawn is refused even where the
+      archived table the run read still cites it.
+
       It is set for A4 and prints in black: the page count follows the TABLE
       font, not the body font, `--font` takes that trade, nothing is
       truncated, screen furniture is hidden by the print rules
