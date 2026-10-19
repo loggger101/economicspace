@@ -1311,6 +1311,19 @@ def dial_value(value):
     return cited(D.esc(text))
 
 
+def grouped(table):
+    """`table` with each group heading (a row whose cells after the first are
+    all empty) spanning the whole row instead of the first column."""
+    def span(m):
+        """One row, spanned if it is a group heading."""
+        cells = re.findall(r"<td>(.*?)</td>", m.group(1), re.S)
+        if len(cells) < 2 or not cells[0] or any(cells[1:]):
+            return m.group(0)
+        return '<tr class="grp"><td colspan="%d">%s</td></tr>' % (len(cells),
+                                                                  cells[0])
+    return re.sub(r"<tr>((?:<td>.*?</td>)+)</tr>", span, table, flags=re.S)
+
+
 def part_dials(S, out):
     """Every calc dial, the value this page used, and how it knows.
 
@@ -1408,8 +1421,9 @@ def part_dials(S, out):
                      '<span class="uses">-</span>',
                      cited("%s <b>%s</b>" % (what, D.esc(field_line(name)))
                            )])
-    S.block(D.table(["dial", "value used", "how this page knows it", "tag",
-                     "what it is (the field's own comment)"], rows, "wide"))
+    S.block(grouped(D.table(["dial", "value used", "how this page knows it",
+                             "tag", "what it is (the field's own comment)"],
+                            rows, "wide")))
     S.prose("Stages 2 and 3 reach this page only through the tables they "
             "wrote, and every row of those tables that a step spends is an "
             "input with its own citation.")
@@ -5353,15 +5367,17 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.03em;
 .sheet tr.in td:first-child{border-left:2px solid var(--ink);}
 .tag{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;
      color:var(--ink);white-space:nowrap;font-weight:600;}
-.sym{font-weight:600;overflow-wrap:anywhere;}
+.sym{font-weight:600;overflow-wrap:break-word;}
 /* INLINE, NOT STACKED.  The name under the symbol and the substitution under
    the formula were a line each on all 231 rows; run together with a
    separator they cost nothing and save about a third of the document. */
 .qty{font-weight:400;color:var(--mute);}
 .work{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;
-      overflow-wrap:anywhere;}
+      overflow-wrap:break-word;}
 .sheet col.c1{width:2.7rem} .sheet col.c2{width:9.5rem}
 .sheet col.c4{width:8.6rem}
+.sheet th:last-child{text-align:right;}
+.blk{margin:.15rem 0 .35rem;}
 .sub2{color:var(--ink);}
 .uses{color:var(--mute);font-size:.7rem;font-family:inherit;}
 .val{font-family:ui-monospace,Menlo,Consolas,monospace;text-align:right;
@@ -5379,14 +5395,25 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.03em;
       margin:.4rem 0 .5rem;}
 .card table{margin:0;font-size:.76rem;}
 .card td{border:0;padding:.03rem .5rem .03rem 0;}
-/* A WIDE TABLE MUST BE ALLOWED TO BREAK ITS LONGEST WORD.  The dial ledger
-   carries field names and file paths with no space in them, and a table
-   cannot be narrower than its widest unbreakable token: it ran to 941px
-   against 741px of paper, so the browser shrank EVERY page to 79%% to fit
-   it, and the --font setting stopped moving the page count at all.
-   `anywhere` (not `break-word`) is the value that lets the column's
-   minimum width shrink. */
-.wide td{overflow-wrap:anywhere;}
+.card td:first-child{white-space:nowrap;}
+/* A group heading in a wide table spans the row: squeezed into the first
+   column it printed `RETURN VEHICLE / SCALES WITH ITS / CARGO` down it. */
+tr.grp td{padding-top:.3rem;}
+/* A WIDE TABLE MUST BE ALLOWED TO BREAK ITS LONGEST WORD, BUT ONLY AT A
+   JOINT.  The dial ledger carries field names and file paths with no space
+   in them, and a table cannot be narrower than its widest unbreakable
+   token: it ran to 941px against 741px of paper, so the browser shrank
+   EVERY page to 79%% to fit it.  `overflow-wrap:anywhere` fixed the width
+   and wrecked the words: it lets EVERY column shrink to one letter, so the
+   browser handed the width to the longest description and printed
+   `max_mini / ng_fractio / n` and `THROUG / HPUT` down a 50px column.  The
+   joints are now in the markup (`typeset` puts a <wbr> after each `_` and
+   `/` of a long token), and `break-word` is only the last resort for a
+   token with none. */
+.wide td{overflow-wrap:break-word;}
+/* A short hyphenated word (a date, `E-chondrite`, `on-site`) stays on one
+   line; `typeset` wraps it. */
+.nw{white-space:nowrap;}
 /* `D.h` attaches a self-link to every anchored heading.  It is useful on
    screen and is furniture on paper, so it fades in on hover and is removed
    outright from the print rules -- which the narrative document next door
@@ -5412,6 +5439,7 @@ a{color:inherit;}
   .note{font-size:%(note).1fpt}
   h2 a.anchor{display:none;}
   h2{page-break-after:avoid;} tr{page-break-inside:avoid;}
+  tr.grp{page-break-after:avoid;}
   .tw{overflow:visible;}
   a{color:inherit;text-decoration:none;}
 }
@@ -5467,8 +5495,58 @@ def paper_px(paper=DEFAULT_PAPER):
             round((h_mm - 2 * vert) * 96 / 25.4))
 
 
+# Where a word may break, said in the markup; see the `.wide td` rule.  A
+# token longer than `_LONG` characters (a field name, a file path) may break
+# after any `_`, `/` or `\` that leaves `_STUB` characters on each side (so
+# never `max_mining_duration_ / yr`); a shorter one with a hyphen in it may
+# not break at all.  Text only: tags, and everything inside <style>,
+# <script> and <title>, pass through untouched.
+_LONG = 20
+_STUB = 5
+_TAGS = re.compile(r"(<[^>]*>)")
+_TOKEN = re.compile(r"[^\s<>]+")
+_JOINT = re.compile(r"(?<=[_/\\])(?=[^_/\\])")
+_RAW = ("style", "script", "title")
+
+
+def _set_token(m):
+    """One token of text, with its break points marked; see `typeset`."""
+    t = m.group(0)
+    if len(t) > _LONG:
+        cuts = [j.start() for j in _JOINT.finditer(t)
+                if _STUB <= j.start() <= len(t) - _STUB]
+        return "<wbr>".join(t[a:b] for a, b in zip([0] + cuts, cuts + [None]))
+    if "-" in t.strip("-"):
+        return '<span class="nw">%s</span>' % t
+    return t
+
+
+def typeset(html):
+    """The page as it is printed: `html` with its break points marked.
+
+    APPLIED TO THE PAGE THAT IS WRITTEN AND MEASURED, NEVER TO THE ONE THE
+    TEXT CHECKS READ.  Those strip tags to a space, so a <wbr> inside
+    `mining_rate_kg_per_day` would hand them seven words; the characters a
+    reader sees are the same either way.
+    """
+    out, raw = [], None
+    for piece in _TAGS.split(html):
+        if piece.startswith("<"):
+            name = re.match(r"</?\s*([a-zA-Z]*)", piece).group(1).lower()
+            if name in _RAW:
+                raw = None if piece.startswith("</") else name
+            out.append(piece)
+        else:
+            out.append(piece if raw else _TOKEN.sub(_set_token, piece))
+    out = "".join(out)
+    # It runs after the checks, so it proves it moved no visible character.
+    if _TAGS.sub("", out) != _TAGS.sub("", html):
+        raise AssertionError("typeset changed the text of the page")
+    return out
+
+
 def render_row(row, backing=None):
-    """One row of the sheet: an input, a step, a prose line or a block.
+    """One row of the sheet: an input, a step or a prose line.
 
     EVERYTHING THAT CAN SHARE A LINE DOES.  A step used to occupy four: the
     name under the symbol, the substitution under the formula, the cited tags
@@ -5481,11 +5559,7 @@ def render_row(row, backing=None):
     """
     kind = row[0]
     if kind == "prose":
-        return ('<tr><td class="tag"></td><td class="prose" colspan="3">%s'
-                '</td></tr>' % row[1])
-    if kind == "block":
-        return ('<tr><td class="tag"></td><td colspan="3">%s</td></tr>'
-                % row[1])
+        return '<tr><td class="prose" colspan="4">%s</td></tr>' % row[1]
     tag = row[1]
     cell = '<td class="tag" id="r-%s"><a href="#b-%s">%s</a></td>' % (
         tag, tag, tag)
@@ -5675,7 +5749,10 @@ def document(out, sheet=None, pt=DEFAULT_PT, paper=DEFAULT_PAPER):
     contents = []
     for part in sheet.parts:
         anchor = "p%d" % part["n"]
-        contents.append('<a href="#%s">%s</a>' % (anchor, part["title"]))
+        # One entry per line-piece: wrapped freely, a part's number ended one
+        # line and its title began the next.
+        contents.append('<a class="nw" href="#%s">%s</a>'
+                        % (anchor, part["title"]))
         # The part's number is a label, like a table row's: it read as an
         # untraced claim the day the page reached a twelfth part, having
         # been "traced" through eleven only by coinciding with small
@@ -5684,15 +5761,42 @@ def document(out, sheet=None, pt=DEFAULT_PT, paper=DEFAULT_PAPER):
                                   D.esc(part["title"]), count=1), anchor))
         if part["blurb"]:
             body.append('<p class="blurb">%s</p>' % part["blurb"])
-        body.append('<div class="tw"><table class="sheet">'
-                    '<colgroup><col class="c1"><col class="c2">'
-                    '<col class="c3"><col class="c4"></colgroup>'
-                    '<thead><tr><th>tag</th><th>quantity</th>'
-                    '<th>how it is worked out</th><th>value</th></tr></thead>'
-                    '<tbody>')
-        body.extend(render_row(r, getattr(sheet, "backing", None))
-                    for r in part["rows"])
-        body.append("</tbody></table></div>")
+        # A BLOCK IS A TABLE OF ITS OWN, SO IT SITS BETWEEN THE STEP TABLES,
+        # NOT INSIDE ONE.  Nested in a row, it lost the tag column's width,
+        # wore the outer header over columns that did not line up with it on
+        # every page it reached, and (rows being kept whole in print) was
+        # pushed to a fresh page, leaving the last a third blank.  A run of
+        # rows with no input or step in it is prose and is set as prose.
+        runs = []
+        for r in part["rows"]:
+            if r[0] == "block":
+                runs.append(r)
+            elif runs and isinstance(runs[-1], list):
+                runs[-1].append(r)
+            else:
+                runs.append([r])
+        for run in runs:
+            if isinstance(run, tuple):
+                body.append('<div class="blk">%s</div>' % run[1])
+                continue
+            # Prose before the first tagged row and after the last is set
+            # outside the table, so its header sits on top of a step.
+            tagged = [i for i, r in enumerate(run) if r[0] != "prose"]
+            lead, tail = ((tagged[0], tagged[-1] + 1) if tagged
+                          else (len(run), len(run)))
+            body.extend('<p class="prose">%s</p>' % r[1] for r in run[:lead])
+            run, after = run[lead:tail], run[tail:]
+            if run:
+                body.append('<div class="tw"><table class="sheet">'
+                            '<colgroup><col class="c1"><col class="c2">'
+                            '<col class="c3"><col class="c4"></colgroup>'
+                            '<thead><tr><th>tag</th><th>quantity</th>'
+                            '<th>how it is worked out</th><th>value</th>'
+                            '</tr></thead><tbody>')
+                body.extend(render_row(r, getattr(sheet, "backing", None))
+                            for r in run)
+                body.append("</tbody></table></div>")
+            body.extend('<p class="prose">%s</p>' % r[1] for r in after)
     # The parts, rendered once, are what the traceability check reads; the
     # footer is then written against that and appended.  See `_PAGE`.
     _PAGE["html"] = "".join(body[1:])
@@ -5879,7 +5983,7 @@ def paper_layout(html, paper=DEFAULT_PAPER):
     import json
     import tempfile
     w, h = paper_px(paper)
-    page = print_variant(html)
+    page = print_variant(typeset(html))
     cut = page.rfind("</body>")
     page = (page[:cut] + _MEASURE_JS % {"w": w, "h": h} + page[cut:]
             if cut >= 0 else page + _MEASURE_JS % {"w": w, "h": h})
@@ -6298,6 +6402,7 @@ def main(argv=None):
               "page comes from one of them, every dial is tabulated, no "
               "answer is stated without its working, and it prints in black")
         return 0
+    html = typeset(html)
     html_path = args.out + ".html"
     with open(html_path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(html)
