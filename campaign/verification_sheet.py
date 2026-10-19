@@ -16,6 +16,11 @@ Three things change:
      sums without substituting them, because a sentence reads badly with nine
      terms in it; a worksheet has the opposite obligation.
 
+A last part then asks every tag what stands BEHIND it, which is a different
+question from where it was read: a published source quoted out of its
+citation, or "(needs backing)" where the honest answer is nothing.  See
+`part_backing`.
+
 NOTHING HERE IS TYPED, for the reason the whole document exists.  This module
 decides what to SAY; `worked_calculation.build` has already done the
 arithmetic, and every figure below is read out of its dicts.  A worksheet
@@ -86,7 +91,8 @@ def exact(value):
 # `ref(key)` now, so inserting a part renumbers every mention of every part.
 PART_KEYS = ("constants", "dials", "body", "prices", "transfer", "ratios",
              "plant", "fixed_point", "settled", "stack", "clock", "hold",
-             "market", "searches", "reliability", "cost", "answer", "checks")
+             "market", "searches", "reliability", "cost", "answer", "checks",
+             "backing")
 
 
 def part_no(key):
@@ -4184,18 +4190,13 @@ def check_substitutions(sheet, tol=1e-9):
     rows += [("table", what or "row", work, value)
              for work, value, what in sheet.claims]
     for tag, symbol, substitution, value in rows:
-        expr = evaluable(substitution)
-        if expr is None:
+        how, got = reproduces(substitution, value, tol)
+        if how == "prose":
             unchecked.append((tag, symbol, substitution))
             continue
-        try:
-            got = eval(expr, {"__builtins__": {}}, dict(_ALLOWED))
-        except Exception as exc:
-            bad.append((tag, symbol, substitution, "%s" % exc, value))
-            continue
-        checked += 1
-        scale = max(abs(float(value)), abs(float(got)), 1e-30)
-        if abs(float(got) - float(value)) / scale > tol:
+        if how != "error":
+            checked += 1
+        if how != "ok":
             bad.append((tag, symbol, substitution, got, value))
     return checked, unchecked, bad
 
@@ -4723,6 +4724,589 @@ def part_checks(S, out):
             % (P(P_["w"]), P(M["trips"]), P(P_["rev"]["clearing"], 8)))
 
 
+# ------------------------------------------------------- 17. the backing
+# WHAT A ROW RESTS ON, ASKED OF EVERY ROW.  The origin check above holds every
+# input to naming a file and a row, which says where a number was READ; it
+# does not say whether anything outside this repository stands behind it.  A
+# config dial, a constant typed into the derivation and a utility factor all
+# pass the origin check, and none of them is a measurement.  This part asks
+# the second question of every tag, and prints "(needs backing)" where the
+# honest answer is nothing.
+#
+# A PUBLISHED SOURCE IS RECOGNISED, NOT ASSERTED.  A sentence of a row's notes
+# counts as naming one when it carries a label ("Anchor:", "Source:"), an
+# author ("et al", two names and a year), a link or DOI, or one of the
+# agencies, publishers and price feeds below.  The sentences that matched are
+# QUOTED on the page, so a false match is visible to the reader rather than
+# hidden behind a tick.  A miss errs the safe way: the row is flagged.  A
+# vehicle or station named as an ANALOGY is not on the list ("ISS-class
+# hardware is rated 15-30 years" names no document), and a row's notes are
+# quoted as the ROW's: a launch-vehicle row's price source is not a source
+# for its payload, and the page says "the row's notes cite" for that reason.
+#
+# AUDITED AGAINST EVERY NOTES FIELD IT CAN READ (2026-10-19): the frozen
+# Stage 2 and Stage 3 tables and every config comment.  That pass found
+# sentences naming an agency in order to DENY a source ("NASA / SpaceX have
+# not published a per-kg PICA-X cost"), which `_NO_SOURCE` now refuses, and
+# real ones the first list missed: a guide or manual by title, "(SpaceNews
+# 2024)", "per Reuters analyst consensus".
+SOURCE_NAMES = (
+    "NASA", "JPL", "ESA", "JAXA", "USGS", "LME", "LBMA", "World Bank",
+    "Johnson Matthey", "CODATA", "IAU", "IERS", "NIST", "FAA", "CFR", "NICM",
+    "SSCM", "SMCM", "Aerospace Corp", "Wikipedia", "Planetary Society",
+    "Minor Planet Center", "MPC", "McDowell", "yfinance", "Yahoo Finance",
+    "metals.dev", "Fastmarkets", "Argus", "Platts", "COMEX", "NYMEX", "CME",
+    "SpaceX", "Blue Origin", "ULA", "Rocket Lab", "Arianespace",
+    "Northrop Grumman", "DARPA", "GAO", "AIAA", "DLA", "Reuters",
+    "SpaceNews", "Astronautix", "RocketCEA", "Gallagher", "Damodaran")
+_MONTHS = ("Jan|Feb|Mar|Apr|May|Jun|June|Jul|July|Aug|Sep|Sept|Oct|Nov|Dec|"
+           "Q[1-4]|NET|FY|early|late|mid")
+_LABEL = re.compile(r"\b(?:Anchors?|Sources?|References?|Cited|Citation)\s*:")
+_SOURCE_MARK = re.compile(
+    _LABEL.pattern +
+    r"|\bet al\b"
+    r"|\b[A-Z][A-Za-z'-]+ (?:and|&) [A-Z][A-Za-z'-]+,? \(?(?:19|20)\d\d\b"
+    # An attribution in parentheses, "(SpaceNews 2024)", and not a date.
+    r"|\((?!(?:%s)\b)[A-Z][\w.&'/-]*(?: [A-Z][\w.&'/-]*)* (?:19|20)\d\d\)"
+    # A document by its kind: a vendor's guide or manual, a datasheet.
+    r"|\bUsers?'?s?'? (?:Guide|Manual)\b|\bPlanner'?s Guide\b"
+    r"|\bdata ?sheets?\b|\bstatus reports?\b|\bStandard Prices\b"
+    r"|\bdoi\s*:|https?://"
+    r"|\b(?:%s)\b" % (_MONTHS, "|".join(re.escape(n) for n in SOURCE_NAMES)))
+# A sentence that names a source only to say there is none, or that records
+# what a row USED to cite.  Neither stands behind today's value.
+_NO_SOURCE = re.compile(
+    r"\b(?:no|not|never|none)\b[^.;:]{0,60}?\b(?:publish\w*|sources?|"
+    r"cite\w*|mention\w*|commodity)\b"
+    r"|\blists [^.;]{0,40}, not\b|\b(?:engineering|order-of-magnitude) "
+    r"estimate\b|^\(?Until v?\d", re.I)
+_SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z(\"'])")
+# What a period after which a sentence does NOT end looks like: an initial,
+# a short abbreviation ("J. Eng.", "Fig.", "Rev.", "No."), "e.g." or "vs.".
+# An initial stands alone: "NEXT-C." ends a sentence, and reading its C as
+# an initial merged it into the next one (the self-test's planted row).
+_ABBREV = re.compile(r"(?:(?<![\w-])[A-Z][a-z]{0,2}|\be\.g|\bi\.e|\bvs|\bcf|"
+                     r"\bal|\bpp?)\.$")
+_SRC_SPAN = re.compile(r"<span class='src'>(.*?)</span>", re.S)
+_FIELD = re.compile(r"<b>(\w+)</b> config, field <i>([a-z0-9_]+)</i>")
+_COLUMN = re.compile(r"column <i>([a-z0-9_]+)</i>")
+
+# The surveys behind every Stage 1 column, as CITATIONS.md section 1 lists
+# them.  A pointer to that file, not a second bibliography: the catalog does
+# not say which survey supplied which column, so the page says what it can.
+SURVEYS = ("the AsteroidCatalog release this run read, compiled from JPL "
+           "SBDB, IMCCE SsODNet/ssoBFT (Berthier et al. 2023), NEOWISE "
+           "Diameters and Albedos V2.0 (Mainzer et al. 2019) and MP3C; "
+           "<b>CITATIONS.md</b> section 1")
+COMPOSITION = ("the meteorite analogue AsteroidCatalog's mineralogy cites for "
+               "this taxonomy class; <b>CITATIONS.md</b> section 1, "
+               "<i>Mineral composition</i>")
+
+# THE RELATIONS A STEP USES THAT A TEXTBOOK STATES.  Matched on the step's
+# formula, so a return leg written with the same relation is cited the same
+# way.  The references are CITATIONS.md section 4's; a step this does not
+# match is the model's own arithmetic on its cited inputs, which the
+# substitution and the run's row verify and no source could.
+RELATIONS = (
+    (re.compile(r"^exp\(dv"), "the rocket equation (Tsiolkovsky)",
+     "Sutton and Biblarz, <i>Rocket Propulsion Elements</i>"),
+    (re.compile(r"^I_sp \* g_0$"), "exhaust velocity from specific impulse",
+     "Sutton and Biblarz, <i>Rocket Propulsion Elements</i>"),
+    (re.compile(r"v_e\^2 / \(2 eta t\)"), "jet power of an electric thruster",
+     "Sutton and Biblarz, <i>Rocket Propulsion Elements</i>"),
+    (re.compile(r"^m_prop v_e / t$"), "thrust as mass flow times exhaust "
+     "velocity", "Sutton and Biblarz, <i>Rocket Propulsion Elements</i>"),
+    # `mu_\w+` and the `[^ ^]*` suffixes because a Mars leg writes the same
+    # relation as `mu_M` and `v_inf,M`; an audit over one cell per
+    # destination found those spellings matching nothing.
+    (re.compile(r"sqrt\((?:mu_\w+ )?\(?2 (?:/|-) "), "the vis-viva equation",
+     "Vallado, <i>Fundamentals of Astrodynamics and Applications</i>"),
+    (re.compile(r"^sqrt\(mu_\w+ / [rR]"), "circular orbital speed",
+     "Vallado, <i>Fundamentals of Astrodynamics and Applications</i>"),
+    (re.compile(r"^sqrt\(2\) \* v_|^sqrt\(2 mu_\w+ / "), "escape speed",
+     "Vallado, <i>Fundamentals of Astrodynamics and Applications</i>"),
+    (re.compile(r"^sqrt\(v_esc[^ ^]*\^2 \+ v_inf[^ ^]*\^2\)"),
+     "hyperbolic excess "
+     "energy at perigee (vis-viva)",
+     "Vallado, <i>Fundamentals of Astrodynamics and Applications</i>"),
+    (re.compile(r"\+ 1 - 2 v_t cos i$|- 2 v_\w+ v_\w+ cos \w+\)$"
+                r"|- 2 sqrt\(v_\w+\^2 v_\w+\^2\) cos \w+\)"),
+     "a combined plane change by the "
+     "law of cosines",
+     "Vallado, <i>Fundamentals of Astrodynamics and Applications</i>"),
+    (re.compile(r"^a(?:_dest)? \^ 1\.5$"), "Kepler's third law",
+     "Vallado, <i>Fundamentals of Astrodynamics and Applications</i>"),
+    (re.compile(r"1 / \|1 / T_ast - 1 / T_dest\|"), "the synodic period",
+     "Vallado, <i>Fundamentals of Astrodynamics and Applications</i>"),
+    (re.compile(r"^k_D / sqrt\(p_V\)"), "diameter from absolute magnitude "
+     "and albedo", "Fowler and Chillemi 1992"),
+)
+
+
+# The table a citation names, and the path dial `C["files"]` records the
+# file it was actually read from under.
+TABLE_FILES = (("operational_costs.csv", "operational_costs_file"),
+               ("propellants.csv", "propellants_file"),
+               ("launch_vehicles.csv", "launch_vehicles_file"),
+               ("mineral_value_catalog.csv", "mineral_catalog_file"),
+               ("asteroid_catalog.csv", "asteroid_catalog_file"))
+
+
+def plain(text):
+    """HTML as the reader sees it: tags dropped, entities decoded."""
+    return " ".join(D.html.unescape(re.sub(r"<[^>]+>", "", str(text)))
+                    .split())
+
+
+def sentences(text):
+    """`text` split into sentences, not at an abbreviation's period."""
+    out = []
+    for piece in _SENTENCE.split(plain(text)):
+        if out and _ABBREV.search(out[-1]):
+            out[-1] += " " + piece
+        else:
+            out.append(piece)
+    return out
+
+
+# A SOURCE A LATER TABLE WITHDREW.  An archived run read a frozen spacecost
+# table, and the page quotes that table faithfully -- including a citation
+# the installed release has since retracted ("Until 1.17.1 this cited
+# 'NASA Money-Mass-ematics 2023', a grades 7-8 classroom worksheet ... that
+# never mentions beneficiation").  Quoting it as backing would be the page
+# vouching for a source the project itself withdrew, so the installed
+# tables' retractions are read, and a sentence naming one is refused.
+_RETRACTED = []
+
+
+def retracted():
+    """Titles the installed spacecost tables say a row once cited wrongly."""
+    if not _RETRACTED:
+        import spacecost
+        titles = set()
+        for loader in ("load_operational_costs", "load_propellants",
+                       "load_launch_vehicles", "load_storage"):
+            for note in getattr(spacecost, loader)()["notes"].dropna():
+                titles.update(re.findall(r"this (?:row )?cited '([^']+)'",
+                                         str(note)))
+        # A sentinel, so an install with no retractions is read once.
+        _RETRACTED.append(tuple(sorted(titles)))
+    return _RETRACTED[0]
+
+
+def withdrawn(found):
+    """(sentences still standing, the retracted titles that struck any)."""
+    hit = [t for t in retracted() if any(t in s for s in found)]
+    return [s for s in found if not any(t in s for t in hit)], hit
+
+
+def named_sources(text):
+    """The sentences of `text` that name a published source, verbatim."""
+    # An explicit label outranks a denial in the same sentence: "Source:
+    # Wikipedia, used as the LEO figure because no LEO figure is published"
+    # names its source and denies a different one.
+    return [s for s in sentences(text)
+            if _LABEL.search(s)
+            or (_SOURCE_MARK.search(s) and not _NO_SOURCE.search(s))]
+
+
+def quoted(sentences):
+    """Sentences as the page quotes them: escaped, each in its own quotes."""
+    return " ".join("&ldquo;%s&rdquo;" % D.esc(s) for s in sentences)
+
+
+def row_cites(sentences):
+    """Sources quoted off a reference row's notes, labelled as the row's."""
+    return "the row's notes cite %s" % quoted(sentences)
+
+
+def input_backing(row):
+    """(status, html) for one INPUT: 'source', 'derived' or 'needs'.
+
+    Dispatched on the citation's own opening clause, which the `cite_*`
+    helpers above write in a fixed form; a citation in a form this does
+    not recognise falls through to the sentence test, and to the flag.
+    """
+    _k, _tag, _sym, quantity, _v, _u, source = row
+    source = source or ""
+    head = plain(source.split(".  ")[0])
+    notes = " ".join(_SRC_SPAN.findall(source))
+    if head.startswith("Derived on this page"):
+        return "derived", "worked out on this page, as its citation says"
+    # `cite_body` writes both forms with " &middot; row "; the run's own
+    # `tank_mass_frac` also opens on profitability_catalog and is not a body
+    # column, so the separator is what tells them apart.
+    if (head.startswith(("asteroid_catalog.csv", "profitability_catalog"))
+            and "&middot; row <i>" in source):
+        column = (_COLUMN.findall(source) or [""])[0]
+        if "NOT measured" in source:
+            return "needs", ("not measured for this body: %s" % quoted(
+                [s for s in sentences(source) if "NOT measured" in s]))
+        return "source", COMPOSITION if column.startswith("comp_") else SURVEYS
+    if head.startswith("mineral_value_catalog.csv"):
+        if "<i>in_space_utility</i>" in source:
+            return "needs", ("an engineering judgement: <b>CITATIONS.md</b> "
+                             "section 7 records that there is nothing to "
+                             "cite for a utility factor")
+        if "terrestrial quote" in quantity:
+            if "No quote" in source:
+                return "needs", ("the row carries no price quote, and "
+                                 "Stage 2 prices a missing terrestrial "
+                                 "price as zero")
+            # To the end of the clause, through a dot inside a name
+            # ("metals.dev") but not the one that ends it.
+            quotes = re.findall(r"(?:reference|live) quote from "
+                                r"(?:[^.]|\.(?=\S))*", plain(source))
+            if quotes:
+                return "source", quoted(quotes)
+        found = named_sources(notes)
+        if found:
+            return "source", row_cites(found)
+        return "needs", ("the row's notes name no published source for "
+                         "this column")
+    match = _FIELD.search(source)
+    if match and head.endswith(("where its whole comment is)",)):
+        module, field = match.groups()
+        doc = field_docs(module).get(field) or {}
+        found = named_sources(doc.get("help") or "")
+        if found:
+            return "source", ("the field's comment: %s" % quoted(found))
+        return "needs", ("a setting: its comment (<b>%s</b>) names no "
+                         "published source" % D.esc(field_line(field,
+                                                               module)))
+    # A REFERENCE ROW IS DECIDED ON ITS NOTES ALONE.  Its citation also
+    # carries the row's other fields, and one of them is `operator Blue
+    # Origin`: scanning the whole citation credited a vehicle's maker as
+    # the source of a figure its notes never sourced.
+    if ".csv" in head:
+        found, struck = withdrawn(named_sources(notes))
+        gone = ", ".join("&ldquo;%s&rdquo;" % D.esc(t) for t in struck)
+        if found:
+            return "source", row_cites(found) + (
+                ".  It also cites %s, which the installed spacecost release "
+                "withdrew" % gone if struck else "")
+        if struck:
+            return "needs", ("the only source the row's notes give, %s, was "
+                             "withdrawn by the installed spacecost release"
+                             % gone)
+        return "needs", "the row's notes name no published source"
+    if notes and named_sources(notes):
+        return "source", "its citation names %s" % quoted(
+            named_sources(notes))
+    found = named_sources(source)
+    if found:
+        return "source", "its citation names %s" % quoted(found)
+    if "campaign/worked_calculation.py" in head:
+        return "needs", "a constant fixed in the derivation's own source, "\
+                        "with no reference given"
+    if head.startswith(("modules/", "spacecost/", "asteroid_catalog/")):
+        return "needs", "the model's own constant, with no reference given"
+    return "needs", "the row's notes name no published source"
+
+
+def relation(formula):
+    """(name, reference) of the textbook relation a step uses, or None."""
+    for pattern, name, where in RELATIONS:
+        if pattern.search(str(formula)):
+            return name, where
+    return None
+
+
+def reproduces(substitution, value, tol=1e-9):
+    """('ok' | 'wrong' | 'error' | 'prose', what it evaluated to)."""
+    expr = evaluable(substitution)
+    if expr is None:
+        return "prose", None
+    try:
+        got = eval(expr, {"__builtins__": {}}, dict(_ALLOWED))
+    except Exception as exc:
+        return "error", "%s" % exc
+    scale = max(abs(float(value)), abs(float(got)), 1e-30)
+    if abs(float(got) - float(value)) / scale > tol:
+        return "wrong", got
+    return "ok", got
+
+
+def run_columns(out):
+    """{value: [(column, how it compared)]} for the run's compared columns.
+
+    Matched on the float, because a step does not know its column's name,
+    and ONLY ON A DISTINCTIVE FLOAT.  The first version matched every value
+    but 0 and 1, and an audit across one cell per destination found the
+    small round numbers colliding: the fleet of 2 "equalled" ep_thrust_yr,
+    a utility factor "equalled" containment_frac.  True as arithmetic and
+    false as verification, so a value must carry four significant digits
+    before the page says a column agrees with it; the integer rows that do
+    have a column name it in their own citation.
+    """
+    c = out["check"]
+    derived = W.comparable(out["C"], out["B"], out["DV"], out["M"],
+                           out["P"], out["ladder"])
+    bad = set(name for name, _o, _t, _r in c["bad"])
+    found = {}
+    for name in c["names"]:
+        value = derived[name]
+        if isinstance(value, bool) or not distinctive(value):
+            continue
+        theirs = float(out["archived"][name])
+        how = ("DIFFERS" if name in bad else
+               "bit-exact" if value == theirs else "within %g" % c["tol"])
+        found.setdefault(float(value), []).append((name, how))
+    return found
+
+
+def distinctive(value):
+    """Whether `value` carries at least four significant digits."""
+    try:
+        mantissa = repr(float(value)).lower().split("e")[0]
+    except (TypeError, ValueError):
+        return False
+    return len(re.sub(r"\D", "", mantissa).strip("0")) >= 4
+
+
+def tag_link(tag, where="b"):
+    """A tag as a link to its row (`r`) or to its backing entry (`b`)."""
+    return '<a href="#%s-%s">%s</a>' % (where, tag, tag)
+
+
+def part_backing(S, out):
+    """One entry per tagged row: where it came from, what stands behind it,
+    and how this page verifies it.
+
+    BUILT LAST, like the dial ledger, because it reads every row the other
+    parts registered.  Every cell is quoted text or a label, so the
+    traceability check skips this part: it states no number the page has
+    not already stated and checked above.
+    """
+    C = out["C"]
+    settled = W.dials_in_force(C)
+    columns = run_columns(out)
+    read = C.get("files", {})
+    files = {table: repo_path(read[dial]) for table, dial in TABLE_FILES
+             if read.get(dial)}
+    rows = [r for part in S.parts for r in part["rows"]
+            if r[0] in ("input", "step")]
+    spent_by, uses = {}, {}
+    for r in rows:
+        if r[0] == "step":
+            uses[r[1]] = list(r[8])
+            for t in r[8]:
+                spent_by.setdefault(t, []).append(r[1])
+    key_of = dict((tag, key) for key, tag in S.tag.items())
+    status = {}
+    for r in rows:
+        if r[0] == "input":
+            status[r[1]] = input_backing(r)
+    # A step needs backing where it SPENDS an input that does: naming the
+    # inputs it spends directly keeps each entry to what that line consumes,
+    # and the count upstream says how far the gap reaches without repeating
+    # sixty tags under every cost line.
+    flagged = set(t for t, (s, _h) in status.items() if s == "needs")
+
+    def upstream(tag, seen):
+        """Every input tag reachable from `tag` through the steps it spends."""
+        for t in uses.get(tag, []):
+            if t in seen:
+                continue
+            seen.add(t)
+            upstream(t, seen)
+        return seen
+
+    S.part("backing", "Backing, row by row",
+           "Every tagged row above, with the published source it rests on, "
+           "quoted exactly where its citation names one, and how this page "
+           "verifies it.  <b>(needs backing)</b> marks an input nothing "
+           "outside this repository stands behind -- a setting, a "
+           "judgement, a constant given with no reference, a value not "
+           "measured for this body -- and a step that spends one.  A step "
+           "whose relation is a textbook one names the book; the rest are "
+           "the model's own arithmetic on their cited inputs, verified by "
+           "re-evaluating the substitution and against the run's own row.  "
+           "The same flag is printed beside the row itself, and each tag "
+           "links between the two.")
+    body = []
+    for r in rows:
+        tag = r[1]
+        bits = []
+        if r[0] == "input":
+            state, why = status[tag]
+            # The citation's opening clause, as text: cut at the joiner the
+            # `cite_*` helpers use, it can end inside a span it opened.
+            origin = D.esc(plain((r[6] or "").split(".  ")[0]))
+            backed = ("<b class=\"nb\">(needs backing)</b> " + why
+                      if state == "needs" else why)
+            by = spent_by.get(tag)
+            if by:
+                bits.append("spent by %s"
+                            % ", ".join(tag_link(t, "r") for t in by))
+            else:
+                bits.append("spent in a table on this page"
+                            if key_of[tag] in S.used else "spent by no step")
+            match = _FIELD.search(r[6] or "")
+            if match and match.group(1) == "calc":
+                field = match.group(2)
+                bits.append("the run's own row settles it: %s"
+                            % settled[field][1] if field in settled else
+                            "read from this process's config")
+            else:
+                name = plain(origin).split(",")[0].split(" ")[0]
+                if name in files:
+                    bits.append("read from <b>%s</b>" % D.esc(files[name]))
+        else:
+            state = ("needs" if any(t in flagged for t in r[8])
+                     else "steps")
+            origin = "worked out on this page from %s" % (
+                ", ".join(tag_link(t, "r") for t in r[8]) or "no tag")
+            gaps = [t for t in r[8] if t in flagged]
+            reach = len(upstream(tag, set()) & flagged)
+            found = relation(r[4])
+            backed = ("%s: %s" % found) if found else (
+                "the model's own arithmetic on the rows it spends")
+            if gaps:
+                backed = ("<b class=\"nb\">(needs backing)</b> spends %s, "
+                          "which %s backing.  %s"
+                          % (", ".join(tag_link(t) for t in gaps),
+                             "needs" if len(gaps) == 1 else "need",
+                             backed[:1].upper() + backed[1:]))
+            if reach:
+                backed += (".  %s input%s upstream %s backing"
+                           % (reach, "" if reach == 1 else "s",
+                              "needs" if reach == 1 else "need"))
+            how, got = reproduces(r[5], r[6]) if isinstance(
+                r[6], (int, float)) else ("prose", None)
+            bits.append({"ok": "the substitution re-evaluates to the value "
+                               "printed",
+                         "prose": "stated in words, not re-evaluated",
+                         "wrong": "the substitution DOES NOT reproduce its "
+                                  "value",
+                         "error": "the substitution DOES NOT evaluate"}[how])
+        value = r[4] if r[0] == "input" else r[6]
+        if (isinstance(value, (int, float)) and not isinstance(value, bool)
+                and distinctive(value)):
+            for name, how in columns.get(float(value), []):
+                bits.append("equals the run's column <i>%s</i>, %s"
+                            % (D.esc(name), how))
+        status[tag] = (state, backed)
+        body.append('<tr><td class="tag" id="b-%s">%s</td>'
+                    '<td class="cite"><b>%s</b> %s</td>'
+                    '<td class="cite">%s</td><td class="cite">%s</td>'
+                    '<td class="cite">%s</td></tr>'
+                    % (tag, tag_link(tag, "r"), D.esc(r[2]), D.esc(r[3]),
+                       origin, backed, "; ".join(bits)))
+    S.backing = dict((t, s) for t, (s, _h) in status.items())
+    S.block('<div class="tw"><table class="wide backing"><thead><tr>'
+            '<th>tag</th><th>quantity</th><th>read from</th>'
+            '<th>the source it rests on</th><th>how this page verifies it'
+            '</th></tr></thead><tbody>%s</tbody></table></div>'
+            % "".join(body))
+
+
+def report_backing(sheet, html, quiet=False):
+    """Every tag has exactly one backing entry, and every flag is on its row.
+
+    Read off the RENDERED page, both ways round: a tag with no entry is a
+    row whose backing nobody stated, an entry for no tag is a ledger that
+    drifted from the sheet, and a flagged entry whose row carries no flag is
+    the page saying two different things about one number.
+    """
+    tags = set(sheet.tag.values())
+    entries = re.findall(r'<td class="tag" id="b-([IS]\d+)">', html)
+    inline = set(re.findall(r'<td class="tag" id="r-([IS]\d+)">'
+                            r'(?:(?!</tr>).)*?class="nb"', html, re.S))
+    flagged = set(t for t, s in getattr(sheet, "backing", {}).items()
+                  if s == "needs")
+    missing = sorted(tags - set(entries))
+    stray = sorted(set(entries) - tags)
+    twice = sorted(t for t in set(entries) if entries.count(t) > 1)
+    unflagged = sorted(flagged - inline)
+    wrongly = sorted(inline - flagged)
+    n_in = sum(1 for t in tags if t.startswith("I"))
+    need_in = sum(1 for t in flagged if t.startswith("I"))
+    need_st = sum(1 for t in flagged if t.startswith("S"))
+    derived = sum(1 for t, s in getattr(sheet, "backing", {}).items()
+                  if s == "derived")
+    if not quiet:
+        print("  backing    %d of %d tags have one entry; inputs: %d named a "
+              "source, %d derived here, %d NEED BACKING; steps: %d spend an "
+              "input that needs backing; %d missing, %d stray, %d twice, %d "
+              "flag(s) not on their row"
+              % (len(tags) - len(missing), len(tags),
+                 n_in - need_in - derived, derived, need_in, need_st,
+                 len(missing), len(stray), len(twice),
+                 len(unflagged) + len(wrongly)))
+        for what, tags_ in (("no entry", missing), ("no such tag", stray),
+                            ("entered twice", twice),
+                            ("flag missing on its row", unflagged),
+                            ("flagged on its row only", wrongly)):
+            for t in tags_:
+                print("     ! %-5s %s" % (t, what))
+    return len(missing) + len(stray) + len(twice) + len(unflagged) \
+        + len(wrongly)
+
+
+def backing_self_test(sheet, html):
+    """Delete one entry and one inline flag, and confirm each is caught."""
+    failed = 0
+    entry = re.search(r'<tr><td class="tag" id="b-[IS]\d+">.*?</tr>', html,
+                      re.S)
+    flag = re.search(r'<span class="nb">\(needs backing\)</span>', html)
+    for what, planted in (
+            ("deleting a backing entry",
+             html[:entry.start()] + html[entry.end():] if entry else None),
+            ("deleting an inline flag",
+             html[:flag.start()] + html[flag.end():] if flag else None)):
+        if planted is None:
+            print("  self-test  *** NOTHING TO PERTURB for %s ***" % what)
+            failed += 1
+        elif report_backing(sheet, planted, quiet=True):
+            print("  self-test  %s is caught: the backing check can fail"
+                  % what)
+        else:
+            print("  self-test  *** %s WENT UNNOTICED ***" % what.upper())
+            failed += 1
+    # PLANTED CITATIONS, one per branch of `input_backing` that no mission on
+    # disk reaches, plus the one fall-through an audit found: a vehicle row
+    # whose notes source nothing must not be credited to its `operator`.
+    def planted(source, quantity="a planted quantity"):
+        """The status `input_backing` gives a made-up input."""
+        return input_backing(("input", "I0", "x", quantity, 1.0, "-",
+                              source))[0]
+    title = (retracted() or ("",))[0]
+    cases = [
+        ("an operator field is not a source", "needs", planted(
+            "<b>launch_vehicles.csv</b>, row <i>V</i>.  operator Blue "
+            "Origin.  <span class='src'>Rounded from the band.</span>")),
+        ("a source in the citation's own words", "source", planted(
+            "<b>modules/calc.py</b>, <i>K</i>: per NASA SP-8007.")),
+        ("a body value not measured", "needs", planted(
+            "<b>asteroid_catalog.csv</b> &middot; row <i>B</i> &middot; "
+            "column <i>density_gcm3</i>.  NOT measured: a class mean.")),
+        ("a mineral with no quote", "needs", planted(
+            "<b>mineral_value_catalog.csv</b>, row <i>m</i>.  <span "
+            "class='src'>No quote: priced as zero.</span>",
+            "m terrestrial quote")),
+    ]
+    if title:
+        cases.append(("a live source beside a withdrawn one", "source",
+                      planted("<b>operational_costs.csv</b>, row <i>R</i>. "
+                              " <span class='src'>Anchor: NASA NEXT-C.  "
+                              "Once from (%s 2023).</span>" % title)))
+    for what, want, got in cases:
+        if got == want:
+            print("  self-test  %s: %s, as it should be" % (what, got))
+        else:
+            print("  self-test  *** %s: %s, NOT %s ***"
+                  % (what.upper(), got, want))
+            failed += 1
+    caught = (not named_sources("A setting chosen to be round.")
+              and named_sources("Anchor: NASA NEXT-C, flown.")
+              and not named_sources("NASA has not published a figure."))
+    print("  self-test  the source test %s a planted sentence with a "
+          "source, one with none and one denying one"
+          % ("tells apart" if caught else
+                                   "*** CANNOT TELL APART ***"))
+    return failed + (0 if caught else 1)
+
 # ------------------------------------------------------------------- render
 CSS = """
 /* PRINT IS THE TARGET, NOT THE SCREEN.  The first version of this sheet came
@@ -4773,6 +5357,9 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.03em;
      white-space:nowrap;font-weight:600;font-size:.76rem;}
 .unit{color:var(--mute);font-weight:400;}
 .src{color:var(--mute);font-style:italic;}
+/* The flag a reader is meant to find on a skim: bold ink, no colour, so it
+   survives the black-only print rules like everything else. */
+.nb{font-weight:700;font-style:normal;color:var(--ink);white-space:nowrap;}
 .org{font-family:inherit;font-size:.74rem;}
 .note{color:var(--mute);font-size:.72rem;font-family:inherit;
       font-style:italic;}
@@ -4869,7 +5456,7 @@ def paper_px(paper=DEFAULT_PAPER):
             round((h_mm - 2 * vert) * 96 / 25.4))
 
 
-def render_row(row):
+def render_row(row, backing=None):
     """One row of the sheet: an input, a step, a prose line or a block.
 
     EVERYTHING THAT CAN SHARE A LINE DOES.  A step used to occupy four: the
@@ -4877,6 +5464,9 @@ def render_row(row):
     under that, and the note under that.  None of the four needed its own
     line, and 231 rows times three wasted lines is most of a document nobody
     would print.  The separators carry the structure instead.
+
+    `backing` is the backing part's {tag: status}: a row's tag links to its
+    entry there, and a row that part flags carries the flag here too.
     """
     kind = row[0]
     if kind == "prose":
@@ -4885,22 +5475,27 @@ def render_row(row):
     if kind == "block":
         return ('<tr><td class="tag"></td><td colspan="3">%s</td></tr>'
                 % row[1])
+    tag = row[1]
+    cell = '<td class="tag" id="r-%s"><a href="#b-%s">%s</a></td>' % (
+        tag, tag, tag)
+    flag = (' <span class="nb">(needs backing)</span>'
+            if (backing or {}).get(tag) == "needs" else "")
     if kind == "input":
         _k, tag, symbol, quantity, value, unit, source = row
-        return ('<tr class="in"><td class="tag">%s</td>'
-                '<td class="sym">%s <span class="qty">%s</span></td>'
+        return ('<tr class="in">%s'
+                '<td class="sym">%s <span class="qty">%s</span>%s</td>'
                 '<td class="org cite">%s</td>'
                 '<td class="val">%s <span class="unit">%s</span></td></tr>'
-                % (tag, D.esc(symbol), D.esc(quantity), source,
+                % (cell, D.esc(symbol), D.esc(quantity), flag, source,
                    P(value, 12) if isinstance(value, (int, float))
                    else D.esc(value), D.esc(unit)))
     (_k, tag, symbol, quantity, formula, substitution, value, unit, tags,
      note) = row
-    return ('<tr><td class="tag">%s</td>'
-            '<td class="sym">%s <span class="qty">%s</span></td>'
+    return ('<tr>%s'
+            '<td class="sym">%s <span class="qty">%s</span>%s</td>'
             '<td class="work">%s <span class="sub2">= %s</span>%s%s</td>'
             '<td class="val">%s <span class="unit">%s</span></td></tr>'
-            % (tag, D.esc(symbol), D.esc(quantity), D.esc(formula),
+            % (cell, D.esc(symbol), D.esc(quantity), flag, D.esc(formula),
                D.esc(substitution),
                ' <span class="uses">[%s]</span>' % ", ".join(tags)
                if tags else "",
@@ -4997,6 +5592,16 @@ def footer(out, sheet):
                    ", and %d DO NOT: %s"
                    % (len(missing),
                       D.esc(", ".join(t for t, _s in missing)))))
+    flags = getattr(sheet, "backing", {})
+    need = sorted((t for t, s in flags.items() if s == "needs"),
+                  key=lambda t: (t[0], int(t[1:])))
+    bits.append("<p>%s rows marked <b>(needs backing)</b>: %d inputs nothing "
+                "outside this repository stands behind, and %d steps that "
+                "spend one (%s).  Each is listed with its reason in %s.</p>"
+                % (len(need), sum(1 for t in need if t.startswith("I")),
+                   sum(1 for t in need if t.startswith("S")),
+                   ", ".join(t for t in need if t.startswith("I")) or "none",
+                   ref("backing")))
     loose_in, loose_step = sheet.unspent()
     bits.append("<p>%d inputs and %d steps.  %s  %d steps are cited by "
                 "nothing further, which is what a result or a diagnostic "
@@ -5031,10 +5636,13 @@ def build_sheet(out):
     # The dial ledger is BUILT LAST and printed second: it names, beside each
     # dial, the tag every other part registered it under, so it has to see
     # them all first.  Its position on the page is still its PART_KEYS slot.
+    # The backing ledger is built after THAT, for the same reason: it has an
+    # entry for every row every other part registered.
     for key in PART_KEYS:
-        if key != "dials":
+        if key not in ("dials", "backing"):
             builders[key](sheet, out)
     part_dials(sheet, out)
+    part_backing(sheet, out)
     sheet.parts.sort(key=lambda part: part["n"])
     assert [part["key"] for part in sheet.parts] == list(PART_KEYS), (
         "the parts built are not the parts PART_KEYS lists")
@@ -5071,7 +5679,8 @@ def document(out, sheet=None, pt=DEFAULT_PT, paper=DEFAULT_PAPER):
                     '<thead><tr><th>tag</th><th>quantity</th>'
                     '<th>how it is worked out</th><th>value</th></tr></thead>'
                     '<tbody>')
-        body.extend(render_row(r) for r in part["rows"])
+        body.extend(render_row(r, getattr(sheet, "backing", None))
+                    for r in part["rows"])
         body.append("</tbody></table></div>")
     # The parts, rendered once, are what the traceability check reads; the
     # footer is then written against that and appended.  See `_PAGE`.
@@ -5532,7 +6141,7 @@ def sweep(args):
               "report_monochrome", "report_furniture", "check_substitutions",
               "untraced", "is_traced", "as_number", "evaluable", "monochrome",
               "print_furniture", "footer", "branch_test", "patched",
-              "cited", "_claim",
+              "cited", "_claim", "report_backing", "backing_self_test",
               "step", "build_sheet", "return_leg_steps"}
     for title, group in (
             ("PAGE COVERAGE: lines of the page no swept page rendered",
@@ -5656,6 +6265,7 @@ def main(argv=None):
     bad = (report_substitutions(sheet) + report_origins(sheet)
            + report_untraced(sheet, html) + report_dials(html)
            + report_placeholders(sheet, html)
+           + report_backing(sheet, html)
            + report_monochrome()
            + report_furniture(stylesheet(args.font, args.paper), html))
     # The paper needs a browser, so it is measured on the runs that print.
@@ -5663,6 +6273,7 @@ def main(argv=None):
         bad += report_paper(html, args.paper)
     if args.self_test and (self_test(sheet) + dial_self_test(html)
                            + placeholder_self_test(sheet, html)
+                           + backing_self_test(sheet, html)
                            + paper_self_test(html, args.paper)
                            + branch_test(winner, label)):
         return 1

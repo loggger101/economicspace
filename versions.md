@@ -595,6 +595,77 @@ single shared figure, which is the case it is built to let through.
 `campaign/verification_sheet.py --check --self-test` pass, as do
 `verify_docs.py`, `verify_stage1.py`, `verify_stage3.py` and `tree_check.py`.
 
+### What stands behind each row of the verification worksheet (2026-10-19, no stamp)
+
+The origin check held every input to naming a file and a row, which says
+where a number was READ, not whether anything outside the repo stands behind
+it: a config dial, a constant typed into the derivation and a utility factor
+all passed it. `campaign/verification_sheet.py` gains a last part, "Backing,
+row by row", with one entry per tag: where the row was read from, the
+published source it rests on, and how the page verifies it (the steps that
+spend it, whether its substitution re-evaluates, which of the run's compared
+columns it equals).
+
+- **A source is recognised, not asserted.** A sentence of a citation counts
+  when it carries a label (`Anchor:`, `Source:`), an author (`et al`, two
+  names and a year), a link or DOI, or a name on `SOURCE_NAMES`; the
+  sentences that matched are quoted, so a weak match is visible. Utility
+  factors, inputs not measured for this body, minerals Stage 2 has no quote
+  for, and settings or constants whose comments name nothing are marked
+  **(needs backing)**, on the entry and on the row. A step is marked when it
+  spends such an input, with a count of those upstream.
+- **Textbook relations are cited by formula** (`RELATIONS`): the rocket
+  equation, vis-viva and the orbital relations, jet power and thrust, and
+  the H-to-diameter relation, against the three references CITATIONS.md
+  section 4 now lists.
+- `check_substitutions` evaluates through `reproduces()`, which the entries
+  share; its counts are unchanged.
+
+**Audited before release**, by running the source test over every notes
+field in the frozen Stage 2 and Stage 3 tables and every config comment,
+and by rendering one winner per destination and ore state (15 pages):
+- Sentences naming an agency to DENY a source ("NASA / SpaceX have not
+  published a per-kg PICA-X cost"), and history ("Until v1.16.0 this row
+  ..."), were counted as sources; `_NO_SOURCE` refuses them, unless the
+  sentence carries an explicit `Source:` label.
+- Real sources were missed: vendor user's guides and manuals, "(SpaceNews
+  2024)", "per Reuters analyst consensus". Attribution in parentheses,
+  document kinds and eight more names now count; the splitter no longer
+  breaks "J. Eng." (and does not take "NEXT-C." for an initial).
+- A table row whose notes sourced nothing fell through to a scan of its
+  whole citation, which credited `operator Blue Origin`. Reference rows are
+  decided on their notes alone.
+- **The frozen spacecost 0.5.0 table cites "NASA Money-Mass-ematics 2023" for
+  beneficiation energy, which the installed release withdrew** ("a grades
+  7-8 classroom worksheet ... that never mentions beneficiation"). The page
+  reads the installed tables' retractions and refuses a source they name, so
+  that input is now flagged on every beneficiated page.
+- Column matches were made on any float but 0 and 1, and small round
+  numbers collided (the fleet of 2 "equalled" `ep_thrust_yr`). A match now
+  needs four significant digits; what remains across the 15 pages are true
+  equalities (feed equals payload on a raw mission).
+- `RELATIONS` missed the Mars and GEO spellings (`mu_M`, `v_inf,M`, `R_GEO`,
+  a law of cosines written with `cos eps`); it now matches every textbook
+  formula on the 15 pages, and every entry matches one.
+
+**Measured** on the default winner (2018 DT, calc 1.26.0 row): of 131
+inputs, 27 name a source, 5 are derived on the page and 99 need backing; 94
+of 206 steps spend one. The PDF is 48 pages on letter.
+
+**Verified.** `--check --self-test --pdf` passes every check it did before
+(394 of 394 substitutions, 131 of 131 origins, 512 of 512 numbers traced, 85
+of 85 dials). The new check reads the rendered page both ways (every tag has
+one entry, every entry names a tag, every flag is on its row); on the 15
+audit pages every in-page link resolves and the ledger's markup balances.
+The self-test deletes one entry and one inline flag and is caught each time,
+feeds the source test a sentence with a source, one without and one denying
+one, and plants a citation for each branch no mission on disk reaches (an
+operator field, a source in a citation's own words, a value not measured, a
+mineral with no quote, a live source beside a withdrawn one); the last
+failed on the "NEXT-C." split before it was fixed. `--every-winner` fails
+only the six LEO cells on `c_ISRU`'s origin, which it failed before this
+change.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer

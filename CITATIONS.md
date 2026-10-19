@@ -283,6 +283,24 @@ The starter and quartic Newton iteration in `kepler_E` follow:
 
 reached by way of skyfield's implementation, which is credited in section 3.
 
+### Textbook relations the verification worksheet cites
+
+`campaign/verification_sheet.py`'s backing part names the source of a step
+whose relation is a textbook one (its `RELATIONS` register). Every other step
+is the model's own arithmetic on cited inputs, and nothing here covers it.
+
+> Sutton, G. P. and Biblarz, O. (2017). *Rocket Propulsion Elements*, 9th
+> ed. Wiley. The rocket equation, exhaust velocity, thrust and jet power.
+
+> Vallado, D. A. (2013). *Fundamentals of Astrodynamics and Applications*,
+> 4th ed. Microcosm Press. Vis-viva, circular and escape speed, the combined
+> plane change, Kepler's third law and the synodic period.
+
+> Fowler, J. W. and Chillemi, J. R. (1992). IRAS asteroid data processing.
+> In Tedesco, E. F. et al., *The IRAS Minor Planet Survey*, Phillips
+> Laboratory technical report PL-TR-92-2049. Diameter from absolute
+> magnitude and albedo.
+
 ---
 
 ## 5. Repositories audited, and what was taken from each
