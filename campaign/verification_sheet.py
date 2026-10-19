@@ -3741,11 +3741,22 @@ def part_cost(S, out):
            "%s * %s" % (P(M["m_oprop"]), P(C["prop_usd_per_kg"])),
            lines["oprop"], "$", ["m_oprop", "c_prop"])
     if C["isru"]:
+        # Three ways `isru_processing_terms` settles the rate, three origins:
+        # the config field, the retired $50 it names as a constant, or the
+        # row's own columns (whose reason already carries their `<i>` names).
+        how = C["isru_opex_how"]
+        if how.startswith("this process"):
+            isru_cite = cite_config("isru_processing_usd_per_kg")
+        elif how.startswith("calc's flat"):
+            isru_cite = cite_here(
+                "ISRU_OPEX_BEFORE_V132",
+                "calc's default for isru_processing_usd_per_kg until 1.32.0 "
+                "retired it.  The row was billed it: its "
+                "return_prop_cost_usd over m_return_prop_kg agrees to 1e-9.")
+        else:
+            isru_cite = how
         S.put("c_isru", "c_ISRU", "flat processing cost of propellant made "
-              "on site", C["isru_opex"], "$/kg",
-              cite_config("isru_processing_usd_per_kg")
-              if C["isru_opex_how"].startswith("this process")
-              else C["isru_opex_how"])
+              "on site", C["isru_opex"], "$/kg", isru_cite)
     S.step("L_rprop", "C_rprop", "return propellant",
            "m_rprop * %s" % ("c_ISRU" if C["isru"] else "c_prop"),
            "%s * %s" % (P(M["m_rprop"]),
