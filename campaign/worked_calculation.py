@@ -820,12 +820,13 @@ def dials_in_force(C):
                                   "the row's <i>detailed_phases</i> column"),
         "model_refinery": (C["refinery"], "<i>refinery_kg</i> on the row: a "
                            "flown refinery always has a plant"),
-        "repair_settled_overshoot": (C["repair"], "the row carries "
-                                     "<i>settle_repairs</i> (calc 1.27.0 and "
-                                     "later) and the config allows it"),
-        "damp_sizing_loop": (C["damp"], "the row carries <i>sizing_damped</i> "
-                             "(calc 1.28.0 and later) and the config allows "
-                             "it"),
+        "repair_settled_overshoot": (C["repair"], "on only where the row "
+                                     "carries <i>settle_repairs</i> (calc "
+                                     "1.27.0 and later) and the config "
+                                     "allows it"),
+        "damp_sizing_loop": (C["damp"], "on only where the row carries "
+                             "<i>sizing_damped</i> (calc 1.28.0 and later) "
+                             "and the config allows it"),
         "launch_capacity_rtol": (C["launch_rtol"], "the row's calc stamp: "
                                  "before 1.29.0 the test was strict, whatever "
                                  "the config says"),
@@ -1189,8 +1190,17 @@ def input_provenance(archived, manifest, minerals_path, minerals_from,
             ("Stage 3 tables", os.path.join(tdir, vehicles_file),
              transport_from, "transportation")):
         ver, date = _table_stamp(path)
-        rows.append((label, "%s %s, written %s: %s"
-                     % (module, ver or "?", date or "?", src)))
+        stamped = "%s %s, written %s" % (module, ver or "?", date or "?")
+        # A frozen set is labelled by its directory, which for Stage 2 is
+        # the stamp just printed: "mineral_value 1.12.0 ... frozen
+        # mineral_value 1.12.0" said one version twice.
+        where, _sep, frozen = src.partition(", frozen ")
+        if frozen:
+            rows.append((label, "%s, frozen in %s%s" % (
+                stamped, where, "" if frozen == "%s %s" % (module, ver)
+                else " (%s)" % frozen)))
+        else:
+            rows.append((label, "%s: %s" % (stamped, src)))
     return rows
 
 
@@ -3282,6 +3292,10 @@ def isru_processing_terms(C, archived):
     C["isru_plant_rate"] = (C["val"]("ISRU propellant plant throughput")
                             if on else 0.0)
     opex, how = float(cfg.isru_processing_usd_per_kg), "this process's config"
+    if not C["isru"]:
+        # A run older than 1.32.0 had $50 here, and it does not matter:
+        # the rate bills propellant made on site, and this mission makes none.
+        how += "; inert, because this mission makes no propellant on site"
     if C["isru"] and hasattr(row, "get"):
         cost, mass = row.get("return_prop_cost_usd"), row.get("m_return_prop_kg")
         if (cost is not None and mass is not None and not pd.isna(cost)

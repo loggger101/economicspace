@@ -301,6 +301,17 @@ is the model's own arithmetic on cited inputs, and nothing here covers it.
 > Laboratory technical report PL-TR-92-2049. Diameter from absolute
 > magnitude and albedo.
 
+Three of the derivation's own constants (`campaign/worked_calculation.py`)
+are cited on the worksheet to the documents below; each agrees with the
+constant to the figures it publishes.
+
+> Petit, G. and Luzum, B. (eds.) (2010). *IERS Conventions (2010)*, IERS
+> Technical Note 36, Table 1.1. Earth's gravitational parameter, `MU_EARTH`.
+
+> NASA NSSDCA, *Earth Fact Sheet* and *Moon Fact Sheet*,
+> <https://nssdc.gsfc.nasa.gov/planetary/factsheet/>. Earth's mean orbital
+> velocity, `V_EARTH`, and the Moon's semi-major axis, `R_MOON`.
+
 ---
 
 ## 5. Repositories audited, and what was taken from each
