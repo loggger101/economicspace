@@ -301,6 +301,10 @@ is the model's own arithmetic on cited inputs, and nothing here covers it.
 > Laboratory technical report PL-TR-92-2049. Diameter from absolute
 > magnitude and albedo.
 
+> Wright, T. P. (1936). Factors affecting the cost of airplanes. *Journal of
+> the Aeronautical Sciences* 3(4), 122-128. The learning curve: each doubling
+> of units built costs a fixed fraction of the last.
+
 Three of the derivation's own constants (`campaign/worked_calculation.py`)
 are cited on the worksheet to the documents below; each agrees with the
 constant to the figures it publishes.

@@ -50,6 +50,7 @@ position, and `Worksheet.step` refuses a key it has not seen registered.
 import argparse
 import datetime
 import math
+import numbers
 import os
 import re
 import sys
@@ -116,6 +117,11 @@ def refs(first, last, joiner="to"):
     a, b = part_no(first), part_no(last)
     return ('<span class="ord"><a href="#p%d">parts %d</a> %s '
             '<a href="#p%d">%d</a></span>' % (a, a, joiner, b, b))
+
+
+def possessive(name):
+    """`name`'s, escaped, or `name`' where it ends in s ("silicates'")."""
+    return D.esc(name) + ("'" if str(name).endswith("s") else "'s")
 
 
 def ordinal(n):
@@ -404,7 +410,19 @@ def cite_table_row(row, table, name, fields=()):
         # audit's list that no line on the page pays.  `Recorded.raw`'s own
         # docstring is the rule this follows.
         value = getattr(row, "raw", getattr(row, "get", None))(field)
-        text = trim(value, 90) if present(value) else ""
+        # A number is printed the way the page prints numbers: raw, the
+        # tank's feed ratio read "1.2857142857142858" beside a value column
+        # reading 1.28571428571, and a fairing "216.0" beside 216.
+        # numbers.Real, because pandas hands back numpy integers, which are
+        # not `int`; a numpy bool is excluded by name with Python's own.
+        if (isinstance(value, numbers.Real)
+                and type(value).__name__ not in ("bool", "bool_")
+                and math.isfinite(float(value))):
+            # A year is a label, not a quantity: "2,026" is no year.
+            text = (str(int(value)) if "year" in field
+                    and float(value).is_integer() else P(value))
+        else:
+            text = trim(value, 90) if present(value) else ""
         if text:
             bits.append("%s %s" % (field, text))
     note = trim(row.raw("notes") if hasattr(row, "raw") else row.get("notes"))
@@ -413,7 +431,7 @@ def cite_table_row(row, table, name, fields=()):
     return join_clauses(bits)
 
 
-def cite_mineral(C, name, label=None):
+def cite_mineral(C, name, label=None, column=None):
     """Cite one commodity row of the Module 2 catalog, price source included.
 
     Two dates matter and they are different questions: `ref_price_date` is
@@ -426,8 +444,9 @@ def cite_mineral(C, name, label=None):
         raise AssertionError("mineral_value_catalog.csv has no row named %r"
                              % name)
     row = hit.iloc[0]
-    bits = ["<b>mineral_value_catalog.csv</b>, row <i>%s</i>"
-            % D.esc(label or name)]
+    bits = ["<b>mineral_value_catalog.csv</b>, row <i>%s</i>%s"
+            % (D.esc(label or name),
+               ", column <i>%s</i>" % D.esc(column) if column else "")]
     basis = trim(row.get("price_basis"), 60)
     if basis:
         bits.append("basis %s" % basis)
@@ -733,23 +752,84 @@ def leo_anchor_row(C, value):
 
     The run's own frozen launch table first, because that is the table of
     the release that priced it; the installed one second.  Either only when
-    its `usd_per_kg_to_leo` is the price on this page.
+    its `usd_per_kg_to_leo` is the price on this page.  The vehicle is the
+    installed anchor, or one the pricing label names: a Stage 2 table priced
+    before spacecost 0.4.0 anchored on Falcon 9 (reusable), which the label
+    says and the installed anchor is not.
     """
     import spacecost
     import spacecost.delivery as sd
-    name = sd.LEO_LAUNCH_VEHICLE
+    label = str(C.get("pricing_label") or "")
     path = C.get("files", {}).get("launch_vehicles_file")
     if path and os.path.exists(path):
         table = pd.read_csv(path)
-        hit = table[table["name"] == name]
-        if len(hit) and float(hit.iloc[0]["usd_per_kg_to_leo"]) == float(value):
-            return ("<b>%s</b>" % D.esc(repo_path(path)), name, hit.iloc[0])
-    row = spacecost_row("load_launch_vehicles", "name", name,
+        named = [n for n in table["name"].astype(str)
+                 if n == sd.LEO_LAUNCH_VEHICLE or n in label]
+        for name in named:
+            hit = table[table["name"] == name]
+            if float(hit.iloc[0]["usd_per_kg_to_leo"]) == float(value):
+                return ("<b>%s</b>" % D.esc(repo_path(path)), name,
+                        hit.iloc[0])
+    row = spacecost_row("load_launch_vehicles", "name", sd.LEO_LAUNCH_VEHICLE,
                         "usd_per_kg_to_leo", value)
     if row is not None:
         return ("spacecost %s's <b>launch_vehicles.csv</b>"
-                % D.esc(spacecost.__version__), name, row)
+                % D.esc(spacecost.__version__), sd.LEO_LAUNCH_VEHICLE, row)
     return None
+
+
+# THE DERIVATION'S CONSTANTS THAT RESTATE A spacecost DELTA-V ROW, by the
+# row calc's own comment on its copy names ("Module 3 'Mars entry ->
+# surface'").  Typed, so held both ways: a constant is cited to its rows only
+# while they sum to it (`delta_v_rows`), and `backing_self_test` fails an
+# entry that matches nothing in the installed table, which is a permission
+# still being granted.  The notes of those rows are where the sources are:
+# Whitley & Martinez for the NRHO burns, NASA SP-4029 for the Apollo descent,
+# NASA DRA 5.0 for the Mars retro-propulsion.
+DERIVATION_ROWS = {
+    "DV_NRHO": ("TLI  →  NRHO insertion",),
+    "DV_NRHO_TO_LUNAR_SURFACE": ("NRHO  →  low lunar orbit",
+                                 "LLO  →  lunar surface (descent)"),
+    "DV_MARS_RETROPROP": ("Mars entry  →  surface (retroprop)",),
+    "DV_AEROBRAKE_TRIM": ("NEA  →  LEO delivery (aerobraked)",),
+}
+
+
+def delta_v_rows(name, value):
+    """The installed delta-v rows constant `name` restates, if they sum to
+    `value` (km/s) to the metre per second; otherwise None."""
+    import spacecost
+    segments = DERIVATION_ROWS.get(name)
+    if not segments:
+        return None
+    table = spacecost.load_delta_v()
+    rows = []
+    for seg in segments:
+        hit = table[table["segment"] == seg]
+        if not len(hit):
+            return None
+        rows.append(hit.iloc[0])
+    total = sum(float(r["dv_m_per_s"]) for r in rows)
+    return rows if round(float(value) * 1000.0, 6) == round(total, 6) else None
+
+
+def cite_constant(name, value, what=""):
+    """`cite_here`, or, where the constant restates delta-v rows, those rows
+    with their notes, so part 18 reads the sources that stand behind it."""
+    import spacecost
+    rows = delta_v_rows(name, value)
+    if rows is None:
+        return cite_here(name, what)
+    notes = "".join("  <span class='src'>%s</span>" % trim(r.get("notes"))
+                    for r in rows if trim(r.get("notes")))
+    return ("<b>campaign/worked_calculation.py</b> &middot; constant "
+            "<i>%s</i>, in km/s, restating spacecost %s's "
+            "<b>delta_v_segments.csv</b>, %s <i>%s</i>, as calc's own copy "
+            "does.%s%s"
+            % (D.esc(name), D.esc(spacecost.__version__),
+               "row" if len(rows) == 1 else "the sum of rows",
+               "</i> + <i>".join(D.esc(r["segment"]) for r in rows),
+               "  " + D.esc(what) if what else "", notes))
 
 
 _CHAIN_SEGMENTS = {}
@@ -1014,16 +1094,21 @@ def part_prices(S, out):
     # "before its band reached NASA's price", and part 18 read that mention
     # of NASA as the source of $2,414/kg.  The source is the vehicle row the
     # anchor IS, so that row's notes are quoted and the label is plain text.
-    anchor = leo_anchor_row(C, C["leo_usd_per_kg"]) if hw_on else None
+    anchor = leo_anchor_row(C, C["leo_usd_per_kg"])
     if anchor is not None:
         where, name, row = anchor
         note = trim(row.get("notes"))
-        source = ("%s, row <i>%s</i>, column <i>usd_per_kg_to_leo</i>: "
-                  "spacecost's <i>LEO_LAUNCH_USD_PER_KG</i>, re-exported by "
-                  "<b>modules/mineral_value.py</b> as <i>_LEO_USD_PER_KG</i>."
+        source = ("%s, row <i>%s</i>, column <i>usd_per_kg_to_leo</i>: %s."
                   "  %s.  Chosen by the Stage 2 table's own stamp, and held "
                   "to every <i>used in space</i> price that table carries.%s"
-                  % (where, D.esc(name), D.esc(C["pricing_label"]),
+                  % (where, D.esc(name),
+                     "spacecost's <i>LEO_LAUNCH_USD_PER_KG</i>, re-exported "
+                     "by <b>modules/mineral_value.py</b> as "
+                     "<i>_LEO_USD_PER_KG</i>" if hw_on else
+                     "spacecost 0.3.x's anchor, which this row's Stage 2 "
+                     "table was priced at (<i>_PRE_V040_LEO_USD_PER_KG</i> "
+                     "in <b>campaign/worked_calculation.py</b>)",
+                     D.esc(C["pricing_label"]),
                      "  <span class='src'>%s</span>" % note if note else ""))
     else:
         source = (("<b>spacecost/delivery.py</b>, "
@@ -1218,12 +1303,22 @@ def part_prices(S, out):
                      C["p_l"], "$/kg", ["c_LEO", "m_LEO"],
                      "held to Module 2's own delivered_cost_usd_per_kg")
 
-    S.prose("Used at the destination: <b>max(0, p + u P_L - c_ref)</b>, "
-            "floored at zero by Stage 2.  Shipped home: <b>max(0, p - "
-            "c_down)</b>.  Which one applies is Module 2's <i>value_route</i> "
-            "column.")
-
     parts = C["price_parts"]
+    if parts:
+        S.prose("Used at the destination: <b>max(0, p + u P_L - c_ref)</b>, "
+                "floored at zero by Stage 2.  Shipped home: <b>max(0, p - "
+                "c_down)</b>.  Which one applies is Module 2's "
+                "<i>value_route</i> column.")
+    else:
+        # 🚨  NO PER-DESTINATION COLUMNS, SO NO RULE TO STATE AND NO PRICE
+        # REGISTERED.  A Stage 2 table for the Earth's surface carries only
+        # the terrestrial price, and this loop used to skip every phase it
+        # had no route for: the silicate and carbon quotes behind V_bulk were
+        # printed in the hold table with no tag and no citation, and the bulk
+        # step cited the alloy alone.
+        S.prose("So each phase below is its row's <i>price_usd_per_kg</i>, "
+                "with nothing added or taken off.")
+
     refinery = bool(C.get("refinery"))
     # 🚨  THE PHASES AS THE BODY HAS THEM, NOT AS THEY ARE SOLD.  calc sells
     # the phases no process separates as one product (`_INSEPARABLE`), so the
@@ -1242,6 +1337,24 @@ def part_prices(S, out):
     for name, frac, price in as_had:
         base = "silicates" if name.startswith("other") else name
         pp = parts.get(base)
+        if (pp is None and not parts and base not in seen
+                and not (base == "nickel-iron" and not C.get("phased"))
+                and len(C["minerals"][C["minerals"]["name"] == base])):
+            seen.append(base)
+            short = base.replace(" ", "_").replace("-", "_")
+            # Keyed as the in-space branch keys it: a phase that can also be
+            # taken apart registers its ROW price as the as-is half, and the
+            # better of the two is its `P_` key, decided below.  Registered
+            # as `P_` here, a phased Earth-surface page asserted on cohenite.
+            way = (C.get("ways") or {}).get(base) if C.get("phased") else None
+            if way is not None and way.get("as_is") is None:
+                continue
+            S.put(("Pa_%s" if way else "P_%s") % short,
+                  ("P_%s,as-is" if way else "P_%s") % base,
+                  "%s terrestrial quote" % base,
+                  way["as_is"] if way else price, "$/kg",
+                  cite_mineral(C, base, column="price_usd_per_kg"))
+            continue
         if pp is None or base in seen:
             continue
         seen.append(base)
@@ -1263,8 +1376,8 @@ def part_prices(S, out):
                  if first_u is None else
                  # Said in full once: it is the same five lines under
                  # every phase, a dozen times on an S-type.
-                 "<span class='src'>The same judgement as %s's, above."
-                 "</span>" % D.esc(first_u)))
+                 "<span class='src'>The same judgement as %s, above."
+                 "</span>" % possessive(first_u)))
         first_u = first_u or base
         # A mineral with NO terrestrial quote (the alloy, troilite,
         # schreibersite) is priced by Stage 2 at a terrestrial price of zero:
@@ -1342,10 +1455,12 @@ def part_prices(S, out):
                 elements.append(element)
     net_of = {}
     if elements:
-        S.prose("The elements a phase can be taken apart into, priced by the "
-                "same two rules as the phases above%s.  A platinum-group "
-                "element carries this body's enrichment, kappa, below."
-                % ("; with the refinery flown the price that SELLS is the one "
+        S.prose("The elements a phase can be taken apart into, %s%s.  A "
+                "platinum-group element carries this body's enrichment, "
+                "kappa, below."
+                % ("priced by the same two rules as the phases above"
+                   if parts else "at their terrestrial quotes",
+                   "; with the refinery flown the price that SELLS is the one "
                    "before the refining deduction and the NET one decides the "
                    "route" if refinery else ""))
         rows = []
@@ -1385,10 +1500,17 @@ def part_prices(S, out):
                          "$" + P(pp["delivered"]), gross_work,
                          ("$" + P(price)) if refinery else "-",
                          cited(cite_mineral(C, element))])
-        S.block(D.table(["element", "route", "p $/kg", "u", "cost $/kg",
-                         "net price worked out", "net $/kg",
-                         "selling price worked out", "selling $/kg",
-                         "source"], rows, "wide"))
+        if parts:
+            S.block(D.table(["element", "route", "p $/kg", "u", "cost $/kg",
+                             "net price worked out", "net $/kg",
+                             "selling price worked out", "selling $/kg",
+                             "source"], rows, "wide"))
+        else:
+            # With no per-destination columns every route, utility, cost
+            # and working cell is a dash: seven columns of them, on every
+            # row, said nothing the prose above does not.
+            S.block(D.table(["element", "terrestrial $/kg", "source"],
+                            [[r[0], r[6], r[9]] for r in rows], "wide"))
         S.put("kappa", "kappa", "platinum-group enrichment", C["kappa"], "x",
               cite_body(C, "comp_pgm_enrichment",
                         "follows the taxonomy class"))
@@ -1521,6 +1643,8 @@ def part_prices(S, out):
         frac = sum(f for _m, f, _v in group)
         value = next(p for n, _f, p in C["phases"] if n == product)
         names = [D.esc(m) for m, _f, _v in group]
+        # The sentence opens on a mineral's name, which is lower case.
+        names[0] = names[0][:1].upper() + names[0][1:]
         S.prose("%s are one grain that no separation takes apart, so calc "
                 "sells them as one product, <i>%s</i>, at their "
                 "fraction-weighted value (<i>_INSEPARABLE</i> in "
@@ -1784,29 +1908,11 @@ def part_constants(S, out):
         S.put("R_M", "R_M", "lunar orbital radius", W.R_MOON, "km",
               cite_here("R_MOON", "The Moon's semi-major axis: NASA's Moon "
                         "Fact Sheet (NSSDCA) gives 0.3844 million km."))
-        # calc's own copy names the row it restates ("Module 3
-        # DELTA_V_REFERENCE 'TLI -> NRHO insertion'"), and that row cites its
-        # source; quoted only while it still says the same number.
-        nrho = "TLI  →  NRHO insertion"
-        # Rounded to the metre per second: 0.450 * 1000 is not 450.0.
-        row = spacecost_row("load_delta_v", "segment", nrho, "dv_m_per_s",
-                            round(W.DV_NRHO * 1000.0, 6))
+        # The row it restates, and that row's source: `DERIVATION_ROWS`.
         why = ("Capture BINDS the orbit at low perigee and takes the Oberth "
                "benefit there; this is the increment that finishes the job "
                "at the depot.")
-        if row is None:
-            source = cite_here("DV_NRHO", why)
-        else:
-            import spacecost
-            note = trim(row.get("notes"))
-            source = ("<b>campaign/worked_calculation.py</b> &middot; "
-                      "constant <i>DV_NRHO</i>, in km/s, restating spacecost "
-                      "%s's <b>delta_v_segments.csv</b>, row <i>%s</i>, as "
-                      "calc's <i>DV_NRHO_INSERTION_KM_S</i> does.  %s%s"
-                      % (D.esc(spacecost.__version__), D.esc(nrho),
-                         D.esc(why),
-                         "  <span class='src'>%s</span>" % note
-                         if note else ""))
+        source = cite_constant("DV_NRHO", W.DV_NRHO, why)
         S.put("dv_NRHO", "dv_NRHO", "NRHO insertion increment", W.DV_NRHO,
               "km/s", source)
 
@@ -1830,7 +1936,8 @@ def return_leg_steps(S, out, leg):
     def const(key, symbol, what, value, unit, constant, why=""):
         """A constant `worked_calculation` fixes, registered by name."""
         if key not in S.tag:
-            S.put(key, symbol, what, value, unit, cite_here(constant, why))
+            S.put(key, symbol, what, value, unit,
+                  cite_constant(constant, value, why))
         return key
 
     def circularise(prefix, v_apo, v_apo_key):
@@ -5170,6 +5277,10 @@ _SOURCE_MARK = re.compile(
     # A document by its kind: a vendor's guide or manual, a datasheet.
     r"|\bUsers?'?s?'? (?:Guide|Manual)\b|\bPlanner'?s Guide\b"
     r"|\bdata ?sheets?\b|\bstatus reports?\b|\bStandard Prices\b"
+    # A standard by its number: "MIL-HDBK-189 puts alpha at 0.3-0.6" is the
+    # whole backing of the reliability-growth exponent, and read as no
+    # source until a Mars page put it on paper.
+    r"|\bMIL-(?:HDBK|STD)-\d+\w*|\bECSS-[A-Z]-\w+"
     r"|\bdoi\s*:|https?://"
     r"|\b(?:%s)\b" % (_MONTHS, "|".join(re.escape(n) for n in SOURCE_NAMES)))
 # A sentence that names a source only to say there is none, or that records
@@ -5265,6 +5376,8 @@ RELATIONS = (
      "Vallado, <i>Fundamentals of Astrodynamics and Applications</i>"),
     (re.compile(r"^k_D / sqrt\(p_V\)"), "diameter from absolute magnitude "
      "and albedo", "Fowler and Chillemi 1992"),
+    (re.compile(r"^log2\(b_LC\)$|k \^ beta_LC$"), "Wright's learning curve",
+     "Wright 1936, <i>Factors Affecting the Cost of Airplanes</i>"),
 )
 
 
@@ -5773,6 +5886,23 @@ def backing_self_test(sheet, html):
         "<b>calc</b> config, field <i>k</i> (<b>modules/calc.py:1</b>, where "
         "its whole comment is).  " + OFF_MARK + "<i>k_col</i>), so it is "
         "exactly 1.0.")))
+    # The register, held the other way: an entry whose rows no longer sum to
+    # its constant is a citation the page has silently stopped giving.
+    stale = [n for n in DERIVATION_ROWS
+             if delta_v_rows(n, getattr(W, n, float("nan"))) is None]
+    print("  self-test  DERIVATION_ROWS: %d of %d constants still restate "
+          "their delta-v rows%s"
+          % (len(DERIVATION_ROWS) - len(stale), len(DERIVATION_ROWS),
+             "" if not stale else "; *** STALE: %s ***" % ", ".join(stale)))
+    failed += len(stale)
+    planted_dv = delta_v_rows("DV_NRHO", W.DV_NRHO + 0.001)
+    print("  self-test  a constant moved off its row is %s"
+          % ("refused the row's citation" if planted_dv is None
+             else "*** STILL CITED TO IT ***"))
+    failed += planted_dv is not None
+    cases.append(("a standard by its number", "source", planted(
+        "<b>operational_costs.csv</b>, row <i>R</i>.  <span class='src'>"
+        "MIL-HDBK-189 puts alpha at 0.3-0.6.</span>")))
     cases.append(("a typed constant that names no source", "needs", planted(
         "<b>spacecost/delivery.py</b>, <i>TUG_ISP_S</i>.  An upper-stage "
         "figure typed there, deliberately not the hydrolox row's.")))
