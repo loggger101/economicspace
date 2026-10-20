@@ -755,6 +755,125 @@ builds the 7 mission shapes on disk with no page finding.
 `worked_calculation.py --audit` shows all 120 non-zero columns and all 36
 rates. `verify_docs.py` and `tree_check.py` pass.
 
+### The verification worksheet's citations: each column cited for itself, each note quoted once (2026-10-19, no stamp)
+
+A second read of all 43 printed pages, aimed at what each citation claims.
+Changes, in `campaign/verification_sheet.py` unless named:
+
+- **A row's notes no longer cite columns they say nothing about.** The
+  refining deduction, the refining energy and the absorption ceiling were
+  each cited with the mineral's description ("most of an iron meteorite's
+  metal"), which names neither a refining cost nor a market. Each now names
+  its own column (`cite_column`): the deduction says Stage 2 writes it as
+  the row's refining energy at the capital cost of energy in space plus an
+  amortised plant (`in_space_processing_cost_usd_per_kg`), and the first
+  ceiling names `IN_SPACE_ANNUAL_DEMAND_KG` and `_DEMAND_SHARE_BY_CLASS`. A
+  note that did name a source would have been credited in part 18 as backing
+  a column it never mentions.
+- **A row's notes are quoted once.** Krypton's paragraph printed under six
+  inputs, New Glenn's under three, and every numeric dial's definition both
+  in part 1 and under its input. The first quotation stays; later ones point
+  to it by tag, or to the dial ledger (`said_once`, applied at render so part
+  18 still reads every citation whole). The ledger's tag column links to the
+  rows.
+- **One number, one spelling.** The fixed point's passes, the payload caps,
+  both ladders, the fleet grid and five step notes printed figures at 6 to 10
+  digits that the steps print at 12 (`7,322.137193` beside `7,322.1371932`);
+  all print at the steps' precision now, the headline objective included.
+- **Nothing said twice.** The paragraphs over the pass table and the
+  concentration ladder restated the re-run note beneath them, and the ladder's
+  pair disagreed (parts 7 to 12 against 7 to 16); the fleet table said parts
+  "12 and 15" where the grid says 12 to 15. The header card printed
+  `mineral_value 1.12.0` twice (`input_provenance` in
+  `worked_calculation.py`, so both documents). Stage 1's provenance labels are
+  stated once, in the body's stamp, and glossed from AsteroidCatalog's own
+  definitions: `spectral_type_source source` read as a typing slip.
+- **Sentences that read wrong.** Part 3 opened "No price here is a
+  terrestrial quote" above a row headed "terrestrial quote"; the rotation
+  citation ran "the catalog median is used calc config"; S62's backing said
+  it was worked out "from no tag"; the footer said "(none)" after a zero and
+  "table(s)". The refining-energy sum says where its kilograms come from.
+  Two dial explanations (`dials_in_force`) state the condition rather than
+  read as if it held, and `isru_processing_usd_per_kg` says it is inert on a
+  mission that makes no propellant.
+- **Part 18 says its stock phrases in a word.** "The substitution
+  re-evaluates to the value printed" and the like stood on 206 rows; the
+  heading now defines *re-evaluates*, *arithmetic* and *equals the run's*.
+- **Three constants cite a source.** `MU_EARTH` (IERS Conventions 2010,
+  Table 1.1), `V_EARTH` and `R_MOON` (NASA's Earth and Moon fact sheets),
+  each read on 2026-10-19 and agreeing to the figures it publishes; CITATIONS.md
+  section 4 lists them. `R_LEO` keeps its flag: its 200 km is a choice.
+
+**Measured** on the default winner (2018 DT): the PDF is 40 pages on letter
+(was 43). Inputs naming a source 30 (was 27), needing backing 96 (was 99),
+steps spending one 92 (was 94). Traced numbers 442 (was 448): the rounded
+copies are gone. Every other count is unchanged.
+
+**Verified.** `--pdf --self-test` passes every check and every planted
+defect is still caught, with 394 of 394 substitutions, 131 of 131 origins,
+85 of 85 dials and 337 of 337 backing entries; the paper check finds nothing
+past the edge. `--sweep` builds the 7 mission shapes on disk with no page
+finding, and `--every-winner` checks 64 Stage 4 outputs with none not clean.
+`worked_calculation.py --audit` shows all 120 non-zero columns and all 36
+rates. `verify_docs.py` passes. The PDF was rasterised and read again.
+
+### The verification worksheet's backing, audited input by input (2026-10-19, no stamp)
+
+Every one of the default winner's 131 inputs was read against its whole
+citation, the config comment or reference row behind it, and the spacecost
+source it was exported from, in both directions: a source the page had but
+did not record, and a source it credited that does not stand behind the
+number. In `campaign/verification_sheet.py`:
+
+- **Recorded now: four inputs whose row named a source the page never
+  quoted.** Each was cited to the name spacecost exports it under, or to the
+  derivation's own copy, so part 18 called it "the model's own constant".
+  Each is a spacecost row, now quoted while it still carries the number
+  (`spacecost_row`): the stage build rate (`operational_costs.csv`, "(Musk
+  2018)"), the tug's propellant (the hydrolox row, "NASA contracts"), the NRHO
+  insertion increment (`delta_v_segments.csv` `TLI → NRHO insertion`,
+  "Whitley & Martinez 2016", the row calc's own copy names), and the leg
+  delta-v, whose row is read off spacecost's source (`chain_segments`) and
+  names no source, so it stays flagged with the right reason. Earth's 1 au
+  phasing orbit now cites NASA's Earth fact sheet.
+- **Corrected: six inputs credited to a "source" that did not stand behind
+  them.** The LEO launch price was credited because its pricing label
+  mentions "NASA's price"; it now quotes the launch-table row the anchor is,
+  and keeps the verdict on a real source (SpaceX's published $150M). Five
+  mineral quotes were credited for the
+  price-source label "USGS/LME/mineralogy reference", which Stage 2 writes on
+  every row of the table; a label every row shares is not a source for one,
+  so those quotes (olivine, enstatite, plagioclase, carbon, bulk silicate)
+  need backing unless their notes name one (`set_catch_all`).
+- **A term the run did not charge is not flagged.** The learning-curve factor
+  of exactly 1 and the cost of capital of exactly 0 are what "off" means, read
+  off the run's own row; flagged, they carried the flag into every hardware
+  line they multiply by one. They are entered as `off` (`OFF_MARK`) and
+  counted apart.
+- **Flagged still, and now saying why.** The cruise-time fit names the four
+  delta-v rows it was calibrated on and says their notes source the delta-v,
+  not the duration; the tug's Isp says spacecost types it deliberately apart
+  from the hydrolox row and asserts the gap.
+
+Left as they are, and worth a reader's judgement: the berthing-adapter rate,
+the NRE overlap fraction and the launch licence are credited to a source that
+backs the bracket or the scope they sit in, not the figure itself; New
+Glenn's payload is credited to a "Source:" sentence about its price. Telling
+those apart is reading, not pattern matching, and the page quotes each
+sentence so a reader can.
+
+**Measured** on the default winner: inputs naming a source 29, derived 5, not
+charged 2, needing backing 95; steps spending one 86 (was 92). The PDF is 40
+pages.
+
+**Verified.** `--pdf --self-test` passes, and five new planted citations each
+get the verdict they should (a catch-all-only quote, the catch-all beside a
+named source, a live feed, a term not charged, a typed constant that names no
+source). `--sweep` builds the 7 mission shapes on disk with no page finding
+(the chain-leg rows are read on every destination's chain), and
+`--every-winner` checks 64 Stage 4 outputs with none not clean.
+`verify_docs.py` passes.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer
