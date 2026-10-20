@@ -13,13 +13,19 @@ what produced the 2026-09 figures now in versions.md.  This file is kept only
 because archive-2026-08_calc-1.17.7/FINDINGS.md names it as a script that
 produced the 2026-08 record; do not add to it, and do not quote a figure from it
 as current.
+
+It reads the 2026-08 cells where they now live,
+`campaign/cells/archive-2026-08_calc-1.17.7/`, so it reproduces that record
+(`campaign/logs/_rig_bounds.log`).  The top level of `campaign/cells/` holds the
+later campaigns' cells, which this file was never written for.
 """
 import glob, gzip, os
 import pandas as pd
 
 print(f"{'cell':42s} {'cycle%':>8s} {'cal%':>8s} {'window%':>9s} {'dig%':>7s} "
       f"{'cadence med':>12s} {'span med':>9s} {'W<trips':>9s}")
-for p in sorted(glob.glob(os.path.join('campaign', 'cells', '*.csv.gz'))):
+for p in sorted(glob.glob(os.path.join('campaign', 'cells',
+                                       'archive-2026-08_calc-1.17.7', '*.csv.gz'))):
     cell = os.path.basename(p)[:-7]
     cols = ['rig_trip_limit_binds', 'cadence_window_bound', 'campaign_cadence_yr',
             'programme_span_yr', 'missions_per_ship', 'trips_per_ship']

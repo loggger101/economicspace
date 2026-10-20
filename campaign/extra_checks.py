@@ -16,6 +16,11 @@ cannot miss a replicated technology nobody thought to list in REPL below.  This
 file is kept only because archive-2026-08_calc-1.17.7/FINDINGS.md names it as a
 script that produced the 2026-08 record; do not quote a figure from it as
 current.
+
+It reads the 2026-08 cells where they now live,
+`campaign/cells/archive-2026-08_calc-1.17.7/`, so it reproduces that record
+(`campaign/logs/_extra_checks.log`).  The top level of `campaign/cells/` holds
+the later campaigns' cells, which this file was never written for.
 """
 import glob
 import gzip
@@ -27,7 +32,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPL = ("FEEP", "PPT", "electrospray", "Electrospray", "Pulsed plasma")
 
 print(f"{'cell':42s} {'fleet@64':>14s} {'repl rows':>12s} {'best repl':>12s} {'rank':>7s} {'vs best':>8s}")
-for p in sorted(glob.glob(os.path.join(ROOT, "campaign", "cells", "*.csv.gz"))):
+for p in sorted(glob.glob(os.path.join(ROOT, "campaign", "cells",
+                                       "archive-2026-08_calc-1.17.7", "*.csv.gz"))):
     cell = os.path.basename(p)[:-7]
     with gzip.open(p, "rb") as fh:
         d = pd.read_csv(fh, low_memory=False, float_precision="round_trip",
