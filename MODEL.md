@@ -1286,7 +1286,7 @@ Stated plainly so results aren't over-read:
   correcting only the overcharge increases the total error in every inclination
   band. Neither term should move without the other. Both measurements, and the
   validated solver behind them, are in
-  [`research/starred-repos/FINDINGS.md`](research/starred-repos/FINDINGS.md).
+  [starred-repos' `FINDINGS.md`](https://github.com/loggger101/starred-repos/blob/main/FINDINGS.md).
 - **Launch windows are statistical, not ephemeris-based.** The synodic period
   gives an expected wait; the model does not compute actual departure dates,
   so it cannot tell you *which* window. As of catalog `1.2.0` the catalog does

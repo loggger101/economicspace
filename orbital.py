@@ -34,7 +34,9 @@ WHAT THIS IS FOR, AND WHAT IT IS NOT FOR
     not exist anywhere in this project, and the estimator's docstring compares
     against five hand-picked bodies.
 
-    See `probe_lambert.py`, which does exactly that.
+    See `probe_lambert.py` in the starred-repos repository
+    (https://github.com/loggger101/starred-repos), which does exactly that.
+    `ui.py` uses only `elements_to_state`, to draw an orbit.
 
 No dependency beyond numpy.  Nothing here imports master or touches
 `asteroid_pipeline/`.

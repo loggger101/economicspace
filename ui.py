@@ -1442,9 +1442,6 @@ def _numeric_table(row: pd.Series, fields: Iterable[Tuple[str, str]],
     )
 
 
-ORBITAL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "research", "starred-repos", "orbital.py")
-
 # The elements a picture of an orbit needs. Stage 4 carries only
 # `semi_major_axis_au` through to the profitability catalog, so the rest are
 # read back out of the Stage 1 catalog on demand.
@@ -1457,7 +1454,7 @@ _ELEMENT_COLUMNS = ["designation", "semi_major_axis_au", "eccentricity",
 # CSV written by an older Stage 1 has none of these columns, and naming a
 # missing column in `usecols` is a ValueError rather than a NaN.
 #
-# It earns a panel of its own because of what research/starred-repos found:
+# It earns a panel of its own because of what the starred-repos audit found:
 # the top 30 of this ranking runs 43.3% at condition code 5 or worse against
 # 13.9% of the population, a 3.1x enrichment at p = 8.3e-05, and the effect
 # disappears further down the ranking. Selecting the extreme of a ranking
@@ -1470,27 +1467,19 @@ _ORBIT_QUALITY_COLUMNS = ["orbit_condition_code", "observation_arc_days",
 
 @st.cache_resource(show_spinner=False)
 def orbital_module():
-    """`research/starred-repos/orbital.py`, or None if it is not there.
+    """`orbital.py` beside this file, or None if it cannot be imported.
 
-    Imported by path rather than restated, because that file already carries a
-    Kepler solver and an `elements_to_state` adapted from skyfield with the
+    Imported rather than restated, because that file already carries a Kepler
+    solver and an `elements_to_state` adapted from skyfield with the
     attribution recorded in CITATIONS.md. A second copy of the same rotation
     would be one more thing to keep in step, and the ATTRIBUTION would be on
-    the copy nobody reads.
-
-    `spec_from_file_location` is entry 5 in verify.py's table of harness bugs,
-    but that entry is about a WORKER re-importing master; this is the parent
-    process importing a numpy-only leaf module whose directory has a hyphen in
-    it, which no plain import statement can name.
+    the copy nobody reads. It sat in `research/starred-repos/` until that
+    audit became its own repository, and is found the way `master` is: by
+    name, with this file's directory on `sys.path`.
     """
-    if not os.path.exists(ORBITAL_PATH):
-        return None
     try:
-        import importlib.util                       # noqa: PLC0415
-        spec = importlib.util.spec_from_file_location("_ui_orbital", ORBITAL_PATH)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
+        import orbital                               # noqa: PLC0415
+        return orbital
     except Exception:
         return None
 
@@ -1607,7 +1596,7 @@ def _render_orbit_quality(e_row: pd.Series) -> None:
             f"**U = {known}: this orbit is provisional.** Delta-v comes from "
             "a, e and i, and the ranking comes from Delta-v, so a body this "
             "poorly determined can be flattered by its own fit errors. "
-            "research/starred-repos measured the top 30 of this ranking at "
+            "The starred-repos audit measured the top 30 of this ranking at "
             "43.3% U >= 5 against 13.9% of the population, and the enrichment "
             "vanishes further down, which is the signature of a winner's "
             "curse rather than a bad catalog.",

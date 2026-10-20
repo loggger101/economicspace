@@ -16,6 +16,7 @@ is in [LESSONS.md](LESSONS.md) under a heading of the same name (frozen
 | [`spacecost`](https://github.com/loggger101/spacecost) | Stage 3's reference tables and the delivery-price chains |
 | [`quietlaunch`](https://github.com/loggger101/quietlaunch) | the windowless dashboard launcher `launch_ui.py` hands over to, and its Windows traps |
 | [`AsteroidCatalog`](https://github.com/loggger101/AsteroidCatalog) | builds and publishes the Stage 1 catalog |
+| [`starred-repos`](https://github.com/loggger101/starred-repos) | the audit of 17 external repos and its probes; `orbital.py` was taken from it |
 
 **Keeping this file small is a rule, not a preference.** It quotes no
 measurement README or MODEL.md carries (`verify_docs.py` check 12 fails on a
