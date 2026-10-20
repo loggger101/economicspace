@@ -960,12 +960,17 @@ in a copy of its module fails its test. Here, with quietlaunch uninstalled,
 `direct_url.json` names the tag's commit) and brought the dashboard up on 8501
 (health `ok`, the page rendering `ui.py`). A second launch during a page load
 reopened it and exited in 3 s with the marker unchanged and nothing on 8502;
-before the fix that launch started a second server. `verify_docs.py` passes.
+before the fix that launch started a second server. `wscript.exe "_START
+HERE.vbs"` returned in 1 s and the dashboard answered 2 s later.
+`verify_docs.py` passes.
 
-Not verified: `_START HERE.vbs` itself on this machine, whose `pyw -3` probe
-hangs because the `py` launcher's 3.14 registration points at a deleted
-folder. That predates this change; the runs above start `pythonw launch_ui.py`,
-which is the command the `.vbs` issues once a probe answers.
+⚠️  **A `pyw` that hangs in a shell does not hang the `.vbs`.** Git Bash's
+PATH reached the legacy `py` launcher, whose 3.14 registration pointed at a
+deleted folder, and there `pyw -3` waited on an error dialog. The `.vbs`
+reached the Python install manager's `pyw`, which ran, and even the legacy
+one exits instead of waiting when started with window style 0, which is how
+`Probe` starts it. Test the double-click by double-clicking (or `wscript`),
+never by running its probe from a shell.
 
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
