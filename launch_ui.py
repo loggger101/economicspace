@@ -23,8 +23,10 @@ NOT A SECOND ENTRY POINT TO THE MODEL. Neither this nor quietlaunch imports
 master, ui, or anything under modules/: quietlaunch spawns `streamlit run ui.py`
 as a child and watches a socket. That is deliberate: this process is the one
 thing that must not fail, and importing the pipeline here would put a 1 MB
-module and a multiprocessing pool inside the supervisor. Standard library only
-until quietlaunch is in hand, for the same reason.
+module and a multiprocessing pool inside the supervisor. It also sidesteps
+`_spawn_environment` entirely, since nothing here is ever a worker's
+`__main__`. Standard library only until quietlaunch is in hand, for the same
+reason.
 
 ASCII ONLY, like the rest of the pipeline's output.
 """

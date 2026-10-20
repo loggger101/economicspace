@@ -1569,8 +1569,9 @@ def check_docstrings() -> bool:
     number without its reasoning attached gets "fixed" by the next person, and
     that applies to code as much as to config: 87 definitions carried neither a
     docstring nor a leading comment when this was first measured, most of them
-    in `ui.py` and `launch_ui.py`, which are almost entirely made of Windows
-    traps that explain why the code looks the way it does.
+    in `ui.py` and `launch_ui.py`, which were then almost entirely made of
+    Windows traps that explain why the code looks the way it does (the
+    launcher's moved to quietlaunch on 2026-10-20, which checks them itself).
 
     NESTED functions count.  Several of the sharpest notes in here are on a
     six-line closure -- `_as_designation` is the NEOWISE float-key bug, and

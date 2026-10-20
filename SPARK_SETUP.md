@@ -36,7 +36,7 @@ touching:
 | line endings in the repo | `.gitattributes` pins `*.py` to LF, so a Linux checkout is byte-identical to the Windows one |
 | the Python floor | only the walrus operator is newer than 3.8, so nothing here needs a recent interpreter |
 | dependencies | pandas, numpy, pyarrow, yfinance, tqdm and streamlit all ship manylinux aarch64 wheels |
-| `launch_ui.py` | already branches on `os.name` and already degrades when tkinter is absent, which is what a headless box has |
+| `launch_ui.py` | hands over to quietlaunch, which branches on `os.name`, kills the server's process group on POSIX, and degrades when tkinter is absent, which is what a headless box has |
 
 ## What was broken, and is now fixed
 
