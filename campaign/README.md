@@ -103,11 +103,17 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       launch table and archive the hybrid under this campaign's name.
   `run_queue.py`   runs everything outstanding, resumable: it skips any cell
       already in `results.csv` with `rc == 0`.  Kill and restart freely.
+      Its `run_queue()` takes the jobs and the ledger as arguments and knows
+      nothing about cells; `DESTS`, `CELLS` and the cell naming are this
+      file's own.  `_supervisor.py`, `memwatch.py` and `_pause.ps1` are split
+      the same way: the generic part takes parameters whose defaults are this
+      campaign's.
   `analyse.py <dest>`  the 2x2 table plus the never-worse, mass-ledger and
       programme-structure invariants.  Do NOT run it while a cell is timing;
       in 2026-08 it inflated a wall clock by a few percent and put two spurious
       10.7-11.5 GB spikes in the memory record.
-  `memwatch.py`    samples python RSS every 20 s into `memory.csv`.
+  `memwatch.py`    samples python RSS every 20 s into `memory.csv`; `--once`
+      writes one row and stops.
   `population.py`  every per-cell POPULATION table the docs carry, from ONE
       pass over `cells/`: the rig's two bounds, the cadence, the propellant and
       vehicle shares, the market-ceiling diagnostic, the `replicated` ranks and
@@ -467,6 +473,10 @@ powershell -File campaign\_pause.ps1            REM freeze
 powershell -File campaign\_pause.ps1 -Resume    REM thaw and carry on
 ```
 
+`-Match` (the command-line patterns naming the trees' roots), `-ProcessName`
+and `-TaskName` default to this campaign's values; `Get-Help
+campaign\_pause.ps1 -Full` describes them.
+
 ✅  **Suspending costs almost no memory, which is the opposite of what you would
 expect.**  Windows trims a suspended process's working set, so pausing
 `leo benef+search` 5.7 h in left the 16-process tree holding **0.4 GB** rather
@@ -484,7 +494,8 @@ would; the queue restarts that cell from the beginning.  Everything already in
 ⚠️  **The pause disarms the `AtLogOn` trigger and the resume re-arms it.**  A
 paused campaign with a live reboot trigger would restart itself behind you at
 the next logon, which is the whole failure the trigger exists to cause on
-purpose.
+purpose.  On a machine without that task (`economicspace_campaign`) the
+pause and resume say so and leave the scheduler alone.
 
 ### ⚠️  One wall clock in the ledger is not comparable: `leo__benef__search-on`
 
