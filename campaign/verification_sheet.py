@@ -682,6 +682,121 @@ def cite_here(name, what=""):
     return "%s.  <span class='src'>%s</span>" % (where, D.esc(what)) if what         else where
 
 
+# WHAT spacecost READS A CONSTANT OUT OF, CITED AS THE ROW.  Five inputs were
+# cited to the name spacecost exports them under (`STAGE_HARDWARE_USD_PER_KG`,
+# `TUG_PROPELLANT_USD_PER_KG`, a `DELIVERY_CHAINS` leg) or to the derivation's
+# own copy (`DV_NRHO`), and part 18 then called each "the model's own
+# constant, with no reference given".  Every one of them is a row of a
+# spacecost table, and three of those rows name their source: the stage rate
+# "(Musk 2018)", the hydrolox price "NASA contracts", the NRHO insertion
+# "Whitley & Martinez 2016".  The citation now quotes the row, so part 18
+# reads the notes that were always there.
+SPACECOST_FILES = {"load_operational_costs": "operational_costs.csv",
+                   "load_propellants": "propellants.csv",
+                   "load_delta_v": "delta_v_segments.csv",
+                   "load_launch_vehicles": "launch_vehicles.csv"}
+
+
+def spacecost_row(loader, key, name, column, value):
+    """The installed spacecost row `name`, if its `column` IS `value`.
+
+    The equality is the point: the page quotes a row as the source of a
+    number only when the row still carries that number, so a table that has
+    moved since the run falls back to the old citation instead of quoting a
+    row that disagrees with the value beside it.
+    """
+    import spacecost
+    table = getattr(spacecost, loader)()
+    hit = table[table[key] == name]
+    if not len(hit) or column not in hit.columns:
+        return None
+    row = hit.iloc[0]
+    try:
+        same = float(row[column]) == float(value)
+    except (TypeError, ValueError):
+        return None
+    return row if same else None
+
+
+def cite_spacecost_row(loader, name, how, row):
+    """Cite one installed spacecost row, its notes quoted for part 18."""
+    import spacecost
+    note = trim(row.get("notes"))
+    return ("spacecost %s's <b>%s</b>, row <i>%s</i>, %s.%s"
+            % (D.esc(spacecost.__version__), SPACECOST_FILES[loader],
+               D.esc(name), how,
+               "  <span class='src'>%s</span>" % note if note else ""))
+
+
+def leo_anchor_row(C, value):
+    """(where, name, row) of the launch-table row the LEO price is, or None.
+
+    The run's own frozen launch table first, because that is the table of
+    the release that priced it; the installed one second.  Either only when
+    its `usd_per_kg_to_leo` is the price on this page.
+    """
+    import spacecost
+    import spacecost.delivery as sd
+    name = sd.LEO_LAUNCH_VEHICLE
+    path = C.get("files", {}).get("launch_vehicles_file")
+    if path and os.path.exists(path):
+        table = pd.read_csv(path)
+        hit = table[table["name"] == name]
+        if len(hit) and float(hit.iloc[0]["usd_per_kg_to_leo"]) == float(value):
+            return ("<b>%s</b>" % D.esc(repo_path(path)), name, hit.iloc[0])
+    row = spacecost_row("load_launch_vehicles", "name", name,
+                        "usd_per_kg_to_leo", value)
+    if row is not None:
+        return ("spacecost %s's <b>launch_vehicles.csv</b>"
+                % D.esc(spacecost.__version__), name, row)
+    return None
+
+
+_CHAIN_SEGMENTS = {}
+
+
+def chain_segments(destination):
+    """The delta-v rows `DELIVERY_CHAINS[destination]` names, leg by leg.
+
+    spacecost exports the chain as numbers only; which row each leg was read
+    from is in its source, as the literal argument of `_dv(...)`.  Read off
+    the syntax tree rather than typed here, and a leg that does not name a
+    row (or a chain this cannot parse) answers None for that leg, which
+    sends the citation back to the export it came through.
+    """
+    if not _CHAIN_SEGMENTS:
+        import ast
+        import inspect
+        import spacecost.delivery as sd
+        tree = ast.parse(inspect.getsource(sd))
+        for node in ast.walk(tree):
+            target = (node.target if isinstance(node, ast.AnnAssign)
+                      else node.targets[0] if isinstance(node, ast.Assign)
+                      else None)
+            if not (isinstance(target, ast.Name)
+                    and target.id == "DELIVERY_CHAINS"
+                    and isinstance(node.value, ast.Dict)):
+                continue
+            for k, v in zip(node.value.keys, node.value.values):
+                if not (isinstance(k, ast.Constant)
+                        and isinstance(v, ast.List)):
+                    continue
+                legs = []
+                for leg in v.elts:
+                    seg = None
+                    if isinstance(leg, ast.Tuple) and len(leg.elts) > 1:
+                        call = leg.elts[1]
+                        if (isinstance(call, ast.Call)
+                                and getattr(call.func, "id", "") == "_dv"
+                                and call.args
+                                and isinstance(call.args[0], ast.Constant)):
+                            seg = call.args[0].value
+                    legs.append(seg)
+                _CHAIN_SEGMENTS[k.value] = legs
+        _CHAIN_SEGMENTS.setdefault("", [])
+    return _CHAIN_SEGMENTS.get(destination, [])
+
+
 def phase_price_keys(S, C, only=None):
     """The registered price keys for the phases, in the table's own order.
 
@@ -895,19 +1010,36 @@ def part_prices(S, out):
            "it on site; one shipped home is worth its quote less the trip "
            "down.")
     hw_on = bool(C.get("stage_hardware"))
-    c_leo = S.put("c_LEO", "c_LEO", "launch price to LEO",
-                  C["leo_usd_per_kg"], "$/kg",
-                  ("<b>spacecost/delivery.py</b>, <i>LEO_LAUNCH_USD_PER_KG</i>, "
-                   "re-exported by <b>modules/mineral_value.py</b> as "
+    # 🚨  THE PRICING LABEL IS NOT THE SOURCE.  It says the anchor was priced
+    # "before its band reached NASA's price", and part 18 read that mention
+    # of NASA as the source of $2,414/kg.  The source is the vehicle row the
+    # anchor IS, so that row's notes are quoted and the label is plain text.
+    anchor = leo_anchor_row(C, C["leo_usd_per_kg"]) if hw_on else None
+    if anchor is not None:
+        where, name, row = anchor
+        note = trim(row.get("notes"))
+        source = ("%s, row <i>%s</i>, column <i>usd_per_kg_to_leo</i>: "
+                  "spacecost's <i>LEO_LAUNCH_USD_PER_KG</i>, re-exported by "
+                  "<b>modules/mineral_value.py</b> as <i>_LEO_USD_PER_KG</i>."
+                  "  %s.  Chosen by the Stage 2 table's own stamp, and held "
+                  "to every <i>used in space</i> price that table carries.%s"
+                  % (where, D.esc(name), D.esc(C["pricing_label"]),
+                     "  <span class='src'>%s</span>" % note if note else ""))
+    else:
+        source = (("<b>spacecost/delivery.py</b>, "
+                   "<i>LEO_LAUNCH_USD_PER_KG</i>, re-exported by "
+                   "<b>modules/mineral_value.py</b> as "
                    "<i>_LEO_USD_PER_KG</i>.  "
                    if hw_on else
                    "<b>campaign/worked_calculation.py</b>, "
-                   "<i>_PRE_V040_LEO_USD_PER_KG</i>, spacecost 0.3.x's anchor, "
-                   "which this row's Stage 2 table was priced at.  ")
+                   "<i>_PRE_V040_LEO_USD_PER_KG</i>, spacecost 0.3.x's "
+                   "anchor, which this row's Stage 2 table was priced at.  ")
                   + "<span class='src'>%s.  Chosen by the Stage 2 table's "
                     "own stamp, and held to every <i>used in space</i> price "
                     "that table carries.</span>"
                   % D.esc(C["pricing_label"]))
+    c_leo = S.put("c_LEO", "c_LEO", "launch price to LEO",
+                  C["leo_usd_per_kg"], "$/kg", source)
     if hw_on:
         rates = C["hw_rates"]
         # ⚠️  ONLY THE RATES THIS CHAIN SPENDS.  Every stage rate and the
@@ -917,32 +1049,71 @@ def part_prices(S, out):
         # the chain's own, the same one the legs below branch on.
         steps = C["chain"]["steps"]
         flown = set(leg["dry"] for leg in steps if leg["kind"] == "burn")
+        import spacecost.delivery as sd
+        # Which row each rate is, by spacecost's own keying: the tug's
+        # structural fraction reads the upper-stage row, the lander's the
+        # lander row.
+        stage_rows = {sd.TUG_DRY_MASS_FRAC: "Expendable upper stage recurring "
+                                            "cost",
+                      sd.LANDER_DRY_MASS_FRAC: "Surface lander recurring cost"}
         for dry, rate in sorted(rates["stage"].items()):
             if dry not in flown:
                 continue
+            name = stage_rows.get(dry, "")
+            row = spacecost_row("load_operational_costs", "category", name,
+                                "value", rate)
             S.put("h_st%d" % round(dry * 100), "h_stage,%s" % P(dry),
                   "build cost of an expended stage at dry fraction %s"
                   % P(dry), rate, "$/kg of stage dry mass",
+                  cite_spacecost_row(
+                      "load_operational_costs", name, "read as "
+                      "<i>STAGE_HARDWARE_USD_PER_KG</i> in "
+                      "<b>spacecost/delivery.py</b>", row)
+                  if row is not None else
                   "<b>spacecost/delivery.py</b>, "
                   "<i>STAGE_HARDWARE_USD_PER_KG</i>, off the operational-cost "
                   "table: the tug rate is <i>Expendable upper stage recurring "
                   "cost</i>, the lander rate <i>Surface lander recurring "
                   "cost</i>.")
         if flown:
+            row = spacecost_row("load_propellants", "name", sd._HYDROLOX,
+                                "ref_cost_usd_per_kg", rates["propellant"])
             S.put("h_prop", "h_prop", "the tug's propellant",
                   rates["propellant"], "$/kg",
+                  cite_spacecost_row(
+                      "load_propellants", sd._HYDROLOX, "column "
+                      "<i>ref_cost_usd_per_kg</i>, read as "
+                      "<i>TUG_PROPELLANT_USD_PER_KG</i> in "
+                      "<b>spacecost/delivery.py</b>", row)
+                  if row is not None else
                   "<b>spacecost/delivery.py</b>, "
                   "<i>TUG_PROPELLANT_USD_PER_KG</i>: the hydrolox row's "
                   "reference price.")
         if any(leg["kind"] != "burn" for leg in steps):
+            name = "Heat shield / TPS for Earth return"
+            row = spacecost_row("load_operational_costs", "category", name,
+                                "value", rates["entry"])
             S.put("h_edl", "h_edl", "the entry system an edl leg discards",
-                  rates["entry"], "$/kg", "<b>spacecost/delivery.py</b>, "
+                  rates["entry"], "$/kg",
+                  cite_spacecost_row(
+                      "load_operational_costs", name, "read as "
+                      "<i>ENTRY_SYSTEM_USD_PER_KG</i> in "
+                      "<b>spacecost/delivery.py</b>, the nearest priced "
+                      "article", row)
+                  if row is not None else
+                  "<b>spacecost/delivery.py</b>, "
                   "<i>ENTRY_SYSTEM_USD_PER_KG</i>: the TPS row, the nearest "
                   "priced article.")
     chain = C["chain"]
     prior = 1.0
     keys = ["c_LEO"]
     hw_keys = []
+    # The delta-v row behind each leg, in the derivation's order: it walks
+    # the chain backwards from the payload, so its first leg is spacecost's
+    # last.  A count that disagrees names no row at all.
+    segs = chain_segments(C["destination"])
+    segs = (list(reversed(segs)) if len(segs) == len(chain["steps"])
+            else [None] * len(chain["steps"]))
     for n, leg in enumerate(chain["steps"], 1):
         if leg["kind"] != "burn":
             S.step("leg%d" % n, "leg %d" % n, "surviving-mass fraction",
@@ -959,16 +1130,30 @@ def part_prices(S, out):
             keys.append("leg%d" % n)
             continue
         dv, isp, dry = leg["dv"], leg["isp"], leg["dry"]
+        seg = segs[n - 1]
+        row = (spacecost_row("load_delta_v", "segment", seg, "dv_m_per_s", dv)
+               if seg else None)
         S.put("dv%d" % n, "dv_%d" % n, "leg %d delta-v" % n, dv, "m/s",
+              cite_spacecost_row(
+                  "load_delta_v", seg, "flown by <b>spacecost/delivery.py</b>'s "
+                  "<i>DELIVERY_CHAINS</i> for %s, re-exported as Module 2's "
+                  "<i>_DELIVERY_LEGS</i>" % D.esc(C["destination"]), row)
+              if row is not None else
               "<b>spacecost/delivery.py</b>, <i>DELIVERY_CHAINS</i> for "
               "%s, re-exported as Module 2's <i>_DELIVERY_LEGS</i>.  "
               "<span class='src'>The chain is walked backwards from the "
               "payload, stage by stage: collapsing it into one burn throws "
               "away staging and overstates the destination.</span>"
               % D.esc(C["destination"]))
+        # Typed in spacecost, and on purpose: its comment says why it is not
+        # the hydrolox row's datasheet figure, and an import assertion holds
+        # the gap.  The sentence says so rather than quoting either number.
         S.put("isp%d" % n, "I_sp,%d" % n, "leg %d stage Isp" % n, isp, "s",
-              "<b>spacecost/delivery.py</b>, <i>DELIVERY_CHAINS</i>.  "
-              "The upper stage this leg is flown on.")
+              "<b>spacecost/delivery.py</b>, <i>TUG_ISP_S</i>, flown by "
+              "every leg of <i>DELIVERY_CHAINS</i>.  The upper stage this "
+              "leg is flown on: an upper-stage figure typed there, "
+              "deliberately not the hydrolox row's, and spacecost asserts "
+              "the gap between the two at import.")
         S.put("dry%d" % n, "delta_%d" % n, "leg %d dry-mass fraction" % n,
               dry, "-", "<b>spacecost/delivery.py</b>, "
                         "<i>DELIVERY_CHAINS</i>.  Stage dry mass as a "
@@ -1582,21 +1767,48 @@ def part_constants(S, out):
     S.put("r_LEO", "r_LEO", "parking-orbit radius", W.R_LEO, "km",
           cite_here("R_LEO", "6,378.14 km of Earth radius plus a "
                     "200 km parking orbit."))
+    # The fit's calibration is in calc's `mission_duration_yr` docstring:
+    # four delta-v rows' durations.  Their notes source the delta-v and not
+    # the duration, so the rows are NAMED and not quoted: quoted, part 18
+    # would credit the fit with sources that stand behind a different column.
     S.put("tau", "tau_fit", "cruise-time fit", W.TAU_CRUISE_FIT_YR_PER_M_S,
           "yr per m/s",
           cite_here("TAU_CRUISE_FIT_YR_PER_M_S", "A linear fit of "
                     "transfer time against delta-v, floored at half a "
-                    "year."))
+                    "year, calibrated (calc's mission_duration_yr) on the "
+                    "duration_yr column of the delta-v table's LEO to easy, "
+                    "average and hard NEA and main-belt rows.  Those rows' "
+                    "notes source the delta-v; nothing sources the "
+                    "durations."))
     if C["return_leg"] in ("ret_cislunar_prop", "ret_lunar_surface_prop"):
         S.put("R_M", "R_M", "lunar orbital radius", W.R_MOON, "km",
               cite_here("R_MOON", "The Moon's semi-major axis: NASA's Moon "
                         "Fact Sheet (NSSDCA) gives 0.3844 million km."))
+        # calc's own copy names the row it restates ("Module 3
+        # DELTA_V_REFERENCE 'TLI -> NRHO insertion'"), and that row cites its
+        # source; quoted only while it still says the same number.
+        nrho = "TLI  →  NRHO insertion"
+        # Rounded to the metre per second: 0.450 * 1000 is not 450.0.
+        row = spacecost_row("load_delta_v", "segment", nrho, "dv_m_per_s",
+                            round(W.DV_NRHO * 1000.0, 6))
+        why = ("Capture BINDS the orbit at low perigee and takes the Oberth "
+               "benefit there; this is the increment that finishes the job "
+               "at the depot.")
+        if row is None:
+            source = cite_here("DV_NRHO", why)
+        else:
+            import spacecost
+            note = trim(row.get("notes"))
+            source = ("<b>campaign/worked_calculation.py</b> &middot; "
+                      "constant <i>DV_NRHO</i>, in km/s, restating spacecost "
+                      "%s's <b>delta_v_segments.csv</b>, row <i>%s</i>, as "
+                      "calc's <i>DV_NRHO_INSERTION_KM_S</i> does.  %s%s"
+                      % (D.esc(spacecost.__version__), D.esc(nrho),
+                         D.esc(why),
+                         "  <span class='src'>%s</span>" % note
+                         if note else ""))
         S.put("dv_NRHO", "dv_NRHO", "NRHO insertion increment", W.DV_NRHO,
-              "km/s",
-              cite_here("DV_NRHO", "Capture BINDS the orbit at low "
-                        "perigee and takes the Oberth benefit there; this "
-                        "is the increment that finishes the job at the "
-                        "depot."))
+              "km/s", source)
 
 
 def return_leg_steps(S, out, leg):
@@ -3185,7 +3397,14 @@ def part_clock(S, out):
           "launch window recurs at the synodic period between the asteroid "
           "and the body the cargo is delivered to: everything in Earth's "
           "system rides Earth's orbit, and a Mars delivery waits on "
-          "Earth-Mars alignment.</span>" % D.esc(C["destination"]))
+          "Earth-Mars alignment.%s</span>"
+          % (D.esc(C["destination"]),
+             # Earth's orbit is 1 au to every figure NASA publishes for it
+             # (read 2026-10-19); calc's Mars figure is not the fact
+             # sheet's to five places, so it is left uncited.
+             "  Earth's semi-major axis: NASA's Earth Fact Sheet (NSSDCA) "
+             "gives 149.598 million km, 1 au to the figures it publishes."
+             if DV["a_dest"] == 1.0 else ""))
     S.step("T_dest", "T_dest", "the orbit the destination is phased against",
            "a_dest ^ 1.5", "%s ^ 1.5" % P(DV["a_dest"]), DV["t_dest"], "yr",
            ["a_dest"])
@@ -4034,8 +4253,8 @@ def part_cost(S, out):
     else:
         S.put("lc", "LC", "learning-curve factor", K["lc"], "-",
               cite_config("model_learning_curve")
-              + "  Not charged on this run (read off the row's "
-              "<i>learning_curve_factor</i>), so it is exactly 1.0.")
+              + "  " + OFF_MARK + "<i>learning_curve_factor</i>), so it is "
+              "exactly 1.0.")
     S.step("L_capsule", "C_cap", "the vehicle that meets the cargo",
            "m_dry * c_cap * LC",
            "%s * %s * %s" % (P(M["m_dry"]), P(C["capsule_per_kg"]), P(K["lc"])),
@@ -4210,8 +4429,8 @@ def part_cost(S, out):
     else:
         S.put("wacc", "r_c", "cost of capital", K["wacc"], "/yr",
               cite_config("apply_wacc_compounding")
-              + "  Not charged on this run (read off the row's "
-              "<i>wacc_multiplier_upfront</i>), so the rate is zero, both "
+              + "  " + OFF_MARK + "<i>wacc_multiplier_upfront</i>), so the "
+              "rate is zero, both "
               "multipliers are exactly 1.0 and the programme calendar term "
               "is inert with it.")
     S.step("mult_up", "mult_up", "compounding on up-front money",
@@ -4970,6 +5189,32 @@ _ABBREV = re.compile(r"(?:(?<![\w-])[A-Z][a-z]{0,2}|\be\.g|\bi\.e|\bvs|\bcf|"
 _SRC_SPAN = re.compile(r"<span class='src'>(.*?)</span>", re.S)
 _FIELD = re.compile(r"<b>(\w+)</b> config, field <i>([a-z0-9_]+)</i>")
 _COLUMN = re.compile(r"column <i>([a-z0-9_]+)</i>")
+_COLUMN_I = re.compile(r"<i>([a-z0-9_]+)</i>")
+
+# How a citation says its term was switched off on this run, written once so
+# the two inputs that say it and `input_backing`, which reads it, cannot
+# drift apart.  Followed by the row's column and a closing parenthesis.
+OFF_MARK = "Not charged on this run (read off the row's "
+
+# The reference-quote source Stage 2 writes on EVERY commodity row of the
+# table this page read, if there is one; see `input_backing`.  Set per page
+# by `part_backing`, which has the table.
+_CATCH_ALL = {"label": None}
+
+
+def catch_all_label():
+    """The price-source label every Stage 2 row carries, or None."""
+    return _CATCH_ALL["label"]
+
+
+def set_catch_all(minerals):
+    """Find the label, if any, that every row of `minerals` shares."""
+    col = minerals.get("ref_price_source") if hasattr(minerals, "get") \
+        else None
+    labels = (set(" ".join(str(v).split()) for v in col)
+              if col is not None else set())
+    _CATCH_ALL["label"] = (labels.pop() if len(labels) == 1
+                           and col.notna().all() and len(col) > 1 else None)
 
 # The surveys behind every Stage 1 column, as CITATIONS.md section 1 lists
 # them.  A pointer to that file, not a second bibliography: the catalog does
@@ -5113,6 +5358,15 @@ def input_backing(row):
     notes = " ".join(_SRC_SPAN.findall(source))
     if head.startswith("Derived on this page"):
         return "derived", "worked out on this page, as its citation says"
+    # A TERM THE RUN DID NOT CHARGE IS NOT A JUDGEMENT ABOUT ITS SIZE.  The
+    # learning-curve factor of exactly 1 and the cost of capital of exactly
+    # 0 are what "off" means, read off the run's own row; flagged, they
+    # carried the flag into every hardware line they multiply by one.
+    if OFF_MARK in source:
+        column = (_COLUMN_I.findall(source.split(OFF_MARK, 1)[1]) or [""])[0]
+        return "off", ("not charged on this run, so the value is the term's "
+                       "identity, which no source is needed for; the run's "
+                       "own <i>%s</i> settles it" % D.esc(column))
     # `cite_body` writes both forms with " &middot; row "; the run's own
     # `tank_mass_frac` also opens on profitability_catalog and is not a body
     # column, so the separator is what tells them apart.
@@ -5137,8 +5391,24 @@ def input_backing(row):
             # ("metals.dev") but not the one that ends it.
             quotes = re.findall(r"(?:reference|live) quote from "
                                 r"(?:[^.]|\.(?=\S))*", plain(source))
-            if quotes:
-                return "source", quoted(quotes)
+            # 🚨  A LABEL EVERY ROW CARRIES SAYS NOTHING ABOUT ONE ROW.
+            # Stage 2 writes "USGS/LME/mineralogy reference" as the
+            # reference-quote source of all 59 commodities, the ones whose
+            # notes name a source and the ones whose notes do not, so on its
+            # own it credited olivine's $0.05/kg with a source nobody named.
+            # A live feed is a source; the catch-all is one only beside notes
+            # that name one, which the test below this block reads.
+            label = catch_all_label()
+            kept = [q for q in quotes
+                    if not (label and q.startswith("reference quote from "
+                                                   + label))]
+            if kept:
+                return "source", quoted(kept)
+            if quotes and not named_sources(notes):
+                return "needs", ("its quote is labelled only &ldquo;%s&rdquo;, "
+                                 "which Stage 2 writes on every row of the "
+                                 "table, and the row's notes name no source"
+                                 % D.esc(label))
         found = named_sources(notes)
         if found:
             return "source", row_cites(found)
@@ -5259,6 +5529,7 @@ def part_backing(S, out):
     not already stated and checked above.
     """
     C = out["C"]
+    set_catch_all(C["minerals"])
     settled = W.dials_in_force(C)
     columns = run_columns(out)
     read = C.get("files", {})
@@ -5300,7 +5571,10 @@ def part_backing(S, out):
            "judgement, a constant given with no reference, a value not "
            "measured for this body) and a step that spends one, naming "
            "those it spends and then how many inputs upstream of it need "
-           "backing in all.  A step whose relation is a textbook one names the "
+           "backing in all.  A term the run did not charge is not flagged: "
+           "its value is the term's identity (a factor of one, a rate of "
+           "zero), and the run's own row says it was off.  A step whose "
+           "relation is a textbook one names the "
            "book; the rest say <i>arithmetic</i>, the model's own on the "
            "rows the step spends.  <i>Re-evaluates</i> means the "
            "substitution, evaluated, gives the value printed, and "
@@ -5406,13 +5680,16 @@ def report_backing(sheet, html, quiet=False):
     need_st = sum(1 for t in flagged if t.startswith("S"))
     derived = sum(1 for t, s in getattr(sheet, "backing", {}).items()
                   if s == "derived")
+    off = sum(1 for t, s in getattr(sheet, "backing", {}).items()
+              if s == "off")
     if not quiet:
         print("  backing    %d of %d tags have one entry; inputs: %d named a "
-              "source, %d derived here, %d NEED BACKING; steps: %d spend an "
-              "input that needs backing; %d missing, %d stray, %d twice, %d "
-              "flag(s) not on their row"
+              "source, %d derived here, %d a term not charged, %d NEED "
+              "BACKING; steps: %d spend an input that needs backing; %d "
+              "missing, %d stray, %d twice, %d flag(s) not on their row"
               % (len(tags) - len(missing), len(tags),
-                 n_in - need_in - derived, derived, need_in, need_st,
+                 n_in - need_in - derived - off, derived, off, need_in,
+                 need_st,
                  len(missing), len(stray), len(twice),
                  len(unflagged) + len(wrongly)))
         for what, tags_ in (("no entry", missing), ("no such tag", stray),
@@ -5472,6 +5749,33 @@ def backing_self_test(sheet, html):
                       planted("<b>operational_costs.csv</b>, row <i>R</i>. "
                               " <span class='src'>Anchor: NASA NEXT-C.  "
                               "Once from (%s 2023).</span>" % title)))
+    # The catch-all quote label, planted as the label of a made-up table, so
+    # the case runs whatever the page's own table carries.
+    held = _CATCH_ALL["label"]
+    _CATCH_ALL["label"] = "Planted catch-all"
+    quote = ("<b>mineral_value_catalog.csv</b>, row <i>m</i>.  reference "
+             "quote from Planted catch-all on 2026-05-29.  ")
+    try:
+        cases += [
+            ("a quote labelled only with the catch-all", "needs", planted(
+                quote + "<span class='src'>Bulk industrial use.</span>",
+                "m terrestrial quote")),
+            ("the catch-all beside notes that name a source", "source",
+             planted(quote + "<span class='src'>Per USGS MCS 2025.</span>",
+                     "m terrestrial quote")),
+            ("a quote with a source of its own", "source", planted(
+                "<b>mineral_value_catalog.csv</b>, row <i>m</i>.  live quote "
+                "from yfinance:PL=F on 2026-09-29.", "m terrestrial quote")),
+        ]
+    finally:
+        _CATCH_ALL["label"] = held
+    cases.append(("a term the run did not charge", "off", planted(
+        "<b>calc</b> config, field <i>k</i> (<b>modules/calc.py:1</b>, where "
+        "its whole comment is).  " + OFF_MARK + "<i>k_col</i>), so it is "
+        "exactly 1.0.")))
+    cases.append(("a typed constant that names no source", "needs", planted(
+        "<b>spacecost/delivery.py</b>, <i>TUG_ISP_S</i>.  An upper-stage "
+        "figure typed there, deliberately not the hydrolox row's.")))
     for what, want, got in cases:
         if got == want:
             print("  self-test  %s: %s, as it should be" % (what, got))

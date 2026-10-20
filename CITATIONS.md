@@ -310,7 +310,13 @@ constant to the figures it publishes.
 
 > NASA NSSDCA, *Earth Fact Sheet* and *Moon Fact Sheet*,
 > <https://nssdc.gsfc.nasa.gov/planetary/factsheet/>. Earth's mean orbital
-> velocity, `V_EARTH`, and the Moon's semi-major axis, `R_MOON`.
+> velocity, `V_EARTH`; Earth's semi-major axis, the 1 au every Earth-system
+> destination's launch windows are phased against (`window_phasing_au` in
+> calc's `DELIVERY_ARCHITECTURES`); and the Moon's semi-major axis, `R_MOON`.
+
+`DV_NRHO` is not cited here: it restates spacecost's delta-v row
+`TLI → NRHO insertion`, whose notes carry its source, and the worksheet quotes
+that row.
 
 ---
 

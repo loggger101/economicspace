@@ -817,6 +817,63 @@ finding, and `--every-winner` checks 64 Stage 4 outputs with none not clean.
 `worked_calculation.py --audit` shows all 120 non-zero columns and all 36
 rates. `verify_docs.py` passes. The PDF was rasterised and read again.
 
+### The verification worksheet's backing, audited input by input (2026-10-19, no stamp)
+
+Every one of the default winner's 131 inputs was read against its whole
+citation, the config comment or reference row behind it, and the spacecost
+source it was exported from, in both directions: a source the page had but
+did not record, and a source it credited that does not stand behind the
+number. In `campaign/verification_sheet.py`:
+
+- **Recorded now: four inputs whose row named a source the page never
+  quoted.** Each was cited to the name spacecost exports it under, or to the
+  derivation's own copy, so part 18 called it "the model's own constant".
+  Each is a spacecost row, now quoted while it still carries the number
+  (`spacecost_row`): the stage build rate (`operational_costs.csv`, "(Musk
+  2018)"), the tug's propellant (the hydrolox row, "NASA contracts"), the NRHO
+  insertion increment (`delta_v_segments.csv` `TLI → NRHO insertion`,
+  "Whitley & Martinez 2016", the row calc's own copy names), and the leg
+  delta-v, whose row is read off spacecost's source (`chain_segments`) and
+  names no source, so it stays flagged with the right reason. Earth's 1 au
+  phasing orbit now cites NASA's Earth fact sheet.
+- **Corrected: six inputs credited to a "source" that did not stand behind
+  them.** The LEO launch price was credited because its pricing label
+  mentions "NASA's price"; it now quotes the launch-table row the anchor is,
+  and keeps the verdict on a real source (SpaceX's published $150M). Five
+  mineral quotes were credited for the
+  price-source label "USGS/LME/mineralogy reference", which Stage 2 writes on
+  every row of the table; a label every row shares is not a source for one,
+  so those quotes (olivine, enstatite, plagioclase, carbon, bulk silicate)
+  need backing unless their notes name one (`set_catch_all`).
+- **A term the run did not charge is not flagged.** The learning-curve factor
+  of exactly 1 and the cost of capital of exactly 0 are what "off" means, read
+  off the run's own row; flagged, they carried the flag into every hardware
+  line they multiply by one. They are entered as `off` (`OFF_MARK`) and
+  counted apart.
+- **Flagged still, and now saying why.** The cruise-time fit names the four
+  delta-v rows it was calibrated on and says their notes source the delta-v,
+  not the duration; the tug's Isp says spacecost types it deliberately apart
+  from the hydrolox row and asserts the gap.
+
+Left as they are, and worth a reader's judgement: the berthing-adapter rate,
+the NRE overlap fraction and the launch licence are credited to a source that
+backs the bracket or the scope they sit in, not the figure itself; New
+Glenn's payload is credited to a "Source:" sentence about its price. Telling
+those apart is reading, not pattern matching, and the page quotes each
+sentence so a reader can.
+
+**Measured** on the default winner: inputs naming a source 29, derived 5, not
+charged 2, needing backing 95; steps spending one 86 (was 92). The PDF is 40
+pages.
+
+**Verified.** `--pdf --self-test` passes, and five new planted citations each
+get the verdict they should (a catch-all-only quote, the catch-all beside a
+named source, a live feed, a term not charged, a typed constant that names no
+source). `--sweep` builds the 7 mission shapes on disk with no page finding
+(the chain-leg rows are read on every destination's chain), and
+`--every-winner` checks 64 Stage 4 outputs with none not clean.
+`verify_docs.py` passes.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer
