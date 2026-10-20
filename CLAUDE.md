@@ -14,6 +14,7 @@ is in [LESSONS.md](LESSONS.md) under a heading of the same name (frozen
 | **this file** | how to edit safely |
 | [`LESSONS.md`](LESSONS.md) | the long form behind each rule here, as of 2026-10-17 |
 | [`spacecost`](https://github.com/loggger101/spacecost) | Stage 3's reference tables and the delivery-price chains |
+| [`quietlaunch`](https://github.com/loggger101/quietlaunch) | the windowless dashboard launcher `launch_ui.py` hands over to, and its Windows traps |
 | [`AsteroidCatalog`](https://github.com/loggger101/AsteroidCatalog) | builds and publishes the Stage 1 catalog |
 
 **Keeping this file small is a rule, not a preference.** It quotes no
@@ -567,17 +568,17 @@ repo on `sys.path`, which the worker pool needs):
 | `verify.py` | yes | release checks |
 | `run.bat`, `run.sh` | no | launcher menus over the above; nothing may prompt once an argument is given (`set /p` hangs a scheduled job) |
 | `_START HERE.vbs` | no | double-click entry; starts the dashboard with no console |
-| `launch_ui.py` | no | supervises `streamlit run ui.py`; imports nothing from this project, keep it that way |
+| `launch_ui.py` | no | installs the pinned quietlaunch and hands it `ui.py`; imports nothing from this project, keep it that way |
 | `campaign/run_cell.py` | via subprocess | one campaign cell through `run_pipeline.py` |
 
 Launcher and dashboard traps:
 - `_START HERE.vbs`: the `_` sorts it first and is safe; `!` breaks `run.bat`
   under delayed expansion. Quote the space (`start "" wscript.exe "_START
   HERE.vbs"`).
-- `launch_ui.py`: no `SO_REUSEADDR` (inverted on Windows); WSH `Run` rather
-  than `start` so a redirected `run.bat ui` does not block; Tk only from the
-  main thread via a queue; the spawn hand-over is locked and the boot thread
-  joined; reuse a server only with the marker, a live pid and a healthy port.
+- `launch_ui.py` is a shim. Its pin is the one `quietlaunch @ ...@vX.Y.Z`
+  line in `requirements-ui.txt` (read, not retyped); the port, Tk-thread,
+  hand-over and server-reuse traps live and are tested in quietlaunch. Here:
+  WSH `Run` rather than `start`, so a redirected `run.bat ui` does not block.
 - `ui.py`: cached fetching stages default off; the destination selector seeds
   from the catalog on disk; presets come from `run_pipeline.apply_preset`;
   search mode replaces the tabs (a widget key is its storage key); `usecols`

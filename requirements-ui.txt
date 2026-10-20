@@ -8,3 +8,8 @@
 #     pip install -r requirements.txt -r requirements-ui.txt
 
 streamlit>=1.30
+
+# The windowless launcher behind `_START HERE.vbs`, split out of this repo.
+# THIS LINE IS THE PIN: launch_ui.py reads the tag off it and holds the
+# installed copy to it, so a repin is this line and nothing else.
+quietlaunch @ git+https://github.com/loggger101/quietlaunch@v0.1.0

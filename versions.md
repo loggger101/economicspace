@@ -928,6 +928,50 @@ builds the 7 mission shapes on disk with no page finding, and
 before the capital letter, which was checked on the default and phased
 Earth-surface sheets alone). `verify_docs.py` passes.
 
+### The dashboard launcher is its own repository, quietlaunch (2026-10-20, no stamp)
+
+`launch_ui.py`'s control window, port choice, server reuse and stop button
+moved to [quietlaunch](https://github.com/loggger101/quietlaunch) v0.1.0, with
+the seven commits that built it replayed there limited to that file. It
+imported nothing from this project, which is what made it separable. No model
+code moves and `master.py` does not carry it, so no stamp moves and nothing is
+rebuilt.
+
+- **`launch_ui.py` is a shim**: it reads the pin off the
+  `quietlaunch @ ...@vX.Y.Z` line in `requirements-ui.txt`, installs or
+  replaces a stale copy with `--force-reinstall --no-deps` (an editable one is
+  refused, as `modules/transportation.py` does for spacecost), and hands
+  quietlaunch `ui.py` with this project's window text. Streamlit's first-run
+  install stays behind the control window, from the same file.
+- **Fixed on the way, in quietlaunch**: a second double-click while the
+  dashboard was busy booted a second server on 8502. The reuse health check
+  waited 1 s and `/_stcore/health` took 4.4 s during a page load; reuse now
+  waits up to 15 s once the marker and a live pid agree. The marker is per app
+  (`.launcher/running-ui.json`); POSIX kills the server's process group.
+- **Docs**: README, CLAUDE.md (its launcher traps now point at quietlaunch,
+  which tests them), `platform_check.py`'s docstring and `_START HERE.vbs`'s
+  header say where the launcher lives. LESSONS.md is frozen and keeps the
+  account as it was.
+
+**Verified.** quietlaunch's 48 tests pass on Windows, Linux and macOS at
+Python 3.9, 3.12 and 3.14 in its CI, and each of ten historical traps planted
+in a copy of its module fails its test. Here, with quietlaunch uninstalled,
+`pythonw launch_ui.py` installed it from the v0.1.0 tag (pip's
+`direct_url.json` names the tag's commit) and brought the dashboard up on 8501
+(health `ok`, the page rendering `ui.py`). A second launch during a page load
+reopened it and exited in 3 s with the marker unchanged and nothing on 8502;
+before the fix that launch started a second server. `wscript.exe "_START
+HERE.vbs"` returned in 1 s and the dashboard answered 2 s later.
+`verify_docs.py` passes.
+
+⚠️  **A `pyw` that hangs in a shell does not hang the `.vbs`.** Git Bash's
+PATH reached the legacy `py` launcher, whose 3.14 registration pointed at a
+deleted folder, and there `pyw -3` waited on an error dialog. The `.vbs`
+reached the Python install manager's `pyw`, which ran, and even the legacy
+one exits instead of waiting when started with window style 0, which is how
+`Probe` starts it. Test the double-click by double-clicking (or `wscript`),
+never by running its probe from a shell.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer
