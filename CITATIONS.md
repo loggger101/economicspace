@@ -311,7 +311,7 @@ lacking. The licence column is the part that does not go stale.
 | repository | licence | what was taken |
 |---|---|---|
 | skyfielders/python-skyfield | MIT | **code**, adapted; see section 3 |
-| juliensimon/space-datasets | MIT | **the PDS3 column layout** for the SDSS table (section 2), and the JPL NHATS endpoint used by `probe_nhats.py` |
+| juliensimon/space-datasets | MIT | **the PDS3 column layout** for the SDSS table (in starred-repos since 2026-10-20; section 2 points there), and the JPL NHATS endpoint used by starred-repos' `probe_nhats.py` |
 | astropy/astroquery | BSD-3 | nothing. It showed that IRSA's async TAP was the right approach; the implementation here is written against `requests`. Its NEODyS client is where the covariance service was found |
 | julie-dujardin/space-map | **AGPL-3.0** | nothing. It showed that SBDB publishes a field list, which is how `condition_code` was found missing |
 | Z3Prover/z3 | MIT | nothing yet |
