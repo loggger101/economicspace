@@ -56,7 +56,7 @@ steps behind a **Start here** panel at the top of the page.
 
 ```
 _START HERE.vbs        Double-click this: opens the dashboard, no terminal
-launch_ui.py           What it runs -- starts the server, owns the stop button
+launch_ui.py           What it runs -- hands ui.py to quietlaunch, which owns the stop button
 run.bat                Windows launcher: a terminal menu over everything below
 run.sh                 Linux / macOS launcher: the same options, POSIX
 run_pipeline.py        Headless CLI the launcher drives (presets + flags)
@@ -238,7 +238,9 @@ a batch file runs, and a shortcut set to "Minimized" still puts one on the
 taskbar. Windows Script Host is the only launcher that can start a process with
 no window at all. It decides nothing itself -- which port, whether a
 dashboard is already up, what to do when Streamlit is missing, all of that
-lives in `launch_ui.py` where it can be read and tested.
+lives in [quietlaunch](https://github.com/loggger101/quietlaunch), where it
+is tested. `launch_ui.py` installs the version `requirements-ui.txt` pins
+(on first use, or when the pin moves) and tells it which app to run.
 
 ### On Linux or macOS, from a terminal: `run.sh`
 

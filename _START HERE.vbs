@@ -13,7 +13,8 @@
 '
 '  It is a launcher and nothing more. Every decision -- which port, whether a
 '  dashboard is already up, what to do when Streamlit is missing -- lives in
-'  launch_ui.py, where it can be read and tested. Keep this file dumb.
+'  quietlaunch, which launch_ui.py installs and runs, where it is tested.
+'  Keep this file dumb.
 ' ==========================================================================
 
 Option Explicit
