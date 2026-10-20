@@ -75,6 +75,8 @@ SPARK_SETUP.md         Standing this up on a DGX Spark (aarch64 Linux)
 master.py              GENERATED single-file pipeline - do not edit by hand
 ui.py                  Streamlit front end (optional): configure, run, inspect
 ui_meta.py             Config introspection + curation for ui.py
+orbital.py             Kepler, elements to state vectors, Lambert; numpy only.
+                       ui.py's orbit diagram draws with it
 modules/
     catalog.py         Stage 1 - asteroid catalog
     mineral_value.py   Stage 2 - mineral prices + densities
@@ -82,9 +84,6 @@ modules/
     calc.py            Stage 4 - profitability calculation
 campaign/              The 28-cell measurement campaign: results.csv, the
                        archived cells, FINDINGS.md, and the scripts that ran it
-research/              Investigations that are not part of a run. starred-repos/
-                       audits 17 external projects against this pipeline and
-                       carries the probes that measured what they were worth
 README.md              This file: what it is, how to run it, current numbers
 MODEL.md               What the model does, charges for, declines and cannot capture
 versions.md            What changed in which release, what numbers used to be,
@@ -469,7 +468,7 @@ order you meet it:
   would disagree with the numbers beside it. It also reports how well the orbit
   is KNOWN when the catalog says: the top of this ranking is enriched roughly
   threefold in bodies whose orbits are provisional, which
-  [`research/starred-repos`](research/starred-repos/SPACE-MAP.md) measured and
+  [starred-repos](https://github.com/loggger101/starred-repos/blob/main/SPACE-MAP.md) measured and
   which no cost figure can show on its own.
 
 The UI ranks by `total_cost_usd / gross_value_usd` rather than `profit_usd`,
@@ -1234,5 +1233,5 @@ upstream data the pipeline fetches at run time or the third-party code adapted
 into it, and [`CITATIONS.md`](CITATIONS.md) is the license position for both.
 Two sources require citation as a condition of use, not as a courtesy, and
 those citations travel with any published figure derived from this pipeline.
-The adapted routines in `research/starred-repos/orbital.py` are MIT,
+The adapted routines in `orbital.py` are MIT,
 Copyright (c) 2013-2018 Brandon Rhodes.

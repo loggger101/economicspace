@@ -990,6 +990,43 @@ line for line, to the log it committed on 2026-08-24
 carriage returns stripped from both sides; the same diff fails when one digit of
 the log is changed. `verify_docs.py` and `tree_check.py` pass.
 
+### The starred-repo audit is its own repository; `orbital.py` stays (2026-10-20, no stamp)
+
+`research/starred-repos/`, the audit of seventeen external repositories, its
+four probes and the 7.5 MB SDSS taxonomy table, moved to
+[starred-repos](https://github.com/loggger101/starred-repos), with the six
+commits that built it replayed there limited to that folder. Nothing in a run
+read it, so no stamp moves and nothing is rebuilt. `research/` is gone.
+
+- **`orbital.py` is at the repo root**, moved whole (`git mv`; only its
+  docstring's pointer to `probe_lambert.py` changed). `ui.py`'s orbit diagram
+  draws with its `elements_to_state` and now imports it by name, the way it
+  imports `master`, instead of by file path into a folder whose hyphen no
+  import statement can name. It joins check 6 and check 11's file lists.
+  starred-repos keeps its own copy: F4's Lambert measurement was taken with it,
+  so that copy is a record rather than a second thing to keep in step.
+- **Citations**: the skyfield MIT notice and the Izzo and Kepler citations stay
+  here, now naming `orbital.py`. Section 2 (data committed to this repository)
+  says none: the SDSS table's citation, a condition of use, moved with the table
+  to section 2 of starred-repos' `CITATIONS.md`, which was extracted from this
+  one. Links into the audit from README, MODEL.md, CITATIONS.md and `ui.py`
+  point at that repository; `verify_docs.py` no longer checks its five docs,
+  which are a frozen audit. `.gitattributes` drops `*.tab -text` (starred-repos
+  carries it). LESSONS.md is frozen and older entries here keep the old path.
+- **Not done**: the table is still in this repository's history, so a clone is
+  no smaller. Removing it would rewrite history and need a force-push.
+
+**Verified.** In starred-repos, each of the six replayed commits has the tree of
+`research/starred-repos/` at its source commit (the last one `e172b10a`), so
+every byte moved, the table's CRLF included. Here, the root `orbital.py`
+imported by name draws an orbit bit-identical to the old file's (a one-ulp
+plant in the comparison is caught); an em dash and a docstring-less function
+planted in it fail checks 6 and 11. The dashboard drew the orbit diagram for the
+cislunar winner on disk. `probe_plane_change.py`, run from this repo's root
+out of starred-repos, reproduced the five figures in
+`asteroid_transfer_dv_km_s`'s docstring. `verify_docs.py` and
+`tree_check.py` pass.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer

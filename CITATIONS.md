@@ -69,7 +69,7 @@ taxonomy, the element epoch and the orbit-quality fields.
 definition belongs to the Minor Planet Center rather than to JPL. It runs 0
 (well determined) to 9 (barely constrained), and what it means for this
 pipeline's ranking is in
-[`research/starred-repos/SPACE-MAP.md`](research/starred-repos/SPACE-MAP.md).
+[starred-repos' `SPACE-MAP.md`](https://github.com/loggger101/starred-repos/blob/main/SPACE-MAP.md).
 
 ### MP3C (Observatoire de la Cote d'Azur)
 
@@ -153,13 +153,14 @@ exactly this reason; quote it.
 
 Not pipeline inputs. Nothing below is fetched by any stage, and none of it
 reaches a CSV; they are the external oracles
-[`research/starred-repos/SECOND-PASS.md`](research/starred-repos/SECOND-PASS.md)
-measures the model against.
+[starred-repos' `SECOND-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/SECOND-PASS.md)
+measures the model against. That repo's own `CITATIONS.md` carries them
+too, with the probes that read them.
 
 - **NASA JPL NHATS**, `https://ssd-api.jpl.nasa.gov/nhats.api`. Optimised
   round-trip delta-v and mission duration for the near-Earth asteroids
   accessible to human spaceflight. Read by
-  `research/starred-repos/probe_nhats.py`.
+  starred-repos' `probe_nhats.py`.
 - **NASA JPL Horizons**, `https://ssd.jpl.nasa.gov/api/horizons.api`, and the
   **NAIF** kernel archive. Recommended in F7 for bounding the two-body error in
   F4's Lambert oracle; not yet used.
@@ -186,39 +187,11 @@ measures the model against.
 
 ## 2. Data committed to this repository
 
-### 🔔 SDSS-based Asteroid Taxonomy V1.1
-
-`research/starred-repos/sdsstax_ast.tab`, 7.5 MB, committed because it is
-static and small. 63,468 numbered asteroids with an independent taxonomic
-class from u'g'r'i'z' photometry.
-
-Dataset, as the archive's own `CITATION_DESC` gives it:
-
-> Hasselmann, P. H., Carvano, J. M., and Lazzaro, D., *SDSS-based Asteroid
-> Taxonomy V1.1.* EAR-A-I0035-5-SDSSTAX-V1.1. NASA Planetary Data System,
-> 2012.
-
-The method paper, which is what a scientific claim should cite:
-
-> Carvano, J. M., Hasselmann, P. H., Lazzaro, D., and Mothe-Diniz, T. (2010).
-> *SDSS-based taxonomic classification and orbital distribution of main belt
-> asteroids.* Astronomy & Astrophysics 510, A43.
-> https://doi.org/10.1051/0004-6361/200913322
-
-The underlying survey:
-
-> Ivezic, Z. et al. (2001). *Solar System Objects Observed in the Sloan
-> Digital Sky Survey Commissioning Data.* The Astronomical Journal 122, 2749.
-
-- Archive: `https://sbnarchive.psi.edu/pds3/non_mission/EAR_A_I0035_5_SDSSTAX_V1_1/`
-
-⚠️  **Cite the papers, not this repository**, for any published result that
-rests on this table. NASA PDS data is in the public domain; the scientific
-credit is not.
-
-ℹ️  The column layout was transcribed from the archive's own `.lbl` files, by
-way of `juliensimon/space-datasets` (MIT), which had already done the
-transcription. See section 5.
+None. The one dataset that was, the SDSS-based Asteroid Taxonomy V1.1 table
+(`sdsstax_ast.tab`, read only by a research probe), moved with the probes to
+[starred-repos](https://github.com/loggger101/starred-repos) on 2026-10-20,
+and its citation, a condition of use, is section 2 of
+[that repo's `CITATIONS.md`](https://github.com/loggger101/starred-repos/blob/main/CITATIONS.md).
 
 ---
 
@@ -226,7 +199,7 @@ transcription. See section 5.
 
 ### skyfield, MIT
 
-`research/starred-repos/orbital.py`, the functions `kepler_E`, `true_anomaly`
+`orbital.py`, the functions `kepler_E`, `true_anomaly`
 and `elements_to_state`, are adapted from `skyfield/keplerlib.py`.
 
 ```
@@ -256,7 +229,7 @@ citation obligation, which is what this section is.
 
 ### Lambert's problem
 
-`lambert_izzo` and its helpers in `research/starred-repos/orbital.py` are
+`lambert_izzo` and its helpers in `orbital.py` are
 implemented from:
 
 > Izzo, D. (2015). *Revisiting Lambert's problem.* Celestial Mechanics and
@@ -272,7 +245,7 @@ Validated against a published worked example:
 > Vallado, D. A. *Fundamentals of Astrodynamics and Applications*, Example 7-5.
 
 Agreement is 7.4e-07 km/s, which is the precision the reference is quoted to.
-See [`research/starred-repos/FINDINGS.md`](research/starred-repos/FINDINGS.md)
+See [starred-repos' `FINDINGS.md`](https://github.com/loggger101/starred-repos/blob/main/FINDINGS.md)
 F4.
 
 ### Kepler's equation
@@ -327,11 +300,11 @@ that row.
 ## 5. Repositories audited, and what was taken from each
 
 A survey of 17 repositories is recorded in
-[`research/starred-repos/`](research/starred-repos/). Most were read and
+[starred-repos](https://github.com/loggger101/starred-repos). Most were read and
 nothing was taken. This table is the licence position for all of them.
 
 Read twice: the second pass is in
-[`SECOND-PASS.md`](research/starred-repos/SECOND-PASS.md), and it moved rows
+[`SECOND-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/SECOND-PASS.md), and it moved rows
 here, because a repository can add exactly the thing it was rejected for
 lacking. The licence column is the part that does not go stale.
 
@@ -348,7 +321,7 @@ lacking. The licence column is the part that does not go stale.
 | OpenSCvx/OpenSCvx | Apache-2.0 | nothing |
 | esa/pygmo2 | MPL-2.0 | nothing |
 | pola-rs/polars | MIT | nothing |
-| typpo/spacekit | MIT | nothing. Its per-body Kepler solve is the technique behind `ui.py`'s orbit diagram, but that diagram is written against `research/starred-repos/orbital.py` and Altair, and no line of spacekit was read into it |
+| typpo/spacekit | MIT | nothing. Its per-body Kepler solve is the technique behind `ui.py`'s orbit diagram, but that diagram is written against `orbital.py` and Altair, and no line of spacekit was read into it |
 | duncaneddy/brahe | MIT | nothing yet. Its native SPICE reader and Horizons SPK client are the recommended way to bound F4's oracle |
 | Small-Bodies-Node/pds4_tools | BSD-3 (Univ. of Maryland) | nothing |
 | nyx-space/nyx | **AGPL-3.0** | nothing |

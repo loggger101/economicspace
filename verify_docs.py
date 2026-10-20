@@ -182,21 +182,10 @@ CAMPAIGN_DOCS = ["campaign/FINDINGS.md", "campaign/README.md",
                  # The citation authority.  It carries two attribution
                  # obligations that are conditions of use rather than
                  # courtesies, so it is prose that must not rot quietly.
-                 "CITATIONS.md",
-                 # The starred-repo audit.  Same argument again: it quotes
-                 # measured figures (the plane-change split, the Lambert gap,
-                 # the taxonomy disagreement, the orbit-quality enrichment)
-                 # and README and versions.md both link into it.
-                 "research/starred-repos/README.md",
-                 "research/starred-repos/FINDINGS.md",
-                 "research/starred-repos/SOURCES.md",
-                 "research/starred-repos/SPACE-MAP.md",
-                 # The second pass over the same seventeen.  Same argument
-                 # again, and one more: it carries the NHATS and
-                 # Shoemaker-Helin rank agreements, which are the only
-                 # external check on the delta-v model that this repo did not
-                 # build itself.
-                 "research/starred-repos/SECOND-PASS.md"]
+                 "CITATIONS.md"]
+# The starred-repo audit (research/starred-repos/) was checked here too until
+# 2026-10-20, when it became the starred-repos repository: a frozen audit,
+# and nothing here reads it any more.
 
 # The campaign scripts.  Prose a reader sees, checked whole like the root
 # scripts rather than comments-only like modules/: they hold no reference table,
@@ -824,7 +813,7 @@ def check_structure() -> bool:
 
 # -------------------------------------------------------------------- 6. dashes
 EM, EN = "—", "–"
-ROOT_PY = ["ui.py", "ui_meta.py", "run_pipeline.py", "verify.py",
+ROOT_PY = ["ui.py", "ui_meta.py", "orbital.py", "run_pipeline.py", "verify.py",
            "build_master.py", "launch_ui.py", "platform_check.py",
            # verify_stage3.py was outside BOTH ratchets until 2026-09-15, which
            # is the "a file nothing checks is clean until it is not" state this
@@ -1555,6 +1544,7 @@ def check_runtime() -> bool:
 # contents are the four modules, which are checked here at source, and
 # build_master.py strips their module docstrings by design.
 FIRST_PARTY_PY = (["build_master.py", "run_pipeline.py", "ui.py", "ui_meta.py",
+                   "orbital.py",
                    "verify.py", "verify_stage3.py", "verify_stage1.py",
                    "tree_check.py",
                    "launch_ui.py", "platform_check.py",
