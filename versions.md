@@ -874,6 +874,60 @@ source). `--sweep` builds the 7 mission shapes on disk with no page finding
 `--every-winner` checks 64 Stage 4 outputs with none not clean.
 `verify_docs.py` passes.
 
+### The verification worksheet on other architectures (2026-10-20, no stamp)
+
+Every read so far was of one mission: a cislunar electric winner. Three
+sheets that share none of its shape were rendered and read: a Mars-surface
+mission (an entry leg, a lander, its own transfer, reliability and the
+learning curve charged, calc 1.21.2 on spacecost 0.3.x tables), an
+Earth-surface raw-ore mission at N = 1, and a cislunar ISRU mission. In
+`campaign/verification_sheet.py`:
+
+- **An Earth-surface page left two prices uncited.** Its Stage 2 table has
+  no per-destination columns, so the phase loop skipped every phase: the
+  silicate and carbon quotes behind V_bulk appeared only in the hold table,
+  with no tag, and the bulk step cited the alloy alone. They are registered
+  inputs now, citing `price_usd_per_kg`. The page no longer states the two
+  in-space pricing rules where neither applies, and its element table drops
+  seven columns of dashes for element, price and source.
+- **Constants that restate a delta-v row cite it.** `DERIVATION_ROWS` maps
+  four of the derivation's constants to the spacecost rows calc's own copies
+  name, and `cite_constant` quotes those rows while they still sum to the
+  constant: the Mars retro-propulsion now cites NASA DRA 5.0, the lunar
+  descent Apollo's flown figures. `DV_NRHO` moved onto it. `--self-test`
+  holds the register both ways (every entry still matches; a constant moved
+  off its row loses the citation).
+- **A pre-0.4.0 LEO price cites its row.** The launch-table lookup finds the
+  vehicle the pricing label names (Falcon 9 (reusable)), not only the
+  installed anchor.
+- **A standard by its number is a source.** "MIL-HDBK-189 puts alpha at
+  0.3-0.6" backs the reliability-growth exponent and read as nothing; the
+  source test now knows a MIL-HDBK / MIL-STD / ECSS number. The learning
+  curve's steps cite Wright 1936 (CITATIONS.md section 4).
+- **Caught by `--every-winner` on the way.** The first version of the
+  Earth-surface fix registered every phase as `P_`, and a phased
+  Earth-surface run (calc 1.26.0) asserted "key 'P_cohenite' is registered
+  twice": a phase that can also be taken apart registers its row price as the
+  as-is half, `Pa_`, and the better of the two is its `P_`. It now keys as the
+  in-space branch does.
+- **Smaller.** "silicates's" is "silicates'" (`possessive`); the
+  inseparable-phase sentence opens with a capital; a reference
+  row's numeric fields print as the page prints numbers ("216", not "216.0";
+  1.28571428571, not 1.2857142857142858), years bare.
+
+**Measured.** Default winner unchanged in every count (29 sourced, 95 need
+backing). Mars surface: 34 sourced (was 31), 57 need backing (was 60).
+Earth surface: 77 inputs (was 75), both new prices flagged, as their only
+label is the catch-all.
+
+**Verified.** `--pdf --self-test` passes with three new cases (the register
+both ways, a standard by its number); the three architecture sheets pass
+every check, as does the phased Earth-surface run that crashed. `--sweep`
+builds the 7 mission shapes on disk with no page finding, and
+`--every-winner` checks 64 Stage 4 outputs with none not clean (both run
+before the capital letter, which was checked on the default and phased
+Earth-surface sheets alone). `verify_docs.py` passes.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer
