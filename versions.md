@@ -972,6 +972,24 @@ one exits instead of waiting when started with window style 0, which is how
 `Probe` starts it. Test the double-click by double-clicking (or `wscript`),
 never by running its probe from a shell.
 
+### The 2026-08 campaign's two population scripts read its own cells again (2026-10-20, no stamp)
+
+`campaign/rig_bounds.py` and `campaign/extra_checks.py` are kept because the
+2026-08 archive's FINDINGS.md names them as scripts that produced its record,
+but both globbed the top level of `campaign/cells/`. The 2026-08 cells moved to
+`campaign/cells/archive-2026-08_calc-1.17.7/` when the 28-cell campaign began,
+so the two scripts had been reading the later campaigns' cells and
+re-measurements, `geo` and `mars_orbit` among them, under 2026-08 definitions:
+figures belonging to no campaign. Both now read the archive directory, and their
+docstrings and `campaign/README.md` say so. `population.py` stays the authority
+for every current table.
+
+**Verified.** Run over the archived cells, each script's output is identical,
+line for line, to the log it committed on 2026-08-24
+(`campaign/logs/_rig_bounds.log`, `campaign/logs/_extra_checks.log`), with
+carriage returns stripped from both sides; the same diff fails when one digit of
+the log is changed. `verify_docs.py` and `tree_check.py` pass.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer

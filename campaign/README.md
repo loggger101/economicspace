@@ -114,7 +114,8 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       the winners.  `--report` renders them from the JSON under `population/`;
       re-running a cell is not needed and not wanted.  It is the authority for
       those tables and supersedes `rig_bounds.py` and `extra_checks.py`, which
-      are kept only because the 2026-08 archive's FINDINGS.md names them.
+      are kept only because the 2026-08 archive's FINDINGS.md names them;
+      they read that campaign's cells, `cells/archive-2026-08_calc-1.17.7/`.
       Same caution as `analyse.py`: do not run it while a cell is timing.
       `--tag calc-1.22.0` reads cells archived under a suffix, i.e. a cell
       re-run at a later release; `analyse.py` takes the same as
