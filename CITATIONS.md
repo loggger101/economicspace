@@ -151,7 +151,8 @@ exactly this reason; quote it.
 
 ### Facts the comments state
 
-Cited in code comments beside a value they explain; neither reaches a value.
+Cited in code comments, or in MODEL.md, beside a value they explain; none
+reaches a value. The rc- numbers are General_Research revision candidates.
 
 - **NASA Office of Inspector General (2023)**, *NASA's Management of Its
   Radioisotope Power Systems Program*, IG-23-010,
@@ -162,6 +163,43 @@ Cited in code comments beside a value they explain; neither reaches a value.
   <https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html>: the CO2 and
   N2 fractions and surface pressure behind `mars_surface`'s utility comments in
   mineral_value (General_Research rc-165).
+- **Kabemba, Mutombo & Waters (2025)**, *A Predictive Geometallurgical
+  Framework for Flotation Kinetics in Complex Platinum Group Metal Orebodies*,
+  Minerals 15:701, doi:10.3390/min15070701; and **Liddell, Adams, Smith &
+  Muller (2019)**, *Kell hydrometallurgical extraction of precious and base
+  metals from flotation concentrates*, J. SAIMM: terrestrial flotation recovery
+  and refinery extraction beside `beneficiation_recovery` (rc-122).
+- **Bogmans, Pescatori, Petrella, Prifti & Stuermer (2024)**, *The Power of
+  Prices: How Fast Do Commodity Markets Adjust to Shocks?*, IMF Working Paper
+  2024/077, doi:10.5089/9798400271953.001.A001: measured metal demand
+  elasticities beside `demand_elasticity` (rc-123).
+- **Whitley, S. & Shinn, S. (2012)**, *The Economics of NASA Mission Cost
+  Reserves*, IEEE Aerospace Conference, NTRS 20120002314; and **National
+  Research Council (2010)**, *Controlling Cost Growth of NASA Earth and Space
+  Science Missions*: reserve consumption and cost growth beside
+  `contingency_fraction` (rc-124).
+- **Chen, G. & McLennan, D. D. (2004)**, *A Study of Learning Curve Impact on
+  Three Identical Small Spacecraft*, NTRS 20040035806: the one measured
+  spacecraft learning case beside `learning_curve_rate` (rc-127).
+- **Sowers, G. (2020)**, *Thermal Mining of Ices on Cold Solar System Bodies*,
+  NIAC Phase I final report; **Schuler, Nick, Leucht, Langton & Smith (2022)**,
+  *ISRU Pilot Excavator: Bucket Drum Scaling Experimental Results*, ASCE Earth
+  and Space; and **Giel et al. (2025)**, *Design and Development of a Modular
+  Bucket Drum Excavator for Lunar ISRU*, arXiv:2511.00492: plant and tool
+  throughputs beside `mining_rate_kg_per_day_per_kg_rig` (rc-136).
+- **NASA Office of Inspector General (2018)**, *Audit of Commercial Resupply
+  Services to the International Space Station*, IG-18-016; and **Motiwala,
+  Mathias & Mattenberger (2014)**, *Conceptual Launch Vehicle and Spacecraft
+  Design for Risk Assessment*, NTRS 20150000182: cargo-vehicle upmass and
+  stage structural fractions beside `return_structure_frac_of_payload`
+  (rc-137).
+- **Sjauw, McGuire & Freeh (2016)**, *Mission Design Considerations for Mars
+  Cargo of the Human Spaceflight Architecture Team's Evolvable Mars Campaign*,
+  AIAA, NTRS 20160010261: a solar-electric cargo stage's Earth-Mars trip time
+  beside `ep_target_thrust_yr` (rc-138).
+- **Northrop Grumman (2016)**, *Propulsion Products Catalog* (OSR No.
+  16-S-1432), STAR 48B pages: the motor-case fraction MODEL.md's tankage table
+  holds the APCP class against (rc-179).
 
 ---
 

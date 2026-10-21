@@ -429,7 +429,7 @@ the whole point of putting volume in the model.
 | storable liquid | MMH/NTO (1.16 kg/L) | 2.2% |
 | benign liquid | water (1.0 kg/L) | 2.3% |
 | mild cryogen | LOX (1.14 kg/L) | 2.5% |
-| solid motor | APCP (1.80 kg/L) | 6.9%, Star 48B measures 6.4% |
+| solid motor | APCP (1.80 kg/L) | 6.9%, Star 48B measures 6.2-6.5% (short and long nozzle; Northrop Grumman *Propulsion Products Catalog*, 2016) |
 | deep cryogen, blended | hydrolox (0.361 kg/L) | 9.7%, Centaur III measures ~9.7% |
 | supercritical gas, 18 MPa | krypton (0.55 kg/L) | 12.5% |
 | supercritical gas, 30 MPa | cold gas N2 (0.25 kg/L) | 46% |
@@ -1003,7 +1003,7 @@ fourteen times the tank per kilogram burnt.
 `tank_kg_per_L` is derived per storage class and anchored on flight articles
 rather than asserted. As a fraction of the propellant it holds: **iodine 0.2%**
 (solid at ambient pressure), xenon 1.9%, kerolox 2.7%, an APCP motor case 6.9%
-against Star 48B's measured 6.4%, hydrolox 9.7% against Centaur III's measured
+against Star 48B's measured 6.2-6.5%, hydrolox 9.7% against Centaur III's measured
 ~9.7%, krypton 12.5%, cold gas 46%, and bare LH2 **53%**, which is what a
 nuclear-thermal stage has to earn its 900 s against.
 

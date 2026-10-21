@@ -216,9 +216,14 @@ class CalcConfig:
     # or the berthing mechanism.  0.15 is deliberately at the light end of the
     # real range because the ablative TPS is already carried separately by
     # `heat_shield_frac_of_payload`, and because a purpose-built ore carrier
-    # should beat a crew-rated capsule.  Heritage for the range: Cygnus PCM
-    # ~1,500 kg dry for 3,500 kg of cargo (0.43), Dragon ~1.3:1 with crew
-    # provisions, OSIRIS-REx's SRC far worse again at sample scale.
+    # should beat a crew-rated capsule.  Heritage for the range: NASA OIG puts
+    # Cygnus's upmass at 3,754 kg a mission and Dream Chaser's at 5,500, with
+    # Dragon 2 returning 2,507 kg and disposing of 800 kg in its trunk
+    # (IG-18-016, p18); Cygnus's ~1,500 kg dry mass, which would make its
+    # ratio 0.40, has no source here.  OSIRIS-REx's SRC is far worse again at
+    # sample scale.  Launch-vehicle STAGES, a different ratio (structure over
+    # stage), run 0.038-0.45 historically (Motiwala, Mathias & Mattenberger
+    # 2014, NTRS 20150000182).
     #
     # Set to 0.0 to restore the pre-v1.10.0 fixed-mass behaviour.  Note that
     # doing so also restores an unbounded payload when ISRU is on and the
@@ -262,7 +267,15 @@ class CalcConfig:
     # this is an engineering assumption, not a measurement; it sits here as a
     # single obvious dial rather than being buried as an implicit infinity.
     # For scale, OSIRIS-REx's TAGSAM collected ~122 g in a touch-and-go; a
-    # continuous rig is a different machine entirely.
+    # continuous rig is a different machine entirely.  Plant-scale figures,
+    # none of which pins the dial: a NIAC thermal-mining design makes 42.0 kg
+    # of propellant a year per kg of plant (0.115 kg/day/kg) against 2.3
+    # (0.0063) for NASA Langley's excavation-based lunar plant (Sowers 2020,
+    # NIAC Phase I report, p88); NASA's IPEx is a 30 kg-class excavator built
+    # to move 10,000 kg of regolith (Schuler et al. 2022); a 4.8 kg bucket-drum
+    # tool dug 172-778 kg/h in sandbox tests (Giel et al. 2025, arXiv
+    # 2511.00492).  They count product, or a tool rather than a whole rig, so
+    # they bracket the order of magnitude rather than set it.
     mining_rate_kg_per_day_per_kg_rig: float = 0.10
     # Hard ceiling on time spent at the asteroid.  Binds the payload: you can
     # only return what you can dig in this long.  Also keeps ops cost and WACC
@@ -400,7 +413,10 @@ class CalcConfig:
     # the strict test, and v1.28.0 to the bit.
     launch_capacity_rtol:      float = 1e-9
     # Fraction of the valuable phase that actually reports to concentrate.
-    # Terrestrial PGM / sulphide flotation circuits run 85-95%; magnetic
+    # Terrestrial PGM flotation recovers ~83-94%: batch flotation of eight
+    # Platreef ore types gave 83.25-94.37% cumulative PGM + Au recovery
+    # (Kabemba, Mutombo & Waters 2025, Minerals 15:701), and the Kell refining
+    # step downstream extracts >95% (Liddell et al. 2019, J. SAIMM).  Magnetic
     # separation of a metal phase from silicate gangue is mechanically simpler
     # than flotation but has no microgravity flight heritage at all.
     beneficiation_recovery:    float = 0.90
@@ -436,7 +452,12 @@ class CalcConfig:
     # 3,000 s Isp thruster winning a mass cascade it could only fly over
     # decades.
     model_low_thrust_time:     bool  = True
-    ep_target_thrust_yr:       float = 3.0    # thrusting time the EP stage is sized for
+    # Thrusting time the EP stage is sized for.  For scale, NASA's 150 kW
+    # solar-electric cargo stage for 50 t to Mars flies the Earth-Mars leg in
+    # 975 days (2.7 yr) in its representative case, from C3 = +2 km2/s2, with
+    # trip times swept over 600-1,200 days (Sjauw, McGuire & Freeh 2016, NTRS
+    # 20160010261).
+    ep_target_thrust_yr:       float = 3.0
     # Reject any mission whose total duration exceeds this.  A 40-year
     # round trip is not a mission, it is a bequest.
     max_mission_duration_yr:   float = 25.0
@@ -456,7 +477,7 @@ class CalcConfig:
 
     # LEARNING CURVE on recurring hardware.  Only NRE was amortised across a
     # fleet; the rig cost $300k/kg at unit 1 and unit 500 alike.  Wright's
-    # law at 85% is standard for aerospace serial production.  Has NO effect
+    # law at 85% is a judgement (see `learning_curve_rate`).  Has NO effect
     # at nre_amortization_missions = 1, where the cumulative average is the
     # first-unit cost by definition.
     #
@@ -475,7 +496,11 @@ class CalcConfig:
     # unaffected by the flip.
     model_learning_curve:      bool  = False
     # Wright's-law rate for the flag above: each doubling of cumulative
-    # production cuts unit cost to this fraction.  Read ONLY when
+    # production cuts unit cost to this fraction.  0.85 is a judgement: no
+    # source here measures a Wright slope for spacecraft.  The one measured
+    # case, three identical ST-5 spacecraft, fits a constant percentage
+    # reduction per unit toward a floor (Chen & McLennan 2004, NTRS
+    # 20040035806), and three units cannot pin a rate.  Read ONLY when
     # `model_learning_curve` is True; 1.0 disables the curve on its own.
     learning_curve_rate:       float = 0.85
 
@@ -509,9 +534,13 @@ class CalcConfig:
     #                   the run says so out loud.
     market_model:              str   = "capacity_cap"
 
-    # The elasticity in P/P0 = (1 + Q/Q_market)^(-1/eps).  0.5 is inelastic,
-    # which is right for precious metals: doubling world supply quarters the
-    # price.  Raising it makes the market absorb more before the price moves.
+    # The elasticity in P/P0 = (1 + Q/Q_market)^(-1/eps).  0.5 is inelastic:
+    # doubling world supply quarters the price.  Measured demand for metals is
+    # more inelastic still: an IMF panel over 1960-2021 finds copper and zinc
+    # close to zero and lead and tin at 0.2-0.3 (Bogmans et al. 2024, IMF WP
+    # 2024/077).  Nothing here measures PGM demand, so 0.5 is a judgement, and
+    # on the generous side.  Raising it makes the market absorb more before
+    # the price moves.
     # Read ONLY when `market_model` is "elasticity"; the other three modes hold
     # price flat and bound quantity instead.
     demand_elasticity:         float = 0.5
@@ -1035,7 +1064,11 @@ class CalcConfig:
     apply_wacc_compounding:    bool  = False
 
     # Flat contingency on the whole cost cascade, applied after every other
-    # line and before WACC.
+    # line and before WACC.  0.20 is at or below what NASA missions have
+    # actually grown: 12 of the 13 CADRe missions spent as much as or more
+    # than the reserves they held at PDR (Whitley & Shinn 2012, NTRS
+    # 20120002314), and prior studies put average cost growth at 23-77% (NRC
+    # 2010, Controlling Cost Growth of NASA Earth and Space Science Missions).
     contingency_fraction:      float = 0.20
 
     # ─── VEHICLE / PROPELLANT SELECTION ──────────────────────────────────────
