@@ -388,7 +388,9 @@ already removes hydrolox ISRU from every row it touched.
   "made on departure"; it is made over the whole stay, so the first hydrogen is
   held for about a year and boils or needs a 20 K cryocooler the whole time.
   Inert while charged hydrolox ISRU wins nothing, and a zero-boil-off cooling
-  model needs a source of its own. In README beside the boil-off model.
+  model needs a source of its own. In
+  [MODEL.md](MODEL.md#gaps-in-what-the-model-charged-for) beside the boil-off
+  model.
 - **ISRU methalox** stays declined (CLAUDE.md, "Measured and declined"). The
   other condition its row named, pricing the plant for hydrolox, is met here
   and only strengthens the decline.
