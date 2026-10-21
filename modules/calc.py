@@ -624,13 +624,14 @@ class CalcConfig:
     # an RTG is ~5 W/kg everywhere, so they cross at 3.46 AU and a large part
     # of this catalog sits beyond it.  Module 3 has priced RTGs since v1.2.0
     # and nothing read the row, so every main-belt body flew a starved solar
-    # array.  Capped because the binding constraint is Pu-238 supply (~1.5 kg/yr
-    # of DOE production, ~one flagship RTG a year for the world), not money.
+    # array.  Capped because the binding constraint is Pu-238 supply (DOE's
+    # goal is ~1.5 kg/yr by 2026, a third of one MMRTG's fuel), not money.
     allow_rtg_power:           bool  = True
 
-    # A SUPPLY cap rather than a money cap.  DOE makes ~1.5 kg of Pu-238 a
-    # year, about one flagship RTG for the entire world, so a mission wanting
-    # more than this goes back to solar and pays the mass.
+    # A SUPPLY cap rather than a money cap.  DOE's goal is 1.5 kg of Pu-238 a
+    # year by 2026, and it made 0.77 kg in total over 2018-2021 against 1.5
+    # planned; an MMRTG holds 4.8 kg (NASA OIG IG-23-010, p13 and p27).  So a
+    # mission wanting more than this goes back to solar and pays the mass.
     rtg_max_power_w:           float = 5_000.0
 
     # ─── MODELLING COMPLETENESS, PART 4  (v1.14.0) ───────────────────────────
@@ -3541,8 +3542,9 @@ def solar_specific_power_w_per_kg(
 #
 #   • It costs 625× more per watt ($500,000 against $800), so the model buys
 #     nuclear only where it is genuinely lighter, and pays for it.
-#   • Pu-238 supply is the real constraint.  DOE production is ~1.5 kg/yr,
-#     which is roughly one flagship RTG a year for the whole world, and a
+#   • Pu-238 supply is the real constraint.  DOE's production goal is
+#     ~1.5 kg/yr by 2026 (it made about half its plan over 2018-2021): a
+#     year's output for the whole world fuels a third of one MMRTG, and a
 #     GPHS-RTG is 290 We.  A few kilowatts is the outside edge of plausible;
 #     a 300 kW nuclear-electric stage is not a cost question, it is a
 #     national-inventory question.  `rtg_max_power_w` caps it, and above the
@@ -7842,8 +7844,8 @@ def _evaluate_combo_at_ratio(
         if processing_power_watts > 0:
             # v1.14.0: the SOURCE is fixed by `power_mode` before the loop, so
             # all that remains inside it is the Pu-238 ceiling, and that is a
-            # hard constraint, not a preference.  DOE production is ~1.5 kg/yr,
-            # about one flagship RTG a year for the entire world, so a plant
+            # hard constraint, not a preference.  DOE's production goal is
+            # ~1.5 kg/yr, a third of one MMRTG a year for the world, so a plant
             # over the cap is not expensive, it is unavailable.  Reporting the
             # candidate infeasible is what makes that honest; the solar
             # candidate for the same body is evaluated alongside and survives.

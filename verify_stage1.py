@@ -371,7 +371,7 @@ def tables(taxonomy: dict):
 def check_bytes(c, manifest) -> bool:
     """What Stage 1 installed is the pinned release, byte for byte.
 
-    The CSV is hashed whole, a few seconds for ~1.2 GB, because a manifest
+    The CSV is hashed whole, every byte of it, because a manifest
     beside a catalog that has since been edited, truncated by a sync client or
     copied in from another host would otherwise vouch for bytes it never saw.
     """

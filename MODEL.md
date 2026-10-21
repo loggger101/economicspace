@@ -301,7 +301,7 @@ itself.
   Fe-Ni to 0.45, silicates to 0.03. Carbon is *not* discounted; solar-wind
   implantation leaves it at ~100 ppm, which is not a resource.
 - **The Martian surface** has metres-thick mid-latitude ground ice, 1-3 wt%
-  hydrated regolith measured by Curiosity's SAM, a 95.3% CO₂ atmosphere and a
+  hydrated regolith measured by Curiosity's SAM, a 95.1% CO₂ atmosphere and a
   globally oxidised crust. Water drops to 0.25, carbon to 0.02, silicates to
   0.02, iron to 0.40.
 - **Nickel, cobalt and copper are undiscounted everywhere.** No concentrated
@@ -1002,7 +1002,7 @@ fourteen times the tank per kilogram burnt.
 
 `tank_kg_per_L` is derived per storage class and anchored on flight articles
 rather than asserted. As a fraction of the propellant it holds: **iodine 0.2%**
-(solid at ambient pressure), xenon 1.9%, kerolox 2.5%, an APCP motor case 6.9%
+(solid at ambient pressure), xenon 1.9%, kerolox 2.7%, an APCP motor case 6.9%
 against Star 48B's measured 6.4%, hydrolox 9.7% against Centaur III's measured
 ~9.7%, krypton 12.5%, cold gas 46%, and bare LH2 **53%**, which is what a
 nuclear-thermal stage has to earn its 900 s against.

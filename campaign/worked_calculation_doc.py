@@ -2269,8 +2269,9 @@ def s_power(out):
             "two cross at sqrt(%s / %s) = <strong>%s AU</strong> and a body "
             "further out than that is better served by nuclear heat. It is "
             "not free: this plant is priced at %s per watt, and the binding "
-            "constraint is not money but Pu-238 supply -- DOE produces about "
-            "1.5 kg a year, roughly one flagship RTG for the entire world, "
+            "constraint is not money but Pu-238 supply -- DOE's production "
+            "goal is 1.5 kg a year, a third of one MMRTG's fuel for the "
+            "entire world, and it has made about half its plan so far, "
             "which is why a draw over the ceiling makes a mission infeasible "
             "rather than expensive."
             % (fmt(C["rtg_w_per_kg"], 2), fmt(C["w_1au"], 2),

@@ -221,12 +221,12 @@ actually reads**:
 
 | file | stage that writes it | size |
 |---|---|---|
-| `asteroid_catalog.csv` | 1 | 823 MB |
-| `mineral_value_catalog.csv` | 2 | 12 KB |
-| `transportation/launch_vehicles.csv` | 3 | 14 KB |
-| `transportation/propellants.csv` | 3 | 27 KB |
-| `transportation/delta_v_segments.csv` | 3 | 6 KB |
-| `transportation/operational_costs.csv` | 3 | 28 KB |
+| `asteroid_catalog.csv` | 1 | 2.2 GB on `data-2026-09-29c` |
+| `mineral_value_catalog.csv` | 2 | tens of KB |
+| `transportation/launch_vehicles.csv` | 3 | tens of KB |
+| `transportation/propellants.csv` | 3 | tens of KB |
+| `transportation/delta_v_segments.csv` | 3 | tens of KB |
+| `transportation/operational_costs.csv` | 3 | tens of KB |
 
 Ask before you queue anything:
 

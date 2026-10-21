@@ -95,7 +95,9 @@ acknowledged by name rather than through a single paper
 - **U.S. Geological Survey, *Mineral Commodity Summaries 2026***: the iron row
   (No. 1 heavy melting steel scrap composite, 2025 average), the tungsten note
   (Rotterdam APT during 2025) and cobalt's world mine production (mineral_value
-  1.12.3 and 1.13.0).
+  1.12.3 and 1.13.0); the comments beside the carbonates price (crushed stone,
+  average unit value 2025e) and iron's world pig-iron production
+  (General_Research rc-144, rc-154).
 - **World Bank, *Commodity Markets (Pink Sheet)* monthly prices**: the nickel
   and copper reference prices, May 2026 averages (mineral_value 1.13.0).
 - **LBMA precious-metal prices**: the silver and platinum reference prices,
@@ -146,6 +148,20 @@ to say what a held-fixed assumption ignores; neither reaches a value.
 ⚠️  Prices are fetched live, so a figure derived from this pipeline is a
 figure **on a date**. `catalog_date` is stamped into every output CSV for
 exactly this reason; quote it.
+
+### Facts the comments state
+
+Cited in code comments beside a value they explain; neither reaches a value.
+
+- **NASA Office of Inspector General (2023)**, *NASA's Management of Its
+  Radioisotope Power Systems Program*, IG-23-010,
+  <https://oig.nasa.gov/docs/IG-23-010.pdf>: DOE's Pu-238 production goal and
+  its shortfall (p27) and an MMRTG's fuel load (Table 1, p13), the reasons
+  calc gives for `rtg_max_power_w` (General_Research rc-120).
+- **NASA NSSDCA, *Mars Fact Sheet***,
+  <https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html>: the CO2 and
+  N2 fractions and surface pressure behind `mars_surface`'s utility comments in
+  mineral_value (General_Research rc-165).
 
 ---
 
