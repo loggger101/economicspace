@@ -3500,8 +3500,8 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
         if C.get("isru_wh", 0.0) > 0 and trial_dig > 0:
             draw += C["isru_wh"] * new_isru_prop / hours(trial_dig)
         # A radioisotope plant is not expensive over the ceiling, it is
-        # UNAVAILABLE: DOE produces about 1.5 kg of Pu-238 a year, roughly one
-        # flagship RTG for the whole world.
+        # UNAVAILABLE: DOE's goal is 1.5 kg of Pu-238 a year by 2026, a third
+        # of one MMRTG's fuel for the whole world.
         if C["power_source"] == "rtg" and draw > cfg.rtg_max_power_w:
             return refuse("the radioisotope plant exceeds `rtg_max_power_w`")
         new_plant = draw / C["plant_w_per_kg"] if draw > 0 else 0.0
@@ -5244,7 +5244,7 @@ TYPED_OK = {
     "1": "symbolic or a name: 1 AU, 1/r2, (R - 1), Module 1",
     "2": "symbolic or a name: the exponent in 1/r2, Stage 2",
     "1.0": "breakeven, which is what the ratio MEANS rather than a measurement",
-    "1.5": "DOE Pu-238 production, kg/yr: a fact about the world, not this model",
+    "1.5": "DOE's Pu-238 production goal, kg/yr: a fact about the world, not this model",
     "1.21": "calc 1.21.0, naming the release that shipped the hard ceiling",
     "2026": "the 2026-09 campaign, naming a measurement rather than making one",
 }

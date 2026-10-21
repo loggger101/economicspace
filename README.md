@@ -999,7 +999,7 @@ the sources get pasted into Colab and Jupyter, and Git for Windows sets
 
 ```
 <output_dir>/
-    asteroid_catalog.csv               ← Stage 1 (~1.2 GB, the pinned release)
+    asteroid_catalog.csv               ← Stage 1 (the pinned release)
     rejected_entries.csv               ← Stage 1 (the build's validation rejects)
     catalog_manifest.json              ← Stage 1 (which release is installed)
     catalog_taxonomy.json              ← Stage 1 (the build's composition tables)

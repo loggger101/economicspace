@@ -732,7 +732,7 @@ IN_SPACE_UTILITY_DEFAULT = 0.0
 #                    FeO plus mare ilmenite, and (at the poles) water ice.
 #   mars_surface     Sits on metres-thick mid-latitude ground ice (SHARAD /
 #                    SWIM), 1-3 wt% hydrated regolith measured by Curiosity's
-#                    SAM, a 95.3% CO2 atmosphere, and a globally oxidised
+#                    SAM, a 95.1% CO2 atmosphere, and a globally oxidised
 #                    iron-rich crust.
 #
 # So the correction runs mostly DOWNWARD, and hardest at the destination that
@@ -921,12 +921,14 @@ IN_SPACE_UTILITY_BY_DESTINATION: Dict[str, Dict[str, float]] = {
         "olivine":          0.02, "pyroxene":       0.02, "orthopyroxene": 0.02,
         "enstatite":        0.02, "plagioclase":    0.02, "spinel":        0.02,
         "phyllosilicates":  0.02, "oxides":         0.02, "silicates":     0.02,
-        # The atmosphere is 95.3% CO2 at ~600 Pa.  Carbon is free on Mars, and
-        # Sabatier + electrolysis turns it and the local water into methane and
-        # onward feedstock, which is most of what "organics" would be for.
+        # The atmosphere is 95.1% CO2 by volume at 636 Pa at the mean radius,
+        # 400-870 Pa with season (NASA NSSDCA Mars Fact Sheet).  Carbon is free
+        # on Mars, and Sabatier + electrolysis turns it and the local water into
+        # methane and onward feedstock, which is most of what "organics" would
+        # be for.
         "carbon":           0.02,
         "organics":         0.05,
-        # v1.11.0.  The same atmosphere is the CO2, and 2.8% of it is N2, the
+        # v1.11.0.  The same atmosphere is the CO2, and 2.59% of it is N2, the
         # nitrogen an ammonia import would supply.  The crust is sulfate-rich
         # (Curiosity, Opportunity), and its basalt is Fe-Ti-Cr oxide-bearing.
         "carbon dioxide":   0.02,
@@ -1050,7 +1052,7 @@ ANNUAL_WORLD_PRODUCTION_KG: Dict[str, float] = {
     "cobalt":         3.1e8,      # ~310,000 t mined, 2025 (USGS MCS 2026)
     "copper":         2.2e10,
     "nickel":         3.6e9,
-    "iron":           1.3e12,     # world pig-iron production
+    "iron":           1.3e12,     # world pig-iron production, 1,300 Mt 2025e (USGS MCS 2026)
     # v1.11.0, USGS MCS 2025 world production for 2024, rounded
     "germanium":      1.4e5,      # ~140 t refinery
     "rhenium":        6.2e4,      # ~62 t
@@ -1932,7 +1934,7 @@ MINERAL_REFERENCE: List[dict] = [
         "formula":               "(Ca,Mg,Fe)CO3",
         "density_gcm3":          2.80,
         "yields": {"carbon dioxide": 0.44},
-        "ref_price_usd_per_kg":  0.02,           # crushed limestone
+        "ref_price_usd_per_kg":  0.02,           # US crushed stone, $18.50/t 2025e (USGS MCS 2026)
         "ref_price_date":        _NEW_ROW_PRICE_DATE,
         "notes":                 "Calcite, dolomite, breunnerite: 2-5 wt% of CI "
                                  "chondrites.  Calcining releases the CO2.",
