@@ -1077,6 +1077,51 @@ so does the same call from PowerShell). This does not affect running
 `_pause.ps1` by hand. A harness has to pass patterns to the script some other
 way, such as an environment variable.
 
+### The campaign runner is its own repository, quietqueue (2026-10-20, no stamp)
+
+The generic halves of `campaign/run_queue.py`, `_supervisor.py`, `memwatch.py`
+and `_pause.ps1` moved to [quietqueue](https://github.com/loggger101/quietqueue),
+with the twelve commits that built them replayed there limited to those files.
+`run_cell.py` is untouched and no model code moves, so no stamp moves.
+
+- **The four files are shims**, holding this campaign's values: `DESTS`,
+  `CELLS`, the cell naming and `run_cell.py` command, `results.csv` and its
+  `cell` column, the queue log, `memory.csv`'s column names, the non-cell log
+  prefixes, the `-Match` patterns and `economicspace_campaign`. Their names,
+  command lines and the scheduled tasks' actions are unchanged. `analyse.py`
+  and `population.py` still import `DESTS` from `run_queue.py`, which imports
+  quietqueue only to run the queue.
+- **The pin is `requirements-campaign.txt`**, one line, read by
+  `campaign/quietqueue_pin.py`, which holds the installed version to it. Unlike
+  `launch_ui.py` it never installs: a mismatch exits 1 with the pip command,
+  and the supervisor also writes it into the queue log, where a detached start
+  is read. `./run.sh setup` installs the line (pinned and loose paths);
+  `requirements-lock.txt` keeps psutil. `verify_docs.py` checks
+  `_supervisor.py` and `quietqueue_pin.py` with the other campaign scripts; the
+  supervisor had been outside the list since its first commit.
+- **What changes in behaviour**, all from quietqueue: the guard matches the
+  target by file name rather than suffix; a Windows venv's script is detached,
+  not only its launcher (found testing quietqueue in a venv; this machine runs
+  no venv); `_pause.ps1` suspends each process once and prints "matching
+  processes" and "its trigger left alone".
+- **Docs**: campaign/README.md keeps the campaign's incidents (the two console
+  kills, the host going down, the pause and its wall clock) and points at
+  quietqueue for the mechanisms; CLAUDE.md, README, CITATIONS.md and
+  SPARK_SETUP.md name it. LESSONS.md is frozen.
+
+**Verified.** Through the shims, against the copies before #161:
+`run_queue.py` prints the same output and exit code for the nine command lines
+and gives the same output and commands in all 35 planted-ledger cases (stubs in
+quietqueue's runner); `memwatch.py` writes the same three rows from the planted
+log directory and process table, and `--once` one; `_supervisor.py`, in a
+throwaway tree, gives the same output and queue log apart from pids, the
+detached child outliving it and a second start refused; `_pause.ps1` freezes
+and thaws the two-process test tree. With the pin planted at `v9.9.9`, all four
+shims and `quietqueue_pin.py` exit 1 naming the fix, the queue log carries it,
+and nothing starts; with no pin line, the queue says so. `DESTS` imports with
+quietqueue hidden. `verify_docs.py` passes, its `--before` audit finds all 40 of
+campaign/README.md's distinctive numbers kept, and `tree_check.py` passes.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer

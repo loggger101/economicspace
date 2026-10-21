@@ -135,11 +135,13 @@ YES=""
 #  said out loud rather than found later in a hash mismatch, and
 #  "./run.sh platform" is what turns it into a measurement.
 #
-#  psutil is on the loose line and in the lock file but NOT in
+#  The campaign runner, quietqueue, is pinned in requirements-campaign.txt and
+#  its one dependency, psutil, in the lock file; neither is in
 #  requirements.txt, which asserts in its own first line that it mirrors
 #  _MASTER_REQUIRED and is checked against it by verify_docs.py check 7.  Only
-#  campaign/memwatch.py imports it, and the pipeline must not grow a dependency
-#  for a tool it does not use.
+#  the campaign uses them, and the pipeline must not grow a dependency for a
+#  tool it does not use.  The campaign's shims refuse to run on any other
+#  quietqueue than the pinned one and never install it, so setup does.
 # ---------------------------------------------------------------------------
 cmd_setup() {
   echo "  Creating .venv with $PY"
@@ -151,7 +153,8 @@ cmd_setup() {
 
   if [ "${1:-}" = "--loose" ]; then
     echo "  Installing the LOOSE set (--loose): the latest of everything."
-    "$vpy" -m pip install -r requirements.txt -r requirements-ui.txt psutil || {
+    "$vpy" -m pip install -r requirements.txt -r requirements-ui.txt \
+        -r requirements-campaign.txt || {
       echo "  install failed." >&2; exit 1; }
   else
     echo "  Installing the PINNED set: what every committed number was"
@@ -168,16 +171,16 @@ cmd_setup() {
     # master.py auto-installs whatever is missing at import -- a git fetch, at
     # run time, inside the environment whose whole purpose is to be the one
     # the numbers were measured on. They are installed here instead, from the
-    # lines requirements.txt already carries, so each tag is still pinned in
-    # exactly one place.
+    # lines requirements.txt and requirements-campaign.txt already carry, so
+    # each tag is still pinned in exactly one place.
     #
     # ⚠️  EVERY DIRECT REFERENCE IS TAKEN, NOT A NAMED ONE. There is one today;
     # there were two while Stage 1 built its own catalog from a git-pinned
     # package, and a named grep then installed one of the two. A PEP 508
     # direct reference is `name @ url`, so the form is the test.
     if "$vpy" -m pip install --only-binary=:all: -r requirements-lock.txt; then
-      specs=$(grep -E '^[A-Za-z0-9._-]+[[:space:]]*@[[:space:]]*[a-z+]+:' \
-              requirements.txt || true)
+      specs=$(grep -hE '^[A-Za-z0-9._-]+[[:space:]]*@[[:space:]]*[a-z+]+:' \
+              requirements.txt requirements-campaign.txt || true)
       if [ -n "$specs" ]; then
         # One pip call per line: the names carry no version specifiers, so
         # there is nothing to resolve between them, and a failure then names
@@ -198,7 +201,8 @@ cmd_setup() {
       echo "  exist for this architecture and could not be built.  Falling" >&2
       echo "  back to the loose set." >&2
       echo
-      "$vpy" -m pip install -r requirements.txt -r requirements-ui.txt psutil || {
+      "$vpy" -m pip install -r requirements.txt -r requirements-ui.txt \
+          -r requirements-campaign.txt || {
         echo "  the loose install failed too." >&2; exit 1; }
       echo
       echo "  NOTE: this environment is NOT the one the numbers were measured"

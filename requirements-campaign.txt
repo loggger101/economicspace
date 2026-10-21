@@ -1,0 +1,16 @@
+# The campaign runner (campaign/run_queue.py, _supervisor.py, memwatch.py and
+# _pause.ps1), split out of this repo into quietqueue.
+#
+# Deliberately NOT merged into requirements.txt: that file mirrors
+# _MASTER_REQUIRED in master.py, which auto-installs its contents at import
+# time, and no pipeline run needs a job runner.
+#
+#     pip install --no-deps -r requirements-campaign.txt
+#
+# (--no-deps because quietqueue's one dependency, psutil, is pinned in
+# requirements-lock.txt.)
+#
+# THIS LINE IS THE PIN: campaign/quietqueue_pin.py reads the tag off it and
+# refuses to run the campaign on any other installed version, so a repin is
+# this line and nothing else.
+quietqueue @ git+https://github.com/loggger101/quietqueue@v0.1.0

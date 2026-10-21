@@ -354,7 +354,8 @@ this repository's statement of what it owes them.
 
 Runtime, from `requirements.txt`: **requests**, **pandas**, **numpy**,
 **yfinance**, **tqdm**, and **spacecost**. Dashboard, from `requirements-ui.txt`:
-**streamlit**. Campaign tooling, from `requirements-lock.txt` only: **psutil**.
+**streamlit**. Campaign tooling: **quietqueue**, from `requirements-campaign.txt`,
+and **psutil**, from `requirements-lock.txt` only.
 Exact pins are in `requirements-lock.txt`; do not
 restate them here.
 

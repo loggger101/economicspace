@@ -15,6 +15,7 @@ is in [LESSONS.md](LESSONS.md) under a heading of the same name (frozen
 | [`LESSONS.md`](LESSONS.md) | the long form behind each rule here, as of 2026-10-17 |
 | [`spacecost`](https://github.com/loggger101/spacecost) | Stage 3's reference tables and the delivery-price chains |
 | [`quietlaunch`](https://github.com/loggger101/quietlaunch) | the windowless dashboard launcher `launch_ui.py` hands over to, and its Windows traps |
+| [`quietqueue`](https://github.com/loggger101/quietqueue) | the campaign job runner the four `campaign/` shims hand over to (queue, no-console supervisor, memory watcher, pause), and its traps; pinned in `requirements-campaign.txt`, checked by `campaign/quietqueue_pin.py`, never auto-installed |
 | [`AsteroidCatalog`](https://github.com/loggger101/AsteroidCatalog) | builds and publishes the Stage 1 catalog |
 | [`starred-repos`](https://github.com/loggger101/starred-repos) | the audit of 17 external repos and its probes; `orbital.py` was taken from it |
 
