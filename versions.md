@@ -1122,6 +1122,32 @@ and nothing starts; with no pin line, the queue says so. `DESTS` imports with
 quietqueue hidden. `verify_docs.py` passes, its `--before` audit finds all 40 of
 campaign/README.md's distinctive numbers kept, and `tree_check.py` passes.
 
+### The audit's solvers and citations go with the audit (2026-10-21, no stamp)
+
+An audit of all seven repositories for content one holds that another should
+found that the starred-repo split had left the audit's own parts here.
+`orbital.py` carried the Kepler solver, the propagator and the Izzo Lambert
+solver, whose one caller is starred-repos' `probe_lambert.py`; nothing here
+called them. CITATIONS.md carried, nearly word for word, starred-repos' section
+1 (the probes' oracles) and section 5 (the 17-repository licence table).
+Nothing a run reads changed, so no stamp moves and nothing is rebuilt.
+
+- **`orbital.py` is `elements_to_state` and `MU_SUN_KM3_S2`**, the two things
+  `ui.py`'s orbit diagram uses, extracted from the old file rather than
+  retyped. starred-repos' copy keeps the rest. This reverses the 2026-10-20
+  note's "`orbital.py` stays" for every part but the diagram's.
+- **CITATIONS.md**: section 1's probe sources and section 5's table become
+  pointers to the same sections in starred-repos; section 3 credits skyfield
+  for `elements_to_state` alone; section 4 says where the Lambert and Kepler
+  citations went. Section 5 keeps this repository's licence position: skyfield's
+  code is the one thing taken, and nothing comes from the four copyleft
+  projects. README and `ui.py`'s docstring say what the file now holds.
+
+**Verified.** `elements_to_state`'s source text equals the old file's and
+starred-repos', and over 5,000 random elliptical orbits at 361 points each its
+state vectors are bit-identical to the old file's; a one-ulp change planted in
+the output is caught. `verify_docs.py` and `tree_check.py` pass.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer

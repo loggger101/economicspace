@@ -75,8 +75,8 @@ SPARK_SETUP.md         Standing this up on a DGX Spark (aarch64 Linux)
 master.py              GENERATED single-file pipeline - do not edit by hand
 ui.py                  Streamlit front end (optional): configure, run, inspect
 ui_meta.py             Config introspection + curation for ui.py
-orbital.py             Kepler, elements to state vectors, Lambert; numpy only.
-                       ui.py's orbit diagram draws with it
+orbital.py             Elements to state vectors, numpy only; ui.py's orbit
+                       diagram draws with it
 modules/
     catalog.py         Stage 1 - asteroid catalog
     mineral_value.py   Stage 2 - mineral prices + densities
@@ -1235,5 +1235,5 @@ upstream data the pipeline fetches at run time or the third-party code adapted
 into it, and [`CITATIONS.md`](CITATIONS.md) is the license position for both.
 Two sources require citation as a condition of use, not as a courtesy, and
 those citations travel with any published figure derived from this pipeline.
-The adapted routines in `orbital.py` are MIT,
+The adapted routine in `orbital.py` is MIT,
 Copyright (c) 2013-2018 Brandon Rhodes.

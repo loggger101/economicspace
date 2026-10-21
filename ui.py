@@ -1469,9 +1469,9 @@ _ORBIT_QUALITY_COLUMNS = ["orbit_condition_code", "observation_arc_days",
 def orbital_module():
     """`orbital.py` beside this file, or None if it cannot be imported.
 
-    Imported rather than restated, because that file already carries a Kepler
-    solver and an `elements_to_state` adapted from skyfield with the
-    attribution recorded in CITATIONS.md. A second copy of the same rotation
+    Imported rather than restated, because that file already carries an
+    `elements_to_state` adapted from skyfield with the attribution recorded in
+    CITATIONS.md. A second copy of the same rotation
     would be one more thing to keep in step, and the ATTRIBUTION would be on
     the copy nobody reads. It sat in `research/starred-repos/` until that
     audit became its own repository, and is found the way `master` is: by

@@ -151,37 +151,13 @@ exactly this reason; quote it.
 
 ### Sources read only by the research probes
 
-Not pipeline inputs. Nothing below is fetched by any stage, and none of it
-reaches a CSV; they are the external oracles
+Not pipeline inputs, and not cited here: no stage fetches them and none of
+them reaches a CSV. They are the external oracles (JPL NHATS and Horizons,
+NEODyS, Asterank, the Bus-DeMeo taxonomy) that
 [starred-repos' `SECOND-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/SECOND-PASS.md)
-measures the model against. That repo's own `CITATIONS.md` carries them
-too, with the probes that read them.
-
-- **NASA JPL NHATS**, `https://ssd-api.jpl.nasa.gov/nhats.api`. Optimised
-  round-trip delta-v and mission duration for the near-Earth asteroids
-  accessible to human spaceflight. Read by
-  starred-repos' `probe_nhats.py`.
-- **NASA JPL Horizons**, `https://ssd.jpl.nasa.gov/api/horizons.api`, and the
-  **NAIF** kernel archive. Recommended in F7 for bounding the two-body error in
-  F4's Lambert oracle; not yet used.
-- **NEODyS** (University of Pisa and SpaceDyS),
-  `https://newton.spacedys.com/neodys/`. Per-object orbital elements with the
-  full 6x6 covariance. Recommended in F9; not yet used.
-- **Asterank**, `http://www.asterank.com/api/asterank`, MIT. Used for its `dv`
-  column only, which is the **Shoemaker-Helin** closed-form delta-v
-  approximation. Its economic columns return degenerate values through the
-  public endpoint and are not used.
-
-  > Shoemaker, E. M. and Helin, E. F. (1978). *Earth-approaching asteroids as
-  > targets for exploration.* NASA CP-2053, pp. 245-256.
-
-- **Bus-DeMeo asteroid taxonomy**, PDS Small Bodies Node bundle
-  `urn:nasa:pds:ast.bus-demeo.taxonomy`. Fetched and inspected in the second
-  pass; not committed and not used by any stage.
-
-  > DeMeo, F. E., Binzel, R. P., Slivan, S. M., and Bus, S. J. (2009). *An
-  > extension of the Bus asteroid taxonomy into the near-infrared.* Icarus,
-  > 202(1), 160-180.
+measures the model against, and section 1 of
+[that repo's `CITATIONS.md`](https://github.com/loggger101/starred-repos/blob/main/CITATIONS.md)
+cites them beside the probes that read them.
 
 ---
 
@@ -199,18 +175,15 @@ and its citation, a condition of use, is section 2 of
 
 ### skyfield, MIT
 
-`orbital.py`, the functions `kepler_E`, `true_anomaly`
-and `elements_to_state`, are adapted from `skyfield/keplerlib.py`.
+`orbital.py`'s one function, `elements_to_state`, is adapted from
+`skyfield/keplerlib.py`.
 
 ```
 Copyright (c) 2013-2018 Brandon Rhodes
 MIT License
 ```
 
-What changed: `kepler_E` keeps skyfield's starter and quartic Newton step but
-drops the scalar early return so it broadcasts over arrays, and clips `e` away
-from 0 and 1 rather than raising. `elements_to_state` is `ele_to_vec`
-restricted to the elliptical case and re-expressed in terms of the semi-major
+What changed: `elements_to_state` is `ele_to_vec` restricted to the elliptical case and re-expressed in terms of the semi-major
 axis rather than the semi-latus rectum, because that is the column this catalog
 stores.
 
@@ -227,34 +200,11 @@ An algorithm described in a paper is not a copyrightable expression, so
 implementing one from its equations carries no licence obligation. It carries a
 citation obligation, which is what this section is.
 
-### Lambert's problem
-
-`lambert_izzo` and its helpers in `orbital.py` are
-implemented from:
-
-> Izzo, D. (2015). *Revisiting Lambert's problem.* Celestial Mechanics and
-> Dynamical Astronomy 121(1), 1-15.
-
-🚨  **Deliberately not copied from an implementation.** The two obvious ones to
-have taken it from are **pykep** (MPL-2.0) and **nyx** (AGPL-3.0), and the
-second would have made this pipeline AGPL. The paper route was chosen for that
-reason.
-
-Validated against a published worked example:
-
-> Vallado, D. A. *Fundamentals of Astrodynamics and Applications*, Example 7-5.
-
-Agreement is 7.4e-07 km/s, which is the precision the reference is quoted to.
-See [starred-repos' `FINDINGS.md`](https://github.com/loggger101/starred-repos/blob/main/FINDINGS.md)
-F4.
-
-### Kepler's equation
-
-The starter and quartic Newton iteration in `kepler_E` follow:
-
-> arXiv:2108.03215
-
-reached by way of skyfield's implementation, which is credited in section 3.
+The Izzo (2015) Lambert solver and the Kepler starter of arXiv:2108.03215 are
+not in this repository: they live in starred-repos' `orbital.py`, with
+`probe_lambert.py`, their one caller, and section 4 of
+[that repo's `CITATIONS.md`](https://github.com/loggger101/starred-repos/blob/main/CITATIONS.md)
+cites them.
 
 ### Textbook relations the verification worksheet cites
 
@@ -299,43 +249,17 @@ that row.
 
 ## 5. Repositories audited, and what was taken from each
 
-A survey of 17 repositories is recorded in
-[starred-repos](https://github.com/loggger101/starred-repos). Most were read and
-nothing was taken. This table is the licence position for all of them.
+The survey of 17 repositories, and the licence position for every one of them,
+is section 5 of
+[starred-repos' `CITATIONS.md`](https://github.com/loggger101/starred-repos/blob/main/CITATIONS.md).
+What reached this repository from them is one thing: skyfield's code, adapted
+into `orbital.py` and credited in section 3. typpo/spacekit's per-body Kepler
+solve is the technique behind `ui.py`'s orbit diagram, but no line of it was
+read into this repository.
 
-Read twice: the second pass is in
-[`SECOND-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/SECOND-PASS.md), and it moved rows
-here, because a repository can add exactly the thing it was rejected for
-lacking. The licence column is the part that does not go stale.
-
-| repository | licence | what was taken |
-|---|---|---|
-| skyfielders/python-skyfield | MIT | **code**, adapted; see section 3 |
-| juliensimon/space-datasets | MIT | **the PDS3 column layout** for the SDSS table (in starred-repos since 2026-10-20; section 2 points there), and the JPL NHATS endpoint used by starred-repos' `probe_nhats.py` |
-| astropy/astroquery | BSD-3 | nothing. It showed that IRSA's async TAP was the right approach; the implementation here is written against `requests`. Its NEODyS client is where the covariance service was found |
-| julie-dujardin/space-map | **AGPL-3.0** | nothing. It showed that SBDB publishes a field list, which is how `condition_code` was found missing |
-| Z3Prover/z3 | MIT | nothing yet |
-| Pyomo/pyomo | BSD-3 | nothing |
-| pymc-devs/pymc | Apache-2.0 | nothing yet |
-| mesa/mesa | Apache-2.0 | nothing |
-| OpenSCvx/OpenSCvx | Apache-2.0 | nothing |
-| esa/pygmo2 | MPL-2.0 | nothing |
-| pola-rs/polars | MIT | nothing |
-| typpo/spacekit | MIT | nothing. Its per-body Kepler solve is the technique behind `ui.py`'s orbit diagram, but that diagram is written against `orbital.py` and Altair, and no line of spacekit was read into it |
-| duncaneddy/brahe | MIT | nothing yet. Its native SPICE reader and Horizons SPK client are the recommended way to bound F4's oracle |
-| Small-Bodies-Node/pds4_tools | BSD-3 (Univ. of Maryland) | nothing |
-| nyx-space/nyx | **AGPL-3.0** | nothing |
-| cuspaceflight/CamPyRoS | **GPL-3.0** | nothing |
-| CelestiaProject/Celestia | **GPL-2.0** | nothing |
-
-🚨  **Nothing is derived from any of the four copyleft projects.** They are
-listed because they were read, and because listing them is the record that they
-were read and not copied.
-
-⚠️  **Read the licence file, not the API label.** `pds4_tools` reports as
-having no licence on GitHub because its BSD-3 text sits in a file named
-`LICENSES`, which the detector does not recognise. "No licence" means all
-rights reserved, so that failure runs in the dangerous direction.
+🚨  **Nothing here is derived from any of the four copyleft projects** the
+survey read (julie-dujardin/space-map and nyx-space/nyx, AGPL-3.0;
+cuspaceflight/CamPyRoS, GPL-3.0; CelestiaProject/Celestia, GPL-2.0).
 
 ---
 
