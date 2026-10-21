@@ -194,9 +194,14 @@ CAMPAIGN_PY = ["campaign/analyse.py", "campaign/extra_checks.py",
                "campaign/memwatch.py", "campaign/population.py",
                "campaign/rig_bounds.py",
                "campaign/run_cell.py", "campaign/run_queue.py",
+               # The two shims that joined when the runner became quietqueue
+               # (2026-10-20): the supervisor sat outside this list from its
+               # first commit, and the pin check prints what a detached
+               # start's log is left saying.
+               "campaign/_supervisor.py", "campaign/quietqueue_pin.py",
                # The two largest campaign scripts, and the pair that spent the
                # longest outside every check in here: together they are more
-               # source than the other seven combined, and one of them RENDERS
+               # source than the rest of this list combined, and one of them RENDERS
                # prose into a document a reader is meant to trust.  A file
                # nothing checks is clean until it is not, which is the whole
                # argument this list is built on.

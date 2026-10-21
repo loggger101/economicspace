@@ -103,11 +103,14 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       launch table and archive the hybrid under this campaign's name.
   `run_queue.py`   runs everything outstanding, resumable: it skips any cell
       already in `results.csv` with `rc == 0`.  Kill and restart freely.
-      Its `run_queue()` takes the jobs and the ledger as arguments and knows
-      nothing about cells; `DESTS`, `CELLS` and the cell naming are this
-      file's own.  `_supervisor.py`, `memwatch.py` and `_pause.ps1` are split
-      the same way: the generic part takes parameters whose defaults are this
-      campaign's.
+  `quietqueue_pin.py`  the job runner is
+      [quietqueue](https://github.com/loggger101/quietqueue), split out of
+      `run_queue.py`, `_supervisor.py`, `memwatch.py` and `_pause.ps1`, which
+      are shims now: each holds this campaign's values (`DESTS`, `CELLS`, the
+      cell naming, `results.csv`, the logs, the task name) and hands them over.
+      The pin is the one line in `requirements-campaign.txt`; this file holds
+      the installed copy to it, and a mismatch is refused with the pip command,
+      never installed.  Run it alone to see what is installed.
   `analyse.py <dest>`  the 2x2 table plus the never-worse, mass-ledger and
       programme-structure invariants.  Do NOT run it while a cell is timing;
       in 2026-08 it inflated a wall clock by a few percent and put two spurious
@@ -381,12 +384,10 @@ event rather than a fault.  Read the exit code before re-running anything: this
 is *a broken checker looks exactly like a broken release*, one level out.
 
 ✅  **`_supervisor.py` is the fix, and it is about the console, not the
-parent.**  It spawns the queue with `DETACHED_PROCESS` (no console exists for an
-event to arrive on) plus `CREATE_NEW_PROCESS_GROUP` (out of the group a Ctrl+C
-is broadcast to), then exits immediately -- holding the child would give the
-scheduled task something to wait on, which is the console-owning process the
-whole thing exists to avoid.  Stage 4 already writes to a per-cell file and the
-queue writes to the handle the supervisor opens, so nothing needs a console.
+parent.**  It starts the queue with no console at all and exits at once; the
+mechanism and its tests are quietqueue's `supervise`.  Stage 4 already writes to
+a per-cell file and the queue writes to the queue log, so nothing needs a
+console.
 
 The scheduled tasks invoke `python.exe _supervisor.py <target>` DIRECTLY.  There
 is deliberately no `.bat` and no `cmd /c`: the wrapper was the console owner.
@@ -449,18 +450,11 @@ needs elevation; `-User "$env:USERDOMAIN\$env:USERNAME"` does not.
 PROVIDE.**  It fires on an ordinary log off and on too, and a second queue would
 race the first for one `profitability_catalog.csv` and one ledger: a corrupted
 cell that still reports `rc 0`, which is defect class 5 wearing a scheduler's
-clothes.  `MultipleInstances IgnoreNew` does **not** cover it, because the
-supervisor exits as soon as it has spawned, so the TASK is never running when
-the trigger fires again -- only the detached grandchild is.  `_supervisor.py`
-therefore checks PROCESSES, not the scheduler.
-
-⚠️  **Match the target as the script being RUN, not as a word on a command
-line.**  The supervisor is invoked as `_supervisor.py run_queue.py`, so its own
-cmdline contains the target, and `py` compounds it by spawning `python.exe`
-with identical arguments -- so a naive substring test finds the launcher,
-excluding self is not enough, and the guard refuses to start anything at all.
-Measured, not predicted: the first version reported a different phantom pid on
-each call.
+clothes.  `MultipleInstances IgnoreNew` does **not** cover it (the supervisor
+exits as soon as it has spawned, so the task is never running when the trigger
+fires again), so the guard checks PROCESSES.  How it tells the queue from its
+own launcher -- the first version reported a different phantom pid on each call
+and started nothing -- is quietqueue's `already_running`, tested there.
 
 ### Pausing without losing the in-flight cell
 
@@ -473,9 +467,9 @@ powershell -File campaign\_pause.ps1            REM freeze
 powershell -File campaign\_pause.ps1 -Resume    REM thaw and carry on
 ```
 
-`-Match` (the command-line patterns naming the trees' roots), `-ProcessName`
-and `-TaskName` default to this campaign's values; `Get-Help
-campaign\_pause.ps1 -Full` describes them.
+The freezing is quietqueue's `pause.ps1`; this file passes it the campaign's
+`-Match` patterns and `-TaskName`, which `Get-Help campaign\_pause.ps1 -Full`
+lists.
 
 ✅  **Suspending costs almost no memory, which is the opposite of what you would
 expect.**  Windows trims a suspended process's working set, so pausing

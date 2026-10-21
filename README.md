@@ -84,6 +84,8 @@ modules/
     calc.py            Stage 4 - profitability calculation
 campaign/              The 28-cell measurement campaign: results.csv, the
                        archived cells, FINDINGS.md, and the scripts that ran it
+                       (its job runner is quietqueue, pinned in
+                       requirements-campaign.txt)
 README.md              This file: what it is, how to run it, current numbers
 MODEL.md               What the model does, charges for, declines and cannot capture
 versions.md            What changed in which release, what numbers used to be,

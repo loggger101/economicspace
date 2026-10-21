@@ -37,6 +37,7 @@ touching:
 | the Python floor | only the walrus operator is newer than 3.8, so nothing here needs a recent interpreter |
 | dependencies | pandas, numpy, pyarrow, yfinance, tqdm and streamlit all ship manylinux aarch64 wheels |
 | `launch_ui.py` | hands over to quietlaunch, which branches on `os.name`, kills the server's process group on POSIX, and degrades when tkinter is absent, which is what a headless box has |
+| the campaign runner | `campaign/run_queue.py` and `memwatch.py` hand over to quietqueue, whose queue and memory watcher are tested on Linux in its CI; `./run.sh setup` installs it from `requirements-campaign.txt`, and the shims refuse any other version. `_supervisor.py` and `_pause.ps1` are for Windows' Task Scheduler and console |
 
 ## What was broken, and is now fixed
 

@@ -70,9 +70,14 @@ tzdata==2026.4
 streamlit==1.61.1
 
 # --- campaign tooling, which the pipeline itself never imports ---------------
-# campaign/memwatch.py, and campaign/_supervisor.py's guard against starting a
-# second queue (it imports psutil at the top, so without it the supervisor
-# starts nothing).  Deliberately NOT in requirements.txt: that file
+# quietqueue, the campaign runner, imports it for its memory watcher and its
+# supervisor's guard against starting a second queue (without it the
+# supervisor starts nothing).  quietqueue itself is a tagged git URL, which
+# this file cannot hold (it is installed with --only-binary); its pin is
+# requirements-campaign.txt, and `./run.sh setup` installs it from there.
+# psutil is pinned here rather than left to quietqueue's `>=`: installed after
+# this file, quietqueue finds it satisfied and leaves it.  Deliberately NOT in
+# requirements.txt: that file
 # asserts in its own first line that it mirrors _MASTER_REQUIRED, and
 # verify_docs.py check 7 holds it to that, so adding psutil there would make
 # every Colab paste pip-install a process inspector it never calls.  It is here
