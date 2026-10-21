@@ -61,10 +61,17 @@ WORKDIR /work
 #
 # ⚠️  This needs no edit per package, which is the point of naming them in one
 # manifest: a third split joins by appearing in requirements.txt.
-COPY requirements-lock.txt requirements.txt ./
+#
+# The one exception is the campaign's job runner, quietqueue: no pipeline run
+# needs it, so it is pinned in requirements-campaign.txt rather than
+# requirements.txt, and this image runs campaigns (CAMPAIGN_WORKERS below).
+# The campaign shims refuse any other quietqueue and never install one, so a
+# missing copy here would stop `./run.sh campaign` at its first line.
+COPY requirements-lock.txt requirements.txt requirements-campaign.txt ./
 RUN python -m pip install --no-cache-dir --upgrade pip \
  && python -m pip install --no-cache-dir -r requirements-lock.txt \
-                                         -r requirements.txt
+                                         -r requirements.txt \
+                                         -r requirements-campaign.txt
 
 COPY . .
 
