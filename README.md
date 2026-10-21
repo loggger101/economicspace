@@ -164,7 +164,7 @@ frozen catalog, gated before it is published (every source must have
 contributed, the stamps must be current, and it must not have shrunk) and
 checksummed.
 
-Stage 1 installs **one pinned release**. The pinned catalog release is `data-2026-09-29c` (data contract 1.8.1),
+Stage 1 installs **one pinned release**. The pinned catalog release is `data-2026-10-21b` (data contract 1.10.0),
 set by `CatalogConfig.catalog_release` in `modules/catalog.py`. Stage 1
 downloads the release's manifest, refuses it unless it is this pipeline's data
 contract (`CatalogConfig.pipeline_version`), downloads the gzipped catalog and
@@ -201,7 +201,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
-| 1 | `modules/catalog.py` | 1.8.1 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
+| 1 | `modules/catalog.py` | 1.10.0 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
 | 2 | `modules/mineral_value.py` | 1.16.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
 | 3 | `modules/transportation.py` | 1.23.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](MODEL.md#the-propulsion-and-storage-catalog) |
 | 4 | `modules/calc.py` | 1.32.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
@@ -490,12 +490,12 @@ full `master.py` at least once, or run stages 1-3 individually first.
 > not a coffee break; budget an afternoon, and cap Stage 4's rows for anything
 > interactive.
 
-- **Stage 1** downloads the pinned catalog release once: a **~310 MB** gzip
-  that decompresses to a **~2.2 GB** CSV (the `data-2026-09-29c` release:
-  1,568,882 bodies, 102 columns; the `comp_phases` column added at 1.7.0 is
+- **Stage 1** downloads the pinned catalog release once: a **~320 MB** gzip
+  that decompresses to a **~2.4 GB** CSV (the `data-2026-10-21b` release:
+  1,575,889 bodies, 102 columns; the `comp_phases` column added at 1.7.0 is
   ~320 MB of it and `comp_phases_detailed`, added at 1.8.0, ~430 MB),
   checksummed before it replaces anything. Installing it on
-  2026-09-29 took **2 min 33 s** end to end.
+  2026-10-21 took **1 min 11 s** end to end.
   A re-run at the same pin downloads nothing and takes ~30 s, the checksum and
   the CSV read.
 - **Stage 4 is the long pole by far**, because `eval_row_cap` defaults to `0`
@@ -591,7 +591,7 @@ that actually move the answer:
 | `.calc.mining_rate_kg_per_day_per_kg_rig` | `0.10` | Extraction throughput per kg of rig; caps payload and sets time at the asteroid |
 | `.calc.max_mining_duration_yr` | `3.0` | Ceiling on time at the asteroid, binds how much you can return |
 | `.calc.nre_recurring_overlap_fraction` | `0.30` | Development share already inside the per-kg recurring rate; `0.0` books both in full |
-| `.catalog.catalog_release` | `"data-2026-09-29c"` | Which published catalog build Stage 1 installs. Changing it replaces the catalog every stage reads and moves every result; record a repin in versions.md. See [Stage 1 downloads the catalog](#stage-1-downloads-the-catalog-it-does-not-build-it) |
+| `.catalog.catalog_release` | `"data-2026-10-21b"` | Which published catalog build Stage 1 installs. Changing it replaces the catalog every stage reads and moves every result; record a repin in versions.md. See [Stage 1 downloads the catalog](#stage-1-downloads-the-catalog-it-does-not-build-it) |
 | `.calc.eval_row_cap` | `0` | Stage-4 evaluation cap; `0` evaluates every row. |
 | `.calc.eval_row_sampling` | `"stride"` | How a cap picks rows. `"stride"` samples the whole belt evenly; `"head"` is the pre-v1.13.0 innermost-N behaviour |
 | `.calc.parallel_workers` | `0` | Stage-4 worker processes. `0` picks a count from the CPU count and the amount of work; `1` forces the single-core path. See [Parallel evaluation](#parallel-evaluation) |
@@ -1141,6 +1141,7 @@ holding each cell's top bodies, and its release note has the detail.
 | [master v1.52.0](versions.md#master-v1520--calc-v1300--mineral_value-v1150--transportation-v1210) (spacecost 0.9.0) | lunar descent re-pinned to Apollo's 2,050 m/s | `lunar_surface` only: **2014 YN 2.86091x to 2.61433x** |
 | [master v1.53.0](versions.md#master-v1530--transportation-v1220) (spacecost 0.10.0) | krypton priced at $794/kg, where it was an unsourced $300 | the `cislunar` winner, 2018 DT, moves to iodine at **4.61562x**; every other winner is the same float |
 | [master v1.55.0](versions.md#master-v1550--calc-v1320--transportation-v1230) (calc 1.32.0) | ISRU hydrolox pays for its electrolysis and liquefaction | charged, hydrolox ISRU wins no sampled row; see [What the model charges for](MODEL.md#what-the-model-charges-for) |
+| [master v1.56.0](versions.md#master-v1560--catalog-v1100) (catalog 1.10.0) | the catalog repins to `data-2026-10-21b`: PGM factors computed for the S complex, Q, K and L, and Tagish Lake's carbon for D, Z, T and P | on a 3,922-body sample, `earth_surface` S bodies better by a median 18-21% and the default best becomes 2018 RT1; the `lunar_surface` raw best becomes 2024 SE4; in space hundredths of a percent |
 
 ⚠️  **Seven cells, one setting.** The raw and N = 1 cells have not been run on
 these inputs at any destination.
@@ -1209,7 +1210,7 @@ most here, because the model's mass, and so its ranking, rests on them:
 | `diameter_source` | `measured`, `derived_mass`, `derived_h_measured_albedo`, `derived_h_taxonomy_albedo`, `derived_h_orbit_albedo` | only `measured` is a size somebody observed; `derived_mass` is sized from a measured mass at the class density (data contract 1.4.0); the three `derived_h_*` are sized from H and an albedo |
 | `spectral_type_source` | `source`, `tholen`, `albedo`, `albedo_assumed`, `orbit`, `unknown` | only `source` and `tholen` rest on a spectrum; `orbit` types an untyped body from the Trojans outward as D (data contract 1.4.0) |
 
-In `data-2026-09-29c`, **149,718** of 1,568,882 bodies have a measured diameter
+In `data-2026-10-21b`, **149,718** of 1,575,889 bodies have a measured diameter
 and 171,109 a taxonomy from a source; the rest are inferred. ⚠️  **Mass is the
 exposed quantity**: D scales as `p_V^-0.5` and mass as `p_V^-1.5`, so a
 factor-2 albedo error is a factor-2.8 mass error. Filter on

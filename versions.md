@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.56.0 / catalog v1.10.0](#master-v1560--catalog-v1100)
 - [master v1.55.0 / calc v1.32.0 / transportation v1.23.0](#master-v1550--calc-v1320--transportation-v1230)
 - [master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0](#master-v1540--calc-v1310--mineral_value-v1160)
 - [master v1.53.0 / transportation v1.22.0](#master-v1530--transportation-v1220)
@@ -105,11 +106,11 @@ one that does not say is not to be used.
 
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
-| 1 | `modules/catalog.py` | **1.8.1** | v1.8.1, the alloy and the sulfides resolved into the minerals they are, the new `comp_phases_detailed` column, with every class whose metal has no source kept at the alloy `nickel-iron` meant; no existing column moved. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
+| 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.16.0** | v1.16.0, an eighth destination, `gto`: its note, `geo`'s utility profile by reference, a sourced 81.6 t/yr demand ceiling, and an import-time check that every in-space destination has one; no existing row moved (v1.13.0 was the last to move a row) |
 | 3 | `modules/transportation.py` | **1.23.0** | v1.23.0, an ISRU processing energy on every propellant row that can be made on site (hydrolox 15,200 Wh/kg) and an ISRU plant throughput row; no existing value moved: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.32.0** | v1.32.0, ISRU hydrolox pays for its electrolysis and liquefaction (energy through the array, plant with the rig), and the flat $50/kg is retired; v1.31.0 had added an eighth destination, `gto` |
-| - | `master.py` | **1.55.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.56.0** | a literal in `build_master.py`, in **two** places |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -198,6 +199,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.56.0 / catalog v1.10.0](#master-v1560--catalog-v1100) | 2026-10-21 | **Stage 1 repins to `data-2026-10-21b`**, data contract 1.10.0: the S complex's PGM factor 1.0 to 1.55 and the primitive types' carbon 0.25-0.30 to 0.04; `earth_surface`'s sampled S bodies better by a median 18-21%, its default best becomes 2018 RT1, and the in-space destinations move by hundredths of a percent |
 | [master v1.55.0 / calc v1.32.0 / transportation v1.23.0](#master-v1550--calc-v1320--transportation-v1230) | 2026-10-17 | **making ISRU propellant costs energy and a plant**: hydrolox pays 15,200 Wh/kg through the array and a plant with the rig, and the flat $50/kg is retired; the one sampled hydrolox ISRU winner gets worse and the water ISRU rows a fraction of a percent better |
 | [master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0](#master-v1540--calc-v1310--mineral_value-v1160) | 2026-10-15 | **an eighth destination, `gto`**: a refuelling depot in geostationary transfer orbit; no existing number moved, and `gto` has not been run on the full catalog |
 | [master v1.53.0 / transportation v1.22.0](#master-v1530--transportation-v1220) | 2026-10-07 | **krypton becomes a band, $794/kg** where it was an unsourced $300: the 149 of 23,100 sampled bodies that flew it get worse by up to 1.1%, no other body moves, and the sampled `cislunar` winner 2018 DT moves to iodine (4.5983x -> 4.61562x) |
@@ -261,6 +263,123 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.56.0 / catalog v1.10.0
+
+**Stage 1 repins to `data-2026-10-21b`, AsteroidCatalog's data contract
+1.10.0, crossing 1.9.0 on the way.** No code here changed: the catalog under
+every stage did. The S complex's platinum group metals are worth half as much
+again to a buyer on Earth, the primitive types carry a meteorite's carbon
+instead of a comet's, and three spacecraft-visited bodies have their measured
+volumes. Every number below is a sample.
+
+### What moved upstream
+
+- **AsteroidCatalog 0.11.0, data contract 1.9.0** (`data-2026-10-21`, never
+  pinned here alone), five of General_Research's revision candidates:
+  - `comp_pgm_enrichment` for the S complex, Q, K and L is computed, CI bulk
+    PGM + Au over the class's metal fraction against the 37 ppm baseline:
+    **1.0 to 1.55** for the S complex and Q, **1.16** for K, **1.86** for L
+    (514,719 bodies). A chondrite's metal holds nearly all of its PGMs, so
+    "chondritic" metal is richer than the iron-meteorite baseline, not equal
+    to it.
+  - K's metal is an octahedrite's alloy (kamacite 0.89, taenite 0.11) where
+    it had been CV-like and taenite-rich, which nothing sourced.
+  - Eros is sized by NEAR's shape volume (16.846 km, 2.67 g/cm3, where the
+    blended 17.600 km gave 2.34), and the E fallback albedo is recounted.
+- **AsteroidCatalog 0.12.0, data contract 1.10.0, published as
+  `data-2026-10-21b`**, the pin: D, Z, T and P carry Tagish Lake's carbon,
+  **0.04**, where they had a comet's 0.25-0.30; X and Xc, a mixture of P, M
+  and E, go 0.08 to 0.02 (40,394 bodies). D and P ice stay, and C's metal
+  stays at 0.01, now labelled a ceiling. Vesta and Bennu take Dawn's and
+  OSIRIS-REx's volumes (522.99 km, 3.458; 0.48934 km, 1.195).
+- Checked upstream against `data-2026-10-21` by value: exactly those rows
+  moved and nothing else. Between `data-2026-09-29c` and it, JPL added 7,007
+  bodies and refit orbits and H as usual. No column added or removed, and no
+  provenance label is new.
+
+### What changes here
+
+- `CatalogConfig.catalog_release` `data-2026-09-29c` to `data-2026-10-21b`,
+  and `pipeline_version` `1.8.1` to `1.10.0`, together.
+- `verify_stage1.py` gains the census for `("1.10.0", "2026-10-21")`: 1.6.0's
+  counts plus the 7,248 bodies JPL added since, every one sized
+  `derived_h_orbit_albedo`. Planting one wrong count turns it red.
+- Stage 2 and Stage 3 are not re-run; mineral_value 1.16.0, transportation
+  1.23.0 and calc 1.32.0 are unchanged. The inputs before the repin are
+  backed up under `asteroid_pipeline/_inputs_backup_2026-10-21_pre-v1.56.0/`;
+  `data-2026-09-29c` itself stays downloadable at its tag.
+
+### Measured (a sample, not a cell)
+
+Every 400th body of `data-2026-09-29c`, **3,922 bodies**, cut byte for byte
+from both catalogs (all 3,922 are in both). Each destination is priced from
+its frozen mineral_value 1.15.0 table and the live spacecost `v0.12.0`
+tables, the same files on both sides, and Stage 4 is the same build, so the
+catalog is the only input that differs. On this cut the catalog moved
+`comp_pgm_enrichment` on 1,271 bodies (S 1,251, K 8, L 5, Q 4, Sa, Sq and Sv
+one each), `comp_carbon_fraction` on 97 (D 71, X 17, P 9), K's alloy, and one
+body's H, 2026 SV12 (C, JPL's 21.122 to 21.130). `median` is among the bodies
+that moved, as `median(r - 1)` with `r` the objective on `data-2026-10-21b`
+over the one on `data-2026-09-29c`; negative is better.
+
+| destination | cell | evaluable | moved | better | worse | median among moved | largest | best row |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| `cislunar` | raw N=1 | 3,442 | 34 | 26 | 8 | -0.104% | 3.242% | 2017 BN93 12.908x, unchanged |
+| `cislunar` | default | 3,442 | 6 | 3 | 3 | -0.000% | 3.433% | 2006 WC30 7.66381x, unchanged |
+| `earth_surface` | raw N=1 | 3,462 | 1,292 | 1,253 | 39 | **-18.058%** | 45.661% | 159584 26787.1x, unchanged |
+| `earth_surface` | default | 3,462 | 1,261 | 1,252 | 9 | **-20.597%** | 40.504% | 159584 9502.13x -> **2018 RT1 9360.61x** |
+| `leo` | raw N=1 | 3,460 | 1,292 | 1,290 | 2 | -0.006% | 4.394% | 2024 SE4 55.6239x -> 55.6205x |
+| `leo` | default | 3,460 | 1,263 | 1,263 | 0 | -0.027% | 15.789% | 2006 WC30 20.0149x, unchanged |
+| `lunar_surface` | raw N=1 | 3,436 | 1,290 | 1,252 | 38 | -0.001% | 32.055% | 416702 16.051x -> **2024 SE4 16.3519x** |
+| `lunar_surface` | default | 3,436 | 1,262 | 1,252 | 10 | -0.003% | 6.031% | 2006 WC30 3.91638x, unchanged |
+| `mars_orbit` | raw N=1 | 3,465 | 35 | 30 | 5 | -0.292% | 2.510% | 2024 SE4 15.1702x, unchanged |
+| `mars_orbit` | default | 3,465 | 10 | 8 | 2 | -0.000% | 2.526% | 416702 5.46229x -> 5.46309x |
+| `geo` | raw N=1 | 3,452 | 1,290 | 1,290 | 0 | -0.007% | 3.725% | 2006 WC30 49.7784x, unchanged |
+| `geo` | default | 3,452 | 1,262 | 1,260 | 2 | -0.031% | 15.513% | 2006 WC30 9.38066x, unchanged |
+| `mars_surface` | raw N=1 | 3,456 | 1,291 | 1,253 | 38 | -0.000% | 5.569% | 159584 4.56892x, unchanged |
+| `mars_surface` | default | 3,456 | 1,268 | 1,255 | 13 | -0.001% | 11.790% | 2022 FP2 1.36339x -> 1.36338x |
+
+- **The PGM factor is a terrestrial ledger.** Delivered to Earth, the S
+  bodies improve by a median 18% raw and 21% beneficiated, Q likewise and L
+  by 27-33%; 2018 RT1 (S) goes 11,837.8x to 9,360.61x and passes 159584 (M,
+  unchanged at 2.0) as the default cell's best. In space a metal sells at the
+  launch cost it avoids, and the same bodies move by hundredths of a percent
+  at the median.
+- **The carbon is worth something where carbon is a volatile.** At
+  `lunar_surface` the raw D and P bodies get worse by a median 29% and 32%,
+  and 416702 (D), the raw best at 16.051x, goes to 20.712x, so 2024 SE4
+  (S, 16.3521x to 16.3519x) is the best row now. At `earth_surface` raw they
+  get 28-46% worse. In orbit the same D and P bodies get slightly better, by
+  a median 0.2-2%.
+- **K gets worse wherever nickel sells**: 32% raw and 40% beneficiated at
+  `earth_surface`, 2-8% at the surfaces; 2-7% better at `leo` and `geo`.
+- **Nothing enters or leaves an evaluable set** at any destination, and every
+  body that moved has a catalog input that moved. 2026 SV12, the one C body,
+  moves 2-3.4% on its H revision alone.
+- The full-catalog figures README quotes were measured on `data-2026-09-29c`
+  and are not re-run here; at this pin they are dated, and `earth_surface`'s
+  are the ones this moves.
+
+These are samples; [THE SAMPLING RULE](LESSONS.md#the-sampling-rule) applies.
+
+### Verified
+
+| harness | result |
+|---|---|
+| AsteroidCatalog, `data-2026-10-21b` against `data-2026-10-21` | by value at 1e-12: exactly the predicted rows; audit clean; albedo tables current; density evidence no failures |
+| Stage 1 install | 2,387,414,099 B as the manifest says; 1,575,889 rows x 102 columns, in 1 min 11 s |
+| `verify_stage1.py` | 6 checks, 0 wrong, census reproduces; a planted wrong count reports NOT VERIFIED |
+| `verify.py invariants`, the new catalog | mass ledger 0 kg on all four cells, never-worse 0 exceptions on all three pairings, Stage 2 tables identical (59 rows), 34/34 phases resolve to a market, ceilings 0 |
+| the A/B above | 28 cells, no `MISMATCH` in any log, every mover explained by a catalog input |
+| `verify_docs.py` | every check |
+
+### What did not change
+
+- mineral_value `1.16.0`, transportation `1.23.0`, calc `1.32.0`: no Stage 2,
+  3 or 4 computation moved. A run at this pin is not comparable with one at
+  `data-2026-09-29c` without saying so.
+- spacecost stays at `v0.12.0`.
 
 ## master v1.55.0 / calc v1.32.0 / transportation v1.23.0
 
@@ -9369,6 +9488,24 @@ unchanged. `PHASE_GROUP` grows by those thirteen names.
 
 Config: `catalog_release` and `pipeline_version` moved; no field added.
 
+**`1.10.0` installed, `data-2026-10-21b` (master v1.56.0).** Two of
+AsteroidCatalog's contracts at once; neither was pinned here alone.
+1.9.0 (`data-2026-10-21`) computes the PGM factor of the S complex, Q, K
+and L as CI bulk PGM+Au over the class's metal fraction against the 37 ppm
+baseline (from 1.0 to 1.55 for S and Q, 1.16 for K, 1.86 for L), gives K an octahedrite's
+alloy, and sizes Eros by NEAR's shape volume; 1.10.0 (`data-2026-10-21b`)
+gives D, Z, T and P Tagish Lake's 0.04 carbon where they had a comet's
+0.25-0.30 (X and Xc 0.08 to 0.02 with it), and Vesta and Bennu their
+mission volumes. Full write-up:
+[master v1.56.0 / catalog v1.10.0](#master-v1560--catalog-v1100).
+
+No column added or removed; `comp_phases`, `comp_phases_detailed`,
+`comp_carbon_fraction`, `comp_pgm_enrichment` and `comp_notes` moved, and
+three bodies' diameters and densities. `verify_stage1.py` gains this
+release's census.
+
+Config: `catalog_release` and `pipeline_version` moved; no field added.
+
 ## Stage 2 changelog: `modules/mineral_value.py`
 
 **`1.1.0`  initial release.**
@@ -10780,8 +10917,8 @@ flag in this repo restores the old tables: reproducing a cell here needs the
 2026-08-11 catalog, the frozen `campaign/stage2/` prices and the spacecost 0.3.x
 tables now frozen under `campaign/stage3/`. ⚠️  **The live
 `asteroid_pipeline/` has held spacecost `v0.12.0`'s tables since 2026-10-17,
-a mineral_value 1.15.0 Stage 2 since 2026-10-07, and the `data-2026-09-29c`
-catalog since 2026-09-29** (the earlier Stage 2 tables are frozen under
+a mineral_value 1.15.0 Stage 2 since 2026-10-07, and the `data-2026-10-21b`
+catalog since 2026-10-21** (`data-2026-09-29c` from 2026-09-29; the earlier Stage 2 tables are frozen under
 `campaign/stage2/mineral_value-*/`; the `v0.4.0` tables it held from
 2026-09-24, the `v0.5.0` ones from 2026-09-28, the `v0.6.0` ones from
 2026-10-06, the `v0.7.0`, `v0.8.0` and `v0.9.0` ones from earlier on

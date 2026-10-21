@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Master Asteroid Profitability Pipeline (1.55.0)
+"""Master Asteroid Profitability Pipeline (1.56.0)
 
 End-to-end SELF-CONTAINED pipeline that combines all four modules into a
 single runnable file.  Copy-paste into Colab / Jupyter / your script and
 run top-to-bottom - the orchestrator at the bottom executes everything.
 
     Stage 1  ->  Asteroid Catalog        (modules/catalog.py, data contract
-                 1.8.1) downloads a pinned, published release of the
+                 1.10.0) downloads a pinned, published release of the
                  AsteroidCatalog build: JPL SBDB + MP3C + SsODNet + NEOWISE,
                  cross-matched, with per-spectral-type composition
     Stage 2  ->  Mineral Value Catalog   (modules/mineral_value.py 1.16.0)
@@ -308,7 +308,7 @@ class CatalogConfig:
     # reads, and moves every number downstream: record a repin in versions.md.
     # The published tags are listed at
     # https://github.com/loggger101/AsteroidCatalog/releases
-    catalog_release: str = "data-2026-09-29c"
+    catalog_release: str = "data-2026-10-21b"
 
     # Where release assets are downloaded from; the tag and the asset name are
     # appended.  Plumbing: change it only to point at a mirror.
@@ -342,7 +342,7 @@ class CatalogConfig:
     # only after the stages that read the catalog have been checked against the
     # new schema.  The record of what each contract changed is AsteroidCatalog's
     # CHANGELOG.md; this pipeline's is versions.md > Stage 1 changelog.
-    pipeline_version: str = "1.8.1"
+    pipeline_version: str = "1.10.0"
 
 
 # Instantiate and create the output dir.  Edit CATALOG_CONFIG values above this line
@@ -14034,7 +14034,7 @@ def run_full_pipeline(master: MasterConfig = None) -> dict:
     t0 = datetime.now()
     print()
     print("#" * 75)
-    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.55.0")
+    print("    MASTER ASTEROID PROFITABILITY PIPELINE - v1.56.0")
     print(f"      {t0.strftime('%Y-%m-%d %H:%M:%S')}  |  output -> {master.output_dir}")
     print("#" * 75)
 

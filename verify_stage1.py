@@ -100,6 +100,27 @@ FRACTIONS = ("metal_fraction", "silicate_fraction", "carbon_fraction",
 # `spectral_type_source`.  Reading all three off one column is the obvious
 # misreading and it is why they are written out per column here.
 CENSUS = {
+    # data contract 1.10.0, `data-2026-10-21b` (master v1.56.0).  1.7.0 to
+    # 1.10.0 added the phase columns and moved composition, PGM factors and
+    # three bodies' diameters, never a provenance label, so the counts are
+    # 1.6.0's plus the 7,248 bodies JPL added since, every one of them sized
+    # `derived_h_orbit_albedo`.
+    ("1.10.0", "2026-10-21"): {
+        "rows": 1575889,
+        "diameter_source": {
+            "measured":                  149718,
+            "derived_h_taxonomy_albedo": 105885,
+            "derived_h_orbit_albedo":   1320239,
+            "derived_h_measured_albedo":     31,
+            "derived_mass":                  16,
+        },
+        "spectral_type_source": {
+            "source":         171109,
+            "albedo":          83405,
+            "albedo_assumed": 1298012,
+            "orbit":           23363,
+        },
+    },
     # data contract 1.6.0 (master v1.37.0).  1.5.0 and 1.6.0 moved densities,
     # masses and composition, never a provenance label, so the diameter census
     # is 2026-09-25's plus the bodies JPL added since.

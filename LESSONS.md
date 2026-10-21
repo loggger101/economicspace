@@ -123,8 +123,8 @@ at once, and `1.0.6` / `1.1.4` / `1.3.6` each shipped as two different things.
 See "The parallel-repo divergence" in `versions.md`; CSVs stamped with those
 versions cannot be trusted and should be regenerated.
 
-Current: catalog `1.8.1`, mineral_value `1.16.0`, transportation `1.23.0`,
-calc `1.32.0`, master `1.55.0` (the master version is a literal in
+Current: catalog `1.10.0`, mineral_value `1.16.0`, transportation `1.23.0`,
+calc `1.32.0`, master `1.56.0` (the master version is a literal in
 `build_master.py`'s `MASTER_HEADER` and `MASTER_ORCHESTRATOR`, two places).
 
 ℹ️  **transportation `1.15.0` IS spacecost's data-contract version**, not a
@@ -4487,8 +4487,8 @@ package. The builder is
 [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog), and that
 repository PUBLISHES its builds as GitHub Releases, one frozen catalog per
 `data-YYYY-MM-DD` tag, gated before publishing (every source contributed,
-stamps current, no shrink against the previous release). The pinned catalog release is `data-2026-09-29c`,
-`CatalogConfig.catalog_release`, at data contract 1.8.1.
+stamps current, no shrink against the previous release). The pinned catalog release is `data-2026-10-21b`,
+`CatalogConfig.catalog_release`, at data contract 1.10.0.
 
 ⚠️  **THE INSTALLER STAGES INTO A FRESH DIRECTORY EVERY TIME, AND A FIXED ONE
 IS A TRAP ON THIS MOUNT.** It used `.catalog_download`, cleared it with

@@ -77,8 +77,8 @@ Name collisions are renamed by `word_replace()`:
 
 ## Versions and release notes
 
-Current: catalog `1.8.1`, mineral_value `1.16.0`, transportation `1.23.0`,
-calc `1.32.0`, master `1.55.0` (checked by `verify_docs.py` check 2; the master
+Current: catalog `1.10.0`, mineral_value `1.16.0`, transportation `1.23.0`,
+calc `1.32.0`, master `1.56.0` (checked by `verify_docs.py` check 2; the master
 version is a literal in `build_master.py`'s `MASTER_HEADER` and
 `MASTER_ORCHESTRATOR`).
 
@@ -480,7 +480,7 @@ lists every file it touched.
 ## Stage 1 and Stage 3 live in other repositories
 
 - **Stage 1 downloads a published catalog**; AsteroidCatalog builds and gates
-  it. The pinned catalog release is `data-2026-09-29c`
+  it. The pinned catalog release is `data-2026-10-21b`
   (`CatalogConfig.catalog_release`). Same pin, same bytes; nothing installs
   until every asset matches its sha256, manifest written last, staging in a
   fresh `mkdtemp`. `pipeline_version` there is the data contract, checked not

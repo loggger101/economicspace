@@ -221,7 +221,7 @@ actually reads**:
 
 | file | stage that writes it | size |
 |---|---|---|
-| `asteroid_catalog.csv` | 1 | 2.2 GB on `data-2026-09-29c` |
+| `asteroid_catalog.csv` | 1 | 2.4 GB on `data-2026-10-21b` |
 | `mineral_value_catalog.csv` | 2 | tens of KB |
 | `transportation/launch_vehicles.csv` | 3 | tens of KB |
 | `transportation/propellants.csv` | 3 | tens of KB |
@@ -317,7 +317,7 @@ and is the part that is easy to miss:
 
 | | size |
 |---|---|
-| the inputs Stage 4 reads | 2.2 GB on `data-2026-09-29c`, nearly all of it the catalog; `run_pipeline.py --check-inputs` prints each file |
+| the inputs Stage 4 reads | 2.4 GB on `data-2026-10-21b`, nearly all of it the catalog; `run_pipeline.py --check-inputs` prints each file |
 | `profitability_catalog.csv`, rewritten per cell | 350-500 MB |
 | `campaign/cells/`, one gzipped archive per cell | 20 GB for the 28 cells of 2026-09; 8.1 GB for the twenty of 2026-08 |
 
