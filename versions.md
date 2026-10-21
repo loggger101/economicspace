@@ -1027,6 +1027,56 @@ out of starred-repos, reproduced the five figures in
 `asteroid_transfer_dv_km_s`'s docstring. `verify_docs.py` and
 `tree_check.py` pass.
 
+### The campaign runner takes its campaign as parameters (2026-10-20, no stamp)
+
+The first step towards splitting the campaign job runner out like the
+launcher: each of its four files now has a generic part that takes as
+parameters what it used to hard-code, with this campaign's values as the
+defaults. Nothing that runs a cell changed (`run_cell.py` is untouched), so no
+stamp moves.
+
+- **`run_queue.py`**: `run_queue()` takes a list of `Job`s (ledger key, the
+  group `--only` selects by, the parts its progress lines print, the command)
+  and the ledger path. `DESTS`, `CELLS`, the cell name and the `run_cell.py`
+  command are `cell_jobs()`. The ledger is a parameter and not a flag: the
+  queue reads it and the command writes it, so a queue pointed at another file
+  would find every job outstanding forever. `analyse.py` and `population.py`
+  still import `DESTS` from it.
+- **`_supervisor.py`**: `supervise(target, log, cwd, self_name)`, the guard's
+  self-exclusion name being the new parameter. Its module code moved into
+  `main()`; the scheduled tasks' command line is unchanged.
+- **`memwatch.py`**: `watch(out, log_dir, ...)` and `sample()`, with the
+  non-cell log prefixes, the process name and the interval as parameters.
+  `--once` writes one row and stops.
+- **`_pause.ps1`**: `-Match`, `-ProcessName` and `-TaskName`. One behaviour
+  changes: on a machine without the scheduled task, which this one is, the
+  old script froze the tree and then printed an error from
+  `Disable-ScheduledTask`; it now says the task is absent and leaves the
+  scheduler alone.
+
+**Verified.** Old and new `run_queue.py` print the same output and exit code
+for nine command lines against the committed ledger (all 28 cells done, a
+misspelt `--only` refused with rc 2), and, driven through five planted ledgers
+with `subprocess.call` and the clock stubbed, give the same output and the
+same commands in all 35 cases (a failed row retried, a blank `rc`, a job
+failing mid-queue); counting `rc == 1` as done, or swapping two of
+`run_cell.py`'s arguments, changes 3 and 15 of them. Old and new
+`_supervisor.py`, in a throwaway tree, give the same output and log apart
+from pids: a detached child outlives it, and a second start through `python`
+(whose app alias runs a second process with the same arguments) is refused.
+Old and new `memwatch.py` write the same three rows from a planted log
+directory and process table, another account's `None` included; dropping the
+`stage2` prefix is caught. Old and new `_pause.ps1` both suspend and resume a
+two-process test tree; the new one also does so under `-Match` arrays and
+`-TaskName ''`, and freezes nothing under a pattern or process name that
+matches nothing. `verify_docs.py` and `tree_check.py` pass.
+
+⚠️  **A Python process with a `*` in its argv hangs the `powershell.exe` it
+starts** (measured three ways; `-Command` from a clean argv runs in 1.3 s, and
+so does the same call from PowerShell). This does not affect running
+`_pause.ps1` by hand. A harness has to pass patterns to the script some other
+way, such as an environment variable.
+
 ## master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0
 
 **An eighth destination, `gto`: a refuelling depot in geostationary transfer
