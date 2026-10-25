@@ -1,8 +1,6 @@
 # The pipeline sources are LF on disk.  Pin it so a checkout on Windows (where
 # core.autocrlf is often true, it is set in Git for Windows' system config by
-# default) does not rewrite every file to CRLF.  They were pasted into Colab /
-# Jupyter, which expect LF, until master v1.57.0; the rule stays because a
-# rewrite to CRLF would put every line of every source into one diff.
+# default) does not rewrite every file to CRLF.
 *.py    text eol=lf
 *.ipynb text eol=lf
 *.md    text eol=lf

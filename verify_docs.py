@@ -22,7 +22,8 @@ counts-in-prose failure this file was written to catch:
                      opening with a bare comma by the pass that removed them;
                      the docs, the root scripts and the campaign scripts
     7. manifests     a list documented in one place, against the list actually
-                     defined in another: requirements.txt vs _MASTER_REQUIRED,
+                     defined in another: requirements.txt vs the modules'
+                     _REQUIRED_PKGS,
                      README's `run.bat` block vs run.bat's own dispatcher, and
                      CLAUDE.md's alias table vs the aliases master.py binds
     8. help          every config dial the dashboard renders carries the
@@ -481,8 +482,7 @@ def check_versions(mods) -> bool:
 
     # The master version is `MASTER_VERSION` in master.py, typed once, and
     # versions.md quotes it in the same table.  It is not a dataclass field, so
-    # check 1 cannot reach it either.  Until master v1.57.0 it was two literals
-    # in build_master.py, which this held to each other.
+    # check 1 cannot reach it either.
     lits = re.findall(r'^MASTER_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"\s*$',
                       read(os.path.join(REPO, "master.py")), re.M)
     if len(lits) != 1:
@@ -828,8 +828,6 @@ def check_structure() -> bool:
 # -------------------------------------------------------------------- 6. dashes
 EM, EN = "—", "–"
 ROOT_PY = ["ui.py", "ui_meta.py", "orbital.py", "run_pipeline.py", "verify.py",
-           # Hand-written since master v1.57.0, when build_master.py (which
-           # stood here) stopped generating it; the package init came with it.
            "master.py", "modules/__init__.py",
            "launch_ui.py", "platform_check.py",
            # verify_stage3.py was outside BOTH ratchets until 2026-09-15, which
@@ -950,9 +948,7 @@ def check_manifests() -> bool:
     bad, n = [], 0
 
     # requirements.txt <-> the union of the four modules' `_REQUIRED_PKGS`,
-    # which each module pip-installs at import time.  This read build_master.py's
-    # `_MASTER_REQUIRED` until master v1.57.0, which retired the generated
-    # master.py and its installer; the union is what that list always restated.
+    # which each module pip-installs at import time.
     req_p = os.path.join(REPO, "requirements.txt")
     if os.path.exists(req_p):
         req = [ln.strip() for ln in read(req_p).split("\n")
@@ -1256,11 +1252,8 @@ def check_manifests() -> bool:
 
     # CLAUDE.md's alias table <-> the aliases `master.py` binds
     # (`CALC_CONFIG = calc.CONFIG`).  The table is what a reader of an entry
-    # point uses to find the module a `master.` name lives in.  Until master
-    # v1.57.0 it was a RENAME table checked against build_master.py's
-    # `word_replace` calls, and it listed `merge_sources -> merge_mineral_sources`
-    # for two releases' worth of audits after master v1.36.0 dropped that
-    # rename.  The shape is unchanged: the module's own name, then master's.
+    # point uses to find the module a `master.` name lives in: the module's own
+    # name, then master's.
     master_p = os.path.join(REPO, "master.py")
     if os.path.exists(master_p):
         _labels = ("catalog", "mineral_value", "transportation", "calc")
@@ -1570,8 +1563,7 @@ def check_runtime() -> bool:
 
 
 # ---------------------------------------------------------------- 11. docstrings
-# Every .py this repo owns.  master.py was excluded until master v1.57.0,
-# because build_master.py generated it from the four modules checked here.
+# Every .py this repo owns.
 FIRST_PARTY_PY = (["master.py", "modules/__init__.py",
                    "run_pipeline.py", "ui.py", "ui_meta.py",
                    "orbital.py",
@@ -2313,10 +2305,9 @@ def master_reads(path: str) -> List[Tuple[int, str]]:
 def check_shim() -> bool:
     """Every `master.<name>` the repo reads resolves, and resolves to one thing.
 
-    `master.py` stopped being the four modules concatenated at master v1.57.0
-    and became a shim that forwards each attribute to the module defining it.
-    A name no module defines is now an AttributeError at the moment some
-    entry point reaches it, which may be an hour into a run, and a name two
+    `master.py` forwards each attribute to the module defining it, so a name
+    no module defines is an AttributeError at the moment some entry point
+    reaches it, which may be an hour into a run, and a name two
     modules define differently (`CONFIG`, `validate`) is refused rather than
     resolved.  This reads every first-party file's master reads off its AST,
     imports master once, and resolves each of them, so both failures show up

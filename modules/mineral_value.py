@@ -412,28 +412,8 @@ _REF_PRICE_DATE = "2026-05-29"
 #
 # Material sold in space is worth the launch cost it AVOIDS.  That number is
 # not asserted here; it is derived from the rocket equation, from the Δv
-# ladder in Module 3's DELTA_V_REFERENCE, and from a real launch price.
-#
-# 🚨  EVERY CONSTANT AND EVERY LEG THAT USED TO BE HERE IS IN
-# `spacecost.delivery` NOW, AND THE SENTENCE THAT STOOD HERE IS WHY:
-#
-#     Constants below are cross-referenced to Module 3.  They are duplicated
-#     rather than imported because Module 2 runs BEFORE Module 3 in the
-#     pipeline order (and in the concatenated master.py), so the tables are
-#     not in scope.  If you change one of these, change it in Module 3 too.
-#
-# Nine delta-v retyped by hand, a launch price retyped by hand, three cost
-# lines retyped by hand, and a manual-sync instruction holding them together.
-#
-# ⚠️  THE JUSTIFICATION DIED WHEN STAGE 3 BECAME A PIP PACKAGE, AND IT TOOK
-# TWO RELEASES TO NOTICE.  A package has no position in a pipeline: this
-# module installs spacecost in the block at the top of this file, before any
-# of its own code runs, and imports it exactly as Module 4 does.  (Until
-# master v1.57.0 the generated master.py's header installed it for all four.)
-# Concatenation order was the whole argument, and concatenation
-# order stopped applying.  The general lesson is the one this repo keeps
-# paying for: a comment explaining why two copies exist is not a reason they
-# still have to.
+# ladder in Module 3's DELTA_V_REFERENCE, and from a real launch price.  Every
+# constant and every leg of that derivation lives in `spacecost.delivery`.
 #
 # ⚠️  THE NAMES BELOW STAY BOUND ON PURPOSE, they are not leftovers.
 # `campaign/worked_calculation.py` reaches `master._DELIVERY_LEGS`,

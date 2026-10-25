@@ -13,11 +13,6 @@ MasterConfig and run_full_pipeline.  Any other attribute is looked up in the
 four modules by `__getattr__` below; a name two modules define differently is
 refused rather than resolved, so `master.CONFIG` and `master.validate` raise.
 
-Until master v1.57.0 this file was GENERATED: build_master.py concatenated the
-four modules into one file so it could be pasted into a Colab cell.  Nothing
-pastes it any more, and the concatenation's rename table went with it.  This
-file is written by hand and is the only place the master version is typed.
-
 DELIVERY DESTINATION - set MASTER_CONFIG.delivery_destination, which writes
 MINERAL_CONFIG.delivery_destination and CALC_CONFIG.delivery_destination
 together.  Stage 2 decides what a kilogram sells for; Stage 4 decides what it
@@ -34,9 +29,7 @@ and overwrite their CSVs.  run_pipeline.py is the entry point that asks first.
 MASTER_VERSION = "1.57.0"
 
 # The package's __init__ fixes the console encoding and silences spawned
-# workers before any of the four modules prints.  Imported in stage order, so
-# the banners and import-time side effects come out in the order they always
-# have.
+# workers before any module prints.  Imported in stage order.
 from modules import catalog, mineral_value, transportation, calc  # noqa: E402
 
 import os                                                          # noqa: E402
@@ -46,7 +39,7 @@ from datetime import datetime                                      # noqa: E402
 # THE NAMES THE ENTRY POINTS USE FOR WHAT EACH MODULE CALLS ITS OWN
 # -----------------------------------------------------------------------------
 # Every module names its config `CONFIG`, and Modules 2 and 3 each define a
-# `validate`.  These are the names they have always had on `master`.
+# `validate`; the entry points use these names for them.
 CATALOG_CONFIG         = catalog.CONFIG
 build_asteroid_catalog = catalog.build_catalog
 MINERAL_CONFIG         = mineral_value.CONFIG
@@ -71,9 +64,7 @@ from modules.calc import (                                         # noqa: E402
 # EVERY OTHER NAME: FORWARDED TO THE MODULE THAT DEFINES IT
 # -----------------------------------------------------------------------------
 # Looked up on every access rather than copied at import, so a global a module
-# rebinds later (its caches) is never served stale.  The order is the one the
-# concatenated file resolved collisions in, last module first, though no name
-# that reaches the end of `_owner` depends on it.
+# rebinds later (its caches) is never served stale.
 _MODULES = (calc, transportation, mineral_value, catalog)
 
 # Bound in more than one module, as EQUAL values that are not the same object.
@@ -106,21 +97,6 @@ def __getattr__(name):
     if name.startswith("__"):
         raise AttributeError(f"module 'master' has no attribute {name!r}")
     return getattr(_owner(name), name)
-
-
-def __dir__():
-    """This file's names plus every unambiguous name the four modules define."""
-    names = set(globals())
-    for module in _MODULES:
-        for name in vars(module):
-            if name.startswith("__") or name in names:
-                continue
-            try:
-                _owner(name)
-            except AttributeError:
-                continue
-            names.add(name)
-    return sorted(names)
 
 
 # =============================================================================

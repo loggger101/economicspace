@@ -1552,10 +1552,7 @@ def _parse_minerals_column(col: pd.Series) -> pd.Series:
 #
 # The owning module is looked up in `sys.modules` rather than imported: under
 # `master.py` all four are already imported, and a standalone `calc.py` has
-# none of them, so its comparisons are skipped.  Until master v1.57.0 this held
-# config GLOBAL names read through `globals()`, which only the concatenated
-# `master.py` had; under the package that lookup would have found nothing and
-# skipped every comparison in silence.  See `stamp_check`.
+# none of them, so its comparisons are skipped.  See `stamp_check`.
 _CATALOG_PROVENANCE: Dict[str, Tuple[int, str]] = {
     "asteroids":   (1, "catalog"),
     "minerals":    (2, "mineral_value"),

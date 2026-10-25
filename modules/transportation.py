@@ -275,10 +275,6 @@ import pandas as pd
 
 import spacecost
 
-# The package's sanity check is imported under its second name,
-# `validate_tables`, which spacecost exports because the generated master.py
-# (retired at master v1.57.0) rewrote every whole word `validate` in this file,
-# the one inside `from spacecost import ... as _y` included.
 from spacecost import validate_tables as _spacecost_validate
 from spacecost import build_catalog as _spacecost_build_catalog
 

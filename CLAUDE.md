@@ -47,11 +47,10 @@ adds its notes to `versions.md` and, if it teaches something, one line here.
 
 ## Build
 
-Nothing is built. `modules/` is a package and `master.py` is a hand-written
-shim (master v1.57.0 retired `build_master.py` and the generated file): it
-imports the four modules, binds the aliases below, holds `MasterConfig` and
-`run_full_pipeline`, and forwards every other `master.<name>` to the module
-that defines it. Edit a module and commit it; there is no second file.
+Nothing is built. `modules/` is a package and `master.py` a hand-written
+shim: it imports the four modules, binds the aliases below, holds
+`MasterConfig` and `run_full_pipeline`, and forwards every other
+`master.<name>` to the module that defines it.
 
 | module | master's name for it |
 |---|---|
@@ -68,9 +67,8 @@ that defines it. Edit a module and commit it; there is no second file.
   what it imports by name.
 - `modules/__init__.py` silences spawned workers before any module prints and
   imports no module, because a Stage 4 worker imports `modules.calc` alone.
-- Each module still runs on its own (`python modules/calc.py`) and still
-  installs its own `_REQUIRED_PKGS` at import; check 7 holds their union to
-  `requirements.txt`.
+- Each module runs on its own (`python modules/calc.py`) and installs its own
+  `_REQUIRED_PKGS` at import; check 7 holds their union to `requirements.txt`.
 
 ## Versions and release notes
 

@@ -676,13 +676,10 @@ Leave `parallel_workers` at `0` unless you have a reason:
 - **A specific count** is obeyed, clamped to the CPU count.
 
 Auto mode will not start a worker that cannot repay its own startup, so short
-interactive runs stay serial. That matters more than it sounds: startup was
-measured at ~1.1 s per worker and **linear**, because each worker re-imported
-the 590 kB generated `master.py` (Windows has no fork), and on a Google Drive
-working copy those reads serialise. Since master v1.57.0 a worker imports
-`modules.calc` alone, and that figure has not been re-measured. At 3,000
-beneficiated rows, twelve workers was slower end to
-end than six. The useful ceiling is the **physical** core count, hyperthreading
+interactive runs stay serial. That matters more than it sounds: startup is
+**linear** in the worker count, because each worker re-imports `modules.calc`
+(Windows has no fork), and on a Google Drive working copy those reads
+serialise. The useful ceiling is the **physical** core count, hyperthreading
 adds ~17% on this branch-heavy pure-Python workload, not 2×.
 
 🚨  **If you drive the pipeline from your own script, import it by name.** A
@@ -702,16 +699,6 @@ assert sys.modules.get("master") is m and m.__spec__ is not None
 If your driver script re-runs itself once per worker, that is why; the full
 account is in [LESSONS.md](LESSONS.md#entry-points).
 
-### What master.py is
-
-`master.py` is not generated. Until master v1.57.0 a build script concatenated
-the four modules into it so it could be pasted into Colab; now it imports them
-from the `modules` package, names each config the way the entry points always
-have (`CATALOG_CONFIG`, `MINERAL_CONFIG`, `TRANSPORT_CONFIG`, `CALC_CONFIG`),
-and forwards any other `master.<name>` to the module that defines it. A name
-two modules define differently, such as `CONFIG`, is refused rather than
-resolved. Edit a module and commit it; there is nothing to rebuild.
-
 ## Verifying a change
 
 Almost every release of Stage 4 is argued from **bit-identity**: the claim is
@@ -724,7 +711,7 @@ py verify.py baseline --tag 1.17.7
 
 Run that on a clean tree **before** editing. It builds four cells, raw and
 beneficiated, each with the programme search off and on, and writes their CSVs
-and hashes under `.verify/` (gitignored). Then make the change, rebuild, and:
+and hashes under `.verify/` (gitignored). Then make the change and:
 
 ```bash
 py verify.py check --tag 1.17.7
@@ -917,7 +904,7 @@ py verify_docs.py
 | 4 | links | a markdown anchor that does not resolve |
 | 5 | structure | unbalanced fences, ragged tables, heading-level jumps, duplicate h1/h2, in every markdown file in the repo |
 | 6 | dashes | an em- or en-dash in prose a reader sees, or a line left opening with a bare comma: the docs, the root scripts, the campaign scripts, and comments in `modules/` |
-| 7 | manifests | a list documented in one place drifting from the list defined in another: `requirements.txt` against `_MASTER_REQUIRED`, the pinned catalog release and spacecost tag against every document that names them, and the `run.bat` and `run.sh` blocks above against their dispatchers |
+| 7 | manifests | a list documented in one place drifting from the list defined in another: `requirements.txt` against the modules' `_REQUIRED_PKGS`, CLAUDE.md's alias table against `master.py`, the pinned catalog release and spacecost tag against every document that names them, and the `run.bat` and `run.sh` blocks above against their dispatchers |
 | 8 | help | a config dial the dashboard renders with no help text, because the UI scrapes its help from the field's own comment |
 | 9 | runtime | the twenty-eight-cell wall-clock table under [What a first run costs](#what-a-first-run-costs) drifting from `calc.MEASURED_DEST_SECONDS`; `calc.MEASURED_CELL_SECONDS` against the `campaign/logs/` JSON that measured it; every "N h at &lt;destination&gt;" in `run.bat`, `run.sh` and this file |
 | 10 | transfer | a measurement dropped rather than moved during a reorganisation, `--before OLD.md NEW.md ...` |
@@ -928,6 +915,7 @@ py verify_docs.py
 | 15 | guards | a FETCHING stage module that would overwrite its own outputs when run directly; the guard is mirrored into all three, and this holds the copies to each other |
 | 16 | borrows | the worked calculation touching something in `master` that is on no row of its `BORROWED` register, or a row that matches no call |
 | 17 | dest table | the destination table under [What a kilogram is worth](MODEL.md#what-a-kilogram-is-worth) drifting from `master.DELIVERY_DESTINATIONS` |
+| 18 | shim | a `master.<name>` the repo's own Python reads that `master.py` cannot resolve, or that two modules define differently |
 
 Every check fails if a file it is supposed to read is not on disk, on a counter
 of its own. Checks 6 and 11 are ratchets: check 6 reads `modules/*.py` through
