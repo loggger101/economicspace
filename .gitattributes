@@ -1,7 +1,8 @@
-# The pipeline sources are LF on disk and are pasted into Colab / Jupyter,
-# which expect LF.  Pin it so a checkout on Windows (where core.autocrlf is
-# often true, it is set in Git for Windows' system config by default) does
-# not rewrite every file to CRLF.
+# The pipeline sources are LF on disk.  Pin it so a checkout on Windows (where
+# core.autocrlf is often true, it is set in Git for Windows' system config by
+# default) does not rewrite every file to CRLF.  They were pasted into Colab /
+# Jupyter, which expect LF, until master v1.57.0; the rule stays because a
+# rewrite to CRLF would put every line of every source into one diff.
 *.py    text eol=lf
 *.ipynb text eol=lf
 *.md    text eol=lf
@@ -37,11 +38,4 @@ Dockerfile   text eol=lf
 # Windows Script Host refuses to be flexible about line endings in a
 # way nobody has ever fully documented; CRLF is what wscript expects.
 *.vbs   text eol=crlf
-
-# Machine-generated: the four modules concatenated by build_master.py, and by
-# a wide margin the largest file here.  Marking it linguist-generated keeps it
-# out of diff noise on hosts that understand the attribute.  No line count is
-# quoted, deliberately: the one that used to be here read 6,300 against a file
-# of 17,747, and nothing checks this file.
-master.py linguist-generated=true
 

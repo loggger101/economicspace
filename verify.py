@@ -18,7 +18,6 @@ edit, exactly as every release note in versions.md says it was.
 
     py verify.py baseline           # on a clean tree, BEFORE editing
     ...make the change...
-    py build_master.py
     py verify.py check              # bit-identity + every invariant
 
 Other entry points:
@@ -185,12 +184,12 @@ REPO = os.path.dirname(os.path.abspath(__file__))
 # The launcher to name in a printed instruction.  `py` is the Windows launcher
 # and does not exist anywhere else, so a hint that says it is wrong advice on
 # the host that most needs the hint.  Not shared between files on purpose: the
-# four modules must stay standalone for the Colab paste, and this is one
-# expression, not a manifest.
+# four modules each run standalone, and this is one expression, not a
+# manifest.
 _PY = "py" if os.name == "nt" else os.path.basename(sys.executable)
 
 def load_master():
-    """Import the built master.py in the one way the worker pool tolerates.
+    """Import master.py in the one way the worker pool tolerates.
 
     MUST be `import master` by name with the repo on sys.path.  Loading it
     through spec_from_file_location("master", path) + exec_module works
@@ -866,14 +865,14 @@ def check_parallel(m, names: List[str], workers: int = 8) -> bool:
 # itself and report MATCH.  Docs, harnesses and campaign scripts are NOT here:
 # they cannot move a number, and failing on them would be the cry-wolf shape
 # this repo records twice.
-MODEL_PATHS = ("modules", "build_master.py", "master.py")
+MODEL_PATHS = ("modules", "master.py")
 
 
 def _git(*args: str):
     """One git command in this repo, captured; None if git cannot answer.
 
     Never raises.  A tree with no git at all is a legitimate place to run this
-    harness -- a Colab paste, an unpacked archive -- and the answer there is
+    harness -- a copied tree, an unpacked archive -- and the answer there is
     "no provenance", which the caller records honestly rather than failing on.
     """
     import subprocess
@@ -1203,7 +1202,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # loud rather than defaulted.
     p.add_argument("--allow-dirty-baseline", action="store_true",
                    help="proceed even though the baseline was captured over a "
-                        "modified modules/ or build_master.py (say so only if "
+                        "modified modules/ or master.py (say so only if "
                         "that edit is unrelated to what you are verifying)")
     args = p.parse_args(argv)
 

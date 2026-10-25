@@ -1,7 +1,7 @@
 # Union of every package required by the four pipeline modules.
-# Mirrors _MASTER_REQUIRED in master.py, which auto-installs these at import
-# time if they are missing (Colab-friendly).  verify_docs.py check 7 holds the
-# two lists to each other.
+# Mirrors the union of the four modules' _REQUIRED_PKGS, which each module
+# auto-installs at import time if they are missing.  verify_docs.py check 7
+# holds the two lists to each other.
 #
 # `spacecost` holds Stage 3's reference tables, which used to live in
 # modules/transportation.py, and Stage 2's delivery chains.  It is not on PyPI

@@ -1,7 +1,7 @@
 # The exact versions every committed number was measured on.
 #
-# requirements.txt is the loose list, and it mirrors _MASTER_REQUIRED in
-# master.py so the pipeline stays Colab-pasteable.  This file is the opposite:
+# requirements.txt is the loose list, and it mirrors what the four modules
+# auto-install at import.  This file is the opposite:
 # it is what a SECOND host installs when the point is to reproduce a hash
 # rather than to run the model.
 #
@@ -78,9 +78,9 @@ streamlit==1.61.1
 # psutil is pinned here rather than left to quietqueue's `>=`: installed after
 # this file, quietqueue finds it satisfied and leaves it.  Deliberately NOT in
 # requirements.txt: that file
-# asserts in its own first line that it mirrors _MASTER_REQUIRED, and
-# verify_docs.py check 7 holds it to that, so adding psutil there would make
-# every Colab paste pip-install a process inspector it never calls.  It is here
+# asserts in its own first line that it mirrors the modules' _REQUIRED_PKGS,
+# and verify_docs.py check 7 holds it to that, so adding psutil there would
+# make every pipeline install a process inspector it never calls.  It is here
 # because a second host standing the campaign up needs the supervisor and wants
 # the memory curve, and discovering the import error after the first cell is the
 # wrong time.

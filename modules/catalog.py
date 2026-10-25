@@ -108,13 +108,6 @@ import pandas as pd
 import requests
 from tqdm.auto import tqdm
 
-# NEVER SPELL A NAME THE BUILD REWRITES IN A WAY THAT MUST SURVIVE.
-# `build_master.py` concatenates the four stage modules into `master.py` and
-# rewrites two words of this one, `CONFIG` and `build_catalog`, with a
-# whole-word regex over the ENTIRE file text -- comments and string literals
-# included.  Read the built master.py rather than assuming, because this file
-# and its concatenated copy are not the same text.
-
 # Silence the chronic noise the data libraries emit during a typical run, but
 # DON'T globally suppress everything, real RuntimeWarnings (e.g. divide-by-zero
 # in our mass calculation) should still surface so we can spot bugs.

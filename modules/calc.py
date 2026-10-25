@@ -120,9 +120,9 @@ Row = Mapping[str, Any]
 # Windows has no fork, so every parallel worker re-imports this file and would
 # replay the startup banner -- 60 lines each, 700+ for a full pool.  The parent
 # sets ASTEROID_PIPELINE_WORKER before creating the pool and children inherit
-# it.  Flipped to "silenced" rather than cleared so that the SECOND copy of
-# this guard in the built master.py (which carries both the master header's and
-# this module's) is a no-op instead of leaking another handle.
+# it.  Flipped to "silenced" rather than cleared so that this copy is a no-op
+# after the package's (`modules/__init__.py` runs the same guard first, before
+# the install block above has printed) instead of leaking another handle.
 #
 # stderr is deliberately left alone: a worker that dies should still say so.
 if os.environ.get("ASTEROID_PIPELINE_WORKER") == "1":
@@ -1217,8 +1217,8 @@ class CalcConfig:
 # `verify_docs.py` check 9 holds every cell of it to this dict.
 #
 # 🚨  EVERY user-facing quote of these ratios DERIVES from here: the --help text
-# and run banner in run_pipeline.py, the MASTER CONFIG READY banner
-# build_master.py writes into master.py, and the sidebar estimate in ui.py.
+# and run banner in run_pipeline.py, the MASTER CONFIG READY banner in
+# master.py, and the sidebar estimate in ui.py.
 # They used to be five hand-copied literals, and they went stale together: the
 # superseded 1.16.0 figures ("~7x" beneficiation, "~3x" the programme search)
 # were still being PRINTED TO THE USER ON EVERY RUN three releases after the
@@ -1544,22 +1544,25 @@ def _parse_minerals_column(col: pd.Series) -> pd.Series:
                      index=col.index, name=col.name)
 
 
-# Which module WRITES each catalog, and the config global carrying that
-# module's version.  `stamp_check` reads this to compare a CSV against the code
-# that produced it; before v1.19.1 it compared every one of them against
-# Module 3, so `asteroids` (1.1.0) and `minerals` (1.7.1) could never match and
-# the check fired on every run.
+# Which module WRITES each catalog, by its name in the `modules` package.
+# `stamp_check` reads this to compare a CSV against the code that produced it;
+# before v1.19.1 it compared every one of them against Module 3, so `asteroids`
+# (1.1.0) and `minerals` (1.7.1) could never match and the check fired on every
+# run.
 #
-# The config names are looked up through `globals()` rather than referenced,
-# because in a standalone `calc.py` none of them exist; only the concatenated
-# `master.py` has all four in one process.  See `stamp_check`.
+# The owning module is looked up in `sys.modules` rather than imported: under
+# `master.py` all four are already imported, and a standalone `calc.py` has
+# none of them, so its comparisons are skipped.  Until master v1.57.0 this held
+# config GLOBAL names read through `globals()`, which only the concatenated
+# `master.py` had; under the package that lookup would have found nothing and
+# skipped every comparison in silence.  See `stamp_check`.
 _CATALOG_PROVENANCE: Dict[str, Tuple[int, str]] = {
-    "asteroids":   (1, "CATALOG_CONFIG"),
-    "minerals":    (2, "MINERAL_CONFIG"),
-    "vehicles":    (3, "TRANSPORT_CONFIG"),
-    "propellants": (3, "TRANSPORT_CONFIG"),
-    "delta_v":     (3, "TRANSPORT_CONFIG"),
-    "ops":         (3, "TRANSPORT_CONFIG"),
+    "asteroids":   (1, "catalog"),
+    "minerals":    (2, "mineral_value"),
+    "vehicles":    (3, "transportation"),
+    "propellants": (3, "transportation"),
+    "delta_v":     (3, "transportation"),
+    "ops":         (3, "transportation"),
 }
 
 
@@ -1963,8 +1966,8 @@ def stamp_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
     number means bumping the version" from a rule someone has to remember into
     one the pipeline enforces on the way past.
 
-    ⚠️  It is a DIAGNOSTIC, not an import.  The four config globals exist only
-    when every module is in one process, which is `master.py`, the normal path.
+    ⚠️  It is a DIAGNOSTIC, not an import.  The other three modules are in this
+    process only when `master.py` imported them, which is the normal path.
     A standalone `calc.py` run has no way to know what Module 1, 2 or 3
     currently says, so each comparison it cannot make is skipped rather than
     invented.  That is deliberate: the modules hand off through CSVs on disk
@@ -1995,8 +1998,10 @@ def stamp_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
         if provenance is None:
             unknown.append(key)           # load_all_catalogs' assert should
             continue                      # have caught this; say so anyway
-        stage, config_name = provenance
-        live = getattr(globals().get(config_name), "pipeline_version", None)
+        stage, owner = provenance
+        module = (sys.modules.get(f"{__package__}.{owner}")
+                  if __package__ else None)
+        live = getattr(getattr(module, "CONFIG", None), "pipeline_version", None)
         if not live:
             continue                      # standalone run: nothing to compare
         for stamped in sorted({str(v) for v in df["pipeline_version"]
@@ -10104,14 +10109,14 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
             work_df = work_df.iloc[idx]
             how = f"every ~{n_before / max(len(idx), 1):.1f}th row, evenly spaced"
         print(f"        Capped at {len(work_df):,} of {n_before:,} rows "
-              f"({how}; eval_row_cap / eval_row_sampling in CONFIG)")
+              f"({how}; eval_row_cap / eval_row_sampling in CalcConfig)")
 
     # Candidate (vehicle × propellant) grid is config-driven, not asteroid-
     # driven, build it once and hand it to every evaluation.
     combos = candidate_combos(catalogs, config)
     if not combos:
         print("\nFAIL  No candidate vehicle x propellant combinations after "
-              "filtering - check operational_vehicles_only / candidate_* in CONFIG.")
+              "filtering - check operational_vehicles_only / candidate_* in CalcConfig.")
         return pd.DataFrame()
     print(f"       {len(combos):,} vehicle x propellant combinations per asteroid")
 

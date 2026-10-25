@@ -18,9 +18,8 @@ Three things it does:
     Inspect     the profitability catalog ranked by cost/revenue, charted, and
                 drilled into one asteroid at a time.
 
-DELIBERATELY NOT IN `modules/`. `build_master.py` concatenates that directory
-into `master.py` and asserts a specific header/footer shape per module; this is
-a consumer of the built `master.py`, not a part of it.
+DELIBERATELY NOT IN `modules/`, which holds the four stage modules and nothing
+else. This is a consumer of `master.py`, not a part of it.
 
 ON THE THREE PRESETS. `run_pipeline.PRESETS` and `run_pipeline.apply_preset`
 are imported rather than restated, so the "Quick sample" button here and

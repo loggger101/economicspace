@@ -32,8 +32,9 @@ adds its notes to `versions.md` and, if it teaches something, one line here.
   every `.verify` baseline and every archived-cell derivation. Use
   `--stages 4`. If you must run one, copy `asteroid_pipeline/*.csv` first.
 - **Take a baseline on a clean tree before editing model code:**
-  `py verify.py baseline --tag <current>`, then edit, `py build_master.py`,
-  `py verify.py check --tag <current>`.
+  `py verify.py baseline --tag <current>`, then edit,
+  `py verify.py check --tag <current>`. Never edit `master.py` or `modules/`
+  while a `verify.py` run is going: its workers import them as they start.
 - **The tree lives in a synced folder** (OneDrive). Every harness runs
   `tree_check.py` first; read `git show --stat` after every commit, and treat a
   `*-DESKTOP-*` file as the newer side of a sync conflict until diffed. See
@@ -46,41 +47,36 @@ adds its notes to `versions.md` and, if it teaches something, one line here.
 
 ## Build
 
-`master.py` is generated from `modules/*.py` by `build_master.py`. Edit the
-module, rebuild, commit both; `git status` clean after a build is the sync
-check. The build finds things by pattern, so every module keeps: a leading
-`# -*- coding: utf-8 -*-` line then the docstring, an `# INSTALLATION` block
-ending in the literal `print("OK  All packages present")`, a
-`# RUN & PREVIEW` block under `if __name__ == "__main__":` at the bottom, and
-its config global named `CONFIG`. It fails with `BUILD FAILED:` otherwise;
-restructuring a header means editing `build_master.py` in the same commit.
+Nothing is built. `modules/` is a package and `master.py` is a hand-written
+shim (master v1.57.0 retired `build_master.py` and the generated file): it
+imports the four modules, binds the aliases below, holds `MasterConfig` and
+`run_full_pipeline`, and forwards every other `master.<name>` to the module
+that defines it. Edit a module and commit it; there is no second file.
 
-Name collisions are renamed by `word_replace()`:
-
-| module | renames |
+| module | master's name for it |
 |---|---|
 | catalog | `CONFIG`->`CATALOG_CONFIG`, `build_catalog`->`build_asteroid_catalog` |
 | mineral_value | `CONFIG`->`MINERAL_CONFIG`, `validate`->`validate_minerals` |
 | transportation | `CONFIG`->`TRANSPORT_CONFIG`, `validate`->`validate_transport` |
 | calc | `CONFIG`->`CALC_CONFIG` |
 
-- `word_replace` is a word-boundary regex over the **whole text**: comments,
-  strings and imported names are rewritten too. `from spacecost import
-  validate as _v` breaks. In a module that reaches outside itself, never spell
-  a rewritten word; spacecost exports `validate_tables` for this. Check the
-  **built** `master.py`, not the module.
-- The post-build AST scan warns on new duplicate top-level names: add a rename,
-  or add the name to `_EXPECTED_DUPES` only if every copy is identical.
-- The pattern anchors include `print\("OK  All packages present"\)`; never
-  "improve" a marker into something with regex metacharacters (`[OK]` is a
-  character class).
+- A name two modules bind to different objects is **refused**, not resolved
+  (`master.CONFIG` raises). Read it from the module, or add an alias here;
+  `_IDENTICAL_COPIES` is only for equal copies that are not one object.
+  `verify_docs.py` check 18 resolves every `master.<name>` the repo reads.
+- The forwarding serves reads from outside. Code inside `master.py` sees only
+  what it imports by name.
+- `modules/__init__.py` silences spawned workers before any module prints and
+  imports no module, because a Stage 4 worker imports `modules.calc` alone.
+- Each module still runs on its own (`python modules/calc.py`) and still
+  installs its own `_REQUIRED_PKGS` at import; check 7 holds their union to
+  `requirements.txt`.
 
 ## Versions and release notes
 
 Current: catalog `1.10.0`, mineral_value `1.16.0`, transportation `1.23.0`,
-calc `1.32.0`, master `1.56.0` (checked by `verify_docs.py` check 2; the master
-version is a literal in `build_master.py`'s `MASTER_HEADER` and
-`MASTER_ORCHESTRATOR`).
+calc `1.32.0`, master `1.57.0` (checked by `verify_docs.py` check 2; the master
+version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.
   **Changing any number a run produces means bumping it. Bumping does not mean
@@ -94,8 +90,7 @@ version is a literal in `build_master.py`'s `MASTER_HEADER` and
   its dashboard help.
 - transportation's stamp **is** spacecost's data contract (`DATA_VERSION`);
   `verify_stage3.py` check 2 holds them equal, so a repin can move it.
-- Comments, docstrings and console text are not output: no stamp, but rebuild
-  `master.py`.
+- Comments, docstrings and console text are not output: no stamp.
 - CSVs stamped `1.0.6` / `1.1.4` / `1.3.6` are untrustworthy (two parallel
   repos shipped different code under each). Before building or measuring,
   confirm the branch is up to date with the remote.
@@ -492,12 +487,12 @@ lists every file it touched.
   unknown ones).
 - **Stage 3 is an adapter over spacecost, pinned to tag `v0.12.0`**, and
   Stage 2 imports `spacecost.delivery` too, so a dropped name fails a pricing
-  stage first. The pin is typed in seven places: `requirements.txt`,
-  `_MASTER_PIP_SPEC` in `build_master.py`, `_PIP_SPEC` in
-  `modules/transportation.py` and `modules/mineral_value.py`, and prose in
-  README, CITATIONS.md and this sentence. Check 7 holds them together.
+  stage first. The pin is typed in six places: `requirements.txt`,
+  `_PIP_SPEC` in `modules/transportation.py` and `modules/mineral_value.py`,
+  and prose in README, CITATIONS.md and this sentence. Check 7 holds them
+  together.
 - **A spacecost table change is four steps**: edit there, bump its version if
-  a number moves, tag a release, repin here and rebuild. Repin with
+  a number moves, tag a release, repin here. Repin with
   `pip install --force-reinstall --no-deps` (without `--no-deps` pip upgrades
   numpy and pandas), then `py platform_check.py`. The install blocks reinstall
   a stale git-pinned package at import.

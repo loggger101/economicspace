@@ -24,7 +24,7 @@ counts-in-prose failure this file was written to catch:
     7. manifests     a list documented in one place, against the list actually
                      defined in another: requirements.txt vs _MASTER_REQUIRED,
                      README's `run.bat` block vs run.bat's own dispatcher, and
-                     CLAUDE.md's rename table vs build_master.py's renames
+                     CLAUDE.md's alias table vs the aliases master.py binds
     8. help          every config dial the dashboard renders carries the
                      comment it shows as help text
     9. runtime       README's wall-clock tables and the launchers' hours,
@@ -57,6 +57,9 @@ counts-in-prose failure this file was written to catch:
                      derivation, which is the third copy of the in-space
                      prices and the one nothing read; and the destination
                      menus in run.bat and run.sh, against the same keys
+   18. shim          every `master.<name>` the repo's own Python reads
+                     resolves on master.py, which forwards to the four
+                     modules and refuses a name two of them define differently
 
     py verify_docs.py                       # every check except 10
     py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 10
@@ -476,26 +479,32 @@ def check_versions(mods) -> bool:
             bad.append("versions.md Current versions: %-28s says %-8s actual %s"
                        % (rel, m.group(1), actual[alias]))
 
-    # The master version is a literal in build_master.py, in two places, and
+    # The master version is `MASTER_VERSION` in master.py, typed once, and
     # versions.md quotes it in the same table.  It is not a dataclass field, so
-    # check 1 cannot reach it either.
-    bm = read(os.path.join(REPO, "build_master.py"))
-    lits = set(re.findall(r"MASTER ASTEROID PROFITABILITY PIPELINE - v"
-                          r"([0-9]+\.[0-9]+\.[0-9]+)", bm))
-    lits |= set(re.findall(r"Master Asteroid Profitability Pipeline "
-                           r"\(([0-9]+\.[0-9]+\.[0-9]+)\)", bm))
-    if len(lits) > 1:
-        bad.append("build_master.py master version disagrees with itself: %s"
-                   % sorted(lits))
-    elif lits:
-        want = lits.pop()
+    # check 1 cannot reach it either.  Until master v1.57.0 it was two literals
+    # in build_master.py, which this held to each other.
+    lits = re.findall(r'^MASTER_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"\s*$',
+                      read(os.path.join(REPO, "master.py")), re.M)
+    if len(lits) != 1:
+        bad.append("master.py: expected one `MASTER_VERSION = \"X.Y.Z\"` line, "
+                   "found %d" % len(lits))
+    else:
+        want = lits[0]
         mm = re.search(r"\|\s*`master\.py`\s*\|\s*\**([0-9]+\.[0-9]+\.[0-9]+)\**\s*\|",
                        versions)
         if mm:
             seen += 1
             if mm.group(1) != want:
-                bad.append("versions.md master.py says %-8s build_master.py has %s"
+                bad.append("versions.md master.py says %-8s master.py has %s"
                            % (mm.group(1), want))
+        # CLAUDE.md's "Current:" line names it too, and nothing held that copy.
+        mcm = re.search(r"master\s*`([0-9]+\.[0-9]+\.[0-9]+)`",
+                        mc.group(1)) if mc else None
+        if mcm:
+            seen += 1
+            if mcm.group(1) != want:
+                bad.append("CLAUDE.md Current: %-16s says %-8s master.py has %s"
+                           % ("master", mcm.group(1), want))
 
     # ---- the "moved without moving a number" tables, and the prose on them --
     # Both files carry this table and both spell its size out in words beside
@@ -819,7 +828,10 @@ def check_structure() -> bool:
 # -------------------------------------------------------------------- 6. dashes
 EM, EN = "—", "–"
 ROOT_PY = ["ui.py", "ui_meta.py", "orbital.py", "run_pipeline.py", "verify.py",
-           "build_master.py", "launch_ui.py", "platform_check.py",
+           # Hand-written since master v1.57.0, when build_master.py (which
+           # stood here) stopped generating it; the package init came with it.
+           "master.py", "modules/__init__.py",
+           "launch_ui.py", "platform_check.py",
            # verify_stage3.py was outside BOTH ratchets until 2026-09-15, which
            # is the "a file nothing checks is clean until it is not" state this
            # check exists to prevent, in the one harness that guards the
@@ -931,21 +943,22 @@ def check_manifests() -> bool:
     Neither of these is a dataclass default, so check 1 cannot reach them, and
     both have already drifted.  `run.bat help` shipped accepted-but-undocumented
     for several releases; requirements.txt asserts in its own first line that it
-    mirrors `_MASTER_REQUIRED`, and nothing was checking that.  The second is
-    not cosmetic: a miss means `pip install -r` builds a different environment
-    from the one the Colab paste auto-installs.
+    mirrors what the modules install, and nothing was checking that.  The
+    second is not cosmetic: a miss means `pip install -r` builds a different
+    environment from the one the modules auto-install at import.
     """
     bad, n = [], 0
 
-    # requirements.txt <-> _MASTER_REQUIRED (build_master.py writes it into
-    # master.py, which pip-installs it at import time).
+    # requirements.txt <-> the union of the four modules' `_REQUIRED_PKGS`,
+    # which each module pip-installs at import time.  This read build_master.py's
+    # `_MASTER_REQUIRED` until master v1.57.0, which retired the generated
+    # master.py and its installer; the union is what that list always restated.
     req_p = os.path.join(REPO, "requirements.txt")
-    bm_p = os.path.join(REPO, "build_master.py")
-    if os.path.exists(req_p) and os.path.exists(bm_p):
+    if os.path.exists(req_p):
         req = [ln.strip() for ln in read(req_p).split("\n")
                if ln.strip() and not ln.strip().startswith("#")]
         # A requirement line reduces to its DISTRIBUTION NAME, which is what
-        # `_MASTER_REQUIRED` lists.  Three forms appear here:
+        # `_REQUIRED_PKGS` lists.  Three forms appear here:
         #     numpy                     a bare name
         #     numpy>=1.24               a version specifier
         #     spacecost @ git+https://  a PEP 508 direct reference
@@ -958,7 +971,7 @@ def check_manifests() -> bool:
         req = [re.split(r"[<>=!~;\[]", r)[0].strip() for r in req]
 
         # ⚠️  A DISTRIBUTION NAME AND AN IMPORT NAME ARE NOT THE SAME STRING.
-        # `_MASTER_REQUIRED` lists IMPORT names, because it drives
+        # `_REQUIRED_PKGS` lists IMPORT names, because it drives
         # `__import__`; requirements.txt lists DISTRIBUTION names, because it
         # drives pip.  For every package here until 2026-09-22 those happened
         # to coincide, so the comparison could be a bare string match and was.
@@ -975,19 +988,29 @@ def check_manifests() -> bool:
             """A distribution name in PEP 503's normalised form."""
             return re.sub(r"[-_.]+", "-", name).lower()
 
-        m = re.search(r"_MASTER_REQUIRED\s*=\s*\[(.*?)\]", read(bm_p), re.S)
-        if m is None:
-            bad.append("build_master.py: no _MASTER_REQUIRED list found")
+        # Every module must declare its list: one that stopped matching would
+        # otherwise drop out of the union and the check would pass on three.
+        master, missing = set(), []
+        for _alias, _rel in MODULES.items():
+            m = re.search(r"^_REQUIRED_PKGS\s*=\s*\[(.*?)\]",
+                          read(os.path.join(REPO, _rel)), re.S | re.M)
+            if m is None:
+                missing.append(_rel)
+            else:
+                master.update(re.findall(r'"([^"]+)"', m.group(1)))
+        master = sorted(master)
+        if missing:
+            bad.append("no `_REQUIRED_PKGS = [...]` list found in %s"
+                       % ", ".join(missing))
         else:
-            master = re.findall(r'"([^"]+)"', m.group(1))
             n += 1
             if sorted(map(_norm, req)) != sorted(map(_norm, master)):
-                bad.append("requirements.txt %s != _MASTER_REQUIRED %s"
+                bad.append("requirements.txt %s != the modules' _REQUIRED_PKGS %s"
                            % (sorted(req), sorted(master)))
 
             # run.bat's dependency probe (`%PY% -c "import a,b,..."`) is the
             # third copy of this list.  It still demanded `pyarrow` two years
-            # of releases after `pyarrow` left `_MASTER_REQUIRED` (master
+            # of releases after `pyarrow` left the master's install list (master
             # v1.36.0), and did not ask for `spacecost`: a machine without
             # pyarrow was offered the same install on every launch, and the
             # install, from requirements.txt, never brought it.
@@ -1006,7 +1029,7 @@ def check_manifests() -> bool:
                     got = [x.strip() for x in probe.group(1).split(",")
                            if x.strip()]
                     if sorted(map(_norm, got)) != sorted(map(_norm, master)):
-                        bad.append("run.bat probes %s != _MASTER_REQUIRED %s"
+                        bad.append("run.bat probes %s != the modules' _REQUIRED_PKGS %s"
                                    % (sorted(got), sorted(master)))
 
     # README's `run.bat` block <-> the words run.bat's dispatcher accepts.
@@ -1168,8 +1191,8 @@ def check_manifests() -> bool:
             # Not a skip. The pin is supposed to be typed in several places, and
             # all of them going missing is the drift rather than a reason to pass.
             bad.append("no pinned %s ref found anywhere in the first-party "
-                       "files; it is typed in at least requirements.txt, "
-                       "build_master.py and a stage module" % _pkg)
+                       "files; it is typed in at least requirements.txt and "
+                       "the stage modules that install it" % _pkg)
         elif len(pins) > 1:
             bad.append("the pinned %s ref disagrees across %d copies: %s"
                        % (_pkg, sum(len(v) for v in pins.values()),
@@ -1231,20 +1254,21 @@ def check_manifests() -> bool:
             bad.append("README documents './run.sh %s', dispatcher rejects it"
                        % extra)
 
-    # CLAUDE.md's rename table <-> the `word_replace` calls `build_master.py`
-    # makes.  The table is what an editor reads before naming something in a
-    # module, and it listed `merge_sources -> merge_mineral_sources` for two
-    # releases' worth of audits after master v1.36.0 dropped that rename, so a
-    # reader avoiding a collision was avoiding one that no longer existed.
-    if os.path.exists(bm_p):
-        _bm = read(bm_p)
-        _labels = {"m1": "catalog", "m2": "mineral_value",
-                   "m3": "transportation", "m4": "calc"}
-        built: Dict[str, set] = {v: set() for v in _labels.values()}
-        for var, old, new in re.findall(
-                r'^(m[1-4])\s*=\s*word_replace\(\s*\1\s*,\s*"(\w+)"\s*,\s*"(\w+)"\s*\)',
-                _bm, re.M):
-            built[_labels[var]].add((old, new))
+    # CLAUDE.md's alias table <-> the aliases `master.py` binds
+    # (`CALC_CONFIG = calc.CONFIG`).  The table is what a reader of an entry
+    # point uses to find the module a `master.` name lives in.  Until master
+    # v1.57.0 it was a RENAME table checked against build_master.py's
+    # `word_replace` calls, and it listed `merge_sources -> merge_mineral_sources`
+    # for two releases' worth of audits after master v1.36.0 dropped that
+    # rename.  The shape is unchanged: the module's own name, then master's.
+    master_p = os.path.join(REPO, "master.py")
+    if os.path.exists(master_p):
+        _labels = ("catalog", "mineral_value", "transportation", "calc")
+        built: Dict[str, set] = {v: set() for v in _labels}
+        for new, label, old in re.findall(
+                r"^(\w+)\s*=\s*(catalog|mineral_value|transportation|calc)"
+                r"\.(\w+)\s*$", read(master_p), re.M):
+            built[label].add((old, new))
         claude_txt = read(os.path.join(REPO, "CLAUDE.md"))
         table: Dict[str, set] = {}
         for label, cell in re.findall(
@@ -1254,16 +1278,17 @@ def check_manifests() -> bool:
                 re.findall(r"`(\w+)`\s*->\s*`(\w+)`", cell))
         n += 1
         if not any(built.values()):
-            bad.append("build_master.py: no `mN = word_replace(mN, \"old\", "
-                       "\"new\")` call this check can read")
+            bad.append("master.py: no `ALIAS = module.NAME` line this check "
+                       "can read")
         for label in sorted(built):
             for old, new in sorted(built[label] - table.get(label, set())):
-                bad.append("build_master.py renames %s->%s in %s; CLAUDE.md's "
-                           "rename table does not list it" % (old, new, label))
+                bad.append("master.py aliases %s.%s as %s; CLAUDE.md's alias "
+                           "table does not list it" % (label, old, new))
             for old, new in sorted(table.get(label, set()) - built[label]):
-                bad.append("CLAUDE.md's rename table lists %s->%s in %s; "
-                           "build_master.py makes no such rename"
-                           % (old, new, label))
+                bad.append("CLAUDE.md's alias table lists %s->%s in %s; "
+                           "master.py binds no such alias" % (old, new, label))
+    else:
+        bad.append("master.py is missing, so the alias table was NOT checked")
 
     print("7. manifests   %d manifests checked, %d mismatched" % (n, len(bad)))
     for b in bad:
@@ -1545,10 +1570,10 @@ def check_runtime() -> bool:
 
 
 # ---------------------------------------------------------------- 11. docstrings
-# Every .py this repo owns.  master.py is excluded because it is GENERATED: its
-# contents are the four modules, which are checked here at source, and
-# build_master.py strips their module docstrings by design.
-FIRST_PARTY_PY = (["build_master.py", "run_pipeline.py", "ui.py", "ui_meta.py",
+# Every .py this repo owns.  master.py was excluded until master v1.57.0,
+# because build_master.py generated it from the four modules checked here.
+FIRST_PARTY_PY = (["master.py", "modules/__init__.py",
+                   "run_pipeline.py", "ui.py", "ui_meta.py",
                    "orbital.py",
                    "verify.py", "verify_stage3.py", "verify_stage1.py",
                    "tree_check.py",
@@ -2176,6 +2201,166 @@ def check_model_borrows() -> bool:
     return not findings
 
 
+# ---------------------------------------------------------------- 18. shim
+# How a file gets hold of the master module without spelling `import master`:
+# run_pipeline.py and verify.py call a loader, ui.py a cached one, and the
+# banner code reads it back out of sys.modules.
+_MASTER_LOADERS = {"load_master", "load_pipeline", "_loaded_master"}
+
+
+def _is_master_expr(node) -> bool:
+    """True for an expression that evaluates to the master module."""
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id in _MASTER_LOADERS):
+        return True
+
+    def _sys_modules(n):
+        """True for the expression `sys.modules`."""
+        return (isinstance(n, ast.Attribute) and n.attr == "modules"
+                and isinstance(n.value, ast.Name) and n.value.id == "sys")
+
+    if (isinstance(node, ast.Subscript) and _sys_modules(node.value)
+            and isinstance(node.slice, ast.Constant)
+            and node.slice.value == "master"):
+        return True
+    return (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get" and _sys_modules(node.func.value)
+            and node.args and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == "master")
+
+
+def master_reads(path: str) -> List[Tuple[int, str]]:
+    """Every `<alias>.<name>` read of the master module in one file, by scope.
+
+    An alias is a name bound to the module in this scope or an enclosing one:
+    `import master [as x]`, `x = load_master()`, `x = sys.modules["master"]`,
+    a parameter called `master`, or the parameter of a function in the same
+    file that some call passes an alias to (verify.py hands it around as `m`).
+    Scope-aware because `m` is also every regex match in this repo, and a
+    file-wide alias would read `m.group` as a borrowing.  It does not follow
+    the module across files, through a container, or into a method; that is
+    the largest thing it could be mistaken for covering.
+    """
+    tree = ast.parse(read(path))
+    scopes = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+    defs = {n.name: n for n in ast.walk(tree)
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    passed: Dict[str, set] = {}       # function name -> params given master
+
+    def own_nodes(scope):
+        """The nodes of `scope` that are not inside a nested scope."""
+        stack = list(ast.iter_child_nodes(scope))
+        while stack:
+            node = stack.pop()
+            yield node
+            if not isinstance(node, scopes):
+                stack.extend(ast.iter_child_nodes(node))
+
+    def visit(scope, inherited):
+        """Resolve this scope's aliases, record its reads, recurse."""
+        here = set(inherited)
+        if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            given = passed.get(getattr(scope, "name", None), set())
+            for arg in ast.walk(scope.args):
+                if isinstance(arg, ast.arg):
+                    if arg.arg == "master" or arg.arg in given:
+                        here.add(arg.arg)
+                    else:
+                        here.discard(arg.arg)
+        nodes = list(own_nodes(scope))
+        for node in nodes:
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    if a.name == "master":
+                        here.add(a.asname or a.name)
+            elif isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value:
+                targets = (node.targets if isinstance(node, ast.Assign)
+                           else [node.target])
+                for t in targets:
+                    if isinstance(t, ast.Name):
+                        if _is_master_expr(node.value):
+                            here.add(t.id)
+                        else:
+                            here.discard(t.id)
+        for node in nodes:
+            if (isinstance(node, ast.Attribute)
+                    and isinstance(node.value, ast.Name)
+                    and node.value.id in here
+                    and isinstance(node.ctx, ast.Load)):
+                found.append((node.lineno, node.attr))
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id in defs):
+                params = [a.arg for a in defs[node.func.id].args.args]
+                for i, arg in enumerate(node.args):
+                    if (isinstance(arg, ast.Name) and arg.id in here
+                            and i < len(params)):
+                        passed.setdefault(node.func.id, set()).add(params[i])
+                for kw in node.keywords:
+                    if isinstance(kw.value, ast.Name) and kw.value.id in here:
+                        passed.setdefault(node.func.id, set()).add(kw.arg)
+            if isinstance(node, scopes):
+                visit(node, here)
+
+    # Re-walk until no call hands master to a parameter not already known.
+    while True:
+        before = {k: set(v) for k, v in passed.items()}
+        found: List[Tuple[int, str]] = []
+        visit(tree, set())
+        if passed == before:
+            return sorted(set(found))
+
+
+def check_shim() -> bool:
+    """Every `master.<name>` the repo reads resolves, and resolves to one thing.
+
+    `master.py` stopped being the four modules concatenated at master v1.57.0
+    and became a shim that forwards each attribute to the module defining it.
+    A name no module defines is now an AttributeError at the moment some
+    entry point reaches it, which may be an hour into a run, and a name two
+    modules define differently (`CONFIG`, `validate`) is refused rather than
+    resolved.  This reads every first-party file's master reads off its AST,
+    imports master once, and resolves each of them, so both failures show up
+    here first.
+
+    Importing master needs the third-party packages but no catalog.  A
+    SyntaxError in this repo's own source is a failure; any other import
+    failure is a skip, as in checks 8 and 9, and CI's `import master` step is
+    what stops that skip from being the only answer CI ever gives.
+    """
+    gone = absent(FIRST_PARTY_PY)
+    reads: Dict[str, List[Tuple[str, int]]] = {}
+    for rel in FIRST_PARTY_PY:
+        p = os.path.join(REPO, rel)
+        if rel == "master.py" or not os.path.exists(p):
+            continue
+        for line, name in master_reads(p):
+            reads.setdefault(name, []).append((rel, line))
+    try:
+        sys.path.insert(0, REPO)
+        with contextlib.redirect_stdout(io.StringIO()):
+            import master as _m
+    except SyntaxError as exc:
+        print("18. shim       FAILED (%s in this repo's own source: %s)"
+              % (type(exc).__name__, exc))
+        return False
+    except Exception as exc:                       # noqa: BLE001
+        print("18. shim       SKIPPED (%s: %s)" % (type(exc).__name__, exc))
+        return not gone
+
+    bad = ["%s is not on disk" % g for g in gone]
+    for name in sorted(reads):
+        try:
+            getattr(_m, name)
+        except AttributeError as exc:
+            where = ", ".join("%s:%d" % w for w in reads[name][:3])
+            bad.append("master.%s (%s): %s" % (name, where, exc))
+    print("18. shim       %d master reads of %d names, %d unresolved"
+          % (sum(map(len, reads.values())), len(reads), len(bad)))
+    for b in bad:
+        print("     ! " + b)
+    return not bad
+
+
 def check_destination_table() -> bool:
     """MODEL.md's destination table, against `master.DELIVERY_DESTINATIONS`.
 
@@ -2373,7 +2558,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                check_prose_numbers,
                check_overwrite_guards,
                check_model_borrows,
-               check_destination_table):
+               check_destination_table,
+               check_shim):
         ok = fn() and ok
     if args.before:
         if len(args.before) < 2:

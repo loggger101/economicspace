@@ -18,7 +18,6 @@ capture, is in [MODEL.md](MODEL.md); the release history is in
 - [Start here](#start-here)
 - [Layout](#layout)
 - [Running it](#running-it)
-- [Rebuilding master.py](#rebuilding-masterpy)
 - [Verifying a change](#verifying-a-change)
 - [Working copy](#working-copy)
 - [Output](#output)
@@ -37,14 +36,14 @@ control panel it puts up is what you close when you are done.
 | you are on | open this | what you get |
 |---|---|---|
 | **Windows, no terminal** | **`_START HERE.vbs`** (double-click) | the dashboard, and nothing else to think about |
-| Windows, a terminal | `run.bat` | a menu over the dashboard, the headless runs, verification and the build |
+| Windows, a terminal | `run.bat` | a menu over the dashboard, the headless runs and verification |
 | Linux or macOS | `./run.sh` | the same menu, POSIX |
 | any host, scripted | `py run_pipeline.py --preset quick` | one headless run, no menu |
 
-⚠️  **`master.py` is not the entry point**, though it is the biggest file here
-and looks like one. It is generated, it is what the four launchers above drive,
-and editing it is destroyed by the next build. If you opened it looking for the
-start button, close it and double-click `_START HERE.vbs`.
+⚠️  **`master.py` is not the entry point**, though its name makes it look like
+one. It is the import surface the four launchers above drive: it imports the
+four stage modules and runs nothing when imported. If you opened it looking for
+the start button, close it and double-click `_START HERE.vbs`.
 
 The dashboard opens ready to re-run Stage 4 against the catalogs already on
 disk, which is the loop you want almost every time; press **Quick sample** in
@@ -60,7 +59,6 @@ launch_ui.py           What it runs -- hands ui.py to quietlaunch, which owns th
 run.bat                Windows launcher: a terminal menu over everything below
 run.sh                 Linux / macOS launcher: the same options, POSIX
 run_pipeline.py        Headless CLI the launcher drives (presets + flags)
-build_master.py        Build tool: assembles modules/ into master.py
 verify.py              Release verification: the checks every change runs
 verify_stage3.py       Stage 3 verification: this repo and spacecost agree
 verify_stage1.py       Stage 1 verification: the pinned catalog release, installed
@@ -72,12 +70,13 @@ platform_reference.json  What it compares against, recorded on the ref host
 requirements-lock.txt  The exact versions every committed number was measured on
 Dockerfile             Container image for a second host. No CUDA layer, on purpose
 SPARK_SETUP.md         Standing this up on a DGX Spark (aarch64 Linux)
-master.py              GENERATED single-file pipeline - do not edit by hand
+master.py              Import surface: the four modules, their configs, the orchestrator
 ui.py                  Streamlit front end (optional): configure, run, inspect
 ui_meta.py             Config introspection + curation for ui.py
 orbital.py             Elements to state vectors, numpy only; ui.py's orbit
                        diagram draws with it
-modules/
+modules/               A package: master.py imports it
+    __init__.py        Console encoding and worker quiet mode; imports no stage
     catalog.py         Stage 1 - asteroid catalog
     mineral_value.py   Stage 2 - mineral prices + densities
     transportation.py  Stage 3 - ADAPTER over the spacecost package
@@ -146,12 +145,11 @@ the data is single-sourced, the config dials are compared at import, and
 the output is compared byte for byte. The invariants are in
 [CLAUDE.md](CLAUDE.md#stage-1-and-stage-3-live-in-other-repositories).
 
-**spacecost is pinned to a tagged release**, `v0.12.0`, in all seven places
-that type it: as a URL in `requirements.txt`, in `_MASTER_PIP_SPEC` in
-`build_master.py`, and in `_PIP_SPEC` in both `modules/transportation.py` and
-`modules/mineral_value.py` (what a standalone module run installs from, and
-Stage 2 reaches the package directly now); and in prose here, in
-[CLAUDE.md](CLAUDE.md) and in [CITATIONS.md](CITATIONS.md).
+**spacecost is pinned to a tagged release**, `v0.12.0`, in all six places
+that type it: as a URL in `requirements.txt`, and in `_PIP_SPEC` in both
+`modules/transportation.py` and `modules/mineral_value.py` (what each module
+installs from at import, and Stage 2 reaches the package directly now); and in
+prose here, in [CLAUDE.md](CLAUDE.md) and in [CITATIONS.md](CITATIONS.md).
 
 ### Stage 1 downloads the catalog; it does not build it
 
@@ -189,10 +187,8 @@ py verify_stage1.py
 ```
 
 `run.bat`, `run_pipeline.py`, `ui.py` and `ui_meta.py` sit at the root rather
-than in `modules/` on purpose:
-`build_master.py` concatenates everything in that directory into `master.py`
-and asserts a specific header/footer shape on each file. All four are
-consumers of the built `master.py`, not stages of it.
+than in `modules/` on purpose: that package holds the four stages and nothing
+else, and all four are consumers of `master.py`, not stages of it.
 
 Each module is a standalone file: run it directly to build just that stage, or
 import it for its functions without triggering a run. They share no Python
@@ -252,7 +248,6 @@ semantics, so `./run.sh quick leo` does what `run.bat quick leo` does:
 ./run.sh setup     create .venv and install the pinned requirements
 ./run.sh platform  can this host reproduce the committed numbers (~10 s)
 ./run.sh inputs    are the CSVs Stage 4 reads on disk (fetches nothing)
-./run.sh build     rebuild master.py from modules/
 ./run.sh quick     400-row sample, all four stages
 ./run.sh rerun     Stage 4 only, against the catalogs already on disk
 ./run.sh standard  20,000-row sample, Stage 4 only
@@ -287,7 +282,7 @@ does not carry.
 ### On Windows, from a terminal: `run.bat`
 
 `run.bat` is the whole pipeline behind a menu -- the same dashboard, plus the
-headless runs, verification and the build. It finds Python, offers to install
+headless runs and verification. It finds Python, offers to install
 anything missing, and dispatches. It takes an argument if you would rather skip
 the menu:
 
@@ -299,13 +294,12 @@ run.bat rerun      Stage 4 only, against the catalogs already on disk
 run.bat standard   20,000-row sample, Stage 4 only
 run.bat full       THE PIPELINE DEFAULTS (3.2 h at cislunar, 6.1 h at earth_surface)
 run.bat verify     verify_stage3.py, then verify.py against the baseline
-run.bat build      rebuild master.py from modules/
 run.bat help       run_pipeline.py --help
 ```
 
 It is a launcher and nothing else. Four of its options go through
 `run_pipeline.py` and one through the dashboard, and from there through
-`master.py`; `verify` calls `verify.py` and `build` calls `build_master.py`.
+`master.py`; `verify` calls `verify.py`.
 No model behaviour lives in it, and it adds no default the pipeline does not
 already have, except that `quick` and `standard` cap rows and fly raw ore at
 N = 1 rather than starting the multi-hour default cell on a double-click.
@@ -406,7 +400,7 @@ On Windows, invoke the launcher `py` rather than `python`, a bare `python`
 hits the Microsoft Store alias and exits without running anything. Every
 `python …` command below becomes `py …`.
 
-Run the whole pipeline as one self-contained file:
+Run all four stages in order:
 
 ```bash
 python master.py
@@ -418,8 +412,8 @@ Or run a single stage:
 python modules/transportation.py
 ```
 
-`master.py` is also designed to be pasted straight into a Colab or Jupyter cell,
-it auto-installs its own dependencies and runs top-to-bottom.
+Each module installs whatever it is missing from its own `_REQUIRED_PKGS` when
+it is imported, so either form works on a fresh interpreter.
 
 ### The UI
 
@@ -682,10 +676,12 @@ Leave `parallel_workers` at `0` unless you have a reason:
 - **A specific count** is obeyed, clamped to the CPU count.
 
 Auto mode will not start a worker that cannot repay its own startup, so short
-interactive runs stay serial. That matters more than it sounds: startup is
-~1.1 s per worker and **linear**, because each worker re-imports the 590 kB
-`master.py` (Windows has no fork), and on a Google Drive working copy those
-reads serialise. At 3,000 beneficiated rows, twelve workers is slower end to
+interactive runs stay serial. That matters more than it sounds: startup was
+measured at ~1.1 s per worker and **linear**, because each worker re-imported
+the 590 kB generated `master.py` (Windows has no fork), and on a Google Drive
+working copy those reads serialise. Since master v1.57.0 a worker imports
+`modules.calc` alone, and that figure has not been re-measured. At 3,000
+beneficiated rows, twelve workers was slower end to
 end than six. The useful ceiling is the **physical** core count, hyperthreading
 adds ~17% on this branch-heavy pure-Python workload, not 2×.
 
@@ -706,34 +702,15 @@ assert sys.modules.get("master") is m and m.__spec__ is not None
 If your driver script re-runs itself once per worker, that is why; the full
 account is in [LESSONS.md](LESSONS.md#entry-points).
 
-## Rebuilding master.py
+### What master.py is
 
-`master.py` is **generated**. Edit the modules, then:
-
-```bash
-python build_master.py
-```
-
-The build strips each module's docstring, auto-install block, and
-`RUN & PREVIEW` section, renames each `CONFIG` global to a unique name
-(`CATALOG_CONFIG`, `MINERAL_CONFIG`, `TRANSPORT_CONFIG`, `CALC_CONFIG`),
-resolves cross-module function-name collisions, then syntax-checks the result.
-The build fails loudly rather than emitting a silently-wrong `master.py`.
-
-Paths are resolved relative to `build_master.py`, so the repo works from any
-location.
-
-After writing `master.py` the build re-parses it and reports any top-level
-name defined twice. Python silently lets the last definition win, so a
-collision introduced by a module edit would otherwise land unnoticed and the
-master would quietly run the wrong function; syntax-checking cannot see it.
-A clean build ends with `names : no unexpected shadowed definitions`. If it
-instead lists a name, either add a `word_replace()` rename in `build_master.py`
-or, if the duplication is deliberate and identical in every copy, add the name
-to `_EXPECTED_DUPES`.
-
-Commit the rebuilt `master.py` alongside the module change; it is tracked,
-and `git status` after a build is the check that the two are in sync.
+`master.py` is not generated. Until master v1.57.0 a build script concatenated
+the four modules into it so it could be pasted into Colab; now it imports them
+from the `modules` package, names each config the way the entry points always
+have (`CATALOG_CONFIG`, `MINERAL_CONFIG`, `TRANSPORT_CONFIG`, `CALC_CONFIG`),
+and forwards any other `master.<name>` to the module that defines it. A name
+two modules define differently, such as `CONFIG`, is refused rather than
+resolved. Edit a module and commit it; there is nothing to rebuild.
 
 ## Verifying a change
 
@@ -772,7 +749,7 @@ subset.
 🚨  **`check` refuses a baseline taken over a modified model path.** Baseline a
 tree that already carries the change and check 1 compares the change against
 itself and prints **MATCH** on every cell. `baseline` records its commit and
-whether `modules/`, `build_master.py` or `master.py` differed from HEAD, by
+whether `modules/` or `master.py` differed from HEAD, by
 `git diff` and never `git status` (which reports phantom changes on a synced
 folder). Pass `--allow-dirty-baseline` only when the edit really was
 unrelated. Docs, harnesses and campaign scripts are not model paths. Cells are
@@ -869,7 +846,7 @@ subset that needs no catalog runs on every push and pull request, in
 
 | step | why it can run there |
 |---|---|
-| `master.py` is in sync with `modules/` | rebuild, then `git diff --exit-code`; it needs no inputs |
+| `import master` | imports the four modules and builds the configs; Stage 1's taxonomy tables are empty without a catalog, which nothing at import reads |
 | `verify_docs.py` | reads the docs and the dataclasses; builds no stage |
 | `verify_stage3.py` | builds into a temp dir, needs no network, and CI checks out `spacecost` at the pinned tag so its reference check RUNS rather than skipping |
 | `platform_check.py` | **report only, never a gate** |
@@ -992,8 +969,8 @@ git config core.hooksPath .githooks
 ```
 
 `.gitattributes` pins `*.py`, `*.md` and the other text sources to LF, because
-the sources get pasted into Colab and Jupyter, and Git for Windows sets
-`core.autocrlf=true` in its system config by default.
+Git for Windows sets `core.autocrlf=true` in its system config by default and a
+rewrite to CRLF would put every line of every source into one diff.
 
 ## Output
 

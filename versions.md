@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.57.0](#master-v1570)
 - [master v1.56.0 / catalog v1.10.0](#master-v1560--catalog-v1100)
 - [master v1.55.0 / calc v1.32.0 / transportation v1.23.0](#master-v1550--calc-v1320--transportation-v1230)
 - [master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0](#master-v1540--calc-v1310--mineral_value-v1160)
@@ -110,7 +111,7 @@ one that does not say is not to be used.
 | 2 | `modules/mineral_value.py` | **1.16.0** | v1.16.0, an eighth destination, `gto`: its note, `geo`'s utility profile by reference, a sourced 81.6 t/yr demand ceiling, and an import-time check that every in-space destination has one; no existing row moved (v1.13.0 was the last to move a row) |
 | 3 | `modules/transportation.py` | **1.23.0** | v1.23.0, an ISRU processing energy on every propellant row that can be made on site (hydrolox 15,200 Wh/kg) and an ISRU plant throughput row; no existing value moved: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.32.0** | v1.32.0, ISRU hydrolox pays for its electrolysis and liquefaction (energy through the array, plant with the rig), and the flat $50/kg is retired; v1.31.0 had added an eighth destination, `gto` |
-| - | `master.py` | **1.56.0** | a literal in `build_master.py`, in **two** places |
+| - | `master.py` | **1.57.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -199,6 +200,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.57.0](#master-v1570) | 2026-10-25 | **`master.py` stops being generated**: `modules/` becomes a package and `master.py` a shim that imports it, so `build_master.py`, its rename table and the commit-both rule go; no module stamp moves and every cell is bit-identical |
 | [master v1.56.0 / catalog v1.10.0](#master-v1560--catalog-v1100) | 2026-10-21 | **Stage 1 repins to `data-2026-10-21b`**, data contract 1.10.0: the S complex's PGM factor 1.0 to 1.55 and the primitive types' carbon 0.25-0.30 to 0.04; `earth_surface`'s sampled S bodies better by a median 18-21%, its default best becomes 2018 RT1, and the in-space destinations move by hundredths of a percent |
 | [master v1.55.0 / calc v1.32.0 / transportation v1.23.0](#master-v1550--calc-v1320--transportation-v1230) | 2026-10-17 | **making ISRU propellant costs energy and a plant**: hydrolox pays 15,200 Wh/kg through the array and a plant with the rig, and the flat $50/kg is retired; the one sampled hydrolox ISRU winner gets worse and the water ISRU rows a fraction of a percent better |
 | [master v1.54.0 / calc v1.31.0 / mineral_value v1.16.0](#master-v1540--calc-v1310--mineral_value-v1160) | 2026-10-15 | **an eighth destination, `gto`**: a refuelling depot in geostationary transfer orbit; no existing number moved, and `gto` has not been run on the full catalog |
@@ -263,6 +265,77 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.57.0
+
+**`master.py` is no longer generated.** Since the project began it was the four
+modules concatenated by `build_master.py` into one file, so the pipeline could
+be pasted into a Colab cell. Nothing pastes it any more, and the concatenation
+had a standing cost: a whole-word rename table that rewrote comments and
+strings too, a duplicate-name scan with its allowlist, a second copy of every
+module change in every diff, a rebuild-and-commit-both rule, CI's sync step,
+and a second package installer. `modules/` is now a package and `master.py` a
+hand-written shim over it. No module's `pipeline_version` moves.
+
+### What changes here
+
+- **`master.py`** imports the four modules in stage order, binds the seven names
+  the entry points have always used (`CALC_CONFIG = calc.CONFIG`,
+  `validate_minerals = mineral_value.validate`, ...), keeps `MasterConfig`,
+  the MASTER CONFIG READY banner and `run_full_pipeline` (extracted from the
+  old build script's template and diffed against it, not retyped), and
+  forwards every other `master.<name>` to the module that defines it through a
+  module `__getattr__`. A name two modules bind to different objects is
+  **refused** with both modules named (`master.CONFIG`, `master.validate`),
+  where the concatenated file let the last definition win. `MASTER_VERSION` is
+  the one place the master version is typed. `MASTER_AUTORUN` is gone; `python
+  master.py` still runs all four stages.
+- **`modules/__init__.py`** carries the two blocks the generated header ran
+  before anything printed: the UTF-8 console fix and the spawned-worker quiet
+  guard. It imports no module, because a Stage 4 worker now imports
+  `modules.calc` alone instead of the whole pipeline.
+- **`stamp_check`** found the other stages' configs through `globals()`, which
+  only the concatenated file had. Under the package that lookup finds nothing
+  and would have skipped every comparison in silence; `_CATALOG_PROVENANCE`
+  now names the owning module and the version is read off `sys.modules`. A
+  standalone `python modules/calc.py` still skips, as before.
+- No master-level installer. Each module already installs its own
+  `_REQUIRED_PKGS` and checks its spacecost pin at import, as it did when run
+  alone; `_MASTER_REQUIRED` and `_MASTER_PIP_SPEC` go, so the spacecost pin is
+  typed in six places, not seven.
+- Three printed hints named a renamed config (`... in CALC_CONFIG`,
+  `edit MINERAL_CONFIG.metals_api_key`) only because the build's rename rewrote
+  strings too; they name the dataclass now. Console text, no stamp.
+- `run.bat` loses menu option 7 and the `build` word (help is option 7), and
+  `run.sh` its `build`. CI's rebuild-and-diff step becomes a hard
+  `import master`.
+- **`verify_docs.py`**: check 2 reads `MASTER_VERSION` and now also holds
+  CLAUDE.md's `Current:` copy of it, which nothing checked; check 7 holds
+  `requirements.txt` and `run.bat`'s probe to the union of the modules'
+  `_REQUIRED_PKGS`, and CLAUDE.md's alias table to the shim's aliases; checks 6
+  and 11 cover `master.py` and `modules/__init__.py`; and **check 18** reads
+  every `master.<name>` the repo's own Python reaches (following an alias into
+  a function's parameter, as `verify.py` passes it) and resolves each one on
+  the shim.
+
+### Verified
+
+| harness | result |
+|---|---|
+| `verify.py check` against a 1.56.0 baseline taken on the clean tree first | MATCH on all four cells (151/151 columns, the v1.55.0 hashes), prune on/off and serial/parallel MATCH, mass ledger 0 kg, never-worse 0 worse, Stage 2 tables identical, market ceilings clean: ALL CHECKS PASSED |
+| an import of the old generated file beside the shim | 358 top-level names compared; every one resolves. The differences are the intended ones (`stamp_check`, `_CATALOG_PROVENANCE`, the banner's version, the aliases' own names), fresh sentinels and caches, and the three printed hints above |
+| `stamp_check`, planted | a doctored `minerals` stamp is reported through master; a standalone `calc` import skips it, as before; the real on-disk lag (Stage 2's CSV at 1.15.0, deliberate since 1.16.0 moved no row) gets the same line from the old file and the shim |
+| `verify_docs.py` check 18, planted | `master.validate`, `master.no_such_name` and `m.CONFIG` reached through a parameter: all three FAILED |
+| `verify_docs.py` check 7, before the doc edits | six pin copies found against "seven" in README and CLAUDE.md; check 2 caught versions.md's master row and a planted CLAUDE.md copy |
+| a 3,000-row Stage 4 through `run_pipeline.py`, 4 workers | exit 0, empty stderr, no worker banner in the log |
+| the dashboard, Stage 4 with `parallel_workers=4` | "4 worker processes" in its run log, 356 rows in 46.9 s, and no worker re-ran the app (the hazard `_spawn_environment` exists for) |
+| `verify_stage1.py`, `verify_stage3.py` | both verified; Stage 3's reference check against a clean `v0.12.0` clone |
+
+### What did not change
+
+- catalog `1.10.0`, mineral_value `1.16.0`, transportation `1.23.0`, calc
+  `1.32.0`: no CSV byte can move, and none did.
+- spacecost stays at `v0.12.0`, the catalog at `data-2026-10-21b`.
 
 ## master v1.56.0 / catalog v1.10.0
 

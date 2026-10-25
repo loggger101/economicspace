@@ -1,9 +1,9 @@
 # The campaign runner (campaign/run_queue.py, _supervisor.py, memwatch.py and
 # _pause.ps1), split out of this repo into quietqueue.
 #
-# Deliberately NOT merged into requirements.txt: that file mirrors
-# _MASTER_REQUIRED in master.py, which auto-installs its contents at import
-# time, and no pipeline run needs a job runner.
+# Deliberately NOT merged into requirements.txt: that file mirrors what the
+# four modules auto-install at import time, and no pipeline run needs a job
+# runner.
 #
 #     pip install --no-deps -r requirements-campaign.txt
 #

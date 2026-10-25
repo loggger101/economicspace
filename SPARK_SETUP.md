@@ -151,9 +151,9 @@ order: can this host build the environment, does its arithmetic agree with the
 reference host, and are the files Stage 4 reads even on the disk.
 
 **The venv is not optional on Ubuntu 24.04**, which is the one thing here that
-is a distribution property rather than a preference. `master.py` pip-installs
-anything in `_MASTER_REQUIRED` that is missing, at import, and it does so with
-`check_call`, so a failure is an exception before the first stage. Recent
+is a distribution property rather than a preference. Each stage module
+pip-installs anything in its `_REQUIRED_PKGS` that is missing, at import, and it
+does so with `check_call`, so a failure is an exception before the first stage. Recent
 Debian and Ubuntu mark the system interpreter externally managed (PEP 668) and
 refuse exactly that install. Inside `.venv` the question does not arise, and
 `run.sh` prefers `.venv/bin/python` over anything on PATH for this reason.
