@@ -275,23 +275,6 @@ import pandas as pd
 
 import spacecost
 
-# NEVER SPELL A NAME THE BUILD REWRITES.  `build_master.py` concatenates the
-# four stage modules into `master.py` and resolves collisions with
-# `word_replace`, a whole-word regex over the ENTIRE file text -- comments and
-# string literals included, not only code.  For this module it rewrites two
-# words: the config global, and the sanity-check function Module 2 also
-# defines.
-#
-# ALIASING THE LOCAL NAME IS NOT ENOUGH, and that is the trap.  In
-# `from spacecost import X as _y` the imported name X is still a bare word, so
-# it gets rewritten too and the import then fails against a package with no
-# such attribute.  That happened here, on the first build, and it surfaced in a
-# docs check rather than in anything looking at Stage 3.
-#
-# The package exports a collision-proof second name for the one function that
-# collides, and that is what is imported.  Everywhere else in this file, reach
-# the package through `spacecost.` -- and read the built master.py rather than
-# assuming, because this file and its concatenated copy are not the same text.
 from spacecost import validate_tables as _spacecost_validate
 from spacecost import build_catalog as _spacecost_build_catalog
 
@@ -469,10 +452,8 @@ ENVIRONMENTS_REFERENCE      = spacecost.ENVIRONMENTS_REFERENCE
 # arguments is a layer with no reader: `help()` on it would show this file's
 # paraphrase instead of the real docstring.
 #
-# `build_master.py` rewrites this name on the way into master.py, because
-# Module 2 defines one that collides.  That rewrite is exactly why the target is
-# imported under a private alias at the top of this file, and why the package
-# exports a second, collision-proof name for it.
+# Module 2 defines a `validate` too, so `master.validate` is refused as
+# ambiguous; master.py binds this one as `validate_transport`.
 validate = _spacecost_validate
 
 

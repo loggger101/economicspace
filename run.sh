@@ -61,7 +61,6 @@ usage() {
     ./run.sh setup    [--loose]    create .venv and install requirements
     ./run.sh platform              check this host can reproduce the numbers
     ./run.sh inputs                check the Stage 1-3 CSVs Stage 4 reads
-    ./run.sh build                 rebuild master.py from modules/
 
     ./run.sh quick      [dest]     small capped run, all four stages
     ./run.sh rerun      [dest]     Stage 4 only, against the catalog on disk
@@ -137,8 +136,9 @@ YES=""
 #
 #  The campaign runner, quietqueue, is pinned in requirements-campaign.txt and
 #  its one dependency, psutil, in the lock file; neither is in
-#  requirements.txt, which asserts in its own first line that it mirrors
-#  _MASTER_REQUIRED and is checked against it by verify_docs.py check 7.  Only
+#  requirements.txt, which asserts in its own first line that it mirrors the
+#  modules' _REQUIRED_PKGS and is checked against them by verify_docs.py
+#  check 7.  Only
 #  the campaign uses them, and the pipeline must not grow a dependency for a
 #  tool it does not use.  The campaign's shims refuse to run on any other
 #  quietqueue than the pinned one and never install it, so setup does.
@@ -168,7 +168,7 @@ cmd_setup() {
     # a tagged git URL, which --only-binary refuses by construction. So the
     # lock install alone produces a venv without `spacecost`, where Stages 2
     # and 3 both fail, and the only reason that has never been seen is that
-    # master.py auto-installs whatever is missing at import -- a git fetch, at
+    # the modules auto-install whatever is missing at import -- a git fetch, at
     # run time, inside the environment whose whole purpose is to be the one
     # the numbers were measured on. They are installed here instead, from the
     # lines requirements.txt and requirements-campaign.txt already carry, so
@@ -270,7 +270,6 @@ case "$ACTION" in
   setup)     cmd_setup "$@" ;;
   platform)  exec "$PY" platform_check.py "$@" ;;
   inputs)    cmd_inputs ;;
-  build)     exec "$PY" build_master.py ;;
   verify)    cmd_verify ;;
   campaign)  cmd_campaign "$@" ;;
   help|--help|-h)

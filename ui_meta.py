@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """Config introspection and curation for the pipeline UI.
 
-Deliberately NOT in `modules/`: `build_master.py` concatenates every module in
-that directory into `master.py` and asserts a specific header/footer shape on
-each one. The UI is a *consumer* of `master.py`, not a part of it, so it lives
-at the repo root alongside `build_master.py`.
+Deliberately NOT in `modules/`, which holds the four stage modules and nothing
+else. The UI is a *consumer* of `master.py`, not a part of it, so it lives at
+the repo root alongside `master.py`.
 
 Two jobs:
 
@@ -34,8 +33,8 @@ from typing import Any, Dict, List, Optional, Tuple
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Which module source backs each config, for comment scraping. The class names
-# are the *module* names, not the renamed master.py globals: build_master.py
-# renames the CONFIG instances, not the classes.
+# are the *module* names, not master.py's aliases: master.py renames the CONFIG
+# instances (`CALC_CONFIG = calc.CONFIG`), not the classes.
 CONFIG_SOURCES: Dict[str, Tuple[str, str]] = {
     "catalog":   (os.path.join(_HERE, "modules", "catalog.py"),        "CatalogConfig"),
     "mineral":   (os.path.join(_HERE, "modules", "mineral_value.py"),  "MineralValueConfig"),

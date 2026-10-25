@@ -9,10 +9,9 @@ This is what `run.bat` drives, and it is a thin wrapper: every knob it exposes
 is a field on one of the four config dataclasses, set through MASTER_CONFIG
 before the stage builders are called.  It adds no model behaviour of its own.
 
-DELIBERATELY NOT IN `modules/`.  `build_master.py` concatenates that directory
-into `master.py` from four explicit paths and asserts a header/footer shape per
-module; this is a consumer of the built `master.py`, exactly as `ui.py` and
-`verify.py` are.
+DELIBERATELY NOT IN `modules/`, which holds the four stage modules and nothing
+else.  This is a consumer of `master.py`, exactly as `ui.py` and `verify.py`
+are.
 
 THREE THINGS IT HAS TO GET RIGHT, all of them traps this repo has already hit:
 
@@ -156,7 +155,7 @@ STAGE_NAMES = {
 
 
 def load_master():
-    """Import the built master.py in the one way the worker pool tolerates.
+    """Import master.py in the one way the worker pool tolerates.
 
     See trap 1 in the module docstring.  The assert is what turns a silent
     fan-out of this script into a failure that names itself.

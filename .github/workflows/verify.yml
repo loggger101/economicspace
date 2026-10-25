@@ -4,8 +4,8 @@
 # a fresh clone has the code and none of the gigabytes Stage 4 reads.  That rules
 # out `verify.py`, whose checks 1-5 all build cells; it stays a local
 # pre-commit harness run against a `.verify` baseline.  What CI can prove is
-# everything that needs no catalog: that `master.py` still matches the modules
-# it is generated from, that the docs still describe the code, that the
+# everything that needs no catalog: that `master.py` still imports the modules
+# it re-exports, that the docs still describe the code, that the
 # pinned catalog release exists at our data contract, and that the Stage 3
 # split has not drifted.  All but the Stage 1 check (added with the pinned
 # release, 2026-09-23) were hand-run until 2026-09-15, and therefore ran only
@@ -85,13 +85,11 @@ jobs:
       - name: Working tree matches the index
         run: python tree_check.py
 
-      # CLAUDE.md names this as the sync check and nothing automated it:
-      # "`git status` clean after a build is the sync check".  An edit made in
-      # master.py directly, or
-      # a module edit committed without a rebuild, is invisible until a run
-      # behaves differently.
-      - name: master.py is in sync with modules/
-        run: python build_master.py && git diff --exit-code -- master.py
+      # A hard step on purpose: verify_docs.py check 18 resolves every
+      # `master.<name>` the repo reads, but it SKIPS when the import fails,
+      # and a skip on every CI run is a check that does not exist.
+      - name: master.py imports
+        run: python -c "import master"
 
       - name: Documentation checks
         run: python verify_docs.py

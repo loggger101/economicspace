@@ -241,9 +241,9 @@ def check_output(t, tmp) -> bool:
 def _pinned_tag() -> str:
     """The `spacecost` tag `requirements.txt` pins, read rather than typed.
 
-    One source: `requirements.txt` says in its own header that it mirrors
-    `_MASTER_REQUIRED`, and `verify_docs.py` check 7 holds the two to each
-    other, so reading it here adds no third copy.  Typing the tag into this
+    One source: `requirements.txt` says in its own header that it mirrors the
+    modules' `_REQUIRED_PKGS`, and `verify_docs.py` check 7 holds the two to
+    each other, so reading it here adds no third copy.  Typing the tag into this
     file would make it the fourth place a repin has to land, and the release
     note for the split already lists three.
     """

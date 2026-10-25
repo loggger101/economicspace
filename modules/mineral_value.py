@@ -412,46 +412,15 @@ _REF_PRICE_DATE = "2026-05-29"
 #
 # Material sold in space is worth the launch cost it AVOIDS.  That number is
 # not asserted here; it is derived from the rocket equation, from the Δv
-# ladder in Module 3's DELTA_V_REFERENCE, and from a real launch price.
-#
-# 🚨  EVERY CONSTANT AND EVERY LEG THAT USED TO BE HERE IS IN
-# `spacecost.delivery` NOW, AND THE SENTENCE THAT STOOD HERE IS WHY:
-#
-#     Constants below are cross-referenced to Module 3.  They are duplicated
-#     rather than imported because Module 2 runs BEFORE Module 3 in the
-#     pipeline order (and in the concatenated master.py), so the tables are
-#     not in scope.  If you change one of these, change it in Module 3 too.
-#
-# Nine delta-v retyped by hand, a launch price retyped by hand, three cost
-# lines retyped by hand, and a manual-sync instruction holding them together.
-#
-# ⚠️  THE JUSTIFICATION DIED WHEN STAGE 3 BECAME A PIP PACKAGE, AND IT TOOK
-# TWO RELEASES TO NOTICE.  A package has no position in a pipeline: master.py
-# installs spacecost in its header, before any stage's code runs, so this
-# module imports it exactly as Module 4 does, and a standalone `py
-# modules/mineral_value.py` fetches it from the install block at the top of
-# this file.  Concatenation order was the whole argument, and concatenation
-# order stopped applying.  The general lesson is the one this repo keeps
-# paying for: a comment explaining why two copies exist is not a reason they
-# still have to.
+# ladder in Module 3's DELTA_V_REFERENCE, and from a real launch price.  Every
+# constant and every leg of that derivation lives in `spacecost.delivery`.
 #
 # ⚠️  THE NAMES BELOW STAY BOUND ON PURPOSE, they are not leftovers.
 # `campaign/worked_calculation.py` reaches `master._DELIVERY_LEGS`,
 # `master._LEO_USD_PER_KG` and `master.delivered_cost_usd_per_kg`, and carries
 # all three on its `BORROWED` register.  Re-exporting is what keeps that
 # reader working, so deleting an alias here is a breaking change for it rather
-# than a tidy-up.
-#
-# ⚠️  NEVER SPELL A WORD THE BUILD REWRITES.  `build_master.py` renames three
-# of this module's top-level names on the way into master.py -- the config
-# global, the source-merge helper and the sanity-check function -- as WHOLE
-# WORDS over the entire file text, comments and string literals included.
-# They are deliberately not spelled out in this paragraph: an earlier draft
-# named one, and in master.py the warning came out naming the RENAMED word
-# instead, which is the same comment-rewriting trap arriving inside the
-# comment about it.  `build_master.py` is the list.  Reach the package
-# through `spacecost.`, and read the built master.py rather than this file,
-# because they are not the same text.
+# than a tidy-up.  `master.py` forwards each of them to this module.
 #
 # WHAT MOVED AND WHAT IS STILL TYPED is documented in spacecost/delivery.py.
 # The short version: every chain delta-v is a DELTA_V_REFERENCE lookup now, so
@@ -2353,7 +2322,7 @@ def fetch_metals_dev(config: MineralValueConfig) -> pd.DataFrame:
     Returns an empty DataFrame on any HTTP / parse failure.
     """
     if config.metals_api_key == "DEMO" or not config.metals_api_key:
-        print("\n  metals.dev - skipped (no API key set; edit CONFIG.metals_api_key)")
+        print("\n  metals.dev - skipped (no API key set; edit MineralValueConfig.metals_api_key)")
         return pd.DataFrame()
 
     print("\n  metals.dev - fetching live LME / spot prices ...")

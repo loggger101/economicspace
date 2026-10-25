@@ -16,7 +16,6 @@ REM      run.bat rerun      Stage 4 only, against the catalogs already on disk
 REM      run.bat standard   20,000-row sample, Stage 4 only
 REM      run.bat full       the pipeline's own defaults (1.6 to 3.8 h)
 REM      run.bat verify     run verify.py against the committed baseline
-REM      run.bat build      rebuild master.py from modules/
 REM      run.bat help       run_pipeline.py --help
 REM
 REM  A run option takes the destination as an optional second argument,
@@ -90,13 +89,14 @@ if not defined PY (
 )
 
 REM -- Check the pipeline's dependencies --------------------------------------
-REM  The import names of _MASTER_REQUIRED in build_master.py; verify_docs.py
-REM  check 7 holds this line to it. It asked for pyarrow, which left that list
-REM  at master v1.36.0, and not for spacecost, so a machine without pyarrow
-REM  was offered the install on every launch and the install never brought it.
-REM  With an argument nothing may prompt or pause (a scheduled job would hang
-REM  there): a scripted run installs without asking, which master.py does at
-REM  import anyway, and a failure exits with a code instead of a pause.
+REM  The import names of the four modules' _REQUIRED_PKGS; verify_docs.py
+REM  check 7 holds this line to their union. It asked for pyarrow, which left
+REM  that list at master v1.36.0, and not for spacecost, so a machine without
+REM  pyarrow was offered the install on every launch and the install never
+REM  brought it. With an argument nothing may prompt or pause (a scheduled job
+REM  would hang there): a scripted run installs without asking, which the
+REM  modules do at import anyway, and a failure exits with a code instead of a
+REM  pause.
 %PY% -c "import requests,pandas,numpy,yfinance,tqdm,spacecost" >nul 2>&1
 if errorlevel 1 (
   echo.
@@ -154,8 +154,7 @@ echo         time. Every run prints each setting marked [default], or
 echo         [default: ...] naming the default it replaced.
 echo.
 echo    [6]  Verify                 check this build against the baseline
-echo    [7]  Rebuild master.py      after editing anything in modules/
-echo    [8]  Command-line help
+echo    [7]  Command-line help
 echo.
 echo    [Q]  Quit
 echo.
@@ -178,9 +177,7 @@ if /i "%CHOICE%"=="5"        goto full
 if /i "%CHOICE%"=="full"     goto full
 if /i "%CHOICE%"=="6"        goto verify
 if /i "%CHOICE%"=="verify"   goto verify
-if /i "%CHOICE%"=="7"        goto build
-if /i "%CHOICE%"=="build"    goto build
-if /i "%CHOICE%"=="8"        goto clihelp
+if /i "%CHOICE%"=="7"        goto clihelp
 if /i "%CHOICE%"=="help"     goto clihelp
 if /i "%CHOICE%"=="q"        exit /b 0
 if /i "%CHOICE%"=="quit"     exit /b 0
@@ -193,7 +190,7 @@ if defined ARG1 (
   echo.
   echo   "%CHOICE%" is not one of the options.
   echo.
-  echo   Try one of:  ui  quick  rerun  standard  full  verify  build  help
+  echo   Try one of:  ui  quick  rerun  standard  full  verify  help
   echo   or run this with no arguments for the menu.
   exit /b 1
 )
@@ -317,13 +314,6 @@ if defined TAG (
 ) else (
   %PY% verify.py check --skip prune parallel
 )
-goto done
-
-:build
-%PY% build_master.py
-echo.
-echo   Reminder: commit master.py together with the modules it was built from.
-echo   `git status` immediately after a build is the sync check.
 goto done
 
 :clihelp
