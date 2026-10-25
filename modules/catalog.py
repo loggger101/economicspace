@@ -60,35 +60,15 @@ Pipeline flow:
 # ──────────────────────────────────────────────────────────────────────────────
 # INSTALLATION
 # ──────────────────────────────────────────────────────────────────────────────
-# Windows consoles default to cp1252, which cannot encode every character this
-# file's progress output can carry -- force UTF-8 before anything prints.
-import sys as _sys
-for _stream in (_sys.stdout, _sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):
-        pass
-
-import subprocess, sys
+try:
+    from . import _runtime
+except ImportError:                 # run as a script: modules/ is on sys.path
+    import _runtime
 
 # No `asteroid_catalog` here: this stage downloads the package's published
 # output and never imports the package itself.
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "tqdm"]
-_missing = []
-for _pkg in _REQUIRED_PKGS:
-    try:
-        __import__(_pkg)
-    except ImportError:
-        _missing.append(_pkg)
-
-if _missing:
-    print(f"PKG  Installing: {_missing} ...")
-    subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", "-q"] + _missing
-    )
-    print("OK  Install complete")
-else:
-    print("OK  All packages present")
+_runtime.install(_REQUIRED_PKGS)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -99,6 +79,7 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 import tempfile
 import warnings
 from dataclasses import dataclass
@@ -115,32 +96,6 @@ for _cat in (DeprecationWarning, FutureWarning, UserWarning):
     warnings.filterwarnings("ignore", category=_cat)
 
 pd.set_option("display.max_columns", None)
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DEFAULT OUTPUT LOCATION
-# ─────────────────────────────────────────────────────────────────────────────
-# Colab keeps its scratch space at /content.  Anywhere else (local Windows,
-# Linux, CI) that path is meaningless -- on Windows it silently resolves to
-# C:\content -- so fall back to an ./asteroid_pipeline dir under the CWD.
-
-def _default_output_dir() -> str:
-    """Colab-aware default output directory."""
-    env = os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
-    if env:
-        return env
-    # Colab detection.  os.path.isdir("/content") alone is not enough: on
-    # Windows a leading "/" is drive-relative, so it tests C:\content -- a
-    # directory an earlier run of the pre-fix code may itself have created,
-    # which would route output straight back to the path this function
-    # exists to avoid.  Require a POSIX platform as well.
-    if os.name == "posix" and os.path.isdir("/content"):
-        return "/content/asteroid_pipeline"
-    return os.path.join(os.getcwd(), "asteroid_pipeline")
-
-
-_DEFAULT_OUTPUT_DIR = _default_output_dir()
-
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # ║                                                                           ║
@@ -177,10 +132,10 @@ class CatalogConfig:
     request_timeout: int = 300
 
     # ─── OUTPUT  (where the CSVs land) ───────────────────────────────────────
-    # `output_dir` is created at startup if it doesn't exist.  On Colab the
-    # default '/content/...' lives in the session sandbox, change to a Drive
-    # path like '/content/drive/MyDrive/asteroids' to persist between runs.
-    output_dir:        str = _DEFAULT_OUTPUT_DIR
+    # `output_dir` is created at startup if it doesn't exist.  It defaults to
+    # ./asteroid_pipeline under the working directory, or to
+    # ASTEROID_PIPELINE_OUTPUT_DIR when that is set.
+    output_dir:       str = _runtime.DEFAULT_OUTPUT_DIR
     catalog_filename:  str = "asteroid_catalog.csv"
     rejected_filename: str = "rejected_entries.csv"
     manifest_filename: str = "catalog_manifest.json"
@@ -483,57 +438,12 @@ if __name__ == "__main__":
     # edit CONFIG fields there, then re-run.
 
 
-    # ── OVERWRITE GUARD ──────────────────────────────────────────────────────
-    # A FETCHING stage writes over the only copy of its inputs, and there is no
-    # undo: every `.verify` baseline and every committed measurement was taken
-    # against the files this run is about to replace.  `run_pipeline.py` has
-    # asked before doing that since 2026-08-23; running THIS FILE went nowhere
-    # near that guard, which is the hole somebody fell into on 2026-09-17 while
-    # smoke-testing an import, re-fetching three live propellant prices over the
-    # campaign's frozen tables.
-    #
-    # ⚠️  Mirrored, not shared: a stage module is standalone by construction and
-    # cannot import a helper.  `verify_docs.py` check 15 holds the three copies
-    # to each other, so edit one and the docs harness names the other two.
-    def _confirm_overwrite(paths, what):
-        """True when it is safe to overwrite `paths`; ask the user if it is not.
-
-        Refuses on EOF rather than hanging, because stdin here may be a
-        scheduled task's dead handle -- the `set /p` trap in `run.bat`, which
-        waits forever instead of failing.  `--yes` skips the question, which is
-        what a scripted caller passes.
-        """
-        existing = [p for p in paths if os.path.exists(p)]
-        if not existing or "--yes" in sys.argv:
-            return True
-        print("")
-        print("  " + "=" * 71)
-        print("  THIS RE-FETCHES LIVE DATA AND OVERWRITES WHAT IS ON DISK")
-        print("  " + "=" * 71)
-        print("  %s" % what)
-        for p in existing[:8]:
-            print("    %s" % p)
-        if len(existing) > 8:
-            print("    ... and %d more" % (len(existing) - 8))
-        print("")
-        print("  The values on disk are the only copy.  Any verify.py baseline")
-        print("  or archived measurement taken against them stops reproducing,")
-        print("  and that looks exactly like a code regression.")
-        print("")
-        try:
-            return input("  Type 'yes' to overwrite: ").strip().lower() == "yes"
-        except (EOFError, KeyboardInterrupt):
-            print("")
-            print("  No console to confirm on (stdin is not a terminal).")
-            print("  Pass --yes if overwriting them is what you meant.")
-            return False
-
     # Nothing is at risk when the pinned release is already installed: Stage 1
     # then downloads nothing, so the guard is handed no paths and passes.
     _at_risk = ([] if release_on_disk(CONFIG) else
                 [os.path.join(CONFIG.output_dir, CONFIG.catalog_filename),
                  os.path.join(CONFIG.output_dir, CONFIG.rejected_filename)])
-    if not _confirm_overwrite(
+    if not _runtime.confirm_overwrite(
             _at_risk,
             "Stage 1 installs catalog release %s over the catalog on disk."
             % CONFIG.catalog_release):

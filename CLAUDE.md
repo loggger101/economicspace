@@ -60,15 +60,19 @@ shim: it imports the four modules, binds the aliases below, holds
 | calc | `CONFIG`->`CALC_CONFIG` |
 
 - A name two modules bind to different objects is **refused**, not resolved
-  (`master.CONFIG` raises). Read it from the module, or add an alias here;
-  `_IDENTICAL_COPIES` is only for equal copies that are not one object.
+  (`master.CONFIG` raises). Read it from the module, or add an alias here.
   `verify_docs.py` check 18 resolves every `master.<name>` the repo reads.
 - The forwarding serves reads from outside. Code inside `master.py` sees only
   what it imports by name.
-- `modules/__init__.py` silences spawned workers before any module prints and
-  imports no module, because a Stage 4 worker imports `modules.calc` alone.
-- Each module runs on its own (`python modules/calc.py`) and installs its own
-  `_REQUIRED_PKGS` at import; check 7 holds their union to `requirements.txt`.
+- `modules/__init__.py` imports no module, because a Stage 4 worker imports
+  `modules.calc` alone.
+- `modules/_runtime.py` holds what every module does first: console encoding,
+  the spawned-worker silence, the output directory, `install()` and
+  `confirm_overwrite()`. The pin guard inside `install()` is called, never run
+  at import, so calc and its workers never touch spacecost.
+- Each module runs on its own (`python modules/calc.py`) and passes its own
+  `_REQUIRED_PKGS` to `_runtime.install()` at import; check 7 holds their union
+  to `requirements.txt`.
 
 ## Versions and release notes
 
@@ -329,7 +333,7 @@ What counts as evidence:
 
 - **Stages 1-3**: see the first rule. `run_pipeline.py` asks before
   overwriting; the three fetching modules guard their own standalone runs
-  (`_confirm_overwrite`, held mirrored by check 15). Typing a stage list to
+  (`_runtime.confirm_overwrite`, held by check 15). Typing a stage list to
   test the parser still runs the stages.
 - **`campaign/run_cell.py` on a measured cell overwrites its archive**
   (`campaign/cells/<cell>.csv.gz`, gitignored, one copy). Archive a
@@ -485,15 +489,14 @@ lists every file it touched.
   unknown ones).
 - **Stage 3 is an adapter over spacecost, pinned to tag `v0.12.0`**, and
   Stage 2 imports `spacecost.delivery` too, so a dropped name fails a pricing
-  stage first. The pin is typed in six places: `requirements.txt`,
-  `_PIP_SPEC` in `modules/transportation.py` and `modules/mineral_value.py`,
-  and prose in README, CITATIONS.md and this sentence. Check 7 holds them
-  together.
+  stage first. The pin is typed in five places: `requirements.txt`,
+  `PIP_SPEC` in `modules/_runtime.py`, and prose in README, CITATIONS.md and
+  this sentence. Check 7 holds them together.
 - **A spacecost table change is four steps**: edit there, bump its version if
   a number moves, tag a release, repin here. Repin with
   `pip install --force-reinstall --no-deps` (without `--no-deps` pip upgrades
-  numpy and pandas), then `py platform_check.py`. The install blocks reinstall
-  a stale git-pinned package at import.
+  numpy and pandas), then `py platform_check.py`. `_runtime.install()`
+  reinstalls a stale git-pinned package at import.
 - `TransportConfig` stays here, mirrored field for field
   (`_check_config_surface()` raises); its comments are the dashboard help.
 - **A regex repin rewrites history**: a version string in prose is a pin or a

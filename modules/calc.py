@@ -62,33 +62,13 @@ Pipeline flow:
 # ─────────────────────────────────────────────────────────────────────────────
 # INSTALLATION
 # ─────────────────────────────────────────────────────────────────────────────
-# Windows consoles default to cp1252, which cannot encode the emoji used in
-# this file's progress output -- force UTF-8 before anything prints.
-import sys as _sys
-for _stream in (_sys.stdout, _sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):
-        pass
-
-import subprocess, sys
+try:
+    from . import _runtime
+except ImportError:                 # run as a script: modules/ is on sys.path
+    import _runtime
 
 _REQUIRED_PKGS = ["pandas", "numpy"]
-_missing = []
-for _pkg in _REQUIRED_PKGS:
-    try:
-        __import__(_pkg)
-    except ImportError:
-        _missing.append(_pkg)
-
-if _missing:
-    print(f"PKG  Installing: {_missing} ...")
-    subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", "-q"] + _missing
-    )
-    print("OK  Install complete")
-else:
-    print("OK  All packages present")
+_runtime.install(_REQUIRED_PKGS)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -116,19 +96,6 @@ import pandas as pd
 # `[key]`, which a dict and a Series serve identically.
 Row = Mapping[str, Any]
 
-# ─── SPAWNED-WORKER QUIET MODE ───────────────────────────────────────────────
-# Windows has no fork, so every parallel worker re-imports this file and would
-# replay the startup banner -- 60 lines each, 700+ for a full pool.  The parent
-# sets ASTEROID_PIPELINE_WORKER before creating the pool and children inherit
-# it.  Flipped to "silenced" rather than cleared so that this copy is a no-op
-# after the package's (`modules/__init__.py` runs the same guard first, before
-# the install block above has printed) instead of leaking another handle.
-#
-# stderr is deliberately left alone: a worker that dies should still say so.
-if os.environ.get("ASTEROID_PIPELINE_WORKER") == "1":
-    os.environ["ASTEROID_PIPELINE_WORKER"] = "silenced"
-    sys.stdout = open(os.devnull, "w", encoding="utf-8")
-
 for _cat in (DeprecationWarning, FutureWarning, UserWarning):
     warnings.filterwarnings("ignore", category=_cat)
 
@@ -138,31 +105,6 @@ pd.set_option("display.float_format", "{:.4g}".format)
 
 # Physical constants
 G0_M_S2 = 9.806_65    # standard gravity (matches Module 3)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DEFAULT OUTPUT LOCATION
-# ─────────────────────────────────────────────────────────────────────────────
-# Colab keeps its scratch space at /content.  Anywhere else (local Windows,
-# Linux, CI) that path is meaningless -- on Windows it silently resolves to
-# C:\content -- so fall back to an ./asteroid_pipeline dir under the CWD.
-
-def _default_output_dir() -> str:
-    """Colab-aware default output directory."""
-    env = os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
-    if env:
-        return env
-    # Colab detection.  os.path.isdir("/content") alone is not enough: on
-    # Windows a leading "/" is drive-relative, so it tests C:\content -- a
-    # directory an earlier run of the pre-fix code may itself have created,
-    # which would route output straight back to the path this function
-    # exists to avoid.  Require a POSIX platform as well.
-    if os.name == "posix" and os.path.isdir("/content"):
-        return "/content/asteroid_pipeline"
-    return os.path.join(os.getcwd(), "asteroid_pipeline")
-
-
-_DEFAULT_OUTPUT_DIR = _default_output_dir()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -175,7 +117,7 @@ class CalcConfig:
     """User-editable configuration for the profitability calculator."""
 
     # ─── INPUTS  (where Modules 1-3 wrote their catalogs) ────────────────────
-    input_dir:                str = _DEFAULT_OUTPUT_DIR
+    input_dir:                str = _runtime.DEFAULT_OUTPUT_DIR
     asteroid_catalog_file:    str = "asteroid_catalog.csv"
     mineral_catalog_file:     str = "mineral_value_catalog.csv"
     transportation_subdir:    str = "transportation"
@@ -186,7 +128,7 @@ class CalcConfig:
     operational_costs_file:   str = "operational_costs.csv"
 
     # ─── OUTPUT ──────────────────────────────────────────────────────────────
-    output_dir:               str = _DEFAULT_OUTPUT_DIR
+    output_dir:               str = _runtime.DEFAULT_OUTPUT_DIR
     output_filename:          str = "profitability_catalog.csv"
 
     # ─── MISSION HARDWARE (kg) ───────────────────────────────────────────────

@@ -43,8 +43,8 @@ counts-in-prose failure this file was written to catch:
                      renders, against the register beside the derivation that
                      would otherwise have had to produce it
    15. guards        every FETCHING stage module refuses to overwrite its own
-                     outputs when it is run directly, and the three mirrored
-                     copies of that guard are still the same guard
+                     outputs when it is run directly: each gates its build
+                     on `_runtime.confirm_overwrite` and exits on a refusal
    16. borrows       every `master` attribute the worked calculation touches is
                      on its own register, and every register row is touched --
                      the footer's claim about what it borrows is derived from
@@ -274,13 +274,15 @@ def absent(names) -> List[str]:
 
 def load_modules() -> Dict[str, object]:
     """Import each stage for its CONFIG.  Their import banners go to /dev/null;
-    they print on import by design and this is not a run."""
+    they print on import by design and this is not a run.  Each is named inside
+    the `modules` package so that its `from . import _runtime` resolves."""
     out = {}
     for alias, rel in MODULES.items():
-        spec = importlib.util.spec_from_file_location("_vd_" + alias,
+        name = "modules._vd_" + alias
+        spec = importlib.util.spec_from_file_location(name,
                                                       os.path.join(REPO, rel))
         mod = importlib.util.module_from_spec(spec)
-        sys.modules["_vd_" + alias] = mod
+        sys.modules[name] = mod
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             spec.loader.exec_module(mod)
@@ -828,7 +830,7 @@ def check_structure() -> bool:
 # -------------------------------------------------------------------- 6. dashes
 EM, EN = "—", "–"
 ROOT_PY = ["ui.py", "ui_meta.py", "orbital.py", "run_pipeline.py", "verify.py",
-           "master.py", "modules/__init__.py",
+           "master.py", "modules/__init__.py", "modules/_runtime.py",
            "launch_ui.py", "platform_check.py",
            # verify_stage3.py was outside BOTH ratchets until 2026-09-15, which
            # is the "a file nothing checks is clean until it is not" state this
@@ -1564,7 +1566,7 @@ def check_runtime() -> bool:
 
 # ---------------------------------------------------------------- 11. docstrings
 # Every .py this repo owns.
-FIRST_PARTY_PY = (["master.py", "modules/__init__.py",
+FIRST_PARTY_PY = (["master.py", "modules/__init__.py", "modules/_runtime.py",
                    "run_pipeline.py", "ui.py", "ui_meta.py",
                    "orbital.py",
                    "verify.py", "verify_stage3.py", "verify_stage1.py",
@@ -2024,27 +2026,7 @@ def check_prose_numbers() -> bool:
 # writes a catalog it can rebuild from inputs that are still there.
 FETCHING_MODULES = ["modules/catalog.py", "modules/mineral_value.py",
                     "modules/transportation.py"]
-
-
-def _nested_block(src: str, header: str) -> str:
-    """One INDENTED function's source, from its `def` to the next line at or
-    outside its own indentation.
-
-    `_function_body` slices between top-level `def` lines and cannot see this
-    one: the guard lives inside `if __name__ == "__main__":`, so it is indented,
-    and the next top-level `def` is nowhere below it.  Asking the wrong slicer
-    would have returned everything to end of file -- each module's preview code
-    included -- and the comparison would have reported drift on three files that
-    agree.
-    """
-    start = src.index(header)
-    indent = len(header) - len(header.lstrip())
-    out = []
-    for line in src[start:].splitlines(True):
-        if out and line.strip() and (len(line) - len(line.lstrip())) <= indent:
-            break
-        out.append(line)
-    return "".join(out)
+RUNTIME = "modules/_runtime.py"
 
 
 def check_overwrite_guards() -> bool:
@@ -2059,33 +2041,24 @@ def check_overwrite_guards() -> bool:
     smoke-testing an import.  The frozen values were recoverable only because an
     archived cell had been priced with them.
 
-    WHAT IT HOLDS.  Each fetching module defines `_confirm_overwrite` inside its
-    `__main__` block and calls it before building.  The guard is MIRRORED rather
-    than shared, because a stage module is standalone by construction and cannot
-    import a helper -- the same argument that keeps `TransportConfig` mirrored
-    against spacecost -- so the copies are asserted equal here, the way
-    `_check_config_surface` asserts that dial surface.
-
-    ⚠️  Equal after normalising the paths each names, and nothing else: a fix
-    applied to one copy and not the others is exactly the "fixing one half of a
-    defect class" failure this repo keeps recording.
+    WHAT IT HOLDS.  `modules/_runtime.py` defines `confirm_overwrite`, and each
+    fetching module's `__main__` block gates its build on it: called, refused
+    with an exit, and before the build.
     """
     bad: List[str] = []
     if absent(FETCHING_MODULES):
         print("15. guards     %d NOT ON DISK" % len(absent(FETCHING_MODULES)))
         return False
 
-    bodies = {}
+    if "\ndef confirm_overwrite(" not in read(os.path.join(REPO, RUNTIME)):
+        bad.append("%s defines no confirm_overwrite for the stages to call"
+                   % RUNTIME)
+    gated = 0
     for rel in FETCHING_MODULES:
         src = read(os.path.join(REPO, rel))
         run = src.partition("# RUN & PREVIEW")[2]
         if not run:
             bad.append("%s: no RUN & PREVIEW block to guard" % rel)
-            continue
-        if "def _confirm_overwrite(" not in run:
-            bad.append("%s: its standalone run defines no _confirm_overwrite, "
-                       "so running the module overwrites its inputs unasked"
-                       % rel)
             continue
         # 🚨  MENTIONED IS NOT GATED, and the first draft of this check
         # accepted the difference.  Neutering the call to
@@ -2095,36 +2068,27 @@ def check_overwrite_guards() -> bool:
         # nobody has seen fail is a check nobody has seen.  So the GATE is what
         # is matched: the refusal, its exit, and its position ahead of the
         # build it guards.
-        after = run.partition("def _confirm_overwrite(")[2]
-        gate = after.find("if not _confirm_overwrite(")
-        build = re.search(r"\bbuild_\w*catalog\(CONFIG\)", after)
+        gate = run.find("if not _runtime.confirm_overwrite(")
+        build = re.search(r"\bbuild_\w*catalog\(CONFIG\)", run)
         if gate == -1:
-            bad.append("%s: _confirm_overwrite is defined but nothing is "
-                       "gated on it -- the build runs either way" % rel)
+            bad.append("%s: nothing is gated on _runtime.confirm_overwrite, "
+                       "so running the module overwrites its inputs unasked"
+                       % rel)
         elif build is None:
             bad.append("%s: no build call found in the run block, so the "
                        "guard cannot be shown to precede it" % rel)
         elif gate > build.start():
             bad.append("%s: the guard is called AFTER the build, which has "
                        "already overwritten the files by then" % rel)
-        elif "sys.exit(" not in after[gate:build.start()]:
+        elif "sys.exit(" not in run[gate:build.start()]:
             bad.append("%s: the guard refuses and the run continues anyway "
                        "-- no sys.exit between the refusal and the build"
                        % rel)
-        bodies[rel] = _nested_block(run, "    def _confirm_overwrite(")
+        else:
+            gated += 1
 
-    # The copies must still be ONE guard.  Compared as text, since that is what
-    # drifts; the call sites differ (each names its own files) and are not here.
-    if len(bodies) > 1:
-        ref_rel, ref_body = sorted(bodies.items())[0]
-        for rel, body in sorted(bodies.items())[1:]:
-            if body != ref_body:
-                bad.append("%s's overwrite guard has drifted from %s's -- they "
-                           "are mirrored copies of one guard and must stay "
-                           "identical" % (rel, ref_rel))
-
-    print("15. guards     %d fetching module(s) refuse to overwrite unasked, "
-          "%d drifted" % (len(bodies), len(bad)))
+    print("15. guards     %d of %d fetching module(s) refuse to overwrite "
+          "unasked" % (gated, len(FETCHING_MODULES)))
     for line in bad:
         print("     " + line)
     return not bad

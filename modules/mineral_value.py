@@ -35,110 +35,13 @@ Adding a new mineral / element:
 # INSTALLATION
 # ─────────────────────────────────────────────────────────────────────────────
 # Auto-installs missing packages.  Safe to re-run.
-
-# Windows consoles default to cp1252, which cannot encode the emoji used in
-# this file's progress output -- force UTF-8 before anything prints.
-import sys as _sys
-for _stream in (_sys.stdout, _sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):
-        pass
-
-import subprocess, sys
+try:
+    from . import _runtime
+except ImportError:                 # run as a script: modules/ is on sys.path
+    import _runtime
 
 _REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
-# spacecost is not on PyPI, so it installs from a TAGGED git ref and a bare
-# name in the install list would resolve to nothing.  The tag is typed in
-# several places in this repo; verify_docs check 7 finds and holds them all.
-_PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.12.0",
-}
-_missing = []
-for _pkg in _REQUIRED_PKGS:
-    try:
-        __import__(_pkg)
-    except ImportError:
-        _missing.append(_PIP_SPEC.get(_pkg, _pkg))
-
-# A PINNED package that imports at the WRONG TAG is as broken as a missing one,
-# and fails later and less legibly: an interpreter holding spacecost 0.1.1 dies
-# inside Stage 2 with "module 'spacecost' has no attribute
-# 'LEO_LAUNCH_USD_PER_KG'", which names neither the package nor the pin.  So a
-# git-pinned package is held to its tag here, read off the module that actually
-# IMPORTS rather than off pip's metadata, since a stale copy earlier on sys.path
-# shadows a correct install.  A stale install is replaced IN PLACE with
-# --no-deps, because a plain reinstall once dragged numpy and pandas off the
-# measured host (CLAUDE.md, "--no-deps when repinning spacecost"); an EDITABLE
-# one is somebody's checkout and is refused rather than overwritten.  The probe
-# above has already imported the stale copy, so it is evicted from sys.modules
-# before anything below imports it for real.
-import importlib as _importlib
-import importlib.metadata as _metadata
-import json as _json
-
-
-def _pinned_pkg_version(name):
-    """The version of `name` as it imports, falling back to pip's metadata."""
-    found = getattr(__import__(name), "__version__", None)
-    if found is None:
-        try:
-            found = _metadata.version(name)
-        except _metadata.PackageNotFoundError:
-            pass
-    return found
-
-
-def _pinned_pkg_editable(name):
-    """True when pip installed `name` editable, i.e. it is somebody's checkout."""
-    try:
-        text = _metadata.distribution(name).read_text("direct_url.json")
-    except _metadata.PackageNotFoundError:
-        return False
-    return bool(_json.loads(text or "{}").get("dir_info", {}).get("editable"))
-
-
-for _pkg, _spec in _PIP_SPEC.items():
-    if _spec in _missing:
-        continue
-    _want = _spec.rsplit("@", 1)[-1].lstrip("v")
-    _have = _pinned_pkg_version(_pkg)
-    if _have == _want:
-        continue
-    _fix = [sys.executable, "-m", "pip", "install", "--force-reinstall",
-            "--no-deps", _spec]
-    if _pinned_pkg_editable(_pkg):
-        raise RuntimeError(
-            f"{_pkg} {_have} is an editable install, and this file pins "
-            f"{_want}.  Check out v{_want} there, or replace it with:  "
-            + " ".join(_fix))
-    print(f"PKG  {_pkg} {_have} is installed and this file pins {_want}; "
-          f"reinstalling with --no-deps ...")
-    try:
-        subprocess.check_call(_fix[:4] + ["-q"] + _fix[4:])
-    except (OSError, subprocess.CalledProcessError) as _err:
-        raise RuntimeError(
-            f"{_pkg} {_have} is installed, this file pins {_want}, and the "
-            f"reinstall failed.  Run:  " + " ".join(_fix)) from _err
-    for _name in [n for n in sys.modules
-                  if n == _pkg or n.startswith(_pkg + ".")]:
-        del sys.modules[_name]
-    _importlib.invalidate_caches()
-    _have = _pinned_pkg_version(_pkg)
-    if _have != _want:
-        raise RuntimeError(
-            f"{_pkg} still imports as {_have} after reinstalling {_want}; "
-            f"another copy shadows it on sys.path.")
-    print(f"OK  {_pkg} {_want} installed")
-
-if _missing:
-    print(f"PKG  Installing: {_missing} ...")
-    subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", "-q"] + _missing
-    )
-    print("OK  Install complete")
-else:
-    print("OK  All packages present")
+_runtime.install(_REQUIRED_PKGS)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -146,6 +49,7 @@ else:
 # ─────────────────────────────────────────────────────────────────────────────
 import json
 import os
+import sys
 import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -162,31 +66,6 @@ for _cat in (DeprecationWarning, FutureWarning, UserWarning):
 
 pd.set_option("display.max_columns", None)
 pd.set_option("display.float_format", "{:.4g}".format)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DEFAULT OUTPUT LOCATION
-# ─────────────────────────────────────────────────────────────────────────────
-# Colab keeps its scratch space at /content.  Anywhere else (local Windows,
-# Linux, CI) that path is meaningless -- on Windows it silently resolves to
-# C:\content -- so fall back to an ./asteroid_pipeline dir under the CWD.
-
-def _default_output_dir() -> str:
-    """Colab-aware default output directory."""
-    env = os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
-    if env:
-        return env
-    # Colab detection.  os.path.isdir("/content") alone is not enough: on
-    # Windows a leading "/" is drive-relative, so it tests C:\content -- a
-    # directory an earlier run of the pre-fix code may itself have created,
-    # which would route output straight back to the path this function
-    # exists to avoid.  Require a POSIX platform as well.
-    if os.name == "posix" and os.path.isdir("/content"):
-        return "/content/asteroid_pipeline"
-    return os.path.join(os.getcwd(), "asteroid_pipeline")
-
-
-_DEFAULT_OUTPUT_DIR = _default_output_dir()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -277,7 +156,7 @@ class MineralValueConfig:
     request_timeout: int = 60   # seconds per HTTP request
 
     # ─── OUTPUT ──────────────────────────────────────────────────────────────
-    output_dir:       str = _DEFAULT_OUTPUT_DIR
+    output_dir:       str = _runtime.DEFAULT_OUTPUT_DIR
     catalog_filename: str = "mineral_value_catalog.csv"
 
     # ─── PRICE UNITS ─────────────────────────────────────────────────────────
@@ -428,8 +307,6 @@ _REF_PRICE_DATE = "2026-05-29"
 # because two of them have no row at all and a third disagrees with its row by
 # 2 m/s, and deriving all six uniformly would have moved two published prices
 # under a change that moves none.
-
-G0_M_S2 = spacecost.G0_M_S2        # standard gravity, exact by definition
 
 # The LEO anchor, off `LAUNCH_VEHICLES_REFERENCE` rather than typed.  Since
 # spacecost v0.4.0 it is whatever vehicle the package's stated rule selects
@@ -2815,52 +2692,7 @@ print("    mineral_to_element_value(catalog, 'nickel-iron')")
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
 
-    # ── OVERWRITE GUARD ──────────────────────────────────────────────────────
-    # A FETCHING stage writes over the only copy of its inputs, and there is no
-    # undo: every `.verify` baseline and every committed measurement was taken
-    # against the files this run is about to replace.  `run_pipeline.py` has
-    # asked before doing that since 2026-08-23; running THIS FILE went nowhere
-    # near that guard, which is the hole somebody fell into on 2026-09-17 while
-    # smoke-testing an import, re-fetching three live propellant prices over the
-    # campaign's frozen tables.
-    #
-    # ⚠️  Mirrored, not shared: a stage module is standalone by construction and
-    # cannot import a helper.  `verify_docs.py` check 15 holds the three copies
-    # to each other, so edit one and the docs harness names the other two.
-    def _confirm_overwrite(paths, what):
-        """True when it is safe to overwrite `paths`; ask the user if it is not.
-
-        Refuses on EOF rather than hanging, because stdin here may be a
-        scheduled task's dead handle -- the `set /p` trap in `run.bat`, which
-        waits forever instead of failing.  `--yes` skips the question, which is
-        what a scripted caller passes.
-        """
-        existing = [p for p in paths if os.path.exists(p)]
-        if not existing or "--yes" in sys.argv:
-            return True
-        print("")
-        print("  " + "=" * 71)
-        print("  THIS RE-FETCHES LIVE DATA AND OVERWRITES WHAT IS ON DISK")
-        print("  " + "=" * 71)
-        print("  %s" % what)
-        for p in existing[:8]:
-            print("    %s" % p)
-        if len(existing) > 8:
-            print("    ... and %d more" % (len(existing) - 8))
-        print("")
-        print("  The values on disk are the only copy.  Any verify.py baseline")
-        print("  or archived measurement taken against them stops reproducing,")
-        print("  and that looks exactly like a code regression.")
-        print("")
-        try:
-            return input("  Type 'yes' to overwrite: ").strip().lower() == "yes"
-        except (EOFError, KeyboardInterrupt):
-            print("")
-            print("  No console to confirm on (stdin is not a terminal).")
-            print("  Pass --yes if overwriting them is what you meant.")
-            return False
-
-    if not _confirm_overwrite(
+    if not _runtime.confirm_overwrite(
             [os.path.join(CONFIG.output_dir, CONFIG.catalog_filename)],
             "Stage 2 re-fetches live metal prices and re-prices every commodity."):
         print("  Cancelled; nothing was fetched and nothing was written.")
