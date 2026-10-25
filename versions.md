@@ -377,6 +377,32 @@ module loader names its copies inside the `modules` package so their
 | `verify_docs.py` check 15, planted | the gate neutered (`if False and ...`), `confirm_overwrite` renamed in `_runtime.py`, catalog's `sys.exit` removed: all three FAILED |
 | `verify_stage1.py`, `verify_stage3.py` | both verified; Stage 3's reference check against a clean `v0.12.0` clone |
 
+### Three stage-harness checks retired to the repo that owns them (2026-10-25, no stamp)
+
+Each re-tested something the upstream repository already gates on every CI
+run. The remaining checks keep their numbers, so a note that names one still
+points at the same check.
+
+- **`verify_stage1.py` checks 2 and 5**, the release's composition and PGM
+  tables against their invariants, and with them the `taxonomy.json` fetch.
+  AsteroidCatalog's `tests/test_traps.py` holds every property they held. The
+  one it lacked, every PGM row a positive multiplier, was added there first
+  (AsteroidCatalog #25), and #24 holds the shipped `PHASE_GROUP` and the
+  manifest's `release_tag`. Check 3 still proves the installed `taxonomy.json`
+  is the release's bytes.
+- **`verify_stage3.py` check 4**, a rebuild compared with spacecost's committed
+  `reference/` CSVs, which needed a source checkout at the pinned tag and
+  failed on any sibling checkout that had moved past it. spacecost's
+  `tests/test_parity.py` makes that comparison byte for byte (green at the
+  `v0.12.0` commit), check 6 proves that commit is what is installed, and
+  check 3 proves the adapter passes the output through unchanged.
+
+| harness | result |
+|---|---|
+| each property checks 2 and 5 held, planted into AsteroidCatalog's `taxonomy.py` (a class summing past 1, a negative fraction, `Unknown` given a value, M at 0.80 metal, M at 5.30 g/cm3, a 0.0 PGM row, no M PGM row) | all seven FAILED a dedicated test in `tests/test_traps.py`; the 0.0 row fails only the new one |
+| `verify_stage1.py`, `verify_stage3.py` before and after, diffed | the deleted checks' lines and the check count are the only differences; `verify_stage3.py` now passes beside a sibling spacecost checkout that is past the tag |
+| `verify_docs.py` | OK |
+
 ## master v1.56.0 / catalog v1.10.0
 
 **Stage 1 repins to `data-2026-10-21b`, AsteroidCatalog's data contract

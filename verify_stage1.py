@@ -12,25 +12,23 @@ is left to verify HERE is the seam: that the pin names a real release written
 against this pipeline's data contract, and that the bytes on disk are that
 release's bytes.
 
-🚨  IT NEVER WRITES THE CATALOG.  Checks 1, 2 and 5 read the release's two small
-files (its manifest and `taxonomy.json`) over the network; everything else
-reads what Stage 1 installed.  Installing is Stage 1's job.
+🚨  IT NEVER WRITES THE CATALOG.  Check 1 reads the release's manifest over
+the network; everything else reads what Stage 1 installed.  Installing is
+Stage 1's job.
 
-THREE CLASSES OF CHECK.
+TWO CLASSES OF CHECK.
 
     1        THE SEAM.  The pinned release exists, names itself, and is the
              data contract this pipeline is written against.  Run first,
              because every other check describes whatever release it names.
-    2, 5     THE RELEASE'S TABLES.  The composition tables the catalog was
-             built with, as the release ships them.  No catalog needed, so
-             these run on CI too.
+             No catalog needed, so it runs on CI too.
     3, 4, 8  AGAINST THE CATALOG ON DISK.  These skip, loudly and with a
              reason, when no release is installed -- which on CI is always,
              because `asteroid_pipeline/` is gitignored in full.
 
-⚠️  The numbering is historical rather than an order.  2 and 8 keep the
-numbers they had when this file verified the builder in place, so a release
-note that names one still points at the same check.  The old 1, 3, 4, 5 and 9
+⚠️  The numbering is historical rather than an order.  8 keeps the number it
+had when this file verified the builder in place, so a release note that
+names it still points at the same check.  The old 1, 3, 4, 5 and 9
 tested the builder's internals and its installed revision; the builder's own
 suite runs those now.
 
@@ -46,6 +44,15 @@ literature diameters moved, and it types every body past 5.5 AU as D, so
 composition stopped being a function of `spectral_type` alone.  A check that a
 correct upstream release fails is a copy of the upstream's rules, not a guard.
 The reference bodies are listed by `tools/audit_catalog.py` now.
+
+⚠️  CHECKS 2 AND 5 ARE RETIRED (2026-10-25), FOR THE SAME REASON.  They held
+the composition and PGM tables the release ships to their invariants (a
+residual under 1, the `Unknown` sentinel, M-type not a bare metal core,
+positive PGM multipliers with an M row).  AsteroidCatalog's
+`tests/test_traps.py` holds every one of those, each shown to fail on a planted
+row, and its `test_the_taxonomy_ships_exactly` holds the shipped
+`taxonomy.json` to those tables; check 3 proves the bytes on disk are that
+file.
 
 ⚠️  A CATALOG BUILT BEFORE STAGE 1 DOWNLOADED RELEASES HAS NO MANIFEST, and
 check 3 fails on it by design: nothing says which build it is, so nothing can
@@ -79,11 +86,6 @@ PIPELINE_DIR = (os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
 # The catalog every Stage 4 run reads.  Not regenerated here under any
 # circumstance; see the module docstring.
 CATALOG = os.path.join(PIPELINE_DIR, "asteroid_catalog.csv")
-
-# The four fields whose sum is the composition invariant.  `Unknown` leaves
-# every one of them None on purpose, which is the sentinel check 2 asserts.
-FRACTIONS = ("metal_fraction", "silicate_fraction", "carbon_fraction",
-             "ice_fraction")
 
 # The provenance census, pinned to the catalog IDENTITY that produced it.
 #
@@ -218,11 +220,6 @@ def installed(c, name_field: str) -> str:
     return os.path.join(PIPELINE_DIR, getattr(c.CONFIG, name_field))
 
 
-def _sha256_bytes(data: bytes) -> str:
-    """sha256 of bytes already in memory."""
-    return hashlib.sha256(data).hexdigest()
-
-
 def _sha256_file(path: str) -> str:
     """sha256 of a file, read in 1 MB chunks."""
     h = hashlib.sha256()
@@ -236,12 +233,7 @@ def _sha256_file(path: str) -> str:
 # 1: THE SEAM.
 # -----------------------------------------------------------------------------
 def fetch_release(c):
-    """The pinned release's manifest and taxonomy tables, or (None, None, why).
-
-    Both are small.  The taxonomy is checked against the manifest's sha256
-    before it is returned, so checks 2 and 5 describe the tables the release
-    actually ships.
-    """
+    """The pinned release's manifest, or (None, why)."""
     import requests
 
     cfg = c.CONFIG
@@ -249,18 +241,13 @@ def fetch_release(c):
     try:
         resp = requests.get(base + "manifest.json", timeout=60)
         if resp.status_code == 404:
-            return None, None, "no release %r at %s" % (cfg.catalog_release, base)
+            return None, "no release %r at %s" % (cfg.catalog_release, base)
         resp.raise_for_status()
         manifest = resp.json()
-        tax = requests.get(base + "taxonomy.json", timeout=60)
-        tax.raise_for_status()
     except Exception as exc:                               # noqa: BLE001
-        return None, None, "could not reach the release: %s: %s" % (
+        return None, "could not reach the release: %s: %s" % (
             type(exc).__name__, exc)
-    entry = (manifest.get("files") or {}).get("taxonomy.json")
-    if not entry or _sha256_bytes(tax.content) != entry.get("sha256"):
-        return manifest, None, "taxonomy.json does not match the manifest's sha256"
-    return manifest, json.loads(tax.content.decode("utf-8")), None
+    return manifest, None
 
 
 def check_release(c, manifest, why) -> bool:
@@ -293,97 +280,6 @@ def check_release(c, manifest, why) -> bool:
     for b in bad:
         print("     ! " + b)
     return not bad
-
-
-# -----------------------------------------------------------------------------
-# 2 and 5: THE RELEASE'S TABLES.
-# -----------------------------------------------------------------------------
-def check_taxonomy(c) -> bool:
-    """The composition table's own invariants, which nothing had executed.
-
-    🚨  CLAUDE.md SAID 0.76-0.96 AND THE TABLE HAS ALWAYS SAID 0.73-0.96.
-    `Cgh` sums to 0.73 and `Cg`, `G` and `Ch` to 0.74-0.75, in every revision
-    of `modules/catalog.py` that has ever existed.  `C` itself is exactly 0.76,
-    which is where the number came from: somebody read the C row and
-    generalised it to the complex.  Three documents quoted it forward.  The
-    range is therefore NOT what is asserted here.
-
-    What is load-bearing is the property the range was standing in for: every
-    real class sums to strictly less than 1, so there IS a residual, and calc
-    values it at a bulk-silicate floor rather than zero.  Asserting the
-    PROPERTY rather than the interval is also what stops this check going red
-    the day somebody re-measures a taxonomy row, which is a legitimate act.
-
-    `Unknown` is the deliberate exception: all four fractions are None, so the
-    residual is the whole body and everything is bulk silicate, which is the
-    honest answer for a body whose taxonomy nothing knows.
-    """
-    bad = []
-    sums = {}
-    for name, entry in c.TAXONOMY_COMPOSITION.items():
-        s = sum(float(entry.get(f) or 0.0) for f in FRACTIONS)
-        sums[name] = s
-        if name == "Unknown":
-            if any(entry.get(f) is not None for f in FRACTIONS):
-                bad.append("Unknown must leave every fraction None (sentinel)")
-            continue
-        if not (0.0 < s < 1.0):
-            bad.append("%s sums to %.4f, outside (0, 1): the residual is what "
-                       "calc floors at bulk silicate" % (name, s))
-        for f in FRACTIONS:
-            v = entry.get(f)
-            if v is not None and not (0.0 <= float(v) <= 1.0):
-                bad.append("%s.%s = %r is not a fraction" % (name, f, v))
-
-    # M-type is not a bare metal core.  No M-type has ever been measured near
-    # iron-meteorite density; Psyche is ~3.8-3.9 g/cm3, and the 0.80 / 5.30
-    # pair is the value this table must never be "restored" to.
-    m = c.TAXONOMY_COMPOSITION.get("M", {})
-    if float(m.get("metal_fraction") or 0) >= 0.80:
-        bad.append("M metal_fraction is back at %s; see CLAUDE.md, M-type is "
-                   "not a bare metal core" % m.get("metal_fraction"))
-    if float(m.get("density_est_gcm3") or 0) >= 5.0:
-        bad.append("M density_est_gcm3 is back at %s; Psyche is ~3.8-3.9"
-                   % m.get("density_est_gcm3"))
-
-    real = [v for k, v in sums.items() if k != "Unknown"]
-    print("2. taxonomy      %d classes, sums %.4f to %.4f, %d wrong"
-          % (len(sums), min(real), max(real), len(bad)))
-    for b in bad:
-        print("     ! " + b)
-    return not bad
-
-
-def check_pgm_table(t) -> bool:
-    """The PGM table is a set of positive multipliers, and the lookup falls back.
-
-    The fallback is what keeps an unlisted sub-type ("Mq") inheriting its
-    parent class rather than silently dropping to chondritic, and the default
-    is 1.0 rather than 0.0 so an unknown body is priced as ordinary rather than
-    as worthless.  Those are properties of the TABLE the release ships; the
-    lookup rule itself is the builder's, and its own suite tests it.
-    """
-    bad = []
-    for k, v in t.PGM_ENRICHMENT_BY_TYPE.items():
-        if not (isinstance(v, (int, float)) and v > 0):
-            bad.append("%s -> %r is not a positive multiplier" % (k, v))
-    parent = t.PGM_ENRICHMENT_BY_TYPE.get("M")
-    if parent is None:
-        bad.append("no M row: the metal-rich class carries no enrichment")
-    print("5. pgm           %d types, %d wrong"
-          % (len(t.PGM_ENRICHMENT_BY_TYPE), len(bad)))
-    for b in bad:
-        print("     ! " + b)
-    return not bad
-
-
-def tables(taxonomy: dict):
-    """The release's tables under the names checks 2 and 5 read them by."""
-    import types
-    return types.SimpleNamespace(
-        TAXONOMY_COMPOSITION=taxonomy["TAXONOMY_COMPOSITION"],
-        PGM_ENRICHMENT_BY_TYPE=taxonomy["PGM_ENRICHMENT_BY_TYPE"],
-    )
 
 
 # -----------------------------------------------------------------------------
@@ -565,7 +461,7 @@ def check_provenance(df) -> bool:
 def main() -> int:
     """Run every check and return the process exit code.
 
-    Checks 1, 2 and 5 always run; they need the network, not the catalog.
+    Check 1 always runs; it needs the network, not the catalog.
     Checks 3, 4 and 8 need an installed catalog and say what would make
     them run when it is absent, which on CI is always, because
     `asteroid_pipeline/` is gitignored in full.
@@ -579,15 +475,8 @@ def main() -> int:
           % (c.CONFIG.catalog_release, c.CONFIG.pipeline_version))
     print("-" * 70)
 
-    manifest, taxonomy, why = fetch_release(c)
+    manifest, why = fetch_release(c)
     results = [tree_ok, check_release(c, manifest, why)]
-    if taxonomy is not None:
-        remote = tables(taxonomy)
-        results += [check_taxonomy(remote), check_pgm_table(remote)]
-    else:
-        print("2,5. tables      NOT RUN: the release's taxonomy.json could not "
-              "be read (see 1)")
-        results.append(False)
 
     if not os.path.isfile(CATALOG):
         print("3,4,8. catalog   SKIPPED, no catalog at")

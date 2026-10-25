@@ -44,13 +44,20 @@ under "RUNNING STAGE 2 OR STAGE 3 DESTROYS EVERY BASELINE YOU HOLD".  This
 script also passes `use_yfinance=False` so it needs no network and is
 deterministic, and pins `catalog_date` so midnight cannot read as a defect.
 
+⚠️  CHECK 4 IS RETIRED (2026-10-25).  It rebuilt the tables and compared them
+with the CSVs spacecost commits under `reference/`, which needed a source
+checkout at the pinned tag and so skipped or failed on every ordinary install.
+spacecost's own `tests/test_parity.py` makes that comparison byte for byte on
+every CI run, check 6 proves the installed package is that tagged commit, and
+check 3 proves the adapter passes its output through unchanged.  The other
+numbers stay, so a note that names one still points at the same check.
+
 WHAT A FAILURE MEANS.  Not "spacecost is broken".  Either the package moved a
 row and this repo has not caught up, or the adapter is no longer passing the
 settings through faithfully.  The report says which.
 """
 
 import contextlib
-import csv
 import dataclasses
 import datetime as _dt
 import hashlib
@@ -90,62 +97,22 @@ REPO = os.path.dirname(os.path.abspath(__file__))
 PINNED_DATE = _dt.date.today().isoformat()
 
 # ⚠️  A TABLE MISSING FROM THIS LIST IS A TABLE NOTHING COMPARES, and nothing
-# says so: checks 3 and 4 walk it, so an omission makes a count quietly smaller
+# says so: check 3 walks it, so an omission makes a count quietly smaller
 # rather than making anything red.  `environments.csv` arrived with the v1.15.0
 # contract (spacecost v0.2.0) and is the first row added here since the split.
 TABLES = ["launch_vehicles.csv", "propellants.csv", "delta_v_segments.csv",
           "operational_costs.csv", "storage_systems.csv", "environments.csv"]
 SUMMARY = "transportation_summary.csv"
 
-# Checks that returned True without running, named in the verdict so it cannot
-# read as a full pass.
-SKIPPED = []
-
-
 def _sha(path: str) -> str:
     """Hash of a file's RAW bytes, provenance columns included.
 
-    The counterpart to `_content_sha`, and the difference between them is the
-    whole of check 3 against check 4.  Check 3 compares two files this run
-    built moments apart, so every column including `catalog_date` must agree
-    and a raw hash is the strictest thing to compare.  Check 4 compares against
-    a file COMMITTED on some other day, where the stamp is guaranteed to differ
-    and says nothing, so it drops it first.  Using this one there is how that
-    check spent a day reporting `*** CONTENT MOVED ***` at a clock.
+    Check 3 compares two files this run built moments apart, so every column
+    including `catalog_date` must agree and a raw hash is the strictest thing
+    to compare.
     """
     with open(path, "rb") as fh:
         return hashlib.sha256(fh.read()).hexdigest()
-
-
-# `catalog_date` is stamped from the wall clock, so any comparison against a
-# COMMITTED artefact has to drop it or it passes on exactly one calendar day.
-# `pipeline_version` is deliberately NOT dropped: it moves only when somebody
-# moves it, so a difference there is a real finding rather than a clock.
-_PROVENANCE = ("catalog_date",)
-
-
-def _content_sha(path: str) -> str:
-    """sha256 of a CSV with the wall-clock provenance columns removed.
-
-    Both sides go through the identical transform, so re-serialising is safe;
-    what matters is that the two are treated the same, not that the text
-    matches the file on disk.
-
-    This exists because check 4 compared raw bytes against a CSV spacecost
-    COMMITTED, which carries the date it was generated on. Every row of every
-    table therefore differed by one field from the day after it was committed,
-    and the check announced `*** CONTENT MOVED ***` -- the most alarming
-    message it has, for a clock. See `PINNED_DATE` above for the same defect
-    in check 3, found the same morning.
-    """
-    with open(path, newline="", encoding="utf-8") as f:
-        rows = list(csv.reader(f))
-    if not rows:
-        return hashlib.sha256(b"").hexdigest()
-    drop = {i for i, c in enumerate(rows[0]) if c in _PROVENANCE}
-    trimmed = [[v for i, v in enumerate(r) if i not in drop] for r in rows]
-    blob = "\n".join("\x1f".join(r) for r in trimmed).encode("utf-8")
-    return hashlib.sha256(blob).hexdigest()
 
 
 def _load_adapter():
@@ -257,58 +224,6 @@ def _pinned_tag() -> str:
     return ""
 
 
-def _reference_dir():
-    """Find spacecost's committed `reference/`, and prove which revision it is.
-
-    Returns `(path, note)` with `path` None when the check cannot run.
-
-    🚨  A PIP INSTALL CAN NEVER SATISFY THIS CHECK, and the old message implied
-    otherwise.  `reference/` sits at spacecost's REPO root, a sibling of the
-    package directory, so `pip install git+...` copies the package and leaves
-    the reference CSVs behind every time.  The skip therefore fired on every
-    ordinary install, reading as an unusual-install caveat when it was in fact
-    "the content half of this seam has never run here".  What it needs is a
-    source checkout, so this looks for one.
-
-    ⚠️  A CHECKOUT IS ONLY USABLE IF ITS `reference/` MATCHES THE PINNED TAG,
-    and that is not a formality: the checkout beside this repo was two commits
-    PAST `v0.1.1` when this was written.  Those two happened to be docs-only,
-    which is exactly the kind of luck this project has already been burned by;
-    a second working copy at another revision is the parallel-repo divergence,
-    not a convenience.  So the revision is asked of git rather than assumed,
-    and a `reference/` that has moved since the tag is a FINDING, not a skip.
-    """
-    tag = _pinned_tag()
-    candidates = []
-    env = os.environ.get("SPACECOST_SOURCE")
-    if env:
-        candidates.append(("SPACECOST_SOURCE", env))
-    candidates.append(("sibling checkout",
-                       os.path.normpath(os.path.join(REPO, os.pardir, "spacecost"))))
-    try:
-        import spacecost
-        candidates.append(("installed package", os.path.dirname(
-            os.path.dirname(os.path.abspath(spacecost.__file__)))))
-    except Exception:
-        pass
-
-    for label, root in candidates:
-        ref = os.path.join(root, "reference")
-        if not os.path.isdir(ref):
-            continue
-        if not tag:
-            return ref, "%s, pinned tag unreadable" % label
-        state = _reference_matches_tag(root, tag)
-        if state is True:
-            return ref, "%s at %s" % (label, tag)
-        if state is False:
-            return None, ("%s has a reference/ that DIFFERS from %s"
-                          % (label, tag))
-        # Not a git checkout, or the tag is absent: usable but unproven.
-        return ref, "%s, revision unproven (%s)" % (label, state)
-    return None, ""
-
-
 def _reference_matches_tag(root: str, tag: str):
     """True / False / a string saying why the revision could not be proven."""
     import subprocess
@@ -335,61 +250,6 @@ def _reference_matches_tag(root: str, tag: str):
         return git("diff", "--quiet", tag, "--", "reference").returncode == 0
     except (OSError, subprocess.SubprocessError):
         return "git unavailable"
-
-
-def check_against_committed_reference(t, tmp) -> bool:
-    """The reference tables against the CSVs spacecost commits there.
-
-    This is the half that pins the CONTENT rather than the plumbing: check 3
-    would still pass if both sides moved together.  See `_reference_dir` for
-    where the CSVs are found and why the revision is proven before they are
-    trusted.  A skip that says so is not a pass, and this one now says what it
-    would take to make it run.
-    """
-    ref, note = _reference_dir()
-    if ref is None:
-        if note:
-            print("4. reference   *** NOT VERIFIED *** %s" % note)
-            print("     The pinned tag and the checkout disagree about the data")
-            print("     this check compares. Check out %s, or point"
-                  % (_pinned_tag() or "the pinned tag"))
-            print("     SPACECOST_SOURCE at a checkout that is at it.")
-            return False
-        print("4. reference   SKIPPED, no spacecost source checkout found")
-        print("     A pip install cannot satisfy this: reference/ sits at")
-        print("     spacecost's repo root, not inside the package, so it is")
-        print("     never copied into site-packages. Clone spacecost beside")
-        print("     this repo, or set SPACECOST_SOURCE, to run it.")
-        SKIPPED.append("4 (no spacecost source checkout)")
-        return True
-
-    built = os.path.join(tmp, "adapter", "transportation")
-    ok, n, unheld = True, 0, []
-    for name in TABLES:
-        want = os.path.join(ref, name)
-        if not os.path.exists(want):
-            # ⚠️  NOT A SILENT CONTINUE.  A table the pinned tag does not commit
-            # is a table this check does not cover, and the only symptom used to
-            # be a smaller `n` -- the "count that is quietly smaller" shape this
-            # repo has already been caught by once, in `verify_docs.py`'s file
-            # enumeration.  It is legitimate (an older tag predates a table), so
-            # it is reported rather than failed.
-            unheld.append(name)
-            continue
-        n += 1
-        # Content, not bytes: see `_content_sha`.  The docstring above has
-        # always said this check pins CONTENT; now it does.
-        same = _content_sha(os.path.join(built, name)) == _content_sha(want)
-        ok = ok and same
-        if not same:
-            print("     %-30s *** DIFFERS from spacecost reference/ ***" % name)
-    if unheld:
-        print("     %d table(s) not committed under reference/ at this tag, so "
-              "NOT compared: %s" % (len(unheld), ", ".join(unheld)))
-    print("4. reference   %s" % (
-        "%d tables match spacecost's committed CSVs (%s)" % (n, note)
-        if ok else "*** CONTENT MOVED *** (%s)" % note))
-    return ok
 
 
 def _quiet_build(fn):
@@ -577,21 +437,20 @@ def check_installed_revision(t) -> bool:
     """The package being driven is the one `requirements.txt` pins.
 
     THE GAP THIS CLOSES, and it is the precondition for every check above.
-    Checks 1 to 5 all describe whatever `import spacecost` happens to reach.
+    Checks 1, 2, 3 and 5 all describe whatever `import spacecost` happens to reach.
     Nothing asked whether that is the revision this repo pins, and the answer
     is not inferable from anything they compare: `__version__` moves only on a
     release, `DATA_VERSION` identifies the data CONTRACT rather than the
-    commit, and `reference/` is compared against a SOURCE CHECKOUT rather than
-    against the installed package. So `pip install -e ../spacecost` at a
-    checkout two commits past the tag passes all five while the pipeline runs
-    code this repo does not pin.
+    commit. So `pip install -e ../spacecost` at a checkout two commits past the
+    tag passes all of them while the pipeline runs code this repo does not
+    pin.
 
     🚨  THAT IS THE PARALLEL-REPO DIVERGENCE WITH A PACKAGE MANAGER IN FRONT OF
     IT. `1.0.6`, `1.1.4` and `1.3.6` each shipped as two different things the
     last time this project had two sources of one truth, and what made it
     expensive was that nothing checked.
 
-    Three outcomes, kept apart the way `_reference_dir`'s are. Installed from
+    Three outcomes, kept apart. Installed from
     the pinned tag is a pass and names the commit. Installed from a DIFFERENT
     revision is a failure. Installed from something with no VCS metadata at all
     -- editable, a local path, a future PyPI release -- is also a failure while
@@ -689,16 +548,10 @@ def main() -> int:
         check_config_surface(t),
         check_data_contract(t),
         check_output(t, tmp),
-        check_against_committed_reference(t, tmp),
         check_validate_missing_flag(t),
         check_installed_revision(t),
     ]
     print("-" * 70)
-    if all(results) and SKIPPED:
-        # A skip is not a pass, and the verdict is the line that gets quoted.
-        print("  OK  STAGE 3 VERIFIED EXCEPT check %s, which SKIPPED"
-              % ", ".join(SKIPPED))
-        return 0
     if all(results):
         print("  OK  STAGE 3 VERIFIED - the split has not drifted")
         return 0

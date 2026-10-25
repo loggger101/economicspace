@@ -65,10 +65,9 @@ jobs:
         run: echo "tag=$(python -c 'import verify_stage3;
           print(verify_stage3._pinned_tag())')" >> "$GITHUB_OUTPUT"
 
-      # `reference/` sits at spacecost's REPO root, so a pip install leaves it
-      # behind and verify_stage3.py check 4 skips.  A skip that fires on 100%
-      # of runs is a check that does not exist; checking the source out at the
-      # pinned tag is what makes that check actually run here.
+      # verify_stage3.py check 6 asks this checkout whether the pinned tag
+      # still names the commit pip installed; a tag that has moved is
+      # invisible from the installed package alone.
       - name: Check out spacecost at the pinned tag
         uses: actions/checkout@v4
         with:
@@ -94,10 +93,10 @@ jobs:
       - name: Documentation checks
         run: python verify_docs.py
 
-      # Checks 1, 2 and 5 are the seam: the pinned catalog release exists, is
-      # this pipeline's data contract, and ships sound composition tables.
-      # They read only the release's manifest and taxonomy.json, so they run
-      # here and catch a pin that names nothing before anybody runs Stage 1.
+      # Check 1 is the seam: the pinned catalog release exists and is this
+      # pipeline's data contract.  It reads only the release's manifest, so it
+      # runs here and catches a pin that names nothing before anybody runs
+      # Stage 1.
       # Checks 3, 4 and 8 need the installed catalog, which is
       # gitignored, so they skip here and say so.
       - name: Stage 1 catalog release
