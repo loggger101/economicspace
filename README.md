@@ -793,25 +793,23 @@ it needs no baseline and no network, and it takes a few seconds:
 py verify_stage3.py
 ```
 
-It asserts six things: `TransportConfig`'s dials match the package's field for
+It asserts five things: `TransportConfig`'s dials match the package's field for
 field, the `pipeline_version` this repo stamps is the package's data-contract
 version, every CSV Stage 3 writes is byte identical whether built through the adapter or
-through the package directly, the reference tables match the CSVs spacecost commits
-under `reference/`, Stage 3's `validate()` still covers a propellant row that
+through the package directly, Stage 3's `validate()` still covers a propellant row that
 omits its `propellantless` flag, and the spacecost that is actually INSTALLED
 is the revision `requirements.txt` pins. The third would still pass if both
-sides moved together, which is what the fourth is for; the fifth is the only
-one that checks BEHAVIOUR rather than bytes; and the sixth is the precondition
-for all of them.
+sides moved together; spacecost's own `tests/test_parity.py` holds the content,
+a build against the CSVs it commits under `reference/`, byte for byte. Check 5
+is the only one that checks BEHAVIOUR rather than bytes, and check 6 is the
+precondition for all of them. The numbers are kept: check 4, that comparison
+against `reference/`, was retired because spacecost's CI makes it.
 
 ⚠️  **Check 6 is the precondition for the rest.** It reads pip's own
 `direct_url.json` (PEP 610) and fails on a different revision, on an install
 with no VCS metadata, and on a tag that has moved since the install.
-⚠️  **Check 4 needs a spacecost source checkout**, found in `SPACECOST_SOURCE`
-and then beside this repo, because `pip install git+...` leaves `reference/`
-behind. The checkout's `reference/` must match the pinned tag, and differing is
-a failure, not a skip. The whole file builds into a temporary directory and
-never touches `asteroid_pipeline/`.
+The whole file builds into a temporary directory and never touches
+`asteroid_pipeline/`.
 
 ⚠️  **`verify.py` covers Stage 4, and it never re-runs Stages 1-3.** That is
 deliberate: a Stage 1 run at a moved pin installs a different catalog, and a
@@ -823,7 +821,7 @@ Stage 3's `validate()`, which Stage 4 never calls, and had to be checked by
 running that function under `-W error::FutureWarning` instead. If you change
 Stage 1, 2 or 3, this file is not your evidence.
 
-`verify_stage3.py`'s fifth check covers that case: a synthetic propellant row
+`verify_stage3.py` check 5 covers that case: a synthetic propellant row
 with no `propellantless` flag, under `-W error::FutureWarning`. Stage 1's
 builder is tested in AsteroidCatalog, where the code is.
 
@@ -837,7 +835,7 @@ subset that needs no catalog runs on every push and pull request, in
 |---|---|
 | `import master` | imports the four modules and builds the configs; Stage 1's taxonomy tables are empty without a catalog, which nothing at import reads |
 | `verify_docs.py` | reads the docs and the dataclasses; builds no stage |
-| `verify_stage3.py` | builds into a temp dir, needs no network, and CI checks out `spacecost` at the pinned tag so its reference check RUNS rather than skipping |
+| `verify_stage3.py` | builds into a temp dir, needs no network, and CI checks out `spacecost` at the pinned tag so check 6 can see a moved tag |
 | `platform_check.py` | **report only, never a gate** |
 
 🚨  **`verify.py` is NOT in CI and cannot be.** `asteroid_pipeline/` is
@@ -869,18 +867,16 @@ It never writes the catalog; installing is Stage 1's job.
 | # | check | what it executes |
 |---|---|---|
 | 1 | release | the pinned release exists, names itself, and is the data contract `CatalogConfig.pipeline_version` says |
-| 2 | taxonomy | in the release's `taxonomy.json`: every class has a residual; `Unknown` is the all-`None` sentinel; M-type has not been restored to a bare metal core |
 | 3 | bytes | the installed catalog and composition tables match the installed manifest's sha256s, and the manifest is the pinned release |
 | 4 | stamps | the rows' `pipeline_version`, `catalog_date` and count match the manifest |
-| 5 | pgm | the release's PGM table is positive multipliers and carries an M row |
 | 8 | provenance | the two `*_source` domains are the labels this pipeline's readers know, and the census reproduces |
 
-Checks 1, 2 and 5 read only the release's manifest and `taxonomy.json` over
-the network, so they run on CI. Checks 3, 4 and 8 read the catalog Stage 1
+Check 1 reads only the release's manifest over the network, so it runs on
+CI. Checks 3, 4 and 8 read the catalog Stage 1
 installed, and say what would make them run when it is absent. A catalog built
 before Stage 1 downloaded releases carries no manifest and fails check 3:
-nothing says which build it is. The numbers 2 and 8 are the ones those checks
-had when this file verified the builder in place.
+nothing says which build it is. The number 8 is the one that check had when
+this file verified the builder in place.
 
 ⚠️  **Checks 6 and 7 are retired (master v1.36.0).** Both re-tested the build,
 which AsteroidCatalog gates before publishing, and check 3 already proves the
@@ -888,6 +884,11 @@ bytes on disk are that build. Check 8 stays because it is a question about this
 pipeline: the worked calculation and the dashboard both branch on the two
 `*_source` labels. Its counts are pinned to the catalog identity they came
 from, so a repin is reported rather than failed.
+
+⚠️  **Checks 2 and 5 are retired too (2026-10-25).** They held the release's
+composition and PGM tables to their invariants; AsteroidCatalog's
+`tests/test_traps.py` holds every one of them, and its release test holds the
+shipped `taxonomy.json` to those tables.
 
 ### Verifying the docs
 

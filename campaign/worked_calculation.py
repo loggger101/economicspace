@@ -1728,7 +1728,7 @@ def taxonomy_fraction_span():
     than one, which is what guarantees there is a residual for the bulk
     silicate floor to catch.  An interval would go red the day somebody
     re-measures a taxonomy row, which is a legitimate act; the property would
-    not.  That is `verify_stage1.py` check 2's distinction, applied here.
+    not.  AsteroidCatalog's `tests/test_traps.py` asserts the same property.
 
     `Unknown` is the deliberate exception -- all four fractions are `None`, so
     the residual is the whole body -- and is excluded rather than skipped
