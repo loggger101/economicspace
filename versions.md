@@ -337,6 +337,46 @@ hand-written shim over it. No module's `pipeline_version` moves.
   `1.32.0`: no CSV byte can move, and none did.
 - spacecost stays at `v0.12.0`, the catalog at `data-2026-10-21b`.
 
+### The stage modules share one preamble (2026-10-25, no stamp)
+
+A stage module was standalone by construction so that it could be pasted into
+Colab alone, and so every one carried its own copy of the same preamble.
+Nothing pastes a module any more (master v1.57.0), so the copies are held once
+in **`modules/_runtime.py`**, which each module imports first (as
+`modules._runtime`, or as `_runtime` when run as a script):
+
+- the UTF-8 console fix (five copies) and the spawned-worker quiet guard
+  (`modules/__init__.py` and calc), both run when `_runtime` is imported, so
+  `modules/__init__.py` is a docstring now;
+- the install loop (four copies) as `install(required)`. Each module still
+  passes its own `_REQUIRED_PKGS`, so check 7 still reads them;
+- the spacecost pin guard (Stage 2 and Stage 3), inside `install()`. It is
+  called, never run at import, and visits a pin only for a module that lists
+  the package, so calc and every Stage 4 worker still never import spacecost.
+  The pin is typed in five places, not six;
+- `_default_output_dir` (four copies) as `DEFAULT_OUTPUT_DIR`, without its
+  Colab branch, which sent output to `/content/asteroid_pipeline` on any POSIX
+  host with a `/content` directory. Neither the Docker image (`/work`) nor
+  SPARK_SETUP.md uses one;
+- `_confirm_overwrite` (three copies) as `confirm_overwrite`. Check 15 keeps
+  its gate tests (gated, before the build, exits on a refusal) and drops the
+  comparison of the copies, since there is one.
+
+mineral_value's `G0_M_S2`, which nothing read, goes too. That empties
+`master.py`'s `_IDENTICAL_COPIES`, so the exception list goes and `_owner`
+refuses every name two modules bind to different objects. `verify_docs.py`'s
+module loader names its copies inside the `modules` package so their
+`from . import _runtime` resolves. About 300 lines go net.
+
+| harness | result |
+|---|---|
+| `verify.py check` against a 1.57.0 baseline taken on the clean tree first | MATCH on all four cells (151/151 columns, the 1.57.0 hashes), prune on/off and serial/parallel (8 workers) MATCH, mass ledger 0 kg, never-worse 0 worse, Stage 2 tables identical, market ceilings clean: ALL CHECKS PASSED |
+| ten import probes (master, calc alone, a spawned worker, each module as a script, the output-dir variable), HEAD against the change | identical console output (200 lines, repo path normalised), spacecost never imported by calc, the worker silenced, every config on one output directory, `master.CONFIG` and `master.validate` still refused |
+| the pin guard with its readers patched, nothing installed | calc's list never probes spacecost; the pinned tag passes with no pip call; another version reinstalls with `--force-reinstall --no-deps`; an editable one is refused with the command named |
+| `verify_docs.py` check 7, planted | the tag changed in `_runtime.py` alone: FAILED |
+| `verify_docs.py` check 15, planted | the gate neutered (`if False and ...`), `confirm_overwrite` renamed in `_runtime.py`, catalog's `sys.exit` removed: all three FAILED |
+| `verify_stage1.py`, `verify_stage3.py` | both verified; Stage 3's reference check against a clean `v0.12.0` clone |
+
 ## master v1.56.0 / catalog v1.10.0
 
 **Stage 1 repins to `data-2026-10-21b`, AsteroidCatalog's data contract

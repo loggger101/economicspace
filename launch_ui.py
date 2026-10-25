@@ -15,7 +15,7 @@ says, and making sure the PINNED quietlaunch is the one that runs.
 The pin is the `quietlaunch @ ...@vX.Y.Z` line in requirements-ui.txt, read
 rather than retyped. A missing or stale install is fixed in place with
 `pip install --force-reinstall --no-deps`, on the same rules
-modules/transportation.py applies to spacecost: the version is read off the
+modules/_runtime.py applies to spacecost: the version is read off the
 module that IMPORTS, and an editable install is somebody's checkout, refused
 rather than overwritten.
 

@@ -18,9 +18,8 @@ MINERAL_CONFIG.delivery_destination and CALC_CONFIG.delivery_destination
 together.  Stage 2 decides what a kilogram sells for; Stage 4 decides what it
 costs to put it there, and the answer is only meaningful when they agree.
 
-The output directory defaults to ./asteroid_pipeline (/content/asteroid_pipeline
-on Colab); override it with the environment variable
-ASTEROID_PIPELINE_OUTPUT_DIR or MASTER_CONFIG.output_dir.
+The output directory defaults to ./asteroid_pipeline; override it with the
+environment variable ASTEROID_PIPELINE_OUTPUT_DIR or MASTER_CONFIG.output_dir.
 
 `python master.py` runs all four stages, and Stages 1-3 re-fetch live inputs
 and overwrite their CSVs.  run_pipeline.py is the entry point that asks first.
@@ -28,9 +27,11 @@ and overwrite their CSVs.  run_pipeline.py is the entry point that asks first.
 
 MASTER_VERSION = "1.57.0"
 
-# The package's __init__ fixes the console encoding and silences spawned
-# workers before any module prints.  Imported in stage order.
+# Each module imports `modules._runtime` first, which fixes the console
+# encoding and silences spawned workers before anything prints.  Imported in
+# stage order.
 from modules import catalog, mineral_value, transportation, calc  # noqa: E402
+from modules import _runtime                                       # noqa: E402
 
 import os                                                          # noqa: E402
 from datetime import datetime                                      # noqa: E402
@@ -50,12 +51,11 @@ CALC_CONFIG            = calc.CONFIG
 
 # What the orchestrator below reads by bare name.  A module-level __getattr__
 # answers `master.X` from outside, never a lookup inside this file, so these
-# have to be bound here.  `_DEFAULT_OUTPUT_DIR` is calc's: all four modules
-# compute it with the same function.
+# have to be bound here.
 from modules.mineral_value import build_mineral_value_catalog      # noqa: E402
 from modules.transportation import build_transportation_catalog    # noqa: E402
 from modules.calc import (                                         # noqa: E402
-    _DEFAULT_OUTPUT_DIR, MEASURED_CELL_SECONDS, beneficiation_cost_ratio,
+    MEASURED_CELL_SECONDS, beneficiation_cost_ratio,
     build_profitability_catalog, measured_cell_provenance,
     programme_search_cost_ratio)
 
@@ -67,23 +67,18 @@ from modules.calc import (                                         # noqa: E402
 # rebinds later (its caches) is never served stale.
 _MODULES = (calc, transportation, mineral_value, catalog)
 
-# Bound in more than one module, as EQUAL values that are not the same object.
-# Anything else two modules both bind is refused unless every copy is the same
-# object (a shared import such as `pd`).
-_IDENTICAL_COPIES = frozenset({
-    "G0_M_S2",                # mineral_value takes spacecost's; calc repeats it
-    "_default_output_dir",    # the same body in all four modules
-    "_DEFAULT_OUTPUT_DIR",    # what that function returned, in each of them
-})
-
 
 def _owner(name):
-    """The module `master.<name>` is read from, or AttributeError saying why not."""
+    """The module `master.<name>` is read from, or AttributeError saying why not.
+
+    A name two modules both bind is refused unless every copy is the same
+    object (a shared import such as `pd`, or `_runtime`).
+    """
     owners = [m for m in _MODULES if name in vars(m)]
     if not owners:
         raise AttributeError(f"module 'master' has no attribute {name!r}")
     first = vars(owners[0])[name]
-    if (len(owners) > 1 and name not in _IDENTICAL_COPIES
+    if (len(owners) > 1
             and any(vars(m)[name] is not first for m in owners[1:])):
         raise AttributeError(
             f"master.{name} is ambiguous: "
@@ -129,7 +124,7 @@ class MasterConfig:
     architecture that puts it there.  Setting them apart prices the cargo at
     a depot while paying to land it in Utah.  This property writes both.
     """
-    output_dir: str = _DEFAULT_OUTPUT_DIR
+    output_dir: str = _runtime.DEFAULT_OUTPUT_DIR
 
     @property
     def delivery_destination(self) -> str:

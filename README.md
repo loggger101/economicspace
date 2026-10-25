@@ -76,7 +76,9 @@ ui_meta.py             Config introspection + curation for ui.py
 orbital.py             Elements to state vectors, numpy only; ui.py's orbit
                        diagram draws with it
 modules/               A package: master.py imports it
-    __init__.py        Console encoding and worker quiet mode; imports no stage
+    __init__.py        Imports no stage, so a Stage 4 worker loads calc alone
+    _runtime.py        What every stage does first: console encoding, worker
+                       quiet mode, output directory, installs, overwrite guard
     catalog.py         Stage 1 - asteroid catalog
     mineral_value.py   Stage 2 - mineral prices + densities
     transportation.py  Stage 3 - ADAPTER over the spacecost package
@@ -145,10 +147,9 @@ the data is single-sourced, the config dials are compared at import, and
 the output is compared byte for byte. The invariants are in
 [CLAUDE.md](CLAUDE.md#stage-1-and-stage-3-live-in-other-repositories).
 
-**spacecost is pinned to a tagged release**, `v0.12.0`, in all six places
-that type it: as a URL in `requirements.txt`, and in `_PIP_SPEC` in both
-`modules/transportation.py` and `modules/mineral_value.py` (what each module
-installs from at import, and Stage 2 reaches the package directly now); and in
+**spacecost is pinned to a tagged release**, `v0.12.0`, in all five places
+that type it: as a URL in `requirements.txt`, and in `PIP_SPEC` in
+`modules/_runtime.py` (what Stages 2 and 3 install from at import); and in
 prose here, in [CLAUDE.md](CLAUDE.md) and in [CITATIONS.md](CITATIONS.md).
 
 ### Stage 1 downloads the catalog; it does not build it
@@ -413,7 +414,8 @@ python modules/transportation.py
 ```
 
 Each module installs whatever it is missing from its own `_REQUIRED_PKGS` when
-it is imported, so either form works on a fresh interpreter.
+it is imported (through `modules/_runtime.py`), so either form works on a fresh
+interpreter.
 
 ### The UI
 
@@ -559,8 +561,8 @@ not budget.
 
 ### Output location
 
-Defaults to `/content/asteroid_pipeline` on Colab and `./asteroid_pipeline`
-everywhere else. Override with an environment variable:
+Defaults to `./asteroid_pipeline` under the working directory. Override with
+an environment variable, set before any module is imported:
 
 ```bash
 ASTEROID_PIPELINE_OUTPUT_DIR=/path/to/output python master.py
@@ -912,7 +914,7 @@ py verify_docs.py
 | 12 | pairs | one measurement quoted in CLAUDE.md, which quotes none, and in README or MODEL.md |
 | 13 | scope | a document disagreeing with `verify.py` about which checks it runs: its docstring list, the check table above, and the sentences that say what `invariants` or `--skip prune parallel` covers |
 | 14 | prose | a number typed into a sentence the worked calculation renders, unless it is on the `TYPED_OK` register in `campaign/worked_calculation.py` |
-| 15 | guards | a FETCHING stage module that would overwrite its own outputs when run directly; the guard is mirrored into all three, and this holds the copies to each other |
+| 15 | guards | a FETCHING stage module that would overwrite its own outputs when run directly: each must gate its build on `_runtime.confirm_overwrite` and exit on a refusal |
 | 16 | borrows | the worked calculation touching something in `master` that is on no row of its `BORROWED` register, or a row that matches no call |
 | 17 | dest table | the destination table under [What a kilogram is worth](MODEL.md#what-a-kilogram-is-worth) drifting from `master.DELIVERY_DESTINATIONS` |
 | 18 | shim | a `master.<name>` the repo's own Python reads that `master.py` cannot resolve, or that two modules define differently |
