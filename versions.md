@@ -403,6 +403,25 @@ points at the same check.
 | `verify_stage1.py`, `verify_stage3.py` before and after, diffed | the deleted checks' lines and the check count are the only differences; `verify_stage3.py` now passes beside a sibling spacecost checkout that is past the tag |
 | `verify_docs.py` | OK |
 
+### An unknown destination is refused, and calc's architecture table is held to the destination list (2026-10-25, no stamp)
+
+- **A mistyped `delivery_destination` raises `ValueError`** naming the valid
+  destinations, in Stage 2's `value_for_destination` and Stage 4's
+  `delivery_architecture` alike. Both used to print a WARN and carry on at
+  `earth_surface`, so a typo produced a full run of plausible prices or
+  missions for a destination nobody asked for, and the warning scrolled past
+  in the run log. No valid destination's path changes, so no number moves.
+- **`verify_docs.py` check 17 holds `DELIVERY_ARCHITECTURES`' keys to
+  `DELIVERY_DESTINATIONS`**, beside the launcher menus. A destination added to
+  one table alone is one the pipeline offers and cannot run.
+
+| harness | result |
+|---|---|
+| `verify.py check` against a baseline taken on the clean tree first | MATCH on all four cells (151/151 columns, the 1.57.0 hashes), prune on/off and serial/parallel (8 workers) MATCH, mass ledger 0 kg, never-worse 0 worse, Stage 2 tables identical, market ceilings clean: ALL CHECKS PASSED |
+| a Stage 4 build with `delivery_destination="cislunr"`, output to a temp dir | `ValueError` from `delivery_architecture`, nothing written, no fallback line |
+| both lookups on every valid key, padded and upper-cased, and on `"cislunr"`, `""` and `None` | all 8 resolve to their own row in each stage; all three refused in each |
+| check 17, planted | `gto` removed from `DELIVERY_ARCHITECTURES`, and a `leo_typo` row added: both FAILED, naming the key |
+
 ## master v1.56.0 / catalog v1.10.0
 
 **Stage 1 repins to `data-2026-10-21b`, AsteroidCatalog's data contract

@@ -4532,15 +4532,14 @@ _ARCH_BY_RAW_KEY: Dict[Any, dict] = {}
 def delivery_architecture(destination: str) -> dict:
     """Look up the mission architecture for a delivery destination.
 
-    Unknown destinations fall back to earth_surface, the conservative
-    choice, and the one whose cost lines are all present.
+    An unknown destination raises ValueError naming the valid ones.  It used
+    to warn and fly the mission to earth_surface, so a typo produced a full run
+    of plausible numbers for a destination nobody asked for.
 
     v1.17.1: the resolved answer is memoised on the RAW argument, because
     `mission_cost_usd` calls this once per programme option: 458,337 times on
     a 150-row beneficiated sample with the search on, to normalise the same
-    string and index the same dict.  Only the hit path is memoised: an unknown
-    destination still falls through and still prints its warning every time,
-    which is the loud behaviour that made it a warning.
+    string and index the same dict.  Only the hit path is memoised.
     """
     try:
         hit = _ARCH_BY_RAW_KEY.get(destination)
@@ -4551,10 +4550,8 @@ def delivery_architecture(destination: str) -> dict:
 
     key = str(destination or "").strip().lower()
     if key not in DELIVERY_ARCHITECTURES:
-        print(f"     WARN   Unknown delivery_destination {destination!r} - "
-              f"falling back to 'earth_surface'.  Valid: "
-              f"{', '.join(sorted(DELIVERY_ARCHITECTURES))}")
-        return DELIVERY_ARCHITECTURES["earth_surface"]
+        raise ValueError(f"Unknown delivery_destination {destination!r}.  "
+                         f"Valid: {', '.join(sorted(DELIVERY_ARCHITECTURES))}")
 
     arch = DELIVERY_ARCHITECTURES[key]
     try:

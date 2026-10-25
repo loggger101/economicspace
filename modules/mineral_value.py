@@ -1192,15 +1192,14 @@ def in_space_processing_cost_usd_per_kg(name: str) -> float:
 def value_for_destination(destination: str) -> dict:
     """Look up the delivered-value basis for a delivery destination.
 
-    Unknown destinations fall back to earth_surface, the conservative
-    choice, rather than silently keeping an in-space premium.
+    An unknown destination raises ValueError naming the valid ones.  It used
+    to warn and price at earth_surface, so a typo produced a full catalog of
+    plausible prices for a destination nobody asked for.
     """
     key = str(destination or "").strip().lower()
     if key not in DELIVERY_DESTINATIONS:
-        print(f"     WARN   Unknown delivery_destination {destination!r} - "
-              f"falling back to 'earth_surface'.  Valid: "
-              f"{', '.join(sorted(DELIVERY_DESTINATIONS))}")
-        key = "earth_surface"
+        raise ValueError(f"Unknown delivery_destination {destination!r}.  "
+                         f"Valid: {', '.join(sorted(DELIVERY_DESTINATIONS))}")
     return DELIVERY_DESTINATIONS[key]
 
 

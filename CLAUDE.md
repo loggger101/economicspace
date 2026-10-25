@@ -462,8 +462,10 @@ lists every file it touched.
 
 1. spacecost: `DELIVERY_CHAINS`, `DOWNLEG_DEPARTURE_DV_M_S`, the `TYPED`
    register for any typed burn, tests; release and repin.
-2. calc: a `DELIVERY_ARCHITECTURES` row (with `window_phasing_au`), its return
-   legs in the per-asteroid Delta-v table, capture Delta-v.
+2. calc: a `DELIVERY_ARCHITECTURES` row (with `window_phasing_au`; check 17
+   holds its keys to `DELIVERY_DESTINATIONS`, and both stages refuse a name
+   they lack), its return legs in the per-asteroid Delta-v table, capture
+   Delta-v.
 3. mineral_value: `_DESTINATION_NOTES`, a decided `IN_SPACE_UTILITY_BY_DESTINATION`
    row (an omission silently means the base profile), and an
    `IN_SPACE_ANNUAL_DEMAND_KG` row (asserted for in-space destinations).
