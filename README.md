@@ -917,7 +917,7 @@ py verify_docs.py
 | 14 | prose | a number typed into a sentence the worked calculation renders, unless it is on the `TYPED_OK` register in `campaign/worked_calculation.py` |
 | 15 | guards | a FETCHING stage module that would overwrite its own outputs when run directly: each must gate its build on `_runtime.confirm_overwrite` and exit on a refusal |
 | 16 | borrows | the worked calculation touching something in `master` that is on no row of its `BORROWED` register, or a row that matches no call |
-| 17 | dest table | the destination table under [What a kilogram is worth](MODEL.md#what-a-kilogram-is-worth) drifting from `master.DELIVERY_DESTINATIONS` |
+| 17 | dest table | the destination table under [What a kilogram is worth](MODEL.md#what-a-kilogram-is-worth) drifting from `master.DELIVERY_DESTINATIONS`, and the launcher menus and calc's `DELIVERY_ARCHITECTURES` offering a different set of destinations |
 | 18 | shim | a `master.<name>` the repo's own Python reads that `master.py` cannot resolve, or that two modules define differently |
 
 Every check fails if a file it is supposed to read is not on disk, on a counter

@@ -57,8 +57,9 @@ counts-in-prose failure this file was written to catch:
                      table: a row of typed markdown per destination restating a
                      derivation, which is the third copy of the in-space
                      prices and the one nothing read; and the destination
-                     menus in run.bat and run.sh, against the same keys
-   18. shim          every `master.<name>` the repo's own Python reads
+                     menus in run.bat and run.sh and calc's
+                     DELIVERY_ARCHITECTURES, against the same keys
+   18. shim         every `master.<name>` the repo's own Python reads
                      resolves on master.py, which forwards to the four
                      modules and refuses a name two of them define differently
 
@@ -2408,6 +2409,11 @@ def check_destination_table() -> bool:
                          r"One of ([^.]*)\.", read(rd_p), re.M)
         menus["README's delivery_destination row"] = (
             set(re.findall(r"`([a-z_]+)`", m_rd.group(1))) if m_rd else set())
+    # Stage 4's own table, keyed by the same names.  Stage 2 prices a
+    # destination off DELIVERY_DESTINATIONS and Stage 4 flies it off this, and
+    # each refuses a name it lacks, so a row added to one alone is a
+    # destination the pipeline offers and cannot run.
+    menus["calc's DELIVERY_ARCHITECTURES"] = set(_m.DELIVERY_ARCHITECTURES)
     for where, offered in sorted(menus.items()):
         n += 1
         if not offered:
