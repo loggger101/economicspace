@@ -61,8 +61,9 @@ Pipeline flow:
 # INSTALLATION
 # ──────────────────────────────────────────────────────────────────────────────
 try:
-    from . import _runtime
+    from . import _release, _runtime
 except ImportError:                 # run as a script: modules/ is on sys.path
+    import _release
     import _runtime
 
 # No `asteroid_catalog` here: this stage downloads the package's published
@@ -75,7 +76,6 @@ _runtime.install(_REQUIRED_PKGS)
 # IMPORTS & CONFIGURATION
 # ──────────────────────────────────────────────────────────────────────────────
 import gzip
-import hashlib
 import json
 import os
 import shutil
@@ -86,8 +86,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 import pandas as pd
-import requests
-from tqdm.auto import tqdm
 
 # Silence the chronic noise the data libraries emit during a typical run, but
 # DON'T globally suppress everything, real RuntimeWarnings (e.g. divide-by-zero
@@ -174,67 +172,39 @@ _ASSET_REJECTED = "rejected_entries.csv"
 _ASSET_TAXONOMY = "taxonomy.json"
 
 
-def _catalog_sha256(path: str) -> str:
-    """sha256 of a file, read in 1 MB chunks."""
-    h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+# The download, the hash and the size check are modules/_release.py's, shared
+# with Stage 2.  What stays here is what is Stage 1's own: the assets, the
+# contract and the words, which name this stage's pin and releases page.
+_catalog_sha256 = _release.sha256
+_check_asset = _release.check
 
 
 def _asset_url(config: "CatalogConfig", asset: str) -> str:
     """Where one asset of the pinned release is served."""
-    return "%s/%s/%s" % (config.release_base_url.rstrip("/"),
-                         config.catalog_release, asset)
+    return _release.asset_url(config.release_base_url, config.catalog_release,
+                              asset)
 
 
 def _download_asset(config: "CatalogConfig", asset: str, dest: str) -> None:
     """Stream one release asset to `dest`, with a byte progress bar."""
     url = _asset_url(config, asset)
-    with requests.get(url, stream=True, timeout=config.request_timeout) as resp:
-        if resp.status_code == 404:
-            raise SystemExit(
-                "FAIL  %s has no asset %s.\n"
-                "      %s\n"
-                "      Check `catalog_release` against the published tags at\n"
-                "      https://github.com/loggger101/AsteroidCatalog/releases"
-                % (config.catalog_release, asset, url))
-        resp.raise_for_status()
-        total = int(resp.headers.get("content-length") or 0) or None
-        with open(dest, "wb") as fh, tqdm(
-                total=total, desc="     %s" % asset, unit="B",
-                unit_scale=True, unit_divisor=1024, mininterval=0.3) as bar:
-            for chunk in resp.iter_content(chunk_size=1 << 20):
-                if chunk:
-                    fh.write(chunk)
-                    bar.update(len(chunk))
-
-
-def _check_asset(path: str, entry: dict, what: str) -> None:
-    """Refuse a file whose size or sha256 is not the manifest's."""
-    size = os.path.getsize(path)
-    if size != entry["bytes"]:
-        raise SystemExit("FAIL  %s is %d bytes; the manifest says %d.  "
-                         "Nothing was installed." % (what, size, entry["bytes"]))
-    digest = _catalog_sha256(path)
-    if digest != entry["sha256"]:
-        raise SystemExit("FAIL  %s has sha256 %s; the manifest says %s.  "
-                         "Nothing was installed." % (what, digest, entry["sha256"]))
+    _release.download(
+        url, dest, config.request_timeout,
+        "FAIL  %s has no asset %s.\n"
+        "      %s\n"
+        "      Check `catalog_release` against the published tags at\n"
+        "      https://github.com/loggger101/AsteroidCatalog/releases"
+        % (config.catalog_release, asset, url), asset)
 
 
 def _fetch_manifest(config: "CatalogConfig") -> dict:
     """The pinned release's manifest, checked against the pin and the contract."""
-    resp = requests.get(_asset_url(config, _ASSET_MANIFEST),
-                        timeout=config.request_timeout)
-    if resp.status_code == 404:
-        raise SystemExit(
-            "FAIL  no catalog release %r.\n"
-            "      Check `catalog_release` against the published tags at\n"
-            "      https://github.com/loggger101/AsteroidCatalog/releases"
-            % config.catalog_release)
-    resp.raise_for_status()
-    manifest = resp.json()
+    manifest = _release.fetch_json(
+        _asset_url(config, _ASSET_MANIFEST), config.request_timeout,
+        "FAIL  no catalog release %r.\n"
+        "      Check `catalog_release` against the published tags at\n"
+        "      https://github.com/loggger101/AsteroidCatalog/releases"
+        % config.catalog_release)
     if manifest.get("release_tag") != config.catalog_release:
         raise SystemExit("FAIL  the manifest served for %r names itself %r."
                          % (config.catalog_release, manifest.get("release_tag")))

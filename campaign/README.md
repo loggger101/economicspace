@@ -95,12 +95,12 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       for any row whose run ended before the live tables were written; three
       propellant prices in them are the 2026-09-17 refetch, and the outbound
       price is recovered from the row regardless.
-  `run_cell.py <dest> <raw|benef> <off|on>`  one cell: copy Stage 2, run
-      `--stages 4` only, time it, archive the output gzipped to `cells/`,
-      append one row to `results.csv`.  REFUSES, before copying anything,
-      when the frozen Stage 2 stamp is not the one the Stage 2 code writes:
-      since master v1.35.0 a cell would pair 0.3.x prices with the v0.4.0
-      launch table and archive the hybrid under this campaign's name.
+  `run_cell.py <dest> <raw|benef> <off|on>`  one cell: install Stage 2,
+      run `--stages 4`, time it, archive the output gzipped to `cells/`,
+      append one row to `results.csv`.  For this campaign it copied the
+      frozen `stage2/` table and refused one whose stamp was not the code's;
+      since master v1.59.0 it installs the destination's table from the
+      pinned price release, and stops the cell if that fails.
   `run_queue.py`   runs everything outstanding, resumable: it skips any cell
       already in `results.csv` with `rc == 0`.  Kill and restart freely.
   `quietqueue_pin.py`  the job runner is

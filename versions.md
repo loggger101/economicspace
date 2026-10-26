@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.59.0 / mineral_value v1.17.0](#master-v1590--mineral_value-v1170)
 - [master v1.58.0 / transportation v1.23.6](#master-v1580--transportation-v1236)
 - [master v1.57.0](#master-v1570)
 - [master v1.56.0 / catalog v1.10.0](#master-v1560--catalog-v1100)
@@ -109,10 +110,10 @@ one that does not say is not to be used.
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
-| 2 | `modules/mineral_value.py` | **1.16.0** | v1.16.0, an eighth destination, `gto`: its note, `geo`'s utility profile by reference, a sourced 81.6 t/yr demand ceiling, and an import-time check that every in-space destination has one; no existing row moved (v1.13.0 was the last to move a row) |
+| 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.32.0** | v1.32.0, ISRU hydrolox pays for its electrolysis and liquefaction (energy through the array, plant with the rig), and the flat $50/kg is retired; v1.31.0 had added an eighth destination, `gto` |
-| - | `master.py` | **1.58.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| - | `master.py` | **1.59.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -127,7 +128,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Twenty-nine stamps so far have moved without moving a number:
+Thirty stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -160,6 +161,7 @@ Twenty-nine stamps so far have moved without moving a number:
 | calc `1.31.0` | **an eighth destination** | bit-identical, verified |
 | mineral_value `1.16.0` | **an eighth destination** | bit-identical, verified |
 | transportation `1.23.6` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
+| mineral_value `1.17.0` | **the pricing moved to spacevalue** | bit-identical, verified |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -167,10 +169,11 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0`,
 `transportation 1.14.0`, `transportation 1.15.0`, `transportation 1.17.2`,
 `mineral_value 1.12.3`, `transportation 1.17.3`, `transportation 1.18.1`,
-`transportation 1.19.0`, `mineral_value 1.16.0` and `transportation 1.23.6`.
+`transportation 1.19.0`, `mineral_value 1.16.0`, `transportation 1.23.6` and
+`mineral_value 1.17.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and twenty-one are not, and that split rotted in prose
+rows are performance stamps and twenty-two are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -202,6 +205,8 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.59.0 / mineral_value v1.17.0](#master-v1590--mineral_value-v1170) | 2026-10-26 | **Stage 2's pricing moves to `spacevalue`, and both pricing stages stop fetching live**: Stage 2 installs a published price release, Stage 3 prices fuel from a recorded quote snapshot (spacecost v0.14.0), and both pins hold the closes every current number was measured on, so no number moves |
+| [master v1.58.0 / transportation v1.23.6](#master-v1580--transportation-v1236) | 2026-10-25 | **spacecost `v0.13.0`, and Stage 3 stops mirroring it**: `TransportConfig` becomes spacecost's config with two defaults overridden, `verify_stage3.py` retires into spacecost's suite and the pin guard; no value moves |
 | [master v1.57.0](#master-v1570) | 2026-10-25 | **`master.py` stops being generated**: `modules/` becomes a package and `master.py` a shim that imports it, so `build_master.py`, its rename table and the commit-both rule go; no module stamp moves and every cell is bit-identical |
 | [master v1.56.0 / catalog v1.10.0](#master-v1560--catalog-v1100) | 2026-10-21 | **Stage 1 repins to `data-2026-10-21b`**, data contract 1.10.0: the S complex's PGM factor 1.0 to 1.55 and the primitive types' carbon 0.25-0.30 to 0.04; `earth_surface`'s sampled S bodies better by a median 18-21%, its default best becomes 2018 RT1, and the in-space destinations move by hundredths of a percent |
 | [master v1.55.0 / calc v1.32.0 / transportation v1.23.0](#master-v1550--calc-v1320--transportation-v1230) | 2026-10-17 | **making ISRU propellant costs energy and a plant**: hydrolox pays 15,200 Wh/kg through the array and a plant with the rig, and the flat $50/kg is retired; the one sampled hydrolox ISRU winner gets worse and the water ISRU rows a fraction of a percent better |
@@ -267,6 +272,112 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.59.0 / mineral_value v1.17.0
+
+**Stage 2's pricing leaves for [`spacevalue`](https://github.com/loggger101/spacevalue),
+and neither pricing stage fetches a live price any more.** Stage 2 installs a
+published price release, exactly as Stage 1 installs a published catalog;
+Stage 3 prices fuel from a recorded quote snapshot. Both pins hold the closes
+the tables every current number was measured on were built from, so **no
+number moves**: the Stage 2 table on disk differs only in its stamp, and the
+Stage 3 tables only in the stamp and the notes 1.23.x reworded on purpose.
+
+### Why
+
+A live quote cannot be fetched twice. Stages 2 and 3 re-fetched on every run
+and overwrote the only copy of the prices every `.verify` baseline and every
+archived cell was measured on, so CLAUDE.md's first rule was "never re-run
+them", `campaign/stage2/` and `campaign/stage3/` filled with hand-frozen
+copies, and `asteroid_pipeline/` with a dozen `_inputs_backup_*` folders.
+`campaign/run_cell.py` had been refusing every cell, because its frozen set was
+stamped 1.9.0 and the code had moved to 1.16.0.
+
+### What moved, and where
+
+- **spacecost `v0.13.0` -> `v0.14.0`** ([spacecost#34](https://github.com/loggger101/spacecost/pull/34)):
+  `spacecost.quotes`, recorded quote snapshots with a `SHA256SUMS` line each;
+  `SpacecostConfig.quote_snapshot`; `spacecost quotes record`. The data
+  contract stays 1.23.6 and a default build is byte-identical.
+- **spacevalue `v0.1.0`**, a new repository whose history is
+  `modules/mineral_value.py`'s, filtered out of this one (58 commits from
+  2026-08-05): the reference table, the eight destinations, utility, demand,
+  the recorded metal quotes, and `prices-*` releases built from one snapshot
+  and gated before upload. Data contract 1.17.0.
+- **Published**: `prices-2026-10-07` (the seed, pinned here) and
+  `prices-2026-10-26`, the first built from quotes recorded at the time.
+
+### What changes here
+
+- **`modules/mineral_value.py` is an installer.** `MineralValueConfig` keeps
+  `delivery_destination` and gains `price_release`, `release_base_url`,
+  `request_timeout`, `manifest_filename` and `subdir`; the live-source fields
+  went with the pricing. Stage 2 fetches the manifest, refuses another data
+  contract, downloads all eight tables, checks each sha256, caches them under
+  `asteroid_pipeline/mineral_value/<tag>/`, and installs the destination's,
+  checked again. It re-exports the spacevalue names this repo reads
+  (`DELIVERY_DESTINATIONS`, check 6's judgement tables, the worked
+  calculation's delivery names).
+- **`modules/_release.py`**: the download, size and sha256 checks Stage 1 had,
+  now shared by Stages 1 and 2. Stage 1's messages are unchanged.
+- **Stage 3 pins `quote_snapshot = "fuel-2026-10-17"`** in place of
+  `use_yfinance = True`.
+- **yfinance leaves `requirements.txt`** and every `_REQUIRED_PKGS`: no stage
+  fetches by default. spacevalue joins it, pinned to its tag, and check 7 holds
+  both packages' five copies, and the price release's prose claims, as it
+  holds spacecost's and the catalog's.
+- **`campaign/run_cell.py` installs Stage 2** for the cell's destination
+  (`run_pipeline.py --stages 2`) instead of copying a frozen table, and stops
+  before Stage 4 if that fails. `worked_calculation.py` also searches the
+  cached price releases for the table a row ran on.
+- The dashboard's "Data sources" group shows the two pins.
+
+### The seeds, and why nothing moved
+
+Neither the fuel nor the metal quotes behind the tables on disk had been
+recorded as quotes: the tables keep only the converted $/kg. Each converts
+back to exactly one close (float32, as yfinance serves them) that reproduces it
+bit for bit: HO=F and NG=F from the Stage 3 tables of 2026-10-17, GC=F, SI=F,
+PL=F, PA=F and HG=F from the Stage 2 tables of 2026-10-07. Those closes are the
+seed snapshots, `fuel-2026-10-17` and `metals-2026-10-07`, and each file's
+`note` column says where it came from.
+
+### Verified
+
+| harness | result |
+|---|---|
+| spacecost from `fuel-2026-10-17` against `v0.13.0`'s live build fed the same closes through a stub yfinance | all seven CSVs identical, byte for byte |
+| that build against the Stage 3 tables on disk | every column identical except `pipeline_version` and `notes` |
+| spacevalue from `metals-2026-10-07` against this repo's mineral_value 1.16.0 fed the same closes | all eight destinations identical in every column but the stamp and date |
+| the same against `campaign/stage2/mineral_value-1.15.0/` | the seven destinations it holds identical byte for byte once the stamp is swapped |
+| `prices-2026-10-07` as published, built on a Windows runner | every table's sha256 equal to the locally built fixtures |
+| spacevalue's CI rebuilding the eight seed tables | byte-identical on Windows, Linux and macOS at Python 3.12-3.14 |
+| `run_pipeline.py --stages 23 --destination cislunar` | Stage 2's table differs from the one it replaced only in `pipeline_version`; Stage 3's tables only in `pipeline_version` and `notes` |
+| `verify.py check` against a 1.58.0 baseline taken on the clean tree first | ALL CHECKS PASSED: the four cells MATCH bit for bit (151 of 151 columns each), as do prune on/off and serial/parallel; mass ledger, never-worse and market ceilings OK; check 6 recomputes all 59 installed cislunar rows through the pinned spacevalue: ALL IDENTICAL |
+| spacecost's suite, spacevalue's suite | 291 passed; 71 passed, each with planted defects for every snapshot and release guard |
+| `verify_docs.py` | OK |
+
+### Found on the way
+
+- **Below Python 3.12 the tables differ in one bit.** Two alloy yields, the
+  iron in taenite and tetrataenite, are float sums, and Python 3.12 made
+  `sum()` over floats compensated. spacevalue's CI found it on its 3.9 legs;
+  spacevalue requires 3.12, and this repo already runs on 3.14.
+- **A snapshot holds settled closes only.** While a market is open yfinance's
+  last bar is the latest trade, which every live build here has always taken;
+  `record` drops a bar dated today.
+- **The synced folder refuses a directory swap.** A one-byte edit planted in
+  the cached release was caught, and the re-download then failed replacing the
+  cache directory (WinError 5, the trap Stage 1's staging comment records).
+  The cache now replaces files, manifest last; the planted edit re-downloads
+  and installs the same bytes.
+
+### What did not change
+
+- `campaign/stage2/`, `campaign/stage3/` and their replay scripts stay as the
+  record of the cells that read them.
+- The lock file still pins yfinance: it is the measured environment, and
+  re-locking is a measurement of its own.
 
 ## master v1.58.0 / transportation v1.23.6
 
@@ -10194,6 +10305,22 @@ at import that every in-space destination has such a row (a missing one used
 to fall through to the unbounded terrestrial market). No existing row, config
 field or column moved; every other destination's table is 1.15.0's but for
 the stamp.
+
+**`1.17.0`  the pricing moves to spacevalue.** Full write-up: [master v1.59.0 / mineral_value v1.17.0](#master-v1590--mineral_value-v1170).
+No row moved: from the same closes, every table is 1.16.0's but for the stamp.
+The tables' `catalog_date` is now the day their quotes were recorded. This
+module's config keeps `delivery_destination` and adds `price_release`,
+`release_base_url`, `request_timeout`, `manifest_filename` and `subdir`;
+`use_yfinance`, `use_metals_api`, `use_reference_table`, `metals_api_key`,
+`metals_api_url` and `PRICE_UNIT` left with the pricing (spacevalue's
+`MineralValueConfig` has them, `use_yfinance` off, plus `quote_snapshot`). No
+output column moved.
+
+**Where a new entry goes now.** A price changes in spacevalue, so it is a
+spacevalue release and a `prices-*` release, recorded in that repo's
+`CHANGELOG.md` under "Data contracts". This repo follows by moving
+`price_release` (and, for a new contract, `pipeline_version` and the package
+pin), and that move is a `master` release recorded above.
 
 ## Stage 3 changelog: `modules/transportation.py`
 

@@ -76,7 +76,7 @@ PATH_FIELDS = {
 # Shown read-only. `pipeline_version` is the stamp that tells you which code
 # produced a CSV. CLAUDE.md is explicit that it must be bumped in the source
 # when output changes, so letting the UI edit it would defeat the entire point.
-READONLY_FIELDS = {"pipeline_version", "PRICE_UNIT"}
+READONLY_FIELDS = {"pipeline_version"}
 
 # Never rendered as an ordinary widget anywhere.
 #
@@ -98,8 +98,9 @@ SUPPRESSED_BY_SECTION: Dict[str, set] = {
                   "contingency_fraction"},
 }
 
-# Secrets get a password-style input.
-SECRET_FIELDS = {"metals_api_key"}
+# Secrets get a password-style input.  None today: the one there was,
+# metals.dev's key, left with Stage 2's pricing for spacevalue.
+SECRET_FIELDS: set = set()
 
 # Fixed value sets. `None` means "resolve at runtime from the loaded module".
 CHOICES: Dict[str, Optional[List[str]]] = {
@@ -411,14 +412,15 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
     ),
     (
         "Data sources",
-        "Live price sources for Stage 2. A source that fails soft falls back "
-        "to reference prices rather than stopping the run, so check the "
-        "provenance panel on the results page before comparing to a committed "
-        "number. The catalog's own sources are chosen when a catalog release "
-        "is built, not here.",
+        "Which recorded prices the run uses. Stage 2 installs a published "
+        "spacevalue price release and Stage 3 prices fuel from a recorded "
+        "spacecost quote snapshot, so both give the same tables on every run. "
+        "Changing either is a repin that moves every number downstream. The "
+        "catalog's own sources are chosen when a catalog release is built, "
+        "not here.",
         [
-            ("mineral", "use_yfinance"),
-            ("mineral", "use_metals_api"),
+            ("mineral", "price_release"),
+            ("transport", "quote_snapshot"),
         ],
     ),
 ]

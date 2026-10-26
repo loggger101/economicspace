@@ -229,8 +229,10 @@ STAGES = [
           "NEOWISE and MP3C, merged and gated upstream): a ~290 MB download, "
           "sha256-checked, and nothing at all once that release is installed."),
     Stage("mineral",   2, "Mineral value",
-          "Live prices + mineralogy, priced FOR THE CHOSEN DESTINATION. Must "
-          "be re-run whenever the destination changes."),
+          "Installs the pinned spacevalue price release's table FOR THE "
+          "CHOSEN DESTINATION: recorded quotes, sha256-checked, and no "
+          "download once the release is cached. Must be re-run whenever the "
+          "destination changes."),
     Stage("transport", 3, "Transportation",
           "Launch vehicles, propellants (with storage class and tankage), Δv "
           "segments, ops costs, storage systems. Reference tables: fast, and "
@@ -583,7 +585,7 @@ def _stage_minutes(key: str) -> float:
     contradicted the stage ETA directly beneath it.
     """
     if key == "mineral":
-        return 0.04              # ~2 s: a handful of live price quotes
+        return 0.04              # ~2 s: a cached release, or eight small tables
     if key == "transport":
         return 0.01              # ~0.5 s: pure reference tables, no network
 
@@ -1907,8 +1909,8 @@ def render_sidebar() -> None:
     # calc's default is `earth_surface` while the catalog here is almost always
     # `cislunar`, so seeding from the config made the freshly-opened page
     # disagree with its own data -- which marks Stage 2 stale, forces it back
-    # on, and makes the very first click of "Run pipeline" re-fetch live metal
-    # prices for a destination nobody chose. The old prices do not come back.
+    # on, and makes the very first click of "Run pipeline" install another
+    # destination's prices over the table every baseline on disk read.
     #
     # This is NOT the silent adoption run_pipeline.py deliberately refuses: the
     # value lands in a selectbox the user is looking at, under a caption saying
@@ -2022,24 +2024,27 @@ def render_sidebar() -> None:
             f"Stage 2 is cached for **{cached_dest}** but you have selected "
             f"**{destination}**. Re-running it is forced, because skipping "
             "would price the cargo at one destination and fly it to another. "
-            "Note that it re-fetches **live** metal prices; see the caution "
-            "below.",
+            "It installs that destination's table from the pinned price "
+            "release; see the caution below.",
             icon="⚠️",
         )
 
-    # Stages 1-3 all FETCH, and each writes over the CSV already on disk. The
-    # previous copy is the only copy: verify.py compares against baselines built
-    # on those exact inputs, so refreshing them makes four cells stop
-    # reproducing -- which looks precisely like a code regression and is not
-    # one. That is a mistake somebody made here on 2026-08-23, by running
-    # Stage 2 to look at a banner; CLAUDE.md carries the write-up. The CLI
+    # Stages 1-3 each write over the CSV already on disk, and verify.py
+    # compares against baselines built on those exact inputs, so replacing them
+    # makes four cells stop reproducing -- which looks precisely like a code
+    # regression and is not one.  Somebody did exactly that here on
+    # 2026-08-23, running Stage 2 to look at a banner; CLAUDE.md carries the
+    # write-up.  Since master v1.59.0 all three build from pins, so the danger
+    # is a different destination or a moved pin rather than a live price.  The CLI
     # spells this out in run_pipeline.py's refusal, and the front door should
     # not be the quieter of the two.
     _FETCHES = {
         "catalog":   "installs the pinned catalog release over the one on disk "
                      "(a no-op when that release is already installed)",
-        "mineral":   "re-fetches live metal prices",
-        "transport": "re-fetches live commodity prices",
+        "mineral":   "installs the pinned price release's table for the "
+                     "chosen destination over the one on disk",
+        "transport": "rebuilds the reference tables from the recorded fuel "
+                     "quotes",
     }
     refetch = [st_ for st_ in STAGES[:3]
                if st_.key in selected and st_.cache_status()]
@@ -2049,8 +2054,8 @@ def render_sidebar() -> None:
                           for st_ in refetch)
         st.sidebar.warning(
             "This overwrites data already on disk:\n\n" + lines +
-            "\n\nThe old values are **not recoverable**, and any verify.py "
-            "baseline built on them will stop reproducing. Copy "
+            "\n\nAny verify.py baseline built on what is there now will "
+            "stop reproducing if the result differs. Copy "
             "`asteroid_pipeline/*.csv` first if you may want to compare "
             "against them.",
             icon="🔄",
@@ -2258,7 +2263,7 @@ def render_getting_started() -> None:
                 "**1. Pick where the material is sold.** The destination in "
                 "the sidebar sets both the price of a kilogram and the "
                 "architecture that delivers it. Changing it forces Stage 2 to "
-                "re-run, which re-fetches live metal prices.")
+                "re-run, which installs that destination's pinned prices.")
             st.markdown(
                 "**2. Pick how big a run you want.** The three preset buttons "
                 "are the ones the command line offers. **Quick sample** "

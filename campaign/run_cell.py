@@ -1,19 +1,22 @@
 # -*- coding: utf-8 -*-
 """Run ONE campaign cell: (destination x beneficiation x programme search).
 
-Copies the frozen Stage 2 catalog for the destination into place, runs Stage 4
-only, times it, extracts the headline + population statistics, archives the
+Installs the destination's Stage 2 table from the pinned price release, runs
+Stage 4, times it, extracts the headline + population statistics, archives the
 output CSV gzipped, and appends one row to campaign/results.csv.
 
-Stages 1 and 3 are NEVER run here.  Stage 2 is never re-fetched -- it is copied
-from campaign/stage2/, which was priced once for every destination the
-campaign flies, from one set of live prices (each file's `catalog_date` says
-when).
+Stages 1 and 3 are NEVER run here.  Stage 2 is, and that is safe since master
+v1.59.0: it installs a published spacevalue release (`price_release` in
+modules/mineral_value.py), the same bytes for every destination and every
+cell, so every cell of a campaign is priced from one recorded set of quotes.
+Until then it copied hand-frozen tables from campaign/stage2/, which stay as
+the record of the campaigns that read them.
 
     python campaign/run_cell.py <destination> <raw|benef> <off|on>
 """
 import csv
 import gzip
+import json
 import os
 import shutil
 import subprocess
@@ -23,7 +26,6 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CAMP = os.path.join(ROOT, "campaign")
 OUT = os.path.join(ROOT, "asteroid_pipeline", "profitability_catalog.csv")
-STAGE2_LIVE = os.path.join(ROOT, "asteroid_pipeline", "mineral_value_catalog.csv")
 LEDGER = os.path.join(CAMP, "results.csv")
 
 # Both campaigns were measured at 12 workers, so 12 is what the wall
@@ -186,31 +188,18 @@ def extract(path, dest, ore, search):
     return stats
 
 
-def frozen_stage2_stamp(path):
-    """The `pipeline_version` a frozen Stage 2 catalog was written at."""
-    with open(path, newline="", encoding="utf-8") as fh:
-        row = next(csv.DictReader(fh), {})
-    return (row.get("pipeline_version") or "").strip()
+def installed_stage2():
+    """What Stage 2 says it installed: its record beside the table, or {}.
 
-
-def stage2_code_stamp():
-    """mineral_value's `pipeline_version`, read off its config dataclass.
-
-    🚨  THE CAMPAIGN'S FROZEN PRICES ARE ONE EPOCH, AND THE CODE MOVED ON.
-    master v1.35.0 repinned spacecost to v0.4.0, which changed Stage 2's
-    delivered-price model and Stage 3's launch table at once.  Copying a
-    spacecost 0.3.x catalog into place under that code does not reproduce the
-    campaign: Stage 4 would read old prices beside a new launch table, and the
-    archive would be named as one of the campaign's own cells.  The dataclass
-    is the authority for the stamp (versions.md says so), and it is read as
-    text because this harness never imports the pipeline.
+    Read as JSON rather than through the pipeline, because this harness never
+    imports it.
     """
-    src = os.path.join(ROOT, "modules", "mineral_value.py")
-    with open(src, encoding="utf-8") as fh:
-        for line in fh:
-            if line.strip().startswith("pipeline_version:"):
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    sys.exit(f"no pipeline_version field in {src}")
+    path = os.path.join(ROOT, "asteroid_pipeline", "mineral_value_manifest.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
 
 
 def ledger_header_problem(path=None):
@@ -247,15 +236,15 @@ def ledger_header_problem(path=None):
 
 
 def main():
-    """Copy the frozen Stage 2 catalog into place, run Stage 4, archive, record.
+    """Install the cell's Stage 2 table, run Stage 4, archive, record.
 
     The ledger row is appended whether the cell succeeded or failed, with `rc`
     recording which, because that is what makes `run_queue.py` resumable: a
     missing row means "never attempted", not "attempted and lost".
 
-    Stage 2 is COPIED from `campaign/stage2/`, never re-fetched. Re-running
-    Stage 3 or a live Stage 2 mid-campaign would move the inputs underneath
-    every cell already measured, and the previous prices are not recoverable.
+    Stage 2 installs the pinned price release, which cannot move underneath a
+    campaign: every cell gets the same prices however long the queue runs.
+    A Stage 2 that fails stops the cell before Stage 4 is paid for.
     """
     dest, ore, search = sys.argv[1], sys.argv[2], sys.argv[3]
     assert ore in ("raw", "benef") and search in ("off", "on")
@@ -265,23 +254,18 @@ def main():
     if problem:
         sys.exit(problem)
 
-    src2 = os.path.join(CAMP, "stage2", f"mineral_value_catalog.{dest}.csv")
-    if not os.path.exists(src2):
-        sys.exit(f"missing frozen Stage 2 catalog: {src2}")
-    frozen, code = frozen_stage2_stamp(src2), stage2_code_stamp()
-    if frozen != code:
-        # Checked BEFORE the copy, because the copy overwrites the live
-        # Stage 2 catalog, which is the one input a refetch cannot give back.
-        sys.exit(
-            f"the frozen Stage 2 catalog was priced by mineral_value {frozen},"
-            f" and the code here is {code}.\n"
-            f"  A cell run now would pair those prices with today's Stage 3"
-            f" tables and today's Stage 2 model:\n"
-            f"  a hybrid of two epochs, archived as though it were this"
-            f" campaign's cell.\n"
-            f"  Re-freeze campaign/stage2/ at {code} for a NEW campaign, or run"
-            f" run_pipeline.py --stages 4 directly.")
-    shutil.copyfile(src2, STAGE2_LIVE)
+    stage2 = [sys.executable, os.path.join(ROOT, "run_pipeline.py"),
+              "--stages", "2", "--destination", dest, "--yes"]
+    log2 = os.path.join(CAMP, "logs", f"{cell}.stage2.log")
+    with open(log2, "w", encoding="utf-8", errors="replace") as fh:
+        rc2 = subprocess.call(stage2, stdout=fh, stderr=subprocess.STDOUT,
+                              cwd=ROOT)
+    got = installed_stage2()
+    if rc2 != 0 or got.get("destination") != dest:
+        sys.exit(f"Stage 2 did not install a table for {dest} (rc={rc2});"
+                 f" see {log2}")
+    print(f"  Stage 2: {got.get('release_tag')} for {dest}, quotes"
+          f" {got.get('quote_snapshot')}", flush=True)
 
     cmd = [
         sys.executable, os.path.join(ROOT, "run_pipeline.py"),

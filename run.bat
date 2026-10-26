@@ -47,7 +47,7 @@ REM  a scheduled `run.bat quick` would exit 1 having done nothing, and this
 REM  file's own header promises it can be scheduled.
 REM
 REM  The confirmations exist to catch an INCIDENTAL run -- someone testing
-REM  something else who did not realise Stages 1-3 re-fetch and overwrite.
+REM  something else who did not realise Stages 1-3 overwrite their inputs.
 REM  Typing `run.bat quick` is not incidental, so answering for it is right.
 set "YES="
 if defined ARG1 set "YES=--yes"
@@ -97,11 +97,11 @@ REM  brought it. With an argument nothing may prompt or pause (a scheduled job
 REM  would hang there): a scripted run installs without asking, which the
 REM  modules do at import anyway, and a failure exits with a code instead of a
 REM  pause.
-%PY% -c "import requests,pandas,numpy,yfinance,tqdm,spacecost" >nul 2>&1
+%PY% -c "import requests,pandas,numpy,tqdm,spacecost,spacevalue" >nul 2>&1
 if errorlevel 1 (
   echo.
   echo   Some required packages are missing:
-  echo     requests  pandas  numpy  yfinance  tqdm  spacecost
+  echo     requests  pandas  numpy  tqdm  spacecost  spacevalue
   echo.
   if not defined ARG1 (
     set "INSTALL="

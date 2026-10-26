@@ -2,7 +2,7 @@
 """Master Asteroid Profitability Pipeline: the import surface.
 
     Stage 1  ->  modules/catalog.py         downloads the pinned catalog release
-    Stage 2  ->  modules/mineral_value.py   prices every commodity per destination
+    Stage 2  ->  modules/mineral_value.py   installs the pinned price release
     Stage 3  ->  modules/transportation.py  launch, propellant, delta-v, ops tables
     Stage 4  ->  modules/calc.py            mission search, cost cascade, ranking
 
@@ -21,11 +21,13 @@ costs to put it there, and the answer is only meaningful when they agree.
 The output directory defaults to ./asteroid_pipeline; override it with the
 environment variable ASTEROID_PIPELINE_OUTPUT_DIR or MASTER_CONFIG.output_dir.
 
-`python master.py` runs all four stages, and Stages 1-3 re-fetch live inputs
-and overwrite their CSVs.  run_pipeline.py is the entry point that asks first.
+`python master.py` runs all four stages.  Stages 1 and 2 install pinned
+releases and Stage 3 builds from a recorded quote snapshot, so each gives the
+same files on every run, but each still writes over what is on disk.
+run_pipeline.py is the entry point that asks first.
 """
 
-MASTER_VERSION = "1.58.0"
+MASTER_VERSION = "1.59.0"
 
 # Each module imports `modules._runtime` first, which fixes the console
 # encoding and silences spawned workers before anything prints.  Imported in
