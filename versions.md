@@ -351,6 +351,38 @@ those thirteen cells before the move, each with its arguments before and after
   there, and `field_docs` still reads it as one pair (`IndexError`). It is not
   this release's, and it is not counted as evidence above.
 
+### samebytes v0.4.0: docs checks 10 and 12 move there (2026-10-26, no stamp)
+
+The pin moves to [samebytes](https://github.com/loggger101/samebytes) v0.4.0,
+which adds `docs.transfer` (check 10, the `--before` audit for a
+reorganisation) and `docs.pairs` (check 12, no measurement quoted in CLAUDE.md
+and in README or MODEL.md off the register). They were the last two checks
+here that need no project knowledge, and the other repositories had neither.
+Nothing the model computes is touched.
+
+- **Both are one call each.** `CURRENT_DOCS` and `REGISTER_HEADER` stay here;
+  `TOKEN`, `YEAR`, `_SEMVER`, `_LINK_TARGET`, `_NUMBER`, `_YEAR` and
+  `_figures` go, moved verbatim (each pattern compared with the one it
+  replaced). The two checks still count "distinctive" differently, as they
+  always did; unifying them would change what an audit reports.
+- **Check 12's findings are one line each**, `README.md:438 and
+  CLAUDE.md:629 both quote ...`, where they used to echo both lines' text
+  beneath; the header counts findings, so a current doc missing from disk
+  is now one of them.
+- **Check 10 resolves its paths from the working directory as before**, and
+  a file not on disk is a finding where it used to be a traceback.
+- **A known miss, carried and not fixed:** a comma straight after a
+  thousands figure stays on check 12's token (`1,555,667,`), so that copy
+  does not match `1,555,667` elsewhere.
+
+| harness | result |
+|---|---|
+| old checks (HEAD) against new (samebytes working copy), check 10 | byte-identical output on five audits: LESSONS.md into the five docs (418 numbers, 0 lost) and into four (51 lost), README into MODEL (105 lost), versions.md into README and CLAUDE.md (2,511 lost), `modules/calc.py` into MODEL (243 lost) |
+| the same, check 12 | live docs: 0 pairs both ways. Two pairs planted in a copy of CLAUDE.md plus one registered: 3 pairs and the same two unregistered number sets both ways |
+| `verify_docs.py --before LESSONS.md README.md MODEL.md CLAUDE.md versions.md`, before and after (v0.4.0 installed from its tag) | check 10 identical (418 numbers, 51 lost); check 12 0 pairs both ways; check 11 one definition fewer (`_figures`); every other line identical. Without `--before`: OK |
+| planted end to end: a README line appended to CLAUDE.md | check 12 FAILED naming `README.md:438 and CLAUDE.md:629`; restored byte for byte |
+| samebytes' own suite | 126 tests; 12 defects planted in a copy of the new code (versions, link targets and years not stripped, register rows read as a side, register ignored, a two-number threshold, no dedupe, a missing file skipped by either check, only the first new file read, findings unsorted) each FAILED its test |
+
 ### samebytes v0.3.0: docs checks 4, 5, 6 and 11 move there (2026-10-26, no stamp)
 
 The pin moves to [samebytes](https://github.com/loggger101/samebytes) v0.3.0,
