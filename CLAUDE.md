@@ -76,8 +76,8 @@ shim: it imports the four modules, binds the aliases below, holds
 
 ## Versions and release notes
 
-Current: catalog `1.10.0`, mineral_value `1.16.0`, transportation `1.23.0`,
-calc `1.32.0`, master `1.57.0` (checked by `verify_docs.py` check 2; the master
+Current: catalog `1.10.0`, mineral_value `1.16.0`, transportation `1.23.6`,
+calc `1.32.0`, master `1.58.0` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.
@@ -90,8 +90,8 @@ version is `MASTER_VERSION` in `master.py`).
   half is what says whether an archived CSV can answer a question). Never a
   changelog in module comments: `ui_meta` scrapes a field's comment block as
   its dashboard help.
-- transportation's stamp **is** spacecost's data contract (`DATA_VERSION`);
-  `verify_stage3.py` check 2 holds them equal, so a repin can move it.
+- transportation's stamp **is** spacecost's data contract (`DATA_VERSION`),
+  inherited with `SpacecostConfig`, so a repin can move it.
 - Comments, docstrings and console text are not output: no stamp.
 - CSVs stamped `1.0.6` / `1.1.4` / `1.3.6` are untrustworthy (two parallel
   repos shipped different code under each). Before building or measuring,
@@ -282,7 +282,6 @@ Traps in that table:
 | `verify.py baseline / check / invariants` | the release checks; list in its own header | full `check` ~30 min; `--skip prune parallel` ~5 min |
 | `verify_docs.py` | the docs checks; list in its docstring | ~1 s; `--before OLD.md README.md MODEL.md CLAUDE.md versions.md LESSONS.md` audits a reorganisation for dropped numbers |
 | `verify_stage1.py` | pinned catalog release vs data contract, and the bytes on disk | never writes the catalog |
-| `verify_stage3.py` | this repo's adapter vs the installed spacecost | temp dir, no baseline |
 | `tree_check.py` | disk content vs git index | run first by every harness |
 | `platform_check.py` | libm/numpy/pandas against `platform_reference.json` | a library version is not a defect |
 | `campaign/worked_calculation.py`, `campaign/verification_sheet.py` | derive one mission from the equations and hold it to its row | see below |
@@ -489,7 +488,7 @@ lists every file it touched.
   third while the winner improved). New provenance label values need the two
   readers that branch on them updated (`verify_stage1.py` check 8 catches
   unknown ones).
-- **Stage 3 is an adapter over spacecost, pinned to tag `v0.12.0`**, and
+- **Stage 3 is an adapter over spacecost, pinned to tag `v0.13.0`**, and
   Stage 2 imports `spacecost.delivery` too, so a dropped name fails a pricing
   stage first. The pin is typed in five places: `requirements.txt`,
   `PIP_SPEC` in `modules/_runtime.py`, and prose in README, CITATIONS.md and
@@ -498,9 +497,13 @@ lists every file it touched.
   a number moves, tag a release, repin here. Repin with
   `pip install --force-reinstall --no-deps` (without `--no-deps` pip upgrades
   numpy and pandas), then `py platform_check.py`. `_runtime.install()`
-  reinstalls a stale git-pinned package at import.
-- `TransportConfig` stays here, mirrored field for field
-  (`_check_config_surface()` raises); its comments are the dashboard help.
+  reinstalls a stale git-pinned package at import, and refuses one pip did
+  not install from a git ref (editable, a local path, a shadowing copy) at
+  any version: tag an unreleased spacecost to test it.
+- `TransportConfig` is `SpacecostConfig` with two defaults overridden
+  (`use_yfinance`, `output_dir`); the dashboard reads every other field's help
+  from spacecost's `config.py`, and hides the three Stage 3 dials only
+  `mission_cost_breakdown` reads.
 - **A regex repin rewrites history**: a version string in prose is a pin or a
   date; decide per string and read the diff.
 - When a seam changes shape, sweep **both** repos for guards of the old shape;

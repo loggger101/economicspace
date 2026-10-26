@@ -57,25 +57,6 @@ jobs:
         run: python -m pip install --upgrade pip
           && python -m pip install -r requirements-lock.txt -r requirements.txt
 
-      # Read rather than typed.  verify_stage3.py already parses this out of
-      # requirements.txt, and reusing its parser is what stops CI becoming the
-      # fourth place a repin has to land.
-      - name: Resolve the pinned spacecost tag
-        id: spacecost
-        run: echo "tag=$(python -c 'import verify_stage3;
-          print(verify_stage3._pinned_tag())')" >> "$GITHUB_OUTPUT"
-
-      # verify_stage3.py check 6 asks this checkout whether the pinned tag
-      # still names the commit pip installed; a tag that has moved is
-      # invisible from the installed package alone.
-      - name: Check out spacecost at the pinned tag
-        uses: actions/checkout@v4
-        with:
-          repository: loggger101/spacecost
-          ref: ${{ steps.spacecost.outputs.tag }}
-          path: _spacecost
-          fetch-depth: 0
-
       # The control case for tree_check.py. On a plain clone this can only
       # pass, which is the point: it proves the check itself still works and
       # that its skip path is NOT what CI is exercising. The failure it guards
@@ -86,7 +67,9 @@ jobs:
 
       # A hard step on purpose: verify_docs.py check 18 resolves every
       # `master.<name>` the repo reads, but it SKIPS when the import fails,
-      # and a skip on every CI run is a check that does not exist.
+      # and a skip on every CI run is a check that does not exist.  The import
+      # is also the Stage 3 seam: modules/_runtime.py refuses a spacecost that
+      # pip did not install from the pinned tag.
       - name: master.py imports
         run: python -c "import master"
 
@@ -101,11 +84,6 @@ jobs:
       # gitignored, so they skip here and say so.
       - name: Stage 1 catalog release
         run: python verify_stage1.py
-
-      - name: Stage 3 seam
-        env:
-          SPACECOST_SOURCE: ${{ github.workspace }}/_spacecost
-        run: python verify_stage3.py
 
       # Informational only: see the header.  What it is worth here is the
       # answer to "how far does a Linux x86-64 runner diverge from the

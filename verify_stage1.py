@@ -69,7 +69,7 @@ import os
 import sys
 
 # Local: the working-tree guard every harness here runs first.  It is a
-# sibling file rather than a copied function because four harnesses need
+# sibling file rather than a copied function because every harness needs
 # it and a second copy of a check is the defect this repo catalogues
 # oftenest.
 import tree_check

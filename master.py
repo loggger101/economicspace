@@ -25,7 +25,7 @@ environment variable ASTEROID_PIPELINE_OUTPUT_DIR or MASTER_CONFIG.output_dir.
 and overwrite their CSVs.  run_pipeline.py is the entry point that asks first.
 """
 
-MASTER_VERSION = "1.57.0"
+MASTER_VERSION = "1.58.0"
 
 # Each module imports `modules._runtime` first, which fixes the console
 # encoding and silences spawned workers before anything prints.  Imported in

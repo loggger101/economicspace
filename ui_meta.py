@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import importlib.util
 import io
 import os
 import re
@@ -32,14 +33,17 @@ from typing import Any, Dict, List, Optional, Tuple
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Which module source backs each config, for comment scraping. The class names
-# are the *module* names, not master.py's aliases: master.py renames the CONFIG
-# instances (`CALC_CONFIG = calc.CONFIG`), not the classes.
-CONFIG_SOURCES: Dict[str, Tuple[str, str]] = {
-    "catalog":   (os.path.join(_HERE, "modules", "catalog.py"),        "CatalogConfig"),
-    "mineral":   (os.path.join(_HERE, "modules", "mineral_value.py"),  "MineralValueConfig"),
-    "transport": (os.path.join(_HERE, "modules", "transportation.py"), "TransportConfig"),
-    "calc":      (os.path.join(_HERE, "modules", "calc.py"),           "CalcConfig"),
+# The sources each config's comments are scraped from, base class first: a
+# later source's help replaces an earlier one's for the fields it redefines.
+# Stage 3's config is spacecost's `SpacecostConfig` with two defaults
+# overridden here, so its help is the package's, read from wherever the package
+# is installed (`find_spec` imports `spacecost`, never master).
+CONFIG_SOURCES: Dict[str, List[Tuple[str, str]]] = {
+    "catalog":   [(os.path.join(_HERE, "modules", "catalog.py"),       "CatalogConfig")],
+    "mineral":   [(os.path.join(_HERE, "modules", "mineral_value.py"), "MineralValueConfig")],
+    "transport": [(importlib.util.find_spec("spacecost.config").origin, "SpacecostConfig"),
+                  (os.path.join(_HERE, "modules", "transportation.py"), "TransportConfig")],
+    "calc":      [(os.path.join(_HERE, "modules", "calc.py"),          "CalcConfig")],
 }
 
 SECTION_LABELS: Dict[str, str] = {
@@ -83,6 +87,16 @@ READONLY_FIELDS = {"pipeline_version", "PRICE_UNIT"}
 # control and writes it through `MASTER_CONFIG.delivery_destination`, which sets
 # both.
 SUPPRESSED_FIELDS = {"delivery_destination"}
+
+# Hidden in one section only.  Stage 3's ISRU and contingency dials are read
+# by spacecost's `mission_cost_breakdown` alone, which nothing here calls, so a
+# build writes the same bytes whatever they are set to; shown, they would sit
+# beside calc's dials of the same names, which ARE read.  By section, because
+# calc's `contingency_fraction` and `isru_processing_usd_per_kg` stay.
+SUPPRESSED_BY_SECTION: Dict[str, set] = {
+    "transport": {"isru_return_propellant", "isru_processing_usd_per_kg",
+                  "contingency_fraction"},
+}
 
 # Secrets get a password-style input.
 SECRET_FIELDS = {"metals_api_key"}
@@ -664,12 +678,15 @@ def build_field_specs(
     of a list the model already owns, which is the drift this repo keeps
     paying for -- add a market model in `calc.py` and the dropdown follows.
     """
-    docs = scrape_field_docs(*CONFIG_SOURCES[section_key])
+    docs: Dict[str, Dict[str, str]] = {}
+    for path, class_name in CONFIG_SOURCES[section_key]:
+        docs.update(scrape_field_docs(path, class_name))
+    hidden = SUPPRESSED_FIELDS | SUPPRESSED_BY_SECTION.get(section_key, set())
 
     specs: List[FieldSpec] = []
     for field in dataclasses.fields(config_obj):
         name = field.name
-        if name in SUPPRESSED_FIELDS:
+        if name in hidden:
             continue
 
         default = getattr(config_obj, name, field.default)
