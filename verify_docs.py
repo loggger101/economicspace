@@ -1291,8 +1291,10 @@ def check_manifests() -> bool:
 def check_help() -> bool:
     """Every config field the dashboard shows as a dial must carry help text.
 
-    The UI scrapes its help straight out of the module sources, so a field's
-    comment IS its documentation.  The attachment rule is positional: a block
+    The UI scrapes its help straight out of the config sources (`ui_meta.
+    CONFIG_SOURCES`: the modules, and spacecost's `config.py` under Stage 3's
+    two overrides), so a field's comment IS its documentation, and this check
+    reads it through `build_field_specs`, exactly as the dashboard does.  The attachment rule is positional: a block
     explains the field directly below it, and a comment block covering TWO
     fields leaves the second one blank in the dashboard.  Thirty-nine of 105
     fields were in that state, including `demand_elasticity`, `rtg_max_power_w`
