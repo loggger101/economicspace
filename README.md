@@ -953,8 +953,9 @@ py verify_docs.py
 | 17 | dest table | the destination table under [What a kilogram is worth](MODEL.md#what-a-kilogram-is-worth) drifting from `master.DELIVERY_DESTINATIONS`, and the launcher menus and calc's `DELIVERY_ARCHITECTURES` offering a different set of destinations |
 | 18 | shim | a `master.<name>` the repo's own Python reads that `master.py` cannot resolve, or that two modules define differently |
 
-Every check fails if a file it is supposed to read is not on disk, on a counter
-of its own. Checks 6 and 11 are ratchets: check 6 reads `modules/*.py` through
+Every check fails if a file it is supposed to read is not on disk; the
+checks samebytes runs (4, 5, 6, 10, 11 and 12) name it among their findings. Checks 6
+and 11 are ratchets: check 6 reads `modules/*.py` through
 `tokenize` and `ast`, so it sees only comments and docstrings (the `notes` and
 `composition` strings are written into the CSVs, so their text is data), and
 reads every other file whole. Check 12 reads README, MODEL.md and CLAUDE.md only, and
