@@ -592,31 +592,68 @@ _FIELD_DOCS = {}
 _FIELD_LINES = {}
 
 
+def _cited_path(path):
+    """`path` as a citation names it: from the repo root when it is in this
+    repo, else from the top of its installed package (`spacecost/config.py`),
+    since a site-packages path is one machine's and says nothing on paper."""
+    path = os.path.abspath(path)
+    if os.path.splitdrive(path)[0].lower() == os.path.splitdrive(ROOT)[0].lower() \
+            and os.path.commonpath([path, ROOT]) == ROOT:
+        return os.path.relpath(path, ROOT).replace(os.sep, "/")
+    top = os.path.dirname(path)
+    while os.path.isfile(os.path.join(os.path.dirname(top), "__init__.py")):
+        top = os.path.dirname(top)
+    return os.path.relpath(path, os.path.dirname(top)).replace(os.sep, "/")
+
+
 def field_docs(module="calc"):
-    """{field: {"help", "section"}} for one config, scraped once."""
+    """{field: {"help", "section"}} for one config, scraped once.
+
+    ONE CONFIG CAN HAVE MORE THAN ONE SOURCE.  `ui_meta.CONFIG_SOURCES` maps
+    each config to its `(path, class)` pairs, base class first (Stage 3's is
+    spacecost's `SpacecostConfig`, then `TransportConfig` overriding two
+    defaults), and a later source's help replaces an earlier one's for the
+    fields it redefines, exactly as `ui_meta.build_field_specs` merges them.
+    The defining line follows the same rule, so a field cites the class that
+    actually defines it.
+    """
     if not _FIELD_DOCS:
+        import ast
         import ui_meta
-        for key, source in ui_meta.CONFIG_SOURCES.items():
-            path, cls = source[0], source[1]
-            # No fallback: a ledger whose definitions silently came back
-            # empty would list every dial with no meaning beside it.
-            _FIELD_DOCS[key] = ui_meta.scrape_field_docs(
-                os.path.join(ROOT, path), cls)
-            # The line each field is DEFINED on, so a citation can point a
-            # reader at the whole comment rather than quoting all of it.
-            # No fallback: a citation with no line to point at is a
-            # ledger that cannot say where a dial is defined.
-            import ast
-            with open(os.path.join(ROOT, path), encoding="utf-8") as fh:
-                tree = ast.parse(fh.read())
-            node = next(n for n in ast.walk(tree)
-                        if isinstance(n, ast.ClassDef) and n.name == cls)
-            _FIELD_LINES[key] = (
-                os.path.relpath(os.path.join(ROOT, path), ROOT)
-                .replace(os.sep, "/"),
-                {s.target.id: s.lineno for s in node.body
-                 if isinstance(s, ast.AnnAssign)
-                 and isinstance(s.target, ast.Name)})
+        for key, sources in ui_meta.CONFIG_SOURCES.items():
+            # No reading round a shape this was not written for: the single
+            # pair it once took was silently half-read as a list.
+            if not (isinstance(sources, list) and sources
+                    and all(isinstance(s, tuple) and len(s) == 2
+                            and all(isinstance(p, str) for p in s)
+                            for s in sources)):
+                raise TypeError("ui_meta.CONFIG_SOURCES[%r] is %r, not a "
+                                "list of (path, class) pairs"
+                                % (key, sources))
+            docs, lines = {}, {}
+            for path, cls in sources:
+                # No fallback: `scrape_field_docs` answers {} for a file or
+                # class it cannot find, and a ledger whose definitions
+                # silently came back empty would list every dial with no
+                # meaning beside it.  Opening the file here raises first.
+                with open(path, encoding="utf-8") as fh:
+                    tree = ast.parse(fh.read())
+                node = next((n for n in ast.walk(tree)
+                             if isinstance(n, ast.ClassDef)
+                             and n.name == cls), None)
+                if node is None:
+                    raise LookupError("no class %s in %s" % (cls, path))
+                docs.update(ui_meta.scrape_field_docs(path, cls))
+                # The line each field is DEFINED on, so a citation can point
+                # a reader at the whole comment rather than quoting all of
+                # it.
+                where = _cited_path(path)
+                lines.update({s.target.id: (where, s.lineno)
+                              for s in node.body
+                              if isinstance(s, ast.AnnAssign)
+                              and isinstance(s.target, ast.Name)})
+            _FIELD_DOCS[key] = docs
+            _FIELD_LINES[key] = lines
     return _FIELD_DOCS.get(module, {})
 
 
@@ -639,8 +676,8 @@ def definition(help_text):
 def field_line(field, module="calc"):
     """`modules/calc.py:251`, the line `field` is defined on, or ''."""
     field_docs(module)
-    path, lines = _FIELD_LINES.get(module, ("", {}))
-    return "%s:%d" % (path, lines[field]) if field in lines else ""
+    lines = _FIELD_LINES.get(module, {})
+    return "%s:%d" % lines[field] if field in lines else ""
 
 
 def cite_config(field, module="calc"):

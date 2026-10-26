@@ -379,6 +379,37 @@ seed snapshots, `fuel-2026-10-17` and `metals-2026-10-07`, and each file's
 - The lock file still pins yfinance: it is the measured environment, and
   re-locking is a measurement of its own.
 
+### The verification sheet's `--check` runs again (2026-10-26, no stamp)
+
+**This is a fix to a check that could not run at all after master v1.58.0.**
+v1.58.0 changed `ui_meta.CONFIG_SOURCES` so that each config maps to a list of
+`(path, class)` pairs, base class first; Stage 3 has two, spacecost's
+`SpacecostConfig` and then `TransportConfig`. `campaign/verification_sheet.py`'s
+`field_docs` still read one pair, so `--check`, `--self-test` and every
+rendered sheet stopped with `IndexError` before reaching the first dial.
+
+- **`field_docs` walks every source the way `ui_meta.build_field_specs`
+  does.** A later source's help replaces an earlier one's for the fields it
+  redefines. Each field's defining line follows the same rule, so a citation
+  names the class that actually defines the field: `quote_snapshot` at
+  `modules/transportation.py:109`, `use_yfinance` at `spacecost/config.py:67`.
+  A source outside this repo is cited from the top of its installed package,
+  not by a site-packages path.
+- **A wrong shape raises, and so does a missing class.** A config given as one
+  pair, a bare path, or a class its file lacks now raises `TypeError` or
+  `LookupError`, naming the config. `scrape_field_docs` answers `{}` for a
+  class it cannot find, and an empty answer would have left every dial with no
+  definition beside it.
+- `modules/` and `master.py` are unchanged, so no number moves.
+
+| harness | result |
+|---|---|
+| `verification_sheet.py --check` on the default row (2018 DT, `profitability_catalog.csv`) | OK: 90 of 90 quantities bit-exact, 394 of 394 substitutions match, 85 of 85 dials tabulated |
+| `verification_sheet.py --self-test` | every planted defect caught (the dial ledger, placeholders, backing, the source test, the paper width) |
+| `field_line` for every Stage 3 field the scrape returns, against the installed spacecost 0.14.0 | the two overrides at `modules/transportation.py`, the rest at `spacecost/config.py`, each on its `AnnAssign` line (the page itself cites only Stage 4 dials) |
+| planted: `calc` as a single pair (the pre-v1.58.0 shape), `transport` as a bare path, `transport` naming `NoSuchConfig` | each raised, naming the config; restoring the sources cites `modules/calc.py:198` again |
+| `verify_docs.py` | OK |
+
 ## master v1.58.0 / transportation v1.23.6
 
 **spacecost `v0.12.0` -> `v0.13.0`, and Stage 3 stops mirroring it.** No value
