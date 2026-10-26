@@ -67,11 +67,16 @@ WORKDIR /work
 # requirements.txt, and this image runs campaigns (CAMPAIGN_WORKERS below).
 # The campaign shims refuse any other quietqueue and never install one, so a
 # missing copy here would stop `./run.sh campaign` at its first line.
-COPY requirements-lock.txt requirements.txt requirements-campaign.txt ./
+# samebytes (requirements-verify.txt) is the toolkit the harnesses and
+# platform_check.py run on; installed here so `./run.sh platform` fetches
+# nothing inside the image.
+COPY requirements-lock.txt requirements.txt requirements-campaign.txt \
+     requirements-verify.txt ./
 RUN python -m pip install --no-cache-dir --upgrade pip \
  && python -m pip install --no-cache-dir -r requirements-lock.txt \
                                          -r requirements.txt \
-                                         -r requirements-campaign.txt
+                                         -r requirements-campaign.txt \
+                                         -r requirements-verify.txt
 
 COPY . .
 

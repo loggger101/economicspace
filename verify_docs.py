@@ -1193,6 +1193,29 @@ def check_manifests() -> bool:
                           "; ".join("%s in %s" % (ref, ", ".join(sorted(files)))
                                     for ref, files in sorted(pins.items()))))
 
+    # THE samebytes PIN, the opposite arrangement on purpose.  spacecost's tag
+    # is typed in several places and the loop above holds them together;
+    # samebytes (tree_check.py, platform_check.py and verify.py's comparison)
+    # is typed ONCE, as the one line in requirements-verify.txt, and
+    # modules/_runtime.py READS it.  So the check is that there is exactly one
+    # copy, in that file: a second typed copy is where a repin starts missing
+    # places.
+    sb_re = re.compile(r"github\.com/loggger101/samebytes@(\S+?)[\"'\s,)]")
+    sb_hits = []
+    for rel in sorted(set(FIRST_PARTY_PY + DOCS + CAMPAIGN_DOCS + [
+            "requirements.txt", "requirements-verify.txt", "requirements-ui.txt",
+            "requirements-campaign.txt", "requirements-lock.txt", "Dockerfile",
+            ".github/workflows/verify.yml", "run.bat", "run.sh"])):
+        path = os.path.join(REPO, rel)
+        if os.path.exists(path):
+            sb_hits += [(rel, ref) for ref in sb_re.findall(read(path) + "\n")]
+    n += 1
+    if [rel for rel, _ in sb_hits] != ["requirements-verify.txt"]:
+        bad.append("samebytes must be pinned exactly once, in "
+                   "requirements-verify.txt (modules/_runtime.py reads it); "
+                   "found: %s" % (", ".join("%s in %s" % (ref, rel)
+                                           for rel, ref in sb_hits) or "none"))
+
     # THE CATALOG RELEASE PIN, `CatalogConfig.catalog_release`.  Typed once in
     # code, and stated in prose wherever a reader is told which catalog the
     # numbers are on.  Every prose claim of the form "the pinned catalog release

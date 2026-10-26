@@ -83,6 +83,39 @@ PIP_SPEC = {
     "spacecost": "git+https://github.com/loggger101/spacecost@v0.13.0",
 }
 
+# samebytes, the toolkit behind tree_check.py, platform_check.py and verify.py's
+# run comparison, is the opposite arrangement on purpose: typed ONCE, as the
+# one `samebytes @ git+...@vX.Y.Z` line in requirements-verify.txt, and read
+# from there.  Only the harnesses install it (`install(["samebytes"])`), never
+# a stage module, so it is no part of requirements.txt or of check 7's typed
+# copies; check 7 holds it to that one line instead.  No file, or no single
+# such line, means it is not pinned here, and the harness says so.
+_VERIFY_REQUIREMENTS = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "requirements-verify.txt")
+
+
+def _read_pin(path, pkg):
+    """The `git+...@vX.Y.Z` spec on `pkg`'s one requirement line in `path`, or None."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return None
+    found = []
+    for line in lines:
+        name, sep, spec = line.partition("@")
+        spec = spec.strip()
+        if (sep and name.strip() == pkg and spec.startswith("git+")
+                and spec.rsplit("@", 1)[-1].startswith("v")):
+            found.append(spec)
+    return found[0] if len(found) == 1 else None
+
+
+_SAMEBYTES_SPEC = _read_pin(_VERIFY_REQUIREMENTS, "samebytes")
+if _SAMEBYTES_SPEC:
+    PIP_SPEC["samebytes"] = _SAMEBYTES_SPEC
+
 
 def _pinned_pkg_version(name):
     """The version of `name` as it imports, falling back to pip's metadata."""
