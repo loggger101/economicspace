@@ -829,7 +829,7 @@ content, so the two can disagree while status says nothing. On a plain clone it
 can only pass, which is why CI runs it, as the control that it still works.
 
 The check itself, the host probes behind `platform_check.py`, `verify.py`'s
-run comparison and `verify_docs.py` checks 4, 5, 6 and 11 live in
+run comparison and `verify_docs.py` checks 4, 5, 6, 10, 11 and 12 live in
 [samebytes](https://github.com/loggger101/samebytes),
 split out of this repo with their history; the two files here are shims bound
 to this repository. The pin is the one line in `requirements-verify.txt`, and

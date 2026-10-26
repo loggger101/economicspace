@@ -63,8 +63,8 @@ counts-in-prose failure this file was written to catch:
                      resolves on master.py, which forwards to the four
                      modules and refuses a name two of them define differently
 
-    Checks 4, 5, 6 and 11 call samebytes.docs and samebytes.source (pinned in
-    requirements-verify.txt); this file names the files they read.
+    Checks 4, 5, 6, 10, 11 and 12 call samebytes.docs and samebytes.source
+    (pinned in requirements-verify.txt); this file names the files they read.
 
     py verify_docs.py                       # every check except 10
     py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 10
@@ -140,7 +140,8 @@ from typing import Dict, List, Optional, Tuple
 # oftenest.
 import tree_check
 
-# Checks 4, 5, 6 and 11 are samebytes' since v0.3.0: `samebytes.docs` and
+# Checks 4, 5, 6 and 11 are samebytes' since v0.3.0, and 10 and 12 since
+# v0.4.0: `samebytes.docs` and
 # `samebytes.source` hold the rules and the account of how each was learned,
 # shared with the other repositories that had each kept a drifting copy.
 # What they read is this repo's and stays below.  Imported after tree_check,
@@ -235,11 +236,6 @@ MODULES = {
     "transport": "modules/transportation.py",
     "calc":      "modules/calc.py",
 }
-
-# A "distinctive" number: has a decimal point, a thousands separator, or four
-# or more digits.  Bare years are excluded -- they are dates, not measurements.
-TOKEN = re.compile(r"\d[\d,]*\.\d+|\d{1,3}(?:,\d{3})+|\b\d{4,}\b")
-YEAR = re.compile(r"20\d\d")
 
 
 def read(path: str) -> str:
@@ -1524,30 +1520,6 @@ CURRENT_DOCS = ("README.md", "MODEL.md", "CLAUDE.md")
 # the numbers it registers by design.
 REGISTER_HEADER = "| the shared measurement | in README under | here under |"
 
-# A dotted version (`1.21.0`, `v1.17.7`) is an identifier, not a measurement,
-# and `[calc v1.12.0](versions.md#calc-v1120--transportation-v1100)` produced
-# three "shared numbers" out of one anchor.  Both are stripped before
-# tokenising rather than filtered after, because the anchor's digits are not
-# separable from a real figure once they are tokens.
-_SEMVER = re.compile(r"v?\d+\.\d+\.\d+")
-_LINK_TARGET = re.compile(r"\]\([^)]*\)")
-_NUMBER = re.compile(r"\d[\d,]*\.\d+|\d[\d,]{3,}")
-_YEAR = re.compile(r"(?:19|20)\d\d")
-
-
-def _figures(line: str) -> set:
-    """The distinctive numbers on one line: decimals and thousands, no noise.
-
-    Distinctive means a number specific enough that two files carrying three of
-    them are quoting one measurement rather than coinciding.  Small integers
-    are excluded for that reason -- a line with `2`, `5` and `64` on it shares
-    those with half the repo.
-    """
-    line = _LINK_TARGET.sub("]()", line)
-    line = _SEMVER.sub(" ", line)
-    return {m.group(0) for m in _NUMBER.finditer(line)
-            if not _YEAR.fullmatch(m.group(0))}
-
 
 def check_pairs() -> bool:
     """No measurement is quoted in BOTH current-claiming docs off the register.
@@ -1567,65 +1539,20 @@ def check_pairs() -> bool:
     removed; what is not fine is a pair nobody knows about, because nobody will
     move both.  So this fails on an UNREGISTERED pair only, and the fix is
     either to cut one copy or to add the row.
+
+    `samebytes.docs.pairs` (since v0.4.0), with CLAUDE.md as the rules file.
+    README and MODEL.md are one current answer split in two, so they are not
+    paired with each other: a result quoting the model's own figure is not a
+    copy.
     """
-    missing_current = ["%s claims to be current and is not on disk" % g
-                       for g in absent(CURRENT_DOCS)]
-    reg_tokens, lines = set(), {}
-    for doc in CURRENT_DOCS:
-        path = os.path.join(REPO, doc)
-        if not os.path.exists(path):
-            continue
-        rows, in_register = [], False
-        for i, raw in enumerate(read(path).splitlines(), 1):
-            if raw.strip() == REGISTER_HEADER:
-                in_register = True
-                continue
-            if in_register:
-                # The table ends at the first line that is not one of its rows.
-                if raw.startswith("|"):
-                    reg_tokens |= _figures(raw)
-                    continue
-                in_register = False
-            rows.append((i, raw, _figures(raw)))
-        lines[doc] = rows
-
-    # CLAUDE.md against each document that carries numbers.  README and
-    # MODEL.md are one current answer split in two, so they are not paired
-    # with each other: a result quoting the model's own figure is not a copy.
-    b = CURRENT_DOCS[-1]
-    unregistered, n_pairs = [], 0
-    seen = set()
-    for a, ia, la, fa in [(d,) + row for d in CURRENT_DOCS[:-1]
-                          for row in lines.get(d, ())]:
-        if len(fa) < 3:
-            continue
-        for ib, lb, fb in lines.get(b, ()):
-            shared = fa & fb
-            if len(shared) < 3:
-                continue
-            n_pairs += 1
-            missing = shared - reg_tokens
-            if not missing:
-                continue
-            key = tuple(sorted(shared))
-            if key in seen:
-                continue
-            seen.add(key)
-            unregistered.append((sorted(missing), a, ia, la, b, ib, lb))
-
-    for gone in missing_current:
-        print("     ! " + gone)
-    print("12. pairs      %d cross-doc number pairs, %d not on the register"
-          % (n_pairs, len(unregistered)))
-    for missing, fa, ia, la, fb, ib, lb in unregistered:
-        print("     ! %s and %s quote %s and it is not on the register"
-              % (fa, fb, ", ".join(missing)))
-        print("         %s:%d  %s" % (fa, ia, la.strip()[:110]))
-        print("         %s:%d  %s" % (fb, ib, lb.strip()[:110]))
-    if unregistered:
+    bad, n = sb_docs.pairs(REPO, CURRENT_DOCS[:-1], CURRENT_DOCS[-1],
+                           register_header=REGISTER_HEADER)
+    _report("12. pairs      %d cross-doc number pairs, %d findings" % (n, len(bad)),
+            bad)
+    if bad:
         print("       Cut the CLAUDE.md copy: it carries rules, README carries")
         print("       the numbers.")
-    return not unregistered and not missing_current
+    return not bad
 
 
 # ---------------------------------------------------------------- 10. transfer
@@ -1634,23 +1561,16 @@ def check_transfer(before: str, after: List[str]) -> bool:
 
     This is the check for a reorganisation.  A line-level diff cannot do it:
     when the docs were split into versions.md a line diff reported 302
-    differences and could not tell 26 dropped measurements from a reflow."""
-    old = read(before)
-    hay = "\n".join(read(p) for p in after)
-    seen: Dict[str, str] = {}
-    for m in TOKEN.finditer(old):
-        tok = m.group(0)
-        if tok in seen or YEAR.fullmatch(tok):
-            continue
-        a = old.rfind("\n", 0, m.start()) + 1
-        b = old.find("\n", m.end())
-        seen[tok] = old[a:b if b > 0 else None].strip()
-    lost = [(t, c) for t, c in seen.items() if t not in hay]
-    print("10. transfer   %d distinctive numbers in %s, %d lost"
-          % (len(seen), os.path.basename(before), len(lost)))
-    for t, c in sorted(lost):
-        print("     ! %-14s | %s" % (t, c[:110]))
-    return not lost
+    differences and could not tell 26 dropped measurements from a reflow.
+    `samebytes.docs.transfer` (since v0.4.0).  The paths are as typed on the
+    command line, so they resolve from the working directory, not REPO; a
+    file that is not on disk is a finding rather than a traceback."""
+    before, after = os.path.abspath(before), [os.path.abspath(p) for p in after]
+    bad, n = sb_docs.transfer(REPO, before, after)
+    gone = len(sb_docs.missing(REPO, [before] + after))
+    _report("10. transfer   %d distinctive numbers in %s, %d lost"
+            % (n, os.path.basename(before), len(bad) - gone), bad)
+    return not bad
 
 
 # --------------------------------------------------------------------- driver

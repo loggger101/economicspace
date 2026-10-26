@@ -10,4 +10,4 @@
 # THIS LINE IS THE PIN: modules/_runtime.py reads the tag off it, installs it
 # when samebytes is missing or at another tag, and refuses an editable or
 # shadowing copy, so a repin is this line and nothing else.
-samebytes @ git+https://github.com/loggger101/samebytes@v0.3.0
+samebytes @ git+https://github.com/loggger101/samebytes@v0.4.0
