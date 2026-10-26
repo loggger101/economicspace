@@ -56,6 +56,10 @@ import sys
 
 import pandas as pd
 
+# Comparison reads go through samebytes' `read_exact`: `float_precision=
+# "round_trip"`, the one argument a comparison cannot do without.
+from samebytes.frames import read_exact  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CELLS = os.path.join(ROOT, "campaign", "cells")
 OUT = os.path.join(ROOT, "campaign", "population")
@@ -163,8 +167,7 @@ def derive(path):
         # committed figure: the default float parser is fast rather than
         # correctly rounded and returns a float64 one ULP from the one written.
         # `designation` as text, so `str()` below never writes "69260.0".
-        d = pd.read_csv(fh, low_memory=False, float_precision="round_trip",
-                        usecols=COLS, dtype={"designation": str})
+        d = read_exact(fh, usecols=COLS, dtype={"designation": str})
 
     obj = d["total_cost_usd"] / d["gross_value_usd"]
     evaluable = int((obj.notna() & (obj > 0)).sum())

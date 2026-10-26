@@ -372,8 +372,8 @@ def read_catalog():
     header = pd.read_csv(CATALOG, nrows=0).columns
     have = [col for col in want if col in header]
     missing = [col for col in want if col not in header]
-    df = pd.read_csv(CATALOG, usecols=have, dtype={"designation": str},
-                     low_memory=False, float_precision="round_trip")
+    from samebytes.frames import read_exact
+    df = read_exact(CATALOG, usecols=have, dtype={"designation": str})
     return df, missing
 
 

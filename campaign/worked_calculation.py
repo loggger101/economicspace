@@ -87,6 +87,9 @@ import sys
 import pandas as pd
 import spacecost
 import spacecost.delivery as _sd
+# Comparison reads go through samebytes' `read_exact`: `float_precision=
+# "round_trip"`, the one argument a comparison cannot do without.
+from samebytes.frames import read_exact  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CAMP = os.path.join(ROOT, "campaign")
@@ -956,8 +959,7 @@ def run_winner(path, designation=None):
            designation)
     if key in _WINNER_CACHE:
         return _WINNER_CACHE[key]
-    frame = pd.read_csv(path, low_memory=False, float_precision="round_trip",
-                        dtype={"designation": str})
+    frame = read_exact(path, dtype={"designation": str})
     if not len(frame):
         sys.exit("%s has no rows" % path)
     usable = frame[frame["gross_value_usd"] > 0]
@@ -1044,8 +1046,7 @@ def archived_winner(cell, designation):
             total += 1
             if needle in line:
                 hits.append(line)
-    frame = pd.read_csv(_lines(header, hits), float_precision="round_trip",
-                        dtype={"designation": str})
+    frame = read_exact(_lines(header, hits), dtype={"designation": str})
     frame = frame[frame["designation"] == designation]
     if len(frame) != 1:
         sys.exit("expected one row for %s in %s, found %d"
@@ -1100,9 +1101,7 @@ def catalog_bodies(designations):
                 if needle in line:
                     hits.append(line)
                     break
-    frame = pd.read_csv(_lines(header, hits), low_memory=False,
-                        float_precision="round_trip",
-                        dtype={"designation": str})
+    frame = read_exact(_lines(header, hits), dtype={"designation": str})
     out = {}
     for des, _needle in wanted:
         hit = frame[frame["designation"] == des]
@@ -5630,9 +5629,7 @@ def rows_for(path, designations, population=None):
                 if needle in line:
                     hits.append(line)
                     break
-    frame = pd.read_csv(_lines(header, hits), low_memory=False,
-                        float_precision="round_trip",
-                        dtype={"designation": str})
+    frame = read_exact(_lines(header, hits), dtype={"designation": str})
     out = {}
     for des, _needle in wanted:
         hit = frame[frame["designation"] == des]

@@ -84,10 +84,13 @@ No edit fixes this. What you can do is find out in ten seconds instead of
 twenty-six hours:
 
 ```bash
-python platform_check.py
+python platform_check.py --lock requirements-lock.txt
 ```
 
-It hashes the raw IEEE bit patterns of every transcendental the model calls,
+`--lock` also lists every installed package against its pin in the lock,
+because a probe difference on a host running other numpy or pandas versions is
+the packages' difference until the lock is installed. The check itself hashes
+the raw IEEE bit patterns of every transcendental the model calls,
 over the model's own argument ranges, and compares them against
 `platform_reference.json`, recorded on the reference host. `math.sqrt` is
 included as a control, because IEEE 754 *does* require correct rounding for
@@ -200,7 +203,8 @@ The safe way to set it up, rather than hand-writing a project spec:
    custom container to this repo's `Dockerfile`.
 4. In the project's settings, **raise shared memory** above the default. This
    is the same `/dev/shm` issue as the Docker path.
-5. Open a terminal in the project and run `python platform_check.py`.
+5. Open a terminal in the project and run
+   `python platform_check.py --lock requirements-lock.txt`.
 
 There is no CUDA layer in the `Dockerfile`, deliberately. The GPU question was
 measured rather than assumed: on the reference machine's card, fp64 `exp` over
