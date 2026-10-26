@@ -21,6 +21,10 @@ import sys
 
 import pandas as pd
 
+# Comparison reads go through samebytes' `read_exact`: `float_precision=
+# "round_trip"`, the one argument a comparison cannot do without.
+from samebytes.frames import read_exact  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CELLS = os.path.join(ROOT, "campaign", "cells")
 RIG_KG = 2000.0
@@ -53,8 +57,7 @@ def load(dest, ore, search, tag=None):
     with gzip.open(p, "rb") as fh:
         # `designation` as text: `never_worse` joins two cells on it, and a
         # dtype inferred per file can differ between the two sides.
-        df = pd.read_csv(fh, low_memory=False, float_precision="round_trip",
-                         dtype={"designation": str})
+        df = read_exact(fh, dtype={"designation": str})
     df["_obj"] = df["total_cost_usd"] / df["gross_value_usd"]
     return df
 

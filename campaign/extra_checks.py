@@ -28,6 +28,10 @@ import os
 
 import pandas as pd
 
+# Comparison reads go through samebytes' `read_exact`: `float_precision=
+# "round_trip"`, the one argument a comparison cannot do without.
+from samebytes.frames import read_exact  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPL = ("FEEP", "PPT", "electrospray", "Electrospray", "Pulsed plasma")
 
@@ -36,7 +40,7 @@ for p in sorted(glob.glob(os.path.join(ROOT, "campaign", "cells",
                                        "archive-2026-08_calc-1.17.7", "*.csv.gz"))):
     cell = os.path.basename(p)[:-7]
     with gzip.open(p, "rb") as fh:
-        d = pd.read_csv(fh, low_memory=False, float_precision="round_trip",
+        d = read_exact(fh,
                         usecols=["designation", "total_cost_usd", "gross_value_usd",
                                  "propellant", "fleet_ships"])
     d["obj"] = d.total_cost_usd / d.gross_value_usd

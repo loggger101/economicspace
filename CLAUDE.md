@@ -284,7 +284,7 @@ Traps in that table:
 | `verify_docs.py` | the docs checks; list in its docstring | ~1 s; `--before OLD.md README.md MODEL.md CLAUDE.md versions.md LESSONS.md` audits a reorganisation for dropped numbers |
 | `verify_stage1.py` | pinned catalog release vs data contract, and the bytes on disk | never writes the catalog |
 | `tree_check.py` | disk content vs git index (shim over `samebytes.tree`) | run first by every harness |
-| `platform_check.py` | libm/numpy/pandas against `platform_reference.json` (shim over `samebytes.parity`) | a library version is not a defect |
+| `platform_check.py` | libm/numpy/pandas against `platform_reference.json` (shim over `samebytes.parity`) | a library version is not a defect; `--lock requirements-lock.txt` names which packages differ from the lock |
 | `campaign/worked_calculation.py`, `campaign/verification_sheet.py` | derive one mission from the equations and hold it to its row | see below |
 
 Comparing two runs (`samebytes.frames` does all of this and `verify.py` calls
@@ -299,7 +299,8 @@ of past harness bugs first):
 - Compare by position (frames come back sorted by the objective), treat `""`
   and NaN as equal, test text columns with `dtype.kind in "OU"` (pandas 3 reads
   them as `str`, not `object`).
-- When a release adds a column, hash the **shared** column set and name it.
+- When a release adds a column, hash the **shared** column set and name it
+  (`samebytes.frames.shared_hash`; check 1 prints it when the columns differ).
 - Set `delivery_destination` explicitly; `mining_hardware_kg` is a config
   constant, not a column; join never-worse pairs at a **matched** row cap.
 - A config field that cells can differ on joins `run_cell`'s explicit resets,

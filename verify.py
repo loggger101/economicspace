@@ -175,9 +175,11 @@ from typing import Any, Dict, List, Optional, Tuple
 # call because every harness needs it and a second copy of a check is the
 # defect this repo catalogues oftenest.
 import tree_check
-# The run comparison, from samebytes: tree_check's import above has
-# installed the pinned tag (modules/_runtime.py) or refused.
+# The run comparison and the baseline's provenance, from samebytes:
+# tree_check's import above has installed the pinned tag
+# (modules/_runtime.py) or refused.
 from samebytes import frames as _frames  # noqa: E402
+from samebytes import provenance as _sb_provenance  # noqa: E402
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 
@@ -396,6 +398,31 @@ def _read_baseline(pd, path):
     `pd` is kept in the signature for the callers.
     """
     return _frames.read_exact(path)
+
+
+def shared_line(df, old, sha16: str):
+    """Check 1's second line when the build and its baseline carry different
+    columns, or None when they carry the same ones.
+
+    A release that adds a column differs from its baseline's hash by
+    construction (header trap "an EXTRA output column"), so check 1 still says
+    DIFFER and this line is what such a release is argued from: the hash over
+    the columns both carry, and the columns that are not shared, named.  It is
+    computed only when the baseline re-reads to its own recorded hash, because
+    a shared hash over a re-read that is not exact compares what the reader
+    made of the file, not the file.
+    """
+    shared, added, gone = _frames.shared_columns(df, old, PROVENANCE)
+    if not added and not gone:
+        return None
+    named = "; added %s" % ",".join(added) if added else ""
+    named += "; gone %s" % ",".join(gone) if gone else ""
+    if cell_hash(old) != sha16:
+        return ("shared hash NOT COMPUTED: the baseline does not re-read to "
+                "its own hash%s" % named)
+    new_h, old_h, cols = _frames.shared_hash(df, old, PROVENANCE)
+    return "%d shared columns | %s vs %s | %s%s" % (
+        len(cols), new_h, old_h, "MATCH" if new_h == old_h else "DIFFER", named)
 
 # -----------------------------------------------------------------------------
 # THE FIVE CHECKS
@@ -780,40 +807,6 @@ def check_parallel(m, names: List[str], workers: int = 8) -> bool:
 MODEL_PATHS = ("modules", "master.py")
 
 
-def _git(*args: str):
-    """One git command in this repo, captured; None if git cannot answer.
-
-    Never raises.  A tree with no git at all is a legitimate place to run this
-    harness -- a copied tree, an unpacked archive -- and the answer there is
-    "no provenance", which the caller records honestly rather than failing on.
-    """
-    import subprocess
-    try:
-        r = subprocess.run(("git", "-C", REPO) + args, capture_output=True,
-                           text=True, timeout=30)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return r.stdout.strip() if r.returncode == 0 else None
-
-
-def _dirty_model_paths() -> Optional[List[str]]:
-    """Files under MODEL_PATHS that differ from HEAD; None if git cannot say.
-
-    🚨  `git diff`, NEVER `git status`, and on this working copy that is not a
-    style preference.  LESSONS.md's "Google Drive makes the tree look dirty"
-    section documents Drive File Stream reporting a placeholder size of 16384
-    bytes when git stats a file just after checkout: `status` then calls it
-    modified WITHOUT READING IT, while `diff` compares content and shows
-    nothing.  A provenance check built on `status` would therefore condemn
-    every baseline taken on the reference machine, which is the one machine
-    that takes them.
-    """
-    out = _git("diff", "--name-only", "HEAD", "--", *MODEL_PATHS)
-    if out is None:
-        return None
-    return [line for line in out.splitlines() if line.strip()]
-
-
 def _provenance() -> Dict[str, Any]:
     """What tree this baseline was taken on, recorded at capture time.
 
@@ -821,17 +814,16 @@ def _provenance() -> Dict[str, Any]:
     `cmd_check` to fail later, which is the only point at which the question
     matters.  Nothing is derived at check time: a baseline is compared against
     the tree it was taken on, not the tree reading it.
+
+    `samebytes.provenance.git_state` asks, through `git diff` and never `git
+    status` (LESSONS.md's "Google Drive makes the tree look dirty": `status`
+    condemns files it never read).  `dirty_model` is its `dirty`, under the
+    name every index.json already carries: None when git could not answer, []
+    when it answered "clean", never one read as the other.
     """
-    dirty = _dirty_model_paths()
-    return {
-        "sha": _git("rev-parse", "HEAD"),
-        "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
-        # None means git could not answer, and [] means it answered "clean".
-        # They are different facts and are kept apart on purpose: reading a
-        # missing answer as a clean one is how an unverifiable baseline would
-        # come to look like a good one.
-        "dirty_model": dirty,
-    }
+    state = _sb_provenance.git_state(REPO, MODEL_PATHS)
+    return {"sha": state["sha"], "branch": state["branch"],
+            "dirty_model": state["dirty"]}
 
 
 def _environment() -> Dict[str, Any]:
@@ -840,17 +832,10 @@ def _environment() -> Dict[str, Any]:
     Until 2026-10-25 nothing recorded it, and requirements-lock.txt went seven
     weeks naming the other machine's environment while every baseline was being
     taken on this one; finding out which had produced them took a measurement.
-    The libraries are the ones the lock calls float-reaching.
+    `samebytes.provenance.environment`: python, system, machine, host, numpy,
+    pandas and pyarrow, the libraries the lock calls float-reaching.
     """
-    import platform
-    env: Dict[str, Any] = {"python": platform.python_version(),
-                           "host": platform.node()}
-    for name in ("numpy", "pandas", "pyarrow"):
-        try:
-            env[name] = __import__(name).__version__
-        except ImportError:
-            env[name] = None
-    return env
+    return _sb_provenance.environment()
 
 
 def report_provenance(index: Dict[str, Any], allow_dirty: bool) -> bool:
@@ -1036,6 +1021,9 @@ def cmd_check(args) -> int:
         ok &= good
         print(f"  {name:13s} {same}/{total} identical | {h} | "
               f"{'MATCH' if good else 'DIFFER ' + ','.join(diff[:4])}")
+        extra = shared_line(df, old, index[name]["sha16"])
+        if extra:
+            print(f"  {'':13s} {extra}")
 
     print("\n2. PRUNE ON vs OFF")
     if "prune" in args.skip:

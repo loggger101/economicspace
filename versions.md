@@ -367,6 +367,34 @@ quietqueue carry its hook since the same night).
 | check 7, planted | a second typed copy in README: FAILED naming both; the line removed from `requirements-verify.txt`: `tree_check` refuses at import |
 | samebytes' own suite | 68 tests on Windows, Linux and macOS at 3.9/3.12/3.14 plus the installed wheel; 16 of the bugs behind them planted in a copy and each FAILED its test |
 
+### samebytes v0.2.0: shared hash, provenance, `--lock` (2026-10-26, no stamp)
+
+The pin moves to [samebytes](https://github.com/loggger101/samebytes) v0.2.0.
+Nothing the model computes is touched (`modules/` and `master.py` unchanged).
+
+- **Check 1 names the shared columns when a build and its baseline differ in
+  columns.** A release that adds an output still prints DIFFER, as it must,
+  and a second line gives the hash over the columns both carry and names the
+  ones added or gone. It is computed only when the baseline re-reads to its
+  own recorded hash, and says NOT COMPUTED otherwise.
+- **`verify.py`'s provenance comes from `samebytes.provenance`.** `_git` and
+  `_dirty_model_paths` go; `index.json` keeps `provenance.dirty_model`, and
+  `_meta.environment` gains `system` and `machine`.
+- **The eight round-trip comparison reads use `samebytes.frames.read_exact`**:
+  `campaign/analyse.py`, `extra_checks.py` and `population.py`, four in
+  `worked_calculation.py`, and `verify_stage1.py`. The frozen
+  `campaign/stage2/mineral_value-1.7.1/replay.py` keeps its own call.
+- **`platform_check.py --lock requirements-lock.txt`** lists each installed
+  package against its pin. SPARK_SETUP.md now gives that command.
+
+| harness | result |
+|---|---|
+| the only read whose arguments change (worked_calculation's single-designation read gains `low_memory=False`), old against new on three campaign cells, five designations and a 60,000-row slice each | 18 of 18 identical: values, dtypes and canonical CSV |
+| `shared_line` on the `raw` baseline: same columns, an added column, an added column plus one ULP, a dropped column, an inexact re-read | none, MATCH (equal to the committed `723d2451bef448ac`), DIFFER, MATCH naming the column, NOT COMPUTED |
+| `platform_check.py` without `--lock`, samebytes 0.1.0 against 0.2.0, with this repo's reference and with none | byte-identical output and exit codes |
+| `--lock requirements-lock.txt` on this host, and in a venv built from the 2026-09-02 lock | 11 of 11 match; 9 of 11 differ, the nine track 0 counted |
+| samebytes' own suite | 90 tests on Windows, Linux and macOS at 3.9/3.12/3.14 plus the wheel; 28 planted defects each FAILED its test |
+
 ### The lock is re-recorded on Python 3.14 (2026-10-26, no stamp)
 
 `requirements-lock.txt` named the environment of 2026-09-02 (CPython 3.13.9,
