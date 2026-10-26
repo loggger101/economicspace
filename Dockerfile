@@ -28,12 +28,12 @@
 # tells you whether this host got it right, and it is the reason that probe
 # exists as a separate check rather than being folded into the libm ones.
 
-# python:3.13 is multi-arch and resolves to linux/arm64 on the Spark.  The minor
-# version is pinned to 3.13.9, the interpreter requirements-lock.txt and
+# python:3.14 is multi-arch and resolves to linux/arm64 on the Spark.  The minor
+# version is pinned to 3.14.6, the interpreter requirements-lock.txt and
 # platform_reference.json were recorded on.  It is deliberately NOT whatever a
 # workstation happens to run (CLAUDE.md types no interpreter version, because
 # that copy rotted): the image exists to reproduce the measurement host.
-FROM python:3.13.9-slim-bookworm
+FROM python:3.14.6-slim-bookworm
 
 # tini so Ctrl-C reaches the worker pool rather than orphaning it: a campaign
 # cell is hours long and killing it is a normal thing to do.  The queue is

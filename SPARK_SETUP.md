@@ -406,6 +406,6 @@ only copy of the catalog you just spent an hour copying over.
 
 ## The interpreter
 
-The `Dockerfile` and `requirements-lock.txt` pin **3.13.9**, which is what the
+The `Dockerfile` and `requirements-lock.txt` pin **3.14.6**, which is what the
 numbers were actually measured on, and `platform_check.py` prints the running
 version beside the reference host's on every run.

@@ -13,61 +13,64 @@
 # is part of the measurement.  Same reasoning that made v1.17.4 measure the
 # pyarrow CSV engine at 4.8x and REJECT it for moving that column by 1e-13.
 #
-# Recorded 2026-09-02 on the reference host: CPython 3.13.9, Windows, x86-64.
+# Recorded 2026-10-25 on the reference host: CPython 3.14.6, Windows, x86-64,
+# the host every .verify baseline since 2026-09-04 was taken on.
 # `platform_check.py` is what says whether a host running these actually
 # reproduces the reference arithmetic; a matching version list is necessary
 # and NOT sufficient, because the C library underneath is not pip's to pin.
 #
-# TWO LINES POSTDATE THAT RECORDING AND EACH SAYS SO WHERE IT SITS: `requests`
-# for a CVE, `tzdata` because the pin had gone stale against the host it claims
-# to describe.  Neither can reach an arithmetic result, which is the ONLY test
-# a line here passes to move.  The first sentence of this file is therefore
-# still true of every version that produced a number, and the way to keep it
-# true is to refuse the upgrade rather than to amend the sentence: a lock file
-# that has been talked into a bump once is not a measurement any more.
+# THIS FILE WAS RE-RECORDED, NOT TALKED INTO A BUMP.  Until 2026-10-25 it named
+# the environment of 2026-09-02 (CPython 3.13.9, numpy 2.2.6, pandas 2.3.3,
+# pyarrow 24.0.0), the other machine's, while the baselines were being taken on
+# this one under the versions below; nothing recorded which environment a
+# baseline came from, so the file had stopped describing the measurements.  The
+# re-recording was measured first, both ways, in one checkout: the four verify
+# cells built under the old environment check MATCH under this one and the
+# reverse (4 of 4 hashes, 151 of 151 columns), and every invariant passes under
+# both; see versions.md.  A full-catalog comparison was attempted and not
+# completed (the host could not hold it beside other work), so rows outside
+# those capped cells were not compared.  The rule stands for the next
+# upgrade: a line moves only when a measurement says no number moved, or when
+# it cannot reach a float.
 #
 #     python -m pip install -r requirements-lock.txt
 #     python platform_check.py
 
 # --- the pipeline itself -----------------------------------------------------
-# A LINE HERE MOVES ONLY IF IT CANNOT REACH A FLOAT.  numpy, pandas and pyarrow
-# all can, so they stay at the measured versions even while newer releases sit
-# there clean: numpy 2.5.3, pandas 3.0.6 and pyarrow 25.0.1 were all available
-# and all declined on 2026-09-21.  pandas 3.0 would also flip
-# platform_reference.json's `pandas.str_dtype` from `object` to `str`, which is
-# the Arrow-backed dtype behind the harness bug in verify.py's header.
-numpy==2.2.6
-pandas==2.3.3
-pyarrow==24.0.0
+# A LINE HERE MOVES ONLY IF A MEASUREMENT SAYS NO NUMBER MOVED.  numpy, pandas
+# and pyarrow can all reach a float.  pandas 3.0 flips
+# platform_reference.json's `pandas.str_dtype` from `object` to `str`, the
+# Arrow-backed dtype behind the harness bug in verify.py's header; it moves no
+# float (measured), and samebytes' comparison handles both.
+numpy==2.5.2
+pandas==3.0.5
+pyarrow==25.0.1
 # 2.32.5 -> 2.34.2 on 2026-09-21, for CVE-2026-25645: insecure temp file reuse
 # in `extract_zipped_paths()`, fixed in 2.33.0.  Nothing in this repo calls that
 # function, so the exposure was nil; it moved anyway because a reproducible
 # environment naming a version with a known CVE is a thing every reader and
-# every scanner has to re-litigate.  It is safe to move because requests is an
-# HTTP client -- it fetches the bytes Stages 1-3 write and touches no
-# arithmetic -- and it was proved rather than argued: all 18 platform_check
-# probes match across it, and it resolved with no transitive dependency moving.
+# every scanner has to re-litigate.  requests is an HTTP client -- it fetches
+# the bytes Stages 1-3 write and touches no arithmetic.
 requests==2.34.2
-tqdm==4.67.1
-yfinance==1.4.1
+tqdm==4.70.0
+yfinance==1.7.0
 
 # --- pandas' own runtime deps, pinned because a date parser is not inert ------
-# tzdata read 2025.2 here while the reference host has carried 2026.4 since
-# some later install pulled it in, so the pin was describing a machine that no
-# longer exists.  Corrected UP to what the host actually runs rather than
-# pinned back down, because this repo does no timezone-aware work at all -- the
-# only use of `timezone` anywhere is `datetime.now(timezone.utc)`, which is
-# stdlib and reads no database -- and every probe matches across a year of tz
-# releases, which is the evidence that it is inert here.
+# This repo does no timezone-aware work at all -- the only use of `timezone`
+# anywhere is `datetime.now(timezone.utc)`, which is stdlib and reads no
+# database -- and every probe matches across these releases, which is the
+# evidence that they are inert here.  tzdata reads one release OLDER than the
+# 2026-09-02 recording's 2026.4 because that is what the reference host runs.
 # WARNING: NOTHING CHECKS THESE LINES AGAINST THE HOST.  platform_check.py
 # records only numpy and pandas in its `host` block, so the other nine pins can
-# drift for a year, as this one did, with every probe still reporting `match`.
+# drift with every probe still reporting `match`; the 2026-09-02 recording did,
+# for seven weeks.
 python-dateutil==2.9.0.post0
-pytz==2025.2
-tzdata==2026.4
+pytz==2026.3.post1
+tzdata==2026.3
 
 # --- the dashboard, which no headless run needs ------------------------------
-streamlit==1.61.1
+streamlit==1.63.0
 
 # --- campaign tooling, which the pipeline itself never imports ---------------
 # quietqueue, the campaign runner, imports it for its memory watcher and its
@@ -84,4 +87,4 @@ streamlit==1.61.1
 # because a second host standing the campaign up needs the supervisor and wants
 # the memory curve, and discovering the import error after the first cell is the
 # wrong time.
-psutil==7.1.0
+psutil==7.2.2

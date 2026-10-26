@@ -37,7 +37,7 @@ jobs:
       - name: Check out economicspace
         uses: actions/checkout@v4
 
-      # 3.13 is what the Dockerfile and requirements-lock.txt pin, and what
+      # 3.14 is what the Dockerfile and requirements-lock.txt pin, and what
       # platform_reference.json was recorded on.  Not spelled more precisely
       # than the minor: CLAUDE.md deletes the interpreter version from prose
       # for the reason it rotted three times in six days, and the patch level
@@ -45,7 +45,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.14'
 
       # The lock pins the versions every committed number was measured on; it
       # does NOT carry the tagged git URL for spacecost (Stage 3's tables),

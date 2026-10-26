@@ -834,6 +834,25 @@ def _provenance() -> Dict[str, Any]:
     }
 
 
+def _environment() -> Dict[str, Any]:
+    """What interpreter and float-reaching libraries this baseline was built by.
+
+    Until 2026-10-25 nothing recorded it, and requirements-lock.txt went seven
+    weeks naming the other machine's environment while every baseline was being
+    taken on this one; finding out which had produced them took a measurement.
+    The libraries are the ones the lock calls float-reaching.
+    """
+    import platform
+    env: Dict[str, Any] = {"python": platform.python_version(),
+                           "host": platform.node()}
+    for name in ("numpy", "pandas", "pyarrow"):
+        try:
+            env[name] = __import__(name).__version__
+        except ImportError:
+            env[name] = None
+    return env
+
+
 def report_provenance(index: Dict[str, Any], allow_dirty: bool) -> bool:
     """Print where a baseline came from; False when it cannot support check 1.
 
@@ -851,6 +870,11 @@ def report_provenance(index: Dict[str, Any], allow_dirty: bool) -> bool:
     dirty-baseline` is the escape for the case where the edit was unrelated.
     """
     meta = index.get("_meta", {})
+    env = meta.get("environment")
+    if env:
+        print("  built by     python %s, numpy %s, pandas %s, pyarrow %s on %s"
+              % tuple(env.get(k) for k in ("python", "numpy", "pandas",
+                                           "pyarrow", "host")))
     if "provenance" not in meta:
         print("  provenance   not recorded (baseline predates this field)")
         return True
@@ -932,7 +956,8 @@ def cmd_baseline(args) -> int:
                       # Recorded HERE rather than derived at check time: the
                       # question is what tree this was taken on, and by the
                       # time anything reads it that tree is gone.
-                      "provenance": _provenance()}
+                      "provenance": _provenance(),
+                      "environment": _environment()}
     with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as f:
         json.dump(index, f, indent=2)
     print(f"\nWrote {len(args.cells)} cells at calc "

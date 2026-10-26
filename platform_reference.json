@@ -5,14 +5,14 @@
     "repr_hash": "769360b27b1ce487"
   },
   "host": {
-    "cpu_count": 12,
+    "cpu_count": 14,
     "float_repr_style": 15,
     "implementation": "CPython",
     "libc": "n/a",
     "machine": "AMD64",
-    "numpy": "2.2.6",
-    "pandas": "2.3.3",
-    "python": "3.13.9",
+    "numpy": "2.5.2",
+    "pandas": "3.0.5",
+    "python": "3.14.6",
     "system": "Windows"
   },
   "libm": {
@@ -32,7 +32,7 @@
   "pandas": {
     "bool_with_gap": "object",
     "empty_is_nan": true,
-    "str_dtype": "object"
+    "str_dtype": "str"
   },
   "spawn": {
     "hash": "54cd5625b78510d7",
