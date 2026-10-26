@@ -143,6 +143,16 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       headless Chrome, `--cell` and `--designation` override the choice.  It is the only script here that imports `master`,
       and the only campaign output that is gitignored rather than committed,
       because it is generated from the run it describes.
+  `cargo_golden.py`  the seam into `spacevalue.cargo` (calc 1.33.0 on).
+      `record DIR` hashes thirteen small cislunar cells, one per cargo branch
+      `verify.py`'s four cells never reach (each market model, phases off,
+      detailed phases off, refinery off, the surplus wall); `check DIR` holds a
+      later tree to them, and `--plant NAME` proves the check can fail.
+      `--fixtures FILE` also records the golden fixture spacevalue's
+      `tests/test_cargo_golden.py` replays: re-record it only at a calc
+      release that moves a number.  It builds cells through `verify.py`, so it
+      reaches `master` the same way and writes only under `.verify/scratch/`
+      and `DIR`.
   `verification_sheet.py`  a SECOND renderer over the same derivation, for a
       reader who wants to reproduce the answer on paper rather than read
       about it.  The narrative document explains the model; this one tags

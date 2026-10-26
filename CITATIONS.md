@@ -305,7 +305,7 @@ travel with it**: its own `CITATIONS.md` carries every survey's endpoint and
 citation in full, each release's notes repeat them, and section 1 above is
 this repository's statement of what it owes them.
 
-⚠️  **spacevalue** is this project's own as well, extracted from Stage 2 and MIT licensed; it is pinned to tag `v0.1.0` and carries the mineral reference table, the destinations, the in-space utility and demand tables and the recorded metal quotes, with the citations for them. Stage 2 installs one of its published price releases, pinned by `MineralValueConfig.price_release`.
+⚠️  **spacevalue** is this project's own as well, extracted from Stage 2 and MIT licensed; it is pinned to tag `v0.2.0` and carries the mineral reference table, the destinations, the in-space utility and demand tables and the recorded metal quotes, with the citations for them, and since calc 1.33.0 Stage 4's cargo valuation (`spacevalue.cargo`), which cites nothing of its own: its prices and yields are the table's. Stage 2 installs one of its published price releases, pinned by `MineralValueConfig.price_release`.
 
 Runtime, from `requirements.txt`: **requests**, **pandas**, **numpy**,
 **tqdm**, **spacecost** and **spacevalue**. Dashboard, from `requirements-ui.txt`:

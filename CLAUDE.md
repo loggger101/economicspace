@@ -68,11 +68,13 @@ shim: it imports the four modules, binds the aliases below, holds
 - The forwarding serves reads from outside. Code inside `master.py` sees only
   what it imports by name.
 - `modules/__init__.py` imports no module, because a Stage 4 worker imports
-  `modules.calc` alone.
+  `modules.calc` alone (and with it `spacevalue.cargo`, which imports nothing
+  else from spacevalue and no spacecost).
 - `modules/_runtime.py` holds what every module does first: console encoding,
   the spawned-worker silence, the output directory, `install()` and
   `confirm_overwrite()`. The pin guard inside `install()` is called, never run
-  at import, so calc and its workers never touch spacecost.
+  at import, and holds only the packages a module lists, so calc and its
+  workers check spacevalue's pin and never touch spacecost.
 - `modules/_release.py` is the download-and-checksum path Stages 1 and 2 share;
   each keeps its own assets, contract check and messages.
 - Each module runs on its own (`python modules/calc.py`) and passes its own
@@ -82,7 +84,7 @@ shim: it imports the four modules, binds the aliases below, holds
 ## Versions and release notes
 
 Current: catalog `1.10.0`, mineral_value `1.17.0`, transportation `1.23.6`,
-calc `1.32.0`, master `1.59.0` (checked by `verify_docs.py` check 2; the master
+calc `1.33.0`, master `1.60.0` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.
@@ -174,14 +176,12 @@ Traps in that table:
   GEO deorbit burn is 1,490 m/s against a row of 1,488: both are asserted at
   import rather than derived, because deriving them moves published prices.
   That is a release with a re-measurement, never a tidy-up.
-- **The payload mix is a fractional knapsack** (`optimal_payload_mix`), greedy
-  by $/kg, provably optimal; content and purity bounds fall out of it. A
-  mineral's value is the better of its own price and its yields
-  (`_phase_value`), in the phase walk only; never move the four-fraction walk
-  onto it.
-- **Inseparable phases sell as one product** (`_INSEPARABLE`: kamacite and
-  taenite). Before splitting a phase, ask whether any process separates the
-  parts. A refinement moves a number only where a **source** moves it.
+- **The cargo valuation lives in `spacevalue.cargo`** since calc 1.33.0
+  (phases, refinery, market ceilings, the payload knapsack), moved verbatim;
+  its CLAUDE.md lists the rules not to "fix" (the knapsack, `_phase_value`,
+  `_INSEPARABLE`). A change there that moves a float is a spacevalue release,
+  a repin and a calc bump; its `test_cargo_golden.py` fails first. A
+  refinement moves a number only where a **source** moves it.
 - **The mission architecture is searched per asteroid** (vehicle, propellant,
   return mode, ISRU, rendezvous apsis, concentration ratio, power source).
   Add a new choice to the search, never as a catalog-wide `CalcConfig` global,
@@ -495,8 +495,9 @@ lists every file it touched.
   The pinned price release is `prices-2026-10-07` (`MineralValueConfig.price_release`),
   checked like the catalog: contract first, every table's sha256, cache
   under `asteroid_pipeline/mineral_value/<tag>/`, manifest last. Stage 2 also
-  imports spacevalue itself, pinned to tag `v0.1.0`, for the names it re-exports
-  (check 6 recomputes the installed table through them). The pin is typed in
+  imports spacevalue itself, pinned to tag `v0.2.0`, for the names it re-exports
+  (check 6 recomputes the installed table through them), and Stage 4 imports
+  its `cargo` module, so a repin can move calc's numbers. The pin is typed in
   five places: `requirements.txt`, `PIP_SPEC` in `modules/_runtime.py`, and
   prose in README, CITATIONS.md and this sentence.
 - **Stage 3 is an adapter over spacecost, pinned to tag `v0.14.0`**, and

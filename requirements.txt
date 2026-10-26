@@ -6,7 +6,8 @@
 # `spacecost` holds Stage 3's reference tables, which used to live in
 # modules/transportation.py, and the recorded fuel quotes Stage 3 prices from.
 # `spacevalue` is Stage 2's pricing, which used to be modules/mineral_value.py:
-# Stage 2 installs its published price releases and re-exports its tables.
+# Stage 2 installs its published price releases and re-exports its tables, and
+# Stage 4 imports its cargo valuation (`spacevalue.cargo`, calc 1.33.0 on).
 # Neither is on PyPI yet, so each is pinned to a TAGGED git ref; an untagged
 # URL would change what a fresh install gets without anything here moving.
 # Their table sizes are not spelled here: the stage banners print them.
@@ -24,4 +25,4 @@ pandas
 numpy
 tqdm
 spacecost @ git+https://github.com/loggger101/spacecost@v0.14.0
-spacevalue @ git+https://github.com/loggger101/spacevalue@v0.1.0
+spacevalue @ git+https://github.com/loggger101/spacevalue@v0.2.0

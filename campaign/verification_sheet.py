@@ -1648,7 +1648,7 @@ def part_prices(S, out):
         S.prose("%s are one grain that no separation takes apart, so calc "
                 "sells them as one product, <i>%s</i>, at their "
                 "fraction-weighted value (<i>_INSEPARABLE</i> in "
-                "<b>modules/calc.py</b>)."
+                "<b>spacevalue.cargo</b>)."
                 % (" and ".join([", ".join(names[:-1]), names[-1]]
                                 if len(names) > 1 else names),
                    D.esc(product)))
