@@ -488,7 +488,7 @@ def _trailing_comments(src: str) -> Dict[int, str]:
     value is allowed to contain one.  This exists because several fields carry
     their whole description as a TRAILING comment and nothing else:
 
-        use_yfinance:        bool = True   # live commodity fuel prices
+        preview_rows:      int = 20   # rows per table in the end-of-run preview
         request_timeout: int = 60   # seconds per HTTP call; a timeout is a soft failure
 
     Reading only the block ABOVE a field showed those as having no help at all,

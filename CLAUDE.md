@@ -151,23 +151,16 @@ Traps in that table:
   Anything that reads a Stage 2 table to interpret a result must first ask
   which destination it was priced for: its prices **and** its routed ceilings
   are per destination, and the wrong one raises nothing.
-- **The pricing rules below live in spacevalue** since master v1.59.0; a
-  change to one is a spacevalue release, a `prices-*` release, then a repin of
-  `price_release` here.
-- **Every commodity is priced per destination**: terrestrial price **plus**
-  `in_space_utility x launch-cost-avoided`, less on-site refining. Utility
-  factors are judgement, the softest input in the model; treat them as a dial.
-- **Utility overrides only run downward** (local competition: a base that can
-  dig its own water does not pay to import it). `leo`, `cislunar` and
-  `mars_orbit` take the base profile; `mars_orbit`'s empty dict is the point (the
-  crust is 4,100 m/s of ascent away). `gto` takes `geo`'s profile **by
-  reference**; do not copy it into a literal. Utility families
-  (`_UTILITY_FAMILIES`) are asserted at import at every destination.
-- **The import budget is split per commodity class** (`_DEMAND_SHARE_BY_CLASS`,
-  sums to 1) and `annual_market_kg` is **routed**: a commodity flown home is
-  bounded by world production, one sold at a depot by its import budget. Every
-  in-space destination must have a demand row (asserted); a missing row used
-  to mean an unbounded market.
+- **The pricing rules live in spacevalue** since master v1.59.0, and its
+  CLAUDE.md lists the ones not to "fix"; a change to one is a spacevalue
+  release, a `prices-*` release, then a repin of `price_release` here.
+  Reading a Stage 2 row: at a depot a commodity takes the better of two fates,
+  used there (terrestrial price **plus** `in_space_utility x
+  launch-cost-avoided`, less on-site processing) or shipped home (terrestrial
+  price less the downleg, so not zero), and `value_route` says which.
+  `annual_market_kg` is routed the same way: world production for a commodity
+  flown home, the depot's import budget for one sold there. Utility factors
+  are the softest input in the model; treat them as a dial.
 - **Cislunar is cheaper to reach than LEO** (an NRHO capture only binds the
   orbit, at low perigee: `_cislunar_capture_dv_km_s`). **Mars is its own
   heliocentric transfer**, not a scaled Earth return. Airless destinations
@@ -181,8 +174,6 @@ Traps in that table:
   GEO deorbit burn is 1,490 m/s against a row of 1,488: both are asserted at
   import rather than derived, because deriving them moves published prices.
   That is a release with a re-measurement, never a tidy-up.
-- **A commodity with no in-space market is worth its terrestrial price minus the
-  downleg**, not zero, at a depot. `value_route` records which fate it took.
 - **The payload mix is a fractional knapsack** (`optimal_payload_mix`), greedy
   by $/kg, provably optimal; content and purity bounds fall out of it. A
   mineral's value is the better of its own price and its yields
