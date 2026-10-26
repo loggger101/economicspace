@@ -65,7 +65,8 @@ verify_docs.py         Docs verification: the docs still describe the code
 tree_check.py          Does the disk hold what git says it holds? ~0.4 s
 platform_check.py      Can THIS host reproduce the committed numbers? ~10 s
 requirements-verify.txt  The pinned samebytes those two (and verify.py's run
-                       comparison) are shims over; installed on first use
+                       comparison, and four docs checks) are shims over;
+                       installed on first use
 .github/workflows/     CI: the checks that need no catalog, run on every push
 platform_reference.json  What it compares against, recorded on the ref host
 requirements-lock.txt  The exact versions every committed number was measured on
@@ -827,8 +828,9 @@ clean throughout: git's stat cache trusts size and mtime and never re-reads
 content, so the two can disagree while status says nothing. On a plain clone it
 can only pass, which is why CI runs it, as the control that it still works.
 
-The check itself, the host probes behind `platform_check.py` and `verify.py`'s
-run comparison live in [samebytes](https://github.com/loggger101/samebytes),
+The check itself, the host probes behind `platform_check.py`, `verify.py`'s
+run comparison and `verify_docs.py` checks 4, 5, 6 and 11 live in
+[samebytes](https://github.com/loggger101/samebytes),
 split out of this repo with their history; the two files here are shims bound
 to this repository. The pin is the one line in `requirements-verify.txt`, and
 `modules/_runtime.py` installs that tag on first use and refuses an editable
@@ -935,7 +937,7 @@ py verify_docs.py
 | 1 | defaults | a documented default that no longer matches its dataclass field |
 | 2 | versions | the Stage/Version table or CLAUDE.md's `Current:` line drifting from `pipeline_version`, and versions.md's "moved without moving a number" table drifting from any count of it spelled out in prose |
 | 3 | row counts | "40 propellants" after a row was added |
-| 4 | links | a markdown anchor that does not resolve |
+| 4 | links | a markdown link to a file that is not there, or an anchor that does not resolve |
 | 5 | structure | unbalanced fences, ragged tables, heading-level jumps, duplicate h1/h2, in every markdown file in the repo |
 | 6 | dashes | an em- or en-dash in prose a reader sees, or a line left opening with a bare comma: the docs, the root scripts, the campaign scripts, and comments in `modules/` |
 | 7 | manifests | a list documented in one place drifting from the list defined in another: `requirements.txt` against the modules' `_REQUIRED_PKGS`, CLAUDE.md's alias table against `master.py`, the pinned catalog release and spacecost tag against every document that names them, and the `run.bat` and `run.sh` blocks above against their dispatchers |
