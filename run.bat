@@ -295,15 +295,12 @@ if defined TAG (
   echo       py verify.py baseline --tag mytag
 )
 echo.
-echo   Two stages come from other repositories: Stage 1 installs a
-echo   published AsteroidCatalog release and Stage 3's tables are the
-echo   spacecost package, so both seams are checked first. Neither needs
-echo   a baseline or writes anything; Stage 1's reads the release's small
-echo   manifest over the network. Together they take seconds.
+echo   Stage 1 installs a published AsteroidCatalog release, so that seam
+echo   is checked first. It needs no baseline and writes nothing; it reads
+echo   the release's small manifest over the network, in seconds. Stage 3's
+echo   seam is held at import: the pinned spacecost tag or nothing.
 echo.
 %PY% verify_stage1.py
-echo.
-%PY% verify_stage3.py
 echo.
 echo   A full check builds ~20 cells and takes about half an hour.
 echo   This skips checks 2 and 3 to run in ~5 minutes, and still catches

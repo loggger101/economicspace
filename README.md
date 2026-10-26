@@ -60,7 +60,6 @@ run.bat                Windows launcher: a terminal menu over everything below
 run.sh                 Linux / macOS launcher: the same options, POSIX
 run_pipeline.py        Headless CLI the launcher drives (presets + flags)
 verify.py              Release verification: the checks every change runs
-verify_stage3.py       Stage 3 verification: this repo and spacecost agree
 verify_stage1.py       Stage 1 verification: the pinned catalog release, installed
 verify_docs.py         Docs verification: the docs still describe the code
 tree_check.py          Does the disk hold what git says it holds? ~0.4 s
@@ -126,28 +125,24 @@ which is worth knowing when an import fails: the traceback will not mention
 Stage 3.
 
 🚨  **A repin can move values, and the data on disk adopts one
-deliberately.** `pipeline_version` is spacecost's data contract, mirrored here
-and asserted equal, so a repin moves the Stage 3 stamp whether or not a value
+deliberately.** `pipeline_version` is spacecost's data contract, inherited with
+its config, so a repin moves the Stage 3 stamp whether or not a value
 moved. When values move, Stages 2 and 3 are re-run (or rebuilt by replaying
 the recorded fuel quotes), and the tables they replace are frozen first under
 `campaign/stage3/spacecost-<ver>/` so the archived cells can still be read
 against what they flew. What each repin moved is in its release note in
 [versions.md](versions.md); the first to move values was
 [master v1.35.0](versions.md#master-v1350--mineral_value-v1100--transportation-v1160).
-One command checks the seam:
-
-```bash
-py verify_stage3.py
-```
 
 ⚠️  **The seam is arranged so drift cannot be committed**, because a split is
 what caused this project's worst recorded incident
 ([the parallel-repo divergence](versions.md#the-parallel-repo-divergence)):
-the data is single-sourced, the config dials are compared at import, and
-the output is compared byte for byte. The invariants are in
+the data and the config are single-sourced (Stage 3's config is spacecost's
+`SpacecostConfig` with two defaults overridden), and the package that imports
+is held to the pinned tag at import. The invariants are in
 [CLAUDE.md](CLAUDE.md#stage-1-and-stage-3-live-in-other-repositories).
 
-**spacecost is pinned to a tagged release**, `v0.12.0`, in all five places
+**spacecost is pinned to a tagged release**, `v0.13.0`, in all five places
 that type it: as a URL in `requirements.txt`, and in `PIP_SPEC` in
 `modules/_runtime.py` (what Stages 2 and 3 install from at import); and in
 prose here, in [CLAUDE.md](CLAUDE.md) and in [CITATIONS.md](CITATIONS.md).
@@ -200,7 +195,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.10.0 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
 | 2 | `modules/mineral_value.py` | 1.16.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
-| 3 | `modules/transportation.py` | 1.23.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](MODEL.md#the-propulsion-and-storage-catalog) |
+| 3 | `modules/transportation.py` | 1.23.6 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](MODEL.md#the-propulsion-and-storage-catalog) |
 | 4 | `modules/calc.py` | 1.32.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 The version column is held to each module's `pipeline_version` by
@@ -253,7 +248,7 @@ semantics, so `./run.sh quick leo` does what `run.bat quick leo` does:
 ./run.sh rerun     Stage 4 only, against the catalogs already on disk
 ./run.sh standard  20,000-row sample, Stage 4 only
 ./run.sh full      THE PIPELINE DEFAULTS (3.2 h at cislunar, 6.1 h at earth_surface)
-./run.sh verify    verify_stage3.py, then verify.py against the newest baseline
+./run.sh verify    verify_stage1.py, then verify.py against the newest baseline
 ./run.sh campaign  the resumable measurement queue
 ./run.sh ui        the dashboard, in the foreground, reachable over the network
 ./run.sh help      run_pipeline.py --help
@@ -294,7 +289,7 @@ run.bat quick      400-row sample, all four stages
 run.bat rerun      Stage 4 only, against the catalogs already on disk
 run.bat standard   20,000-row sample, Stage 4 only
 run.bat full       THE PIPELINE DEFAULTS (3.2 h at cislunar, 6.1 h at earth_surface)
-run.bat verify     verify_stage3.py, then verify.py against the baseline
+run.bat verify     verify_stage1.py, then verify.py against the baseline
 run.bat help       run_pipeline.py --help
 ```
 
@@ -785,31 +780,12 @@ can only pass, which is why CI runs it, as the control that it still works.
 
 ### Verifying Stage 3
 
-`verify.py` deliberately does not cover Stage 3, and since the tables moved to
-`spacecost` there is a seam that needs its own check. `verify_stage3.py` is it,
-it needs no baseline and no network, and it takes a few seconds:
-
-```bash
-py verify_stage3.py
-```
-
-It asserts five things: `TransportConfig`'s dials match the package's field for
-field, the `pipeline_version` this repo stamps is the package's data-contract
-version, every CSV Stage 3 writes is byte identical whether built through the adapter or
-through the package directly, Stage 3's `validate()` still covers a propellant row that
-omits its `propellantless` flag, and the spacecost that is actually INSTALLED
-is the revision `requirements.txt` pins. The third would still pass if both
-sides moved together; spacecost's own `tests/test_parity.py` holds the content,
-a build against the CSVs it commits under `reference/`, byte for byte. Check 5
-is the only one that checks BEHAVIOUR rather than bytes, and check 6 is the
-precondition for all of them. The numbers are kept: check 4, that comparison
-against `reference/`, was retired because spacecost's CI makes it.
-
-⚠️  **Check 6 is the precondition for the rest.** It reads pip's own
-`direct_url.json` (PEP 610) and fails on a different revision, on an install
-with no VCS metadata, and on a tag that has moved since the install.
-The whole file builds into a temporary directory and never touches
-`asteroid_pipeline/`.
+spacecost's own CI holds its tables to the CSVs it commits, its `validate()`
+to its bands and its built wheel to the names this repo imports
+(`tests/test_consumer_contract.py`). Here, `modules/_runtime.py` refuses any
+spacecost but the pinned tag at import: another tag or revision is reinstalled
+in place, and an editable checkout, a shadowing copy or an install with no git
+record is refused with the command to fix it.
 
 ⚠️  **`verify.py` covers Stage 4, and it never re-runs Stages 1-3.** That is
 deliberate: a Stage 1 run at a moved pin installs a different catalog, and a
@@ -821,9 +797,9 @@ Stage 3's `validate()`, which Stage 4 never calls, and had to be checked by
 running that function under `-W error::FutureWarning` instead. If you change
 Stage 1, 2 or 3, this file is not your evidence.
 
-`verify_stage3.py` check 5 covers that case: a synthetic propellant row
-with no `propellantless` flag, under `-W error::FutureWarning`. Stage 1's
-builder is tested in AsteroidCatalog, where the code is.
+spacecost's suite covers that case now, a synthetic propellant row with no
+`propellantless` flag under `-W error::FutureWarning`, and Stage 1's builder is
+tested in AsteroidCatalog: each where the code is.
 
 ### What runs automatically
 
@@ -833,9 +809,8 @@ subset that needs no catalog runs on every push and pull request, in
 
 | step | why it can run there |
 |---|---|
-| `import master` | imports the four modules and builds the configs; Stage 1's taxonomy tables are empty without a catalog, which nothing at import reads |
+| `import master` | imports the four modules and builds the configs, which also holds the installed spacecost to the pinned tag; Stage 1's taxonomy tables are empty without a catalog, which nothing at import reads |
 | `verify_docs.py` | reads the docs and the dataclasses; builds no stage |
-| `verify_stage3.py` | builds into a temp dir, needs no network, and CI checks out `spacecost` at the pinned tag so check 6 can see a moved tag |
 | `platform_check.py` | **report only, never a gate** |
 
 🚨  **`verify.py` is NOT in CI and cannot be.** `asteroid_pipeline/` is
@@ -847,8 +822,7 @@ number.**
 
 ⚠️  **platform_check.py is informational on purpose.** A GitHub runner is glibc
 on x86-64 and the reference host is the Windows UCRT, so a differing libm probe
-there is the expected answer, not a finding. The pinned `spacecost` tag is
-resolved by `verify_stage3._pinned_tag()`, never typed into the workflow.
+there is the expected answer, not a finding.
 
 ### Verifying Stage 1
 

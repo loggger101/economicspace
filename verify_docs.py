@@ -833,12 +833,7 @@ EM, EN = "—", "–"
 ROOT_PY = ["ui.py", "ui_meta.py", "orbital.py", "run_pipeline.py", "verify.py",
            "master.py", "modules/__init__.py", "modules/_runtime.py",
            "launch_ui.py", "platform_check.py",
-           # verify_stage3.py was outside BOTH ratchets until 2026-09-15, which
-           # is the "a file nothing checks is clean until it is not" state this
-           # check exists to prevent, in the one harness that guards the
-           # spacecost split.  It was clean on dashes and carried three
-           # definitions with no docstring, `main` among them.
-           "verify_stage3.py", "verify_stage1.py", "tree_check.py",
+           "verify_stage1.py", "tree_check.py",
            # Not Python, but prose a reader sees, and it was outside the
            # ratchet long enough to collect two em-dashes.  The hook's header
            # is the only account of the Drive stat-cache bug there is.
@@ -1570,7 +1565,7 @@ def check_runtime() -> bool:
 FIRST_PARTY_PY = (["master.py", "modules/__init__.py", "modules/_runtime.py",
                    "run_pipeline.py", "ui.py", "ui_meta.py",
                    "orbital.py",
-                   "verify.py", "verify_stage3.py", "verify_stage1.py",
+                   "verify.py", "verify_stage1.py",
                    "tree_check.py",
                    "launch_ui.py", "platform_check.py",
                    os.path.basename(__file__)]

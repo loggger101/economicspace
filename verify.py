@@ -35,10 +35,10 @@ different catalog, either of which moves the inputs underneath the comparison.  
 6 works around that by recomputing the pure table functions against the values
 already stored in the on-disk Stage 2 catalog, which needs no network.
 
-Both of those now have harnesses of their own, and this file is still not
-their evidence.  Stage 3's validate() is `verify_stage3.py` check 5;
-transportation 1.12.1's propellant-flag fix lives there, and had been checked
-once by hand under `-W error::FutureWarning`.  Stage 1 is `verify_stage1.py`,
+Both of those are checked elsewhere, and this file is still not their
+evidence.  Stage 3's validate() lives in spacecost, whose own suite holds
+transportation 1.12.1's propellant-flag fix (it had been checked once by hand
+under `-W error::FutureWarning`).  Stage 1 is `verify_stage1.py`,
 which checks the pinned catalog release against this pipeline's data contract
 and the catalog on disk against that release's bytes; the build itself is
 verified in AsteroidCatalog before it is published.  If you change Stage 1 or
@@ -169,7 +169,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 # Local: the working-tree guard every harness here runs first.  It is a
-# sibling file rather than a copied function because four harnesses need
+# sibling file rather than a copied function because every harness needs
 # it and a second copy of a check is the defect this repo catalogues
 # oftenest.
 import tree_check
@@ -932,8 +932,8 @@ def report_provenance(index: Dict[str, Any], allow_dirty: bool) -> bool:
     prints MATCH on all four cells and the release note then argues from a
     hash that compared the change to itself.
 
-    Three outcomes, kept distinct for the reason `verify_stage3.py` keeps its
-    three apart.  A baseline written before this field existed has no
+    Three outcomes, kept distinct, as `_runtime.install()`'s pin guard keeps
+    its own apart.  A baseline written before this field existed has no
     provenance and is reported as such rather than assumed good; a clean one is
     named; a baseline taken over a modified model path FAILS, and `--allow-
     dirty-baseline` is the escape for the case where the edit was unrelated.

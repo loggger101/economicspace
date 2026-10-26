@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.58.0 / transportation v1.23.6](#master-v1580--transportation-v1236)
 - [master v1.57.0](#master-v1570)
 - [master v1.56.0 / catalog v1.10.0](#master-v1560--catalog-v1100)
 - [master v1.55.0 / calc v1.32.0 / transportation v1.23.0](#master-v1550--calc-v1320--transportation-v1230)
@@ -109,9 +110,9 @@ one that does not say is not to be used.
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.16.0** | v1.16.0, an eighth destination, `gto`: its note, `geo`'s utility profile by reference, a sourced 81.6 t/yr demand ceiling, and an import-time check that every in-space destination has one; no existing row moved (v1.13.0 was the last to move a row) |
-| 3 | `modules/transportation.py` | **1.23.0** | v1.23.0, an ISRU processing energy on every propellant row that can be made on site (hydrolox 15,200 Wh/kg) and an ISRU plant throughput row; no existing value moved: the stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.32.0** | v1.32.0, ISRU hydrolox pays for its electrolysis and liquefaction (energy through the array, plant with the rig), and the flat $50/kg is retired; v1.31.0 had added an eighth destination, `gto` |
-| - | `master.py` | **1.57.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| - | `master.py` | **1.58.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -126,7 +127,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Twenty-eight stamps so far have moved without moving a number:
+Twenty-nine stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -158,6 +159,7 @@ Twenty-eight stamps so far have moved without moving a number:
 | transportation `1.19.0` | **two launch rows no mission can fly** | bit-identical, verified |
 | calc `1.31.0` | **an eighth destination** | bit-identical, verified |
 | mineral_value `1.16.0` | **an eighth destination** | bit-identical, verified |
+| transportation `1.23.6` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -165,10 +167,10 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.8.0`, `mineral_value 1.9.0`, `transportation 1.13.0`,
 `transportation 1.14.0`, `transportation 1.15.0`, `transportation 1.17.2`,
 `mineral_value 1.12.3`, `transportation 1.17.3`, `transportation 1.18.1`,
-`transportation 1.19.0` and `mineral_value 1.16.0`.
+`transportation 1.19.0`, `mineral_value 1.16.0` and `transportation 1.23.6`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and twenty are not, and that split rotted in prose
+rows are performance stamps and twenty-one are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -265,6 +267,71 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.58.0 / transportation v1.23.6
+
+**spacecost `v0.12.0` -> `v0.13.0`, and Stage 3 stops mirroring it.** No value
+moves: spacecost v0.12.1 to v0.12.6 changed `notes` cells only, and v0.13.0
+removed three names this repo stopped reading. The transportation stamp
+follows the data contract, 1.23.0 -> 1.23.6. `verify_stage3.py` is retired;
+what it still held lives in spacecost's suite and in the pin guard.
+
+### What moved upstream (spacecost 0.13.0)
+
+- `validate_tables`, `TransportConfig` and `build_transportation_catalog` are
+  gone. The first existed because the concatenated `master.py` rewrote the
+  word `validate`, which master v1.57.0 retired.
+- Its consumer contract lists what this repo reads now, including five
+  `spacecost.delivery` names the worked calculation and verification sheet
+  reach (one private, `_HYDROLOX`). Every `SpacecostConfig` field must carry a
+  help comment, since this dashboard shows them. `verify_stage3.py` check 5,
+  the flagless-propellant band, is a spacecost test.
+
+### What changes here
+
+- **`TransportConfig` is `spacecost.SpacecostConfig`** with two defaults
+  overridden, `use_yfinance` (True: a stage fetches) and `output_dir`. The
+  mirrored copy of its ten fields, `_check_config_surface` and `_as_spacecost`
+  go; `pipeline_version` is inherited, so a repin moves it and nothing here
+  does. A subclass rather than an instance with arguments, because the
+  dashboard's reset and `run_pipeline.py`'s defaults banner read the CLASS
+  default, which would have been spacecost's `use_yfinance=False`.
+- **The dashboard** reads Stage 3's help from spacecost's `config.py`, with
+  this file's two fields on top, and hides `isru_return_propellant`,
+  `isru_processing_usd_per_kg` and `contingency_fraction` in the Stage 3
+  section only: only spacecost's `mission_cost_breakdown` reads them, which
+  nothing here calls. calc's dials of the same names stay.
+- **The pin guard in `modules/_runtime.py`** (the old `verify_stage3.py` check
+  6, folded in) reads pip's record of the install as well as the version: an
+  install from another tag or revision is reinstalled in place with
+  `--no-deps`; an editable checkout, a copy that shadows the install, and an
+  install with no git record are refused, at any version, with the command
+  that fixes them. The tag-moved sub-check and CI's spacecost checkout go;
+  CI's `import master` step is the seam now.
+- `from spacecost import validate`. `verify_stage3.py`, its CI steps, its
+  `run.bat` / `run.sh` lines and its ratchet entries go.
+
+### Verified
+
+| harness | result |
+|---|---|
+| spacecost `v0.12.0` against `v0.13.0` | committed `reference/*.csv` as strings: only `notes` and `pipeline_version` differ; the numeric literals in `spacecost/*.py`, as a multiset: identical; fresh offline builds of all seven CSVs: every other column identical |
+| `verify.py check` against a 1.57.0 baseline taken on the clean tree first | ALL CHECKS PASSED: the four cells MATCH, bit for bit, as do prune on/off and serial/parallel; mass ledger, never-worse, Stage 2 tables and market ceilings OK |
+| the three hidden dials, each set far from its default | a build writes the same seven files byte for byte |
+| the pin guard, readers patched, nothing installed | calc's list never probes spacecost; the tag with pip's record agreeing passes; another revision at the same version, and another version, reinstall with `--no-deps`; editable, shadowed and untracked installs are refused with no pip call |
+| the pin guard, unpatched | this machine's install reads clean at `v0.13.0` and "revision" against `v0.12.0`; a real copy of the package first on `sys.path`, at the same version, is refused as shadowing |
+| the first import after the repin | reinstalled `v0.13.0` (commit `0acfff2`) in place; numpy 2.5.2 and pandas 3.0.5 unmoved |
+| `campaign/worked_calculation.py --verify --audit` | 90 quantities bit-exact, 0 DIFFER; 120 of 120 non-zero columns shown, 36 of 36 rates; OK, derivation reproduces the row |
+| `verify_docs.py` | OK |
+
+### What did not change
+
+- The tables on disk stay at 1.23.0 (the rule: re-run Stage 3 when a row
+  changes, not when a stamp does), so a Stage 4 run prints one `stamp_check`
+  line until Stage 3 is next re-run. Nothing refuses on it: `preflight`,
+  `run_cell` and the worked calculation's `transport_tables_for` (which picks
+  by date) only report it.
+- catalog `1.10.0`, mineral_value `1.16.0`, calc `1.32.0`.
 
 ## master v1.57.0
 
@@ -10065,8 +10132,8 @@ stamp identifies the DATA and the data did not change.
 
 **Where a new entry goes now.** A table row changes in spacecost, so it is a
 spacecost release, recorded in that repo's `CHANGELOG.md`. This repo follows by
-moving the pinned tag in `requirements.txt` and `_MASTER_REQUIRED`, and that
-move is a `master` release recorded above.
+moving the pinned tag in `requirements.txt` and `PIP_SPEC` in
+`modules/_runtime.py`, and that move is a `master` release recorded above.
 ## Stage 4 changelog: `modules/calc.py`
 
 **`1.3.0`  initial profitability calculator.**
