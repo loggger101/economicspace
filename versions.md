@@ -329,8 +329,7 @@ those thirteen cells before the move, each with its arguments before and after
 | harness | result |
 |---|---|
 | the extraction's two proofs (byte and AST identity of the moved span; calc's other statements unchanged and in order) | both pass; each fails on a planted one-token edit |
-| `verify.py check --skip prune parallel` against a baseline taken on the clean 1.32.0 tree first | the four cells MATCH bit for bit (151 of 151 columns each); mass ledger, never-worse and market ceilings OK; check 6 recomputes all 59 installed cislunar rows: ALL IDENTICAL |
-| `verify.py check` with checks 2 and 3 (pruning, serial against parallel) at the published tag | PENDING_TAG |
+| `verify.py check`, all seven, with spacevalue `v0.2.0` installed from its tag, against a baseline taken on the clean 1.32.0 tree first | ALL CHECKS PASSED: the four cells MATCH bit for bit (151 of 151 columns each), as do prune on/off and serial against 8 workers; mass ledger, never-worse and market ceilings OK; check 6 recomputes all 59 installed cislunar rows: ALL IDENTICAL |
 | `campaign/cargo_golden.py check`: the thirteen coverage cells, hashed at 1.32.0 before the move | ALL MATCH; `--plant _blend` moves 48 columns of the default raw cell, `--plant saturation_price_multiplier` 7 of the elasticity cell |
 | the names: `calc.X is spacevalue.cargo.X is master.X` | all 25 |
 | spacevalue's golden replay: 4,858 calls recorded in calc 1.32.0 | bit-exact on Windows and Linux at Python 3.12-3.14; macOS rounds `pow` one ulp away on 2 of the 64 elasticity-multiplier calls (held to one ulp there, everything else to the bit); a planted re-association fails it |
