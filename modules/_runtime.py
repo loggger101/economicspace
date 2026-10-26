@@ -250,9 +250,10 @@ def install(required):
 # -----------------------------------------------------------------------------
 # OVERWRITE GUARD
 # -----------------------------------------------------------------------------
-# A FETCHING stage writes over the only copy of its inputs, and there is no
-# undo: every `.verify` baseline and every committed measurement was taken
-# against the files this run is about to replace.  `run_pipeline.py` has
+# Stages 1-3 write over the inputs every `.verify` baseline and every
+# committed measurement was taken against.  Since master v1.59.0 each builds
+# from a pin and gives the same bytes back, but a different destination or a
+# moved pin does not, and before the pins there was no undo at all.  `run_pipeline.py` has
 # asked before doing that since 2026-08-23; running a stage module directly
 # went nowhere near that guard, which is the hole somebody fell into on
 # 2026-09-17 while smoke-testing an import, re-fetching three live propellant
@@ -272,7 +273,7 @@ def confirm_overwrite(paths, what):
         return True
     print("")
     print("  " + "=" * 71)
-    print("  THIS RE-FETCHES LIVE DATA AND OVERWRITES WHAT IS ON DISK")
+    print("  THIS OVERWRITES WHAT IS ON DISK")
     print("  " + "=" * 71)
     print("  %s" % what)
     for p in existing[:8]:
@@ -280,9 +281,9 @@ def confirm_overwrite(paths, what):
     if len(existing) > 8:
         print("    ... and %d more" % (len(existing) - 8))
     print("")
-    print("  The values on disk are the only copy.  Any verify.py baseline")
-    print("  or archived measurement taken against them stops reproducing,")
-    print("  and that looks exactly like a code regression.")
+    print("  Any verify.py baseline or archived measurement taken against")
+    print("  what is there now stops reproducing if the result differs, and")
+    print("  that looks exactly like a code regression.")
     print("")
     try:
         return input("  Type 'yes' to overwrite: ").strip().lower() == "yes"

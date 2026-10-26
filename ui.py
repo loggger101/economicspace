@@ -2032,10 +2032,10 @@ def render_sidebar() -> None:
     # Stages 1-3 each write over the CSV already on disk, and verify.py
     # compares against baselines built on those exact inputs, so replacing them
     # makes four cells stop reproducing -- which looks precisely like a code
-    # regression and is not one.  Since master v1.59.0 all three build from
-    # pins, so the danger is a different destination or a moved pin rather
-    # than a live price. That is a mistake somebody made here on 2026-08-23, by running
-    # Stage 2 to look at a banner; CLAUDE.md carries the write-up. The CLI
+    # regression and is not one.  Somebody did exactly that here on
+    # 2026-08-23, running Stage 2 to look at a banner; CLAUDE.md carries the
+    # write-up.  Since master v1.59.0 all three build from pins, so the danger
+    # is a different destination or a moved pin rather than a live price.  The CLI
     # spells this out in run_pipeline.py's refusal, and the front door should
     # not be the quieter of the two.
     _FETCHES = {

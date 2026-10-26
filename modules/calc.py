@@ -1708,12 +1708,12 @@ def phase_price_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
           f"no Stage 2 price: {missing}")
     if col == _DETAILED_COL:
         print("     Stage 2 at mineral_value 1.12.0 or later prices them.  Either "
-              "re-run Stage 2 (it re-fetches live prices), or set "
+              "re-run Stage 2 (it installs the pinned price release), or set "
               "CALC_CONFIG.model_detailed_phases = False to read comp_phases.  "
               "Aborting.")
     else:
         print("     Stage 2 at mineral_value 1.11.0 or later prices them.  Either "
-              "re-run Stage 2 (it re-fetches live prices), or set "
+              "re-run Stage 2 (it installs the pinned price release), or set "
               "CALC_CONFIG.model_mineral_phases = False for the four-fraction "
               "model.  Aborting.")
     return False
@@ -1965,11 +1965,12 @@ def stamp_check(catalogs: Dict[str, pd.DataFrame]) -> bool:
     print("        -> This may be DELIBERATE. Several releases changed no CSV "
           "byte and chose not to re-run their stage; read the release note in "
           "versions.md before acting on this.")
-    print("        -> If you do re-run Stage 2 or 3, it REFETCHES live prices "
-          "and overwrites the only copy of its CSV, and every verify.py "
-          "baseline stops reproducing. Copy asteroid_pipeline/*.csv first. "
-          "Stage 1 installs the pinned catalog release; it is a no-op when "
-          "that release is already installed.")
+    print("        -> If you do re-run Stage 2 or 3, it rebuilds from its pin "
+          "(the price release, the recorded fuel quotes) and overwrites its "
+          "CSV, and every verify.py baseline taken against the old one stops "
+          "reproducing. Copy asteroid_pipeline/*.csv first. Stage 1 installs "
+          "the pinned catalog release; it is a no-op when that release is "
+          "already installed.")
     return False
 
 
