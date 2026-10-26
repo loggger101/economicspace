@@ -1301,6 +1301,18 @@ def mineral_catalog_for(dest, archived=None):
                 sets.append((os.path.join(root, sub, name),
                              "campaign/stage2/%s, frozen %s"
                              % (sub, sub.replace("-", " "))))
+    # ✅  AND THE PRICE RELEASES.  Since master v1.59.0 Stage 2 installs a
+    # published spacevalue release and caches all of it, every destination,
+    # under asteroid_pipeline/<subdir>/<tag>/.  A release is the same bytes on
+    # every host, so a cached one is as good an authority as a frozen set.
+    # Appended after the frozen sets so that, at an equal date, the release
+    # wins: `prices-2026-10-07` and `mineral_value-1.15.0` are the same prices
+    # under two stamps, and the release is what a run since then installed.
+    cache = os.path.join(ROOT, "asteroid_pipeline", master.MINERAL_CONFIG.subdir)
+    if os.path.isdir(cache):
+        for tag in sorted(os.listdir(cache)):
+            sets.append((os.path.join(cache, tag, name),
+                         "price release %s" % tag))
     sets = [(p, label, _table_date(p)) for p, label in sets if os.path.exists(p)]
     if sets:
         sets.sort(key=lambda st: st[2] or "")
@@ -5127,10 +5139,11 @@ BORROWED = {
     "DEFAULT_FAIRING_VOLUME_M3": (
         "data", "the fairing the model flies when a vehicle row gives none"),
     "DELIVERY_ARCHITECTURES": ("data", "the destination table"),
+    "MINERAL_CONFIG": ("data", "where Stage 2 caches its price releases"),
     "FRACTION_TO_MINERAL": ("data", "composition column -> mineral name"),
     "RARE_METAL_ELEMENTS": ("data", "which elements price as rare metals"),
     "TAXONOMY_COMPOSITION": ("data", "Module 1's taxonomy fractions"),
-    "_DELIVERY_LEGS": ("data", "the leg chain `delivery_chain` walks itself; Module 2 re-exports it from spacecost.delivery"),
+    "_DELIVERY_LEGS": ("data", "the leg chain `delivery_chain` walks itself; Module 2 re-exports it from spacevalue, which takes it from spacecost.delivery"),
     "_LEO_USD_PER_KG": ("data", "the launch price, off spacecost's vehicle table"),
     "_PHASE_MARKET_ALIAS": ("data", "phase -> market key"),
     "_RESIDUAL_PHASE": ("data", "the name of the composition residual"),

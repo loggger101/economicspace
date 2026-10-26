@@ -29,11 +29,12 @@ Other entry points:
 
 SCOPE.  Checks 1-5 and 7 cover STAGE 4; check 6 covers STAGE 2's judgement
 TABLES.
-Nothing here ever re-runs Stages 1-3 -- deliberately, because a Stage 2 or 3
-run re-fetches live prices and a Stage 1 run at a moved pin installs a
-different catalog, either of which moves the inputs underneath the comparison.  Check
-6 works around that by recomputing the pure table functions against the values
-already stored in the on-disk Stage 2 catalog, which needs no network.
+Nothing here ever re-runs Stages 1-3 -- deliberately, because a run at a moved
+pin installs a different catalog, a different price release or different fuel
+quotes, any of which moves the inputs underneath the comparison.  Check 6
+instead recomputes the pinned spacevalue's table functions against the values
+stored in the installed Stage 2 table, which needs no network and says the
+release on disk is what the pinned package computes.
 
 Both of those are checked elsewhere, and this file is still not their
 evidence.  Stage 3's validate() lives in spacecost, whose own suite holds

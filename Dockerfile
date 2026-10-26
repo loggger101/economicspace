@@ -50,8 +50,9 @@ WORKDIR /work
 # missing has to be built rather than downloaded.
 # requirements.txt comes along because the git-pinned packages are NOT in the
 # lock file and cannot be: each is a tagged git URL rather than a wheel pin.
-# There is one -- `spacecost`, for Stage 3's reference tables -- so installing
-# only the lock leaves an image without that stage, and the failure is
+# There are two -- `spacecost`, for Stage 3's tables, and `spacevalue`, whose
+# names Stage 2 re-exports -- so installing only the lock leaves an image
+# without either stage, and the failure is
 # invisible on a networked host because the modules pip-install what is missing
 # at import -- which means a git fetch at run time, inside the image that
 # exists to BE the reproducible environment. Both files are resolved together

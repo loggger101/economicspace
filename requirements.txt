@@ -4,17 +4,24 @@
 # holds the two lists to each other.
 #
 # `spacecost` holds Stage 3's reference tables, which used to live in
-# modules/transportation.py, and Stage 2's delivery chains.  It is not on PyPI
-# yet, so it is pinned to a TAGGED git ref; an untagged URL would change what a
-# fresh install gets without anything here moving.  Its table sizes are not
-# spelled here: the Stage 3 banner prints them.
+# modules/transportation.py, and the recorded fuel quotes Stage 3 prices from.
+# `spacevalue` is Stage 2's pricing, which used to be modules/mineral_value.py:
+# Stage 2 installs its published price releases and re-exports its tables.
+# Neither is on PyPI yet, so each is pinned to a TAGGED git ref; an untagged
+# URL would change what a fresh install gets without anything here moving.
+# Their table sizes are not spelled here: the stage banners print them.
 #
 # Stage 1 installs no package.  It downloads a pinned, published build of the
 # asteroid catalog -- data, not code -- from the AsteroidCatalog repository's
 # releases; the pin is `CatalogConfig.catalog_release` in modules/catalog.py.
+# Stage 2 likewise downloads its prices; that pin is
+# `MineralValueConfig.price_release` in modules/mineral_value.py.
+#
+# yfinance is not here: no stage fetches a live price by default any more.
+# Asking for live quotes (`use_yfinance`) needs `pip install yfinance`.
 requests
 pandas
 numpy
-yfinance
 tqdm
-spacecost @ git+https://github.com/loggger101/spacecost@v0.13.0
+spacecost @ git+https://github.com/loggger101/spacecost@v0.14.0
+spacevalue @ git+https://github.com/loggger101/spacevalue@v0.1.0

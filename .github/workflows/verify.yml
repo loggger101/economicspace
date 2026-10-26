@@ -48,8 +48,8 @@ jobs:
           python-version: '3.14'
 
       # The lock pins the versions every committed number was measured on; it
-      # does NOT carry the tagged git URL for spacecost (Stage 3's tables),
-      # which lives in the loose list.  Installing both files in ONE resolve
+      # does NOT carry the tagged git URLs for spacecost (Stage 3's tables) and
+      # spacevalue (Stage 2's pricing), which live in the loose list.  Installing both files in ONE resolve
       # means the `==` pins win and the package arrives at its pinned tag, with
       # no version typed here.  A second split needs no edit to this step.
       # Stage 1 installs no package: it downloads a pinned catalog release.
@@ -80,8 +80,8 @@ jobs:
       # A hard step on purpose: verify_docs.py check 18 resolves every
       # `master.<name>` the repo reads, but it SKIPS when the import fails,
       # and a skip on every CI run is a check that does not exist.  The import
-      # is also the Stage 3 seam: modules/_runtime.py refuses a spacecost that
-      # pip did not install from the pinned tag.
+      # is also the Stage 2 and Stage 3 seam: modules/_runtime.py refuses a
+      # spacecost or spacevalue that pip did not install from its pinned tag.
       - name: master.py imports
         run: python -c "import master"
 

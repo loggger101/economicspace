@@ -80,8 +80,9 @@ modules/               A package: master.py imports it
     __init__.py        Imports no stage, so a Stage 4 worker loads calc alone
     _runtime.py        What every stage does first: console encoding, worker
                        quiet mode, output directory, installs, overwrite guard
+    _release.py        Download and checksum a published release (Stages 1, 2)
     catalog.py         Stage 1 - asteroid catalog
-    mineral_value.py   Stage 2 - mineral prices + densities
+    mineral_value.py   Stage 2 - installs a published spacevalue price release
     transportation.py  Stage 3 - ADAPTER over the spacecost package
     calc.py            Stage 4 - profitability calculation
 campaign/              The 28-cell measurement campaign: results.csv, the
@@ -108,7 +109,8 @@ Each document is the authority for one thing:
 | [`CITATIONS.md`](CITATIONS.md) | where every source, dataset and borrowed line came from, and what each obliges | references and attribution |
 | [`CLAUDE.md`](CLAUDE.md) | the traps, the invariants, and the decisions that look wrong, one rule at a time | how to edit it safely |
 | [`LESSONS.md`](LESSONS.md) | how each of those rules was learned, word for word as of 2026-10-17, and maintained as current about nothing | why a rule exists |
-| the [`spacecost`](https://github.com/loggger101/spacecost) repo | Stage 3's reference tables, their citations, their release history, and the delivery chains Stage 2 prices through | every launch, propellant, delta-v, operational and storage row, and what a kilogram costs to deliver or return |
+| the [`spacecost`](https://github.com/loggger101/spacecost) repo | Stage 3's reference tables, their citations, their release history, the recorded fuel quotes, and the delivery chains Stage 2's prices are built on | every launch, propellant, delta-v, operational and storage row, and what a kilogram costs to deliver or return |
+| the [`spacevalue`](https://github.com/loggger101/spacevalue) repo | Stage 2's pricing: the mineral reference table, the destinations, in-space utility and demand, the recorded metal quotes, and the published price releases | what a kilogram of each commodity is worth at each destination, and why |
 | the [`General_Research`](https://github.com/loggger101/General_Research) repo | the peer-reviewed and tiered-authoritative sources behind the model's weakest-sourced cells, with one extracted-data CSV per source | what backs a number, and how strongly |
 
 ### Stage 3's tables live in another repository
@@ -120,21 +122,24 @@ storage systems, each with its inline citation. `modules/transportation.py` is
 now a thin adapter that drives it, where two thirds of what it used to hold
 was reference data.
 
-**It holds the delivery chains too, as of spacecost `v0.3.0`, and those are
-Stage 2's.** `delivered_cost_usd_per_kg` and `downleg_cost_usd_per_kg` live in
-`spacecost.delivery`, so **Stage 2 is the first stage to reach the package**,
-which is worth knowing when an import fails: the traceback will not mention
-Stage 3.
+**It holds the delivery chains too, as of its `v0.3.0`, and those are what
+Stage 2's prices are built on.** `delivered_cost_usd_per_kg` and
+`downleg_cost_usd_per_kg` live in `spacecost.delivery`, which the Stage 2
+package reads at import, so a name dropped there fails Stage 2 first and the
+traceback will not mention Stage 3.
+
+**Stage 3 prices fuel from a recorded quote snapshot**, `fuel-2026-10-17`
+(`TransportConfig.quote_snapshot`), so re-running it rebuilds the same tables,
+byte for byte and offline. It fetched live fuel prices until master v1.59.0,
+which is why `campaign/stage3/spacecost-<ver>/` holds hand-frozen copies; they
+stay as the record of the cells that read them.
 
 🚨  **A repin can move values, and the data on disk adopts one
 deliberately.** `pipeline_version` is spacecost's data contract, inherited with
-its config, so a repin moves the Stage 3 stamp whether or not a value
-moved. When values move, Stages 2 and 3 are re-run (or rebuilt by replaying
-the recorded fuel quotes), and the tables they replace are frozen first under
-`campaign/stage3/spacecost-<ver>/` so the archived cells can still be read
-against what they flew. What each repin moved is in its release note in
-[versions.md](versions.md); the first to move values was
-[master v1.35.0](versions.md#master-v1350--mineral_value-v1100--transportation-v1160).
+its config, so a repin moves the Stage 3 stamp whether or not a value moved.
+When values move, Stage 3 is re-run at the new pin. What each repin moved is
+in its release note in [versions.md](versions.md); the first to move values
+was [master v1.35.0](versions.md#master-v1350--mineral_value-v1100--transportation-v1160).
 
 ⚠️  **The seam is arranged so drift cannot be committed**, because a split is
 what caused this project's worst recorded incident
@@ -142,12 +147,12 @@ what caused this project's worst recorded incident
 the data and the config are single-sourced (Stage 3's config is spacecost's
 `SpacecostConfig` with two defaults overridden), and the package that imports
 is held to the pinned tag at import. The invariants are in
-[CLAUDE.md](CLAUDE.md#stage-1-and-stage-3-live-in-other-repositories).
+[CLAUDE.md](CLAUDE.md#stages-1-2-and-3-live-in-other-repositories).
 
-**spacecost is pinned to a tagged release**, `v0.13.0`, in all five places
+**spacecost is pinned to a tagged release**, `v0.14.0`, in all five places
 that type it: as a URL in `requirements.txt`, and in `PIP_SPEC` in
-`modules/_runtime.py` (what Stages 2 and 3 install from at import); and in
-prose here, in [CLAUDE.md](CLAUDE.md) and in [CITATIONS.md](CITATIONS.md).
+`modules/_runtime.py` (what Stage 3 installs from at import); and in prose
+here, in [CLAUDE.md](CLAUDE.md) and in [CITATIONS.md](CITATIONS.md).
 
 ### Stage 1 downloads the catalog; it does not build it
 
@@ -184,6 +189,44 @@ AsteroidCatalog repository (Actions > publish catalog > Run workflow).
 py verify_stage1.py
 ```
 
+### Stage 2 installs published prices; it does not price
+
+`modules/mineral_value.py` prices nothing. The reference table, the eight
+destinations, the in-space utility factors and demand ceilings, and the
+recorded metal quotes are in [`spacevalue`](https://github.com/loggger101/spacevalue),
+split out of this module with its history at master v1.59.0, and that
+repository **publishes** price releases: each `prices-YYYY-MM-DD`
+[release](https://github.com/loggger101/spacevalue/releases) is every
+destination's table built from one recorded quote snapshot, gated before it is
+published and checksummed.
+
+Stage 2 installs **one pinned release**. The pinned price release is `prices-2026-10-07`,
+set by `MineralValueConfig.price_release` in `modules/mineral_value.py`. It
+holds the five COMEX and NYMEX closes the tables every current measurement was taken on
+were priced from, so pinning it moved no number. Stage 2 downloads the
+release's manifest, refuses it unless it is this pipeline's data contract
+(`MineralValueConfig.pipeline_version`), downloads all eight tables, checks
+every byte against the manifest, caches them under
+`asteroid_pipeline/mineral_value/<tag>/`, and installs the one for
+`delivery_destination`. With the release cached it downloads nothing, so a
+destination change needs no network.
+
+**Why.** A live price cannot be fetched twice. While Stage 2 fetched its own,
+re-running it replaced the only copy of the prices every baseline and archived
+cell was measured on, and `campaign/stage2/` filled with hand-frozen copies,
+which stay as the record of the campaigns that read them.
+
+**Changing a price is a release, then a repin.** A new snapshot, a utility
+factor or a reference price is a spacevalue change and a new `prices-*`
+release; this repository then moves `price_release` and records it in
+[versions.md](versions.md). It moves every number downstream.
+
+**spacevalue is pinned to a tagged release**, `v0.1.0`, in all five places
+that type it: as a URL in `requirements.txt`, and in `PIP_SPEC` in
+`modules/_runtime.py` (what Stage 2 installs at import, for the names it
+re-exports); and in prose here, in [CLAUDE.md](CLAUDE.md) and in
+[CITATIONS.md](CITATIONS.md).
+
 `run.bat`, `run_pipeline.py`, `ui.py` and `ui_meta.py` sit at the root rather
 than in `modules/` on purpose: that package holds the four stages and nothing
 else, and all four are consumers of `master.py`, not stages of it.
@@ -196,7 +239,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.10.0 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
-| 2 | `modules/mineral_value.py` | 1.16.0 | Live yfinance futures, USGS/LME reference prices, in-pipeline mineralogy, destination pricing for every commodity, per-destination ISRU discounts |
+| 2 | `modules/mineral_value.py` | 1.17.0 | Installs the pinned, published [`spacevalue`](https://github.com/loggger101/spacevalue) price release: for the destination, every commodity priced from recorded COMEX and NYMEX closes and dated USGS/LME/LBMA reference prices, with in-space utility, demand ceilings and per-destination discounts. Downloads rather than prices since master v1.59.0; the version is spacevalue's data contract |
 | 3 | `modules/transportation.py` | 1.23.6 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](MODEL.md#the-propulsion-and-storage-catalog) |
 | 4 | `modules/calc.py` | 1.32.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
@@ -221,10 +264,11 @@ output to `.launcher/dashboard-<port>.log` so a failed start is still
 diagnosable with no console to have watched it.
 
 **The dashboard opens ready to re-run Stage 4 and nothing else.** Stages 1-3
-each re-fetch live data and overwrite the only copy of their CSV on disk, so a
-cached stage starts unticked and the destination selector is preselected to
-whatever the catalog on disk is already priced for. Tick a fetching stage and
-it tells you what that will overwrite. This is the loop you want almost every
+build from pinned inputs and give the same files on every run, but each writes
+over what is on disk, and a destination change or a repin replaces what a
+baseline was measured on. So a cached stage starts unticked and the
+destination selector is preselected to whatever the catalog on disk is already
+priced for. Tick a stage and it tells you what that will overwrite. This is the loop you want almost every
 time: the catalogs are expensive to rebuild and Stage 4 is the stage whose
 answer you are actually changing.
 
@@ -302,11 +346,12 @@ No model behaviour lives in it, and it adds no default the pipeline does not
 already have, except that `quick` and `standard` cap rows and fly raw ore at
 N = 1 rather than starting the multi-hour default cell on a double-click.
 
-**Stages 1-3 re-fetch and overwrite, so they ask first.** Each replaces the
-only copy of its CSV; there is no history and no undo, and every `verify.py`
-baseline is built against those exact bytes. `run_pipeline.py` names what a
-run would re-fetch and waits for a `yes`, unless the file does not exist yet
-(nothing to lose) or you pass `--yes`. `run.bat` passes `--yes` on any
+**Stages 1-3 overwrite, so they ask first.** Each replaces its CSV on disk,
+and every `verify.py` baseline is built against those exact bytes. The pinned
+inputs make a re-run give the same bytes back, but a different destination or
+a repin does not. `run_pipeline.py` names what a run would overwrite and waits
+for a `yes`, unless the file does not exist yet (nothing to lose) or you pass
+`--yes`. `run.bat` passes `--yes` on any
 invocation carrying an argument, so a scripted or scheduled `run.bat quick`
 still runs unattended; the menu asks.
 
@@ -620,7 +665,8 @@ that actually move the answer:
 | `.calc.model_reliability_growth` | `True` | Let `p_mining` grow across a programme under the Duane model rather than sitting at the first-of-kind figure. Inert while `model_reliability` is off |
 | `.calc.model_learning_curve` | `False` | Apply Wright's law to recurring hardware across a programme. **Off since calc v1.22.0**: it is a statement about a factory's learning, fitted to programmes that built dozens of articles, and this one prices the marginal physics. Exactly inert at N = 1 either way |
 | `.calc.learning_curve_rate` | `0.85` | Wright's-law rate: each doubling of cumulative production cuts unit cost to this. Read ONLY when `model_learning_curve` is `True` |
-| `.mineral.metals_api_key` | `"DEMO"` | Set a real metals.dev key to enable that source; `"DEMO"` silently skips |
+| `.mineral.price_release` | `"prices-2026-10-07"` | The spacevalue price release Stage 2 installs. A repin moves every price |
+| `.transport.quote_snapshot` | `"fuel-2026-10-17"` | The recorded fuel quotes Stage 3 prices from. A repin moves the propellant prices |
 
 ⚠️  **`use_isru_return_propellant` and `use_aerocapture_return` mean
 "available", not "mandatory".** Stage 4 prices every feasible combination per
@@ -797,9 +843,9 @@ in place, and an editable checkout, a shadowing copy or an install with no git
 record is refused with the command to fix it.
 
 ⚠️  **`verify.py` covers Stage 4, and it never re-runs Stages 1-3.** That is
-deliberate: a Stage 1 run at a moved pin installs a different catalog, and a
-Stage 2 or 3 run re-fetches live metal and fuel prices, either of which moves
-the inputs underneath the comparison and invalidates every baseline in the same
+deliberate: a run at a moved pin installs a different catalog, a different
+price release or different fuel quotes, any of which moves the inputs
+underneath the comparison and invalidates every baseline in the same
 session. The consequence is that **a change to an upstream module can pass
 every check here and still be wrong**: v1.12.1's propellant-flag fix lives in
 Stage 3's `validate()`, which Stage 4 never calls, and had to be checked by
@@ -958,7 +1004,9 @@ rewrite to CRLF would put every line of every source into one diff.
     rejected_entries.csv               ← Stage 1 (the build's validation rejects)
     catalog_manifest.json              ← Stage 1 (which release is installed)
     catalog_taxonomy.json              ← Stage 1 (the build's composition tables)
-    mineral_value_catalog.csv          ← Stage 2
+    mineral_value_catalog.csv          ← Stage 2 (the destination's table)
+    mineral_value_manifest.json        ← Stage 2 (which release and destination)
+    mineral_value/<tag>/               ← Stage 2 (the pinned release, all eight)
     transportation/
         launch_vehicles.csv            ← Stage 3
         propellants.csv                ← Stage 3
@@ -1143,9 +1191,8 @@ The three that most often get quoted out of date:
 ## Data sources
 
 - **The asteroid catalog**, a published [AsteroidCatalog](https://github.com/loggger101/AsteroidCatalog) release merging NASA JPL SBDB, IMCCE SsODNet ssoBFT, NEOWISE Diameters & Albedos V2.0 and MP3C
-- **yfinance**: live futures prices (metals; fuel-cost proxies)
-- **USGS Mineral Commodity Summaries + LME**: reference prices for metals yfinance doesn't expose
-- **metals.dev**: optional; set `MINERAL_CONFIG.metals_api_key` (defaults to `"DEMO"`, i.e. skipped)
+- **Commodity prices**, a published [spacevalue](https://github.com/loggger101/spacevalue) price release: COMEX and NYMEX closes recorded from Yahoo Finance, and USGS, LME, LBMA, World Bank and Johnson Matthey reference prices, each dated; its CITATIONS.md lists them
+- **Fuel-cost proxies**, a recorded [spacecost](https://github.com/loggger101/spacecost) quote snapshot of the NYMEX heating-oil and Henry Hub natural-gas closes
 
 🔔  **[`CITATIONS.md`](CITATIONS.md) is the authority for how to cite these**,
 and two of them ask for citation as a **condition of use** rather than as a

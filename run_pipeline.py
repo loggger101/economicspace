@@ -562,11 +562,10 @@ def report_inputs(cfg, stages) -> int:
     the important half; this is the half that answers the question BEFORE a
     campaign is queued, and prints the sizes so a copy can be checked.
 
-    Regenerating them instead of copying them is not equivalent for Stages 2
-    and 3, and the difference is silent: they re-fetch live prices, so nothing
-    produced from them is comparable with any committed number. Stage 1 is the
-    exception: it installs the pinned catalog release, the same bytes on every
-    host.
+    Regenerating Stages 2 and 3 is equivalent since master v1.59.0: Stage 2
+    installs the pinned price release and Stage 3 prices fuel from a recorded
+    quote snapshot, the same bytes on every host. Stage 1 installs the pinned
+    catalog release, which is not the build the 2026-09 campaign measured.
 
     Returns the process exit code: 0 everything present, 2 something missing.
     """
@@ -598,10 +597,10 @@ def report_inputs(cfg, stages) -> int:
     print("      rsync -avP <reference-host>:<repo>/asteroid_pipeline/ \\")
     print("            %s/" % cfg.calc.input_dir)
     print()
-    print("  Re-running Stages 2-3 to make them instead re-fetches live prices,")
-    print("  so the result is valid and NOT comparable with anything already")
-    print("  measured. Stage 1 is safe to run: it installs the pinned catalog")
-    print("  release, the same bytes on every host.")
+    print("  Stages 2-3 can be re-run instead: they install the pinned price")
+    print("  release and the recorded fuel quotes, the same bytes on every host.")
+    print("  Stage 1 installs the pinned catalog release, which a campaign")
+    print("  measured on an older catalog did not read.")
     print()
     return 2
 
@@ -688,14 +687,14 @@ def preflight(cfg, stages, destination_given: bool) -> list:
         "",
         "      --destination %s" % stamped,
         "",
-        "-- or re-price it, which means running Stage 2:",
+        "-- or install that destination's prices, which means running Stage 2:",
         "",
         "      --stages %s --destination %s"
         % ("".join(str(x) for x in sorted(set(stages) | {2})), mine),
         "",
-        "WARNING: Stage 2 re-fetches LIVE metal prices and overwrites the",
-        "catalog on disk. The old prices are not recoverable, and every",
-        ".verify baseline stops reproducing. Copy asteroid_pipeline/*.csv",
+        "WARNING: Stage 2 installs the pinned release's table for that",
+        "destination over the one on disk, and every .verify baseline taken",
+        "against the old one stops reproducing. Copy asteroid_pipeline/*.csv",
         "first if you may want to compare against them.",
     ]
 
@@ -866,26 +865,28 @@ def print_banner(args, settings, cfg, stages) -> None:
     print("=" * 78)
 
 
-# Stage -> (what it re-fetches, the file it overwrites). Stage 4 is absent
-# because it fetches nothing: it reads the CSVs the others wrote. Stage 1 is
-# at risk only when the pinned catalog release is not the one installed; see
+# Stage -> (what it installs, the file it overwrites). Stage 4 is absent
+# because it installs nothing: it reads the CSVs the others wrote. Stages 1 and
+# 2 are at risk only when what is installed is not what the pins ask for; see
 # `overwrite_warning`.
 _FETCHING_STAGES = {
     1: ("the asteroid catalog, replaced by the pinned release",
         "asteroid_catalog_file"),
-    2: ("live metal prices", "mineral_catalog_file"),
-    3: ("live commodity prices", None),
+    2: ("the destination's prices, replaced by the pinned release's table",
+        "mineral_catalog_file"),
+    3: ("the reference tables, rebuilt from the recorded fuel quotes", None),
 }
 
 
 def overwrite_warning(cfg, stages) -> list:
     """Lines naming every fetch that would replace data already on disk.
 
-    WHY THIS EXISTS, twice over. Stages 1-3 do not compute, they FETCH, and
-    each writes over the only copy of its CSV -- there is no history and no
-    undo. Every `.verify` baseline is built against those exact inputs, so
-    refreshing one makes four cells stop reproducing, which looks exactly like
-    a code regression and is not one.
+    WHY THIS EXISTS, twice over. Stages 1-3 each write over their CSVs, and
+    every `.verify` baseline is built against those exact inputs, so replacing
+    one makes four cells stop reproducing, which looks exactly like a code
+    regression and is not one.  Since master v1.59.0 all three build from pins
+    and a re-run at the same pins writes the same bytes, but a different
+    destination or a moved pin does not.
 
     It has now happened here twice. On 2026-08-23 somebody ran `--stages 2`
     to look at a banner. Later the same day somebody testing THIS FILE's
@@ -911,6 +912,16 @@ def overwrite_warning(cfg, stages) -> list:
                 continue
             what = "%s %s (installed: %s)" % (what, cfg.catalog.catalog_release,
                                               installed or "no manifest")
+        # Stage 2 likewise: the pinned release's table for this destination,
+        # already installed, is what a run would write again.
+        if stage == 2:
+            rel, dest = _installed_price_table(cfg)
+            if (rel == cfg.mineral.price_release
+                    and dest == cfg.mineral.delivery_destination):
+                continue
+            what = "%s %s for %s (installed: %s)" % (
+                what, cfg.mineral.price_release, cfg.mineral.delivery_destination,
+                "%s for %s" % (rel, dest) if rel else "no record")
         path = None
         if attr:
             path = os.path.join(cfg.calc.input_dir, getattr(cfg.calc, attr))
@@ -922,16 +933,32 @@ def overwrite_warning(cfg, stages) -> list:
         at_risk.append((stage, what))
     if not at_risk:
         return []
-    lines = ["This run RE-FETCHES live data and overwrites what is on disk:", ""]
+    lines = ["This run overwrites what is on disk:", ""]
     lines += ["    Stage %d  %s" % (stage, what) for stage, what in at_risk]
     lines += [
         "",
-        "The current values are the only copy. Any verify.py baseline built",
-        "on them stops reproducing, and that reads exactly like a code",
-        "regression. Copy asteroid_pipeline/*.csv first if you may want to",
-        "compare against them.",
+        "Any verify.py baseline built on what is there now stops",
+        "reproducing, and that reads exactly like a code regression. Copy",
+        "asteroid_pipeline/*.csv first if you may want to compare against",
+        "them.",
     ]
     return lines
+
+
+def _installed_price_table(cfg):
+    """(release tag, destination) of the Stage 2 table installed, or (None, None).
+
+    Read from the record Stage 2 writes beside the table.  A table written
+    before Stage 2 installed releases has no record.
+    """
+    import json
+    path = os.path.join(cfg.mineral.output_dir, cfg.mineral.manifest_filename)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            rec = json.load(fh)
+    except (OSError, ValueError):
+        return None, None
+    return rec.get("release_tag"), rec.get("destination")
 
 
 def _installed_catalog_release(cfg):
@@ -953,11 +980,10 @@ def confirm_overwrite(cfg, stages) -> bool:
     """Ask before Stages 1-3 overwrite a CSV that already exists.
 
     NOT the same question as `confirm_long_run`, and the distinction is the
-    point: that one asks about spending hours, this one asks about spending
-    something you cannot get back. A Stage 2 run takes five seconds and
-    re-fetches live metal prices over the only copy of the catalog those prices
-    are in, which silently invalidates every `.verify` baseline on disk; a
-    runtime question would wave it straight through. Skipped by `--yes`, which
+    point: that one asks about spending hours, this one asks about replacing
+    the inputs a baseline was measured on. A Stage 2 run takes seconds and can
+    install another destination's table over the one every `.verify` baseline
+    on disk read; a runtime question would wave it straight through. Skipped by `--yes`, which
     `run.bat` passes on every scripted invocation.
     """
     for line in overwrite_warning(cfg, stages):

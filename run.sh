@@ -116,7 +116,7 @@ pick_destination() {
 # `--yes` skips the overwrite and long-run confirmations.  Passed only when
 # this is NOT an interactive terminal, which is the same split run.bat makes:
 # a scripted invocation must never block, a typed one should still be asked
-# before it re-fetches something that cannot be got back.
+# before it overwrites the inputs a baseline was measured on.
 YES=""
 [ -t 0 ] || YES="--yes"
 
@@ -166,18 +166,19 @@ cmd_setup() {
     # not there, the pin has already failed and the loose set is the answer.
     # The git-pinned packages are NOT in the lock file and cannot be: each is
     # a tagged git URL, which --only-binary refuses by construction. So the
-    # lock install alone produces a venv without `spacecost`, where Stages 2
-    # and 3 both fail, and the only reason that has never been seen is that
-    # the modules auto-install whatever is missing at import -- a git fetch, at
-    # run time, inside the environment whose whole purpose is to be the one
-    # the numbers were measured on. They are installed here instead, from the
-    # lines requirements.txt and requirements-campaign.txt already carry, so
-    # each tag is still pinned in exactly one place.
+    # lock install alone produces a venv without `spacecost` and `spacevalue`,
+    # where Stages 2 and 3 both fail, and the only reason that has never been
+    # seen is that the modules auto-install whatever is missing at import --
+    # a git fetch, at run time, inside the environment whose whole purpose is
+    # to be the one the numbers were measured on. They are installed here
+    # instead, from the lines requirements.txt and requirements-campaign.txt
+    # already carry, so each tag is still pinned in exactly one place.
     #
-    # ⚠️  EVERY DIRECT REFERENCE IS TAKEN, NOT A NAMED ONE. There is one today;
-    # there were two while Stage 1 built its own catalog from a git-pinned
-    # package, and a named grep then installed one of the two. A PEP 508
-    # direct reference is `name @ url`, so the form is the test.
+    # ⚠️  EVERY DIRECT REFERENCE IS TAKEN, NOT A NAMED ONE. requirements.txt
+    # carries two today (spacecost and spacevalue); there were two before,
+    # while Stage 1 built its own catalog from a git-pinned package, and a
+    # named grep then installed one of them. A PEP 508 direct reference is
+    # `name @ url`, so the form is the test.
     if "$vpy" -m pip install --only-binary=:all: -r requirements-lock.txt; then
       specs=$(grep -hE '^[A-Za-z0-9._-]+[[:space:]]*@[[:space:]]*[a-z+]+:' \
               requirements.txt requirements-campaign.txt || true)

@@ -35,7 +35,7 @@ touching:
 | encoding | every `print` in the four modules is pure ASCII, and every file open names its encoding |
 | line endings in the repo | `.gitattributes` pins `*.py` to LF, so a Linux checkout is byte-identical to the Windows one |
 | the Python floor | only the walrus operator is newer than 3.8, so nothing here needs a recent interpreter |
-| dependencies | pandas, numpy, pyarrow, yfinance, tqdm and streamlit all ship manylinux aarch64 wheels |
+| dependencies | pandas, numpy, pyarrow, tqdm and streamlit all ship manylinux aarch64 wheels; spacecost and spacevalue are pure Python |
 | `launch_ui.py` | hands over to quietlaunch, which branches on `os.name`, kills the server's process group on POSIX, and degrades when tkinter is absent, which is what a headless box has |
 | the campaign runner | `campaign/run_queue.py` and `memwatch.py` hand over to quietqueue, whose queue and memory watcher are tested on Linux in its CI; `./run.sh setup` installs it from `requirements-campaign.txt`, and the shims refuse any other version. `_supervisor.py` and `_pause.ps1` are for Windows' Task Scheduler and console |
 
@@ -250,8 +250,9 @@ rsync -avP <reference-host>:<repo>/asteroid_pipeline/ ~/economicspace/asteroid_p
 
 **Regenerating them instead is not the same thing, and the difference is
 silent.** Stage 1 installs the currently pinned catalog release, which is not
-the 2026-08-11 build the campaign was measured on; Stage 2 and Stage 3
-re-fetch live prices. The
+the 2026-08-11 build the campaign was measured on. Stages 2 and 3 do rebuild
+the same tables on any host, since master v1.59.0: Stage 2 installs the pinned
+price release and Stage 3 prices fuel from a recorded quote snapshot. The
 run that follows is perfectly valid and is comparable with nothing already
 measured, which is the whole point of moving the campaign rather than starting
 a new one. `run_pipeline.py` refuses a Stage 4 run whose inputs are missing
@@ -271,26 +272,26 @@ killing it costs at most the in-flight cell.
 
 The queue is the **28** cells of the 2026-09 campaign: seven destinations
 times raw/beneficiated times search off/on (`DESTS` in `campaign/run_queue.py`).
-`gto` is in the model and not in the queue: it has no frozen Stage 2 catalog
-under `campaign/stage2/`, and making one means a live Stage 2 run at today's
-prices, which is a decision about methodology rather than a portability gap.
+`gto` is in the model and not in the queue: the 2026-09 campaign predates it.
+The pinned price release prices it, so adding it to a new campaign is one
+line in `DESTS`.
 
 ⚠️ **That campaign is finished, so the queue has nothing to run today.**
 `campaign/results.csv` records every cell at `rc == 0`, and `run_cell.py`
-refuses a cell whose frozen Stage 2 catalog was priced by a different
-mineral_value than the code it would run under (each catalog's
-`pipeline_version` column says which), and refuses to append to a ledger
-started under different columns. A cell on this host is therefore a new
-campaign: re-freeze `campaign/stage2/` at the current code, start a new
-ledger, and expect numbers comparable with nothing committed.
+refuses to append to a ledger started under different columns. A cell on this
+host is therefore a new campaign: start a new ledger, and expect numbers
+comparable with nothing committed.
 
-The Stage 2 catalogs the queue does use travel with the repo: they are
-committed under `campaign/stage2/`, are **never re-fetched**, and `run_cell.py`
-copies the right one into place per cell. The rest of what a cell reads does
-not travel with the repo at all; see [the inputs git does not carry](#the-inputs-git-does-not-carry). Re-running Stage 2 or
-Stage 3 to "check something" overwrites the only copy of its CSV and
-permanently invalidates every baseline you hold. That has happened twice on the
-reference host, both times from a throwaway command.
+Stage 2's prices travel as a pin: `run_cell.py` installs the destination's
+table from the pinned price release before each cell, the same bytes on every
+host, and stops the cell if that fails. The frozen tables under
+`campaign/stage2/` are the record of the campaigns before master v1.59.0. The
+rest of what a cell reads does not travel with the repo at all; see
+[the inputs git does not carry](#the-inputs-git-does-not-carry). Re-running a
+stage to "check something" still overwrites its CSV, and Stage 2 installs one
+destination's table over the one a baseline was measured on. Before the pins,
+that destroyed the only copy of the prices twice on the reference host, both
+times from a throwaway command.
 
 ### Worker count
 
@@ -405,8 +406,8 @@ re-reading a log.
 
 **The dashboard defaults every cached stage to off except Stage 4**, which
 fetches nothing. That is deliberate and it matters more here than at home: a
-tick in the wrong box re-prices Stage 2 against live quotes and overwrites the
-only copy of the catalog you just spent an hour copying over.
+tick in the wrong box installs a catalog or a destination's prices over the
+inputs you just spent an hour copying across.
 
 ## The interpreter
 

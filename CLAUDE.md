@@ -13,7 +13,8 @@ is in [LESSONS.md](LESSONS.md) under a heading of the same name (frozen
 | [`CITATIONS.md`](CITATIONS.md) | where each source came from and what it obliges (references, never values: a value's source is cited on the row that carries it in `modules/*.py`) |
 | **this file** | how to edit safely |
 | [`LESSONS.md`](LESSONS.md) | the long form behind each rule here, as of 2026-10-17 |
-| [`spacecost`](https://github.com/loggger101/spacecost) | Stage 3's reference tables and the delivery-price chains |
+| [`spacecost`](https://github.com/loggger101/spacecost) | Stage 3's reference tables, the delivery-price chains, and the recorded quote snapshots (`spacecost.quotes`) |
+| [`spacevalue`](https://github.com/loggger101/spacevalue) | Stage 2's pricing (reference table, destinations, utility, demand, metal quotes) and the `prices-*` releases Stage 2 installs |
 | [`quietlaunch`](https://github.com/loggger101/quietlaunch) | the windowless dashboard launcher `launch_ui.py` hands over to, and its Windows traps |
 | [`quietqueue`](https://github.com/loggger101/quietqueue) | the campaign job runner the four `campaign/` shims hand over to (queue, no-console supervisor, memory watcher, pause), and its traps; pinned in `requirements-campaign.txt`, checked by `campaign/quietqueue_pin.py`, never auto-installed |
 | [`samebytes`](https://github.com/loggger101/samebytes) | the tree, host-parity and run-comparison checks the shims `tree_check.py` and `platform_check.py` and `verify.py` hand over to, and the `.githooks/` it copies; pinned by the one line in `requirements-verify.txt`, which `_runtime.install()` reads and auto-installs |
@@ -28,9 +29,10 @@ adds its notes to `versions.md` and, if it teaches something, one line here.
 
 ## Before you touch anything
 
-- **Never run Stage 1, 2 or 3 to test something else.** Stages 2 and 3
-  re-fetch live prices and overwrite the only copy of their CSVs, which breaks
-  every `.verify` baseline and every archived-cell derivation. Use
+- **Never run Stage 1, 2 or 3 to test something else.** Since master v1.59.0
+  all three build from pins (catalog release, price release, fuel snapshot) and
+  give the same bytes back, but each overwrites its CSVs, and Stage 2 installs
+  ONE destination's table over whatever a baseline was measured on. Use
   `--stages 4`. If you must run one, copy `asteroid_pipeline/*.csv` first.
 - **Take a baseline on a clean tree before editing model code:**
   `py verify.py baseline --tag <current>`, then edit,
@@ -71,14 +73,16 @@ shim: it imports the four modules, binds the aliases below, holds
   the spawned-worker silence, the output directory, `install()` and
   `confirm_overwrite()`. The pin guard inside `install()` is called, never run
   at import, so calc and its workers never touch spacecost.
+- `modules/_release.py` is the download-and-checksum path Stages 1 and 2 share;
+  each keeps its own assets, contract check and messages.
 - Each module runs on its own (`python modules/calc.py`) and passes its own
   `_REQUIRED_PKGS` to `_runtime.install()` at import; check 7 holds their union
   to `requirements.txt`.
 
 ## Versions and release notes
 
-Current: catalog `1.10.0`, mineral_value `1.16.0`, transportation `1.23.6`,
-calc `1.32.0`, master `1.58.0` (checked by `verify_docs.py` check 2; the master
+Current: catalog `1.10.0`, mineral_value `1.17.0`, transportation `1.23.6`,
+calc `1.32.0`, master `1.59.0` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.
@@ -138,7 +142,7 @@ Traps in that table:
 ## The model: load-bearing assumptions (do not "fix")
 
 - **`delivery_destination` must agree in Stage 2 and Stage 4**
-  (`MINERAL_CONFIG` prices the cargo, `CALC_CONFIG` flies it; in `master.py`
+  (`MINERAL_CONFIG` installs the cargo's prices, `CALC_CONFIG` flies it; in `master.py`
   set `MASTER_CONFIG.delivery_destination`). `CALC_CONFIG` defaults to
   `earth_surface` while the catalog on disk is usually `cislunar`, and
   `destination_check()` only prints `MISMATCH` to stdout. `run_pipeline.py`'s
@@ -147,6 +151,9 @@ Traps in that table:
   Anything that reads a Stage 2 table to interpret a result must first ask
   which destination it was priced for: its prices **and** its routed ceilings
   are per destination, and the wrong one raises nothing.
+- **The pricing rules below live in spacevalue** since master v1.59.0; a
+  change to one is a spacevalue release, a `prices-*` release, then a repin of
+  `price_release` here.
 - **Every commodity is priced per destination**: terrestrial price **plus**
   `in_space_utility x launch-cost-avoided`, less on-site refining. Utility
   factors are judgement, the softest input in the model; treat them as a dial.
@@ -343,13 +350,14 @@ What counts as evidence:
   suffixed archive is invisible to them: `worked_calculation.py` lists those it
   did not compare and reaches one with `--catalog <path>.csv.gz`. Never make it
   glob `campaign/cells/`.
-- **Freeze the live inputs before the re-run that replaces them**
-  (`campaign/stage2/mineral_value-<ver>/`, `campaign/stage3/spacecost-<ver>/`).
-  A table that recorded its quotes can be rebuilt (`live_price_*` replayed as
-  the live frame, network untouched); change rows by replaying, not
-  re-fetching.
-- **`run_cell.py` refuses** a frozen Stage 2 catalog whose stamp differs from
-  the Stage 2 code.
+- **`campaign/stage2/` and `campaign/stage3/` are history, never inputs to
+  refresh.** They hold the hand-frozen tables the cells before master v1.59.0
+  read; prices now come from pins. A live price is never adopted by re-running:
+  record a snapshot (`spacecost quotes record`, `spacevalue quotes record`),
+  publish, repin.
+- **`run_cell.py` installs Stage 2** from the pinned price release for the
+  cell's destination (a `run_pipeline.py --stages 2` subprocess) and stops the
+  cell before Stage 4 if that fails.
 - **A synced-folder revert** silently undoes uncommitted edits and
   `tree_check.py` stays green (content equals the index). Commit early; audit
   landed work against `origin/main`, not the working tree.
@@ -468,9 +476,10 @@ lists every file it touched.
    holds its keys to `DELIVERY_DESTINATIONS`, and both stages refuse a name
    they lack), its return legs in the per-asteroid Delta-v table, capture
    Delta-v.
-3. mineral_value: `_DESTINATION_NOTES`, a decided `IN_SPACE_UTILITY_BY_DESTINATION`
+3. spacevalue: `_DESTINATION_NOTES`, a decided `IN_SPACE_UTILITY_BY_DESTINATION`
    row (an omission silently means the base profile), and an
-   `IN_SPACE_ANNUAL_DEMAND_KG` row (asserted for in-space destinations).
+   `IN_SPACE_ANNUAL_DEMAND_KG` row (asserted for in-space destinations); then a
+   package release, a `prices-*` release, and repins of both here.
 4. `campaign/worked_calculation.py`, `verification_sheet.py` and
    `worked_calculation_doc.py`: the return legs and their labels.
 5. `run.bat` and `run.sh` menus, and MODEL.md's destination table; check 17
@@ -478,7 +487,7 @@ lists every file it touched.
    `DELIVERY_DESTINATIONS`.
 6. Not until a cell is measured: `MEASURED_DEST_SECONDS`, campaign `DESTS`.
 
-## Stage 1 and Stage 3 live in other repositories
+## Stages 1, 2 and 3 live in other repositories
 
 - **Stage 1 downloads a published catalog**; AsteroidCatalog builds and gates
   it. The pinned catalog release is `data-2026-10-21b`
@@ -491,11 +500,19 @@ lists every file it touched.
   third while the winner improved). New provenance label values need the two
   readers that branch on them updated (`verify_stage1.py` check 8 catches
   unknown ones).
-- **Stage 3 is an adapter over spacecost, pinned to tag `v0.13.0`**, and
-  Stage 2 imports `spacecost.delivery` too, so a dropped name fails a pricing
-  stage first. The pin is typed in five places: `requirements.txt`,
-  `PIP_SPEC` in `modules/_runtime.py`, and prose in README, CITATIONS.md and
-  this sentence. Check 7 holds them together.
+- **Stage 2 downloads published prices**; spacevalue builds and gates them.
+  The pinned price release is `prices-2026-10-07` (`MineralValueConfig.price_release`),
+  checked like the catalog: contract first, every table's sha256, cache
+  under `asteroid_pipeline/mineral_value/<tag>/`, manifest last. Stage 2 also
+  imports spacevalue itself, pinned to tag `v0.1.0`, for the names it re-exports
+  (check 6 recomputes the installed table through them). The pin is typed in
+  five places: `requirements.txt`, `PIP_SPEC` in `modules/_runtime.py`, and
+  prose in README, CITATIONS.md and this sentence.
+- **Stage 3 is an adapter over spacecost, pinned to tag `v0.14.0`**, and
+  spacevalue imports `spacecost.delivery` too, so a dropped name fails Stage 2
+  first. The pin is typed in five places: `requirements.txt`, `PIP_SPEC` in
+  `modules/_runtime.py`, and prose in README, CITATIONS.md and this sentence.
+  Check 7 holds both packages' copies together.
 - **A spacecost table change is four steps**: edit there, bump its version if
   a number moves, tag a release, repin here. Repin with
   `pip install --force-reinstall --no-deps` (without `--no-deps` pip upgrades
@@ -504,15 +521,15 @@ lists every file it touched.
   not install from a git ref (editable, a local path, a shadowing copy) at
   any version: tag an unreleased spacecost to test it.
 - `TransportConfig` is `SpacecostConfig` with two defaults overridden
-  (`use_yfinance`, `output_dir`); the dashboard reads every other field's help
+  (`quote_snapshot`, `output_dir`); the dashboard reads every other field's help
   from spacecost's `config.py`, and hides the three Stage 3 dials only
   `mission_cost_breakdown` reads.
 - **A regex repin rewrites history**: a version string in prose is a pin or a
   date; decide per string and read the diff.
 - When a seam changes shape, sweep **both** repos for guards of the old shape;
   a private name consumed across repos needs a tested contract in the repo
-  that could delete it (spacecost's `tests/test_consumer_contract.py` names
-  what Stage 2 and Stage 3 reach).
+  that could delete it (each package's `tests/test_consumer_contract.py` names
+  what this repo reaches; spacecost's names spacevalue's reach too).
 
 ## Config and docs discipline
 
@@ -539,9 +556,10 @@ lists every file it touched.
 - **A flipped default reaches every reader that infers a run from the config**,
   not only the producers; chase it into the worked calculation and the
   harnesses.
-- Data sources fail softly; read the per-ticker `FAIL`/`WARN` lines before
-  quoting a level, since a yfinance outage prices off reference rows and
-  reports success. `metals.dev` with key `DEMO` is skipped on purpose.
+- **Recorded quotes refuse a gap; live ones do not.** A snapshot missing a
+  ticker a row reads is refused when it is recorded and when it is built from.
+  Live quotes (opt-in, `pip install yfinance`) still fall back to reference
+  rows per ticker and report success: read the `FAIL` lines.
 - **Printed strings are ASCII** (Windows cp1252 stdout crashes on anything
   else, box drawing included). Comments, docstrings and data strings keep their
   characters. `run.bat` and `run_pipeline.py` also force UTF-8, which cannot

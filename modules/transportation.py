@@ -19,10 +19,10 @@ WHAT THIS FILE STILL OWNS, and why each did not move:
     two defaults        `TransportConfig` is spacecost's `SpacecostConfig`
                         with two defaults this project's rather than a
                         library's: `output_dir` points into
-                        `asteroid_pipeline/`, and `use_yfinance` is True
-                        because a pipeline STAGE is expected to fetch, where a
-                        library must not.  Every other field, its default and
-                        its dashboard help are the package's
+                        `asteroid_pipeline/`, and `quote_snapshot` names the
+                        recorded fuel quotes the tables are priced from.
+                        Every other field, its default and its dashboard help
+                        are the package's
     the RUN & PREVIEW    the standalone-module behaviour every stage here has
 
 THE CSVs ARE THE PACKAGE'S, BYTE FOR BYTE.  spacecost was extracted by slicing
@@ -35,26 +35,24 @@ at no other time.  What each repin moved, and which frozen set it left under
 `campaign/stage3/`, is in versions.md's
 [Stage 3 changelog](../versions.md#stage-3-changelog-modulestransportationpy).
 
-RE-RUN STAGE 3 WHEN A ROW CHANGES, NOT WHEN A STAMP DOES.  A repin does not
-require a restamp: Stage 4 reads no column this contract moved, so leaving the
-CSVs at the older stamp costs one `stamp_check()` line and nothing else, where
-re-running re-fetches live fuel prices over the only copy of the tables every
-committed measurement and every `.verify` baseline was taken against.  A repin
-that moves a row is rebuilt by replaying the fuel quotes the old tables
-recorded, after freezing them.
+RE-RUNNING STAGE 3 IS SAFE.  Since spacecost v0.14.0 it prices fuel from a
+recorded quote snapshot (`quote_snapshot` below) rather than fetching live, so
+a re-run rebuilds the same tables byte for byte, on any day and offline.  It
+used to re-fetch live fuel prices over the only copy of the tables every
+committed measurement and every `.verify` baseline was taken against, which is
+why `campaign/stage3/` holds hand-frozen copies; those stay as history.
 
 Active sources:
     - spacecost (the reference tables, cited per row)  launch, propellant,
                                                        dv, operational,
                                                        storage, environments
-    - yfinance  (Yahoo Finance)                        live commodity prices as
-                                                       proxies for RP-1 (HO=F),
-                                                       methane (NG=F), and a
-                                                       crude cross-check (CL=F)
+    - spacecost's recorded fuel quotes                 Yahoo Finance closes of
+                                                       HO=F (RP-1) and NG=F
+                                                       (methane), recorded once
 
 Pipeline flow:
-    Fetch live fuel prices  ->  Load spacecost tables  ->  Merge  ->  Validate
-                            ->  Compute normalised cost-per-dv  ->  Export
+    Recorded fuel quotes  ->  Load spacecost tables  ->  Merge  ->  Validate
+                          ->  Compute normalised cost-per-dv  ->  Export
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -65,7 +63,7 @@ try:
 except ImportError:                 # run as a script: modules/ is on sys.path
     import _runtime
 
-_REQUIRED_PKGS = ["requests", "pandas", "numpy", "yfinance", "spacecost"]
+_REQUIRED_PKGS = ["requests", "pandas", "numpy", "spacecost"]
 _runtime.install(_REQUIRED_PKGS)
 
 
@@ -101,9 +99,14 @@ class TransportConfig(spacecost.SpacecostConfig):
     config.py, and these two from here."""
 
     # ─── SOURCE TOGGLES ──────────────────────────────────────────────────────
-    # Live commodity fuel quotes, ON here where spacecost leaves them off: a
-    # pipeline stage is expected to fetch, and a library must not.
-    use_yfinance: bool = True
+    # The recorded fuel quotes Stage 3 prices from: a snapshot committed in
+    # spacecost (spacecost/quotes/), so re-running Stage 3 rebuilds the same
+    # tables, offline, on any day.  `fuel-2026-10-17` holds the closes the
+    # tables every current measurement was taken on were built from, so it
+    # moves no number.  A newer snapshot is a repin that moves prices: record
+    # it in versions.md.  `use_yfinance` (off) fetches today's quotes instead,
+    # which nothing can reproduce; spacecost refuses the two together.
+    quote_snapshot: str = "fuel-2026-10-17"
 
     # ─── OUTPUT ──────────────────────────────────────────────────────────────
     # The seven CSVs land in `<output_dir>/transportation/`, where Stage 4
@@ -198,7 +201,8 @@ if __name__ == "__main__":
                              "delta_v_segments.csv", "operational_costs.csv",
                              "storage_systems.csv", "environments.csv",
                              "transportation_summary.csv")],
-            "Stage 3 re-fetches live fuel prices and rewrites every reference table."):
+            "Stage 3 rebuilds every reference table from fuel quotes %s."
+            % CONFIG.quote_snapshot):
         print("  Cancelled; nothing was fetched and nothing was written.")
         sys.exit(1)
 

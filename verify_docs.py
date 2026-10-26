@@ -1092,7 +1092,11 @@ def check_manifests() -> bool:
     # installing the package and started downloading a published catalog
     # RELEASE, so the package is pinned nowhere; the release pin is held by its
     # own block below the loop.  The parameterisation stays, for the next split.
-    for _pkg, _repo in (("spacecost", "spacecost"),):
+    #
+    # 2026-10-26: and the next split came.  Stage 2's pricing left for
+    # `spacevalue` (master v1.59.0), installed from a tagged git ref exactly as
+    # spacecost is, so it joined as a second row.
+    for _pkg, _repo in (("spacecost", "spacecost"), ("spacevalue", "spacevalue")):
 
         def _mine(_text, _at, _pkg=_pkg, _repo=_repo):
             """Is the claim at `_at` about THIS package?"""
@@ -1246,6 +1250,37 @@ def check_manifests() -> bool:
                     if ref != pin:
                         bad.append("%s says the pinned catalog release is %s; "
                                    "modules/catalog.py pins %s" % (rel, ref, pin))
+
+    # THE PRICE RELEASE PIN, `MineralValueConfig.price_release`, held exactly
+    # as the catalog release is above, and for the same reason: Stage 2 installs
+    # a published spacevalue release since master v1.59.0, and a repin that
+    # moved the code and not the documents would leave them naming prices
+    # nothing runs on.
+    mv_p = os.path.join(REPO, "modules", "mineral_value.py")
+    if os.path.exists(mv_p):
+        m_pin = re.search(r'^\s*price_release:\s*str\s*=\s*"([^"]+)"',
+                          read(mv_p), re.M)
+        n += 1
+        if not m_pin:
+            bad.append("modules/mineral_value.py declares no `price_release` "
+                       "default this check can read")
+        else:
+            pin = m_pin.group(1)
+            claim = re.compile(r"pinned price release is `(prices-[^`]+)`")
+            for rel in ("README.md", "CLAUDE.md", "versions.md"):
+                path = os.path.join(REPO, rel)
+                if not os.path.exists(path):
+                    continue
+                found = claim.findall(read(path))
+                n += 1
+                if not found and rel != "versions.md":
+                    bad.append("%s does not state the pinned price release "
+                               "as \"pinned price release is `%s`\"" % (rel, pin))
+                for ref in found:
+                    if ref != pin:
+                        bad.append("%s says the pinned price release is %s; "
+                                   "modules/mineral_value.py pins %s"
+                                   % (rel, ref, pin))
 
     # README's `./run.sh` block <-> the words run.sh's dispatcher accepts.
     # Same check as the one above and for the same reason: `run.bat help`

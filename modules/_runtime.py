@@ -74,13 +74,15 @@ DEFAULT_OUTPUT_DIR = (os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
 # -----------------------------------------------------------------------------
 # INSTALLATION
 # -----------------------------------------------------------------------------
-# spacecost is not on PyPI, so it installs from a TAGGED git ref, and a bare
-# name in an install list would resolve to nothing.  This maps import name to
-# pip argument for every such package.  IF SPACECOST IS EVER PUBLISHED, replace
-# the URL with a pinned version ("spacecost==0.1.0").  The tag is typed in
-# several places in this repo; verify_docs check 7 finds and holds them all.
+# spacecost and spacevalue are not on PyPI, so they install from TAGGED git
+# refs, and a bare name in an install list would resolve to nothing.  This
+# maps import name to pip argument for every such package.  IF ONE IS EVER
+# PUBLISHED, replace its URL with a pinned version ("spacecost==0.1.0").  Each
+# tag is typed in several places in this repo; verify_docs check 7 finds and
+# holds them all.
 PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.13.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.14.0",
+    "spacevalue": "git+https://github.com/loggger101/spacevalue@v0.1.0",
 }
 
 # samebytes, the toolkit behind tree_check.py, platform_check.py and verify.py's

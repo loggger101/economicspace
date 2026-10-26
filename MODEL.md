@@ -146,12 +146,17 @@ for the full record.
 
 ### What a kilogram is worth
 
+The pricing is [spacevalue](https://github.com/loggger101/spacevalue)'s, which
+was this pipeline's Stage 2 until master v1.59.0; Stage 2 now installs one of
+its published price releases. This section describes what those tables hold.
+
 In-space prices are the launch cost avoided, **derived** rather than
 tabulated: the cheapest LEO price a buyer can book today (Falcon Heavy
 expendable, chosen by a rule spacecost asserts at import), carried further by
 walking a chain of real stages backwards from the payload (`delivered_cost_usd_per_kg` over
-`_DELIVERY_LEGS`, both re-exported here from `spacecost.delivery`, where every
-leg's Δv is a lookup into the same table Stage 3 reads). Staging is modelled
+`_DELIVERY_LEGS`, both re-exported here from spacevalue, which takes them from
+`spacecost.delivery`, where every leg's Δv is a lookup into the same table
+Stage 3 reads). Staging is modelled
 leg-by-leg because it matters, a
 single stage flying the whole 6,100 m/s to the lunar surface needs 12.81 kg
 in LEO per kg landed against 5.28 kg for the tug-plus-lander pair that would
@@ -260,8 +265,8 @@ so it is priced by shipping it home rather than written off:
 The used-in-space rows are mineral_value 1.15.0 on spacecost `v0.9.0`; the
 shipped-down rows were computed on `v0.4.0` from the 2026-09-09 terrestrial
 quotes frozen under `campaign/stage2/`, and the LEO anchor does not reach them,
-though the lunar ones carry `v0.9.0`'s ascent ($197/kg less downleg). Precious-metal rows carry a live spot quote, so they
-move between runs; the rest are reference prices. Four things in that table
+though the lunar ones carry `v0.9.0`'s ascent ($197/kg less downleg). Precious-metal rows carry a recorded futures close, so they
+move when the pinned price release does; the rest are reference prices. Four things in that table
 are worth reading twice:
 
 - **Cislunar is worse than LEO for anything shipped down**: it is further from

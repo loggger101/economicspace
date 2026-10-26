@@ -491,7 +491,7 @@ REFINING_NOTE = ("Stage 2's refining deduction: the row's "
                  "<i>refining_kwh_per_kg</i> at the capital cost of energy "
                  "in space, plus an amortised plant "
                  "(<i>in_space_processing_cost_usd_per_kg</i> in "
-                 "<b>modules/mineral_value.py</b>).")
+                 "spacevalue's <b>spacevalue/catalog.py</b>).")
 
 
 def cite_body(C, column, what=""):
@@ -1370,7 +1370,7 @@ def part_prices(S, out):
               pp["utility"], "-",
               "<b>mineral_value_catalog.csv</b>, row <i>%s</i>, column "
               "<i>in_space_utility</i>, written by "
-              "<b>modules/mineral_value.py</b>'s "
+              "spacevalue's <b>spacevalue/catalog.py</b> and its "
               "<i>IN_SPACE_UTILITY_BY_DESTINATION</i> for %s.  %s"
               % (D.esc(base), D.esc(C["destination"]), UTILITY_NOTE
                  if first_u is None else
@@ -3703,7 +3703,7 @@ def market_inputs(S, C, markets):
                      "is bounded by that depot's import budget "
                      "(<i>IN_SPACE_ANNUAL_DEMAND_KG</i>) times its commodity "
                      "class's share of it (<i>_DEMAND_SHARE_BY_CLASS</i>, "
-                     "both in <b>modules/mineral_value.py</b>), and one "
+                     "both in spacevalue's <b>spacevalue/catalog.py</b>), and one "
                      "flown home by world annual production"
                      if first is None else
                      "routed as the %s ceiling above is"
