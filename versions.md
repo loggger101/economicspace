@@ -386,6 +386,12 @@ Nothing the model computes is touched (`modules/` and `master.py` unchanged).
   `campaign/stage2/mineral_value-1.7.1/replay.py` keeps its own call.
 - **`platform_check.py --lock requirements-lock.txt`** lists each installed
   package against its pin. SPARK_SETUP.md now gives that command.
+- **The last two copies in `verify.py` go** (a later PR the same day): check
+  6's Stage 2 read is `read_exact`, and `baseline` records `cell_hash(df)`
+  rather than its own sha256 of the text. A baseline taken afterwards records
+  the same four hashes (`723d2451bef448ac`, `76dce7661ce6092f`,
+  `04964d9e569ec610`, `248ee9891d7c0c96`), and check 6 reads 59 rows ALL
+  IDENTICAL.
 
 | harness | result |
 |---|---|

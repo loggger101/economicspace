@@ -162,7 +162,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import dataclasses
-import hashlib
 import io
 import json
 import os
@@ -676,7 +675,7 @@ def check_stage2(m) -> bool:
         print(f"  no Stage 2 catalog at {path} -- NOT CHECKED  FAIL")
         return False
 
-    d = pd.read_csv(path, float_precision="round_trip")
+    d = _frames.read_exact(path)
     dest = str(d["delivery_destination"].iloc[0])
     bad = []
     for _, r in d.iterrows():
@@ -931,7 +930,7 @@ def cmd_baseline(args) -> int:
         text = _csv(df)
         with open(_cell_file(d, name), "w", encoding="utf-8", newline="") as f:
             f.write(text)
-        h = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+        h = cell_hash(df)
         index[name] = {"sha16": h, "rows": int(len(df)),
                        "cap": CELLS[name]["eval_row_cap"]}
         print(f"  {name:13s} {len(df):4d} rows | {h} | "
