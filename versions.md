@@ -351,6 +351,36 @@ those thirteen cells before the move, each with its arguments before and after
   there, and `field_docs` still reads it as one pair (`IndexError`). It is not
   this release's, and it is not counted as evidence above.
 
+### samebytes v0.3.0: docs checks 4, 5, 6 and 11 move there (2026-10-26, no stamp)
+
+The pin moves to [samebytes](https://github.com/loggger101/samebytes) v0.3.0,
+whose new `docs` and `source` modules hold the house rules that this repo,
+spacecost, spacevalue, AsteroidCatalog, quietqueue and quietlaunch had each
+written for themselves, five or six drifting copies of each. Nothing the model
+computes is touched (`modules/` and `master.py` unchanged).
+
+- **`verify_docs.py` checks 4, 5, 6 and 11 are one call each** into
+  `samebytes.docs.links`, `.structure` (`one_h1=False`, because this file
+  divides itself into parts with h1s), `.dashes` (`modules/*.py` as
+  `prose_only`) and `samebytes.source.docstrings`. The lists of what they read
+  (`DOCS`, `CAMPAIGN_DOCS`, `ROOT_PY`, `FIRST_PARTY_PY`) stay here, as do the
+  docstrings saying why each list holds what it holds. `slugs`, `LINK`, `EM`,
+  `EN` and `ORPHAN_COMMA` go.
+- **Three fixes came with the move**, none of which finds anything in this
+  repo today: a heading inside a code fence no longer makes an anchor (it
+  could shift a real heading's `-1` suffix), a table that ends a file is
+  checked, and an anchor into a markdown file the list does not name is
+  checked.
+- A named file not on disk is a finding inside each check's list, where it
+  used to be counted beside it; the console lines lose their `NOT ON DISK`
+  suffix and the run still fails on it.
+
+| harness | result |
+|---|---|
+| `verify_docs.py` before and after, on this tree | checks 4, 5, 6 and 11 read the same: 534 anchors, 10 files, 41 files and 753 definitions, all clean; every other line identical; OK |
+| planted, one per check: a broken anchor in `campaign/README.md`, a link to a missing file in `SPARK_SETUP.md`, a ragged table ending `CITATIONS.md`, an em-dash in a `modules/calc.py` comment, an orphan comma in `run.sh`, an undocumented function in `orbital.py` | each FAILED its check, naming the file and line |
+| samebytes' own suite | 120 tests; 22 defects planted in a copy of the two new modules each FAILED its test |
+
 ## master v1.59.0 / mineral_value v1.17.0
 
 **Stage 2's pricing leaves for [`spacevalue`](https://github.com/loggger101/spacevalue),

@@ -63,6 +63,9 @@ counts-in-prose failure this file was written to catch:
                      resolves on master.py, which forwards to the four
                      modules and refuses a name two of them define differently
 
+    Checks 4, 5, 6 and 11 call samebytes.docs and samebytes.source (pinned in
+    requirements-verify.txt); this file names the files they read.
+
     py verify_docs.py                       # every check except 10
     py verify_docs.py --before OLD.md NEW.md NEW2.md   # adds check 10
 
@@ -129,7 +132,6 @@ import json
 import os
 import re
 import sys
-import tokenize
 from typing import Dict, List, Optional, Tuple
 
 # Local: the working-tree guard every harness here runs first.  It is a
@@ -137,6 +139,13 @@ from typing import Dict, List, Optional, Tuple
 # it and a second copy of a check is the defect this repo catalogues
 # oftenest.
 import tree_check
+
+# Checks 4, 5, 6 and 11 are samebytes' since v0.3.0: `samebytes.docs` and
+# `samebytes.source` hold the rules and the account of how each was learned,
+# shared with the other repositories that had each kept a drifting copy.
+# What they read is this repo's and stays below.  Imported after tree_check,
+# which has installed samebytes at the pinned tag and refused any other copy.
+from samebytes import docs as sb_docs, source as sb_source  # noqa: E402
 
 
 
@@ -695,69 +704,33 @@ def check_row_counts(mods) -> bool:
 
 
 # -------------------------------------------------------------------- 4. links
-def slugs(path: str) -> set:
-    """GitHub's heading -> anchor rule, including its -1 suffix for repeats."""
-    out, seen = set(), {}
-    for line in read(path).split("\n"):
-        m = re.match(r"^(#{1,6})\s+(.*?)\s*$", line)
-        if not m:
-            continue
-        # NB: underscore is a WORD character and GitHub KEEPS it in an anchor.
-        # Stripping it here reported `#reading-profitability_catalogcsv` as
-        # broken when it is correct -- and a broken checker looks exactly like
-        # a broken release, which this repo has already paid for twice.
-        h = re.sub(r"[`*~]|\[|\]|\(|\)", "", m.group(2))
-        s = re.sub(r"[^\w\s\-]", "", h, flags=re.UNICODE).strip().lower()
-        s = s.replace(" ", "-")
-        k = seen.get(s, 0)
-        seen[s] = k + 1
-        out.add(s if k == 0 else "%s-%d" % (s, k))
-    return out
-
-
-LINK = re.compile(r"\[([^\]]*)\]\(([^)\s]+)\)")
-
 # Link-checked as well as DOCS.  These live in a subdirectory and point back up
 # at the root docs, which is why targets resolve relative to the LINKING FILE
-# rather than to REPO -- keying anchors by the path as written works only while
-# every doc sits at the root, and campaign/ does not.
+# rather than to REPO (samebytes.docs.links does).
 LINKED_DOCS = DOCS + CAMPAIGN_DOCS
 
 
-def check_links() -> bool:
-    """Every intra-repo markdown anchor resolves, in all five linked docs.
-
-    Targets resolve relative to the LINKING FILE, not to the repo root, because
-    `campaign/` does not sit at the root and keying anchors by the path as
-    written works only while every doc does. External links are skipped; this
-    checks what the repo controls.
-    """
-    missing_linked = ["%s is on the linked-document list and is not on disk"
-                      % g for g in absent(LINKED_DOCS)]
-    files = [d for d in LINKED_DOCS if os.path.exists(os.path.join(REPO, d))]
-    anchors = {os.path.normpath(os.path.join(REPO, d)):
-               slugs(os.path.join(REPO, d)) for d in files}
-    bad, n = list(missing_linked), 0
-    for d in files:
-        src = os.path.normpath(os.path.join(REPO, d))
-        base = os.path.dirname(src)
-        for m in LINK.finditer(read(src)):
-            target = m.group(2)
-            if target.startswith(("http", "mailto", "#!")):
-                continue
-            fpart, _, apart = target.partition("#")
-            dest = os.path.normpath(os.path.join(base, fpart)) if fpart else src
-            if fpart and dest not in anchors:
-                if not os.path.exists(dest):
-                    bad.append("%s -> %s  (no such file)" % (d, target))
-                continue
-            if apart:
-                n += 1
-                if apart not in anchors[dest]:
-                    bad.append("%s -> %s  (no such anchor)" % (d, target))
-    print("4. links       %d anchors checked, %d broken" % (n, len(bad)))
-    for b in bad:
+def _report(head: str, bad: List[str], limit: Optional[int] = None) -> None:
+    """Print a check's one-line verdict, then its findings (the first `limit`)."""
+    print(head)
+    for b in bad[:limit]:
         print("     ! " + b)
+    if limit is not None and len(bad) > limit:
+        print("     ! ... and %d more" % (len(bad) - limit))
+
+
+def check_links() -> bool:
+    """Every intra-repo markdown link and anchor resolves, in every linked doc.
+
+    `samebytes.docs.links`: targets resolve relative to the linking file, an
+    anchor is checked in whichever markdown file the link lands in, and the
+    underscore GitHub keeps in an anchor is kept (stripping it once reported
+    `#reading-profitability_catalogcsv` as broken when it is correct, and a
+    broken checker looks exactly like a broken release).  External links are
+    skipped; this checks what the repo controls.
+    """
+    bad, n = sb_docs.links(REPO, LINKED_DOCS)
+    _report("4. links       %d anchors checked, %d broken" % (n, len(bad)), bad)
     return not bad
 
 
@@ -765,71 +738,19 @@ def check_links() -> bool:
 def check_structure() -> bool:
     """Balanced fences, no ragged tables, no heading jumps, no duplicate h1/h2.
 
-    Over every markdown file in the repo, not only the three authorities: a
-    ragged table renders as literal pipes wherever it lives, and `campaign/`
-    was outside this until 2026-09.
-
-    A repeated h3 is normal here and is NOT flagged; nineteen release sections
-    each carry their own "### Verification (date)". Ambiguous LINK targets are
-    check 4's job, and it resolves GitHub's `-1` suffixes.
+    `samebytes.docs.structure`, over every markdown file in the repo, not only
+    the three authorities: a ragged table renders as literal pipes wherever it
+    lives, and `campaign/` was outside this until 2026-09.  A repeated h3 is
+    normal here and is not flagged (nineteen release sections each carry their
+    own "### Verification (date)").  `one_h1=False` because versions.md divides
+    itself into parts with h1s.
     """
-    bad = ["%s is a tracked document and is not on disk" % g
-           for g in absent(DOCS + CAMPAIGN_DOCS)]
-    for d in DOCS + CAMPAIGN_DOCS:
-        p = os.path.join(REPO, d)
-        if not os.path.exists(p):
-            continue
-        lines = read(p).split("\n")
-
-        fences = [i for i, l in enumerate(lines, 1) if l.strip().startswith("```")]
-        if len(fences) % 2:
-            bad.append("%s: unbalanced code fences (last at line %d)"
-                       % (d, fences[-1]))
-
-        infence, block, start, prev, heads = False, [], 0, 0, {}
-        for i, l in enumerate(lines, 1):
-            if l.strip().startswith("```"):
-                infence = not infence
-                continue
-            if infence:
-                continue
-            s = l.strip()
-            if s.startswith("|"):
-                if not block:
-                    start = i
-                block.append(s)
-            else:
-                if len(block) >= 2 and len({b.count("|") for b in block}) > 1:
-                    bad.append("%s: ragged table at line %d" % (d, start))
-                block = []
-            m = re.match(r"^(#{1,6})\s+\S", l)
-            if m:
-                lvl = len(m.group(1))
-                if prev and lvl > prev + 1:
-                    bad.append("%s: heading jumps h%d -> h%d at line %d"
-                               % (d, prev, lvl, i))
-                prev = lvl
-                # Only h1/h2.  A repeated h3 is normal and correct here --
-                # nineteen release sections each carry their own
-                # "### Verification (date)" and "### What this release does
-                # NOT close", and flagging those made the check useless noise.
-                # Ambiguous LINK targets are check 4's job, and it resolves
-                # GitHub's -1 suffixes.
-                if lvl <= 2:
-                    heads[l.strip()] = heads.get(l.strip(), 0) + 1
-        for h, c in heads.items():
-            if c > 1:
-                bad.append("%s: duplicate heading %r (%dx)" % (d, h[:60], c))
-
-    print("5. structure   %d files checked, %d problems"
-          % (len(DOCS) + len(CAMPAIGN_DOCS), len(bad)))
-    for b in bad:
-        print("     ! " + b)
+    bad, n = sb_docs.structure(REPO, DOCS + CAMPAIGN_DOCS, one_h1=False)
+    _report("5. structure   %d files checked, %d problems" % (n, len(bad)), bad)
     return not bad
 
 
 # -------------------------------------------------------------------- 6. dashes
-EM, EN = "—", "–"
 ROOT_PY = ["ui.py", "ui_meta.py", "orbital.py", "run_pipeline.py", "verify.py",
            "master.py", "modules/__init__.py", "modules/_runtime.py",
            "launch_ui.py", "platform_check.py",
@@ -843,93 +764,27 @@ ROOT_PY = ["ui.py", "ui_meta.py", "orbital.py", "run_pipeline.py", "verify.py",
            "run.sh"] + CAMPAIGN_PY
 
 
-# A line that begins with a bare comma is what the 2026-08-23 ASCII pass left
-# where an em-dash had OPENED a continuation line.  The sentence stops parsing
-# in English and nothing noticed for ten days: twelve in modules/*.py, then
-# eight more in the docs found a week later, because the first sweep only
-# looked at Python.  Anchored on start-of-line so a comma inside a sentence is
-# untouched, and it is checked in the same place as the dashes because it is
-# the same pass's damage.
-ORPHAN_COMMA = re.compile(r"^\s*(?:#\s*)?,\s+\S")
-
-
 def check_dashes() -> bool:
     """No em- or en-dash in prose a person reads, and no orphaned comma.
 
-    The docs, the root scripts and the campaign scripts must be clean outright.
-    In modules/*.py only COMMENTS and DOCSTRINGS are checked: the `notes` and
-    `composition` strings are written into propellants.csv,
-    launch_vehicles.csv and the asteroid catalog, so their text is DATA and
-    keeps whatever it has.
+    `samebytes.docs.dashes`.  The docs, the root scripts and the campaign
+    scripts must be clean outright.  In modules/*.py only COMMENTS and
+    DOCSTRINGS are checked (`prose_only`): the `notes` and `composition`
+    strings are written into propellants.csv, launch_vehicles.csv and the
+    asteroid catalog, so their text is DATA and keeps whatever it has.
 
     This is a ratchet, not a style opinion.  1,342 dashes came out of the docs
     and 1,120 out of the modules; without a check they drift back one commit
-    at a time.  The orphan comma is the same conversion's leftover, and it is
-    checked here for that reason.
+    at a time.  The orphan comma (a line opening with `, `) is what the
+    2026-08-23 ASCII pass left where a dash had opened a continuation line,
+    and it is checked here for that reason.
     """
-    gone = absent(DOCS + CAMPAIGN_DOCS + ROOT_PY + list(MODULES.values()))
-    bad = []
-    files = 0
-
-    for name in DOCS + CAMPAIGN_DOCS + ROOT_PY:
-        p = os.path.join(REPO, name)
-        if not os.path.exists(p):
-            continue
-        files += 1
-        for i, line in enumerate(read(p).split("\n"), 1):
-            # verify_docs.py's own character classes must keep matching a dash
-            if name == os.path.basename(__file__) and "[-:" in line:
-                continue
-            if EM in line or EN in line:
-                bad.append("%s:%d  em/en dash  %s" % (name, i, line.strip()[:60]))
-            elif ORPHAN_COMMA.match(line):
-                bad.append("%s:%d  line opens with a bare comma  %s"
-                           % (name, i, line.strip()[:60]))
-
-    for rel in MODULES.values():
-        p = os.path.join(REPO, rel)
-        if not os.path.exists(p):
-            continue
-        files += 1
-        src = read(p)
-        rows = set()
-        try:
-            fh = io.StringIO(src)
-            for tok in tokenize.generate_tokens(fh.readline):
-                if tok.type == tokenize.COMMENT:
-                    rows.add(tok.start[0])
-            for node in ast.walk(ast.parse(src)):
-                body = getattr(node, "body", None)
-                if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
-                                     ast.AsyncFunctionDef)) and body:
-                    f = body[0]
-                    if (isinstance(f, ast.Expr)
-                            and isinstance(f.value, ast.Constant)
-                            and isinstance(f.value.value, str)):
-                        rows.update(range(f.lineno, f.end_lineno + 1))
-        except (SyntaxError, tokenize.TokenError) as exc:
-            bad.append("%s: could not parse (%s)" % (rel, exc))
-            continue
-        for i, line in enumerate(src.split("\n"), 1):
-            if i not in rows:
-                continue
-            if EM in line or EN in line:
-                bad.append("%s:%d  em/en dash  %s" % (rel, i, line.strip()[:60]))
-            elif ORPHAN_COMMA.match(line):
-                bad.append("%s:%d  comment opens with a bare comma  %s"
-                           % (rel, i, line.strip()[:60]))
-
-    print("6. dashes      %d files checked, %d bad lines "
-          "(em/en dash, or a line opening with a bare comma)%s"
-          % (files, len(bad),
-             ", %d NOT ON DISK" % len(gone) if gone else ""))
-    for g in gone:
-        print("     ! %s is on the dash ratchet and is not on disk" % g)
-    for b in bad[:20]:
-        print("     ! " + b)
-    if len(bad) > 20:
-        print("     ! ... and %d more" % (len(bad) - 20))
-    return not bad and not gone
+    bad, n = sb_docs.dashes(REPO, DOCS + CAMPAIGN_DOCS + ROOT_PY,
+                            prose_only=list(MODULES.values()))
+    _report("6. dashes      %d files checked, %d bad lines "
+            "(em/en dash, or a line opening with a bare comma)" % (n, len(bad)),
+            bad, limit=20)
+    return not bad
 
 
 # ---------------------------------------------------------------- 7. manifests
@@ -1635,53 +1490,24 @@ FIRST_PARTY_PY = (["master.py", "modules/__init__.py", "modules/_runtime.py",
 def check_docstrings() -> bool:
     """Every module, class and function in the repo's own Python has a docstring.
 
-    A ratchet, on the same argument as check 6.  This repo's premise is that a
-    number without its reasoning attached gets "fixed" by the next person, and
-    that applies to code as much as to config: 87 definitions carried neither a
-    docstring nor a leading comment when this was first measured, most of them
-    in `ui.py` and `launch_ui.py`, which were then almost entirely made of
-    Windows traps that explain why the code looks the way it does (the
-    launcher's moved to quietlaunch on 2026-10-20, which checks them itself).
+    `samebytes.source.docstrings`.  A ratchet, on the same argument as check 6.
+    This repo's premise is that a number without its reasoning attached gets
+    "fixed" by the next person, and that applies to code as much as to config:
+    87 definitions carried neither a docstring nor a leading comment when this
+    was first measured, most of them in `ui.py` and `launch_ui.py`, which were
+    then almost entirely made of Windows traps that explain why the code looks
+    the way it does (the launcher's moved to quietlaunch on 2026-10-20, which
+    checks them itself).
 
     NESTED functions count.  Several of the sharpest notes in here are on a
     six-line closure -- `_as_designation` is the NEOWISE float-key bug, and
     `_truthy` is the `.astype(bool)` trap -- and exempting them by size would
     exempt exactly the ones worth reading.
     """
-    gone = absent(FIRST_PARTY_PY)
-    bad = []
-    n = 0
-    for rel in FIRST_PARTY_PY:
-        path = os.path.join(REPO, rel)
-        if not os.path.exists(path):
-            continue
-        try:
-            tree = ast.parse(read(path))
-        except SyntaxError as exc:
-            bad.append("%s: could not parse (%s)" % (rel, exc))
-            continue
-        n += 1
-        if not ast.get_docstring(tree):
-            bad.append("%s has no module docstring" % rel)
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
-                                     ast.ClassDef)):
-                continue
-            n += 1
-            if not ast.get_docstring(node):
-                bad.append("%s:%d  %s has no docstring"
-                           % (rel, node.lineno, node.name))
-
-    print("11. docstrings %d definitions checked, %d without one%s"
-          % (n, len(bad),
-             ", %d FILES NOT ON DISK" % len(gone) if gone else ""))
-    for g in gone:
-        print("     ! %s is first-party Python and is not on disk" % g)
-    for b in bad[:20]:
-        print("     ! " + b)
-    if len(bad) > 20:
-        print("     ! ... and %d more" % (len(bad) - 20))
-    return not bad and not gone
+    bad, n = sb_source.docstrings(REPO, FIRST_PARTY_PY)
+    _report("11. docstrings %d definitions checked, %d without one" % (n, len(bad)),
+            bad, limit=20)
+    return not bad
 
 
 
