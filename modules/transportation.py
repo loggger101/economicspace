@@ -101,9 +101,9 @@ class TransportConfig(spacecost.SpacecostConfig):
     # ─── SOURCE TOGGLES ──────────────────────────────────────────────────────
     # The recorded fuel quotes Stage 3 prices from: a snapshot committed in
     # spacecost (spacecost/quotes/), so re-running Stage 3 rebuilds the same
-    # tables, offline, on any day.  `fuel-2026-10-17` holds the closes the
-    # tables every current measurement was taken on were built from, so it
-    # moves no number.  A newer snapshot is a repin that moves prices: record
+    # tables, offline, on any day.  Every current measurement was taken on
+    # tables built from `fuel-2026-10-17`'s closes, so pinning it moved no
+    # number.  A newer snapshot is a repin that moves prices: record
     # it in versions.md.  `use_yfinance` (off) fetches today's quotes instead,
     # which nothing can reproduce; spacecost refuses the two together.
     quote_snapshot: str = "fuel-2026-10-17"
