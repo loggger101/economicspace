@@ -53,9 +53,14 @@ jobs:
       # means the `==` pins win and the package arrives at its pinned tag, with
       # no version typed here.  A second split needs no edit to this step.
       # Stage 1 installs no package: it downloads a pinned catalog release.
+      # requirements-verify.txt is samebytes, the toolkit tree_check.py,
+      # platform_check.py and verify.py hand over to.  Installed here in the
+      # same resolve, so the guard in modules/_runtime.py finds the pinned tag
+      # and installs nothing at run time.
       - name: Install dependencies
         run: python -m pip install --upgrade pip
           && python -m pip install -r requirements-lock.txt -r requirements.txt
+             -r requirements-verify.txt
 
       # The control case for tree_check.py. On a plain clone this can only
       # pass, which is the point: it proves the check itself still works and
@@ -64,6 +69,13 @@ jobs:
       # runner has, so this is the only place its clean answer is ever seen.
       - name: Working tree matches the index
         run: python tree_check.py
+
+      # The .githooks/ copies are samebytes' packaged hooks: drift, CRLF, a
+      # missing eol=lf pin or a missing executable bit each makes a copy
+      # silently useless after a checkout.  core.hooksPath is not required: a
+      # fresh clone has not opted in.
+      - name: Hooks match samebytes
+        run: python -m samebytes hooks check .
 
       # A hard step on purpose: verify_docs.py check 18 resolves every
       # `master.<name>` the repo reads, but it SKIPS when the import fails,

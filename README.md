@@ -64,6 +64,8 @@ verify_stage1.py       Stage 1 verification: the pinned catalog release, install
 verify_docs.py         Docs verification: the docs still describe the code
 tree_check.py          Does the disk hold what git says it holds? ~0.4 s
 platform_check.py      Can THIS host reproduce the committed numbers? ~10 s
+requirements-verify.txt  The pinned samebytes those two (and verify.py's run
+                       comparison) are shims over; installed on first use
 .github/workflows/     CI: the checks that need no catalog, run on every push
 platform_reference.json  What it compares against, recorded on the ref host
 requirements-lock.txt  The exact versions every committed number was measured on
@@ -778,6 +780,13 @@ clean throughout: git's stat cache trusts size and mtime and never re-reads
 content, so the two can disagree while status says nothing. On a plain clone it
 can only pass, which is why CI runs it, as the control that it still works.
 
+The check itself, the host probes behind `platform_check.py` and `verify.py`'s
+run comparison live in [samebytes](https://github.com/loggger101/samebytes),
+split out of this repo with their history; the two files here are shims bound
+to this repository. The pin is the one line in `requirements-verify.txt`, and
+`modules/_runtime.py` installs that tag on first use and refuses an editable
+or shadowing copy, exactly as it does spacecost.
+
 ### Verifying Stage 3
 
 spacecost's own CI holds its tables to the CSVs it commits, its `validate()`
@@ -811,6 +820,7 @@ subset that needs no catalog runs on every push and pull request, in
 |---|---|
 | `import master` | imports the four modules and builds the configs, which also holds the installed spacecost to the pinned tag; Stage 1's taxonomy tables are empty without a catalog, which nothing at import reads |
 | `verify_docs.py` | reads the docs and the dataclasses; builds no stage |
+| `samebytes hooks check` | the `.githooks/` copies are samebytes' packaged hooks, LF and executable |
 | `platform_check.py` | **report only, never a gate** |
 
 🚨  **`verify.py` is NOT in CI and cannot be.** `asteroid_pipeline/` is
@@ -932,6 +942,9 @@ three things follow; the editing rules for each are in
 ```bash
 git config core.hooksPath .githooks
 ```
+
+The hooks are samebytes' copies; `python -m samebytes hooks check .` says
+whether they still match the pinned release, and CI runs it.
 
 `.gitattributes` pins `*.py`, `*.md` and the other text sources to LF, because
 Git for Windows sets `core.autocrlf=true` in its system config by default and a

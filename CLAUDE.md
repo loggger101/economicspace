@@ -16,6 +16,7 @@ is in [LESSONS.md](LESSONS.md) under a heading of the same name (frozen
 | [`spacecost`](https://github.com/loggger101/spacecost) | Stage 3's reference tables and the delivery-price chains |
 | [`quietlaunch`](https://github.com/loggger101/quietlaunch) | the windowless dashboard launcher `launch_ui.py` hands over to, and its Windows traps |
 | [`quietqueue`](https://github.com/loggger101/quietqueue) | the campaign job runner the four `campaign/` shims hand over to (queue, no-console supervisor, memory watcher, pause), and its traps; pinned in `requirements-campaign.txt`, checked by `campaign/quietqueue_pin.py`, never auto-installed |
+| [`samebytes`](https://github.com/loggger101/samebytes) | the tree, host-parity and run-comparison checks the shims `tree_check.py` and `platform_check.py` and `verify.py` hand over to, and the `.githooks/` it copies; pinned by the one line in `requirements-verify.txt`, which `_runtime.install()` reads and auto-installs |
 | [`AsteroidCatalog`](https://github.com/loggger101/AsteroidCatalog) | builds and publishes the Stage 1 catalog |
 | [`starred-repos`](https://github.com/loggger101/starred-repos) | the audit of 17 external repos and its probes; `orbital.py` was taken from it |
 
@@ -282,12 +283,13 @@ Traps in that table:
 | `verify.py baseline / check / invariants` | the release checks; list in its own header | full `check` ~30 min; `--skip prune parallel` ~5 min |
 | `verify_docs.py` | the docs checks; list in its docstring | ~1 s; `--before OLD.md README.md MODEL.md CLAUDE.md versions.md LESSONS.md` audits a reorganisation for dropped numbers |
 | `verify_stage1.py` | pinned catalog release vs data contract, and the bytes on disk | never writes the catalog |
-| `tree_check.py` | disk content vs git index | run first by every harness |
-| `platform_check.py` | libm/numpy/pandas against `platform_reference.json` | a library version is not a defect |
+| `tree_check.py` | disk content vs git index (shim over `samebytes.tree`) | run first by every harness |
+| `platform_check.py` | libm/numpy/pandas against `platform_reference.json` (shim over `samebytes.parity`) | a library version is not a defect |
 | `campaign/worked_calculation.py`, `campaign/verification_sheet.py` | derive one mission from the equations and hold it to its row | see below |
 
-Comparing two runs (`verify.py` already does all of this; copy it rather than
-writing a new harness, and read its header list of past harness bugs first):
+Comparing two runs (`samebytes.frames` does all of this and `verify.py` calls
+it; use it rather than writing a new harness, and read verify.py's header list
+of past harness bugs first):
 - Print a hash **and** a column diff. When they disagree the hash is right and
   the comparator is broken; "every cell differs at once" is the tell.
 - Strip **both** provenance columns, `pipeline_version` and `catalog_date`
@@ -553,7 +555,8 @@ lists every file it touched.
   a conflict copy together, so read `git show --stat`.
 - `git status` can show phantom-modified files; confirm with `git diff`.
   `.githooks/drive-restat.sh` re-stats entries whose content matches the index
-  (opt in with `git config core.hooksPath .githooks`). Never `git stash`. An
+  (opt in with `git config core.hooksPath .githooks`); it is samebytes' copy,
+  and CI's `samebytes hooks check` fails on drift. Never `git stash`. An
   unmappable `.git/index` during a sync clears on its own; do not delete it.
 - Another host (Linux): `lineterminator="\r\n"` is pinned in every CSV writer
   and in `verify.py` because every committed hash is a hash of CRLF; never

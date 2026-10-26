@@ -333,6 +333,40 @@ what it still held lives in spacecost's suite and in the pin guard.
   by date) only report it.
 - catalog `1.10.0`, mineral_value `1.16.0`, calc `1.32.0`.
 
+### The verification toolkit moves to samebytes (2026-10-25, no stamp)
+
+`tree_check.py`, `platform_check.py`, `.githooks/` and `verify.py`'s run
+comparison move to [samebytes](https://github.com/loggger101/samebytes)
+v0.1.0, a new repository that carries the moved files' history and serves
+every repo in the synced folder (spacecost, AsteroidCatalog, quietlaunch and
+quietqueue carry its hook since the same night).
+
+- **`tree_check.py` and `platform_check.py` are shims**, bound to this
+  repository (its root; `platform_reference.json` and this repo's commands in
+  the printed advice), so every `import tree_check`, every command in the docs
+  and launchers, and CI's steps stay as they were.
+- **`verify.py`'s `_comparable`, `_csv`, `cell_hash`, `column_diff` and
+  `_read_baseline` are one call each into `samebytes.frames`**; `_blanks` and
+  `_isnan` go. The trap-history header stays as history.
+- **The pin is the one line in `requirements-verify.txt`**, which
+  `modules/_runtime.py` reads (never typed) and `install(["samebytes"])` holds
+  exactly as it holds spacecost: missing or another tag is installed in place,
+  an editable or shadowing copy is refused. A stage module never installs it.
+  `verify_docs.py` check 7 holds it to that one line.
+- **`.githooks/` is samebytes' packaged copy** (its header names samebytes),
+  and a CI step, `samebytes hooks check`, fails on drift, CRLF, a missing
+  `eol=lf` pin or a missing executable bit.
+
+| harness | result |
+|---|---|
+| `verify.py check` against a baseline taken on the clean tree first (`--skip prune`) | MATCH on all four cells (151/151 columns, the 1.57.0 hashes), serial/parallel (8 workers, each importing the shim) MATCH, mass ledger 0 kg, never-worse 0 worse, Stage 2 tables identical, market ceilings clean |
+| `samebytes.frames` against the old `verify.py` functions, in one process, over every `.verify` baseline cell | 108 of 108: the same frame, hash, canonical CSV and column diff; all 108 re-read hashes equal their `index.json` sha16 |
+| `samebytes.parity.report` with this repo's hints against `platform_check.py`, every branch (all-match, libm, pandas, a defect, all three, host-only) | byte-identical output and exit code; `collect()` identical |
+| `platform_check.py` before and after, on this host | byte-identical output |
+| a same-length, same-mtime change to `LICENSE` | `git status` clean, `tree_check.py` exit 1 naming the file |
+| check 7, planted | a second typed copy in README: FAILED naming both; the line removed from `requirements-verify.txt`: `tree_check` refuses at import |
+| samebytes' own suite | 68 tests on Windows, Linux and macOS at 3.9/3.12/3.14 plus the installed wheel; 16 of the bugs behind them planted in a copy and each FAILED its test |
+
 ## master v1.57.0
 
 **`master.py` is no longer generated.** Since the project began it was the four
