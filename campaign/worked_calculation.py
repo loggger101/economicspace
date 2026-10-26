@@ -489,7 +489,7 @@ def gross_minerals(minerals):
 
 
 def body_water_fraction(body, phased):
-    """The fraction of the body that is WATER, as calc's _row_water_fraction.
+    """The fraction of the body that is WATER, as spacevalue.cargo's _row_water_fraction.
 
     With phases, the water phase alone: an outer-belt body's ice is part CO2
     and ammonia, and hydrolox cannot be made from either.  Without, the ice
@@ -1462,7 +1462,7 @@ def reference_tables(dest, archived=None):
 def _yield_blend(yields, price, kappa, rare):
     """sum of yield x (enrichment, on a rare metal) x element price.
 
-    The same walk, in the same order, as calc's `_mineral_implied_value`: an
+    The same walk, in the same order, as `_mineral_implied_value` (spacevalue.cargo): an
     element with no price is skipped, which is also what a NaN quote is.
     """
     total = 0.0
@@ -1485,7 +1485,7 @@ _HOW = {}
 def _refining_wh(mineral, table_yields, kwh, here, price, kappa, rare):
     """(Wh per kg as it is, Wh per kg taken apart, gross blend, net blend).
 
-    calc's `_yield_terms` and `_phase_terms`, written out: a mineral taken
+    `_yield_terms` and `_phase_terms` (spacevalue.cargo), written out: a mineral taken
     apart pays its own breakdown energy when any of its elements is refined
     HERE, plus each such element's; an element shipped home is refined on
     Earth.  The blends walk the yields in the same order as the model.
@@ -3256,7 +3256,7 @@ def refining_energy(C, payload, mix):
 
 def refinery_plant(C, hold, stay_yr):
     """The plant that puts `hold` through in `stay_yr`: Module 3's throughput
-    per kilogram of plant, as calc's `refinery_plant_kg`."""
+    per kilogram of plant, as `refinery_plant_kg` (spacevalue.cargo)."""
     rate = C.get("refinery_rate", 0.0)
     if hold <= 0 or stay_yr <= 0 or rate <= 0:
         return 0.0

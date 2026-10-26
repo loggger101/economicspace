@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.60.0 / calc v1.33.0](#master-v1600--calc-v1330)
 - [master v1.59.0 / mineral_value v1.17.0](#master-v1590--mineral_value-v1170)
 - [master v1.58.0 / transportation v1.23.6](#master-v1580--transportation-v1236)
 - [master v1.57.0](#master-v1570)
@@ -112,8 +113,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.32.0** | v1.32.0, ISRU hydrolox pays for its electrolysis and liquefaction (energy through the array, plant with the rig), and the flat $50/kg is retired; v1.31.0 had added an eighth destination, `gto` |
-| - | `master.py` | **1.59.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 4 | `modules/calc.py` | **1.33.0** | v1.33.0, the cargo valuation (phases, refinery, market ceilings, the payload knapsack) moves verbatim to `spacevalue.cargo` (spacevalue v0.2.0) and no number moves; v1.32.0 was the last to move one, ISRU hydrolox paying for its electrolysis and liquefaction |
+| - | `master.py` | **1.60.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -128,7 +129,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Thirty stamps so far have moved without moving a number:
+Thirty-one stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -162,6 +163,7 @@ Thirty stamps so far have moved without moving a number:
 | mineral_value `1.16.0` | **an eighth destination** | bit-identical, verified |
 | transportation `1.23.6` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 | mineral_value `1.17.0` | **the pricing moved to spacevalue** | bit-identical, verified |
+| calc `1.33.0` | **the cargo valuation moved to spacevalue** | bit-identical, verified |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -173,7 +175,7 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.17.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and twenty-two are not, and that split rotted in prose
+rows are performance stamps and twenty-three are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -205,6 +207,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.60.0 / calc v1.33.0](#master-v1600--calc-v1330) | 2026-10-26 | **Stage 4's cargo valuation moves to `spacevalue.cargo`** (spacevalue v0.2.0): the phase walk, the refinery, the market ceilings and the payload knapsack, verbatim, about 1,400 lines; calc imports them back and no number moves |
 | [master v1.59.0 / mineral_value v1.17.0](#master-v1590--mineral_value-v1170) | 2026-10-26 | **Stage 2's pricing moves to `spacevalue`, and both pricing stages stop fetching live**: Stage 2 installs a published price release, Stage 3 prices fuel from a recorded quote snapshot (spacecost v0.14.0), and both pins hold the closes every current number was measured on, so no number moves |
 | [master v1.58.0 / transportation v1.23.6](#master-v1580--transportation-v1236) | 2026-10-25 | **spacecost `v0.13.0`, and Stage 3 stops mirroring it**: `TransportConfig` becomes spacecost's config with two defaults overridden, `verify_stage3.py` retires into spacecost's suite and the pin guard; no value moves |
 | [master v1.57.0](#master-v1570) | 2026-10-25 | **`master.py` stops being generated**: `modules/` becomes a package and `master.py` a shim that imports it, so `build_master.py`, its rename table and the commit-both rule go; no module stamp moves and every cell is bit-identical |
@@ -272,6 +275,81 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.60.0 / calc v1.33.0
+
+**Stage 4's cargo valuation leaves for `spacevalue.cargo`** (spacevalue
+v0.2.0), and **no number moves**. What a hold is worth (the mineral and phase
+walk, the inseparable phases, the flown refinery, the composition memo, the
+market ceilings and the payload knapsack) was the one part of `calc.py` that
+reads no config and no rocket: it reads the Stage 2 table and an asteroid row.
+It now sits in the repository that writes that table.
+
+### What moved
+
+- **47 definitions, 1,433 lines, verbatim**, from `MINERAL-VALUE LOOKUPS` to
+  `asteroid_best_phase_usd_per_kg`: cut out of the tree programmatically, not
+  retyped. The module's body is byte-identical to calc's span, comments
+  included, and every definition's `ast.dump` is unchanged; calc's other 213
+  top-level statements are AST-identical and in the same order. Both proofs
+  failed on a planted one-token edit before they were trusted.
+- **What stays**: `MARKET_MODELS`, `_MARKET_MODE_SET` and `_market_mode`, the
+  only code in the span that reads `CalcConfig`. spacevalue never sees calc's
+  config.
+- **calc imports 25 names back**: the 20 its own code calls, and five
+  (`RARE_METAL_ELEMENTS`, `FRACTION_TO_MINERAL`, `_INSEPARABLE`,
+  `_RESIDUAL_PHASE`, `_PHASE_MARKET_ALIAS`) only so `master.<name>` still
+  reaches them for the worked calculation and `verify.py`. Nothing that reads
+  `master` changed. Private names keep their underscores; spacevalue's
+  consumer contract names all 25.
+- **calc's `_REQUIRED_PKGS` gains spacevalue**, so calc and its workers hold it
+  to its pin. `import spacevalue.cargo` imports nothing else from spacevalue
+  and no spacecost: v0.2.0 resolves every package name lazily, and its suite
+  fails if that is lost.
+- **The stamp moves without a number** (calc 1.33.0), because calc's numbers
+  now depend on code in another repository: a spacevalue repin that moves a
+  float in `cargo` is a calc release.
+
+### The coverage `verify.py` does not have
+
+`verify.py`'s four cells run the default flags, and check 7 adds `unbounded`.
+The moved code also holds the elasticity multiplier, the single-mission
+market, the four-fraction walk, the `comp_phases` fallback, the price-deduction
+refinery and the surplus wall, which no check reached. Thirteen small cells
+(raw at 150 rows, beneficiated at 40, built through `verify.run_cell`) were
+hashed before the move and again after it, one per branch.
+
+spacevalue's `tests/test_cargo_golden.py` holds the seam from the other side:
+a seeded sample of real calls to the 16 functions calc calls, recorded in
+those thirteen cells before the move, each with its arguments before and after
+(the knapsack spends its `caps`) and its result, every float as `repr`.
+
+### Verified
+
+| harness | result |
+|---|---|
+| the extraction's two proofs (byte and AST identity of the moved span; calc's other statements unchanged and in order) | both pass; each fails on a planted one-token edit |
+| `verify.py check`, all seven, with spacevalue `v0.2.0` installed from its tag, against a baseline taken on the clean 1.32.0 tree first | ALL CHECKS PASSED: the four cells MATCH bit for bit (151 of 151 columns each), as do prune on/off and serial against 8 workers; mass ledger, never-worse and market ceilings OK; check 6 recomputes all 59 installed cislunar rows: ALL IDENTICAL |
+| `campaign/cargo_golden.py check`: the thirteen coverage cells, hashed at 1.32.0 before the move | ALL MATCH; `--plant _blend` moves 48 columns of the default raw cell, `--plant saturation_price_multiplier` 7 of the elasticity cell |
+| the names: `calc.X is spacevalue.cargo.X is master.X` | all 25 |
+| spacevalue's golden replay: 4,858 calls recorded in calc 1.32.0 | bit-exact on Windows and Linux at Python 3.12-3.14; macOS rounds `pow` one ulp away on 2 of the 64 elasticity-multiplier calls (held to one ulp there, everything else to the bit); a planted re-association fails it |
+| `campaign/worked_calculation.py --verify --audit` on the default archived row | 90 quantities, 90 bit-exact; audit clean |
+| the recorded calls, timed through calc 1.32.0's own functions and through `spacevalue.cargo`, interleaved in one process | median ratio 1.0016 over 30 rounds; importing `spacevalue.cargo` costs about 10 ms per worker |
+| `verify_docs.py` | OK |
+
+### Found on the way
+
+- **The surplus-wall cell did not bind.** `surplus_wall/benef+search` hashes
+  identically to the default cell on its 38 rows: no ceiling binds there, so
+  that coverage cell exercises the wall's code path without moving a number.
+- **A plant must be patched where calc looks.** calc binds each imported name
+  to the same object, so a defect planted only in `spacevalue.cargo` reached
+  the cargo module's own callers and not calc's. `cargo_golden.py --plant`
+  patches both.
+- **`verification_sheet.py --check` cannot run, and has not since master
+  v1.58.0.** `ui_meta.CONFIG_SOURCES` became a list of `(path, class)` pairs
+  there, and `field_docs` still reads it as one pair (`IndexError`). It is not
+  this release's, and it is not counted as evidence above.
 
 ## master v1.59.0 / mineral_value v1.17.0
 
@@ -11331,6 +11409,14 @@ high-inclination arrival. No config field or output column moved, and
 - **New output columns**: `isru_plant_kg`, `isru_processing_power_w`.
 - **Schema guard**: `schema_check` names the new propellant column and the
   new ops row, with what their absence reverts.
+
+**`1.33.0`  the cargo valuation moves to spacevalue.** Full write-up: [master v1.60.0 / calc v1.33.0](#master-v1600--calc-v1330).
+- **Paired with spacevalue `v0.2.0`**: the mineral and phase walk, refinery,
+  market ceilings and payload knapsack are `spacevalue.cargo`, imported back
+  under the same names. A spacevalue repin that moves a float there is a calc
+  bump.
+- No config field and no output column added or removed; every number
+  bit-identical to 1.32.0.
 
 # Measurement history
 
