@@ -201,9 +201,9 @@ destination's table built from one recorded quote snapshot, gated before it is
 published and checksummed.
 
 Stage 2 installs **one pinned release**. The pinned price release is `prices-2026-10-07`,
-set by `MineralValueConfig.price_release` in `modules/mineral_value.py`. It
-holds the five COMEX and NYMEX closes the tables every current measurement was taken on
-were priced from, so pinning it moved no number. Stage 2 downloads the
+set by `MineralValueConfig.price_release` in `modules/mineral_value.py`.
+Every current measurement was taken on tables priced from its five COMEX and
+NYMEX closes, so pinning it moved no number. Stage 2 downloads the
 release's manifest, refuses it unless it is this pipeline's data contract
 (`MineralValueConfig.pipeline_version`), downloads all eight tables, checks
 every byte against the manifest, caches them under

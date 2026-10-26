@@ -122,7 +122,7 @@ class MineralValueConfig:
     #
     # ⚠️  Module 4's CALC_CONFIG carries a delivery_destination of its own,
     # and it must MATCH this one; it selects the mission architecture that
-    # actually delivers the cargo here.  In master.py set
+    # delivers the cargo here.  In master.py set
     # MASTER_CONFIG.delivery_destination, which sets both.
     delivery_destination: str = "earth_surface"
 

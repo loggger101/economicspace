@@ -278,10 +278,10 @@ module in numeric order.
 **Stage 2's pricing leaves for [`spacevalue`](https://github.com/loggger101/spacevalue),
 and neither pricing stage fetches a live price any more.** Stage 2 installs a
 published price release, exactly as Stage 1 installs a published catalog;
-Stage 3 prices fuel from a recorded quote snapshot. Both pins hold the closes
-the tables every current number was measured on were built from, so **no
-number moves**: the Stage 2 table on disk differs only in its stamp, and the
-Stage 3 tables only in the stamp and the notes 1.23.x reworded on purpose.
+Stage 3 prices fuel from a recorded quote snapshot. Every current number was
+measured on tables built from the closes the two pins hold, so **no number
+moves**. The Stage 2 table on disk differs only in its stamp, and the Stage 3
+tables only in the stamp and the notes 1.23.x reworded on purpose.
 
 ### Why
 
@@ -10307,7 +10307,7 @@ field or column moved; every other destination's table is 1.15.0's but for
 the stamp.
 
 **`1.17.0`  the pricing moves to spacevalue.** Full write-up: [master v1.59.0 / mineral_value v1.17.0](#master-v1590--mineral_value-v1170).
-No row moved: from the same closes, every table is 1.16.0's but for the stamp.
+No row moved. From the same closes, every table is 1.16.0's but for the stamp.
 The tables' `catalog_date` is now the day their quotes were recorded. This
 module's config keeps `delivery_destination` and adds `price_release`,
 `release_base_url`, `request_timeout`, `manifest_filename` and `subdir`;
