@@ -366,6 +366,11 @@ seed snapshots, `fuel-2026-10-17` and `metals-2026-10-07`, and each file's
 - **A snapshot holds settled closes only.** While a market is open yfinance's
   last bar is the latest trade, which every live build here has always taken;
   `record` drops a bar dated today.
+- **The synced folder refuses a directory swap.** A one-byte edit planted in
+  the cached release was caught, and the re-download then failed replacing the
+  cache directory (WinError 5, the trap Stage 1's staging comment records).
+  The cache now replaces files, manifest last; the planted edit re-downloads
+  and installs the same bytes.
 
 ### What did not change
 

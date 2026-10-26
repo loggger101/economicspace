@@ -287,9 +287,18 @@ def _download_release(config: "MineralValueConfig") -> dict:
                   newline="\n") as fh:
             json.dump(manifest, fh, indent=2)
             fh.write("\n")
-        if os.path.isdir(cache):
-            shutil.rmtree(cache)
-        os.replace(stage, cache)
+        # FILES ARE REPLACED, NOT THE DIRECTORY.  Removing the cache directory
+        # to swap a fresh one in fails on the synced folder (WinError 5, the
+        # trap Stage 1's staging comment records), and it did, on a planted
+        # one-byte edit.  The manifest goes first and comes back last, so the
+        # cache never holds a manifest vouching for tables it does not have.
+        os.makedirs(cache, exist_ok=True)
+        manifest_path = os.path.join(cache, _ASSET_MANIFEST)
+        if os.path.exists(manifest_path):
+            os.remove(manifest_path)
+        for fname in manifest["files"]:
+            os.replace(os.path.join(stage, fname), os.path.join(cache, fname))
+        os.replace(os.path.join(stage, _ASSET_MANIFEST), manifest_path)
     finally:
         shutil.rmtree(stage, ignore_errors=True)
     return manifest
