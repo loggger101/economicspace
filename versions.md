@@ -367,6 +367,33 @@ quietqueue carry its hook since the same night).
 | check 7, planted | a second typed copy in README: FAILED naming both; the line removed from `requirements-verify.txt`: `tree_check` refuses at import |
 | samebytes' own suite | 68 tests on Windows, Linux and macOS at 3.9/3.12/3.14 plus the installed wheel; 16 of the bugs behind them planted in a copy and each FAILED its test |
 
+### The lock is re-recorded on Python 3.14 (2026-10-26, no stamp)
+
+`requirements-lock.txt` named the environment of 2026-09-02 (CPython 3.13.9,
+numpy 2.2.6, pandas 2.3.3, pyarrow 24.0.0) while the baselines were taken on
+this host under 3.14.6, numpy 2.5.2, pandas 3.0.5 and pyarrow 25.0.1, and
+nothing recorded which produced them. It was settled by measurement, not
+argued: an environment built from the old lock (a venv on 3.13.9) and this
+host's, in one checkout at 087aef5, each building the four `verify.py` cells
+and checking them against the other's.
+
+- **All eleven lines move to this host's versions**, the Dockerfile to
+  `python:3.14.6-slim-bookworm` and CI to 3.14; `platform_reference.json` is
+  re-recorded here (every probe as before except `pandas.str_dtype`, `object`
+  to `str`, which pandas 3 always reads).
+- **`verify.py baseline` writes `_meta.environment`** (python, numpy, pandas,
+  pyarrow, host), and `check` prints it, so the question cannot come up again.
+- **The second machine moves to 3.14.6** and installs the lock; until it does,
+  `platform_check.py` there reports the pandas dtype contract.
+
+| harness | result |
+|---|---|
+| the old-lock environment's cells checked against this host's baseline | MATCH: 4 of 4 hashes, 151 of 151 columns, every invariant passes |
+| this host's cells checked against the old-lock environment's baseline | MATCH: the same 4 hashes (`723d2451bef448ac`, `76dce7661ce6092f`, `04964d9e569ec610`, `248ee9891d7c0c96`) |
+| `platform_check.py` in the old-lock environment against the old reference | all 18 probes match (the control) |
+| `pip install --dry-run -r requirements-lock.txt` on this host | installs nothing |
+| the full-catalog raw N = 1 cell in both environments | **not completed**: killed three times by a memory watchdog on a 15 GB host shared with other work, so rows outside the capped cells were not compared |
+
 ## master v1.57.0
 
 **`master.py` is no longer generated.** Since the project began it was the four
