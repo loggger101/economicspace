@@ -379,7 +379,8 @@ Nothing the model computes is touched.
 |---|---|
 | old checks (HEAD) against new (samebytes working copy), check 10 | byte-identical output on five audits: LESSONS.md into the five docs (418 numbers, 0 lost) and into four (51 lost), README into MODEL (105 lost), versions.md into README and CLAUDE.md (2,511 lost), `modules/calc.py` into MODEL (243 lost) |
 | the same, check 12 | live docs: 0 pairs both ways. Two pairs planted in a copy of CLAUDE.md plus one registered: 3 pairs and the same two unregistered number sets both ways |
-| `verify_docs.py --before LESSONS.md README.md MODEL.md CLAUDE.md versions.md`, before and after (v0.4.0 installed from its tag) | check 10 identical (418 numbers, 51 lost); check 12 0 pairs both ways; check 11 one definition fewer (`_figures`); every other line identical. Without `--before`: OK |
+| `verify_docs.py --before LESSONS.md README.md MODEL.md CLAUDE.md versions.md`, before and after (v0.4.0 installed from a local tag) | check 10 identical (418 numbers, 51 lost); check 12 0 pairs both ways; check 11 one definition fewer (`_figures`); every other line identical. Without `--before`: OK |
+| the same, with samebytes installed by `_runtime.install()` from the pushed `v0.4.0` tag (`86f64e4`) | without `--before`: OK; with it, identical to the local-tag run |
 | planted end to end: a README line appended to CLAUDE.md | check 12 FAILED naming `README.md:438 and CLAUDE.md:629`; restored byte for byte |
 | samebytes' own suite | 126 tests; 12 defects planted in a copy of the new code (versions, link targets and years not stripped, register rows read as a side, register ignored, a two-number threshold, no dedupe, a missing file skipped by either check, only the first new file read, findings unsorted) each FAILED its test |
 
