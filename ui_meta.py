@@ -14,7 +14,8 @@ Two jobs:
 2.  **Curate.** Decide what belongs on the front page, what is a path rather
     than a dial, and which fields have a fixed set of legal values.
 
-The help text shown in the UI is scraped straight out of the module sources.
+The help text shown in the UI is scraped straight out of the module sources,
+by samebytes' `source.field_docs` (the rule lived here until samebytes v0.5.0).
 Those comment blocks are the real documentation for this model. The repo's
 whole premise is that a number without its reasoning attached gets "fixed" by
 the next person, so the UI surfaces them rather than paraphrasing.
@@ -22,16 +23,33 @@ the next person, so the UI surfaces them rather than paraphrasing.
 
 from __future__ import annotations
 
-import ast
+import contextlib
 import dataclasses
 import importlib.util
 import io
 import os
-import re
-import tokenize
+import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+
+# The comment scraper is samebytes' `source.field_docs`.  samebytes is pinned
+# once, in requirements-verify.txt, and `_runtime.install` puts that tag in
+# place, as it does for the harnesses: the dashboard needs it too since the
+# scraper moved there.  It has no dependencies of its own, so installing it
+# cannot move a pin.  install() says "OK  All packages present" when there is
+# nothing to do; only what it says otherwise is passed on.
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+from modules import _runtime  # noqa: E402
+
+_said = io.StringIO()
+with contextlib.redirect_stdout(_said):
+    _runtime.install(["samebytes"])
+if _said.getvalue().replace("OK  All packages present\n", ""):
+    print(_said.getvalue(), end="")
+
+from samebytes.source import field_docs  # noqa: E402
 
 # The sources each config's comments are scraped from, base class first: a
 # later source's help replaces an earlier one's for the fields it redefines.
@@ -436,145 +454,17 @@ CURATED_KEYS = {
 # COMMENT SCRAPING
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Matches `# ─── MINING THROUGHPUT  (v1.4.0) ────────────────────` and friends.
-# The modules use box-drawing rules of a few different characters.
+# The rule (the block directly above a field, to the first blank line, banner or
+# bare rule, plus a trailing comment on its own line; the titled banner above
+# it is its section) is samebytes' `source.field_docs`, moved there verbatim in
+# samebytes v0.5.0 so that spacecost, spacevalue and AsteroidCatalog test their
+# own configs' help by the rule this dashboard renders, through
+# `source.missing_help`.  spacecost's tests had kept a hand-written copy, and it
+# had drifted.  The traps behind each part of the rule are documented there.
 #
-# The class is built through re.escape because a literal "-" sitting between
-# two other characters is a RANGE, not a hyphen: the same family of mistake as
-# the `str.contains(..., regex=False)` fixes in the pipeline itself.
-_RULE_CHARS = "".join(re.escape(c) for c in "─═━=_·•-")
-_BANNER_RE = re.compile(
-    rf"^#\s*[{_RULE_CHARS}]{{2,}}\s*(?P<title>.*?)\s*[{_RULE_CHARS}]{{2,}}\s*$"
-)
-_BARE_RULE_RE = re.compile(rf"^#\s*[{_RULE_CHARS}]{{4,}}\s*$")
-
-
-def _banner_title(line: str) -> Optional[str]:
-    """Section title if `line` is a section banner, else None.
-
-    A banner must have an actual title, or an ASCII table drawn in a comment
-    becomes a section: a separator row like `------  ----------------` matches
-    the banner shape exactly and produced a group heading with that literal
-    text. The instance this was written for was the version-history block above
-    each `pipeline_version`, which moved to versions.md in 2026-09; the guard
-    stays because a comment is free to draw a table at any time, and a UI that
-    invents a section from one is worse than a bare dial.
-    """
-    match = _BANNER_RE.match(line.strip())
-    if not match:
-        return None
-    title = match.group("title").strip()
-    # Reject a "title" made of nothing but more rule characters.
-    if not title or not re.search(r"[0-9A-Za-zΔ]", title):
-        return None
-    return title
-
-
-def _clean_comment(line: str) -> str:
-    """A comment line with its `#` and one following space removed.
-
-    Exactly ONE space, so the modules' hanging indents survive into the help
-    text: several config blocks lay out a small table or a bulleted list under
-    a field, and stripping the leading whitespace would flatten them.
-    """
-    body = line.lstrip()[1:]
-    return body[1:] if body.startswith(" ") else body
-
-
-def _trailing_comments(src: str) -> Dict[int, str]:
-    """line number -> the inline `#` comment on that line, if any.
-
-    Read through `tokenize` rather than by splitting on "#", because a default
-    value is allowed to contain one.  This exists because several fields carry
-    their whole description as a TRAILING comment and nothing else:
-
-        preview_rows:      int = 20   # rows per table in the end-of-run preview
-        request_timeout: int = 60   # seconds per HTTP call; a timeout is a soft failure
-
-    Reading only the block ABOVE a field showed those as having no help at all,
-    while the text was sitting on the same line.
-    """
-    out: Dict[int, str] = {}
-    try:
-        for tok in tokenize.generate_tokens(io.StringIO(src).readline):
-            if tok.type == tokenize.COMMENT:
-                # A comment that starts the line is a block comment, not a
-                # trailing one; those are already handled by the walk upward.
-                if src.split("\n")[tok.start[0] - 1][:tok.start[1]].strip():
-                    out[tok.start[0]] = _clean_comment(tok.string).strip()
-    except (tokenize.TokenError, IndentationError, SyntaxError):
-        return {}
-    return out
-
-
-def scrape_field_docs(path: str, class_name: str) -> Dict[str, Dict[str, str]]:
-    """field name -> {"help", "section"} scraped from a module source.
-
-    Walks backwards from each field definition collecting the comment block
-    directly above it, stopping at the first blank line or section banner. The
-    banner title, if there is one, becomes the field's group heading: the
-    modules already organise their configs into labelled sections and there is
-    no reason for the UI to invent its own taxonomy.
-    """
-    try:
-        with open(path, encoding="utf-8") as fh:
-            src = fh.read()
-        tree = ast.parse(src)
-    except (OSError, SyntaxError):
-        return {}
-
-    lines = src.split("\n")
-    trailing_comments = _trailing_comments(src)
-    cls = next(
-        (n for n in ast.walk(tree)
-         if isinstance(n, ast.ClassDef) and n.name == class_name),
-        None,
-    )
-    if cls is None:
-        return {}
-
-    docs: Dict[str, Dict[str, str]] = {}
-    for stmt in cls.body:
-        if not isinstance(stmt, ast.AnnAssign) or not isinstance(stmt.target, ast.Name):
-            continue
-
-        block: List[str] = []
-        section = ""
-
-        i = stmt.lineno - 2          # 0-indexed line directly above the field
-        while i >= 0 and lines[i].strip() and lines[i].lstrip().startswith("#"):
-            section = _banner_title(lines[i]) or ""
-            if section or _BARE_RULE_RE.match(lines[i].strip()):
-                break
-            block.append(_clean_comment(lines[i]))
-            i -= 1
-
-        # If the field had no comment of its own, keep scanning up for the
-        # section banner it lives under so it still gets grouped.
-        while not section and i >= 0:
-            line = lines[i].strip()
-            if line.startswith("class ") or line.startswith("@dataclass"):
-                break
-            section = _banner_title(line) or ""
-            i -= 1
-
-        help_text = "\n".join(reversed(block)).strip()
-
-        # A trailing comment on the field's own line. For most fields this is
-        # the only description there is; where a block exists too it usually
-        # carries the part the block leaves out ("0 = all 1.55 M asteroids"),
-        # so it is appended rather than discarded, and skipped when the block
-        # already says it.
-        trailing = trailing_comments.get(stmt.lineno, "")
-        if trailing and trailing not in help_text:
-            help_text = (help_text + "\n" + trailing).strip() if help_text else trailing
-
-        docs[stmt.target.id] = {
-            "help": help_text,
-            "section": section or "Other",
-        }
-
-    return docs
+# `scrape_field_docs` stays the name this file, verify_docs.py check 8 and
+# campaign/verification_sheet.py read it by.
+scrape_field_docs = field_docs
 
 
 # ─────────────────────────────────────────────────────────────────────────────

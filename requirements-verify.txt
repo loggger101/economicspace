@@ -1,5 +1,6 @@
 # The verification toolkit behind tree_check.py, platform_check.py and
-# verify.py's run comparison, split out of this repo into samebytes.
+# verify.py's run comparison, split out of this repo into samebytes; the
+# dashboard's ui_meta.py reads its config help through it too.
 #
 # Deliberately NOT merged into requirements.txt: that file mirrors what the
 # four modules auto-install at import (verify_docs check 7), and no pipeline
@@ -10,4 +11,4 @@
 # THIS LINE IS THE PIN: modules/_runtime.py reads the tag off it, installs it
 # when samebytes is missing or at another tag, and refuses an editable or
 # shadowing copy, so a repin is this line and nothing else.
-samebytes @ git+https://github.com/loggger101/samebytes@v0.4.0
+samebytes @ git+https://github.com/loggger101/samebytes@v0.5.0

@@ -65,7 +65,8 @@ verify_docs.py         Docs verification: the docs still describe the code
 tree_check.py          Does the disk hold what git says it holds? ~0.4 s
 platform_check.py      Can THIS host reproduce the committed numbers? ~10 s
 requirements-verify.txt  The pinned samebytes those two (and verify.py's run
-                       comparison, and four docs checks) are shims over;
+                       comparison, the docs checks and the dashboard's
+                       config help) are shims over;
                        installed on first use
 .github/workflows/     CI: the checks that need no catalog, run on every push
 platform_reference.json  What it compares against, recorded on the ref host
@@ -829,8 +830,9 @@ content, so the two can disagree while status says nothing. On a plain clone it
 can only pass, which is why CI runs it, as the control that it still works.
 
 The check itself, the host probes behind `platform_check.py`, `verify.py`'s
-run comparison and `verify_docs.py` checks 4, 5, 6, 10, 11 and 12 live in
-[samebytes](https://github.com/loggger101/samebytes),
+run comparison, `verify_docs.py` checks 4, 5, 6, 10, 11 and 12, check 7's pin
+comparison and the comment scraper the dashboard reads its config help with
+live in [samebytes](https://github.com/loggger101/samebytes),
 split out of this repo with their history; the two files here are shims bound
 to this repository. The pin is the one line in `requirements-verify.txt`, and
 `modules/_runtime.py` installs that tag on first use and refuses an editable
