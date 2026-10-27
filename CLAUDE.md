@@ -527,9 +527,10 @@ lists every file it touched.
 
 - Configs are dataclasses instantiated once; edit the field default, never the
   instance. A field's help text is the comment block directly above it
-  (stopping at a blank line) or a one-line trailing comment; a trailing comment
-  cannot continue onto the next line. Check 8 fails on a non-path field with no
-  help.
+  (stopping at a blank line, banner or bare rule) plus a one-line trailing
+  comment, by samebytes' `source.field_docs`; a block explains only the field
+  under it, and a trailing comment cannot continue onto the next line. Check 8
+  fails on a non-path field with no help.
 - **When a number changes, grep for the superseded claim**, not only the
   digits: `grep -rn "<old>" --include='*.md' .` and the same over code
   comments, `--help` text and banners. A file that derives a number in one
