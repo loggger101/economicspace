@@ -88,10 +88,12 @@ PIP_SPEC = {
 # samebytes, the toolkit behind tree_check.py, platform_check.py and verify.py's
 # run comparison, is the opposite arrangement on purpose: typed ONCE, as the
 # one `samebytes @ git+...@vX.Y.Z` line in requirements-verify.txt, and read
-# from there.  Only the harnesses install it (`install(["samebytes"])`), never
-# a stage module, so it is no part of requirements.txt or of check 7's typed
-# copies; check 7 holds it to that one line instead.  No file, or no single
-# such line, means it is not pinned here, and the harness says so.
+# from there.  Only the harnesses and the dashboard's ui_meta.py, whose config
+# help is samebytes' `source.field_docs`, install it
+# (`install(["samebytes"])`), never a stage module, so it is no part of
+# requirements.txt or of check 7's typed copies; check 7 holds it to that one
+# line instead.  No file, or no single such line, means it is not pinned here,
+# and the harness says so.
 _VERIFY_REQUIREMENTS = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "requirements-verify.txt")

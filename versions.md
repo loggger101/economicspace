@@ -351,6 +351,40 @@ those thirteen cells before the move, each with its arguments before and after
   there, and `field_docs` still reads it as one pair (`IndexError`). It is not
   this release's, and it is not counted as evidence above.
 
+### samebytes v0.5.0: check 7's pins and the dashboard's help scraper move there (2026-10-27, no stamp)
+
+The pin moves to [samebytes](https://github.com/loggger101/samebytes) v0.5.0,
+which adds `docs.pins` / `docs.pin_copies` (check 7's pin comparison, made
+general) and `source.field_docs` / `source.missing_help` (`ui_meta`'s comment
+scraper, moved, and the check over it). spacecost's tests had kept a
+hand-written copy of the scraper, and it had drifted from this one; the other
+packages can now test their own configs' help by the rule the dashboard
+renders. Nothing the model computes is touched.
+
+- **`ui_meta.py` installs samebytes.** It calls `_runtime.install(["samebytes"])`
+  at import, as the harnesses do, so the dashboard reads the one pinned tag
+  (samebytes has no dependencies, so this can move no pin). `scrape_field_docs`
+  stays as the name `ui_meta`, check 8 and `verification_sheet.py` read it
+  by; the seven names behind it go.
+- **Check 7's pin loop is two calls.** The packages, the live-claim pattern and
+  the spelled count stay here. Its findings are samebytes' wording now
+  (`spacecost is pinned at 2 refs: ... in requirements.txt:27`, with line
+  numbers), and a prose claim belongs to the package named NEAREST before it
+  rather than to any package in the window, so one sentence can carry both
+  tags. The printed count holds: `n` still counts each claim file and each
+  comparison.
+- Check 8 is unchanged: it reads help through `build_field_specs`, which now
+  reaches samebytes' scraper.
+
+| harness | result |
+|---|---|
+| samebytes' scraper against `ui_meta`'s, one process (v0.5.0 working copy) | every `CONFIG_SOURCES` pair, then all 47 classes in the tracked Python of seven repositories: 202 fields, equal dicts; `build_field_specs` with the scraper swapped: 112 specs identical |
+| check 7's own loop (lines extracted from this file) against `docs.pin_copies` | live tree: the same refs in the same files, 10 copies of two pins; one planted repin in a copy: both find two refs |
+| `verify_docs.py` before (v0.4.0) and after (v0.5.0 from the pushed tag, `f900fa7`) | identical except check 11, four definitions fewer (the scraper's), and the tree line's count of uncommitted files; check 7 still 26 manifests, check 8 still 89 dials. OK |
+| `campaign/verification_sheet.py --check`, before and after | byte-identical output, OK |
+| planted end to end, each restored byte for byte | `requirements.txt`'s spacecost pin alone moved: check 7 FAILED naming both refs and every copy; CITATIONS.md's spacevalue claim reworded: FAILED naming the file (and the spelled counts, now one copy short); `CatalogConfig.catalog_release`'s comment block deleted: check 8 FAILED, `1 with no help` |
+| samebytes' own suite | 133 tests; 18 defects planted in a copy of the new code each FAILED its test |
+
 ### samebytes v0.4.0: docs checks 10 and 12 move there (2026-10-26, no stamp)
 
 The pin moves to [samebytes](https://github.com/loggger101/samebytes) v0.4.0,

@@ -899,7 +899,8 @@ def check_manifests() -> bool:
                        % extra)
 
     # The PINNED REF, which the name comparison above deliberately throws
-    # away. `spacecost` is not on PyPI, so it installs from a tagged git URL.
+    # away. spacecost and spacevalue are not on PyPI, so each installs from a
+    # tagged git URL.
     #
     # 🚨  A ONE-LINE REPIN OF ONE COPY ALONE IS THE PARALLEL-REPO DIVERGENCE.
     # Two paths would install different revisions of the reference tables, both
@@ -909,94 +910,44 @@ def check_manifests() -> bool:
     # `1.3.6` each shipped as two different things the last time this project
     # ran two sources of one truth; see versions.md.
     #
-    # ⚠️  THIS READ TWO FILES BY NAME AND THERE WERE FOUR COPIES.  It compared
-    # `requirements.txt` against `_MASTER_PIP_SPEC` and knew nothing of
-    # `_PIP_SPEC` in modules/transportation.py -- which is what a STANDALONE
-    # module run installs from, so the module could have gone on fetching the
-    # old tables past a repin -- or of README's sentence naming the tag. That is
-    # "a check that reads one row of a table is a check on that row", the lesson
-    # this repo wrote down for check 9 and then left standing here. So the URL
-    # is now found rather than looked up: every first-party file is scanned, and
-    # a fifth copy appearing tomorrow joins the comparison with no edit.
+    # The copies are FOUND, not listed: samebytes' `docs.pins` reads every
+    # `github.com/loggger101/<repo>@<ref>` in the first-party files and the live
+    # prose claims below, and reports a package pinned at more than one ref, a
+    # package pinned nowhere, and a prose file that no longer states one. This
+    # check was the rule's first copy, and it was widened three times after a
+    # copy it did not read went stale: two named files when there were four
+    # copies, prose read in one file of three, one package when there were two.
+    # samebytes v0.5.0 holds the general rule, so a third package joins by
+    # being listed.
     #
-    # Only the URL FORM counts. A bare `v0.1.1` in prose is usually history --
-    # both documents tell the story of a checkout that sat two commits past it
-    # -- and pinning those to the live tag would rewrite an account of what
-    # happened. README's one live claim is matched explicitly instead.
-    # 🚨  THIS READ ONE PACKAGE UNTIL 2026-09-22, AND THERE ARE TWO NOW.
-    # Stage 1's builder moved out to `asteroid_catalog` that day, on the same
-    # arrangement Stage 3 uses, and its pin is typed in six files. Every
-    # pattern below named `spacecost`, so not one of those six was compared
-    # with any other -- the check was written against the place somebody was
-    # last burned, which is this repo's own "a check that reads one row of a
-    # table is a check on that row", committed a second time inside the check
-    # written to prevent exactly that. The package is a parameter now, so a
-    # third split joins by adding one row.
+    # Only the LIVE prose form counts, the two phrasings that assert what the
+    # pin IS. A bare `v0.1.1` elsewhere in prose is history -- both documents
+    # tell the story of a checkout that sat two commits past it -- and pinning
+    # those to the live tag would rewrite an account of what happened. A claim
+    # belongs to the package named nearest before it (samebytes' CLAIM_WINDOW,
+    # 200 characters), so one sentence can carry both tags.
     #
-    # ⚠️  A PROSE CLAIM IS ATTRIBUTED BY PROXIMITY, because prose carries no
-    # URL and one phrasing has to serve both packages without either borrowing
-    # the other's tag: the package or its repository must be named within the
-    # 200 characters before the claim. A claim no pattern matches is still a
-    # FINDING rather than a silent pass.
-    #
-    # 2026-09-23: `asteroid_catalog` left this loop again.  Stage 1 stopped
-    # installing the package and started downloading a published catalog
-    # RELEASE, so the package is pinned nowhere; the release pin is held by its
-    # own block below the loop.  The parameterisation stays, for the next split.
-    #
-    # 2026-10-26: and the next split came.  Stage 2's pricing left for
-    # `spacevalue` (master v1.59.0), installed from a tagged git ref exactly as
-    # spacecost is, so it joined as a second row.
-    for _pkg, _repo in (("spacecost", "spacecost"), ("spacevalue", "spacevalue")):
+    # Files that are not on disk are left out of the list: `absent()` already
+    # reports a missing first-party file, and `docs.pins` would report it again.
+    pin_pkgs = ["spacecost", "spacevalue"]
+    pin_claims = [(re.compile(r"pinned to (?:tag|a tagged release\*\*,) `(v[0-9][^`]*)`"),
+                   ["README.md", "CLAUDE.md", "CITATIONS.md"])]
+    pin_files = [rel for rel in sorted(set(FIRST_PARTY_PY + DOCS + ["requirements.txt"]))
+                 if os.path.exists(os.path.join(REPO, rel))]
+    bad += sb_docs.pins(REPO, pin_files, "loggger101", pin_pkgs, pin_claims)[0]
+    copies = sb_docs.pin_copies(REPO, pin_files, "loggger101", pin_pkgs, pin_claims)
+    for _pkg in pin_pkgs:
+        _repo = _pkg
+        pins = copies.get(_pkg, {})
+        # One count per claim file and one for the comparison, as this check
+        # counted them before the rule moved, so its printed total holds.
+        n += len(pin_claims[0][1]) + 1
 
         def _mine(_text, _at, _pkg=_pkg, _repo=_repo):
             """Is the claim at `_at` about THIS package?"""
             _window = _text[max(0, _at - 200):_at]
             return _pkg in _window or _repo in _window
 
-        pin_re = re.compile(r"github\.com/loggger101/%s@(\S+?)[\"'\s,)]"
-                            % re.escape(_repo))
-        pins: Dict[str, List[str]] = {}
-        for rel in sorted(set(FIRST_PARTY_PY + DOCS + ["requirements.txt"])):
-            path = os.path.join(REPO, rel)
-            if not os.path.exists(path):
-                continue                      # absent() covers first-party files
-            for ref in pin_re.findall(read(path) + "\n"):
-                pins.setdefault(ref.rstrip("\"'`,"), []).append(rel)
-        # THE PROSE COPIES, and there are three of them.
-        #
-        # ⚠️  THIS READ ONE SENTENCE IN ONE FILE UNTIL 2026-09-22, and the two it
-        # did not read had gone a release stale with nothing looking at them:
-        # CLAUDE.md and CITATIONS.md both still said `v0.3.0` after the repin to
-        # `v0.3.1`.  The URL form is found rather than listed, so a fifth code
-        # copy joins by existing -- but prose does not carry a URL, so every prose
-        # claim had to be named, and only one was.  That is this repo's own "a
-        # check that reads one row of a table is a check on that row", committed
-        # inside the check written to prevent the same thing.
-        #
-        # Only the LIVE claim form counts, the two phrasings that assert what the
-        # pin IS.  A bare `v0.1.1` elsewhere in prose is history -- both documents
-        # tell the story of a checkout that sat two commits past it -- and pinning
-        # those to the live tag would rewrite an account of what happened.
-        live_claim = re.compile(
-            r"pinned to (?:tag|a tagged release\*\*,) `(v[0-9][^`]*)`")
-        for rel in ("README.md", "CLAUDE.md", "CITATIONS.md"):
-            path = os.path.join(REPO, rel)
-            if not os.path.exists(path):
-                continue                      # absent() covers first-party files
-            _text = read(path)
-            found = [_m.group(1) for _m in live_claim.finditer(_text)
-                     if _mine(_text, _m.start())]
-            n += 1
-            if not found:
-                # Not a skip.  Each of these three asserts the pin in prose, and a
-                # rewording that this pattern stops matching is how the check
-                # quietly goes back to reading one row.
-                bad.append("%s no longer states the pinned %s tag in a form "
-                           "check 7 can read; reword it back or teach the "
-                           "pattern" % (rel, _pkg))
-            for ref in found:
-                pins.setdefault(ref, []).append("%s (prose)" % rel)
         # THE SPELLED COUNT, held to the copies actually found.
         #
         # This repo's standing rule is that a count nothing checks is a number
@@ -1034,19 +985,6 @@ def check_manifests() -> bool:
                                "copies were found: %s"
                                % (rel, word, got, total,
                                   "; ".join(sorted(f for v in pins.values() for f in v))))
-
-        n += 1
-        if not pins:
-            # Not a skip. The pin is supposed to be typed in several places, and
-            # all of them going missing is the drift rather than a reason to pass.
-            bad.append("no pinned %s ref found anywhere in the first-party "
-                       "files; it is typed in at least requirements.txt and "
-                       "the stage modules that install it" % _pkg)
-        elif len(pins) > 1:
-            bad.append("the pinned %s ref disagrees across %d copies: %s"
-                       % (_pkg, sum(len(v) for v in pins.values()),
-                          "; ".join("%s in %s" % (ref, ", ".join(sorted(files)))
-                                    for ref, files in sorted(pins.items()))))
 
     # THE samebytes PIN, the opposite arrangement on purpose.  spacecost's tag
     # is typed in several places and the loop above holds them together;
@@ -1203,7 +1141,9 @@ def check_help() -> bool:
     The UI scrapes its help straight out of the config sources (`ui_meta.
     CONFIG_SOURCES`: the modules, and spacecost's `config.py` under Stage 3's
     two overrides), so a field's comment IS its documentation, and this check
-    reads it through `build_field_specs`, exactly as the dashboard does.  The attachment rule is positional: a block
+    reads it through `build_field_specs`, exactly as the dashboard does (the
+    scrape itself is samebytes' `source.field_docs`, whose `missing_help` the
+    packages behind those sources call on their own configs).  The attachment rule is positional: a block
     explains the field directly below it, and a comment block covering TWO
     fields leaves the second one blank in the dashboard.  Thirty-nine of 105
     fields were in that state, including `demand_elasticity`, `rtg_max_power_w`
