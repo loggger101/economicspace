@@ -1298,6 +1298,46 @@ Stated plainly so results aren't over-read:
   at least carry `element_epoch_jd`, so `mean_anomaly_deg` can be referred to a
   date; before that it could not, which made real phasing impossible rather
   than merely unimplemented.
+- **For most NEOs the taxonomy is a guess, and the guess is a coin flip.**
+  Nine in ten NEOs have no measured class and no measured albedo, so the
+  catalog builder assumes an albedo from the orbit (S inside 2.5 AU, C beyond)
+  and reads the composition off that. Scored against the 2,943 NEOs that do
+  have a measured class, the class this rule gives is right about half the
+  time, and a guessed C is C-complex only **29%** of the time; a fitted model of
+  class from the orbit does no better than base rates. Granvik et al.'s
+  debiased NEO population model, an independent instrument, disagrees with
+  2,959 of the 3,460 guessed Cs. None of the albedo-guessed NEOs has a measured
+  albedo in NEOWISE, SsODNet's datacloud or the lightcurve database that the
+  catalog missed, so there is nothing cheaper to fix it with. The model prices
+  the guess as a fact; [`campaign/composition_range.py`](campaign/composition_range.py)
+  re-prices a body under each class it could be and reports the spread. The
+  measurements are F11, F16 and F17 in
+  [starred-repos' `FOURTH-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md).
+- **Small, fast-spinning bodies cannot hold the regolith the model digs.** A
+  body that rotates faster than about two hours cannot keep a loose grain on
+  its equator, so it has no loose layer for a bucket-drum to scoop; it is bare
+  or cohesive rock. A quarter of the NEOs with a reliably measured period spin
+  that fast (a third if tentative periods are counted too), and every measured
+  NEO fainter than H 28 does, at a median period near a minute and a half. The rows that lead a default ranking are bodies of that
+  size. `rotation_period_h` sizes only the night-side battery by default;
+  `CalcConfig.model_spin_limit` (off by default, so no number moves) declines
+  every candidate on a body measured to spin faster than its lift period and
+  reports the limit as `spin_lift_period_h`. A body with no measured period is
+  not declined, because the rule would have to guess its spin. F13 and F18 in
+  [starred-repos' `FOURTH-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md)
+  are the measurements.
+- **A poorly known orbit costs a lost target, not a wrong Δv.** Many top-ranked
+  bodies have orbits fitted to a few days of observations. Pushed through the
+  Δv estimator, their orbit covariance barely moves Δv (a few m/s for most),
+  because a short arc fixes the orbit's size, shape and tilt well. What it
+  leaves loose is where along the orbit the body is, which the date-free
+  estimator never reads. Propagated forward, most of the top-ranked bodies are
+  never bright enough to observe again before 2036, and every one with a
+  condition code of 7 or worse is either unobservable or lost, so no mission
+  could be targeted at them. The model has no recovery or targeting cost and
+  no notion of a body being lost. F14 and F15 in
+  [starred-repos' `FOURTH-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md)
+  are the measurements.
 - **Composition is uniform.** Each asteroid is its taxonomy class's mean
   composition all the way through: no core/mantle structure, no regolith
   versus bedrock, no ore grade. Beneficiation concentrates *against that mean*,
