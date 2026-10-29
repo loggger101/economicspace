@@ -1265,7 +1265,14 @@ Stated plainly so results aren't over-read:
 - **Low-thrust trajectories are sized, not optimised.** Trip time and power
   are now modelled (see [What the model now charges for](#what-the-model-charges-for)),
   but the EP stage is sized to a fixed target thrusting time rather than having
-  its trajectory jointly optimised against payload and arrival date.
+  its trajectory jointly optimised against payload and arrival date. Its Δv is
+  the impulsive figure times `dv_penalty_factor`, 1.5 on every electric row,
+  which spacecost takes as a mid-range of the 1.3 to 2 times the literature
+  gives. No low-thrust solve has calibrated it. Prospector's Sims-Flanagan
+  solver would (item 5 of
+  [starred-repos' `THIRD-PASS.md` plan](https://github.com/loggger101/starred-repos/blob/main/THIRD-PASS.md#what-i-would-do-in-order)),
+  but it needs pykep, which on Windows means conda or WSL, and it has not
+  been run.
 - **The mining rate has no flight heritage.** No one has sustained-mined an
   asteroid, so `mining_rate_kg_per_day_per_kg_rig` is an engineering
   assumption. It is a single obvious dial rather than a hidden infinity, but
@@ -1292,6 +1299,23 @@ Stated plainly so results aren't over-read:
   band. Neither term should move without the other. Both measurements, and the
   validated solver behind them, are in
   [starred-repos' `FINDINGS.md`](https://github.com/loggger101/starred-repos/blob/main/FINDINGS.md).
+
+  Three later measurements bear on it. The gap is the estimator's, not the
+  check's: run on JPL Horizons' trajectories instead of two-body orbits, the
+  Lambert porkchop moves by a median 0.0035 km/s
+  ([F19](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md#f19-f4s-oracle-is-not-the-problem-its-two-body-error-is-00035-kms)).
+  Against JPL's NHATS list of the NEAs a mission could reach, the estimator
+  ranks bodies with a Spearman agreement of 0.597. Prospector's closed form,
+  which prices the departure heliocentrically, reaches 0.759, and moving the
+  plane change to the match burn drops the shipped one to 0.316, so the rank
+  error lies in how the apsis match is weighed against the departure, not in
+  where the tilt is paid
+  ([F10](https://github.com/loggger101/starred-repos/blob/main/THIRD-PASS.md#f10-prospectors-estimator-ranks-closer-to-jpl-and-the-plane-change-is-not-why)).
+  And on 14 Earth co-orbital NEAs (median `a` 1.005 AU, `i` 1.43 deg) the
+  one-way leg costs more than NHATS's whole round trip, by up to 0.30 km/s,
+  which no correct estimate can do: the patched conic degenerates where the
+  transfer ellipse is barely an ellipse
+  ([F6](https://github.com/loggger101/starred-repos/blob/main/SECOND-PASS.md#f6-two-independent-delta-v-oracles-exist-and-neither-was-used)).
 - **Launch windows are statistical, not ephemeris-based.** The synodic period
   gives an expected wait; the model does not compute actual departure dates,
   so it cannot tell you *which* window. As of catalog `1.2.0` the catalog does
@@ -1310,8 +1334,12 @@ Stated plainly so results aren't over-read:
   albedo in NEOWISE, SsODNet's datacloud or the lightcurve database that the
   catalog missed, so there is nothing cheaper to fix it with. The model prices
   the guess as a fact; [`campaign/composition_range.py`](campaign/composition_range.py)
-  re-prices a body under each class it could be and reports the spread. The
-  measurements are F11, F16 and F17 in
+  re-prices a body under each class it could be and reports the spread. Heat
+  is not a second reason to doubt the water credited to the bodies that win:
+  of the 364 water-carrying NEOs in the top thousand rows, none has better than
+  even odds of having passed inside 0.2 AU of the Sun, where heating strips
+  hydrated minerals, on Toliou et al.'s (2021) population model. The
+  measurements are F11, F12, F16 and F17 in
   [starred-repos' `FOURTH-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md).
 - **Small, fast-spinning bodies cannot hold the regolith the model digs.** A
   body that rotates faster than about two hours cannot keep a loose grain on
