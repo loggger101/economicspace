@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.61.0 / calc v1.34.0](#master-v1610--calc-v1340)
 - [master v1.60.0 / calc v1.33.0](#master-v1600--calc-v1330)
 - [master v1.59.0 / mineral_value v1.17.0](#master-v1590--mineral_value-v1170)
 - [master v1.58.0 / transportation v1.23.6](#master-v1580--transportation-v1236)
@@ -113,8 +114,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.33.0** | v1.33.0, the cargo valuation (phases, refinery, market ceilings, the payload knapsack) moves verbatim to `spacevalue.cargo` (spacevalue v0.2.0) and no number moves; v1.32.0 was the last to move one, ISRU hydrolox paying for its electrolysis and liquefaction |
-| - | `master.py` | **1.60.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 4 | `modules/calc.py` | **1.34.0** | v1.34.0, an opt-in spin limit (`model_spin_limit`, off by default) declines bodies measured to spin faster than loose regolith can stay on, and no number moves; v1.33.0 moved the cargo valuation to `spacevalue.cargo`; v1.32.0 was the last to move a number, ISRU hydrolox paying for its electrolysis and liquefaction |
+| - | `master.py` | **1.61.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -129,7 +130,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Thirty-one stamps so far have moved without moving a number:
+Thirty-two stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -164,6 +165,7 @@ Thirty-one stamps so far have moved without moving a number:
 | transportation `1.23.6` | **citations only** | bit-identical by construction: Stage 4 reads no `notes` |
 | mineral_value `1.17.0` | **the pricing moved to spacevalue** | bit-identical, verified |
 | calc `1.33.0` | **the cargo valuation moved to spacevalue** | bit-identical, verified |
+| calc `1.34.0` | **an opt-in spin limit** | bit-identical, verified (the limit is off by default) |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -175,7 +177,7 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.17.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and twenty-three are not, and that split rotted in prose
+rows are performance stamps and twenty-four are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -207,6 +209,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.61.0 / calc v1.34.0](#master-v1610--calc-v1340) | 2026-10-29 | **an opt-in spin limit**: `model_spin_limit` declines a body measured to spin faster than loose regolith can stay on its equator, and reports `spin_lift_period_h`; off by default, so no number moves. With it, `campaign/composition_range.py` re-prices a guessed-class body under each class it could be |
 | [master v1.60.0 / calc v1.33.0](#master-v1600--calc-v1330) | 2026-10-26 | **Stage 4's cargo valuation moves to `spacevalue.cargo`** (spacevalue v0.2.0): the phase walk, the refinery, the market ceilings and the payload knapsack, verbatim, about 1,400 lines; calc imports them back and no number moves |
 | [master v1.59.0 / mineral_value v1.17.0](#master-v1590--mineral_value-v1170) | 2026-10-26 | **Stage 2's pricing moves to `spacevalue`, and both pricing stages stop fetching live**: Stage 2 installs a published price release, Stage 3 prices fuel from a recorded quote snapshot (spacecost v0.14.0), and both pins hold the closes every current number was measured on, so no number moves |
 | [master v1.58.0 / transportation v1.23.6](#master-v1580--transportation-v1236) | 2026-10-25 | **spacecost `v0.13.0`, and Stage 3 stops mirroring it**: `TransportConfig` becomes spacecost's config with two defaults overridden, `verify_stage3.py` retires into spacecost's suite and the pin guard; no value moves |
@@ -275,6 +278,71 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.61.0 / calc v1.34.0
+
+**An opt-in spin limit**, off by default, so **no number moves**.
+starred-repos measured (F13, F18 in its `FOURTH-PASS.md`) that a body
+spinning faster than about two hours cannot keep a loose grain on its equator,
+that a quarter of the NEOs with a reliably measured period spin that fast, and
+that every measured NEO fainter than H 28 does. The rig digs loose regolith,
+and `rotation_period_h` only ever sized the night-side battery. With the same
+release, `campaign/composition_range.py` re-prices a body whose class was
+guessed under each class it could be, and MODEL.md records three things the
+model does not capture.
+
+### What changes
+
+- **`CalcConfig.model_spin_limit`** (default `False`). On, a body whose
+  measured `rotation_period_h` is shorter than its lift period,
+  `sqrt(3 pi / (G rho))` at its `density_gcm3`, is declined in
+  `evaluate_asteroid` straight after `asteroid_context`, before any candidate
+  is priced. A body with no measured period, or no density, is never declined:
+  the rule would have to guess. Two new functions, `spin_lift_period_h` and
+  `spin_limited`, carry the rule; neither is called with the flag off.
+- **`spin_lift_period_h`**, a new output column written only with the limit
+  on, so a default run's columns are unchanged.
+- **`campaign/composition_range.py`**, new. For each guessed-class NEO in the
+  top rows of the profitability catalog it evaluates the body four ways
+  (C-complex, S-complex, X-complex and the commonest other class among NEOs
+  with a measured one), each with a donor row's composition and the body
+  re-sized from its H at that class's median albedo, and weights them by
+  starred-repos F11's empirical prior. It writes nothing unless `--out` names
+  a CSV, never calls `build_profitability_catalog`, and refuses a destination
+  the installed Stage 2 table was not priced for.
+- **MODEL.md**, "What the model does not capture", gains three entries: the
+  guessed taxonomy (F11, F16, F17), small fast-spinning bodies (F13, F18) and
+  poorly known orbits costing a lost target rather than a wrong Δv (F14, F15).
+
+### Verified
+
+| harness | result |
+|---|---|
+| `verify.py check`, all seven, against a baseline taken on the clean 1.33.0 tree first (`--tag pre-spin-check`) | ALL CHECKS PASSED: the four cells MATCH bit for bit (151 of 151 columns each), as do prune on/off and serial against 8 workers; mass ledger, never-worse and market ceilings OK; check 6 recomputes all 59 installed cislunar rows: ALL IDENTICAL |
+| `verify.py check --skip prune parallel`, the same baseline | ALL CHECKS RUN PASSED: the four cells MATCH bit for bit, 151 of 151 columns each; mass ledger, never-worse, Stage 2 tables and market ceilings OK |
+| the limit on, eighteen real NEO rows at cislunar: six measured faster than their lift period, six measured more than twice as slow, six with no period | the six fast ones are declined; the other twelve give rows identical to the flag-off rows in every column, plus `spin_lift_period_h` |
+| `composition_range.py --destination cislunar --top 25` | 21 guessed NEOs priced; its self-check (the assigned class's donor composition on the row's own size reproduces the row bit for bit, and its sizing formula the catalog's diameters) passes on 21 of 21, to 7.3e-14 on diameter; with the C and S donors swapped it fails on the first body |
+| `verify_docs.py` | OK |
+
+### What the tool says about the top of the ranking
+
+On the profitability catalog on disk (run at calc 1.26.0, so the tool's
+`objective_assigned` is today's model on the same catalog rows, not that
+file's figures), the 16 metre-scale bodies that lead it are all S-types from
+an assumed albedo. Priced as C or X they come out two to three and a half
+times cheaper per dollar of revenue, because a dark body of the same H is about
+twice the diameter, eight times the mass, and carries water. F11's prior gives
+those two classes 32%. Across the 21 bodies the worst class's objective is a
+median 4.4 times the best's.
+
+### Found on the way
+
+- **The builder sizes a guessed S-type at its orbit bin's albedo, not at an
+  S-type's.** A NEO inside 1.3 AU with no albedo is sized at 0.187 and typed
+  S; an S-type's median measured albedo is 0.234. Priced as an S at that
+  median, the same body is about 11% smaller in diameter and 30% lighter, and
+  every one of the 16 leaders gets worse. Which albedo a guessed S should be
+  sized at is a catalog decision (AsteroidCatalog), not this release's.
 
 ## master v1.60.0 / calc v1.33.0
 
@@ -11545,6 +11613,16 @@ high-inclination arrival. No config field or output column moved, and
   bump.
 - No config field and no output column added or removed; every number
   bit-identical to 1.32.0.
+
+**`1.34.0`  an opt-in spin limit.** Full write-up: [master v1.61.0 / calc v1.34.0](#master-v1610--calc-v1340).
+- **New config field**: `model_spin_limit` (default `False`). On, a body whose
+  measured `rotation_period_h` is shorter than its lift period,
+  `sqrt(3 pi / (G rho))` at its `density_gcm3`, is declined before any
+  candidate is priced. A body with no measured period, or no density, is never
+  declined. `False` is 1.33.0 to the bit.
+- **New output column, only with the limit on**: `spin_lift_period_h` (None
+  where the body has no density). A default run's columns are unchanged.
+- **New functions**: `spin_lift_period_h`, `spin_limited`.
 
 # Measurement history
 

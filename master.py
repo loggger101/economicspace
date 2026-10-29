@@ -27,7 +27,7 @@ same files on every run, but each still writes over what is on disk.
 run_pipeline.py is the entry point that asks first.
 """
 
-MASTER_VERSION = "1.60.0"
+MASTER_VERSION = "1.61.0"
 
 # Each module imports `modules._runtime` first, which fixes the console
 # encoding and silences spawned workers before anything prints.  Imported in

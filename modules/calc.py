@@ -642,6 +642,14 @@ class CalcConfig:
     # 72 h is three days, which is the outside edge of what a chemical battery
     # is a sane answer for.
     max_dark_period_h:         float = 72.0
+    # A body that spins faster than its lift period, sqrt(3 pi / (G rho)),
+    # cannot keep a loose grain on its equator, so it has no loose regolith for
+    # the rig to dig; it is bare or cohesive rock.  On, every candidate on a
+    # body whose MEASURED period is shorter than that is declined, and every
+    # row reports `spin_lift_period_h`.  A body with no measured period is never
+    # declined: the rule would have to guess its spin.  Off by default, which
+    # moves no number.  starred-repos F13 is the measurement behind it.
+    model_spin_limit:          bool  = False
 
     # VOLATILE CARGO CONTAINMENT.  The pipeline sells water at every in-space
     # destination and charged nothing to keep it from subliming across a
@@ -1150,7 +1158,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.33.0"
+    pipeline_version: str = "1.34.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2196,6 +2204,50 @@ def power_source_for_target(
 # sunlight.  The RTG exemption is the one with a visible consequence: eclipse
 # is what makes the radioisotope branch worth choosing on more than a rounding
 # number of bodies.
+
+# SPIN LIMIT (v1.34.0).  The night-side battery above is the only thing the
+# rotation period sized, and nothing asked whether the body can hold the
+# regolith the rig digs.  A loose grain on the equator of a spinning sphere is
+# bound only while gravity beats the centrifugal pull, G M / r^2 > omega^2 r,
+# which with M = (4/3) pi r^3 rho is a period longer than sqrt(3 pi / (G rho)):
+# size-independent, about 2.3 h at 2 g/cm^3.  A third of the NEOs with a
+# measured period spin faster, and every measured NEO fainter than H 28 does
+# (starred-repos F13).  `model_spin_limit` declines those bodies; it is off by
+# default.
+
+# The gravitational constant, CODATA 2018, m^3 kg^-1 s^-2.
+_G_SI = 6.67430e-11
+
+
+def spin_lift_period_h(density_gcm3: Any) -> Optional[float]:
+    """The rotation period (h) below which loose regolith leaves a sphere's equator.
+
+    None when the density is missing or not positive, so no body is declined
+    for want of a density.
+    """
+    try:
+        rho = float(density_gcm3) * 1000.0
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(rho) or rho <= 0:
+        return None
+    return math.sqrt(3.0 * math.pi / (_G_SI * rho)) / 3600.0
+
+
+def spin_limited(rotation_period_h: Any, lift_period_h: Optional[float]) -> bool:
+    """Whether a MEASURED rotation period is shorter than the lift period.
+
+    A missing, non-positive or unparseable period is not a measurement, and is
+    never limited.
+    """
+    if lift_period_h is None:
+        return False
+    try:
+        period = float(rotation_period_h)
+    except (TypeError, ValueError):
+        return False
+    return bool(np.isfinite(period) and 0 < period < lift_period_h)
+
 
 def dark_period_hours(
     rotation_period_h: Optional[float],
@@ -8077,6 +8129,13 @@ def evaluate_asteroid(
     ctx = asteroid_context(asteroid_row, ops_df, config)
     if ctx is None:
         return None
+    # v1.34.0: a body measured to spin faster than its lift period has no loose
+    # regolith to dig, so no candidate is flown to it.  Read only when the flag
+    # is on, so a default run takes no new branch.
+    if config.model_spin_limit:
+        lift_period_h = spin_lift_period_h(asteroid_row.get("density_gcm3"))
+        if spin_limited(asteroid_row.get("rotation_period_h"), lift_period_h):
+            return None
     # Purity bound for beneficiation, the richest concentrate obtainable.
     # Computed once per asteroid rather than per combo; it depends only on
     # composition and prices.
@@ -8320,6 +8379,10 @@ def evaluate_asteroid(
         "detailed_phases":          (_DETAILED_COL in asteroid_row
                                      and _row_phases(asteroid_row) is not None),
     })
+    # v1.34.0: only when the spin limit is on, so a default run's columns are
+    # unchanged.  None where the body has no density.
+    if config.model_spin_limit:
+        best["spin_lift_period_h"] = lift_period_h
 
     return best
 
