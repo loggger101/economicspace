@@ -222,9 +222,10 @@ def load_master():
 # CELLS
 # -----------------------------------------------------------------------------
 # The four cells every release in versions.md is verified on, at the caps it uses.
-# Beneficiated cells run at 150 rows because they are ~4.7x raw (the ratio is
+# Beneficiated cells run at 150 rows because they are 6.4x raw at N = 1 and 8.1x
+# with the search on (calc v1.22.0; the ratios are
 # master.MEASURED_CELL_SECONDS'; this comment is the only place verify.py
-# restates it); raw at 400.
+# restates them); raw at 400.
 CELLS: Dict[str, Dict[str, Any]] = {
     "raw":          dict(use_beneficiation=False, optimise_programme_scale=False,
                          eval_row_cap=400),
@@ -481,7 +482,7 @@ def _ratio(df):
 # Both never-worse comparisons join two cells on `designation`, so the two
 # sides must be sampled at the SAME cap or the join is a subset of the smaller
 # one and the counts mean nothing.  The bit-identity cells above deliberately
-# do not share a cap (beneficiated is ~4.7x raw, so it runs at 150), which is why
+# do not share a cap (beneficiated is the slower, so it runs at 150), which is why
 # this check runs its own.  400 is the cap the committed figures use.
 NEVER_WORSE_CAP = 400
 

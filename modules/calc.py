@@ -421,14 +421,14 @@ class CalcConfig:
     model_water_liberation:    bool  = True
 
     # LEARNING CURVE on recurring hardware.  Only NRE was amortised across a
-    # fleet; the rig cost $300k/kg at unit 1 and unit 500 alike.  Wright's
-    # law at 85% is a judgement (see `learning_curve_rate`).  Has NO effect
+    # fleet; the rig cost $300k/kg at unit 1 and unit 500 alike.  A Crawford
+    # curve at 85% is a judgement (see `learning_curve_rate`).  Has NO effect
     # at nre_amortization_missions = 1, where the cumulative average is the
     # first-unit cost by definition.
     #
     # ⚠️  DEFAULT FALSE as of v1.22.0, and it is a SCOPE decision rather than a
     # claim that the curve is wrong, which is the same objection v1.20.0 made
-    # to insurance.  Wright's law is a statement about a factory's learning,
+    # to insurance.  A learning curve is a statement about a factory's learning,
     # fitted to programmes that built dozens to hundreds of articles; this
     # pipeline prices the marginal physics of moving a kilogram and its
     # programme ladder routinely proposes N in the tens.  Charging a serial-
@@ -440,9 +440,10 @@ class CalcConfig:
     # N = 1 either way, so every single-mission figure in this project is
     # unaffected by the flip.
     model_learning_curve:      bool  = False
-    # Wright's-law rate for the flag above: each doubling of cumulative
-    # production cuts unit cost to this fraction.  0.85 is a judgement: no
-    # source here measures a Wright slope for spacecraft.  The one measured
+    # Crawford unit-curve rate for the flag above: each doubling of cumulative
+    # production cuts the nth unit's cost, not the cumulative average, to this
+    # fraction.  0.85 is a judgement: no source here measures a learning slope
+    # for spacecraft.  The one measured
     # case, three identical ST-5 spacecraft, fits a constant percentage
     # reduction per unit toward a floor (Chen & McLennan 2004, NTRS
     # 20040035806), and three units cannot pin a rate.  Read ONLY when
@@ -501,10 +502,11 @@ class CalcConfig:
     # down.  Abandoning the mass instead models a market with a cliff in it.
     #
     # True sells the surplus at `surplus_price_fraction` of the full price.
-    # Ceilings still bind, and they still bound the programme ladder, because
-    # the marginal kilogram past the wall is worth strictly less than the one
-    # before it -- which is what stops the objective running to
-    # `max_fleet_ships`.  What changes is that it is worth something.
+    # Ceilings still bind, because the marginal kilogram past the wall is worth
+    # strictly less than the one before it, but that alone does not stop the
+    # objective running to `max_fleet_ships`: unlimited surplus at a positive
+    # constant price can keep improving with fleet size.  What changes is that
+    # it is worth something.
     #
     # ⚠️  It reshapes the BENEFICIATED knapsack as well as the raw sale, and
     # that is the half worth understanding.  A concentrated load chooses what
@@ -643,10 +645,11 @@ class CalcConfig:
     # is a sane answer for.
     max_dark_period_h:         float = 72.0
     # A body that spins faster than its lift period, sqrt(3 pi / (G rho)),
-    # cannot keep a loose grain on its equator, so it has no loose regolith for
-    # the rig to dig; it is bare or cohesive rock.  On, every candidate on a
-    # body whose MEASURED period is shorter than that is declined, and every
-    # row reports `spin_lift_period_h`.  A body with no measured period is never
+    # cannot keep an unconfined loose grain on its equator.  That does not show
+    # the whole body has no loose regolith, so declining all of it is a
+    # conservative screen (MODEL.md).  On, every candidate on a body whose
+    # MEASURED period is shorter than that is declined, and every row reports
+    # `spin_lift_period_h`.  A body with no measured period is never
     # declined: the rule would have to guess its spin.  Off by default, which
     # moves no number.  starred-repos F13 is the measurement behind it.
     model_spin_limit:          bool  = False
@@ -842,7 +845,9 @@ class CalcConfig:
     # mars_surface.  Cislunar and lunar_surface ignore it; see uses_tps().
     use_aerocapture_return:    bool  = True
     aerocapture_dv_savings_m_s: float = 4_000   # fallback only, when elements are unusable
-    heat_shield_frac_of_payload: float = 0.15   # TPS mass = 15% of returned payload
+    # TPS mass = 15% of returned payload.  Flat, whatever the entry speed: it is
+    # a lunar-return-class figure (~11 km/s) and optimistic for faster returns.
+    heat_shield_frac_of_payload: float = 0.15
 
     # ─── ISRU  (return propellant manufactured at the asteroid) ──────────────
     # Return propellant is not hauled outbound; it is electrolysed from mined
@@ -937,12 +942,13 @@ class CalcConfig:
     # two-dimensional over (F, W) rather than a ladder over F.
     optimise_programme_scale:  bool  = True
     # Upper bound on the fleet search.  Not a physical limit; it is where the
-    # ladder stops.  Market saturation drives revenue toward zero as concurrent
-    # output grows, so the objective is eventually monotone WORSE in fleet size
-    # and the optimum is interior for any sane market; this exists so a body
-    # with an effectively bottomless market cannot run the ladder forever.
+    # ladder stops.  Market saturation lowers marginal revenue as concurrent
+    # output grows, but surplus sold at a constant positive price can leave the
+    # objective improving at every fleet size, so an interior optimum is not
+    # promised; this exists so such a body cannot run the ladder forever.
     # `build_profitability_catalog` reports how often the winner landed ON this
-    # bound, which is the signal that it is binding rather than bounding.
+    # bound, which is the signal that it is binding rather than bounding, and
+    # a cap-sensitivity check is what shows an optimum is interior.
     max_fleet_ships:           int   = 64
     # Points in the coarse geometric sweep over fleet size, before the
     # refinement pass.  Same idiom and same reason as
@@ -1398,7 +1404,7 @@ print(f"    Reliability    : "
          if CONFIG.model_reliability else
          "NOT charged - the run answers what it costs IF IT WORKS"))
 print(f"    Learning curve : "
-      + ("Wright's law at %.0f%% on recurring hardware"
+      + ("Crawford learning curve at %.0f%% on recurring hardware"
          % (CONFIG.learning_curve_rate * 100.0)
          if CONFIG.model_learning_curve else
          "NOT applied - no serial-production discount"))
@@ -4438,12 +4444,14 @@ def mining_success_probability(
 
 
 def learning_curve_factor(n_units: int, rate: float) -> float:
-    """Cumulative-average cost multiplier for building `n_units` (Wright's law).
+    """Cumulative-mean cost multiplier for building `n_units` on a Crawford curve.
 
     The nth unit costs T1·n^b with b = log₂(rate); an 85% curve means each
-    doubling of cumulative production cuts unit cost to 85%.  Standard for
-    aerospace serial production and the reason nobody prices the hundredth
-    article at the first article's cost.
+    doubling of cumulative production cuts the nth unit's cost to 85%.  That is
+    the ratio of unit costs, not of cumulative averages: Wright's model reads
+    the rate on the average, which at 0.85 gives 0.34 at N = 100 where this
+    gives 0.44.  Standard for aerospace serial production and the reason nobody
+    prices the hundredth article at the first article's cost.
 
     Summed exactly rather than integrated; the integral approximation is
     wrong by 30% at N = 1, which is precisely the case that has to come out
@@ -5366,7 +5374,7 @@ def _mission_cost_prologue(
     # Heat shield; mass now comes from the actual cascade, not re-derived.
     # v1.14.0: the learning curve applies here too.  An ablative heat shield is
     # consumed on entry and rebuilt for every mission; it is the most literally
-    # per-mission article on the vehicle, so Wright's law applies to it exactly
+    # per-mission article on the vehicle, so the learning curve applies to it exactly
     # as it does to the capsule, the power system, the electric stage and the
     # tankage, all of which already carry `lc`.  It was the one recurring
     # article that did not, for no reason anybody wrote down.  Exactly 1.0 at
