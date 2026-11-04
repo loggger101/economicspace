@@ -419,7 +419,7 @@ def build_parser(destinations) -> argparse.ArgumentParser:
 
     lc = p.add_mutually_exclusive_group()
     lc.add_argument("--learning-curve", dest="learning", action="store_true",
-                    help="apply Wright's law to recurring hardware across a "
+                    help="apply a learning curve to recurring hardware across a "
                          "programme (inert at N = 1)")
     lc.add_argument("--no-learning-curve", dest="learning",
                     action="store_false",
@@ -812,7 +812,7 @@ def print_banner(args, settings, cfg, stages) -> None:
         return lambda v: on_text if v else off_text
 
     fmt_rel = fmt_onoff("charged (revenue x P(success))", "not charged")
-    fmt_learn = fmt_onoff("Wright's law on recurring hardware", "not applied")
+    fmt_learn = fmt_onoff("Learning curve on recurring hardware", "not applied")
     fmt_wacc = fmt_onoff("compounded at Module 3's WACC", "not charged")
     surplus = (cfg.calc.sell_surplus_at_discount,
                cfg.calc.surplus_price_fraction)

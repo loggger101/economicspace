@@ -231,7 +231,7 @@ not "what it costs now".
 
 The surface figures include building the stages a chain expends (since
 spacecost `v0.4.0`): that is 72% of the lunar price and 85% of the Mars one,
-against 11-12% at the orbital destinations, which is why both surfaces rose
+against 8-11% at the orbital destinations, which is why both surfaces rose
 while every orbit fell at that repin.
 
 A kilogram sitting at a depot is worth **the better of its two fates**, and
@@ -576,7 +576,8 @@ are the point rather than the absolute masses (cislunar delivery, measured on a
 and campaigns-per-ship per asteroid, jointly with every other architecture
 axis, and N follows as their product. It is **on by default** since v1.17.0.
 
-That costs **2.0× to 3.1× runtime** rather than one full run per N, because
+That costs **1.96× runtime on raw ore and about 2.46× beneficiated** (calc
+v1.22.0, `MEASURED_CELL_SECONDS`) rather than one full run per N, because
 **N enters nothing in the mass cascade**; it appears in the cost model, the saturation
 block and the reliability block, and in none of the rocket equation, the power
 fixed point, the payload knapsack or the concentration sweep. The expensive
@@ -588,8 +589,8 @@ and the last two are what stop it running away. Under the calc v1.22.0 defaults
 three of the five are off or inert, which is marked per bullet; both of the two
 that bound it are live:
 
-- **NRE amortises** across the programme, and the learning curve (Wright's law,
-  0.85) falls on the per-mission articles. ⚠️  **The curve is OFF by default
+- **NRE amortises** across the programme, and the learning curve (a Crawford
+  unit curve, 0.85) falls on the per-mission articles. ⚠️  **The curve is OFF by default
   since v1.22.0** (`model_learning_curve`); the NRE amortisation is not and
   never was a flag. Turning the curve on is worth 34.3% on the searched
   cislunar sample cell and exactly nothing at N = 1.
@@ -683,7 +684,7 @@ story: a body whose period nearly matches Earth's drifts in phase very slowly.
 
 | Semi-major axis | Period | Synodic with Earth |
 |---|---|---|
-| 1.05 AU | 1.08 yr | **10.0 yr** |
+| 1.05 AU | 1.08 yr | **14.2 yr** |
 | 1.13 AU | 1.20 yr | 6.0 yr |
 | 2.70 AU | 4.44 yr | 1.3 yr |
 
@@ -719,13 +720,14 @@ makes those rows a median 77% worse. See
 [master v1.55.0](versions.md#master-v1550--calc-v1320--transportation-v1230).
 
 **Learning curve** (`model_learning_curve`, **off** since calc v1.22.0;
-`learning_curve_rate` 0.85). Wright's law on the per-mission articles,
-capsule/lander and power system. The amortised mining rig is **excluded**,
-because it is one shared unit rather than N built, and a curve on it
-double-counts. Exactly 1.0 at `nre_amortization_missions = 1`, so a
+`learning_curve_rate` 0.85). The cumulative mean of a Crawford unit-cost curve
+on the per-mission articles, capsule/lander and power system: 0.85 is the ratio
+of nth-unit costs on doubling, not of cumulative averages. The amortised mining
+rig is **excluded**, because it is one shared unit rather than N built, and a
+curve on it double-counts. Exactly 1.0 at `nre_amortization_missions = 1`, so a
 single-mission run is untouched either way; 0.44 at N = 100.
 
-⚠️  **It is off because it prices a factory, not a mission.** Wright's law is
+⚠️  **It is off because it prices a factory, not a mission.** A learning curve is
 fitted to programmes that built dozens to hundreds of articles; the ladder here
 routinely proposes N in the tens, and crediting them with serial-production
 learning assumes an industrial base the run never modelled. It also runs in the
@@ -774,14 +776,17 @@ sloping down. The surplus is sold at `surplus_price_fraction` of full price,
 surplus earns nothing and is reported as unsold; that is what the whole 2026-09
 campaign was measured on.
 
-⚠️  **This does NOT unbound the programme**, which is the objection to check
-first, and the reason it does not is one sentence: the marginal kilogram past a
-ceiling is worth strictly less than the one before it. A bigger fleet delivers
-more often, so each delivery gets a shorter accumulation window and a larger
-share of the load falls into the discounted tier, so another ship still adds
-its full cost against a falling marginal revenue, and the objective still turns
-over on its own. A wall is the `surplus_price_fraction = 0` end of the same
-model, and `1.0` is the only setting that would genuinely remove the ceiling.
+⚠️  **This can unbound the programme**, which is the objection to check first.
+The marginal kilogram past a ceiling is worth strictly less than the one before
+it: a bigger fleet delivers more often, so each delivery gets a shorter
+accumulation window and a larger share of the load falls into the discounted
+tier, and another ship adds its full cost against a falling marginal revenue.
+That lowers marginal revenue without promising a turnover, because surplus sold
+without limit at any positive constant price can leave cost/revenue improving
+at every fleet size. So `max_fleet_ships` is a numerical bound, and the
+fleet-bound hit rate and a cap-sensitivity check decide whether a reported
+optimum is interior. A wall is the `surplus_price_fraction = 0` end of the same
+model, and `1.0` removes the ceiling altogether.
 
 **In a concentrated load the discount changes what the ship carries, not just
 what it is paid.** Each phase now appears in the knapsack twice, at full price
@@ -1179,7 +1184,7 @@ while leaving the ratio exactly as reliable as they are. A default run answers
 surface delivery prices are.
 
 **The learning curve** (`model_learning_curve`, default `False` since calc
-v1.22.0). Wright's law at 85%. It prices a factory, and this pipeline does not
+v1.22.0). A Crawford curve at 85%. It prices a factory, and this pipeline does not
 have one: the curve is fitted to programmes that built dozens to hundreds of
 articles, and crediting a ten-mission programme with that learning assumes an
 industrial base the run never modelled. Exactly inert at N = 1 either way, so
@@ -1231,7 +1236,7 @@ Stated plainly so results aren't over-read:
   (development NRE, autonomy NRE, rig, capsule, contingency) run to
   billions, while the best bulk material is worth a few dollars per kg on
   Earth. The best case the model reaches today, `mars_surface` delivery plus
-  beneficiation plus a searched programme, comes within 9% of breakeven (see
+  beneficiation plus a searched programme, comes within about 8.5% of breakeven (see
   [every destination at this release](README.md#every-destination-at-this-release-mars-surface-is-now-the-best-case)),
   and what put it there is the delivered price of a kilogram on Mars, not the
   asteroids. There is no "don't fly" option, so the ranking is really *which
@@ -1342,15 +1347,20 @@ Stated plainly so results aren't over-read:
   measurements are F11, F12, F16 and F17 in
   [starred-repos' `FOURTH-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md).
 - **Small, fast-spinning bodies cannot hold the regolith the model digs.** A
-  body that rotates faster than about two hours cannot keep a loose grain on
-  its equator, so it has no loose layer for a bucket-drum to scoop; it is bare
-  or cohesive rock. A quarter of the NEOs with a reliably measured period spin
+  body that rotates faster than about two hours cannot keep an unconfined loose
+  grain on its equator. That is all the rule establishes: it does not show the
+  whole body is bare or cohesive rock, because a thin layer on a strong core can
+  keep stable polar regions even with no cohesion while the body spins about a
+  fixed axis (Sánchez & Scheeres 2020). A quarter of the NEOs with a reliably measured period spin
   that fast (a third if tentative periods are counted too), and every measured
   NEO fainter than H 28 does, at a median period near a minute and a half. The rows that lead a default ranking are bodies of that
   size. `rotation_period_h` sizes only the night-side battery by default;
   `CalcConfig.model_spin_limit` (off by default, so no number moves) declines
   every candidate on a body measured to spin faster than its lift period and
-  reports the limit as `spin_lift_period_h`. A body with no measured period is
+  reports the limit as `spin_lift_period_h`. Declining the whole body is a
+  conservative screen and not a physical result: a resolved exclusion would need
+  local latitude and slope, spin state and material strength, and the area of a
+  static polar cap is not a mineable mass. A body with no measured period is
   not declined, because the rule would have to guess its spin. F13 and F18 in
   [starred-repos' `FOURTH-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md)
   are the measurements.

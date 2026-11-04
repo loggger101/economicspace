@@ -375,7 +375,7 @@ question it answered.
   Destination  : cislunar             [default: earth_surface]
   Asteroids    : all (1.55 M)         [default]
   Stage 4 rows : 400 (stride sample)  [default: every row]
-  Ore          : run-of-mine          [default: beneficiated (~4.7x slower)]
+  Ore          : run-of-mine          [default: beneficiated (~8.1x slower)]
 ```
 
 Those labels are read from the config dataclasses at runtime, not hardcoded, and
@@ -415,7 +415,7 @@ py run_pipeline.py --stages 4 --destination cislunar --raw --no-search \
 `--no-surplus-sales` restores the hard wall at a market ceiling
 (`--surplus-fraction F` sets what the surplus fetches otherwise, 0.0 to 1.0,
 refused outside it), `--reliability` the `P(launch) x P(cruise) x P(mining)`
-discount on revenue, `--learning-curve` Wright's law on recurring hardware, and
+discount on revenue, `--learning-curve` a learning curve on recurring hardware, and
 `--cost-of-capital` WACC compounding and with it the programme calendar
 charge, which is time-value and inert without a rate. Reproducing the 28-cell
 matrix takes all four. Figures from before v1.21.0 do not reproduce exactly on
@@ -666,8 +666,8 @@ that actually move the answer:
 | `.calc.apply_wacc_compounding` | `False` | Cost of capital: compound up-front costs over the mission, bucketed by when each is incurred, at Module 3's 10% WACC. **Off since calc v1.22.0** because a discount rate is a statement about whose money this is, which is outside a marginal-cost model; it also silences `model_programme_calendar`, whose multipliers are exactly 1.0 at a zero rate. See [What the model deliberately does not charge for](MODEL.md#what-the-model-deliberately-does-not-charge-for) |
 | `.calc.model_reliability` | `False` | Multiply expected revenue by `P(launch) x P(cruise) x P(mining)` while charging every cost in full. **Off since calc v1.22.0**: two of those three are assumptions about a machine nobody has built, and multiplying the answer by them buries them in every headline. A default run now answers what it costs IF IT WORKS |
 | `.calc.model_reliability_growth` | `True` | Let `p_mining` grow across a programme under the Duane model rather than sitting at the first-of-kind figure. Inert while `model_reliability` is off |
-| `.calc.model_learning_curve` | `False` | Apply Wright's law to recurring hardware across a programme. **Off since calc v1.22.0**: it is a statement about a factory's learning, fitted to programmes that built dozens of articles, and this one prices the marginal physics. Exactly inert at N = 1 either way |
-| `.calc.learning_curve_rate` | `0.85` | Wright's-law rate: each doubling of cumulative production cuts unit cost to this. Read ONLY when `model_learning_curve` is `True` |
+| `.calc.model_learning_curve` | `False` | Apply a learning curve to recurring hardware across a programme. **Off since calc v1.22.0**: it is a statement about a factory's learning, fitted to programmes that built dozens of articles, and this one prices the marginal physics. Exactly inert at N = 1 either way |
+| `.calc.learning_curve_rate` | `0.85` | Crawford unit-curve rate: each doubling of cumulative production cuts the nth unit's cost to this. Read ONLY when `model_learning_curve` is `True` |
 | `.mineral.price_release` | `"prices-2026-10-07"` | The spacevalue price release Stage 2 installs. A repin moves every price |
 | `.transport.quote_snapshot` | `"fuel-2026-10-17"` | The recorded fuel quotes Stage 3 prices from. A repin moves the propellant prices |
 
@@ -1113,9 +1113,12 @@ invariants are in
 #### Every destination at this release: Mars surface is now the best case
 
 The six other destinations' default cells were run on the same inputs on
-2026-10-01/03, so the seven together are the current answer to "where is it
-best to deliver". `gto`, added at master v1.54.0, has no cell here and has
-never been run on the full catalog, so it is not ranked:
+2026-10-01/03, so the seven together are the answer to "where is it best to
+deliver" as of those runs, and no full cell has been run since. "What has moved
+since" below supersedes three rows (`cislunar`, `earth_surface` and
+`lunar_surface`) and moves every in-space winner by 0.55% to 5.04%. `gto`, added
+at master v1.54.0, has no cell here and has never been run on the full catalog,
+so it is not ranked:
 
 | destination | cost / revenue | winner | median body |
 |---|---|---|---|
