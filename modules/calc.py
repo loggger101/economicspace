@@ -655,6 +655,31 @@ class CalcConfig:
     # declined: the rule would have to guess its spin.  Off by default, which
     # moves no number.  starred-repos F13 is the measurement behind it.
     model_spin_limit:          bool  = False
+    # Five method changes that are each off by default, which moves no number.
+    # versions.md (v1.36.0) reports what each does to a run.
+    #
+    # A raw cargo is dug like any other, at the same Wh/kg, and only a
+    # concentrating or ISRU mission sized a plant for it.  On, every extracted
+    # kilogram charges the array, in sizing and in settlement alike.
+    model_raw_excavation_power: bool = False
+    # Module 3's $/W is a price per watt of ARRAY.  Off, the plant is bought at
+    # the watts it delivers at the body, so an array whose mass grows with a^2
+    # and the night-side oversize costs what one at 1 AU costs.  On, the plant
+    # and the EP array are bought at their 1-AU rating, the basis of their mass.
+    # A radioisotope plant's output and price do not depend on distance.
+    model_rated_array_cost:    bool  = False
+    # Off, each return mode flies the apsis with the smaller dv_out + dv_ret,
+    # which is not the objective.  On, both go to the mission search and
+    # `selection_key` decides, at about twice the candidates.
+    offer_both_apsides:        bool  = False
+    # Off, a rig's 15-year calendar life counts its stays.  On, it counts
+    # elapsed time, stay + (W - 1) x cadence, in the campaign bound and in the
+    # salvage credit, so a rig waiting on windows ages while it waits.
+    model_rig_calendar_cadence: bool = False
+    # Off, a cryogenic hold clipped to the fairing after sizing keeps the boil-off
+    # of the longer dig that loop assumed.  On, the mission is solved again with
+    # the clipped hold as its ceiling, so fuel and clock describe one mission.
+    reclose_volume_capped_hold: bool = False
 
     # VOLATILE CARGO CONTAINMENT.  The pipeline sells water at every in-space
     # destination and charged nothing to keep it from subliming across a
@@ -1166,7 +1191,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.35.0"
+    pipeline_version: str = "1.36.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -3311,6 +3336,11 @@ def asteroid_dv_options(
     `rendezvous_apsis` and `tps_frac`, best apsis already resolved for each
     return mode.  Never empty: a row with unusable elements gets the single
     uniform-Δv fallback option.
+
+    With `offer_both_apsides` on each return mode offers every apsis, smaller
+    round trip first so a tie resolves as it does with the flag off, and the
+    mission search chooses.  A sum of two burns made on different stages by
+    different masses does not order missions.
     """
     arch = delivery_architecture(config.delivery_destination)
     # Which return modes exist here at all.  Cislunar and the lunar surface
@@ -3329,7 +3359,7 @@ def asteroid_dv_options(
     out: List[Dict[str, object]] = []
     for aero in modes:
         leg = arch["aero_leg"] if aero else arch["prop_leg"]
-        best = None
+        offers: List[Dict[str, object]] = []
         for legs in options:
             if leg not in legs:
                 continue                # Mars geometry that did not close
@@ -3337,18 +3367,20 @@ def asteroid_dv_options(
                          config.max_dv_outbound_m_s)
             dv_ret = min(max(legs[leg] * 1_000.0, 300.0),
                          config.max_dv_outbound_m_s)
-            # Resolve the apsis against the round trip actually being flown,
-            # not against a fixed Earth return.
-            if best is None or (dv_out + dv_ret) < (best["dv_out_m_s"] + best["dv_ret_m_s"]):
-                best = {"dv_out_m_s": dv_out, "dv_ret_m_s": dv_ret,
-                        "rendezvous_apsis": legs["rendezvous_apsis"]}
-        if best is None:
+            offers.append({"dv_out_m_s": dv_out, "dv_ret_m_s": dv_ret,
+                           "rendezvous_apsis": legs["rendezvous_apsis"]})
+        # Resolve the apsis against the round trip actually being flown, not
+        # against a fixed Earth return.  The sort is stable, so a tie keeps the
+        # first apsis.
+        offers.sort(key=lambda o: o["dv_out_m_s"] + o["dv_ret_m_s"])
+        if not offers:
             dv_out, dv_ret = _dv_fallback_m_s(config, aero)
-            best = {"dv_out_m_s": dv_out, "dv_ret_m_s": dv_ret,
-                    "rendezvous_apsis": "reference"}
-        best["aero"]     = aero
-        best["tps_frac"] = config.heat_shield_frac_of_payload if aero else 0.0
-        out.append(best)
+            offers = [{"dv_out_m_s": dv_out, "dv_ret_m_s": dv_ret,
+                       "rendezvous_apsis": "reference"}]
+        for offer in (offers if config.offer_both_apsides else offers[:1]):
+            offer["aero"]     = aero
+            offer["tps_frac"] = config.heat_shield_frac_of_payload if aero else 0.0
+            out.append(offer)
     return out
 
 
@@ -4555,6 +4587,7 @@ def _mining_reliability_cached(
 
 def rig_trips_per_ship(
     ops_df: pd.DataFrame, config: CalcConfig, stay_yr: float,
+    cadence_yr: Optional[float] = None,
 ) -> Optional[Tuple[int, int, Optional[int]]]:
     """How many consecutive campaigns one rig is good for, at this stay length.
 
@@ -4582,6 +4615,11 @@ def rig_trips_per_ship(
     A missing Module 3 row reverts to calendar-only, silently, exactly as every
     other `_ops_value` default does, which is why the row is named in
     `_MODULE3_REQUIRED_OPS` with the consequence spelled out.
+
+    With `model_rig_calendar_cadence` on and a cadence given, the calendar bound
+    is elapsed time from the first start, stay + (W - 1) x cadence <= life, so W
+    campaigns that wait on windows do not outlive the rig.  The duty-cycle bound
+    is untouched.
     """
     if not config.model_rig_service_life or stay_yr <= 0:
         return None
@@ -4591,6 +4629,9 @@ def rig_trips_per_ship(
     ops_cost     = _ops_cost_constants(ops_df)
     life_yr      = ops_cost[1]
     calendar_cap = max(1, int(life_yr // stay_yr))
+    if (config.model_rig_calendar_cadence and cadence_yr
+            and stay_yr <= life_yr):
+        calendar_cap = 1 + int((life_yr - stay_yr) // cadence_yr)
     trip_cap: Optional[int] = None
     if config.model_rig_trip_limit:
         raw = ops_cost[3]
@@ -4598,6 +4639,15 @@ def rig_trips_per_ship(
             trip_cap = max(1, int(raw))
     trips = calendar_cap if trip_cap is None else min(calendar_cap, trip_cap)
     return trips, calendar_cap, trip_cap
+
+
+def _rig_age_yr(
+    campaigns: int, stay_yr: float, cadence: float, ages_waiting: bool,
+) -> float:
+    """Calendar years of rig life `campaigns` use up, see `rig_trips_per_ship`."""
+    if ages_waiting:
+        return stay_yr + (campaigns - 1) * cadence
+    return campaigns * stay_yr
 
 
 def campaign_cadence_yr(
@@ -5193,6 +5243,8 @@ def _mission_cost_prologue(
     power_source:        str   = "solar",
     cadence_yr:          Optional[float] = None,
     rig_trips:           Optional[Tuple[int, int, Optional[int]]] = None,
+    plant_rated_per_w:   float = 1.0,
+    ep_rated_per_w:      float = 1.0,
 ) -> tuple:
     """The half of `mission_cost_usd` that does not move with programme size.
 
@@ -5322,7 +5374,7 @@ def _mission_cost_prologue(
     # a second derivation: `rig_trips_per_ship` remains the only place the
     # two bounds are resolved.
     if rig_trips is None:
-        rig_trips = rig_trips_per_ship(ops_df, config, stay_yr)
+        rig_trips = rig_trips_per_ship(ops_df, config, stay_yr, cadence_yr)
 
     # v1.4.0: the capsule is priced off its OWN rate.  It used to be billed at
     # the mining-payload rate, which treats a parachute-and-heat-shield can as
@@ -5360,7 +5412,10 @@ def _mission_cost_prologue(
     # this codebase keeps finding: a mass in the rocket equation with the
     # wrong price, or none, in the ledger.
     plant_per_w             = (rtg_per_w if power_source == "rtg" else power_per_w)
-    power_base              = max(0.0, float(processing_power_w)) * plant_per_w
+    # `plant_rated_per_w` and `ep_rated_per_w` are watts of 1-AU array bought per
+    # watt delivered, 1.0 unless `model_rated_array_cost` is on.
+    power_base              = (max(0.0, float(processing_power_w)) * plant_per_w
+                               * plant_rated_per_w)
     # ── Electric propulsion stage (v1.10.0) ──────────────────────────────────
     # v1.7.0 put the EP array and thruster into the ROCKET EQUATION and stopped
     # there: `ep_system_kg` was hauled as mass and never appeared in a single
@@ -5374,7 +5429,7 @@ def _mission_cost_prologue(
     # train, the thruster and PPU off Module 3's per-kW propulsion row.
     ep_kw = max(0.0, float(ep_power_w)) / 1000.0
     if ep_kw > 0:
-        ep_base = (max(0.0, float(ep_power_w)) * power_per_w
+        ep_base = (max(0.0, float(ep_power_w)) * power_per_w * ep_rated_per_w
                    + ep_kw * ep_drive_per_kw)
     else:
         ep_base = 0.0
@@ -5511,6 +5566,7 @@ def _mission_cost_prologue(
         ongoing_lines, ongoing_with_cont, end_lines, end_with_cont,
         cadence, stay_yr, mission_duration_yr,
         config.model_programme_calendar, config.nre_amortization_missions,
+        config.model_rig_calendar_cadence,
     )
 
 
@@ -5542,7 +5598,7 @@ def _mission_cost_tail(
      mult_upfront, mult_ongoing, mult_end, wacc,
      ongoing_lines, ongoing_with_cont, end_lines, end_with_cont,
      cadence, stay_yr, mission_duration_yr,
-     calendar_on, n_missions_cfg) = pro
+     calendar_on, n_missions_cfg, rig_ages_waiting) = pro
 
     # v1.15.0: programme size is a searched axis, so it arrives as an argument.
     # None falls back to the config for every caller that has not been updated,
@@ -5609,16 +5665,21 @@ def _mission_cost_tail(
             # is the larger of the two fractions.  Gated with the cycle cap
             # itself: with `model_rig_trip_limit` off this is exactly the
             # calendar-only expression v1.14.2 used.
-            life_used_frac = missions_sharing_rig * stay_yr / life_yr
+            life_used_frac = _rig_age_yr(missions_sharing_rig, stay_yr, cadence,
+                                         rig_ages_waiting) / life_yr
             if trip_cap is not None:
-                life_used_frac = max(life_used_frac, missions_sharing_rig / trips)
+                # Once elapsed time binds `trips`, it is not the rig's duty life.
+                duty_trips = trip_cap if rig_ages_waiting else trips
+                life_used_frac = max(life_used_frac,
+                                     missions_sharing_rig / duty_trips)
             life_used_frac = min(1.0, life_used_frac)
             rig_terminal_value = mining_rig_cost_total * (1.0 - life_used_frac) * salvage
             if short_rigs:
-                short_used_frac = (missions_sharing_rig - 1) * stay_yr / life_yr
+                short_used_frac = _rig_age_yr(missions_sharing_rig - 1, stay_yr,
+                                              cadence, rig_ages_waiting) / life_yr
                 if trip_cap is not None:
                     short_used_frac = max(short_used_frac,
-                                          (missions_sharing_rig - 1) / trips)
+                                          (missions_sharing_rig - 1) / duty_trips)
                 short_used_frac = min(1.0, short_used_frac)
                 short_rig_value = (mining_rig_cost_total
                                    * (1.0 - short_used_frac) * salvage)
@@ -5857,6 +5918,8 @@ def mission_cost_usd(
     rig_trips:           Optional[Tuple[int, int, Optional[int]]] = None,
     totals_only:         bool = False,
     fleet_ships:         Optional[int] = None,
+    plant_rated_per_w:   float = 1.0,
+    ep_rated_per_w:      float = 1.0,
 ) -> Union[Dict[str, float], float]:
     """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
 
@@ -5907,7 +5970,8 @@ def mission_cost_usd(
         _mission_cost_prologue(
             mass_cascade, vehicle, propellant, ops_df, config,
             mission_duration_yr, processing_power_w, stay_yr, isru_return,
-            ep_power_w, power_source, cadence_yr, rig_trips),
+            ep_power_w, power_source, cadence_yr, rig_trips,
+            plant_rated_per_w, ep_rated_per_w),
         n_missions, missions_per_ship, totals_only, fleet_ships=fleet_ships)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -6195,7 +6259,7 @@ def _evaluate_combo_at_ratio(
     # the eclipse inputs, and v1.14.1 moved the arithmetic that consumed them
     # onto `AsteroidContext` because it is per-BODY.  Read `ctx.dark_*` and
     # `ctx.plant_w_per_kg_solar` below rather than re-deriving from these.
-    (dig_wh, benef_wh, _base_w_per_kg, ep_eff, ep_kg_per_kw,
+    (dig_wh, benef_wh, base_w_per_kg, ep_eff, ep_kg_per_kw,
      rtg_w_per_kg, ppu_only_kg_per_kw,
      _dark_frac_raw, _storage_wh_per_kg, _storage_eta, _baseline_dark_h,
      containment_per_kg) = ctx.ops
@@ -6477,7 +6541,7 @@ def _evaluate_combo_at_ratio(
         # model has always charged it.  So the draw below is computed whenever
         # either term is non-zero, and the array is sized from the total.
         processing_power_watts = 0.0
-        if beneficiate or isru:
+        if beneficiate or isru or config.model_raw_excavation_power:
             processing_power_watts = processing_power_w(
                 trial_feed + new_isru_feed,
                 trial_payload if beneficiate else 0.0,
@@ -6674,6 +6738,24 @@ def _evaluate_combo_at_ratio(
         m_payload = min(m_payload_demand, volume_capacity_kg, ore_throughput_kg)
     if m_payload <= 0:
         return None
+    if (config.reclose_volume_capped_hold and models_boiloff and not volume_fits
+            and m_payload == volume_capacity_kg and _repair_depth < 3):
+        reclosed = _evaluate_combo_at_ratio(
+            asteroid_row, vehicle, propellant, bulk_value_per_kg,
+            dv_out_arg, dv_ret_arg, ops_df, config,
+            best_phase_value_per_kg=best_phase_value_per_kg,
+            phases=phases, target_ratio=target_ratio,
+            beneficiate=beneficiate, markets=markets, aero=aero,
+            isru=isru, rendezvous_apsis=rendezvous_apsis,
+            power_mode=power_mode, ctx=ctx, market_mode=market_mode,
+            refinery=refinery, payload_cap_kg=volume_capacity_kg,
+            _repair_depth=_repair_depth + 1,
+            _damped_steps=_damped_steps + damped_here,
+        )
+        if reclosed is not None:
+            # Still the hold that did not fit, whatever the ceiling made of it.
+            reclosed["volume_fits"] = False
+            return reclosed
 
     # ── Beneficiation mass balance ───────────────────────────────────────────
     # Concentrate exactly as far as it pays, and no further.  Once the
@@ -6793,7 +6875,7 @@ def _evaluate_combo_at_ratio(
     # other way, a price with no mass rather than a mass with no price.
     mining_yr = mining_duration_yr(feed_kg + isru_feed_kg, config)
     processing_power_watts = 0.0
-    if beneficiate or isru:
+    if beneficiate or isru or config.model_raw_excavation_power:
         processing_power_watts = processing_power_w(
             feed_kg + isru_feed_kg, m_payload if beneficiate else 0.0,
             mining_yr, dig_wh, benef_wh,
@@ -6977,15 +7059,15 @@ def _evaluate_combo_at_ratio(
     # searched fleet size alone, on the argument that the optimum N is always a
     # whole multiple of the rig's trip life; v1.16.0 retires that argument,
     # because programme calendar time is a lever that pushes back inside a band.
-    rig_trips        = rig_trips_per_ship(ops_df, config, stay_yr)
-    trips_per_ship   = rig_trips[0] if rig_trips is not None else 0
-    rig_calendar_cap = rig_trips[1] if rig_trips is not None else 0
-    rig_trip_cap     = rig_trips[2] if rig_trips is not None else None
     # v1.16.0.  How often the rig can start again, the dig, unless windows open
     # more slowly than it digs.  Derived once here because it depends on the
     # stay, which is a property of this candidate, and it is read by every rung
     # of the programme search below.
     cadence_yr       = campaign_cadence_yr(stay_yr, synodic_yr, config)
+    rig_trips        = rig_trips_per_ship(ops_df, config, stay_yr, cadence_yr)
+    trips_per_ship   = rig_trips[0] if rig_trips is not None else 0
+    rig_calendar_cap = rig_trips[1] if rig_trips is not None else 0
+    rig_trip_cap     = rig_trips[2] if rig_trips is not None else None
 
     # ── Market saturation (v1.7.0, programme-aware v1.14.0) ──────────────────
     # The saleable mix and its prices do not depend on the programme either, so
@@ -7077,6 +7159,11 @@ def _evaluate_combo_at_ratio(
     # closure.  Only `n_missions` and `missions_per_ship` move, so only the
     # tail is worth re-running.  `mission_cost_usd` is exactly these two calls
     # composed, and it stays the entry point for everyone else.
+    plant_rated_per_w = ep_rated_per_w = 1.0
+    if config.model_rated_array_cost and ep_w_per_kg > 0:
+        ep_rated_per_w = base_w_per_kg / ep_w_per_kg
+        if power_source == "solar":
+            plant_rated_per_w = ep_rated_per_w * array_oversize_factor
     cost_prologue = _mission_cost_prologue(
         mass_cascade        = actual_cascade,
         vehicle             = vehicle,
@@ -7091,6 +7178,8 @@ def _evaluate_combo_at_ratio(
         power_source        = power_source,
         cadence_yr          = cadence_yr,
         rig_trips           = rig_trips,
+        plant_rated_per_w   = plant_rated_per_w,
+        ep_rated_per_w      = ep_rated_per_w,
     )
     # Per-candidate, because everything the saturation sum reads besides the
     # fleet belongs to this candidate.  See the read of it below.
