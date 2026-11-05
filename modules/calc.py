@@ -417,7 +417,9 @@ class CalcConfig:
     # BOUND-WATER LIBERATION.  C/B/D-type "ice" is water locked in
     # phyllosilicates; it has to be baked out at ~700 K, not scooped.  The
     # pipeline was extracting it for free while selling it at full
-    # launch-cost-avoided.
+    # launch-cost-avoided.  Off drops the bake-out draw on ISRU and cargo water
+    # alike, in sizing and settlement (v1.35.0); the feed and propellant books
+    # are physical and stay.
     model_water_liberation:    bool  = True
 
     # LEARNING CURVE on recurring hardware.  Only NRE was amortised across a
@@ -1164,7 +1166,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.34.0"
+    pipeline_version: str = "1.35.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -3632,16 +3634,18 @@ _SIZING_CONSTS_KEY  = "_sizing_consts"
 _VEHICLE_CONSTS_KEY = "_vehicle_consts"
 
 
-def _tank_frac_per_kg(propellant: Row, config: CalcConfig) -> float:
+def _tank_frac_per_kg(propellant: Row) -> float:
     """Tank mass per kg of propellant, or 0.0 where the row cannot state one.
+
+    The physical figure, whatever `model_tank_mass` says.  This goes on a row
+    that can outlive a config, so each reader of the cached tuples applies the
+    flag itself (v1.35.0).
 
     Module 3 quotes tankage per LITRE because that is what it scales with, a
     tank encloses volume, not mass, so this is the one place the two columns
     are divided.  A row predating Module 3 v1.9.0 has neither column and comes
     through as 0.0, which is exactly `model_tank_mass = False`.
     """
-    if not config.model_tank_mass:
-        return 0.0
     tank_per_L = propellant.get("tank_kg_per_L")
     rho        = propellant.get("density_kg_per_L")
     if (tank_per_L is not None and rho is not None
@@ -3675,7 +3679,7 @@ def _sizing_propellant_consts(
         float(propellant.get("dv_penalty_factor", 1.0) or 1.0),
         eff,
         kgn,
-        _tank_frac_per_kg(propellant, config),
+        _tank_frac_per_kg(propellant),
         float(propellant["isp_vac_s"]),
         float(propellant.get("boiloff_pct_per_day", 0.0) or 0.0),
     )
@@ -3739,7 +3743,7 @@ def _prefilter_propellant_consts(
         return None
 
     dv_penalty = float(propellant.get("dv_penalty_factor", 1.0) or 1.0)
-    tank_frac  = _tank_frac_per_kg(propellant, config)
+    tank_frac  = _tank_frac_per_kg(propellant)
 
     boiloff_pct = float(propellant.get("boiloff_pct_per_day", 0.0) or 0.0)
     return isp, dv_penalty, tank_frac, boiloff_pct
@@ -3779,6 +3783,8 @@ def _combo_close_terms(
     here rather than being re-refuted per vehicle.
     """
     isp, dv_penalty, t, boiloff_pct = consts
+    if not config.model_tank_mass:
+        t = 0.0
     dv_out = dv_out_m_s * dv_penalty
     dv_ret = dv_ret_m_s * dv_penalty
     if not (math.isfinite(dv_out) and math.isfinite(dv_ret)):
@@ -4000,6 +4006,8 @@ def _closes_carrying_its_own_stage(
     """
     (dv_penalty, thruster_eff_row, thruster_kg_per_n_row,
      tank_frac, isp_s_val, boiloff_pct) = sizing_consts
+    if not config.model_tank_mass:
+        tank_frac = 0.0
 
     if not (config.model_low_thrust_time and dv_penalty > 1.0):
         return True                    # no stage to carry; stage 1 said it all
@@ -4413,6 +4421,7 @@ def mining_success_probability(
     p_first:    float,
     alpha:      float,
     p_mature:   float,
+    fleet_ships: int = 1,
 ) -> float:
     """Fleet-average probability the mining chain works, over `n_missions`.
 
@@ -4431,13 +4440,23 @@ def mining_success_probability(
     the programme average.  Quoting the last mission's reliability would
     credit every mission with heritage that only the last one has.
 
+    v1.35.0: heritage is what has FLOWN, not what has been ordered.  `fleet_ships`
+    fly together, so every ship in a wave sees the same earlier flights: wave w
+    has `w x F` of them and all F ships read `q(w x F + 1)`.  Twenty-five ships
+    launched at once are twenty-five first-of-kinds, not missions 1..25.  A
+    wave is taken to see the results of the wave before it, one cadence earlier;
+    no separate correction delay is modelled.  At F = 1 this is the serial sum
+    k = 1..N, term for term.
+
     Exactly `p_first` at N = 1, so a single-mission run is unaffected.
     """
     n = max(1, int(n_missions))
+    f = max(1, int(fleet_ships))
     q_first = max(0.0, 1.0 - p_first)
     q_floor = max(0.0, 1.0 - p_mature)
     total = 0.0
-    for k in range(1, n + 1):
+    for i in range(n):
+        k = i // f * f + 1
         q = q_first * (k ** -alpha) if alpha > 0 else q_first
         total += 1.0 - max(q, q_floor)
     return total / n
@@ -4522,14 +4541,16 @@ def _learning_curve_cached(n_units: int, rate: float) -> float:
 @functools.lru_cache(maxsize=None)
 def _mining_reliability_cached(
     n_missions: int, p_first: float, alpha: float, p_mature: float,
+    fleet_ships: int = 1,
 ) -> float:
-    """`mining_success_probability`, memoised on (missions, and three constants).
+    """`mining_success_probability`, memoised on (missions, fleet and constants).
 
-    Unbounded on the same argument as `_learning_curve_cached`: the last three
-    arguments are config constants and the first is a ladder rung, so the two
-    memos together held 69 entries after 2.4 M hits on an 800-row default cell.
+    Unbounded on the same argument as `_learning_curve_cached`: the middle three
+    arguments are config constants and (N, F) is a programme, so the ceiling is
+    `max_fleet_ships` x `max_trips`.  Only read with `model_reliability` on.
     """
-    return mining_success_probability(n_missions, p_first, alpha, p_mature)
+    return mining_success_probability(n_missions, p_first, alpha, p_mature,
+                                      fleet_ships)
 
 
 def rig_trips_per_ship(
@@ -4662,7 +4683,9 @@ def programme_calendar_multipliers(
     which is ≤ 1 and falls with W.  Compounding a credit forward alongside the
     cost it is netted against would inflate a refund for taking longer to
     collect it, the exact shape of subsidy this module keeps finding, arriving
-    this time through a term added to remove one.
+    this time through a term added to remove one.  v1.35.0: and it is not given
+    the caller's `(1+W)^T` either: a receipt on the day of the last sale is worth
+    its face value there, so the credit is applied as of the sale, not of t = 0.
     """
     w = max(1, int(missions_per_ship))
     if w == 1 or wacc <= 0.0 or cadence_yr <= 0.0:
@@ -4948,7 +4971,9 @@ def programme_options(
     # The configured N is the FLOOR of the search, not the answer: a caller who
     # sets N = 50 is stating a programme they have already committed to, and the
     # search should size the fleet for it and upward rather than propose a
-    # smaller one.
+    # smaller one.  v1.35.0: the floor is on N itself, because the F ladder
+    # alone let a small W take N back below it.  F x trips always clears it, so
+    # the list cannot come back empty.
     f_min  = max(1, math.ceil(n_cfg / trips))
     f_max  = max(f_min, int(config.max_fleet_ships))
     ladder = fleet_search_ladder(f_min, f_max, config.programme_search_steps)
@@ -4956,7 +4981,8 @@ def programme_options(
         return [(f * trips, f, trips) for f in ladder]
     # Two-dimensional: the F ladder × every W.  See the docstring for why W is
     # enumerated rather than laddered; it is at most `max_trips` integers.
-    return [(f * w, f, w) for f in ladder for w in range(1, trips + 1)]
+    return [(f * w, f, w) for f in ladder for w in range(1, trips + 1)
+            if f * w >= n_cfg]
 
 
 def _ops_table(ops_df: pd.DataFrame) -> Dict[str, Optional[float]]:
@@ -5493,8 +5519,9 @@ def _mission_cost_tail(
     n_missions:          Optional[int] = None,
     missions_per_ship:   Optional[int] = None,
     totals_only:         bool = False,
-    rig_cache:           Optional[Dict[Tuple[int, bool],
+    rig_cache:           Optional[Dict[Tuple[int, bool, int, int],
                                        Tuple[float, ...]]] = None,
+    fleet_ships:         Optional[int] = None,
 ) -> Union[Dict[str, float], float]:
     """The half of `mission_cost_usd` that DOES move with programme size.
 
@@ -5530,6 +5557,7 @@ def _mission_cost_tail(
     # is stranded, not an asset.
     rig_terminal_value = 0.0
     missions_sharing_rig = n_missions
+    short_rigs = 0
     _rig_hit = _rig_key = None
     if rig_trips is not None:
         trips, _calendar_cap, trip_cap = rig_trips
@@ -5540,6 +5568,16 @@ def _mission_cost_tail(
         # and every pre-v1.16.0 caller get.
         missions_sharing_rig = (min(n_missions, trips) if missions_per_ship is None
                                 else max(1, min(int(missions_per_ship), trips)))
+        # v1.35.0: only a fixed N can leave F x W above N, and then the rigs do
+        # not fly equally: N = 7 over 2 rigs is 4 + 3 campaigns, not two of 4.
+        # `short_rigs` is how many fly one campaign fewer.  None or zero is the
+        # rectangular programme every searched rung is, and the block below
+        # never reads it.  Gated with the calendar for the same reason as the
+        # `min(n_missions, trips)` above.
+        if calendar_on and fleet_ships is not None:
+            short_rigs = fleet_ships * missions_sharing_rig - n_missions
+            if not 0 < short_rigs < fleet_ships:
+                short_rigs = 0
         # ── v1.17.5: everything from here to the calendar multipliers is a
         # function of (missions_sharing_rig, n_missions > 1) and the PROLOGUE,
         # and the ladder is the F ladder crossed with W, so ~42 options ask
@@ -5551,14 +5589,16 @@ def _mission_cost_tail(
         # Keyed on `missions_sharing_rig` rather than on `missions_per_ship`
         # so the key is correct on BOTH paths, a caller that passes no
         # `missions_per_ship` derives it from N, and the min/max above is cheap
-        # enough to run before the lookup.
+        # enough to run before the lookup.  The last two fields are zero on
+        # every rectangular programme.
         #
         # ⚠️  Bit-identical by construction, not by rounding: the same key
         # re-runs the same arithmetic on the same prologue, so the cached
         # floats ARE the floats the block would have produced.  Opt-in; a
         # `rig_cache` of None is exactly the v1.17.4 code path, which is what
         # `mission_cost_usd` and every other caller still get.
-        _rig_key = (missions_sharing_rig, n_missions > 1)
+        _rig_key = (missions_sharing_rig, n_missions > 1,
+                    fleet_ships if short_rigs else 0, short_rigs)
         if rig_cache is not None:
             _rig_hit = rig_cache.get(_rig_key)
         if _rig_hit is None and n_missions > 1:
@@ -5574,6 +5614,14 @@ def _mission_cost_tail(
                 life_used_frac = max(life_used_frac, missions_sharing_rig / trips)
             life_used_frac = min(1.0, life_used_frac)
             rig_terminal_value = mining_rig_cost_total * (1.0 - life_used_frac) * salvage
+            if short_rigs:
+                short_used_frac = (missions_sharing_rig - 1) * stay_yr / life_yr
+                if trip_cap is not None:
+                    short_used_frac = max(short_used_frac,
+                                          (missions_sharing_rig - 1) / trips)
+                short_used_frac = min(1.0, short_used_frac)
+                short_rig_value = (mining_rig_cost_total
+                                   * (1.0 - short_used_frac) * salvage)
     # v1.17.2: one `max(1, ·)` rather than three.  Deliberately NOT dropped
     # altogether: `missions_sharing_rig` is ≥ 1 in every branch above given
     # `trips` ≥ 1, but that is a property of `rig_trips_per_ship`'s current
@@ -5613,6 +5661,32 @@ def _mission_cost_tail(
         if calendar_on and missions_sharing_rig > 1:
             cal_cost, cal_credit = _calendar_multipliers_cached(
                 missions_sharing_rig, cadence, wacc)
+        if short_rigs:
+            # v1.35.0: F whole rigs bought, each credited for its own use, and
+            # the sum split over the N missions.  Everything above is the
+            # rectangular case and the calendar's mean over sales is rebuilt
+            # here over the sales that exist: y^(W-1) is missing `short_rigs`
+            # times.  A rig's credit arrives after its OWN last campaign.
+            full_rigs        = fleet_ships - short_rigs
+            credits_full     = full_rigs * rig_terminal_value
+            credits_short    = short_rigs * short_rig_value
+            credits          = credits_full + credits_short
+            rig_gross_share  = fleet_ships * mining_rig_cost_total / n_missions
+            rig_credit_share = credits / n_missions
+            mining_rig_cost  = rig_gross_share - rig_credit_share
+            rig_terminal_value = credits / fleet_ships
+            if cal_cost != 1.0 or cal_credit != 1.0:
+                cost_full, credit_full = cal_cost, cal_credit
+                cost_short, credit_short = _calendar_multipliers_cached(
+                    missions_sharing_rig - 1, cadence, wacc)
+                cal_cost = ((full_rigs * missions_sharing_rig * cost_full
+                             + short_rigs * (missions_sharing_rig - 1) * cost_short)
+                            / n_missions)
+                if credits > 0.0:
+                    cal_credit = (cal_cost
+                                  * (credits_full * credit_full / cost_full
+                                     + credits_short * credit_short / cost_short)
+                                  / credits)
         if rig_cache is not None and _rig_key is not None:
             rig_cache[_rig_key] = (mining_rig_cost, rig_gross_share,
                                    rig_credit_share, rig_terminal_value,
@@ -5661,6 +5735,15 @@ def _mission_cost_tail(
     )
     upfront_with_cont = upfront_lines * cont
 
+    # v1.35.0: `hardware_cost` nets the rig's salvage against its purchase, but
+    # the credit is a receipt at the programme's end, so it must not ride the
+    # up-front compounding.  Moved to the end bucket only when the two buckets
+    # are compounded differently, which is opt-in WACC; off, where the bucket
+    # changes no total, the columns stay as every earlier release wrote them.
+    if mult_upfront != mult_end and rig_credit_share != 0.0:
+        upfront_with_cont += rig_credit_share * cont
+        end_with_cont     -= rig_credit_share * cont
+
     # ── Programme calendar time (v1.16.0) ────────────────────────────────────
     # The bucket above compounds every up-front line over ONE mission duration,
     # which silently prices a programme as though all of its missions happened
@@ -5683,9 +5766,9 @@ def _mission_cost_tail(
     )
     if cal_cost != 1.0 or cal_credit != 1.0:
         programme_upfront = nre_cost + autonomy_nre_cost + rig_gross_share
-        total_cost += ((programme_upfront * (cal_cost - 1.0)
-                        - rig_credit_share * (cal_credit - 1.0))
-                       * cont * mult_upfront)
+        total_cost += ((programme_upfront * (cal_cost - 1.0) * mult_upfront
+                        - rig_credit_share * (cal_credit - 1.0) * mult_end)
+                       * cont)
 
     # ── v1.17.1: the programme ladder wants ONE number ───────────────────────
     # `_price_programme` prices a median of 40 options per candidate mission
@@ -5773,6 +5856,7 @@ def mission_cost_usd(
     cadence_yr:          Optional[float] = None,
     rig_trips:           Optional[Tuple[int, int, Optional[int]]] = None,
     totals_only:         bool = False,
+    fleet_ships:         Optional[int] = None,
 ) -> Union[Dict[str, float], float]:
     """Full mission cost breakdown for a given (mass cascade, vehicle, prop).
 
@@ -5824,7 +5908,7 @@ def mission_cost_usd(
             mass_cascade, vehicle, propellant, ops_df, config,
             mission_duration_yr, processing_power_w, stay_yr, isru_return,
             ep_power_w, power_source, cadence_yr, rig_trips),
-        n_missions, missions_per_ship, totals_only)
+        n_missions, missions_per_ship, totals_only, fleet_ships=fleet_ships)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # (VEHICLE × PROPELLANT) EVALUATOR FOR ONE ASTEROID
@@ -6022,6 +6106,8 @@ def _evaluate_combo_at_ratio(
         propellant[_SIZING_CONSTS_KEY] = sizing_consts
     (dv_penalty, thruster_eff_row, thruster_kg_per_n_row,
      tank_frac, isp_s_val, boiloff_pct) = sizing_consts
+    if not config.model_tank_mass:
+        tank_frac = 0.0
 
     # v1.27.0: the caller's figures, kept for the overshoot repair below,
     # which prices this same candidate again and must not apply the penalty
@@ -6712,12 +6798,12 @@ def _evaluate_combo_at_ratio(
             feed_kg + isru_feed_kg, m_payload if beneficiate else 0.0,
             mining_yr, dig_wh, benef_wh,
         )
-    water_kg = isru_water_kg
+    water_kg = 0.0
     if config.model_water_liberation:
         # v1.14.0: `cargo_water_kg` was settled above, at this same payload and
         # feed, to size the containment.  Reused rather than recomputed: one
         # quantity, one expression, and one (expensive) knapsack call.
-        water_kg += cargo_water_kg
+        water_kg = isru_water_kg + cargo_water_kg
     if water_kg > 0 and mining_yr > 0:
         processing_power_watts += (
             water_wh * water_kg / (mining_yr * 365.25 * 24.0)
@@ -7024,7 +7110,7 @@ def _evaluate_combo_at_ratio(
     # `trips` ≤ 5 campaigns, so ~42 options ask `_mission_cost_tail` for at
     # most ten distinct answers to that block.  Per-candidate for the same
     # reason `sat_by_fleet` is: every other input to it lives in `cost_prologue`.
-    rig_by_share: Dict[Tuple[int, bool], Tuple[float, ...]] = {}
+    rig_by_share: Dict[Tuple[int, bool, int, int], Tuple[float, ...]] = {}
 
     # ⚠️  v1.17.6: NO annotations on this signature.  It is a nested def, so its
     # annotations are evaluated every time the enclosing function runs, and
@@ -7051,7 +7137,8 @@ def _evaluate_combo_at_ratio(
         early return in `_mission_cost_tail`.
         """
         c = _mission_cost_tail(cost_prologue, n_missions, per_ship,
-                               totals_only = not full, rig_cache = rig_by_share)
+                               totals_only = not full, rig_cache = rig_by_share,
+                               fleet_ships = fleet)
         if full:
             total_cost = c["total_cost"]
         else:
@@ -7237,7 +7324,8 @@ def _evaluate_combo_at_ratio(
             # Launch and cruise reliability deliberately do not grow; launch
             # vehicles are mature, and MTBF is a duration exposure rather than a
             # heritage question.
-            pm = (_mining_reliability_cached(n_missions, p_first, rel_alpha, p_mature)
+            pm = (_mining_reliability_cached(n_missions, p_first, rel_alpha,
+                                             p_mature, fleet)
                   if config.model_reliability_growth else p_first)
             ps = max(0.0, min(1.0, p_launch * p_cruise * pm))
             g *= ps
@@ -7281,8 +7369,11 @@ def _evaluate_combo_at_ratio(
     # be held fixed while F moves, because N = F × W and refining F against some
     # other W would price a programme the search never proposed.
     if len(programmes) > 1:
+        n_floor = max(1, int(config.nre_amortization_missions))
         for fleet in _fleet_refinement_cached(best_f, fleet_ladder):
             n_missions = fleet * best_w
+            if n_missions < n_floor:
+                continue
             cand = _price_programme(n_missions, fleet, best_w, full=False)
             priced_count += 1
             key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config, on_profit)
@@ -8048,36 +8139,42 @@ def _fleet_refinement_cached(f_best: int, ladder: List[int]) -> List[int]:
 def _prefilter_probe(
     asteroid_row: Row,
     combos:       List[Tuple[Dict[str, Any], Dict[str, Any]]],
+    ops_df:       pd.DataFrame,
     config:       CalcConfig,
-) -> Tuple[int, int]:
-    """(candidates considered, candidates kept) for one asteroid.
+) -> Tuple[int, int, int]:
+    """(considered, past stage 1, past stage 2) for one asteroid.
 
     Mirrors the loop nest in `evaluate_asteroid` exactly, same axes, same
-    order, same test, so the printed rate describes the search that is about
-    to run rather than an approximation of it.  Diagnostic only; nothing in the
-    pipeline consumes the answer.
+    order, same two tests, so the printed rate describes the search that is
+    about to run rather than an approximation of it.  Counts stop above the
+    power-source loop, so these are architectures, not evaluator calls.
+    Diagnostic only; nothing in the pipeline consumes the answer.
     """
-    window_wait_yr = 0.0
-    if config.model_launch_windows:
-        a_dest_au = window_phasing_au(config.delivery_destination)
-        window_wait_yr = 0.5 * synodic_period_yr(
-            asteroid_row.get("semi_major_axis_au"), a_dest_au)
+    ctx = asteroid_context(asteroid_row, ops_df, config)
+    if ctx is None:
+        return 0, 0, 0               # no usable mass: nothing is searched
+    window_wait_yr = ctx.window_wait_yr
 
     dv_options   = asteroid_dv_options(asteroid_row, config)
     isru_allowed = (config.use_isru_return_propellant
                     and config.optimise_architecture_per_asteroid)
 
-    seen = kept = 0
+    seen = past_first = kept = 0
     for vehicle, propellant in combos:
         isru_modes = [False]
         if config.use_isru_return_propellant and isru_feed_kg_per_kg_propellant(
                 asteroid_row, propellant, config) is not None:
             isru_modes = [False, True] if isru_allowed else [True]
-        pf_consts = propellant.get(_PREFILTER_CONSTS_KEY)
-        vconsts   = vehicle.get(_VEHICLE_CONSTS_KEY)
-        leo_cap   = (vconsts[1] if vconsts is not None
-                     else _vehicle_consts(vehicle)[1])
+        pf_consts     = propellant.get(_PREFILTER_CONSTS_KEY)
+        sizing_consts = propellant.get(_SIZING_CONSTS_KEY)
+        vconsts       = vehicle.get(_VEHICLE_CONSTS_KEY)
+        _fairing, leo_cap, leo_ok = (vconsts if vconsts is not None
+                                     else _vehicle_consts(vehicle))
         for dv_opt in dv_options:
+            dv_out = float(dv_opt["dv_out_m_s"])
+            dv_ret = float(dv_opt["dv_ret_m_s"])
+            dv_tps = (config.heat_shield_frac_of_payload
+                      if bool(dv_opt["aero"]) else 0.0)
             for isru in isru_modes:
                 seen += 1
                 # `_combo_can_close` rather than the split form the search uses
@@ -8085,14 +8182,19 @@ def _prefilter_probe(
                 # composing the two halves here would put a third copy of the
                 # test in the file.  The one-call form is defined as exactly that
                 # composition, so the rate it reports is still the search's.
-                if pf_consts is not None and _combo_can_close(
-                        leo_cap, pf_consts,
-                        float(dv_opt["dv_out_m_s"]), float(dv_opt["dv_ret_m_s"]),
-                        (config.heat_shield_frac_of_payload
-                         if bool(dv_opt["aero"]) else 0.0),
-                        isru, window_wait_yr, config):
+                if (pf_consts is None or not leo_ok
+                        or not _combo_can_close(
+                            leo_cap, pf_consts, dv_out, dv_ret, dv_tps,
+                            isru, window_wait_yr, config)):
+                    continue
+                past_first += 1
+                if sizing_consts is None or _closes_carrying_its_own_stage(
+                        leo_cap, sizing_consts, ctx.ops,
+                        ctx.solar_w_per_kg, ctx.structure_frac,
+                        window_wait_yr, dv_out, dv_ret, dv_tps,
+                        isru, config):
                     kept += 1
-    return seen, kept
+    return seen, past_first, kept
 
 
 def evaluate_asteroid(
@@ -8738,15 +8840,19 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
             np.linspace(0, len(work_df) - 1, min(200, len(work_df)))
             .round().astype(int)
         )
-        seen = kept = 0
+        seen = past_first = kept = 0
         for prow in _iter_row_dicts(work_df.iloc[probe_idx]):
-            seen_row, kept_row = _prefilter_probe(prow, combos, config)
+            seen_row, first_row, kept_row = _prefilter_probe(
+                prow, combos, catalogs["ops"], config)
             seen += seen_row
+            past_first += first_row
             kept += kept_row
         if seen:
             print(f"        Pre-filter keeps {kept / seen * 100:.1f}% of "
                   f"candidates ({seen - kept:,} of {seen:,} pruned on a "
-                  f"{len(probe_idx)}-row probe; prune_infeasible_combos)")
+                  f"{len(probe_idx)}-row probe, {seen - past_first:,} at "
+                  f"stage 1 and {past_first - kept:,} at stage 2; "
+                  f"prune_infeasible_combos)")
 
     n = len(work_df)
 

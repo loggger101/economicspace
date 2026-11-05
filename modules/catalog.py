@@ -205,6 +205,16 @@ def _fetch_manifest(config: "CatalogConfig") -> dict:
         "      Check `catalog_release` against the published tags at\n"
         "      https://github.com/loggger101/AsteroidCatalog/releases"
         % config.catalog_release)
+    _check_contract(config, manifest)
+    return manifest
+
+
+def _check_contract(config: "CatalogConfig", manifest: dict) -> None:
+    """Refuse a manifest that is not the pin, or not this pipeline's contract.
+
+    Every manifest goes through this, fetched or already on disk: hashes say a
+    copy is intact, and an intact copy of the wrong contract is still wrong.
+    """
     if manifest.get("release_tag") != config.catalog_release:
         raise SystemExit("FAIL  the manifest served for %r names itself %r."
                          % (config.catalog_release, manifest.get("release_tag")))
@@ -217,7 +227,6 @@ def _fetch_manifest(config: "CatalogConfig") -> dict:
             "      checked against the new schema."
             % (config.catalog_release, manifest.get("pipeline_version"),
                config.pipeline_version, config.pipeline_version))
-    return manifest
 
 
 def installed_manifest(config: "CatalogConfig" = CONFIG) -> Optional[dict]:
@@ -307,6 +316,7 @@ def build_catalog(config: CatalogConfig = CONFIG) -> pd.DataFrame:
     print("=" * 65)
 
     if release_on_disk(config):
+        _check_contract(config, installed_manifest(config))
         print("  OK  %s is already installed, and its sha256 matches."
               % config.catalog_release)
     else:
