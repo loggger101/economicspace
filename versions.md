@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.67.0 / calc v1.40.0](#master-v1670--calc-v1400)
 - [master v1.66.0 / calc v1.39.0](#master-v1660--calc-v1390)
 - [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380)
 - [master v1.64.0 / calc v1.37.0](#master-v1640--calc-v1370)
@@ -119,8 +120,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.39.0** | v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.66.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 4 | `modules/calc.py` | **1.40.0** | v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
+| - | `master.py` | **1.67.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -135,7 +136,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Thirty-six stamps so far have moved without moving a number:
+Thirty-seven stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -175,6 +176,7 @@ Thirty-six stamps so far have moved without moving a number:
 | calc `1.37.0` | **three opt-in method changes** | bit-identical, verified (all three are off by default) |
 | calc `1.38.0` | **seven opt-in changes** | bit-identical, verified (all seven are off by default) |
 | calc `1.39.0` | **four opt-in changes** | bit-identical, verified (all four are off by default) |
+| calc `1.40.0` | **two opt-in flags finished** | bit-identical, verified (both are off by default) |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -186,7 +188,7 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.17.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and twenty-eight are not, and that split rotted in prose
+rows are performance stamps and twenty-nine are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -292,6 +294,71 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.67.0 / calc v1.40.0
+
+**Two flags that were partial fixes now do what their General_Research candidates
+ask, and every flag of v1.36.0 to v1.39.0 has now been run together.** Both flags
+stay off by default, so **no default number moves**. Nothing here repins a package.
+
+### What changes
+
+- **`refit_rtg_ceiling`** (rc-281). A radioisotope plant over its ceiling was scaled
+  down by the ratio of ceiling to draw, which is exact on a floor stay. Past the
+  floor a bigger dig only takes longer, so the draw holds level, and the scaling
+  could spend the repair depth above the floor and refuse a candidate that fits.
+  The first step now goes to the floor stay if the dig sets the draw, and the
+  ceiling step follows. On a 63.8 t launcher at 20 AU and a 60,000 W ceiling, a
+  candidate that was refused flies 12,381.4 kg at 60,000 W, which is
+  `60,000 W x 0.25 yr / 10,620 Wh/kg`. Two cases at 95 t behave the same way.
+- **`model_body_resource_budget`** (rc-245). A rung the body cannot feed at this load
+  was only dropped, so N fell and the load stayed. It is now also tried at the
+  smaller load that fits the body, and those loads compete with this one on the
+  objective. R315's 1,000 kg body goes from N = 1 at 1,000 kg, the partial fix's
+  answer, to N = 2 at 500 kg, at a cost over revenue of 16,233 against 16,624, and a
+  fixed N = 5 that was refused flies 200 kg a load. Up to `_LOAD_RESIZE_TRIES` loads
+  are tried, spread across the rungs dropped, and they search no further.
+
+### What was measured
+
+| harness | result |
+|---|---|
+| `verify.py check`, all seven, against a baseline taken on the clean 1.39.0 tree first (`--tag pre-round7`) | ALL CHECKS PASSED: the four cells MATCH bit for bit, 151 of 151 columns each |
+| R345's 23 cases replayed from the record's own inputs, `refit_rtg_ceiling` on | 23 of 23 land on the record's bounded cost over revenue, to three decimals, where v1.38.0 could only check the mechanism on a raised dig energy |
+| R315's 9 cases, flag off | each matches the record's N and load |
+| 61 of the catalog's smallest bodies (the smallest 2%), raw, search on, flag on | 5 over-mine with the flag off. The smaller loads are priced and **none wins**: each loses to a larger load at fewer missions, by 0.3% to 3% on the rungs inspected. So these rows read as they did under v1.37.0's partial fix, at 1.001x to 3.75x the flag-off cost over revenue, median 1.15x |
+| 356 raw and 136 beneficiated rows, flag on | no row moves, against flag off or against v1.39.0's flag: a stride sample holds no body this small |
+
+### All the flags together
+
+The flags of v1.36.0 to v1.39.0 had each been measured alone or with their own
+release. Here all 18 run together, every one except `carry_ep_home`, cislunar,
+beneficiated, programme search on.
+
+| rows | evaluable | cost per kg against all off | cost over revenue against all off |
+|---|---|---|---|
+| 60 on a stride | 53 of 53 | 0.848x to 1.729x, median 1.590x | 0.887x to 1.729x, median 1.558x |
+| 150 on a stride | 136 of 136 | 0.845x to 1.824x, median 1.573x | 0.881x to 1.824x, median 1.543x |
+
+- Nothing raised, no row changes evaluability, and all 53 rows run with the pre-filter
+  on and off give the same frame.
+- **Never-worse holds with all 18 on**, 136 rows at each pairing: beneficiated against
+  raw, searched and at N = 1, and searched against N = 1, raw and beneficiated.
+- Adding `carry_ep_home`, 22 of the 53 stay, the same 31 lost as with it alone, at
+  1.088x to 29.9x the cost per kg, median 3.16x. It remains the flag to decide on
+  first, and rc-246's separate return units are still not built.
+
+### Measured and not
+
+- All of this is samples, so none of it is a campaign result. The 18 flags were not
+  run on another destination.
+- `model_repeat_manifest` is still rc-248's partial fix. Re-solving the freed capacity
+  means two loads in one programme, and every per-mission book here assumes one.
+- rc-279 is not here. spacevalue has the as-is table it needs, on `main` once its PR
+  is merged, and using it needs that release pinned, which needs a `prices-*` release
+  at spacevalue's data contract.
+- With `model_body_resource_budget` on, a candidate that drops a rung costs up to
+  five more solves: 61 small bodies took 9 s against 6 s.
 
 ## master v1.66.0 / calc v1.39.0
 
@@ -12004,6 +12071,12 @@ high-inclination arrival. No config field or output column moved, and
 - **New output column, only with the limit on**: `spin_lift_period_h` (None
   where the body has no density). A default run's columns are unchanged.
 - **New functions**: `spin_lift_period_h`, `spin_limited`.
+
+**`1.40.0`  two opt-in flags finished.** Full write-up: [master v1.67.0 / calc v1.40.0](#master-v1670--calc-v1400).
+- **No new config field and no new output column.** `refit_rtg_ceiling` and
+  `model_body_resource_budget` mean more than they did, so a flag-on result can
+  differ from 1.39.0's. Both stay `False`.
+- **New constant**: `_LOAD_RESIZE_TRIES`.
 
 **`1.39.0`  four opt-in changes.** Full write-up: [master v1.66.0 / calc v1.39.0](#master-v1660--calc-v1390).
 - **New config fields**, all default `False`: `size_ep_on_flown_load`,
