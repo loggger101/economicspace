@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380)
 - [master v1.64.0 / calc v1.37.0](#master-v1640--calc-v1370)
 - [master v1.63.0 / calc v1.36.0](#master-v1630--calc-v1360)
 - [master v1.62.0 / calc v1.35.0](#master-v1620--calc-v1350)
@@ -117,8 +118,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.37.0** | v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.64.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 4 | `modules/calc.py` | **1.38.0** | v1.38.0, two more opt-in search changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
+| - | `master.py` | **1.65.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -133,7 +134,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Thirty-four stamps so far have moved without moving a number:
+Thirty-five stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -171,6 +172,7 @@ Thirty-four stamps so far have moved without moving a number:
 | calc `1.34.0` | **an opt-in spin limit** | bit-identical, verified (the limit is off by default) |
 | calc `1.36.0` | **five opt-in method changes** | bit-identical, verified (all five are off by default) |
 | calc `1.37.0` | **three opt-in method changes** | bit-identical, verified (all three are off by default) |
+| calc `1.38.0` | **two opt-in search changes** | bit-identical, verified (both are off by default) |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -182,7 +184,7 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.17.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and twenty-six are not, and that split rotted in prose
+rows are performance stamps and twenty-seven are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -214,6 +216,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380) | 2026-11-05 | **two more opt-in search changes, off by default**: a radioisotope plant over its ceiling is solved again at a smaller payload, and concentration is searched past purity where market ceilings can pay for it. No default number moves |
 | [master v1.64.0 / calc v1.37.0](#master-v1640--calc-v1370) | 2026-11-05 | **three more opt-in method changes, off by default**: the market accumulates over the span a programme reports, a programme has to fit the body, and an ISRU mission over its feed budget is solved again at a payload that fits. No default number moves |
 | [master v1.63.0 / calc v1.36.0](#master-v1630--calc-v1360) | 2026-11-05 | **five opt-in method changes, all off by default**: excavation power for raw cargo, solar arrays priced at their rated watts, both rendezvous apsides offered, rig age counted in elapsed time, and a volume-clipped cryogenic hold solved again. No default number moves |
 | [master v1.62.0 / calc v1.35.0](#master-v1620--calc-v1350) | 2026-11-04 | **eight General_Research candidates off the default path**: a fixed N that does not divide evenly buys and credits whole rigs, ships flown together share heritage, salvage stops compounding under the cost of capital, `model_water_liberation` and `model_tank_mass` hold on both sides, N is a true floor, a cached release of the wrong contract is refused, and the pre-filter line reports both stages; no default number moves |
@@ -286,6 +289,54 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.65.0 / calc v1.38.0
+
+**Two more General_Research candidates behind flags that are off by default**,
+so **no default number moves**. Both widen a search, so with either on a result
+can only improve on the configured objective or stay the same, at more
+evaluations. Nothing here repins a package.
+
+### What each flag does
+
+Measured on 60 rows spaced evenly across the catalog, 53 of them evaluable,
+cislunar, beneficiated, programme search on, against the same run with the flag
+off, unless a line says otherwise.
+
+- **`search_concentration_past_purity`** (rc-265). Concentration stopped where
+  the hold is pure best-phase, which is the top only while every kilogram sells
+  at full price. Under ceilings, more feed can still buy the scarcer phases. On,
+  with `market_model = "capacity_cap"`, seven more ratios up to
+  `max_concentration_ratio` and a refinement are priced after the usual grid, so
+  no ratio it priced moves. **24 of the 53 rows change**, at 0.855x to 1.000x the
+  cost per kg, median 0.973x. On R334's toy case the cost over revenue goes from
+  2,354 to 1,499, better than the candidate's own trial at ratio 10 (1,554),
+  because the search lands on 12.5. Its ample-market, unbounded and
+  beneficiation-off controls do not move.
+- **`refit_rtg_ceiling`** (rc-281). A radioisotope plant over `rtg_max_power_w`
+  refused the candidate at the largest payload it tried, before any smaller one.
+  On, it is solved again at the payload the ceiling allows, and refused only
+  if that cannot be found within the repair depth. **No row of the 53 changes.**
+  On a synthetic 1e9 kg body at 20 AU, with the dig energy raised 20x so the plant
+  goes over its ceiling, a refused candidate flies 2,739.4 kg at 4,999.999995 W,
+  matching `5000 W x 0.25 yr / 4000 Wh/kg`, at $1.69M/kg against solar's $5.11M/kg.
+  Solar results do not move.
+
+With both on, no row changes evaluability, and the pre-filter gives the same rows
+on and off.
+
+Three repairs now share one helper, `_solved_under`, so each states only the
+ceiling it asks for.
+
+### Measured and not
+
+- The sample is 60 rows, so none of this is a campaign result.
+- `search_concentration_past_purity` prices more ratios and was not timed.
+- `refit_rtg_ceiling` scales the payload by the ceiling, which is exact on a floor
+  stay. A dig-limited draw that does not fall with payload spends the repair depth
+  and is refused as before, so this is not the general joint solver rc-281 asks for.
+- The rc-281 witness uses a raised dig energy and not R345's refinery route, so it
+  checks the mechanism and does not reproduce the record's numbers.
 
 ## master v1.64.0 / calc v1.37.0
 
@@ -11816,6 +11867,11 @@ high-inclination arrival. No config field or output column moved, and
 - **New output column, only with the limit on**: `spin_lift_period_h` (None
   where the body has no density). A default run's columns are unchanged.
 - **New functions**: `spin_lift_period_h`, `spin_limited`.
+
+**`1.38.0`  two opt-in search changes.** Full write-up: [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380).
+- **New config fields**, both default `False`: `refit_rtg_ceiling`,
+  `search_concentration_past_purity`.
+- **No new output column** and no changed public signature.
 
 **`1.37.0`  three opt-in method changes.** Full write-up: [master v1.64.0 / calc v1.37.0](#master-v1640--calc-v1370).
 - **New config fields**, all default `False`: `model_market_wave_clock`,

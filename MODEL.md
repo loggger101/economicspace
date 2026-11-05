@@ -1376,6 +1376,11 @@ Stated plainly so results aren't over-read:
   not declined, because the rule would have to guess its spin. F13 and F18 in
   [starred-repos' `FOURTH-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md)
   are the measurements.
+- **Two searches stop early, and each has a flag, off by default.** A radioisotope
+  plant over its ceiling is refused at the largest payload tried
+  (`refit_rtg_ceiling`), and concentration stops at purity even where market
+  ceilings would pay for more (`search_concentration_past_purity`).
+  [Release v1.65.0](versions.md#master-v1650--calc-v1380) has each one's effect.
 - **Three more method questions are flags, off by default.** A default run's
   market accumulates past the span its programme reports
   (`model_market_wave_clock`), a programme may dig more than its body holds

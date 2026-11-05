@@ -696,6 +696,17 @@ class CalcConfig:
     # more than the body holds.  On, both books carry the tank, and a mission
     # over min(mineable, throughput) is solved again at the payload that fits.
     model_isru_feed_budget:    bool  = False
+    # Two more, off by default (v1.38.0).
+    #
+    # Off, a radioisotope plant over `rtg_max_power_w` refuses the candidate at
+    # the largest payload it tried.  On, it is solved again at the payload the
+    # ceiling allows, and is refused only if that cannot be found.
+    refit_rtg_ceiling:         bool  = False
+    # Off, concentration stops where the hold is pure best-phase, which is the
+    # top only while every kilogram sells at full price.  Under ceilings, more
+    # feed can still buy the scarcer phases.  On, the search continues to
+    # `max_concentration_ratio`, after and in addition to the usual grid.
+    search_concentration_past_purity: bool = False
 
     # VOLATILE CARGO CONTAINMENT.  The pipeline sells water at every in-space
     # destination and charged nothing to keep it from subliming across a
@@ -1207,7 +1218,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.37.0"
+    pipeline_version: str = "1.38.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -6446,6 +6457,34 @@ def _evaluate_combo_at_ratio(
     water_wh = _ops_value(
         ops_df, "Water liberation energy (bound water)", default=2_500.0,
     )
+    def _solved_under(cap_kg):
+        """This candidate, solved from the top with `cap_kg` as its ceiling."""
+        return _evaluate_combo_at_ratio(
+            asteroid_row, vehicle, propellant, bulk_value_per_kg,
+            dv_out_arg, dv_ret_arg, ops_df, config,
+            best_phase_value_per_kg=best_phase_value_per_kg,
+            phases=phases, target_ratio=target_ratio,
+            beneficiate=beneficiate, markets=markets, aero=aero,
+            isru=isru, rendezvous_apsis=rendezvous_apsis,
+            power_mode=power_mode, ctx=ctx, market_mode=market_mode,
+            refinery=refinery, payload_cap_kg=cap_kg,
+            _repair_depth=_repair_depth + 1,
+            _damped_steps=_damped_steps + damped_here,
+        )
+
+    def _refit_to_plant_ceiling(payload_kg, watts):
+        """Price the candidate again at the payload the plant ceiling allows.
+
+        Draw is proportional to payload on a floor stay and falls with it
+        otherwise, so scaling converges from above; a dig-limited draw that
+        does not fall spends the repair depth and is refused as before.  The
+        margin keeps a draw solved AT the ceiling from failing on its rounding.
+        """
+        if _repair_depth >= 3:
+            return None
+        return _solved_under(
+            payload_kg * config.rtg_max_power_w / watts * (1.0 - 1e-9))
+
     def _refit_to_feed_budget(payload_kg, fuel_feed_kg, feed_per_payload):
         """Price the candidate again at the payload its feed budget allows.
 
@@ -6459,18 +6498,7 @@ def _evaluate_combo_at_ratio(
                / (feed_per_payload + per_load * (1.0 + structure_frac_eff)))
         if not 0.0 < cap < payload_kg or _repair_depth >= 3:
             return None
-        return _evaluate_combo_at_ratio(
-            asteroid_row, vehicle, propellant, bulk_value_per_kg,
-            dv_out_arg, dv_ret_arg, ops_df, config,
-            best_phase_value_per_kg=best_phase_value_per_kg,
-            phases=phases, target_ratio=target_ratio,
-            beneficiate=beneficiate, markets=markets, aero=aero,
-            isru=isru, rendezvous_apsis=rendezvous_apsis,
-            power_mode=power_mode, ctx=ctx, market_mode=market_mode,
-            refinery=refinery, payload_cap_kg=cap,
-            _repair_depth=_repair_depth + 1,
-            _damped_steps=_damped_steps + damped_here,
-        )
+        return _solved_under(cap)
 
     cascade = None
     # v1.28.0, `damp_sizing_loop`.  `base` is the state the last CLOSING pass
@@ -6678,6 +6706,9 @@ def _evaluate_combo_at_ratio(
             # candidate infeasible is what makes that honest; the solar
             # candidate for the same body is evaluated alongside and survives.
             if power_source == "rtg" and processing_power_watts > config.rtg_max_power_w:
+                if config.refit_rtg_ceiling:
+                    return _refit_to_plant_ceiling(trial_payload,
+                                                   processing_power_watts)
                 return None
             new_power_kg = (processing_power_watts / plant_w_per_kg
                             if plant_w_per_kg > 0 else 0.0)
@@ -6796,18 +6827,7 @@ def _evaluate_combo_at_ratio(
         return None
     if (config.reclose_volume_capped_hold and models_boiloff and not volume_fits
             and m_payload == volume_capacity_kg and _repair_depth < 3):
-        reclosed = _evaluate_combo_at_ratio(
-            asteroid_row, vehicle, propellant, bulk_value_per_kg,
-            dv_out_arg, dv_ret_arg, ops_df, config,
-            best_phase_value_per_kg=best_phase_value_per_kg,
-            phases=phases, target_ratio=target_ratio,
-            beneficiate=beneficiate, markets=markets, aero=aero,
-            isru=isru, rendezvous_apsis=rendezvous_apsis,
-            power_mode=power_mode, ctx=ctx, market_mode=market_mode,
-            refinery=refinery, payload_cap_kg=volume_capacity_kg,
-            _repair_depth=_repair_depth + 1,
-            _damped_steps=_damped_steps + damped_here,
-        )
+        reclosed = _solved_under(volume_capacity_kg)
         if reclosed is not None:
             # Still the hold that did not fit, whatever the ceiling made of it.
             reclosed["volume_fits"] = False
@@ -6971,6 +6991,8 @@ def _evaluate_combo_at_ratio(
         # rather than trusted from the loop, because the loop sized against an
         # estimated payload and this is the payload actually flown.
         if power_source == "rtg" and processing_power_watts > config.rtg_max_power_w:
+            if config.refit_rtg_ceiling:
+                return _refit_to_plant_ceiling(m_payload, processing_power_watts)
             return None
         power_system_kg = (processing_power_watts / plant_w_per_kg
                            if plant_w_per_kg > 0 else 0.0)
@@ -8033,8 +8055,38 @@ def evaluate_combo(
     r_max = saturation_ratio(
         phases or [], config.beneficiation_recovery, config.max_concentration_ratio,
     )
-    if r_max <= 1.0:
+
+    def _past_purity(best, best_key):
+        """The ratios above `r_max`, where only a ceiling can make them pay.
+
+        After the usual grid and apart from it, so no ratio it priced moves.
+        """
+        top = float(config.max_concentration_ratio)
+        if (not config.search_concentration_past_purity or top <= r_max
+                or _market_mode(config) != "capacity_cap"):
+            return best
+        lo = max(1.0, r_max)
+        n = max(2, int(config.concentration_search_steps))
+        step = (top / lo) ** (1.0 / (n - 1))
+        best_past, past_key = None, (-np.inf, -np.inf)
+        for r in [lo * step ** i for i in range(1, n)]:
+            res = solve(r)
+            key = selection_key(res, config)
+            if res is not None and key > past_key:
+                best_past, past_key = r, key
+            if res is not None and key > best_key:
+                best_key, best = key, res
+        if best_past is not None:
+            for r in (best_past / (step ** 0.5), best_past * (step ** 0.5)):
+                if lo <= r <= top:
+                    res = solve(r)
+                    key = selection_key(res, config)
+                    if res is not None and key > best_key:
+                        best_key, best = key, res
         return best
+
+    if r_max <= 1.0:
+        return _past_purity(best, best_key)
 
     # Coarse sweep, geometric so the cheap end is sampled as finely as the
     # expensive end.  Endpoints included explicitly.
@@ -8073,7 +8125,7 @@ def evaluate_combo(
                 key = selection_key(res, config)
                 if res is not None and key > best_key:
                     best_key, best = key, res
-    return best
+    return _past_purity(best, best_key)
 
 
 def _row_to_dict(row: Row) -> Dict[str, Any]:
