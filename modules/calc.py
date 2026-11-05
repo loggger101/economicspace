@@ -730,7 +730,7 @@ class CalcConfig:
     # finds all its fuel still in the tank after the cruise home.  On, the fuel
     # for it is carried through the cruise at the propellant's own loss rate.
     model_return_coast_boiloff: bool = False
-    # Three more, off by default (v1.39.0).
+    # Four more, off by default (v1.39.0).
     #
     # Off, the electric stage is sized on a provisional cascade, which has no
     # return fuel under ISRU and full-vehicle loads otherwise, and is reported
@@ -745,6 +745,10 @@ class CalcConfig:
     # flights are priced without one, at the same cargo.  Cargo the freed
     # capacity could carry is not re-solved.
     model_repeat_manifest:     bool  = False
+    # Off, a capped market re-picks the mix it prices after the hold is
+    # engineered, so the sale can be of cargo the book never flew.  On, the
+    # hold that was engineered is what sells.
+    price_engineered_hold:     bool  = False
 
     # VOLATILE CARGO CONTAINMENT.  The pipeline sells water at every in-space
     # destination and charged nothing to keep it from subliming across a
@@ -7643,7 +7647,8 @@ def _evaluate_combo_at_ratio(
                         break
                 if not binds:
                     entry = (gross_base, 1.0, 0.0, delivered_base, 0.0)
-                elif beneficiate and payload_mix:
+                elif (beneficiate and payload_mix
+                      and not config.price_engineered_hold):
                     # RESHAPE.  Concentrating means the hold's contents are
                     # chosen, so a load that caps out on one phase re-fills the
                     # freed space with the next most valuable one instead of
@@ -7687,6 +7692,7 @@ def _evaluate_combo_at_ratio(
                     # composition, so whatever is past a ceiling simply does not
                     # sell.  The hold still flies and is still paid for, which
                     # is why this is the branch that punishes scale hardest.
+                    # `price_engineered_hold` fixes a concentrated hold the same way.
                     cvalue, cunsold, csurplus = _capped_sale_value(
                         sale_terms, window, surplus_frac)
                     entry = (
