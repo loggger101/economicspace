@@ -730,6 +730,21 @@ class CalcConfig:
     # finds all its fuel still in the tank after the cruise home.  On, the fuel
     # for it is carried through the cruise at the propellant's own loss rate.
     model_return_coast_boiloff: bool = False
+    # Three more, off by default (v1.39.0).
+    #
+    # Off, the electric stage is sized on a provisional cascade, which has no
+    # return fuel under ISRU and full-vehicle loads otherwise, and is reported
+    # as burning for `ep_target_thrust_yr` whatever it carries.  On, it is sized
+    # on the fuel the mission flies and its burn time is read from that fuel.
+    size_ep_on_flown_load:     bool  = False
+    # Off, the electric stage is one-way hardware, though the same stage is
+    # sized for the return burn.  On, it flies home and is in the return mass.
+    carry_ep_home:             bool  = False
+    # Off, every flight of a programme is priced with a rig aboard, though F
+    # rigs serve N flights and stay where they dig.  On, the N - F repeat
+    # flights are priced without one, at the same cargo.  Cargo the freed
+    # capacity could carry is not re-solved.
+    model_repeat_manifest:     bool  = False
 
     # VOLATILE CARGO CONTAINMENT.  The pipeline sells water at every in-space
     # destination and charged nothing to keep it from subliming across a
@@ -1241,7 +1256,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.38.0"
+    pipeline_version: str = "1.39.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -4038,6 +4053,33 @@ def _ep_stage_kg(
     return array_kg + ppu_kg + thruster_kg, ep_power_w, ep_thrust_n, ep_thrust_yr
 
 
+def _flown_propellant_kg(
+    payload_kg:     float,
+    hardware_kg:    float,
+    return_dry_kg:  float,
+    structure_frac: float,
+    tps_frac:       float,
+    tank_frac:      float,
+    cascade:        Dict[str, float],
+    isru:           bool,
+) -> Dict[str, float]:
+    """The two legs' fuel at this payload, for `_ep_stage_kg`.
+
+    The sums the settled book does, at a payload the cascade did not solve for.
+    Hardware that flies out and back belongs in `return_dry_kg` alone.
+    """
+    k_ret  = float(cascade.get("k_ret", 1.0))
+    k_out  = float(cascade.get("k_out", 1.0))
+    after  = k_ret * (1.0 + tps_frac) * (payload_kg * (1.0 + structure_frac)
+                                         + return_dry_kg)
+    return_prop = after * (cascade["r_ret"] - 1.0)
+    dry    = return_dry_kg + structure_frac * payload_kg
+    out_load = (hardware_kg + dry + tps_frac * (payload_kg + dry)
+                + tank_frac * return_prop + (0.0 if isru else return_prop))
+    return {"m_outbound_prop": out_load * k_out * (cascade["r_out"] - 1.0),
+            "m_return_prop":   return_prop}
+
+
 def _closes_carrying_its_own_stage(
     leo_capacity_kg: float,
     sizing_consts:   Tuple[float, Optional[float], Optional[float],
@@ -4126,6 +4168,10 @@ def _closes_carrying_its_own_stage(
 
     if not (config.model_low_thrust_time and dv_penalty > 1.0):
         return True                    # no stage to carry; stage 1 said it all
+    # This test's stage is the smallest the cascade can size, and one sized on
+    # a capped mission's own fuel can be smaller than that.
+    if config.size_ep_on_flown_load:
+        return True
 
     (_dig_wh, _benef_wh, _base_w, ep_eff, ep_kg_per_kw,
      _rtg_w, ppu_only_kg_per_kw,
@@ -5628,6 +5674,18 @@ def _mission_cost_prologue(
 
     cadence   = (stay_yr if cadence_yr is None else max(0.0, float(cadence_yr)))
 
+    # Launch, outbound fuel and outbound tank a flight saves by leaving the rig
+    # behind.  Outbound fuel and tank are linear in what reaches the asteroid.
+    repeat_saved = None
+    if config.model_repeat_manifest:
+        rig_share = (config.mining_hardware_kg
+                     / float(mass_cascade["m_at_asteroid"]))
+        fuel_kg = rig_share * float(mass_cascade["m_outbound_prop"])
+        tank_kg = rig_share * float(mass_cascade["m_tank_outbound"])
+        repeat_saved = ((config.mining_hardware_kg + fuel_kg + tank_kg)
+                        * float(vehicle["usd_per_kg_to_leo"]),
+                        fuel_kg * cost_per_kg_prop, tank_kg * tank_per_kg)
+
     return (
         launch_cost, tanker_cost, tanker_flights,
         outbound_prop_cost, return_prop_cost, return_prop_is_ongoing,
@@ -5649,7 +5707,7 @@ def _mission_cost_prologue(
         ongoing_lines, ongoing_with_cont, end_lines, end_with_cont,
         cadence, stay_yr, mission_duration_yr,
         config.model_programme_calendar, config.nre_amortization_missions,
-        config.model_rig_calendar_cadence,
+        config.model_rig_calendar_cadence, repeat_saved,
     )
 
 
@@ -5681,7 +5739,7 @@ def _mission_cost_tail(
      mult_upfront, mult_ongoing, mult_end, wacc,
      ongoing_lines, ongoing_with_cont, end_lines, end_with_cont,
      cadence, stay_yr, mission_duration_yr,
-     calendar_on, n_missions_cfg, rig_ages_waiting) = pro
+     calendar_on, n_missions_cfg, rig_ages_waiting, repeat_saved) = pro
 
     # v1.15.0: programme size is a searched axis, so it arrives as an argument.
     # None falls back to the config for every caller that has not been updated,
@@ -5842,6 +5900,13 @@ def _mission_cost_tail(
     # nre_amortization_missions > 1 it is modelled as ONE unit shared across
     # missions, not N units built, so a curve on it would double-count.
     # Exactly 1.0 at N = 1, so a single-mission run is untouched.
+    if repeat_saved is not None and n_missions > 1:
+        first_flights = (fleet_ships if fleet_ships is not None
+                         else math.ceil(n_missions / missions_sharing_rig))
+        repeat_share  = 1.0 - first_flights / n_missions
+        launch_cost        -= repeat_share * repeat_saved[0]
+        outbound_prop_cost -= repeat_share * repeat_saved[1]
+        tank_base          -= repeat_share * repeat_saved[2]
     lc = _learning_curve_cached(n_missions, lc_rate)
     capsule_cost            = capsule_base * lc
     power_system_cost       = power_base * lc
@@ -6569,7 +6634,7 @@ def _evaluate_combo_at_ratio(
         that exactly fills the budget is closed-form.  None if no smaller
         payload fits, or the repair depth is spent.
         """
-        dry = config.return_vehicle_dry_kg
+        dry = return_dry_kg
         per_load = fuel_feed_kg / (payload_kg * (1.0 + structure_frac_eff) + dry)
         cap = ((min(throughput_cap_kg, mineable_kg) - per_load * dry)
                / (feed_per_payload + per_load * (1.0 + structure_frac_eff)))
@@ -6602,18 +6667,21 @@ def _evaluate_combo_at_ratio(
             r_ret_eff = 1.0 + (r_ret_raw - 1.0) * boiloff_factor
             dv_ret_eff = isp_s_val * G0_M_S2 * math.log(r_ret_eff)
 
+        hardware_est_kg = (config.mining_hardware_kg + power_system_kg
+                           + ep_system_kg + refinery_kg
+                           + (refinery_plant_kg(isru_prop_kg,
+                                                stay_est_yr - window_wait_yr,
+                                                isru_plant_rate)
+                              if isru_plant_rate > 0 else 0.0))
+        carried_ep_kg = ep_system_kg if config.carry_ep_home else 0.0
+        return_dry_kg = config.return_vehicle_dry_kg + carried_ep_kg
         cascade = max_return_payload_kg(
             leo_capacity_kg = leo_cap,
             isp_s           = isp_s_val,
             dv_out_m_s      = dv_out_m_s,
             dv_ret_m_s      = dv_ret_eff,
-            hardware_kg     = (config.mining_hardware_kg + power_system_kg
-                               + ep_system_kg + refinery_kg
-                               + (refinery_plant_kg(isru_prop_kg,
-                                                    stay_est_yr - window_wait_yr,
-                                                    isru_plant_rate)
-                                  if isru_plant_rate > 0 else 0.0)),
-            dry_return_kg   = config.return_vehicle_dry_kg,
+            hardware_kg     = hardware_est_kg - carried_ep_kg,
+            dry_return_kg   = return_dry_kg,
             tps_frac        = tps_frac,
             isru_return     = isru,
             structure_frac  = structure_frac_eff,
@@ -6664,7 +6732,7 @@ def _evaluate_combo_at_ratio(
         if isru:
             r_ret = cascade["r_ret"]
             new_isru_prop = ((trial_payload
-                              + config.return_vehicle_dry_kg
+                              + return_dry_kg
                               + structure_frac_eff * trial_payload)
                              * (1.0 + tps_frac) * (r_ret - 1.0))
             if config.model_isru_feed_budget:
@@ -6677,6 +6745,16 @@ def _evaluate_combo_at_ratio(
                         trial_payload, new_isru_feed,
                         target_ratio if beneficiate else 1.0)
                 return None
+
+        if is_electric and config.size_ep_on_flown_load:
+            (new_ep_kg, ep_power_watts,
+             ep_thrust_n, ep_thrust_yr) = _ep_stage_kg(
+                _flown_propellant_kg(
+                    trial_payload, hardware_est_kg - carried_ep_kg, return_dry_kg,
+                    structure_frac_eff, tps_frac, tank_frac, cascade, isru),
+                isp_s_val, eff_used, ep_w_per_kg,
+                ppu_kg_per_kw, thruster_kg_per_n, config,
+            )
 
         trial_feed = (min(trial_payload * target_ratio,
                           max(0.0, throughput_cap_kg - new_isru_feed),
@@ -6980,7 +7058,8 @@ def _evaluate_combo_at_ratio(
     # bodies this model likes.
     m_dry_return    = config.return_vehicle_dry_kg + structure_frac_eff * m_payload
     m_containment_kg = containment_frac * m_payload
-    m_tps           = tps_frac * (m_payload + m_dry_return)
+    carried_ep_kg   = ep_system_kg if config.carry_ep_home else 0.0
+    m_tps           = tps_frac * (m_payload + m_dry_return + carried_ep_kg)
     # v1.11.0: the same two tankage scalars the solver used, read back rather
     # than re-derived.  k_ret = 1/(1 − t(R_ret−1)) inflates the post-burn mass
     # by the tank that flies home inside it; k_out does the same on the
@@ -6989,7 +7068,8 @@ def _evaluate_combo_at_ratio(
     k_ret_c         = float(cascade.get("k_ret", 1.0))
     k_out_c         = float(cascade.get("k_out", 1.0))
     m_after_return  = k_ret_c * (1.0 + tps_frac) * (
-        m_payload * (1.0 + structure_frac_eff) + config.return_vehicle_dry_kg)
+        m_payload * (1.0 + structure_frac_eff) + config.return_vehicle_dry_kg
+        + carried_ep_kg)
     m_return_prop   = m_after_return * (r_ret - 1.0)
     m_tank_return   = tank_frac * m_return_prop
 
@@ -7112,8 +7192,8 @@ def _evaluate_combo_at_ratio(
                 isp_s           = isp_s_val,
                 dv_out_m_s      = dv_out_m_s,
                 dv_ret_m_s      = dv_ret_eff,
-                hardware_kg     = hardware_total_kg,
-                dry_return_kg   = config.return_vehicle_dry_kg,
+                hardware_kg     = hardware_total_kg - carried_ep_kg,
+                dry_return_kg   = config.return_vehicle_dry_kg + carried_ep_kg,
                 tps_frac        = tps_frac,
                 isru_return     = isru,
                 structure_frac  = structure_frac_eff,
@@ -7155,6 +7235,11 @@ def _evaluate_combo_at_ratio(
             per_kg_liquid = per_kg_out + (0.0 if isru else per_kg_return)
             cap = m_payload - (liquid_kg - room_kg) / per_kg_liquid
             return _solved_under(cap * (1.0 - 1e-9)) if cap > 0.0 else None
+
+    if is_electric and config.size_ep_on_flown_load and ep_thrust_n > 0:
+        # The stage's thrust is fixed; the fuel it has to burn is now known.
+        ep_thrust_yr = (ep_thrust_required_n(m_outbound_prop + m_return_prop,
+                                             isp_s_val, 1.0) / ep_thrust_n)
 
     actual_cascade = {
         "max_payload_kg":  m_payload,

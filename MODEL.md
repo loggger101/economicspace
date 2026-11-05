@@ -1376,6 +1376,12 @@ Stated plainly so results aren't over-read:
   not declined, because the rule would have to guess its spin. F13 and F18 in
   [starred-repos' `FOURTH-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md)
   are the measurements.
+- **Three more mass questions are flags, off by default.** A default run sizes
+  the electric stage on a provisional load (`size_ep_on_flown_load`), leaves that
+  stage behind for free on the way home (`carry_ep_home`, which most sampled rows do
+  not survive), and flies a new rig's mass on every repeat flight
+  (`model_repeat_manifest`).
+  [Release v1.66.0](versions.md#master-v1660--calc-v1390) has each one's effect.
 - **Seven more limits are flags, off by default.** A radioisotope plant over its
   ceiling is refused at the largest payload tried (`refit_rtg_ceiling`),
   concentration stops at purity even where market ceilings would pay for more

@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.66.0 / calc v1.39.0](#master-v1660--calc-v1390)
 - [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380)
 - [master v1.64.0 / calc v1.37.0](#master-v1640--calc-v1370)
 - [master v1.63.0 / calc v1.36.0](#master-v1630--calc-v1360)
@@ -118,8 +119,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.38.0** | v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.65.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 4 | `modules/calc.py` | **1.39.0** | v1.39.0, three more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
+| - | `master.py` | **1.66.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -134,7 +135,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Thirty-five stamps so far have moved without moving a number:
+Thirty-six stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -173,6 +174,7 @@ Thirty-five stamps so far have moved without moving a number:
 | calc `1.36.0` | **five opt-in method changes** | bit-identical, verified (all five are off by default) |
 | calc `1.37.0` | **three opt-in method changes** | bit-identical, verified (all three are off by default) |
 | calc `1.38.0` | **seven opt-in changes** | bit-identical, verified (all seven are off by default) |
+| calc `1.39.0` | **three opt-in changes** | bit-identical, verified (all three are off by default) |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -184,7 +186,7 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.17.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and twenty-seven are not, and that split rotted in prose
+rows are performance stamps and twenty-eight are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -216,6 +218,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.66.0 / calc v1.39.0](#master-v1660--calc-v1390) | 2026-11-05 | **three more opt-in changes, off by default**: the electric stage is sized on the fuel it flies, it can be flown home, and repeat flights leave the rig behind. No default number moves |
 | [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380) | 2026-11-05 | **seven more opt-in changes, off by default**: three widen or close a search, and four hold a mission to a physical limit a default run ignores. No default number moves |
 | [master v1.64.0 / calc v1.37.0](#master-v1640--calc-v1370) | 2026-11-05 | **three more opt-in method changes, off by default**: the market accumulates over the span a programme reports, a programme has to fit the body, and an ISRU mission over its feed budget is solved again at a payload that fits. No default number moves |
 | [master v1.63.0 / calc v1.36.0](#master-v1630--calc-v1360) | 2026-11-05 | **five opt-in method changes, all off by default**: excavation power for raw cargo, solar arrays priced at their rated watts, both rendezvous apsides offered, rig age counted in elapsed time, and a volume-clipped cryogenic hold solved again. No default number moves |
@@ -289,6 +292,73 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.66.0 / calc v1.39.0
+
+**Three more General_Research candidates behind flags that are off by default**,
+so **no default number moves**. **`carry_ep_home` is the one to read before turning
+it on: it takes most of the sampled rows out of the results.** Nothing here repins
+a package.
+
+### What each flag does
+
+Measured on 60 rows spaced evenly across the catalog, 53 of them evaluable,
+cislunar, beneficiated, programme search on, against the same run with the flag
+off, unless a line says otherwise.
+
+- **`carry_ep_home`** (rc-246). The electric stage was one-way hardware, though it
+  is sized for the return burn too. On, the one stage flies home, in the return
+  mass and through the return burn. **31 of the 53 rows stop closing**, and the other
+  22 move, at 1.03x to 897x the cost per kg, median 2.09x. Raw gives the same 31
+  and a median of 2.07x. The two refused rows traced fly stages of 23 and 26 t on a
+  63.8 t launch, and with it aboard the return they close at no payload tried,
+  from 100 kg up. So this is a real consequence of ONE shared stage, and it
+  is not the only reading: rc-246 also allows separate outbound and return units,
+  which is not built here, and which would carry far less home. R316's chemical,
+  low-thrust-off and zero-return controls do not move. Its xenon case goes from
+  5,441.3 to 3,641.3 kg, and its three electrospray cases are refused, because a
+  stage that heavy cannot carry itself.
+- **`size_ep_on_flown_load`** (rc-244). The stage was sized on a provisional cascade
+  and reported as burning for `ep_target_thrust_yr` whatever it carried: under ISRU
+  that cascade has no return fuel, and otherwise it has a full vehicle's. On, the
+  stage is sized on the fuel the mission flies, and its burn time is read from that
+  fuel. On R314's 10,000 kg water case the stage implied an 18.0 year burn while
+  reporting 3. It now burns 3.00, at 3,562 W against 590 W and 124.8 kg against
+  20.7 kg. Uncapped, cargo falls from 77,391.9 to 72,641.0 kg. The other way, its
+  100 kg xenon case loses a 941.3 kg stage for a 34.2 kg one, and launch falls from
+  3,675 to 2,720 kg. **44 of the 53 rows move**, at 0.732x to 0.999x the cost per kg,
+  median 0.996x: their stages were oversized for capped missions. No row changes
+  evaluability. The pre-filter's second stage assumes the provisional stage, so
+  it stands down under this flag.
+- **`model_repeat_manifest`** (rc-248). F rigs serve N flights and stay where they
+  dig, but every flight paid to launch a rig. On, the N - F repeat flights are priced
+  without one, with the outbound fuel and tank it took. R318's fixed N = 5 case
+  goes from $1,020.54M to $1,009.30M per mission as recorded, and 7 more of its 9
+  cases match to a thousandth of a dollar. N = 1 does not move. **All 53 rows
+  move**, at 0.977x to 0.997x the cost per kg, median 0.988x, and raw matches that to
+  within 0.002x. No row changes evaluability.
+
+With `size_ep_on_flown_load` and `model_repeat_manifest` on, the pre-filter gives
+the same 53 rows as a run without it. With `size_ep_on_flown_load` and
+`carry_ep_home` on, it gives the same 22, on raw and beneficiated cells alike.
+`carry_ep_home` alone was not run with the pre-filter off.
+
+### Measured and not
+
+- The sample is 60 rows, so none of this is a campaign result. The three flags were
+  not run together with the flags of earlier releases.
+- `carry_ep_home` models one shared stage only. Separate units are rc-246's other
+  option and the flag should not be turned on without deciding between them.
+- The coupled stage is hard to settle. R316's PPT case returns 169.6 kg where a
+  ceiling of 200 kg also flies, and `relax_oscillating_sizing` does not improve it,
+  so a result here can sit below the most the stack can carry.
+- `model_repeat_manifest` keeps the cargo: what the freed capacity could carry is
+  not re-solved, which rc-248 also asks for, so this is a partial fix. It leaves
+  only the rig behind, and the plant still flies each time.
+- R318's trip-limit control was not replayed: this run did not set its limit.
+  Under that limit every flight is a first flight, so the record's change is zero.
+- R314's water cases were compared with the current code, not the record's: the
+  record's 18.16 years is 18.00 here, the same defect.
 
 ## master v1.65.0 / calc v1.38.0
 
@@ -11920,6 +11990,11 @@ high-inclination arrival. No config field or output column moved, and
 - **New output column, only with the limit on**: `spin_lift_period_h` (None
   where the body has no density). A default run's columns are unchanged.
 - **New functions**: `spin_lift_period_h`, `spin_limited`.
+
+**`1.39.0`  three opt-in changes.** Full write-up: [master v1.66.0 / calc v1.39.0](#master-v1660--calc-v1390).
+- **New config fields**, all default `False`: `size_ep_on_flown_load`,
+  `carry_ep_home`, `model_repeat_manifest`.
+- **No new output column** and no changed public signature.
 
 **`1.38.0`  seven opt-in changes.** Full write-up: [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380).
 - **New config fields**, all default `False`: `refit_rtg_ceiling`,
