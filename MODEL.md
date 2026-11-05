@@ -1376,6 +1376,16 @@ Stated plainly so results aren't over-read:
   not declined, because the rule would have to guess its spin. F13 and F18 in
   [starred-repos' `FOURTH-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md)
   are the measurements.
+- **Seven more limits are flags, off by default.** A radioisotope plant over its
+  ceiling is refused at the largest payload tried (`refit_rtg_ceiling`),
+  concentration stops at purity even where market ceilings would pay for more
+  (`search_concentration_past_purity`), and an oscillating sizing loop flies its
+  last pass (`relax_oscillating_sizing`). A default run also does not carry capture
+  fuel through the cruise home (`model_return_coast_boiloff`), hold Earth-loaded
+  propellant to the fairing (`model_launch_liquid_volume`), measure a concentrate at
+  its own density (`model_cargo_volume`), or test surface escape
+  (`gate_surface_escape`).
+  [Release v1.65.0](versions.md#master-v1650--calc-v1380) has each one's effect.
 - **Three more method questions are flags, off by default.** A default run's
   market accumulates past the span its programme reports
   (`model_market_wave_clock`), a programme may dig more than its body holds
