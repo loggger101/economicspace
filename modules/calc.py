@@ -688,8 +688,9 @@ class CalcConfig:
     model_market_wave_clock:   bool  = False
     # Off, `max_mining_fraction` bounds one mission and a programme may take the
     # body many times over.  On, N x (feed + ISRU feed) has to fit the body's
-    # whole mass, so a rung that does not is not priced.  One mission always
-    # is: this bounds the programme, and the sizing bounds the mission.
+    # whole mass: a rung that does not is not priced at this load, and is tried
+    # at the smaller load that fits it.  One mission always is priced: this
+    # bounds the programme, and the sizing bounds the mission.
     model_body_resource_budget: bool = False
     # Off, the loop's ISRU fuel leaves out the return tank the settled fuel
     # includes, and only throughput is checked at the end, so a mission can dig
@@ -700,7 +701,8 @@ class CalcConfig:
     #
     # Off, a radioisotope plant over `rtg_max_power_w` refuses the candidate at
     # the largest payload it tried.  On, it is solved again at the payload the
-    # ceiling allows, and is refused only if that cannot be found.
+    # ceiling allows, down to the shortest stay if the dig is what sets the
+    # draw, and is refused only if that cannot be found.
     refit_rtg_ceiling:         bool  = False
     # Off, concentration stops where the hold is pure best-phase, which is the
     # top only while every kilogram sells at full price.  Under ceilings, more
@@ -1260,7 +1262,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.39.0"
+    pipeline_version: str = "1.40.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -6244,6 +6246,11 @@ _DAMP_MIN_STEP     = 1.0 / 1024.0
 _DAMP_EXTRA_PASSES = 36
 
 
+# Smaller loads a body too small for its programme ladder is tried at; see
+# `model_body_resource_budget`.  The ladder is geometric, so a few span it.
+_LOAD_RESIZE_TRIES = 4
+
+
 def _damp_blend(base: Tuple[float, ...], target: Tuple[float, ...],
                 step: float) -> Tuple[float, ...]:
     """`step` of the way from `base` to `target`, term by term.
@@ -6283,6 +6290,7 @@ def _evaluate_combo_at_ratio(
     _repair_depth:     int = 0,
     _damped_steps:     int = 0,
     _relax:            Optional[bool] = None,
+    _resize_load:      bool = True,
 ) -> Optional[Dict[str, float]]:
     """Evaluate one (vehicle × propellant × architecture) mission for one asteroid.
 
@@ -6597,7 +6605,7 @@ def _evaluate_combo_at_ratio(
     water_wh = _ops_value(
         ops_df, "Water liberation energy (bound water)", default=2_500.0,
     )
-    def _solved_again(cap_kg, repair_depth, relax):
+    def _solved_again(cap_kg, repair_depth, relax, resize_load=_resize_load):
         """This candidate, solved from the top."""
         return _evaluate_combo_at_ratio(
             asteroid_row, vehicle, propellant, bulk_value_per_kg,
@@ -6612,39 +6620,46 @@ def _evaluate_combo_at_ratio(
             _repair_depth=repair_depth,
             _damped_steps=_damped_steps + damped_here,
             _relax=relax,
+            _resize_load=resize_load,
         )
 
-    def _solved_under(cap_kg):
+    def _solved_under(cap_kg, resize_load=_resize_load):
         """This candidate with `cap_kg` as its ceiling."""
-        return _solved_again(cap_kg, _repair_depth + 1, None)
+        return _solved_again(cap_kg, _repair_depth + 1, None, resize_load)
 
-    def _refit_to_plant_ceiling(payload_kg, watts):
+    def _refit_to_plant_ceiling(payload_kg, watts, dig_yr):
         """Price the candidate again at the payload the plant ceiling allows.
 
-        Draw is proportional to payload on a floor stay and falls with it
-        otherwise, so scaling converges from above; a dig-limited draw that
-        does not fall spends the repair depth and is refused as before.  The
-        margin keeps a draw solved AT the ceiling from failing on its rounding.
+        Draw is proportional to payload on a floor stay.  Past the floor a
+        bigger dig just takes longer, so the draw holds level and no payload
+        above the floor can help: the step goes there first and the ceiling
+        step follows.  The margin keeps a draw solved AT the ceiling from
+        failing on its rounding.
         """
         if _repair_depth >= 3:
             return None
-        return _solved_under(
-            payload_kg * config.rtg_max_power_w / watts * (1.0 - 1e-9))
+        scale = min(config.rtg_max_power_w / watts,
+                    config.station_keeping_floor_yr / dig_yr)
+        return _solved_under(payload_kg * scale * (1.0 - 1e-9))
 
-    def _refit_to_feed_budget(payload_kg, fuel_feed_kg, feed_per_payload):
+    def _refit_to_feed_budget(payload_kg, fuel_feed_kg, feed_per_payload,
+                              budget_kg=None, resize_load=_resize_load):
         """Price the candidate again at the payload its feed budget allows.
 
         Fuel feed is linear in payload through the return stack, so the payload
-        that exactly fills the budget is closed-form.  None if no smaller
-        payload fits, or the repair depth is spent.
+        that exactly fills the budget is closed-form.  The budget is the
+        mission's unless `budget_kg` names another.  None if no smaller payload
+        fits, or the repair depth is spent.
         """
+        if budget_kg is None:
+            budget_kg = min(throughput_cap_kg, mineable_kg)
         dry = return_dry_kg
         per_load = fuel_feed_kg / (payload_kg * (1.0 + structure_frac_eff) + dry)
-        cap = ((min(throughput_cap_kg, mineable_kg) - per_load * dry)
+        cap = ((budget_kg - per_load * dry)
                / (feed_per_payload + per_load * (1.0 + structure_frac_eff)))
         if not 0.0 < cap < payload_kg or _repair_depth >= 3:
             return None
-        return _solved_under(cap)
+        return _solved_under(cap, resize_load)
 
     cascade = None
     # v1.28.0, `damp_sizing_loop`.  `base` is the state the last CLOSING pass
@@ -6866,8 +6881,8 @@ def _evaluate_combo_at_ratio(
             # candidate for the same body is evaluated alongside and survives.
             if power_source == "rtg" and processing_power_watts > config.rtg_max_power_w:
                 if config.refit_rtg_ceiling:
-                    return _refit_to_plant_ceiling(trial_payload,
-                                                   processing_power_watts)
+                    return _refit_to_plant_ceiling(
+                        trial_payload, processing_power_watts, trial_dur)
                 return None
             new_power_kg = (processing_power_watts / plant_w_per_kg
                             if plant_w_per_kg > 0 else 0.0)
@@ -7165,7 +7180,8 @@ def _evaluate_combo_at_ratio(
         # estimated payload and this is the payload actually flown.
         if power_source == "rtg" and processing_power_watts > config.rtg_max_power_w:
             if config.refit_rtg_ceiling:
-                return _refit_to_plant_ceiling(m_payload, processing_power_watts)
+                return _refit_to_plant_ceiling(
+                    m_payload, processing_power_watts, mining_yr)
             return None
         power_system_kg = (processing_power_watts / plant_w_per_kg
                            if plant_w_per_kg > 0 else 0.0)
@@ -7217,6 +7233,7 @@ def _evaluate_combo_at_ratio(
                     dv_capture_m_s=dv_capture_m_s,
                     _repair_depth=_repair_depth + 1,
                     _damped_steps=_damped_steps + damped_here,
+                    _resize_load=_resize_load,
                 )
         return None
 
@@ -7736,8 +7753,23 @@ def _evaluate_combo_at_ratio(
         rig_trips, config, market_mode)
     max_n = math.inf
     if config.model_body_resource_budget:
-        max_n = (float(asteroid_row.get("estimated_mass_kg"))
-                 / (feed_kg + isru_feed_kg))
+        body_kg = float(asteroid_row.get("estimated_mass_kg"))
+        max_n = body_kg / (feed_kg + isru_feed_kg)
+        over = sorted({p[0] for p in programmes if p[0] > max_n})
+        if over and _resize_load:
+            # A rung the body cannot feed at this load may fit a smaller one, so
+            # this load and a spread of those compete on the objective.  None of
+            # them searches further, which keeps this to one level.
+            loads = [_refit_to_feed_budget(
+                         m_payload, isru_feed_kg,
+                         target_ratio if beneficiate else 1.0,
+                         body_kg / n * (1.0 - 1e-9), False)
+                     for n in over[::max(1, len(over) // _LOAD_RESIZE_TRIES)]]
+            return max(
+                [_solved_again(payload_cap_kg, _repair_depth, _relax, False)]
+                + loads,
+                key=lambda res: selection_key(res, config),
+            )
         programmes = [p for p in programmes if p[0] == 1 or p[0] <= max_n]
         if not programmes:
             return None
