@@ -680,6 +680,22 @@ class CalcConfig:
     # of the longer dig that loop assumed.  On, the mission is solved again with
     # the clipped hold as its ceiling, so fuel and clock describe one mission.
     reclose_volume_capped_hold: bool = False
+    # Three more, off by default (v1.37.0).
+    #
+    # Off, a delivery's market window runs to T + (N - 1) x cadence / F, past the
+    # T + (W - 1) x cadence the cost calendar sells the last wave at.  On, the
+    # market accumulates over the span the programme reports.
+    model_market_wave_clock:   bool  = False
+    # Off, `max_mining_fraction` bounds one mission and a programme may take the
+    # body many times over.  On, N x (feed + ISRU feed) has to fit the body's
+    # whole mass, so a rung that does not is not priced.  One mission always
+    # is: this bounds the programme, and the sizing bounds the mission.
+    model_body_resource_budget: bool = False
+    # Off, the loop's ISRU fuel leaves out the return tank the settled fuel
+    # includes, and only throughput is checked at the end, so a mission can dig
+    # more than the body holds.  On, both books carry the tank, and a mission
+    # over min(mineable, throughput) is solved again at the payload that fits.
+    model_isru_feed_budget:    bool  = False
 
     # VOLATILE CARGO CONTAINMENT.  The pipeline sells water at every in-space
     # destination and charged nothing to keep it from subliming across a
@@ -1191,7 +1207,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.36.0"
+    pipeline_version: str = "1.37.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -6430,6 +6446,32 @@ def _evaluate_combo_at_ratio(
     water_wh = _ops_value(
         ops_df, "Water liberation energy (bound water)", default=2_500.0,
     )
+    def _refit_to_feed_budget(payload_kg, fuel_feed_kg, feed_per_payload):
+        """Price the candidate again at the payload its feed budget allows.
+
+        Fuel feed is linear in payload through the return stack, so the payload
+        that exactly fills the budget is closed-form.  None if no smaller
+        payload fits, or the repair depth is spent.
+        """
+        dry = config.return_vehicle_dry_kg
+        per_load = fuel_feed_kg / (payload_kg * (1.0 + structure_frac_eff) + dry)
+        cap = ((min(throughput_cap_kg, mineable_kg) - per_load * dry)
+               / (feed_per_payload + per_load * (1.0 + structure_frac_eff)))
+        if not 0.0 < cap < payload_kg or _repair_depth >= 3:
+            return None
+        return _evaluate_combo_at_ratio(
+            asteroid_row, vehicle, propellant, bulk_value_per_kg,
+            dv_out_arg, dv_ret_arg, ops_df, config,
+            best_phase_value_per_kg=best_phase_value_per_kg,
+            phases=phases, target_ratio=target_ratio,
+            beneficiate=beneficiate, markets=markets, aero=aero,
+            isru=isru, rendezvous_apsis=rendezvous_apsis,
+            power_mode=power_mode, ctx=ctx, market_mode=market_mode,
+            refinery=refinery, payload_cap_kg=cap,
+            _repair_depth=_repair_depth + 1,
+            _damped_steps=_damped_steps + damped_here,
+        )
+
     cascade = None
     # v1.28.0, `damp_sizing_loop`.  `base` is the state the last CLOSING pass
     # was solved at and `target` the state that pass computed; the loop moves
@@ -6520,9 +6562,16 @@ def _evaluate_combo_at_ratio(
                               + config.return_vehicle_dry_kg
                               + structure_frac_eff * trial_payload)
                              * (1.0 + tps_frac) * (r_ret - 1.0))
+            if config.model_isru_feed_budget:
+                new_isru_prop *= float(cascade.get("k_ret", 1.0))
             new_isru_feed = new_isru_prop * isru_feed_per_kg_prop
             if new_isru_feed >= throughput_cap_kg or new_isru_feed >= mineable_kg:
-                return None       # the rig cannot dig its own fuel in the time
+                # the rig cannot dig its own fuel in the time
+                if config.model_isru_feed_budget:
+                    return _refit_to_feed_budget(
+                        trial_payload, new_isru_feed,
+                        target_ratio if beneficiate else 1.0)
+                return None
 
         trial_feed = (min(trial_payload * target_ratio,
                           max(0.0, throughput_cap_kg - new_isru_feed),
@@ -6726,6 +6775,13 @@ def _evaluate_combo_at_ratio(
     # cost of ISRU, and it is the part the old flat $50/kg charge left out.
     ore_throughput_kg = max(0.0, throughput_cap_kg - isru_feed_kg)
     ore_mineable_kg   = max(0.0, mineable_kg - isru_feed_kg)
+    if (config.model_isru_feed_budget and isru
+            and (trial_payload * (target_ratio if beneficiate else 1.0)
+                 + isru_feed_kg) > min(throughput_cap_kg, mineable_kg) + 1e-6):
+        refit = _refit_to_feed_budget(trial_payload, isru_feed_kg,
+                                      target_ratio if beneficiate else 1.0)
+        if refit is not None:
+            return refit
 
     m_payload_demand = min(cascade["max_payload_kg"], ore_mineable_kg)
     if payload_cap_kg is not None and m_payload_demand > payload_cap_kg:
@@ -6854,7 +6910,12 @@ def _evaluate_combo_at_ratio(
     if isru:
         isru_prop_kg = m_return_prop
         isru_feed_kg = isru_prop_kg * isru_feed_per_kg_prop
-        if isru_feed_kg + feed_kg > throughput_cap_kg + 1e-6:
+        if config.model_isru_feed_budget:
+            if (isru_feed_kg + feed_kg
+                    > min(throughput_cap_kg, mineable_kg) + 1e-6):
+                return _refit_to_feed_budget(m_payload, isru_feed_kg,
+                                             feed_kg / m_payload)
+        elif isru_feed_kg + feed_kg > throughput_cap_kg + 1e-6:
             return None
     isru_water_kg = isru_prop_kg * isru_water_per_kg_prop if isru else 0.0
 
@@ -7322,8 +7383,13 @@ def _evaluate_combo_at_ratio(
             ckey  = (n_missions, fleet)
             entry = cap_by_programme.get(ckey)
             if entry is None:
-                window = _delivery_window_yr(
-                    n_missions, fleet, mission_duration_yr, cadence_yr)
+                if config.model_market_wave_clock:
+                    waves = per_ship or math.ceil(n_missions / fleet)
+                    window = ((mission_duration_yr + (waves - 1) * cadence_yr)
+                              / n_missions)
+                else:
+                    window = _delivery_window_yr(
+                        n_missions, fleet, mission_duration_yr, cadence_yr)
                 # The fast path, and it is the common one at small fleets.  If
                 # no commodity reaches its ceiling then the load sells whole
                 # and the optimiser would only rediscover `gross_base`.  Same
@@ -7429,6 +7495,13 @@ def _evaluate_combo_at_ratio(
     # and it skips the rebuild entirely by pricing in full straight away.
     programmes, fleet_ladder = _programme_ladder_cached(
         rig_trips, config, market_mode)
+    max_n = math.inf
+    if config.model_body_resource_budget:
+        max_n = (float(asteroid_row.get("estimated_mass_kg"))
+                 / (feed_kg + isru_feed_kg))
+        programmes = [p for p in programmes if p[0] == 1 or p[0] <= max_n]
+        if not programmes:
+            return None
     single       = len(programmes) == 1
     # v1.17.6: the ranking objective is a config field, so it is resolved once
     # here rather than re-read on every rung below.  See `_objective_key`.
@@ -7461,7 +7534,7 @@ def _evaluate_combo_at_ratio(
         n_floor = max(1, int(config.nre_amortization_missions))
         for fleet in _fleet_refinement_cached(best_f, fleet_ladder):
             n_missions = fleet * best_w
-            if n_missions < n_floor:
+            if n_missions < n_floor or n_missions > max_n:
                 continue
             cand = _price_programme(n_missions, fleet, best_w, full=False)
             priced_count += 1
