@@ -188,7 +188,7 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.17.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and twenty-eight are not, and that split rotted in prose
+rows are performance stamps and twenty-nine are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
