@@ -1376,6 +1376,14 @@ Stated plainly so results aren't over-read:
   not declined, because the rule would have to guess its spin. F13 and F18 in
   [starred-repos' `FOURTH-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md)
   are the measurements.
+- **Five method questions are open, and each is a flag, off by default.** A
+  default run sizes no plant for a raw dig (`model_raw_excavation_power`), buys
+  solar arrays at delivered rather than rated watts (`model_rated_array_cost`,
+  the largest, near 1.7x on the cost per kg of a sampled run), picks the
+  rendezvous apsis on a delta-v sum (`offer_both_apsides`), ages a rig only while
+  it digs (`model_rig_calendar_cadence`) and keeps the boil-off of a longer dig
+  for a hold the fairing clipped (`reclose_volume_capped_hold`).
+  [Release v1.63.0](versions.md#master-v1630--calc-v1360) has each one's effect.
 - **A poorly known orbit costs a lost target, not a wrong Δv.** Many top-ranked
   bodies have orbits fitted to a few days of observations. Pushed through the
   Δv estimator, their orbit covariance barely moves Δv (a few m/s for most),
