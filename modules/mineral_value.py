@@ -242,7 +242,8 @@ def cached_release(config: "MineralValueConfig" = CONFIG) -> Optional[dict]:
 
     Reads and hashes every cached table (they are small), because a manifest
     beside a table that has since been edited would vouch for bytes it never
-    saw.  None means Stage 2 has to download.
+    saw.  None means Stage 2 has to download.  An intact cache of the wrong
+    data contract is refused here, offline, before it can replace anything.
     """
     cache = _cache_dir(config)
     manifest = _read_manifest(os.path.join(cache, _ASSET_MANIFEST))
@@ -253,6 +254,7 @@ def cached_release(config: "MineralValueConfig" = CONFIG) -> Optional[dict]:
         if (not os.path.isfile(path) or os.path.getsize(path) != entry["bytes"]
                 or _release.sha256(path) != entry["sha256"]):
             return None
+    _check_contract(config, manifest)
     return manifest
 
 

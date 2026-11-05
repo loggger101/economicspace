@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.62.0 / calc v1.35.0](#master-v1620--calc-v1350)
 - [master v1.61.0 / calc v1.34.0](#master-v1610--calc-v1340)
 - [master v1.60.0 / calc v1.33.0](#master-v1600--calc-v1330)
 - [master v1.59.0 / mineral_value v1.17.0](#master-v1590--mineral_value-v1170)
@@ -114,8 +115,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.34.0** | v1.34.0, an opt-in spin limit (`model_spin_limit`, off by default) declines bodies measured to spin faster than loose regolith can stay on, and no number moves; v1.33.0 moved the cargo valuation to `spacevalue.cargo`; v1.32.0 was the last to move a number, ISRU hydrolox paying for its electrolysis and liquefaction |
-| - | `master.py` | **1.61.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 4 | `modules/calc.py` | **1.35.0** | v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
+| - | `master.py` | **1.62.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -209,6 +210,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.62.0 / calc v1.35.0](#master-v1620--calc-v1350) | 2026-11-04 | **eight General_Research candidates off the default path**: a fixed N that does not divide evenly buys and credits whole rigs, ships flown together share heritage, salvage stops compounding under the cost of capital, `model_water_liberation` and `model_tank_mass` hold on both sides, N is a true floor, a cached release of the wrong contract is refused, and the pre-filter line reports both stages; no default number moves |
 | [master v1.61.0 / calc v1.34.0](#master-v1610--calc-v1340) | 2026-10-29 | **an opt-in spin limit**: `model_spin_limit` declines a body measured to spin faster than loose regolith can stay on its equator, and reports `spin_lift_period_h`; off by default, so no number moves. With it, `campaign/composition_range.py` re-prices a guessed-class body under each class it could be |
 | [master v1.60.0 / calc v1.33.0](#master-v1600--calc-v1330) | 2026-10-26 | **Stage 4's cargo valuation moves to `spacevalue.cargo`** (spacevalue v0.2.0): the phase walk, the refinery, the market ceilings and the payload knapsack, verbatim, about 1,400 lines; calc imports them back and no number moves |
 | [master v1.59.0 / mineral_value v1.17.0](#master-v1590--mineral_value-v1170) | 2026-10-26 | **Stage 2's pricing moves to `spacevalue`, and both pricing stages stop fetching live**: Stage 2 installs a published price release, Stage 3 prices fuel from a recorded quote snapshot (spacecost v0.14.0), and both pins hold the closes every current number was measured on, so no number moves |
@@ -278,6 +280,73 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.62.0 / calc v1.35.0
+
+**Eight General_Research candidates, all on paths a default run never takes**,
+so **no default number moves**. The four verify cells run at N = 1 with the
+cost of capital and reliability off, which is why every one of these survived:
+bit-identity defends the default and says nothing about the rest. Each fix
+therefore has its own measurement below, and each moves numbers on exactly the
+path it names. Nothing here repins a package.
+
+### What changes
+
+- **rc-250, a fixed N that does not divide evenly buys whole rigs.** N = 7 over
+  two rigs flies 4 + 3 campaigns. The rig line charged every mission a quarter
+  of one rig net of its credit, which books 1.75 rigs on a programme that owns
+  two: $945M at $600M a rig, where the rigs net $1,020M. It now charges both
+  rigs less both credits over the seven missions, each rig credited for its own
+  use, and each credit dated at that rig's last campaign. Reachable only with
+  `optimise_programme_scale=False`: every programme the search proposes is
+  rectangular.
+- **rc-286, ships flown together share heritage.** `mining_success_probability`
+  grew reliability one flight at a time however the fleet flew. Wave `w` now
+  reads the curve at `w x F + 1`: 25 ships in one wave stay at 0.850 where 25
+  flown in sequence average 0.923. A wave is assumed to see the results of the
+  wave before it, one cadence earlier, and no separate correction delay is
+  modelled. Reachable only with `model_reliability` on and F > 1.
+- **rc-262, salvage is a receipt at the end.** With the cost of capital on, the
+  rig credit was netted inside the up-front bucket and so compounded for the
+  whole mission, as if the salvage were received at launch. It now sits in the
+  end bucket, which can go negative. With the cost of capital off the buckets
+  change no total and the credit stays where it was.
+- **rc-247, `model_water_liberation=False` drops both bake-outs.** Sizing dropped
+  ISRU and cargo water; settlement then charged the ISRU water anyway, so the
+  plant priced was not the plant sized and a mission could fail at settlement on
+  the RTG cap it had passed. The feed and the propellant it makes stay.
+- **rc-264, `model_tank_mass` reads the config it is run with.** The cached
+  propellant constants carried the flag's answer, so a row reused under the
+  other setting kept the first. The constants now hold the physical figure and
+  each reader applies the flag.
+- **rc-249, the configured N is a floor on N.** The floor sat on the fleet
+  ladder, so a small W took N back below it: N = 100 could fly 60. Coarse sweep
+  and refinement both hold `F x W >= N`, and `programme_options_priced` falls to
+  match. N = 1 filters nothing.
+- **rc-278, a cached release of the wrong contract is refused.** Only a download
+  was checked. A catalog or price release already on disk with intact hashes
+  went straight through; both modules now run the contract check on the cached
+  copy, offline, before it can replace anything.
+- **rc-255, the pre-filter line reports both stages.** `_prefilter_probe` stopped
+  at stage 1 and read the window wait from a second copy of the calculation.
+  It now runs the two stages the search runs, through `asteroid_context`, and
+  the line names each. A stdout change only: no column moves.
+
+### Verified
+
+| harness | result |
+|---|---|
+| `verify.py check`, all seven, against a baseline taken on the clean 1.34.0 tree first (`--tag pre-gates`) | ALL CHECKS PASSED: the four cells MATCH bit for bit, 151 of 151 columns each; prune on and off, serial and parallel, mass ledger, never-worse, Stage 2 tables and market ceilings clean |
+| 80 real rows at cislunar through both trees (60 on a stride, 20 of the bodies with ice above 0.1), search on, search off, and `model_tank_mass=False` from fresh rows | 0 rows differ, on every column |
+| rc-250, R320's witness rig at N = 7, 9, 11, 13 | net rig $1,020M, $1,140M, $1,560M, $1,680M; N = 7, 9 and 11 against dated sums with the cost of capital on; fixed N = 7 on the real rows raises cost on all 70 that evaluate, and N = 2 changes none |
+| rc-286 | 25 serial still 0.9227022785808684; fixed N = 7 over two ships reads 0.8879 against 0.8939, and no row reads higher |
+| rc-262, R331's witness, then fixed N = 2 and N = 3 on the real rows | $240M credit, $175.82688M difference; cost rises on all 70 rows and the end bucket is negative on all 70 |
+| rc-247, a New Glenn hydrolox row forced to ISRU at 20% water | water baked with the flag off 14,858 kg to 0; 530 kg less power system; payload 10,190 to 12,185 kg; $70,829 to $61,721/kg |
+| rc-264, one set of rows run under each setting in both orders | against fresh rows, 74 of 80 differ on 1.34.0 and 0 now |
+| rc-249, N = 100 with the search on | below the floor on 38 of 70 rows at 1.34.0, on 0 now; the other 32 differ only in `programme_options_priced` |
+| rc-255, the probe against a counted search on 80 rows | 0 mismatches; on a 200-row probe, 38,790 candidates pass stage 1 of 220,608 and 9,010 pass stage 2, where the old line printed the 38,790 as kept; about 0.4 s more, once a run |
+| rc-278 | a wrong contract is refused on a warm catalog and on a warm price cache; an intact cache still passes |
+| `verify_docs.py` | OK |
 
 ## master v1.61.0 / calc v1.34.0
 
@@ -11623,6 +11692,20 @@ high-inclination arrival. No config field or output column moved, and
 - **New output column, only with the limit on**: `spin_lift_period_h` (None
   where the body has no density). A default run's columns are unchanged.
 - **New functions**: `spin_lift_period_h`, `spin_limited`.
+
+**`1.35.0`  eight fixes off the default path.** Full write-up: [master v1.62.0 / calc v1.35.0](#master-v1620--calc-v1350).
+- **No new config field and no new output column.**
+- **Changed signatures**: `_tank_frac_per_kg(propellant)` loses `config`;
+  `_prefilter_probe(asteroid_row, combos, ops_df, config)` gains `ops_df` and
+  returns three counts; `mission_cost_usd` and `_mission_cost_tail` gain
+  `fleet_ships=None`; `mining_success_probability` and
+  `_mining_reliability_cached` gain `fleet_ships=1`, whose default is the serial
+  1.34.0 curve.
+- **Columns that read differently on a path the release names**:
+  `end_of_mission_cost_usd` can be negative with `apply_wacc_compounding` on;
+  `rig_terminal_value_usd` is the mean per rig on a partial programme;
+  `programme_options_priced` falls when `nre_amortization_missions` > 1 with the
+  search on.
 
 # Measurement history
 

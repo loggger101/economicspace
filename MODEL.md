@@ -697,7 +697,9 @@ water locked into phyllosilicates; it is baked out at ~700 K, not scooped.
 Stage 3 charges **2,500 Wh/kg**, derived from heating the rock through
 dehydroxylation plus the enthalpy of dehydration plus vaporisation, and
 matching the 1-3 kWh/kg in the ISRU literature. It had been extracted free and
-sold at full launch-cost-avoided.
+sold at full launch-cost-avoided. Off drops the bake-out draw for both kinds of
+water, ISRU feed and cargo, in sizing and at settlement alike; the feed and its
+propellant are still flown.
 
 **Making ISRU propellant** (`model_isru_processing`, calc v1.32.0). Liberating
 the water was the only processing an ISRU mission paid for in energy; splitting
@@ -872,7 +874,10 @@ expensive, not less:
 
 Life remaining when the programme ends is credited at the salvage fraction
 (0.50), but only when `nre_amortization_missions > 1`: a rig parked at an
-asteroid nobody revisits is stranded, not an asset.
+asteroid nobody revisits is stranded, not an asset. A fixed N that does not
+divide evenly buys whole rigs and credits each for its own use: N = 7 over two
+rigs is 4 + 3 campaigns, and the cost of both, less both credits, is split
+over the seven missions.
 
 **Mission reliability** (`model_reliability`, **off** since calc v1.22.0).
 Revenue was certain. With this on, expected revenue is
@@ -930,7 +935,11 @@ hardware that flies once every few years with no test fleet. Capped at a 0.95 ma
 the rig amortise across the whole programme, so per-mission expected revenue
 has to use the programme average; quoting the last mission's reliability would
 credit every mission with heritage only the last one has. Exactly 0.850 at
-N = 1. ⚠️  Launch and cruise reliability deliberately do **not** grow: launch
+N = 1. The table is a serial programme (F = 1). Heritage is what has flown, so
+ships launched together all read the same point on the curve: wave `w` has
+seen `w × F` flights, and 25 ships in one wave stay at 0.850 where 25 flown in
+sequence average 0.923. A wave is assumed to see the results of the wave
+before it, one cadence earlier; no separate correction delay is modelled. ⚠️  Launch and cruise reliability deliberately do **not** grow: launch
 vehicles are already mature, and MTBF is a duration exposure rather than a
 heritage question. Do not "complete" the model by adding growth to them.
 
@@ -1166,7 +1175,10 @@ agency's, a sovereign fund's, a venture portfolio's -- and the model does not
 know and should not guess. It is not a rounding term either: an up-front line
 compounded over a 5-to-12-year mission is worth roughly **twice** its face
 value, which is the same 2.12-2.38x multiplier measured on the insurance
-premium, applied to every up-front line in the cascade.
+premium, applied to every up-front line in the cascade. The rig's salvage is a
+receipt at the programme's end, so with this on it sits in the end bucket and
+is not compounded; with it off, the bucket changes no total and the credit
+stays netted in the up-front column.
 
 ⚠️  **It takes the programme calendar charge with it.** `model_programme_calendar`
 is time-value, and `programme_calendar_multipliers` returns exactly (1.0, 1.0)
