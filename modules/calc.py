@@ -696,7 +696,7 @@ class CalcConfig:
     # more than the body holds.  On, both books carry the tank, and a mission
     # over min(mineable, throughput) is solved again at the payload that fits.
     model_isru_feed_budget:    bool  = False
-    # Two more, off by default (v1.38.0).
+    # Seven more, off by default (v1.38.0).
     #
     # Off, a radioisotope plant over `rtg_max_power_w` refuses the candidate at
     # the largest payload it tried.  On, it is solved again at the payload the
@@ -707,6 +707,29 @@ class CalcConfig:
     # feed can still buy the scarcer phases.  On, the search continues to
     # `max_concentration_ratio`, after and in addition to the usual grid.
     search_concentration_past_purity: bool = False
+    # Off, a sizing loop that never had to back off flies its twelfth pass even
+    # if that pass has not settled, so an oscillating loop reports whichever
+    # side of the answer it stopped on.  On, such a candidate is solved again
+    # with every pass relaxed half way, and the better of the two flies.
+    relax_oscillating_sizing:  bool  = False
+    # Off, a body's gravity does not enter its transport budget, so a large one
+    # is left for less than it takes to leave its surface.  On, a return offer
+    # that with the fastest rotation still falls short of surface escape is
+    # withdrawn.  A necessary test: passing it is not a surface-launch design.
+    gate_surface_escape:       bool  = False
+    # Off, the hold is measured at the parent body's bulk density.  On, a
+    # concentrate must also fit at its own phases' densities, unpacked, so a
+    # water hold no longer fits at the density of the rock it came from.
+    model_cargo_volume:        bool  = False
+    # Off, only the returned cargo is held to the fairing.  On, the propellant
+    # loaded on Earth must fit it too, at its own density, with the payload
+    # solved down until it does.  A necessary test: tank walls, ullage and the
+    # stowed hardware take no volume here.
+    model_launch_liquid_volume: bool = False
+    # Off, boil-off stops at departure and ISRU fuel is exempt, so a capture burn
+    # finds all its fuel still in the tank after the cruise home.  On, the fuel
+    # for it is carried through the cruise at the propellant's own loss rate.
+    model_return_coast_boiloff: bool = False
 
     # VOLATILE CARGO CONTAINMENT.  The pipeline sells water at every in-space
     # destination and charged nothing to keep it from subliming across a
@@ -2294,6 +2317,33 @@ def spin_lift_period_h(density_gcm3: Any) -> Optional[float]:
     return math.sqrt(3.0 * math.pi / (_G_SI * rho)) / 3600.0
 
 
+def surface_escape_shortfall_m_s(asteroid_row: Row, config: CalcConfig) -> float:
+    """What a surface load still lacks after the fastest rotation helps (m/s).
+
+    Spherical escape from the mean radius, less the equatorial speed at the
+    body's period.  Zero when mass or size is missing, so no body is declined
+    for want of them.
+    """
+    try:
+        mass_kg     = float(asteroid_row.get("estimated_mass_kg"))
+        diameter_km = float(asteroid_row.get("diameter_km"))
+    except (TypeError, ValueError):
+        return 0.0
+    if not (np.isfinite(mass_kg) and np.isfinite(diameter_km)
+            and mass_kg > 0 and diameter_km > 0):
+        return 0.0
+    radius_m = diameter_km * 500.0
+    try:
+        period_h = float(asteroid_row.get("rotation_period_h"))
+    except (TypeError, ValueError):
+        period_h = float("nan")
+    if not np.isfinite(period_h) or period_h <= 0:
+        period_h = config.default_rotation_period_h
+    escape_m_s   = math.sqrt(2.0 * _G_SI * mass_kg / radius_m)
+    rotation_m_s = 2.0 * math.pi * radius_m / (period_h * 3600.0)
+    return max(0.0, escape_m_s - rotation_m_s)
+
+
 def spin_limited(rotation_period_h: Any, lift_period_h: Optional[float]) -> bool:
     """Whether a MEASURED rotation period is shorter than the lift period.
 
@@ -3394,8 +3444,11 @@ def asteroid_dv_options(
                          config.max_dv_outbound_m_s)
             dv_ret = min(max(legs[leg] * 1_000.0, 300.0),
                          config.max_dv_outbound_m_s)
+            departure = legs["dv_depart_for_mars" if "mars" in leg
+                             else "ret_earth_surface_aero"]
             offers.append({"dv_out_m_s": dv_out, "dv_ret_m_s": dv_ret,
-                           "rendezvous_apsis": legs["rendezvous_apsis"]})
+                           "rendezvous_apsis": legs["rendezvous_apsis"],
+                           "dv_capture_m_s": max(0.0, legs[leg] - departure) * 1_000.0})
         # Resolve the apsis against the round trip actually being flown, not
         # against a fixed Earth return.  The sort is stable, so a tie keeps the
         # first apsis.
@@ -3408,6 +3461,9 @@ def asteroid_dv_options(
             offer["aero"]     = aero
             offer["tps_frac"] = config.heat_shield_frac_of_payload if aero else 0.0
             out.append(offer)
+    if config.gate_surface_escape:
+        shortfall = surface_escape_shortfall_m_s(asteroid_row, config)
+        out = [offer for offer in out if offer["dv_ret_m_s"] >= shortfall]
     return out
 
 
@@ -6045,6 +6101,7 @@ class AsteroidContext(NamedTuple):
     # usable ice column", which multiplies out to the same 0.0 that branch
     # used to return early.
     cargo_ice_frac:        float
+    phase_density_kg_per_L: Dict[str, float] = {}
 
 
 def asteroid_context(
@@ -6153,8 +6210,10 @@ def _evaluate_combo_at_ratio(
     market_mode:       Optional[str] = None,
     refinery:          Optional[Tuple[Dict[str, float], float]] = None,
     payload_cap_kg:    Optional[float] = None,
+    dv_capture_m_s:    float = 0.0,
     _repair_depth:     int = 0,
     _damped_steps:     int = 0,
+    _relax:            Optional[bool] = None,
 ) -> Optional[Dict[str, float]]:
     """Evaluate one (vehicle × propellant × architecture) mission for one asteroid.
 
@@ -6440,7 +6499,19 @@ def _evaluate_combo_at_ratio(
     processing_power_watts = 0.0
     isru_feed_kg    = 0.0
     isru_prop_kg    = 0.0
-    dv_ret_eff      = dv_ret_m_s
+    dv_ret_stored   = dv_ret_m_s
+    if (config.model_return_coast_boiloff and config.model_propellant_boiloff
+            and boiloff_pct > 0 and dv_capture_m_s > 0):
+        # The fuel left after the departure burn is B x what capture needs, so
+        # R = Rd (1 + B (Rc - 1)).  A storage ratio and not a trajectory: the
+        # clock and every physical Δv stay on `dv_ret_m_s`.
+        cruise_yr = max(0.5, 0.000_23 * dv_ret_m_s)
+        r_capture = math.exp(dv_capture_m_s * dv_penalty / (isp_s_val * G0_M_S2))
+        r_coast   = (math.exp(dv_ret_m_s / (isp_s_val * G0_M_S2)) / r_capture
+                     * (1.0 + math.exp(boiloff_pct / 100.0 * cruise_yr * 365.25)
+                        * (r_capture - 1.0)))
+        dv_ret_stored = isp_s_val * G0_M_S2 * math.log(r_coast)
+    dv_ret_eff      = dv_ret_stored
     boiloff_factor  = 1.0
     stay_est_yr     = config.station_keeping_floor_yr + window_wait_yr
     outbound_yr     = max(0.5, 0.000_23 * dv_out_m_s)
@@ -6457,8 +6528,8 @@ def _evaluate_combo_at_ratio(
     water_wh = _ops_value(
         ops_df, "Water liberation energy (bound water)", default=2_500.0,
     )
-    def _solved_under(cap_kg):
-        """This candidate, solved from the top with `cap_kg` as its ceiling."""
+    def _solved_again(cap_kg, repair_depth, relax):
+        """This candidate, solved from the top."""
         return _evaluate_combo_at_ratio(
             asteroid_row, vehicle, propellant, bulk_value_per_kg,
             dv_out_arg, dv_ret_arg, ops_df, config,
@@ -6468,9 +6539,15 @@ def _evaluate_combo_at_ratio(
             isru=isru, rendezvous_apsis=rendezvous_apsis,
             power_mode=power_mode, ctx=ctx, market_mode=market_mode,
             refinery=refinery, payload_cap_kg=cap_kg,
-            _repair_depth=_repair_depth + 1,
+            dv_capture_m_s=dv_capture_m_s,
+            _repair_depth=repair_depth,
             _damped_steps=_damped_steps + damped_here,
+            _relax=relax,
         )
+
+    def _solved_under(cap_kg):
+        """This candidate with `cap_kg` as its ceiling."""
+        return _solved_again(cap_kg, _repair_depth + 1, None)
 
     def _refit_to_plant_ceiling(payload_kg, watts):
         """Price the candidate again at the payload the plant ceiling allows.
@@ -6521,7 +6598,7 @@ def _evaluate_combo_at_ratio(
         if models_boiloff:
             hold_yr = outbound_yr + stay_est_yr
             boiloff_factor = math.exp(boiloff_pct / 100.0 * hold_yr * 365.25)
-            r_ret_raw = math.exp(dv_ret_m_s / (isp_s_val * G0_M_S2))
+            r_ret_raw = math.exp(dv_ret_stored / (isp_s_val * G0_M_S2))
             r_ret_eff = 1.0 + (r_ret_raw - 1.0) * boiloff_factor
             dv_ret_eff = isp_s_val * G0_M_S2 * math.log(r_ret_eff)
 
@@ -6727,7 +6804,7 @@ def _evaluate_combo_at_ratio(
             # far below anything that moves a reported number.
             and abs(new_containment_frac - containment_frac) <= 1e-4
         )
-        if damp:
+        if damp or _relax:
             base   = (power_system_kg, ep_system_kg, refinery_kg, isru_feed_kg,
                       isru_prop_kg, stay_est_yr, containment_frac)
             target = (new_power_kg, new_ep_kg, new_refinery_kg, new_isru_feed,
@@ -6745,6 +6822,10 @@ def _evaluate_combo_at_ratio(
         structure_frac_eff            = structure_frac + containment_frac
         if converged:
             break
+        if _relax and not damped_here:
+            step = 0.5
+            damped_here += 1
+            pass_limit += _DAMP_EXTRA_PASSES
 
     if cascade is None or not cascade["viable"]:
         return None
@@ -6754,6 +6835,14 @@ def _evaluate_combo_at_ratio(
     # runs out of passes flies its last pass, as it always has.
     if damped_here and not converged:
         return None
+    # The native last pass stays in the running: it is a mission the stack can
+    # fly, and relaxing can fail where the update is too steep for a half step.
+    if config.relax_oscillating_sizing and not converged and _relax is None:
+        return max(
+            (_solved_again(payload_cap_kg, _repair_depth, False),
+             _solved_again(payload_cap_kg, _repair_depth, True)),
+            key=lambda res: selection_key(res, config),
+        )
     hardware_total_kg = (config.mining_hardware_kg + power_system_kg + ep_system_kg
                          + refinery_kg
                          + (refinery_plant_kg(isru_prop_kg,
@@ -7041,10 +7130,31 @@ def _evaluate_combo_at_ratio(
                     isru=isru, rendezvous_apsis=rendezvous_apsis,
                     power_mode=power_mode, ctx=ctx, market_mode=market_mode,
                     refinery=refinery, payload_cap_kg=cap,
+                    dv_capture_m_s=dv_capture_m_s,
                     _repair_depth=_repair_depth + 1,
                     _damped_steps=_damped_steps + damped_here,
                 )
         return None
+
+    if config.model_launch_liquid_volume:
+        liquid_kg = m_outbound_prop + (0.0 if isru else m_return_prop)
+        room_kg   = fairing_m3 * 1000.0 * float(propellant.get("density_kg_per_L") or 0.0)
+        if 0.0 < room_kg < liquid_kg:
+            # Both books are affine in payload at this hardware, and a lighter
+            # payload never needs heavier hardware, so one step lands inside
+            # and the rest of the depth limit is for the dig clock.
+            if _repair_depth >= 3:
+                return None
+            per_kg_after  = k_ret_c * (1.0 + tps_frac) * (1.0 + structure_frac_eff)
+            per_kg_return = per_kg_after * (r_ret - 1.0)
+            per_kg_out    = ((structure_frac_eff
+                              + tps_frac * (1.0 + structure_frac_eff)
+                              + tank_frac * per_kg_return
+                              + (0.0 if isru else per_kg_return))
+                             * k_out_c * (r_out - 1.0))
+            per_kg_liquid = per_kg_out + (0.0 if isru else per_kg_return)
+            cap = m_payload - (liquid_kg - room_kg) / per_kg_liquid
+            return _solved_under(cap * (1.0 - 1e-9)) if cap > 0.0 else None
 
     actual_cascade = {
         "max_payload_kg":  m_payload,
@@ -7086,6 +7196,22 @@ def _evaluate_combo_at_ratio(
         payload_mix            = {}
         dominant_phase         = None
         dominant_frac          = 0.0
+
+    # A raw hold stays at the body's density, the rock it is.  A repair scales
+    # the hold, which is exact while the mix keeps its shares.
+    if config.model_cargo_volume and payload_mix and ctx.phase_density_kg_per_L:
+        return_volume_m3 = sum(
+            kg / ctx.phase_density_kg_per_L.get(name, bulk_density_kg_per_L)
+            for name, kg in payload_mix.items()) / 1000.0
+        bulk_density_kg_per_L = m_payload / return_volume_m3 / 1000.0
+        if return_volume_m3 > usable_return_m3:
+            if _repair_depth >= 3:
+                return None
+            refit = _solved_under(
+                m_payload * usable_return_m3 / return_volume_m3 * (1.0 - 1e-9))
+            if refit is not None:
+                refit["volume_fits"] = False
+            return refit
 
     # Time is charged on the FEED, not the product: the rig has to dig all
     # of it, and that stay time flows into ops cost and WACC.  ISRU feed counts,
@@ -7985,6 +8111,7 @@ def evaluate_combo(
     ctx:               Optional[AsteroidContext] = None,
     market_mode:       Optional[str] = None,
     refinery:          Optional[Tuple[Dict[str, float], float]] = None,
+    dv_capture_m_s:    float = 0.0,
 ) -> Optional[Dict[str, float]]:
     """Best mission for one (asteroid × vehicle × propellant × architecture),
     optimising over how hard to concentrate.  "Best" is `selection_key`, which
@@ -8017,6 +8144,7 @@ def evaluate_combo(
         market_mode=market_mode,
         aero=aero, isru=isru, rendezvous_apsis=rendezvous_apsis,
         power_mode=power_mode, ctx=ctx, refinery=refinery,
+        dv_capture_m_s=dv_capture_m_s,
     )
 
     if not config.use_beneficiation:
@@ -8126,6 +8254,13 @@ def evaluate_combo(
                 if res is not None and key > best_key:
                     best_key, best = key, res
     return _past_purity(best, best_key)
+
+
+def phase_densities(minerals: pd.DataFrame) -> Dict[str, float]:
+    """Each mineral's density (kg/L), for those that state one."""
+    density = pd.to_numeric(minerals["density_gcm3"], errors="coerce")
+    return {name: float(rho) for name, rho in zip(minerals["name"], density)
+            if np.isfinite(rho) and rho > 0}
 
 
 def _row_to_dict(row: Row) -> Dict[str, Any]:
@@ -8453,6 +8588,8 @@ def evaluate_asteroid(
     ctx = asteroid_context(asteroid_row, ops_df, config)
     if ctx is None:
         return None
+    if config.model_cargo_volume:
+        ctx = ctx._replace(phase_density_kg_per_L=phase_densities(minerals))
     # v1.34.0: a body measured to spin faster than its lift period has no loose
     # regolith to dig, so no candidate is flown to it.  Read only when the flag
     # is on, so a default run takes no new branch.
@@ -8566,7 +8703,8 @@ def evaluate_asteroid(
          float(o["dv_ret_m_s"]),
          (config.heat_shield_frac_of_payload if bool(o["aero"]) else 0.0),
          bool(o["aero"]),
-         str(o["rendezvous_apsis"]))
+         str(o["rendezvous_apsis"]),
+         float(o.get("dv_capture_m_s", 0.0)))
         for i, o in enumerate(dv_options)
     ]
 
@@ -8607,7 +8745,7 @@ def evaluate_asteroid(
         if vconsts is None:
             vconsts = vehicle[_VEHICLE_CONSTS_KEY] = _vehicle_consts(vehicle)
         _fairing, leo_cap, leo_ok = vconsts
-        for dv_i, dv_out, dv_ret, dv_tps, dv_aero, dv_apsis in dv_resolved:
+        for dv_i, dv_out, dv_ret, dv_tps, dv_aero, dv_apsis, dv_capture in dv_resolved:
             for isru in isru_modes:
                 # Sits ABOVE the power-source loop on purpose: pass 1 of the
                 # sizing loop runs at zero plant mass, so it cannot tell the two
@@ -8664,7 +8802,7 @@ def evaluate_asteroid(
                         aero=dv_aero, isru=isru,
                         rendezvous_apsis=dv_apsis,
                         power_mode=power_mode, ctx=ctx,
-                        refinery=refinery,
+                        refinery=refinery, dv_capture_m_s=dv_capture,
                     )
                     if result is None:
                         continue

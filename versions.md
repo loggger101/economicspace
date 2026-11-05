@@ -118,7 +118,7 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.38.0** | v1.38.0, two more opt-in search changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
+| 4 | `modules/calc.py` | **1.38.0** | v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
 | - | `master.py` | **1.65.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
@@ -172,7 +172,7 @@ Thirty-five stamps so far have moved without moving a number:
 | calc `1.34.0` | **an opt-in spin limit** | bit-identical, verified (the limit is off by default) |
 | calc `1.36.0` | **five opt-in method changes** | bit-identical, verified (all five are off by default) |
 | calc `1.37.0` | **three opt-in method changes** | bit-identical, verified (all three are off by default) |
-| calc `1.38.0` | **two opt-in search changes** | bit-identical, verified (both are off by default) |
+| calc `1.38.0` | **seven opt-in changes** | bit-identical, verified (all seven are off by default) |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -216,7 +216,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
-| [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380) | 2026-11-05 | **two more opt-in search changes, off by default**: a radioisotope plant over its ceiling is solved again at a smaller payload, and concentration is searched past purity where market ceilings can pay for it. No default number moves |
+| [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380) | 2026-11-05 | **seven more opt-in changes, off by default**: three widen or close a search, and four hold a mission to a physical limit a default run ignores. No default number moves |
 | [master v1.64.0 / calc v1.37.0](#master-v1640--calc-v1370) | 2026-11-05 | **three more opt-in method changes, off by default**: the market accumulates over the span a programme reports, a programme has to fit the body, and an ISRU mission over its feed budget is solved again at a payload that fits. No default number moves |
 | [master v1.63.0 / calc v1.36.0](#master-v1630--calc-v1360) | 2026-11-05 | **five opt-in method changes, all off by default**: excavation power for raw cargo, solar arrays priced at their rated watts, both rendezvous apsides offered, rig age counted in elapsed time, and a volume-clipped cryogenic hold solved again. No default number moves |
 | [master v1.62.0 / calc v1.35.0](#master-v1620--calc-v1350) | 2026-11-04 | **eight General_Research candidates off the default path**: a fixed N that does not divide evenly buys and credits whole rigs, ships flown together share heritage, salvage stops compounding under the cost of capital, `model_water_liberation` and `model_tank_mass` hold on both sides, N is a true floor, a cached release of the wrong contract is refused, and the pre-filter line reports both stages; no default number moves |
@@ -292,16 +292,20 @@ module in numeric order.
 
 ## master v1.65.0 / calc v1.38.0
 
-**Two more General_Research candidates behind flags that are off by default**,
-so **no default number moves**. Both widen a search, so with either on a result
-can only improve on the configured objective or stay the same, at more
-evaluations. Nothing here repins a package.
+**Seven more General_Research candidates behind flags that are off by default**,
+so **no default number moves**. The first three widen or close a search, so with
+one on a result improves on the configured objective or stays the same. The other
+four hold a mission to a limit a default run ignores, so they can only cost.
+Nothing here repins a package.
 
 ### What each flag does
 
 Measured on 60 rows spaced evenly across the catalog, 53 of them evaluable,
 cislunar, beneficiated, programme search on, against the same run with the flag
-off, unless a line says otherwise.
+off, unless a line says otherwise. Each of the last five was also run raw, with
+the same result. Only `search_concentration_past_purity` moves more than one row
+of this sample, because the rows that need the others are large vehicles, cryogens
+and bodies this sample does not reach. Each one's own case below shows it working.
 
 - **`search_concentration_past_purity`** (rc-265). Concentration stopped where
   the hold is pure best-phase, which is the top only while every kilogram sells
@@ -321,9 +325,48 @@ off, unless a line says otherwise.
   goes over its ceiling, a refused candidate flies 2,739.4 kg at 4,999.999995 W,
   matching `5000 W x 0.25 yr / 4000 Wh/kg`, at $1.69M/kg against solar's $5.11M/kg.
   Solar results do not move.
+- **`relax_oscillating_sizing`** (rc-282). A sizing loop that never failed flies its
+  twelfth pass settled or not, so an oscillating one reports whichever side it
+  stopped on. On, such a candidate is solved again with each pass relaxed half way,
+  and the better of the two flies, so a loop that relaxing cannot close keeps its
+  old answer. R346's 1.4 AU case goes from 4,743.9 kg at a cost over revenue of
+  283.02 to 9,160.2 kg at 160.59, against the record's closed-form 160.49. Across
+  its 23 cases, 22 replay the record's native answer to six places (the
+  `refinery_disabled` control does not, on my inputs), every gain lands within
+  0.36% of the closed form, and the body-limit, volume-limit and profit-objective
+  controls do not move. **One row of the 53 moves**, at 0.997x the cost per kg.
+- **`model_return_coast_boiloff`** (rc-284). Boil-off stopped at departure and ISRU
+  fuel was exempt, so a capture burn found all its fuel still in the tank. On, that
+  fuel is carried through the cruise, `R = Rd (1 + B (Rc - 1))`, which needs a
+  separate capture burn, so a mission with no later burn does not move. The clock
+  and every physical Δv are unchanged. All 20 of R348's cases match the record to
+  rounding: at 1.2 AU the fuel goes from 1,347.06 to 1,640.12 kg, launch from
+  10,495.84 to 10,918.01 kg and cost from $1,741.00M to $1,758.68M. One case that
+  closed before is now refused, as recorded. **No row of the 53 moves**: their
+  winners fly xenon, which does not boil off.
+- **`model_launch_liquid_volume`** (rc-288). Only returned cargo was held to the
+  fairing. On, the propellant loaded on Earth must fit it too, and the payload is
+  solved down until it does. Of R353's 23 cases the 9 controls that fly do not move,
+  and the 14 that overfill now fit: SLS Block 1 hydrolox at 1.3 AU goes from 228.3 m³
+  and 13,568.3 kg to 216.0 m³ and 12,746.8 kg. Ten land on the record's 48-step
+  bisection, the other four up to 0.5% lighter, since the single step is solved at
+  the hardware of the book it repairs. **No row of the 53 moves.**
+- **`model_cargo_volume`** (rc-285). The hold was measured at the parent body's
+  density, so a water cargo fit at the density of the rock it came from. On, a
+  concentrate must also fit at its own phases' densities, unpacked, and the payload
+  is solved down until it does. A raw hold stays at the body's density. R350's main
+  case goes from 57,746.6 kg of water to 54,000.0 kg at 54.0 m³ and launch from
+  95,000 to 89,157.6 kg, as recorded. **No row of the 53 moves.**
+- **`gate_surface_escape`** (rc-289). A body's gravity was not in its transport
+  budget. On, a return offer that still falls short of surface escape with the
+  fastest rotation added is withdrawn. All 14 of R354's accepted failures lose the
+  short offer, so its Ceres-scale case flies 1,159.8 kg by the propulsive route
+  rather than 7,866.7 kg on 300 m/s, and its 7 recorded non-detections and its
+  refusal are unchanged. **No row of the 53 moves**, and among the 12 most massive
+  catalog bodies the two that are evaluable keep their offer, at about 12 km/s.
 
-With both on, no row changes evaluability, and the pre-filter gives the same rows
-on and off.
+With all seven on, 25 of the 53 rows move, at 0.855x to 1.000x the cost per kg, no
+row changes evaluability, and the pre-filter gives the same rows on and off.
 
 Three repairs now share one helper, `_solved_under`, so each states only the
 ceiling it asks for.
@@ -332,6 +375,16 @@ ceiling it asks for.
 
 - The sample is 60 rows, so none of this is a campaign result.
 - `search_concentration_past_purity` prices more ratios and was not timed.
+- rc-282's relaxed solve stops at the loop's 1% tolerance, which is why it sits just
+  above the closed form. A slowly converging loop, as opposed to an oscillating
+  one, relaxes no faster and keeps its old answer.
+- rc-285 and rc-288 are necessary tests, as their candidates say. rc-285 does not
+  pack solids, take credit for a denser cargo than the body, or search the best
+  mix for the volume. rc-288 gives tank walls, ullage and hardware no volume.
+- rc-289 is an eligibility limit, not a surface-launch design, and it misses
+  bodies that pass the energy test and still could not lift off.
+- rc-284 was replayed through the kernel on R348's inputs, and the capture split
+  through the offers was only exercised on the real rows, where it changes nothing.
 - `refit_rtg_ceiling` scales the payload by the ceiling, which is exact on a floor
   stay. A dig-limited draw that does not fall with payload spends the repair depth
   and is refused as before, so this is not the general joint solver rc-281 asks for.
@@ -11868,10 +11921,13 @@ high-inclination arrival. No config field or output column moved, and
   where the body has no density). A default run's columns are unchanged.
 - **New functions**: `spin_lift_period_h`, `spin_limited`.
 
-**`1.38.0`  two opt-in search changes.** Full write-up: [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380).
-- **New config fields**, both default `False`: `refit_rtg_ceiling`,
-  `search_concentration_past_purity`.
-- **No new output column** and no changed public signature.
+**`1.38.0`  seven opt-in changes.** Full write-up: [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380).
+- **New config fields**, all default `False`: `refit_rtg_ceiling`,
+  `search_concentration_past_purity`, `relax_oscillating_sizing`,
+  `gate_surface_escape`, `model_cargo_volume`, `model_launch_liquid_volume`,
+  `model_return_coast_boiloff`.
+- **No new output column.** `asteroid_dv_options` offers carry `dv_capture_m_s`, and
+  `evaluate_combo` takes it as a new keyword, default 0.
 
 **`1.37.0`  three opt-in method changes.** Full write-up: [master v1.64.0 / calc v1.37.0](#master-v1640--calc-v1370).
 - **New config fields**, all default `False`: `model_market_wave_clock`,
