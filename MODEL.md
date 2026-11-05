@@ -1376,6 +1376,12 @@ Stated plainly so results aren't over-read:
   not declined, because the rule would have to guess its spin. F13 and F18 in
   [starred-repos' `FOURTH-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md)
   are the measurements.
+- **Three more method questions are flags, off by default.** A default run's
+  market accumulates past the span its programme reports
+  (`model_market_wave_clock`), a programme may dig more than its body holds
+  (`model_body_resource_budget`), and an ISRU mission can overrun the body or be
+  refused where a smaller payload fits (`model_isru_feed_budget`).
+  [Release v1.64.0](versions.md#master-v1640--calc-v1370) has each one's effect.
 - **Five method questions are open, and each is a flag, off by default.** A
   default run sizes no plant for a raw dig (`model_raw_excavation_power`), buys
   solar arrays at delivered rather than rated watts (`model_rated_array_cost`,

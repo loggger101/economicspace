@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.64.0 / calc v1.37.0](#master-v1640--calc-v1370)
 - [master v1.63.0 / calc v1.36.0](#master-v1630--calc-v1360)
 - [master v1.62.0 / calc v1.35.0](#master-v1620--calc-v1350)
 - [master v1.61.0 / calc v1.34.0](#master-v1610--calc-v1340)
@@ -116,8 +117,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.36.0** | v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.63.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 4 | `modules/calc.py` | **1.37.0** | v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
+| - | `master.py` | **1.64.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -132,7 +133,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Thirty-three stamps so far have moved without moving a number:
+Thirty-four stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -169,6 +170,7 @@ Thirty-three stamps so far have moved without moving a number:
 | calc `1.33.0` | **the cargo valuation moved to spacevalue** | bit-identical, verified |
 | calc `1.34.0` | **an opt-in spin limit** | bit-identical, verified (the limit is off by default) |
 | calc `1.36.0` | **five opt-in method changes** | bit-identical, verified (all five are off by default) |
+| calc `1.37.0` | **three opt-in method changes** | bit-identical, verified (all three are off by default) |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -180,7 +182,7 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.17.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eight
-rows are performance stamps and twenty-five are not, and that split rotted in prose
+rows are performance stamps and twenty-six are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -212,6 +214,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.64.0 / calc v1.37.0](#master-v1640--calc-v1370) | 2026-11-05 | **three more opt-in method changes, off by default**: the market accumulates over the span a programme reports, a programme has to fit the body, and an ISRU mission over its feed budget is solved again at a payload that fits. No default number moves |
 | [master v1.63.0 / calc v1.36.0](#master-v1630--calc-v1360) | 2026-11-05 | **five opt-in method changes, all off by default**: excavation power for raw cargo, solar arrays priced at their rated watts, both rendezvous apsides offered, rig age counted in elapsed time, and a volume-clipped cryogenic hold solved again. No default number moves |
 | [master v1.62.0 / calc v1.35.0](#master-v1620--calc-v1350) | 2026-11-04 | **eight General_Research candidates off the default path**: a fixed N that does not divide evenly buys and credits whole rigs, ships flown together share heritage, salvage stops compounding under the cost of capital, `model_water_liberation` and `model_tank_mass` hold on both sides, N is a true floor, a cached release of the wrong contract is refused, and the pre-filter line reports both stages; no default number moves |
 | [master v1.61.0 / calc v1.34.0](#master-v1610--calc-v1340) | 2026-10-29 | **an opt-in spin limit**: `model_spin_limit` declines a body measured to spin faster than loose regolith can stay on its equator, and reports `spin_lift_period_h`; off by default, so no number moves. With it, `campaign/composition_range.py` re-prices a guessed-class body under each class it could be |
@@ -283,6 +286,57 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.64.0 / calc v1.37.0
+
+**Three more General_Research candidates behind flags that are off by default**,
+so **no default number moves**. As with v1.36.0, turning one on is a decision.
+`model_isru_feed_budget` changes winners by more than its candidate expected.
+Nothing here repins a package.
+
+### What each flag does
+
+Measured on 80 rows, 60 spaced evenly across the catalog and 20 across its
+smallest fifth, 73 of them evaluable, cislunar, raw, programme search on, against
+the same run with every flag off, unless a line says otherwise.
+
+- **`model_isru_feed_budget`** (rc-241). The sizing loop's ISRU fuel left out the
+  return tank the settled fuel includes, and only throughput was checked at the
+  end, so a mission could dig more than the body holds. On, both books carry the
+  tank, and a mission over `min(mineable, throughput)` is solved again at the
+  payload that fits, closed-form because fuel feed is linear in payload. The
+  same repair replaces an outright refusal in the sizing loop, and **that is what
+  moves results**: ISRU candidates refused at their largest payload now fly a
+  smaller one. 13 of the 73 rows switch from xenon to water ion, at 0.67x to 0.75x
+  the cost per kg, with a smaller cargo and a three-year dig. Every one of them
+  stays inside its budget. On a synthetic 1,000 kg wet body a candidate refused
+  before flies 23.3 kg and digs 1,000 kg in all.
+- **`model_market_wave_clock`** (rc-287). A delivery's market window ran to
+  `T + (N - 1) x cadence / F`, past the `T + (W - 1) x cadence` the cost calendar
+  sells the last wave at, so the market accumulated for longer than the programme
+  reports. On, it uses the span the programme reports. At F = N = 64, W = 1, R352's
+  case goes from 2.047 to 1.801 market years, both as recorded. 31 of the 73 rows
+  move, 26 of them to a smaller programme, and cost per kg rises by up to 1.012x,
+  median 1.002x on the rows that move.
+- **`model_body_resource_budget`** (rc-245). `max_mining_fraction` bounds one
+  mission, so a programme could take a body many times over. On, a rung with
+  `N x (feed + ISRU feed)` above the body's whole mass is not priced, in the coarse,
+  refined and fixed-N paths. R315's 1,000 kg body goes from N = 5 to 1 at 1,000 kg
+  a load and 5 to 2 at 500 kg, and stays at 5 at 200 kg and on a 1e6 kg body. **This
+  is a partial fix.** It lowers N and does not try a smaller repeated load, which
+  the candidate also asks for. So the one real row that moves goes from N = 320 to
+  N = 1 at 3.75x the cost per kg, and a smaller load might do better.
+
+All three on, no row changes evaluability, and the pre-filter gives the same rows
+on and off.
+
+### Measured and not
+
+- The sample is 80 rows, so none of this is a campaign result.
+- The rc-241 fix was checked with a synthetic body and the 13 real rows, not by
+  replaying R311's witness, whose return stack is hand-set.
+- The rc-241 rows were audited against their feed budget only. Their water-ion
+  missions are as good as the model's existing ISRU books.
 
 ## master v1.63.0 / calc v1.36.0
 
@@ -11762,6 +11816,11 @@ high-inclination arrival. No config field or output column moved, and
 - **New output column, only with the limit on**: `spin_lift_period_h` (None
   where the body has no density). A default run's columns are unchanged.
 - **New functions**: `spin_lift_period_h`, `spin_limited`.
+
+**`1.37.0`  three opt-in method changes.** Full write-up: [master v1.64.0 / calc v1.37.0](#master-v1640--calc-v1370).
+- **New config fields**, all default `False`: `model_market_wave_clock`,
+  `model_body_resource_budget`, `model_isru_feed_budget`.
+- **No new output column** and no changed public signature.
 
 **`1.36.0`  five opt-in method changes.** Full write-up: [master v1.63.0 / calc v1.36.0](#master-v1630--calc-v1360).
 - **New config fields**, all default `False`: `model_raw_excavation_power`,
