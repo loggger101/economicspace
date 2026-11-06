@@ -1246,6 +1246,25 @@ class CalcConfig:
     # pre-filter and the two builds should be diffed column by column.
     prune_infeasible_combos:   bool = True
 
+    # Skip a (vehicle × propellant × return mode × propellant sourcing × power
+    # source) combo whose best possible result cannot beat the body's best so
+    # far (v1.41.0).  `_combo_key_bound` prices a ceiling on what the combo can
+    # earn and a floor on what it must cost, over every concentration ratio,
+    # repair and programme rung, and a result only ever replaces the incumbent
+    # on a strictly better key, so a skipped combo had nothing to offer.  On
+    # stride samples it skipped 57-60% of combos at every destination tried and
+    # ran 2.3-3.1x faster; a sample does not predict a full cell.
+    #
+    # The answer does not depend on this setting, PROVIDED the bound is
+    # admissible, and that is a proof rather than a measurement: a floor that
+    # is occasionally too high drops a winner without changing the row count,
+    # and a 120-row hash did not see one 1.6x too high.  `verify.py` check 8
+    # asserts the bound on every solve and every rung and must catch a planted
+    # one; check 2 diffs this on and off.  It switches itself off when
+    # `apply_wacc_compounding` is on, which its proof does not cover.  Turn it
+    # off to check that claim, or to profile the full search.
+    prune_dominated_combos:    bool = True
+
     # ─── PIPELINE VERSION ────────────────────────────────────────────────────
     # Stamped into every output CSV, and the only way to tell which code
     # produced a given catalog.  BUMP IT when a change moves any number a run
@@ -1262,7 +1281,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.40.0"
+    pipeline_version: str = "1.41.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -4086,6 +4105,124 @@ def _flown_propellant_kg(
             "m_return_prop":   return_prop}
 
 
+def _pass1_cascade(
+    leo_capacity_kg: float,
+    sizing_consts:   Tuple[float, Optional[float], Optional[float],
+                           float, float, float],
+    structure_frac:  float,
+    window_wait_yr:  float,
+    dv_out_m_s:      float,
+    dv_ret_m_s:      float,
+    tps_frac:        float,
+    isru:            bool,
+    config:          CalcConfig,
+) -> Optional[Tuple[Dict[str, float], float]]:
+    """`(cascade, dv_ret_eff)` of the sizing loop's first pass, or None.
+
+    v1.41.0.  Moved out of `_closes_carrying_its_own_stage` unchanged, because
+    the combo bound needs the same cascade and a third copy of this preamble is
+    the hazard this file names under `tank_frac`.  Same operations on the same
+    values, so the pre-filter's floats do not move.
+
+    Pass 1 flies the rig and nothing else, the empty return vehicle, pass 1's
+    `structure_frac` and the shortest hold, so it is the most optimistic pass
+    the loop takes.  Its boil-off leaves out `model_return_coast_boiloff`,
+    which only raises the return Δv, so it is still a pass no later one beats.
+    None when the boil-off arithmetic overflows: no conclusion, not a refusal.
+    """
+    (dv_penalty, _thruster_eff_row, _thruster_kg_per_n_row,
+     tank_frac, isp_s_val, boiloff_pct) = sizing_consts
+    if not config.model_tank_mass:
+        tank_frac = 0.0
+
+    # The same two lines the sizing function runs before its loop, on the same
+    # values, so the solver below sees the identical floats.
+    dv_out = dv_out_m_s * dv_penalty
+    dv_ret = dv_ret_m_s * dv_penalty
+
+    # And the same boil-off substitution pass 1 makes, at the same shortest
+    # hold.  Written in Δv space rather than `_combo_close_terms`' R space
+    # because the value has to reach `max_return_payload_kg` bit-for-bit as the
+    # loop would have handed it over.
+    dv_ret_eff = dv_ret
+    if config.model_propellant_boiloff and boiloff_pct > 0 and not isru:
+        outbound_yr = max(0.5, 0.000_23 * dv_out)
+        stay_est_yr = config.station_keeping_floor_yr + window_wait_yr
+        try:
+            boiloff_factor = math.exp(
+                boiloff_pct / 100.0 * (outbound_yr + stay_est_yr) * 365.25)
+            r_ret_raw = math.exp(dv_ret / (isp_s_val * G0_M_S2))
+        except OverflowError:
+            return None
+        r_ret_eff = 1.0 + (r_ret_raw - 1.0) * boiloff_factor
+        if not (math.isfinite(r_ret_eff) and r_ret_eff > 0.0):
+            return None
+        dv_ret_eff = isp_s_val * G0_M_S2 * math.log(r_ret_eff)
+
+    # ⚠️  v1.17.6: written out rather than built as a dict and splatted; `**`
+    # on a 9-key dict measured 558 ns a call against 146 ns for the keywords.
+    pass1 = max_return_payload_kg(
+        leo_capacity_kg = leo_capacity_kg,
+        isp_s           = isp_s_val,
+        dv_out_m_s      = dv_out,
+        dv_ret_m_s      = dv_ret_eff,
+        hardware_kg     = config.mining_hardware_kg,
+        dry_return_kg   = config.return_vehicle_dry_kg,
+        tps_frac        = tps_frac,
+        isru_return     = isru,
+        structure_frac  = structure_frac,
+        tank_frac       = tank_frac,
+    )
+    return pass1, dv_ret_eff
+
+
+def _ep_stage_floor(
+    pass1:          Dict[str, float],
+    sizing_consts:  Tuple[float, Optional[float], Optional[float],
+                          float, float, float],
+    ops:            Tuple[float, ...],
+    solar_w_per_kg: float,
+    tps_frac:       float,
+    config:         CalcConfig,
+    floor_basis:    bool,
+) -> Tuple[float, float]:
+    """`(ep_kg, ep_power_w)` of the electric stage sized off pass 1.
+
+    v1.41.0.  Moved out of `_closes_carrying_its_own_stage` unchanged; the
+    combo bound reads the same stage.  With `floor_basis` the stage flies
+    pass 1's full-vehicle OUTBOUND load and the EMPTY vehicle's return load:
+    the loop sizes its stage off its own max-payload cascade, whose outbound
+    load is the same at every hardware mass and whose return load is at least
+    the empty vehicle's, so every stage it can converge on is at least this.
+    Without it, the stage is pass 1's own.  No 1% slack here; each caller
+    applies the one its argument needs.
+    """
+    (_dv_penalty, thruster_eff_row, thruster_kg_per_n_row,
+     _tank_frac, isp_s_val, _boiloff_pct) = sizing_consts
+    (_dig_wh, _benef_wh, _base_w, ep_eff, ep_kg_per_kw,
+     _rtg_w, ppu_only_kg_per_kw,
+     _df, _swh, _seta, _bdh, _containment) = ops
+
+    eff_used, thruster_kg_per_n, ppu_kg_per_kw = _ep_device_consts(
+        True, thruster_eff_row, thruster_kg_per_n_row,
+        ep_eff, ep_kg_per_kw, ppu_only_kg_per_kw,
+    )
+    stage_basis = pass1
+    if floor_basis:
+        k_ret = float(pass1.get("k_ret", 1.0))
+        stage_basis = {
+            "m_outbound_prop": float(pass1.get("m_outbound_prop", 0.0)),
+            "m_return_prop":   (k_ret * (1.0 + tps_frac)
+                                * config.return_vehicle_dry_kg
+                                * (float(pass1["r_ret"]) - 1.0)),
+        }
+    ep_kg, ep_w, _tn, _ty = _ep_stage_kg(
+        stage_basis, isp_s_val, eff_used, solar_w_per_kg,
+        ppu_kg_per_kw, thruster_kg_per_n, config,
+    )
+    return ep_kg, ep_w
+
+
 def _closes_carrying_its_own_stage(
     leo_capacity_kg: float,
     sizing_consts:   Tuple[float, Optional[float], Optional[float],
@@ -4167,8 +4304,8 @@ def _closes_carrying_its_own_stage(
     ISRU the outbound load grows with the hardware, so pass 1's stage is
     already the floor and the test is unchanged.
     """
-    (dv_penalty, thruster_eff_row, thruster_kg_per_n_row,
-     tank_frac, isp_s_val, boiloff_pct) = sizing_consts
+    (dv_penalty, _thruster_eff_row, _thruster_kg_per_n_row,
+     tank_frac, isp_s_val, _boiloff_pct) = sizing_consts
     if not config.model_tank_mass:
         tank_frac = 0.0
 
@@ -4179,83 +4316,28 @@ def _closes_carrying_its_own_stage(
     if config.size_ep_on_flown_load:
         return True
 
-    (_dig_wh, _benef_wh, _base_w, ep_eff, ep_kg_per_kw,
-     _rtg_w, ppu_only_kg_per_kw,
-     _df, _swh, _seta, _bdh, _containment) = ops
-
-    eff_used, thruster_kg_per_n, ppu_kg_per_kw = _ep_device_consts(
-        True, thruster_eff_row, thruster_kg_per_n_row,
-        ep_eff, ep_kg_per_kw, ppu_only_kg_per_kw,
-    )
-
-    # The same two lines the sizing function runs before its loop, on the same
-    # values, so the solver below sees the identical floats.
-    dv_out = dv_out_m_s * dv_penalty
-    dv_ret = dv_ret_m_s * dv_penalty
-
-    # And the same boil-off substitution pass 1 makes, at the same shortest
-    # hold.  Written in Δv space rather than `_combo_close_terms`' R space
-    # because the value has to reach `max_return_payload_kg` bit-for-bit as the
-    # loop would have handed it over.
-    dv_ret_eff = dv_ret
-    if config.model_propellant_boiloff and boiloff_pct > 0 and not isru:
-        outbound_yr = max(0.5, 0.000_23 * dv_out)
-        stay_est_yr = config.station_keeping_floor_yr + window_wait_yr
-        try:
-            boiloff_factor = math.exp(
-                boiloff_pct / 100.0 * (outbound_yr + stay_est_yr) * 365.25)
-            r_ret_raw = math.exp(dv_ret / (isp_s_val * G0_M_S2))
-        except OverflowError:
-            return True                # let the solver make its own refusal
-        r_ret_eff = 1.0 + (r_ret_raw - 1.0) * boiloff_factor
-        if not (math.isfinite(r_ret_eff) and r_ret_eff > 0.0):
-            return True
-        dv_ret_eff = isp_s_val * G0_M_S2 * math.log(r_ret_eff)
-
-    # ⚠️  v1.17.6: written out twice rather than built as a dict and splatted
-    # into both calls.  Same arguments in the same order, `**` on a 9-key dict
-    # measures 558 ns a call against 146 ns for the keywords, plus 306 ns to
-    # build the dict, so the splat was ~1.1 us of a ~16 us function that runs
-    # once per surviving (vehicle × propellant × Δv × ISRU).
-    dry_return_kg = config.return_vehicle_dry_kg
-    pass1 = max_return_payload_kg(
-        leo_capacity_kg = leo_capacity_kg,
-        isp_s           = isp_s_val,
-        dv_out_m_s      = dv_out,
-        dv_ret_m_s      = dv_ret_eff,
-        hardware_kg     = config.mining_hardware_kg,
-        dry_return_kg   = dry_return_kg,
-        tps_frac        = tps_frac,
-        isru_return     = isru,
-        structure_frac  = structure_frac,
-        tank_frac       = tank_frac,
-    )
+    # v1.41.0: pass 1 and its stage come from the two helpers the combo bound
+    # reads too, moved out of here unchanged.
+    first = _pass1_cascade(leo_capacity_kg, sizing_consts, structure_frac,
+                           window_wait_yr, dv_out_m_s, dv_ret_m_s, tps_frac,
+                           isru, config)
+    if first is None:
+        return True                    # let the solver make its own refusal
+    pass1, dv_ret_eff = first
     if not pass1["viable"]:
         return False                   # stage 1 already knew this; agree with it
 
-    stage_basis = pass1
-    if getattr(config, "damp_sizing_loop", False) and not isru:
-        # v1.28.0.  With the loop damped, pass 2 is no longer the test: a
-        # candidate whose pass-2 stack overshoots backs off to a smaller
-        # payload and a smaller stage.  What every closing state still flies
-        # is a stage sized off a full-vehicle cascade (the outbound load is
-        # the same at every hardware mass, because the payload fills the
-        # vehicle) carrying at least the EMPTY return vehicle home, so the
-        # stage for that load is a floor under every stage the loop can
-        # converge on.  The loop converges to 1%, hence the slack below.
-        # Under ISRU the outbound load grows with the hardware, so pass 1's
-        # stage is already the floor and the test is unchanged.
-        k_ret = float(pass1.get("k_ret", 1.0))
-        stage_basis = {
-            "m_outbound_prop": float(pass1.get("m_outbound_prop", 0.0)),
-            "m_return_prop":   (k_ret * (1.0 + tps_frac) * dry_return_kg
-                                * (float(pass1["r_ret"]) - 1.0)),
-        }
-    ep_kg, _pw, _tn, _ty = _ep_stage_kg(
-        stage_basis, isp_s_val, eff_used, solar_w_per_kg,
-        ppu_kg_per_kw, thruster_kg_per_n, config,
-    )
-    if stage_basis is not pass1:
+    # v1.28.0.  With the loop damped, pass 2 is no longer the test: a
+    # candidate whose pass-2 stack overshoots backs off to a smaller payload
+    # and a smaller stage.  What every closing state still flies is a stage
+    # sized off a full-vehicle cascade carrying at least the EMPTY return
+    # vehicle home (see `_ep_stage_floor`).  The loop converges to 1%, hence
+    # the slack below.  Under ISRU the outbound load grows with the hardware,
+    # so pass 1's stage is already the floor and the test is unchanged.
+    floor_basis = bool(getattr(config, "damp_sizing_loop", False) and not isru)
+    ep_kg, _pw = _ep_stage_floor(pass1, sizing_consts, ops, solar_w_per_kg,
+                                 tps_frac, config, floor_basis)
+    if floor_basis:
         ep_kg = max(0.0, ep_kg - 0.01 * max(ep_kg, 1.0))
     if ep_kg <= 0.0:
         return True
@@ -4263,10 +4345,10 @@ def _closes_carrying_its_own_stage(
     return bool(max_return_payload_kg(
         leo_capacity_kg = leo_capacity_kg,
         isp_s           = isp_s_val,
-        dv_out_m_s      = dv_out,
+        dv_out_m_s      = dv_out_m_s * dv_penalty,
         dv_ret_m_s      = dv_ret_eff,
         hardware_kg     = config.mining_hardware_kg + ep_kg,
-        dry_return_kg   = dry_return_kg,
+        dry_return_kg   = config.return_vehicle_dry_kg,
         tps_frac        = tps_frac,
         isru_return     = isru,
         structure_frac  = structure_frac,
@@ -8215,6 +8297,264 @@ def saturation_ratio(
     return max(1.0, min(1.0 / denom, cap))
 
 
+# ── The combo bound  (v1.41.0) ─────────────────────────────────────────────
+# A key no result can reach, and a key every result reaches.  The first means
+# "no bound": nothing is ever pruned on it.  The second means "every solve of
+# this combo returns None", which `selection_key` scores exactly this way.
+_NO_BOUND_KEY: Tuple[float, float] = (math.inf, math.inf)
+_NO_RESULT_KEY: Tuple[float, float] = (-math.inf, -math.inf)
+# The floor is shaved and the ceiling padded by this much, so a floor equal to
+# the true cost in exact arithmetic cannot exceed it by the rounding of a
+# different association.  The bound is loose by tens of percent; this is noise.
+_BOUND_REL = 1e-9
+
+
+def _combo_bound_applies(config: CalcConfig, market_mode: Optional[str]) -> bool:
+    """Whether `_combo_key_bound`'s proof covers this run.
+
+    With `apply_wacc_compounding` off every WACC multiplier is 1.0, the rate is
+    0.0 so both programme-calendar multipliers are 1.0, and the rig credit
+    never changes bucket: `total_cost` is contingency times a plain sum of
+    non-negative lines, which is what the floor is built from.  With it on the
+    calendar delta can be negative and nothing is pruned.  The four market
+    models are the ones whose gross the ceiling is proved for.
+    """
+    if market_mode is None:
+        market_mode = _market_mode(config)
+    return (not config.apply_wacc_compounding
+            and market_mode in ("capacity_cap", "elasticity",
+                                "single_mission", "unbounded"))
+
+
+def _combo_key_bound(
+    asteroid_row:      Row,
+    vehicle:           Row,
+    propellant:        Row,
+    bulk_value_per_kg: float,
+    dv_out_m_s:        float,
+    dv_ret_m_s:        float,
+    ops_df:            pd.DataFrame,
+    config:            CalcConfig,
+    phases:            Optional[List[Tuple[str, float, float]]],
+    aero:              bool,
+    isru:              bool,
+    ctx:               Optional[AsteroidContext],
+    market_mode:       Optional[str] = None,
+) -> Tuple[Tuple[float, float], float, float, float]:
+    """`(key, payload_ub, gross_ub, cost_lb)` for one combo, every result of it.
+
+    A combo is one `evaluate_combo` call: every concentration ratio, every
+    overshoot repair, and every programme rung under each.  `key` is at least
+    `selection_key` of anything it can return, so `evaluate_asteroid` may skip
+    the combo when `key <= best_key`: a result replaces the incumbent only on
+    a STRICTLY greater key.  The order of the search and its ties are
+    untouched.  The parts are returned for `verify.py` check 8, which asserts
+    each against every solve and rung beneath it.
+
+    Built from a gross ceiling G and a cost floor C, with `selection_key`'s
+    own regimes:  (1, G - C) if G > C;  (0, -C / G) if G > 0;  (-1, -C).
+
+    PAYLOAD.  `_pass1_cascade` at the rig plus the electric-stage floor less
+    the loop's 1% convergence tolerance.  `max_return_payload_kg`'s payload
+    falls with hardware, dry return mass, structure fraction and return Δv,
+    and moving mass from hardware to the dry return (`carry_ep_home`) changes
+    the bracket by x(1 - k s R) <= 0.  Every later pass flies at least that
+    hardware: the final cascade carries the previous state's stage, sized off
+    a full-vehicle cascade (see `_ep_stage_floor`) and within 1% of the last,
+    or, on an undamped loop out of passes, exactly the last.  The payload flown
+    is also under the body's mineable mass and the hold volume at the row's
+    density; repairs and refits only lower it.
+
+    GROSS.  A raw hold sells m x bulk, or through a market branch at most m x
+    the fraction-weighted phase price.  A concentrated hold is a fractional
+    knapsack, monotone in hold and feed while prices are >= 0, and feed is at
+    most max(m, min(throughput cap, mineable)).  Ceilings, the surplus tier
+    (clamped to <= 1), the elasticity multiplier (<= 1) and reliability (<= 1)
+    only lower it.  A negative price anywhere falls back to m x the top price.
+
+    COST.  Contingency times: launch and outbound fuel on the least mass that
+    reaches the asteroid (rig, empty return vehicle with its shield, tank and,
+    without ISRU, its fuel; the rig left out under `model_repeat_manifest`,
+    whose saving is at most that share); the empty vehicle's return fuel; the
+    rig's share at the most trips a rig flies, net of salvage; the capsule,
+    shield, tanks and electric stage at their floors (only while the learning
+    curve, which can scale them below 1, is off); ops over the shortest
+    mission, which is at least the station-keeping floor plus the launch-window
+    wait; recovery and licensing.  Power plant, NRE and insurance are >= 0 and
+    left out.  Any negative rate turns the bound off.
+
+    Re-prove the affected term when a cost line, pass 1's inputs or the
+    knapsack changes; check 8 is what catches the term nobody remembered.
+    """
+    none = (_NO_BOUND_KEY, math.inf, math.inf, 0.0)
+    if ctx is None or not _combo_bound_applies(config, market_mode):
+        return none
+    vconsts = vehicle.get(_VEHICLE_CONSTS_KEY)
+    if vconsts is None:
+        vconsts = _vehicle_consts(vehicle)
+    fairing_m3, leo_cap, _leo_ok = vconsts
+    if leo_cap <= 0:
+        return (_NO_RESULT_KEY, 0.0, 0.0, math.inf)
+    sizing_consts = propellant.get(_SIZING_CONSTS_KEY)
+    if sizing_consts is None:
+        sizing_consts = _sizing_propellant_consts(propellant, config)
+    dv_penalty, _te, _tk, tank_frac, _isp, _boil = sizing_consts
+    if not config.model_tank_mass:
+        tank_frac = 0.0
+    tps_frac = config.heat_shield_frac_of_payload if aero else 0.0
+    d0 = config.return_vehicle_dry_kg
+
+    first = _pass1_cascade(leo_cap, sizing_consts, ctx.structure_frac,
+                           ctx.window_wait_yr, dv_out_m_s, dv_ret_m_s,
+                           tps_frac, isru, config)
+    if first is None:
+        return none
+    pass1, dv_ret_eff = first
+    if not pass1["viable"]:
+        return (_NO_RESULT_KEY, 0.0, 0.0, math.inf)   # pass 1's refusal is final
+
+    # The electric stage, as hardware under the payload and as a price.
+    ep_kg = ep_w = 0.0
+    if (config.model_low_thrust_time and dv_penalty > 1.0
+            and not config.size_ep_on_flown_load):
+        ep_kg, ep_w = _ep_stage_floor(pass1, sizing_consts, ctx.ops,
+                                      ctx.solar_w_per_kg, tps_frac, config,
+                                      not isru)
+        ep_kg = max(0.0, ep_kg - 0.01 * max(ep_kg, 1.0))
+        ep_w = max(0.0, ep_w)
+    cascade = pass1
+    if ep_kg > 0.0:
+        cascade = max_return_payload_kg(
+            leo_capacity_kg = leo_cap,
+            isp_s           = sizing_consts[4],
+            dv_out_m_s      = dv_out_m_s * dv_penalty,
+            dv_ret_m_s      = dv_ret_eff,
+            hardware_kg     = config.mining_hardware_kg + ep_kg,
+            dry_return_kg   = d0,
+            tps_frac        = tps_frac,
+            isru_return     = isru,
+            structure_frac  = ctx.structure_frac,
+            tank_frac       = tank_frac,
+        )
+        if not cascade["viable"]:
+            return (_NO_RESULT_KEY, 0.0, 0.0, math.inf)
+
+    # The mission's clock cannot run shorter than this.
+    stay_floor = config.station_keeping_floor_yr + ctx.window_wait_yr
+    duration_floor = asteroid_mission_duration_yr(
+        dv_out_m_s * dv_penalty, dv_ret_m_s * dv_penalty, config,
+        mining_yr=stay_floor)
+    if duration_floor > config.max_mission_duration_yr:
+        return (_NO_RESULT_KEY, 0.0, 0.0, math.inf)
+
+    # ── Gross ceiling ────────────────────────────────────────────────────────
+    density = asteroid_row.get("density_gcm3")
+    try:
+        density = float(density)
+    except (TypeError, ValueError):
+        density = math.nan
+    if not density > 0:                              # NaN fails this too
+        density = 2.0
+    payload_ub = min(float(cascade["max_payload_kg"]), ctx.mineable_kg,
+                     0.25 * fairing_m3 * 1000.0 * density)
+    bulk = float(bulk_value_per_kg)
+    prices = [float(p) for _n, _f, p in (phases or [])]
+    if bulk < 0 or not all(p >= 0 for p in prices):
+        gross_ub = payload_ub * max([0.0, bulk] + [p for p in prices if p == p])
+    else:
+        per_kg = bulk
+        frac_sum = sum(f for _n, f, _p in (phases or []))
+        if frac_sum > 0:
+            per_kg = max(per_kg, sum(f * p for _n, f, p in phases) / frac_sum)
+        gross_ub = payload_ub * per_kg
+        if config.use_beneficiation and phases and payload_ub > 0:
+            feed_ub = max(payload_ub,
+                          min(ctx.throughput_cap_kg, ctx.mineable_kg))
+            gross_ub = max(gross_ub, float(optimal_payload_mix(
+                payload_ub, feed_ub, phases,
+                config.beneficiation_recovery)["value_usd"]))
+    gross_ub *= 1.0 + _BOUND_REL
+
+    # ── Cost floor ───────────────────────────────────────────────────────────
+    (hw_per_kg, _life_yr, salvage, max_trips_raw,
+     lander_per_kg, capsule_earth_per_kg, berthing_per_kg,
+     power_per_w, _rtg_per_w, ep_drive_per_kw, tank_per_kg,
+     ops_per_year, tps_per_kg,
+     recovery_earth, licensing_earth, recovery_depot, licensing_depot,
+     liability_cost, _launch_ins_raw,
+     _nre_total, _autonomy_nre_total, _wacc_rate) = _ops_cost_constants(ops_df)
+    price_leo = float(vehicle["usd_per_kg_to_leo"])
+    prop_per_kg = float(propellant["cost_usd_per_kg"])
+    cont = 1.0 + config.contingency_fraction
+    rates = (price_leo, prop_per_kg, hw_per_kg, lander_per_kg,
+             capsule_earth_per_kg, berthing_per_kg, power_per_w,
+             ep_drive_per_kw, tank_per_kg, ops_per_year, tps_per_kg,
+             recovery_earth, licensing_earth, recovery_depot, licensing_depot,
+             config.isru_processing_usd_per_kg)
+    if (not all(math.isfinite(x) and x >= 0.0 for x in rates)
+            or not cont > 0.0 or not 0.0 <= salvage <= 1.0):
+        return (_NO_BOUND_KEY, payload_ub, gross_ub, 0.0)
+
+    r_out, r_ret = float(pass1["r_out"]), float(pass1["r_ret"])
+    k_out, k_ret = float(pass1["k_out"]), float(pass1["k_ret"])
+    shield = 1.0 + tps_frac
+    return_prop = k_ret * shield * d0 * (r_ret - 1.0)
+    rig_kg = 0.0 if config.model_repeat_manifest else config.mining_hardware_kg
+    at_asteroid = (rig_kg + shield * d0 + tank_frac * return_prop
+                   + (0.0 if isru else return_prop))
+    outbound_prop = at_asteroid * k_out * (r_out - 1.0)
+    launch = (price_leo * at_asteroid
+              * (1.0 + k_out * (r_out - 1.0) * (1.0 + tank_frac)))
+
+    arch = delivery_architecture(config.delivery_destination)
+    if arch.get("needs_lander"):
+        capsule_per_kg = lander_per_kg
+    elif arch["returns_to_earth"]:
+        capsule_per_kg = capsule_earth_per_kg
+    else:
+        capsule_per_kg = berthing_per_kg
+    if arch["returns_to_earth"]:
+        recovery, licensing = recovery_earth, licensing_earth
+    else:
+        recovery, licensing = recovery_depot, licensing_depot
+
+    rig_share = 0.0
+    if (config.model_rig_service_life and config.model_rig_trip_limit
+            and max_trips_raw > 0):
+        rig_share = (config.mining_hardware_kg * hw_per_kg * (1.0 - salvage)
+                     / max(1, int(max_trips_raw)))
+    per_unit = 0.0
+    if not config.model_learning_curve:
+        ep_rated = 1.0
+        if config.model_rated_array_cost and ctx.solar_w_per_kg > 0:
+            ep_rated = ctx.ops[2] / ctx.solar_w_per_kg
+        per_unit = (d0 * capsule_per_kg
+                    + (tps_frac * d0 * tps_per_kg if tps_frac > 0 else 0.0)
+                    + tank_frac * (outbound_prop + return_prop) * tank_per_kg
+                    + ep_w * power_per_w * ep_rated
+                    + ep_w / 1000.0 * ep_drive_per_kw)
+    lines = (launch
+             + outbound_prop * prop_per_kg
+             + return_prop * (config.isru_processing_usd_per_kg if isru
+                              else prop_per_kg)
+             + rig_share + per_unit
+             + ops_per_year * duration_floor
+             + recovery + licensing
+             + (liability_cost if config.charge_insurance and liability_cost > 0
+                else 0.0))
+    cost_lb = cont * lines * (1.0 - _BOUND_REL)
+
+    if _selects_on_profit(config.selection_objective):
+        key = (0.0, gross_ub - cost_lb)
+    elif gross_ub - cost_lb > 0:
+        key = (1.0, gross_ub - cost_lb)
+    elif gross_ub > 0:
+        key = (0.0, -(cost_lb / gross_ub))
+    else:
+        key = (-1.0, -cost_lb)
+    return (key, payload_ub, gross_ub, cost_lb)
+
+
 def evaluate_combo(
     asteroid_row:      Row,
     vehicle:           Row,
@@ -8831,6 +9171,12 @@ def evaluate_asteroid(
         for i, o in enumerate(dv_options)
     ]
 
+    # v1.41.0: the combo bound, resolved once per asteroid.  See
+    # `_combo_key_bound`; off, or under a regime its proof does not cover,
+    # every combo is solved exactly as before.
+    bound_on = (bool(getattr(config, "prune_dominated_combos", True))
+                and _combo_bound_applies(config, market_mode))
+
     best     = None
     best_key = (-np.inf, -np.inf)
     for vehicle, propellant in combos:
@@ -8914,7 +9260,21 @@ def evaluate_asteroid(
                             window_wait_yr, dv_out, dv_ret, dv_tps,
                             isru, config):
                         continue
+                # v1.41.0: the bound is the same for every power source, so
+                # it is priced once here, and tested against the incumbent
+                # before each one because the incumbent can move between them.
+                # `<=` is exact: a result replaces the incumbent only when its
+                # key is STRICTLY greater, and no key here exceeds `bound`.
+                bound = None
                 for power_mode in power_modes:
+                    if bound_on:
+                        if bound is None:
+                            bound = _combo_key_bound(
+                                asteroid_row, vehicle, propellant, bulk_value,
+                                dv_out, dv_ret, ops_df, config, phases, dv_aero,
+                                isru, ctx, market_mode)[0]
+                        if bound <= best_key:
+                            continue
                     result = evaluate_combo(
                         asteroid_row, vehicle, propellant,
                         bulk_value, dv_out, dv_ret,

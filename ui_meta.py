@@ -359,9 +359,13 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "pruner on a population nobody has tried, if an output ever moves, "
         "that is a bug in the pre-filter, not a result. The run log prints how "
         "much it is actually removing; a rate near 0% or near 100% is worth "
-        "investigating either way.",
+        "investigating either way. Since v1.41.0 a second pruner skips the "
+        "candidates that can close but provably cannot beat the body's best "
+        "mission so far; it changes no output either, and leave it ON for "
+        "the same reason.",
         [
             ("calc", "prune_infeasible_combos"),
+            ("calc", "prune_dominated_combos"),
         ],
     ),
     (
