@@ -12,6 +12,7 @@ memory each time:
     5. never-worse     beneficiated <= raw, and searched <= N = 1
     6. stage 2 tables  the judgement tables still produce the numbers on disk
     7. market ceilings a capacity ceiling may only ever cost you, never pay
+    8. combo bound     the pruning bound holds on every solve and every rung
 
 Typical use.  The ORDER matters: the baseline must be captured before the first
 edit, exactly as every release note in versions.md says it was.
@@ -22,12 +23,12 @@ edit, exactly as every release note in versions.md says it was.
 
 Other entry points:
 
-    py verify.py check --skip prune parallel  # ~5 min: 1 and 4 to 7
+    py verify.py check --skip prune parallel  # ~5 min: 1 and 4 to 8
     py verify.py check --cells raw benef      # a subset
-    py verify.py invariants                   # 4 to 7 only; needs no baseline
+    py verify.py invariants                   # 4 to 8 only; needs no baseline
     py verify.py baseline --tag 1.17.6        # keep several around
 
-SCOPE.  Checks 1-5 and 7 cover STAGE 4; check 6 covers STAGE 2's judgement
+SCOPE.  Checks 1-5, 7 and 8 cover STAGE 4; check 6 covers STAGE 2's judgement
 TABLES.
 Nothing here ever re-runs Stages 1-3 -- deliberately, because a run at a moved
 pin installs a different catalog, a different price release or different fuel
@@ -49,7 +50,7 @@ BUDGET.  A full `check` builds ~20 cells and takes roughly HALF AN HOUR on the
 reference machine.  Most of that is check 2, because turning the pre-filter off
 is what v1.14.1 and v1.17.4 exist to avoid -- an unpruned cell runs the whole
 search.  Iterate with `--skip prune parallel` (~5 min, and it still catches any
-change to any number: it turns off 2 and 3 and leaves 1 and 4 to 7 running),
+change to any number: it turns off 2 and 3 and leaves 1 and 4 to 8 running),
 then run the full set once before committing.  A
 verification you will not run is worse than a slow one.
 
@@ -269,6 +270,7 @@ RESET_FIELDS = (
     "damp_sizing_loop",          # v1.28.0: the damped loop is A/B'd against the pass-2 refusal
     "model_isru_processing",     # v1.32.0: ISRU energy and plant are A/B'd against none
     "isru_processing_usd_per_kg",  # v1.32.0: the retired $50/kg is A/B'd against 0.0
+    "prune_dominated_combos",    # v1.41.0: check 2 builds every cell with the bound off
 )
 
 
@@ -766,6 +768,132 @@ def check_prune(m, names: List[str],
         ok &= good
         print(f"  {name:13s} {same}/{total} identical | {h1} vs {h2} | "
               f"{'MATCH' if good else 'DIFFER ' + ','.join(diff[:4])}")
+        # calc v1.41.0: and the combo bound must agree with the search that
+        # runs every combo.  Same comparison, the other pruner switched off.
+        off = run_cell(m, name, prune_dominated_combos=False)
+        m.CALC_CONFIG.prune_dominated_combos = True
+        same, total, diff = column_diff(_comparable(on), _comparable(off))
+        h3 = cell_hash(off)
+        good = (h1 == h3) and not diff
+        ok &= good
+        print(f"  {name:13s} bound off: {same}/{total} identical | {h1} vs {h3} | "
+              f"{'MATCH' if good else 'DIFFER ' + ','.join(diff[:4])}")
+    return ok
+
+
+# The planted defect check 8 must catch.  A cost floor this much too high was
+# invisible to a 120-row output hash when the bound was designed (2026-11-05),
+# and the per-rung test below reported 400,556 violations of it; that gap is
+# why this check exists and why it must keep proving it can fail.
+_PLANTED_FLOOR = 1.6
+
+
+def check_bound(m, names: List[str]) -> bool:
+    """calc v1.41.0: the combo bound holds on every solve and every rung (check 8).
+
+    `prune_dominated_combos` skips a (vehicle, propellant, Δv, ISRU, power)
+    combo when `_combo_key_bound` says no result it could return beats the
+    asteroid's incumbent.  That is exact only if the bound is ADMISSIBLE, and
+    check 1 and check 2 cannot show that: a floor that is occasionally too
+    tight drops a winner only when the combo it misjudges would have won, which
+    a few hundred rows can easily never contain.  So this runs each cell with
+    pruning OFF, every combo solved, and asserts the bound's three parts
+    against everything the search produces beneath it:
+
+      * every `_mission_cost_tail` total, which is every programme rung of
+        every solve, at least the cost floor;
+      * every `_evaluate_combo_at_ratio` result, nested repairs included, at
+        most the payload and gross ceilings;
+      * every combo's selection key at most its bound.
+
+    And it must be able to FAIL: the same pass counts rungs under a floor
+    `_PLANTED_FLOOR` times too high, and a pass where that planted floor is
+    never violated is a check that could not have seen a real one, so it fails
+    too.  Serial only: the wrappers live in this process.
+    """
+    calc = sys.modules["modules.calc"]
+    orig_ec = calc.evaluate_combo
+    orig_tail = calc._mission_cost_tail
+    orig_solve = calc._evaluate_combo_at_ratio
+    stats = dict(combos=0, prunable=0, solves=0, rungs=0, key=0, cost=0,
+                 gross=0, payload=0, planted=0, unbounded=0)
+    state = {"cur": None, "best": None}
+
+    def evaluate_combo(asteroid_row, vehicle, propellant, bulk_value_per_kg,
+                       dv_out_m_s, dv_ret_m_s, ops_df, config, **kw):
+        """The real `evaluate_combo`, with its bound priced first and held to it."""
+        bound = calc._combo_key_bound(
+            asteroid_row, vehicle, propellant, bulk_value_per_kg, dv_out_m_s,
+            dv_ret_m_s, ops_df, config, kw.get("phases"), kw.get("aero"),
+            kw.get("isru", False), kw.get("ctx"), kw.get("market_mode"))
+        stats["combos"] += 1
+        stats["unbounded"] += bound[0] == calc._NO_BOUND_KEY
+        if state["best"] is not None and bound[0] <= state["best"]:
+            stats["prunable"] += 1
+        state["cur"] = bound
+        try:
+            res = orig_ec(asteroid_row, vehicle, propellant, bulk_value_per_kg,
+                          dv_out_m_s, dv_ret_m_s, ops_df, config, **kw)
+        finally:
+            state["cur"] = None
+        key = calc.selection_key(res, config)
+        if res is not None and key > bound[0]:
+            stats["key"] += 1
+        if state["best"] is None or key > state["best"]:
+            state["best"] = key
+        return res
+
+    def tail(*a, **k):
+        """Every programme rung's total, against the floor and the planted one."""
+        out = orig_tail(*a, **k)
+        cur = state["cur"]
+        if cur is not None:
+            total = out["total_cost"] if isinstance(out, dict) else out
+            stats["rungs"] += 1
+            stats["cost"] += total < cur[3]
+            stats["planted"] += total < cur[3] * _PLANTED_FLOOR
+        return out
+
+    def solve(*a, **k):
+        """Every solve, nested repairs included, against both ceilings."""
+        res = orig_solve(*a, **k)
+        cur = state["cur"]
+        if cur is not None and res is not None:
+            stats["solves"] += 1
+            stats["payload"] += float(res["max_payload_kg"]) > cur[1]
+            stats["gross"] += float(res["gross_value_usd"]) > cur[2]
+        return res
+
+    orig_ea = calc.evaluate_asteroid
+
+    def evaluate_asteroid(*a, **k):
+        """The real one, with the would-have-pruned incumbent reset per body."""
+        state["best"] = None
+        return orig_ea(*a, **k)
+
+    ok = True
+    calc.evaluate_combo, calc._mission_cost_tail = evaluate_combo, tail
+    calc._evaluate_combo_at_ratio, calc.evaluate_asteroid = solve, evaluate_asteroid
+    try:
+        for name in names:
+            for k in stats:
+                stats[k] = 0
+            df = run_cell(m, name, prune_dominated_combos=False)
+            m.CALC_CONFIG.prune_dominated_combos = True
+            bad = stats["key"] + stats["cost"] + stats["gross"] + stats["payload"]
+            blind = stats["rungs"] == 0 or stats["planted"] == 0
+            good = not df.empty and bad == 0 and not blind
+            ok &= good
+            print(f"  {name:13s} {stats['combos']:6d} combos, "
+                  f"{stats['solves']:7d} solves, {stats['rungs']:8d} rungs | "
+                  f"violations {bad} | planted x{_PLANTED_FLOOR} caught on "
+                  f"{stats['planted']} rungs | prunable "
+                  f"{100.0 * stats['prunable'] / max(1, stats['combos']):.1f}%"
+                  f"{'' if good else '  FAIL'}"
+                  + ("  (CHECK COULD NOT FAIL)" if blind else ""))
+    finally:
+        calc.evaluate_combo, calc._mission_cost_tail = orig_ec, orig_tail
+        calc._evaluate_combo_at_ratio, calc.evaluate_asteroid = orig_solve, orig_ea
     return ok
 
 
@@ -971,7 +1099,7 @@ def cmd_check(args) -> int:
     that cannot run must never say it passed.**
 
     Checks 2 and 3 are the slow half and are what `--skip prune parallel`
-    turns off for the ~5 minute loop; 4 to 7 need no baseline and are also
+    turns off for the ~5 minute loop; 4 to 8 need no baseline and are also
     available on their own as `invariants`.
 
     The working-tree guard in `main()` runs before any of them and is not
@@ -1057,6 +1185,8 @@ def cmd_check(args) -> int:
     # stopped where the list did.
     print("\n7. MARKET CEILINGS")
     ok &= check_market_cap(m)
+    print("\n8. COMBO BOUND (calc v1.41.0)")
+    ok &= check_bound(m, args.cells)
 
     if unchecked:
         print("\n*** NOT VERIFIED: check 1 compared nothing for %s."
@@ -1088,7 +1218,7 @@ def cmd_check(args) -> int:
 
 
 def cmd_invariants(args) -> int:
-    """Checks 4 to 7 only -- no baseline needed, so this runs on any tree."""
+    """Checks 4 to 8 only -- no baseline needed, so this runs on any tree."""
     m = load_master()
     frames = {name: run_cell(m, name) for name in args.cells}
     print("\n4. MASS LEDGER")
@@ -1099,6 +1229,8 @@ def cmd_invariants(args) -> int:
     ok &= check_stage2(m)
     print("\n7. MARKET CEILINGS (calc v1.21.0)")
     ok &= check_market_cap(m)
+    print("\n8. COMBO BOUND (calc v1.41.0)")
+    ok &= check_bound(m, args.cells)
     print("\n" + ("OK" if ok else "*** FAILURES ABOVE ***"))
     return 0 if ok else 1
 

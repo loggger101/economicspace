@@ -84,7 +84,7 @@ shim: it imports the four modules, binds the aliases below, holds
 ## Versions and release notes
 
 Current: catalog `1.10.0`, mineral_value `1.17.0`, transportation `1.23.6`,
-calc `1.40.0`, master `1.67.0` (checked by `verify_docs.py` check 2; the master
+calc `1.41.0`, master `1.68.0` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.
@@ -405,6 +405,8 @@ pen-and-paper worksheet and `--check` re-evaluates every printed substitution.
   The pre-filter's second stage runs at pass 1's `structure_frac`; with
   `damp_sizing_loop` on it sizes the EP stage off the **floor** (full-vehicle
   outbound load plus the empty return vehicle, less 1%), except under ISRU.
+  Pass 1 and that stage are `_pass1_cascade` and `_ep_stage_floor`, which the
+  combo bound reads too; a change there is a change to both pruners.
 - A pre-filter proven against the loop is not proven against the problem: the
   prune and the loop can be wrong together and check 2 cannot see it.
 - A damped loop must converge; an undamped one may fly its last pass. At step
@@ -620,9 +622,14 @@ cheap items; the ranking changes. Each of these looks like a win and is closed:
 | `nickel-iron`'s missing market ceiling | declined until `earth_surface` is re-run |
 | ISRU methalox (Sabatier, carbon route) | declined: bound by the rig cap; carbon gasification has no source |
 | a GPU port | the RTX 2080 Ti is 7.6x slower than the CPU at fp64 `exp`; fp32 breaks bit-identity |
-| an exhaustive fleet ladder | declined; see branch-and-bound |
+| an exhaustive fleet ladder | declined; the combo bound below prunes instead |
+| memoising `_hold_refining` | bit-identical, and no wall-clock gain: its repeated calls are the cheap early returns |
+| ordering combos by their bound | a few points of combo time, and it would make ties depend on the order |
 
-The one structural item still open is **branch-and-bound on the objective**. It
-needs a provably admissible bound on `selection_key`. Never approximate it: a
-bound that is occasionally too tight drops winners without changing the row
-count, which no check here would see.
+**Branch-and-bound over combos is in** (calc 1.41.0, `_combo_key_bound`,
+`prune_dominated_combos`). It is exact only while the bound is admissible, and
+that is a proof, term by term, in its docstring; never approximate a term. An
+output hash cannot certify it (a floor 1.6x too high left a sample's hash
+unchanged), so `verify.py` check 8 asserts it on every solve and every rung and
+must catch a planted floor. A change to a cost line, pass 1's inputs or the
+knapsack re-proves the term it touches; the proof covers WACC off only.

@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.68.0 / calc v1.41.0](#master-v1680--calc-v1410)
 - [master v1.67.0 / calc v1.40.0](#master-v1670--calc-v1400)
 - [master v1.66.0 / calc v1.39.0](#master-v1660--calc-v1390)
 - [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380)
@@ -120,8 +121,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.40.0** | v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.67.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 4 | `modules/calc.py` | **1.41.0** | v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
+| - | `master.py` | **1.68.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -136,7 +137,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Thirty-seven stamps so far have moved without moving a number:
+Thirty-eight stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -177,6 +178,7 @@ Thirty-seven stamps so far have moved without moving a number:
 | calc `1.38.0` | **seven opt-in changes** | bit-identical, verified (all seven are off by default) |
 | calc `1.39.0` | **four opt-in changes** | bit-identical, verified (all four are off by default) |
 | calc `1.40.0` | **two opt-in flags finished** | bit-identical, verified (both are off by default) |
+| calc `1.41.0` | performance only | bit-identical, verified |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -187,7 +189,7 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `transportation 1.19.0`, `mineral_value 1.16.0`, `transportation 1.23.6` and
 `mineral_value 1.17.0`.
 
-⚠️  **Derive any count of these from the table, not from a sentence.** Eight
+⚠️  **Derive any count of these from the table, not from a sentence.** Nine
 rows are performance stamps and twenty-nine are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
@@ -220,6 +222,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.68.0 / calc v1.41.0](#master-v1680--calc-v1410) | 2026-11-05 | **branch-and-bound over combos**: a combo whose best possible result cannot beat the body's best so far is skipped, 2.3-3.1x faster on samples; no number moves, and `verify.py` check 8 holds the bound on every solve and rung |
 | [master v1.66.0 / calc v1.39.0](#master-v1660--calc-v1390) | 2026-11-05 | **four more opt-in changes, off by default**: the electric stage is sized on the fuel it flies, it can be flown home, repeat flights leave the rig behind, and a capped market buys the hold that was loaded. No default number moves |
 | [master v1.65.0 / calc v1.38.0](#master-v1650--calc-v1380) | 2026-11-05 | **seven more opt-in changes, off by default**: three widen or close a search, and four hold a mission to a physical limit a default run ignores. No default number moves |
 | [master v1.64.0 / calc v1.37.0](#master-v1640--calc-v1370) | 2026-11-05 | **three more opt-in method changes, off by default**: the market accumulates over the span a programme reports, a programme has to fit the body, and an ISRU mission over its feed budget is solved again at a payload that fits. No default number moves |
@@ -294,6 +297,86 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.68.0 / calc v1.41.0
+
+**Branch-and-bound over combos: a (vehicle, propellant, Δv option, ISRU, power
+source) combo whose best possible result cannot beat the body's best so far is
+skipped.** Performance only: **no number moves**, and `prune_dominated_combos =
+False` is 1.40.0's search to the bit. Nothing here repins a package.
+
+### Why
+
+Runs had grown to 25.4 h for the cislunar default cell and 53.4 h for `gto`
+(calc 1.34.0, 12 workers). A profile of a 2,000-row cislunar stride found no
+redundant arithmetic left to remove. What it did find is where the search spends
+its time:
+
+- **Most combo time goes to combos that lose badly.** 83% of combo time went
+  to combos finishing at least 2x worse than the body's winner, and 41% to
+  combos at least 10x worse.
+- **The time inside a combo is real model work:**
+  - the concentration sweep
+  - the overshoot repair, a full second fixed-point solve on 67% of feasible
+    solves, about 70% of the run
+  - the programme ladder
+
+So the lever was skipping losers, which CLAUDE.md had carried as the one open
+structural item, on the condition that the bound be provably admissible.
+
+### What changes
+
+- **`_combo_key_bound`** prices, before a combo is solved:
+  - a ceiling on its gross: the knapsack at the largest hold pass 1 can carry
+    with the smallest electric stage any converged state flies;
+  - a floor on its cost: launch, fuel, rig share, the per-unit articles and
+    ops at their least, times contingency.
+
+  Together these bound `selection_key` over every concentration ratio, repair
+  and programme rung. `evaluate_asteroid` skips the combo when that bound is at
+  or below its incumbent, which is exact because a result replaces the
+  incumbent only on a strictly greater key. The proof, term by term, is the
+  function's docstring.
+- **When it switches off:** the proof needs WACC compounding off, which is the
+  default, because then `total_cost` is contingency times a plain sum of
+  non-negative lines. `_combo_bound_applies` turns the bound off otherwise, and
+  also for any negative rate.
+- **One statement of pass 1:** `_pass1_cascade` and `_ep_stage_floor` are the
+  pre-filter's second stage's own pass-1 and stage arithmetic, moved out
+  unchanged so the two pruners read one statement of it.
+- **`verify.py` check 8** runs each cell with the bound off and asserts it on
+  every solve (payload and gross ceilings), every programme rung (cost floor)
+  and every combo's key. It also fails if a floor 1.6x too high goes unseen.
+- **Check 2** also diffs every cell with the bound on and off.
+
+### What was measured
+
+| harness | result |
+|---|---|
+| `verify.py check`, all eight, against a baseline taken on the clean 1.40.0 tree first (`--tag pre-combo-bound`) | ALL CHECKS PASSED: the four cells MATCH bit for bit, 151 of 151 columns each |
+| check 2, each cell with the bound on and off | MATCH on all four |
+| check 8, each cell with the bound off and every combo solved | 0 violations over 364,085 solves and 3,849,834 rungs; the planted 1.6x floor caught on 214 to 993,517 rungs per cell; 42.9% to 60.4% of combos prunable |
+| design probe, check-mode prototype, cislunar default and earth_surface, gto, mars_surface, lunar_surface defaults (50-60 rows each), plus eight cislunar flag variants (raw, search off, learning + reliability + insurance, elasticity, the 1.39.0 and 1.38.0 opt-in flags together, damping and repair off, WACC on) | 0 violations on every solve and rung; the bound switches itself off under WACC |
+| `evaluate_combo` calls, 60 cislunar stride rows, in-repo code | 2,222 with the bound against 5,329 without (58% skipped) |
+| same rows, serial, one pinned core | 17.9 s against 49.6 s |
+| prototype, 100-row samples at four more destinations, serial, pinned | 2.6x to 3.1x faster, identical result hashes at all five |
+
+- **An output hash is not the test.** A floor planted 1.6x too high left a
+  120-row hash unchanged, while the per-rung check found 400,556 violations of
+  it. That gap is why check 8 exists and why it must catch the planted floor
+  on every run.
+- **Ordering combos by their bound was measured and declined.** It would prune
+  64% of combo time instead of 61%, which is also the ceiling an incumbent known
+  in advance would reach, and it would make ties depend on the order.
+
+### Measured and not
+
+- **No full cell has been run at this release**, so `MEASURED_CELL_SECONDS`,
+  `MEASURED_DEST_SECONDS` and every banner and README budget still quote
+  1.40.0-era wall clocks, which this release should beat. By the sampling rule
+  a 2.3-3.1x sample speed-up does not predict a full cell; re-measure one
+  before quoting a figure.
+- **Not tested under WACC compounding on**, where nothing is pruned.
 
 ## master v1.67.0 / calc v1.40.0
 
@@ -12071,6 +12154,16 @@ high-inclination arrival. No config field or output column moved, and
 - **New output column, only with the limit on**: `spin_lift_period_h` (None
   where the body has no density). A default run's columns are unchanged.
 - **New functions**: `spin_lift_period_h`, `spin_limited`.
+
+**`1.41.0`  performance only: the combo bound.** Full write-up: [master v1.68.0 / calc v1.41.0](#master-v1680--calc-v1410).
+- **New config field**: `prune_dominated_combos` (default `True`). Off is
+  1.40.0's search to the bit; on gives the same rows, faster.
+- **New functions**: `_combo_key_bound`, `_combo_bound_applies`, and
+  `_pass1_cascade` and `_ep_stage_floor`, moved out of
+  `_closes_carrying_its_own_stage` unchanged so the two pruners read one
+  statement of pass 1. New constants `_NO_BOUND_KEY`, `_NO_RESULT_KEY`,
+  `_BOUND_REL`.
+- **No new output column**; every number bit-identical to 1.40.0.
 
 **`1.40.0`  two opt-in flags finished.** Full write-up: [master v1.67.0 / calc v1.40.0](#master-v1670--calc-v1400).
 - **No new config field and no new output column.** `refit_rtg_ceiling` and

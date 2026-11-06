@@ -244,7 +244,7 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | 1 | `modules/catalog.py` | 1.10.0 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
 | 2 | `modules/mineral_value.py` | 1.17.0 | Installs the pinned, published [`spacevalue`](https://github.com/loggger101/spacevalue) price release: for the destination, every commodity priced from recorded COMEX and NYMEX closes and dated USGS/LME/LBMA reference prices, with in-space utility, demand ceilings and per-destination discounts. Downloads rather than prices since master v1.59.0; the version is spacevalue's data contract |
 | 3 | `modules/transportation.py` | 1.23.6 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](MODEL.md#the-propulsion-and-storage-catalog) |
-| 4 | `modules/calc.py` | 1.40.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 4 | `modules/calc.py` | 1.41.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 The version column is held to each module's `pipeline_version` by
 `verify_docs.py` check 2, and the dataclass field is the authority. **What
@@ -770,14 +770,15 @@ which runs every check in this table:
 | # | check | catches |
 |---|---|---|
 | 1 | bit-identity vs the baseline | any change to any number, column by column and by hash |
-| 2 | pre-filter on vs off | the pruner and the solver drifting apart; they are two statements of one algebra |
+| 2 | each pruner on vs off | the pre-filter and the solver drifting apart (they are two statements of one algebra), or the combo bound skipping a combo that would have won |
 | 3 | serial vs 8 workers | a worker seeing different reference data from its parent |
 | 4 | mass ledger | a kilogram in the rocket equation with no price in the ledger |
 | 5 | never-worse | a search optimising something other than what it reports |
 | 6 | Stage 2 tables | a judgement-table edit that moved a number, or a commodity falling through a silent default |
 | 7 | market ceilings | a capacity ceiling that pays rather than costs, and the three market columns swapping meanings: `saturation_multiplier`, `unsold_payload_kg` and v1.22.0's `surplus_payload_kg` |
+| 8 | combo bound | a bound that is not admissible: asserted on every solve and every programme rung with pruning off, and it must also catch a planted floor 1.6x too high |
 
-`py verify.py invariants` runs 4 to 7 and needs no baseline, so it works on any
+`py verify.py invariants` runs 4 to 8 and needs no baseline, so it works on any
 tree and is the fast way to check an upstream table edit; `--cells` takes a
 subset.
 
