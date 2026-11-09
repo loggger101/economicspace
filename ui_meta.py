@@ -362,10 +362,13 @@ CURATED_GROUPS: List[Tuple[str, str, List[Tuple[str, str]]]] = [
         "investigating either way. Since v1.41.0 a second pruner skips the "
         "candidates that can close but provably cannot beat the body's best "
         "mission so far; it changes no output either, and leave it ON for "
-        "the same reason.",
+        "the same reason. Since v1.42.0 a third skips the market-capped sale "
+        "of a programme size that provably cannot beat the best size found "
+        "so far for that mission, with the same guarantee.",
         [
             ("calc", "prune_infeasible_combos"),
             ("calc", "prune_dominated_combos"),
+            ("calc", "prune_dominated_rungs"),
         ],
     ),
     (

@@ -12,7 +12,8 @@ memory each time:
     5. never-worse     beneficiated <= raw, and searched <= N = 1
     6. stage 2 tables  the judgement tables still produce the numbers on disk
     7. market ceilings a capacity ceiling may only ever cost you, never pay
-    8. combo bound     the pruning bound holds on every solve and every rung
+    8. bounds          the combo bound holds on every solve and rung, and the
+                       rung ceiling on every market-capped sale
 
 Typical use.  The ORDER matters: the baseline must be captured before the first
 edit, exactly as every release note in versions.md says it was.
@@ -271,6 +272,7 @@ RESET_FIELDS = (
     "model_isru_processing",     # v1.32.0: ISRU energy and plant are A/B'd against none
     "isru_processing_usd_per_kg",  # v1.32.0: the retired $50/kg is A/B'd against 0.0
     "prune_dominated_combos",    # v1.41.0: check 2 builds every cell with the bound off
+    "prune_dominated_rungs",     # v1.42.0: and with the rung bound off
 )
 
 
@@ -778,10 +780,20 @@ def check_prune(m, names: List[str],
         ok &= good
         print(f"  {name:13s} bound off: {same}/{total} identical | {h1} vs {h3} | "
               f"{'MATCH' if good else 'DIFFER ' + ','.join(diff[:4])}")
+        # calc v1.42.0: and the rung bound, the same way.
+        off = run_cell(m, name, prune_dominated_rungs=False)
+        m.CALC_CONFIG.prune_dominated_rungs = True
+        same, total, diff = column_diff(_comparable(on), _comparable(off))
+        h4 = cell_hash(off)
+        good = (h1 == h4) and not diff
+        ok &= good
+        print(f"  {name:13s} rungs off: {same}/{total} identical | {h1} vs {h4} | "
+              f"{'MATCH' if good else 'DIFFER ' + ','.join(diff[:4])}")
     return ok
 
 
-# The planted defect check 8 must catch.  A cost floor this much too high was
+# The planted defect check 8 must catch (since v1.42.0 also as a rung ceiling
+# this much too low).  A cost floor this much too high was
 # invisible to a 120-row output hash when the bound was designed (2026-11-05),
 # and the per-rung test below reported 400,556 violations of it; that gap is
 # why this check exists and why it must keep proving it can fail.
@@ -810,14 +822,27 @@ def check_bound(m, names: List[str]) -> bool:
     `_PLANTED_FLOOR` times too high, and a pass where that planted floor is
     never violated is a check that could not have seen a real one, so it fails
     too.  Serial only: the wrappers live in this process.
+
+    calc v1.42.0: the same pass runs with `prune_dominated_rungs` off, so
+    every rung of every ladder is sold, and holds every market-capped sale
+    (`optimal_payload_mix` with `caps`, and `_capped_sale_value`) to the
+    `_rung_gross_ceiling` its solve priced just before its ladder.  The
+    ceiling is reset at the start of every solve: a nested solve (a repair, a
+    resized load) always runs before its parent prices the ceiling, never
+    between the ceiling and the ladder.  A searched cell that sells nothing
+    capped, or never breaks a ceiling `_PLANTED_FLOOR` times too low, fails.
     """
     calc = sys.modules["modules.calc"]
     orig_ec = calc.evaluate_combo
     orig_tail = calc._mission_cost_tail
     orig_solve = calc._evaluate_combo_at_ratio
+    orig_ceil = calc._rung_gross_ceiling
+    orig_knap = calc.optimal_payload_mix
+    orig_capped = calc._capped_sale_value
     stats = dict(combos=0, prunable=0, solves=0, rungs=0, key=0, cost=0,
-                 gross=0, payload=0, planted=0, unbounded=0)
-    state = {"cur": None, "best": None}
+                 gross=0, payload=0, planted=0, unbounded=0,
+                 ladders=0, sales=0, ceiling=0, planted_ceiling=0)
+    state = {"cur": None, "best": None, "ceil": None}
 
     def evaluate_combo(asteroid_row, vehicle, propellant, bulk_value_per_kg,
                        dv_out_m_s, dv_ret_m_s, ops_df, config, **kw):
@@ -856,6 +881,7 @@ def check_bound(m, names: List[str]) -> bool:
 
     def solve(*a, **k):
         """Every solve, nested repairs included, against both ceilings."""
+        state["ceil"] = None
         res = orig_solve(*a, **k)
         cur = state["cur"]
         if cur is not None and res is not None:
@@ -863,6 +889,35 @@ def check_bound(m, names: List[str]) -> bool:
             stats["payload"] += float(res["max_payload_kg"]) > cur[1]
             stats["gross"] += float(res["gross_value_usd"]) > cur[2]
         return res
+
+    def ceiling(*a, **k):
+        """The rung ceiling a solve prices before its ladder, remembered."""
+        out = orig_ceil(*a, **k)
+        state["ceil"] = out
+        stats["ladders"] += 1
+        return out
+
+    def sale(value):
+        """One market-capped sale against the ceiling and the planted one."""
+        ceil = state["ceil"]
+        if ceil is None:
+            return
+        stats["sales"] += 1
+        stats["ceiling"] += value > ceil
+        stats["planted_ceiling"] += ceil > 0 and value > ceil / _PLANTED_FLOOR
+
+    def knap(*a, **k):
+        """The real knapsack; a capped call is a rung's sale."""
+        out = orig_knap(*a, **k)
+        if k.get("caps") is not None:
+            sale(float(out["value_usd"]))
+        return out
+
+    def capped(*a, **k):
+        """The real raw capped sale."""
+        out = orig_capped(*a, **k)
+        sale(out[0])
+        return out
 
     orig_ea = calc.evaluate_asteroid
 
@@ -874,12 +929,16 @@ def check_bound(m, names: List[str]) -> bool:
     ok = True
     calc.evaluate_combo, calc._mission_cost_tail = evaluate_combo, tail
     calc._evaluate_combo_at_ratio, calc.evaluate_asteroid = solve, evaluate_asteroid
+    calc._rung_gross_ceiling, calc.optimal_payload_mix = ceiling, knap
+    calc._capped_sale_value = capped
     try:
         for name in names:
             for k in stats:
                 stats[k] = 0
-            df = run_cell(m, name, prune_dominated_combos=False)
+            df = run_cell(m, name, prune_dominated_combos=False,
+                          prune_dominated_rungs=False)
             m.CALC_CONFIG.prune_dominated_combos = True
+            m.CALC_CONFIG.prune_dominated_rungs = True
             bad = stats["key"] + stats["cost"] + stats["gross"] + stats["payload"]
             blind = stats["rungs"] == 0 or stats["planted"] == 0
             good = not df.empty and bad == 0 and not blind
@@ -891,9 +950,24 @@ def check_bound(m, names: List[str]) -> bool:
                   f"{100.0 * stats['prunable'] / max(1, stats['combos']):.1f}%"
                   f"{'' if good else '  FAIL'}"
                   + ("  (CHECK COULD NOT FAIL)" if blind else ""))
+            # calc v1.42.0: the rung ceiling.  Only a searched cell has a
+            # ladder, so only a searched cell can be blind to it.
+            searched = "search" in name
+            rblind = searched and (stats["ladders"] == 0 or stats["sales"] == 0
+                                   or stats["planted_ceiling"] == 0)
+            rgood = stats["ceiling"] == 0 and not rblind
+            ok &= rgood
+            print(f"  {name:13s} rung ceiling: {stats['ladders']:7d} ladders, "
+                  f"{stats['sales']:8d} capped sales | violations "
+                  f"{stats['ceiling']} | planted /{_PLANTED_FLOOR} caught on "
+                  f"{stats['planted_ceiling']} sales"
+                  f"{'' if rgood else '  FAIL'}"
+                  + ("  (CHECK COULD NOT FAIL)" if rblind else ""))
     finally:
         calc.evaluate_combo, calc._mission_cost_tail = orig_ec, orig_tail
         calc._evaluate_combo_at_ratio, calc.evaluate_asteroid = orig_solve, orig_ea
+        calc._rung_gross_ceiling, calc.optimal_payload_mix = orig_ceil, orig_knap
+        calc._capped_sale_value = orig_capped
     return ok
 
 
@@ -1185,7 +1259,7 @@ def cmd_check(args) -> int:
     # stopped where the list did.
     print("\n7. MARKET CEILINGS")
     ok &= check_market_cap(m)
-    print("\n8. COMBO BOUND (calc v1.41.0)")
+    print("\n8. BOUNDS (combo calc v1.41.0, rung calc v1.42.0)")
     ok &= check_bound(m, args.cells)
 
     if unchecked:
@@ -1229,7 +1303,7 @@ def cmd_invariants(args) -> int:
     ok &= check_stage2(m)
     print("\n7. MARKET CEILINGS (calc v1.21.0)")
     ok &= check_market_cap(m)
-    print("\n8. COMBO BOUND (calc v1.41.0)")
+    print("\n8. BOUNDS (combo calc v1.41.0, rung calc v1.42.0)")
     ok &= check_bound(m, args.cells)
     print("\n" + ("OK" if ok else "*** FAILURES ABOVE ***"))
     return 0 if ok else 1

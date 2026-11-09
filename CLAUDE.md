@@ -84,7 +84,7 @@ shim: it imports the four modules, binds the aliases below, holds
 ## Versions and release notes
 
 Current: catalog `1.10.0`, mineral_value `1.17.0`, transportation `1.23.6`,
-calc `1.41.0`, master `1.68.0` (checked by `verify_docs.py` check 2; the master
+calc `1.42.0`, master `1.69.0` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.
@@ -633,3 +633,12 @@ output hash cannot certify it (a floor 1.6x too high left a sample's hash
 unchanged), so `verify.py` check 8 asserts it on every solve and every rung and
 must catch a planted floor. A change to a cost line, pass 1's inputs or the
 knapsack re-proves the term it touches; the proof covers WACC off only.
+
+**So is branch-and-bound over programme rungs** (calc 1.42.0,
+`_rung_gross_ceiling`, `prune_dominated_rungs`): the rung's cost exact, its
+capped sale at a ceiling, the ladder's best rung as the incumbent. The ceiling
+is the uncapped load's POSITIVE-price value, not `gross_base`: the knapsack
+fills through negative prices and a raw hold's `gross_base` prices the residual
+differently, and either can put a capped sale above it. Check 8 audits every
+capped sale; a change to the knapsack, `_capped_sale_value` or the capacity
+branch re-proves it.
