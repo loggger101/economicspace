@@ -124,7 +124,7 @@ one that does not say is not to be used.
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.43.0** | v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.70.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| - | `master.py` | **1.71.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -226,6 +226,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.71.0](#master-v1710) | 2026-11-10 | **ten General_Research citation candidates**: comments cite a comparator beside ten unsourced values and say which are scenarios; comments only, so no stamp and no number moves |
 | [master v1.70.0 / calc v1.43.0](#master-v1700--calc-v1430) | 2026-11-10 | the programme ladder's market pooling built once per solve, not once per rung: an estimated 2.7-5.0% of a sample run by count, most at earth_surface; no number moves |
 | [master v1.69.0 / calc v1.42.0](#master-v1690--calc-v1420) | 2026-11-09 | **branch-and-bound over programme rungs**: a rung whose market-capped sale cannot beat its ladder's best is not sold, 13-17% faster on capped samples and unchanged at earth_surface; no number moves, and `verify.py` check 8 holds the ceiling on every capped sale |
 | [master v1.68.0 / calc v1.41.0](#master-v1680--calc-v1410) | 2026-11-05 | **branch-and-bound over combos**: a combo whose best possible result cannot beat the body's best so far is skipped, 2.3-3.1x faster on samples; no number moves, and `verify.py` check 8 holds the bound on every solve and rung |
@@ -303,6 +304,33 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.71.0
+
+**Ten General_Research citation candidates, in comments only.** The values
+stay. Each comment now names a comparator and says whether the value is an
+engineering scenario or a safeguard. No module's `pipeline_version` moves. The
+syntax trees of `modules/calc.py` and `campaign/worked_calculation.py` are
+identical to v1.70.0's, so no number can move.
+
+- `R_LEO_KM`: IERS 2010 equatorial radius plus NASA's typical 200 km LEO, a
+  reference-orbit convention (rc-356).
+- `mining_hardware_kg` beside RASSOR 2.0, 66 kg (rc-370);
+  `return_vehicle_dry_kg` beside OSIRIS-REx, ~880 kg dry (rc-376). Both are
+  engineering scenarios.
+- `max_mining_duration_yr` and `max_mission_duration_yr` beside NASA's
+  prospector concept, which asks for 1-5 year missions (rc-371, rc-412).
+  `station_keeping_floor_yr` beside OSIRIS-REx's 2+ years at Bennu (rc-372).
+- `default_rotation_period_h` beside a 10.986 h median of bright main-belt
+  bodies, a different population (rc-382).
+- The 3,000 and 300 m/s delta-v floors are model safeguards; NHATS's best round
+  trip totals 3.549 km/s (rc-387).
+- `max_concentration_ratio`: the uncited "100:1 to 1000:1" claim is replaced
+  by Rustenburg's measured 59.5-62.4:1. The 50:1 cap allows a larger mass pull
+  than that plant runs, so the comment no longer calls the cap conservative
+  (rc-388).
+- `max_dark_period_h`: 72 h is a scenario cap, not a battery limit. NASA sized
+  73-117 h of storage for the worst lunar south-pole site (rc-411).
 
 ## master v1.70.0 / calc v1.43.0
 

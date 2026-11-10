@@ -138,12 +138,19 @@ class CalcConfig:
     # `m_hardware`     - mining rig + comms + structure that stays at asteroid
     # `m_dry_return`   - return vehicle dry mass (TPS frame + chute + structure,
     #                    NOT the ablative TPS itself which scales with payload)
+    # 2,000 kg is an engineering scenario with no published mass budget behind
+    # it.  For scale, NASA's RASSOR 2.0 lunar excavator is 66 kg and digs at
+    # least 2.7 t of regolith a day (Mueller et al., NTRS 20210011366), a
+    # surface robot with no anchoring or mission systems (GR rc-370).
     mining_hardware_kg:        float = 2_000
 
     # A FLOOR, not the whole return dry mass: `return_structure_frac_of_payload`
     # adds 15% of the haul on top of it.  Flat 500 kg gave 250:1
     # payload-to-structure against 0.4:1 (Cygnus) to 2:1 (Dragon) for real
-    # cargo craft, and nothing else bounded returned mass.
+    # cargo craft, and nothing else bounded returned mass.  The floor is an
+    # engineering scenario.  OSIRIS-REx, a whole sample-return spacecraft, was
+    # ~880 kg dry (Bierhaus et al. 2018, Space Sci. Rev. 214:107): a different
+    # scope, not a lower bound (GR rc-376).
     return_vehicle_dry_kg:     float = 500
 
     # ─── RETURN VEHICLE SCALES WITH ITS CARGO  (v1.10.0) ─────────────────────
@@ -224,10 +231,16 @@ class CalcConfig:
     mining_rate_kg_per_day_per_kg_rig: float = 0.10
     # Hard ceiling on time spent at the asteroid.  Binds the payload: you can
     # only return what you can dig in this long.  Also keeps ops cost and WACC
-    # from compounding over an implausible stay.
+    # from compounding over an implausible stay.  An engineering scenario:
+    # NASA's Robotic Asteroid Prospector asks for a spacecraft good for 1-5
+    # year WHOLE missions (Cohen et al. 2013, NIAC Phase I, p. 65), and states
+    # no stay (GR rc-371).
     max_mining_duration_yr:            float = 3.0
-    # Floor on time at the asteroid regardless of how little is mined: 
-    # approach, characterisation, proximity ops, departure phasing.
+    # Floor on time at the asteroid regardless of how little is mined:
+    # approach, characterisation, proximity ops, departure phasing.  An
+    # engineering floor, not a measured minimum: OSIRIS-REx's proximity
+    # operations at Bennu ran Dec 2018 to May 2021, over 2 years, for a sample
+    # (Antreasian et al., NTRS 20210025471) (GR rc-372).
     station_keeping_floor_yr:          float = 0.25
 
     # ─── BENEFICIATION  (v1.5.0) ─────────────────────────────────────────────
@@ -365,9 +378,11 @@ class CalcConfig:
     # separation of a metal phase from silicate gangue is mechanically simpler
     # than flotation but has no microgravity flight heritage at all.
     beneficiation_recovery:    float = 0.90
-    # Safety cap on feed:concentrate mass ratio.  Terrestrial mills run
-    # 100:1 to 1000:1 on PGM ores; 50:1 is deliberately conservative for a
-    # first autonomous rig.  The purity bound above usually binds first.
+    # Safety cap on feed:concentrate mass ratio, a scenario for a first
+    # autonomous rig.  For comparison, the Rustenburg PGM concentrators ran
+    # 59.5:1 to 62.4:1 in 2021-2025 (Sibanye-Stillwater technical report,
+    # Table 57), a 1.6-1.7% mass pull against the 2.0% this cap allows (GR
+    # rc-388).  The purity bound above usually binds first.
     max_concentration_ratio:   float = 50.0
     # How hard to concentrate is an economic decision, not a setting; see
     # evaluate_combo.  This is how many points the profit sweep samples
@@ -404,7 +419,9 @@ class CalcConfig:
     # 20160010261).
     ep_target_thrust_yr:       float = 3.0
     # Reject any mission whose total duration exceeds this.  A 40-year
-    # round trip is not a mission, it is a bequest.
+    # round trip is not a mission, it is a bequest.  25 years is a model
+    # eligibility cap, not a physical limit; no source sets it (NASA's
+    # prospector concept asks for 1-5 year missions; GR rc-412).
     max_mission_duration_yr:   float = 25.0
 
     # LAUNCH WINDOWS.  Departure needs the target and destination phased,
@@ -637,14 +654,18 @@ class CalcConfig:
     # (2026-08-08).  Used only where the body does not state one, about two
     # thirds of the catalog.  Sub-kilometre bodies run faster (median 6.3 h),
     # so this default is conservative for exactly the small NEAs this model
-    # likes: a longer assumed night buys a heavier battery.
+    # likes: a longer assumed night buys a heavier battery.  For comparison,
+    # 1,230 quality-coded bright (H<=11) main-belt bodies have a 10.986 h
+    # median (Marciniak et al. 2015, Table 1), a different population (GR
+    # rc-382).
     default_rotation_period_h: float = 10.222
     # Slow rotators run to hundreds of hours and a few tumble on ~10,000 h.
     # Sizing a battery for a 40-day night is not an answer, it is a different
     # architecture question (you would fly nuclear, or accept a duty cycle), so
     # the dark period used for STORAGE is clamped and the clamp is reported.
-    # 72 h is three days, which is the outside edge of what a chemical battery
-    # is a sane answer for.
+    # 72 h, three days, is a scenario cap, not a battery limit: NASA sized
+    # 73-117 h of storage, battery or fuel cell, for the worst lunar south-pole
+    # site (Fincannon 2007, NASA/TM-2007-215025) (GR rc-411).
     max_dark_period_h:         float = 72.0
     # A body that spins faster than its lift period, sqrt(3 pi / (G rho)),
     # cannot keep an unconfined loose grain on its equator.  That does not show
@@ -2729,6 +2750,9 @@ def _cargo_water_kg(
 
 V_EARTH_KM_S     = 29.784              # Earth mean orbital velocity
 MU_EARTH_KM3_S2  = 398_600.4418        # Earth gravitational parameter
+# Equatorial radius 6,378,136.6 m (IERS Conventions 2010, Table 1.1) plus a
+# 200 km circular orbit, NASA's "typical" LEO in the SLS capability tables: a
+# reference-orbit convention, not every mission's orbit (GR rc-356).
 R_LEO_KM         = 6_378.14 + 200.0    # 200-km circular parking orbit
 
 
@@ -3496,6 +3520,9 @@ def asteroid_dv_options(
         for legs in options:
             if leg not in legs:
                 continue                # Mars geometry that did not close
+            # The 3,000 and 300 m/s floors are model safeguards, not typical
+            # leg requirements, and have no source; NHATS's best round trip,
+            # 2000 SG344, totals 3.549 km/s (GR rc-387).
             dv_out = min(max(legs["dv_out"] * 1_000.0, 3_000.0),
                          config.max_dv_outbound_m_s)
             dv_ret = min(max(legs[leg] * 1_000.0, 300.0),
