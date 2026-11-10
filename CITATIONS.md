@@ -203,6 +203,10 @@ reaches a value. The rc- numbers are General_Research revision candidates.
 - **Fincannon, J. (2007)**, *Lunar South Pole Illumination: Review,
   Reassessment, and Power System Implications*, NASA/TM-2007-215025: storage
   hours beside `max_dark_period_h` (rc-411).
+- **Terzi & Nicoli (2026)**, *From Sputnik to Starship*, PNAS Nexus: launch-cost
+  experience curves beside `learning_curve_rate` (rc-385). RASSOR 2.0, above,
+  also sits beside `mining_rate_kg_per_day_per_kg_rig` (rc-309), and NHATS
+  beside `asteroid_mission_duration_yr` (rc-354).
 
 ---
 

@@ -227,7 +227,11 @@ class CalcConfig:
     # to move 10,000 kg of regolith (Schuler et al. 2022); a 4.8 kg bucket-drum
     # tool dug 172-778 kg/h in sandbox tests (Giel et al. 2025, arXiv
     # 2511.00492).  They count product, or a tool rather than a whole rig, so
-    # they bracket the order of magnitude rather than set it.
+    # they bracket the order of magnitude rather than set it.  The highest
+    # whole-system figure is RASSOR 2.0: a 66 kg lunar excavator designed for
+    # at least 2.7 t a day, 40.9 kg/day/kg and ~409x this dial (Mueller et al.,
+    # NTRS 20210011366), in loose regolith at lunar gravity, a design rather
+    # than a flown rate.  0.10 stays under review (GR rc-309).
     mining_rate_kg_per_day_per_kg_rig: float = 0.10
     # Hard ceiling on time spent at the asteroid.  Binds the payload: you can
     # only return what you can dig in this long.  Also keeps ops cost and WACC
@@ -465,8 +469,12 @@ class CalcConfig:
     # for spacecraft.  The one measured
     # case, three identical ST-5 spacecraft, fits a constant percentage
     # reduction per unit toward a floor (Chen & McLennan 2004, NTRS
-    # 20040035806), and three units cannot pin a rate.  Read ONLY when
-    # `model_learning_curve` is True; 1.0 disables the curve on its own.
+    # 20040035806), and three units cannot pin a rate.  For comparison, launch
+    # cost per kg falls ~6% per doubling of cumulative payload within rocket
+    # families, 8% after 1995 (Terzi & Nicoli 2026, PNAS Nexus): launch cost
+    # against payload, not spacecraft units, so 0.85 stays a scenario (GR
+    # rc-385).  Read ONLY when `model_learning_curve` is True; 1.0 disables
+    # the curve on its own.
     learning_curve_rate:       float = 0.85
 
     # MARKET MODEL.  How much of a delivered kilogram actually sells, and the
@@ -3744,6 +3752,10 @@ def asteroid_mission_duration_yr(
         8,500 m/s           →  2.0 yr
        10,500 m/s           →  3.5 yr
     Approximately linear at ~0.00023 yr per m/s.
+
+    A SCENARIO PRIOR, not a trajectory: real transfers trade delta-v against
+    time (NHATS, 2000 SG344: 3.549 km/s over 370 days, or 11.402 km/s over
+    34), so no single line maps one to the other (General_Research rc-354).
 
     v1.4.0: the middle term is the actual mining duration rather than a flat
     0.5 yr, so returning more material genuinely costs more mission-years.

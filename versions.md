@@ -226,7 +226,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
-| [master v1.71.0](#master-v1710) | 2026-11-10 | **ten General_Research citation candidates**: comments cite a comparator beside ten unsourced values and say which are scenarios; comments only, so no stamp and no number moves |
+| [master v1.71.0](#master-v1710) | 2026-11-10 | **thirteen General_Research candidates**: comments cite a comparator beside thirteen unsourced values and say which are scenarios; comments only, so no stamp and no number moves |
 | [master v1.70.0 / calc v1.43.0](#master-v1700--calc-v1430) | 2026-11-10 | the programme ladder's market pooling built once per solve, not once per rung: an estimated 2.7-5.0% of a sample run by count, most at earth_surface; no number moves |
 | [master v1.69.0 / calc v1.42.0](#master-v1690--calc-v1420) | 2026-11-09 | **branch-and-bound over programme rungs**: a rung whose market-capped sale cannot beat its ladder's best is not sold, 13-17% faster on capped samples and unchanged at earth_surface; no number moves, and `verify.py` check 8 holds the ceiling on every capped sale |
 | [master v1.68.0 / calc v1.41.0](#master-v1680--calc-v1410) | 2026-11-05 | **branch-and-bound over combos**: a combo whose best possible result cannot beat the body's best so far is skipped, 2.3-3.1x faster on samples; no number moves, and `verify.py` check 8 holds the bound on every solve and rung |
@@ -307,9 +307,10 @@ module in numeric order.
 
 ## master v1.71.0
 
-**Ten General_Research citation candidates, in comments only.** The values
-stay. Each comment now names a comparator and says whether the value is an
-engineering scenario or a safeguard. No module's `pipeline_version` moves. The
+**Thirteen General_Research candidates, in comments only.** Ten are citation
+candidates and three are value reviews, and every value stays. Each comment now
+names a comparator and says whether the value is an engineering scenario or a
+safeguard. No module's `pipeline_version` moves. Ignoring docstrings, the
 syntax trees of `modules/calc.py` and `campaign/worked_calculation.py` are
 identical to v1.70.0's, so no number can move.
 
@@ -331,6 +332,14 @@ identical to v1.70.0's, so no number can move.
   (rc-388).
 - `max_dark_period_h`: 72 h is a scenario cap, not a battery limit. NASA sized
   73-117 h of storage for the worst lunar south-pole site (rc-411).
+- Value reviews, annotated and kept:
+  - `mining_rate_kg_per_day_per_kg_rig`: RASSOR 2.0's design rate is ~409x the
+    dial (rc-309).
+  - `learning_curve_rate`: launch-cost experience curves run 6-8% per doubling,
+    a different quantity (rc-385).
+  - `asteroid_mission_duration_yr`: the delta-v-to-time line is a scenario
+    prior, since NHATS shows one body's trajectories trading 3.5 km/s over 370
+    days against 11.4 km/s over 34 (rc-354).
 
 ## master v1.70.0 / calc v1.43.0
 
