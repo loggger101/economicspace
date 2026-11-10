@@ -106,7 +106,7 @@ CATALOG = os.path.join(ROOT, "asteroid_pipeline", "profitability_catalog.csv")
 G0 = 9.80665
 V_EARTH = 29.784
 MU_EARTH = 398_600.4418
-R_LEO = 6_378.14 + 200.0
+R_LEO = 6_378.14 + 200.0     # IERS 2010 equatorial radius + 200 km reference LEO (GR rc-356)
 R_MOON = 384_400.0
 DV_NRHO = 0.450
 # The capsule still has to come down: capture into LEO and then land is not

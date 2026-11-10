@@ -175,6 +175,38 @@ reaches a value. The rc- numbers are General_Research revision candidates.
 - **Northrop Grumman (2016)**, *Propulsion Products Catalog* (OSR No.
   16-S-1432), STAR 48B pages: the motor-case fraction MODEL.md's tankage table
   holds the APCP class against (rc-179).
+- **Petit, G. & Luzum, B. (eds.) (2010)**, *IERS Conventions (2010)*, IERS
+  Technical Note 36, Table 1.1: Earth's equatorial radius; and NASA's SLS
+  capability tables, whose "typical" LEO is a 200 km circle: `R_LEO_KM`
+  (rc-356).
+- **Mueller, Smith, Schuler et al. (2016)**, *Design of an Excavation Robot:
+  RASSOR 2.0*, ASCE Earth & Space, NTRS
+  20210011366: a 66 kg excavator's daily regolith beside `mining_hardware_kg`
+  (rc-370).
+- **Cohen et al. (2013)**, *Robotic Asteroid Prospector*, NASA NIAC Phase I
+  final report, p. 65: 1-5 year mission capability beside
+  `max_mining_duration_yr` and `max_mission_duration_yr` (rc-371, rc-412).
+- **Antreasian et al. (2021)**, *OSIRIS-REx Proximity Operations and
+  Navigation Performance at (101955) Bennu*, NTRS 20210025471: over 2 years of
+  proximity operations beside `station_keeping_floor_yr` (rc-372).
+- **Bierhaus et al. (2018)**, *The OSIRIS-REx Spacecraft and the
+  Touch-and-Go Sample Acquisition Mechanism*, Space Sci. Rev. 214:107: ~880 kg
+  dry beside `return_vehicle_dry_kg` (rc-376).
+- **Marciniak et al. (2015)**, *Against the biases in spins and shapes of
+  asteroids*, Planet. Space Sci. 118:256, Table 1: an LCDB rotation-period median beside
+  `default_rotation_period_h` (rc-382).
+- **NASA/JPL NHATS**: the best round-trip delta-v beside the per-leg floors in
+  `asteroid_dv_options` (rc-387).
+- **Sibanye-Stillwater (2026)**, Rustenburg technical report summary, Table
+  57: concentrator feed and concentrate tonnages beside
+  `max_concentration_ratio` (rc-388).
+- **Fincannon, J. (2007)**, *Lunar South Pole Illumination: Review,
+  Reassessment, and Power System Implications*, NASA/TM-2007-215025: storage
+  hours beside `max_dark_period_h` (rc-411).
+- **Terzi & Nicoli (2026)**, *From Sputnik to Starship*, PNAS Nexus: launch-cost
+  experience curves beside `learning_curve_rate` (rc-385). RASSOR 2.0, above,
+  also sits beside `mining_rate_kg_per_day_per_kg_rig` (rc-309), and NHATS
+  beside `asteroid_mission_duration_yr` (rc-354).
 
 ---
 
