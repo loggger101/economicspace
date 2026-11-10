@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.70.0 / calc v1.43.0](#master-v1700--calc-v1430)
 - [master v1.69.0 / calc v1.42.0](#master-v1690--calc-v1420)
 - [master v1.68.0 / calc v1.41.0](#master-v1680--calc-v1410)
 - [master v1.67.0 / calc v1.40.0](#master-v1670--calc-v1400)
@@ -122,8 +123,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.42.0** | v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.69.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 4 | `modules/calc.py` | **1.43.0** | v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
+| - | `master.py` | **1.70.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -138,7 +139,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Thirty-nine stamps so far have moved without moving a number:
+Forty stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -181,6 +182,7 @@ Thirty-nine stamps so far have moved without moving a number:
 | calc `1.40.0` | **two opt-in flags finished** | bit-identical, verified (both are off by default) |
 | calc `1.41.0` | performance only | bit-identical, verified |
 | calc `1.42.0` | performance only | bit-identical, verified |
+| calc `1.43.0` | performance only | bit-identical, verified |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -191,7 +193,7 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `transportation 1.19.0`, `mineral_value 1.16.0`, `transportation 1.23.6` and
 `mineral_value 1.17.0`.
 
-⚠️  **Derive any count of these from the table, not from a sentence.** Ten
+⚠️  **Derive any count of these from the table, not from a sentence.** Eleven
 rows are performance stamps and twenty-nine are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
@@ -224,6 +226,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.70.0 / calc v1.43.0](#master-v1700--calc-v1430) | 2026-11-10 | the programme ladder's market pooling built once per solve, not once per rung: an estimated 2.7-5.0% of a sample run by count, most at earth_surface; no number moves |
 | [master v1.69.0 / calc v1.42.0](#master-v1690--calc-v1420) | 2026-11-09 | **branch-and-bound over programme rungs**: a rung whose market-capped sale cannot beat its ladder's best is not sold, 13-17% faster on capped samples and unchanged at earth_surface; no number moves, and `verify.py` check 8 holds the ceiling on every capped sale |
 | [master v1.68.0 / calc v1.41.0](#master-v1680--calc-v1410) | 2026-11-05 | **branch-and-bound over combos**: a combo whose best possible result cannot beat the body's best so far is skipped, 2.3-3.1x faster on samples; no number moves, and `verify.py` check 8 holds the bound on every solve and rung |
 | [master v1.66.0 / calc v1.39.0](#master-v1660--calc-v1390) | 2026-11-05 | **four more opt-in changes, off by default**: the electric stage is sized on the fuel it flies, it can be flown home, repeat flights leave the rig behind, and a capped market buys the hold that was loaded. No default number moves |
@@ -301,6 +304,50 @@ fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
 
+## master v1.70.0 / calc v1.43.0
+
+**The market pooling the programme ladder's "does anything bind" test reads is
+built once per solve instead of once per rung.** Performance only: **no number
+moves**. Nothing here repins a package or adds a config field.
+
+### Why
+
+Under `capacity_cap`, every rung of a ladder pooled `sale_terms` by market
+before testing whether any ceiling binds. Nothing in that pooling depends on
+the rung, and at earth_surface, where no ceiling binds, the test is most of
+what a rung costs once its cost tail is priced. calc 1.42.0's rung bound saves
+nothing there for the same reason.
+
+### What changes
+
+- **`market_pool`**, built once per solve beside `cap_by_programme` when
+  `capacity_cap` applies: the same additions over `sale_terms` in the same
+  order as the per-rung `agg` it replaces, so the same floats, kept as a tuple
+  of (kg pooled, ceiling kg/yr) per market in first-seen order.
+- **The rung's test** walks `market_pool` against its own window. The test is
+  an "any", so the order it walks in decides only when it stops.
+- **Not hoisted:** the reshape branch's `caps_by_market`. The walk consumes
+  that dict, so it must be fresh per rung, and building it is small beside
+  the knapsack it feeds. `elasticity`'s pooling was already memoised per fleet.
+
+### What was measured
+
+| harness | result |
+|---|---|
+| `verify.py check`, all eight, against a baseline taken on the clean 1.42.0 tree first (`--tag pre-hoist-agg`) | ALL CHECKS PASSED: the four cells MATCH bit for bit, 151 of 151 columns each |
+| check 2, each cell with the combo bound off and, separately, the rung bound off | MATCH on all four, both ways |
+| check 8, each cell with both bounds off | the same counts as at 1.42.0: 0 violations over 364,085 solves and 3,849,834 rungs, and 0 over 324,797 capped sales in 86,589 ladders; the planted floor and ceiling caught as before |
+| count probe: the old code with `_delivery_window_yr` counted (one call per rung reaching the test) and the pooling loop priced with `timeit` at each `sale_terms` length seen | earth_surface 30 rows: 772,060 rung tests in 18,794 solves, 0.50 s saved, 5.0% of the run; cislunar 60 rows: 396,750 in 9,267, 3.4%; mars_surface 40 rows: 507,326 in 12,682, 2.7% |
+| old and new in one process, interleaved, serial, one pinned core | result hashes identical at all three destinations; wall clocks 6% to 12% faster, but an A/A control (the new code loaded twice the same way) read 1.4% and 5.7% on the same samples, so the harness cannot resolve a change this size and the count probe is the figure |
+
+### Measured and not
+
+- **No full cell has been timed** at this release; the percentages above are
+  of sample runs and do not predict a full cell.
+- **The A/A control is the lesson.** Two copies of the same `modules.calc`
+  timed interleaved in one process read up to 5.7% apart on these samples,
+  about the size of the change being measured. A ratio of that size needs a
+  count, not a stopwatch.
 ## master v1.69.0 / calc v1.42.0
 
 **Branch-and-bound over programme rungs: a rung whose market-capped sale cannot
@@ -12240,6 +12287,10 @@ high-inclination arrival. No config field or output column moved, and
 - **New output column, only with the limit on**: `spin_lift_period_h` (None
   where the body has no density). A default run's columns are unchanged.
 - **New functions**: `spin_lift_period_h`, `spin_limited`.
+
+**`1.43.0`  performance only: the ladder's market pooling, hoisted.** Full write-up: [master v1.70.0 / calc v1.43.0](#master-v1700--calc-v1430).
+- **No new config field, function or output column**; every number
+  bit-identical to 1.42.0.
 
 **`1.42.0`  performance only: the rung bound.** Full write-up: [master v1.69.0 / calc v1.42.0](#master-v1690--calc-v1420).
 - **New config field**: `prune_dominated_rungs` (default `True`). Off is

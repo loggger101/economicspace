@@ -1297,7 +1297,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.42.0"
+    pipeline_version: str = "1.43.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -7606,6 +7606,18 @@ def _evaluate_combo_at_ratio(
     # which answers most rungs in a few float comparisons.
     cap_by_programme: Dict[Tuple[int, int],
                           Tuple[float, float, float, float, float]] = {}
+    # v1.43.0: the per-market pooling of `sale_terms` the "does anything
+    # bind" test below reads.  Nothing in it depends on the rung, so it is
+    # built once per solve rather than once per rung: the same additions in
+    # the same order, so the same floats.  (kg pooled, ceiling kg/yr) per
+    # market, in first-seen order.
+    market_pool: Tuple[Tuple[float, float], ...] = ()
+    if capacity_applies:
+        agg: Dict[str, Tuple[float, float]] = {}
+        for kg, _price, mkt, key in sale_terms:
+            prev = agg.get(key)
+            agg[key] = (kg + prev[0], mkt) if prev is not None else (kg, mkt)
+        market_pool = tuple(agg.values())
     # v1.17.5: the same argument one function further in.  The rig shares and
     # the programme-calendar multipliers are a function of the campaigns one
     # rig flies and of the PROLOGUE, and the ladder crosses ~8 fleets with
@@ -7776,13 +7788,10 @@ def _evaluate_combo_at_ratio(
                 # v1.21.2: pooled, for the same reason the sale is.  Testing
                 # per phase let a load slip through this fast path while the
                 # SHARED silicates allowance was already over, and the fast
-                # path returns `gross_base`, i.e. no ceiling at all.
-                agg: Dict[str, Tuple[float, float]] = {}
-                for kg, _price, mkt, key in sale_terms:
-                    prev = agg.get(key)
-                    agg[key] = (kg + prev[0], mkt) if prev is not None else (kg, mkt)
+                # path returns `gross_base`, i.e. no ceiling at all.  The
+                # pooling is `market_pool`, built once per solve above.
                 binds = False
-                for kg, mkt in agg.values():
+                for kg, mkt in market_pool:
                     if kg > mkt * window:
                         binds = True
                         break
