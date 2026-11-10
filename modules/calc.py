@@ -1265,6 +1265,22 @@ class CalcConfig:
     # off to check that claim, or to profile the full search.
     prune_dominated_combos:    bool = True
 
+    # Skip the market-capped sale of a programme rung that cannot beat the
+    # ladder's best rung so far (v1.42.0).  The rung's cost is priced exactly
+    # and its revenue at `_rung_gross_ceiling`, the most any market-capped
+    # sale of the mission can fetch, and a rung replaces the ladder's best only
+    # on a strictly better key, so a skipped rung had nothing to offer.  Acts
+    # under `capacity_cap` on a searched programme only, and only on a rung
+    # whose ceilings bind, so where none binds (earth_surface) it neither
+    # saves nor costs anything.
+    #
+    # The answer does not depend on this setting, PROVIDED the ceiling is
+    # admissible, which is a proof in that function's docstring.  `verify.py`
+    # check 8 holds every capped sale to it and must catch a planted one;
+    # check 2 diffs this on and off.  Turn it off to check that claim, or to
+    # profile the full ladder.
+    prune_dominated_rungs:     bool = True
+
     # ─── PIPELINE VERSION ────────────────────────────────────────────────────
     # Stamped into every output CSV, and the only way to tell which code
     # produced a given catalog.  BUMP IT when a change moves any number a run
@@ -1281,7 +1297,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.41.0"
+    pipeline_version: str = "1.42.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -7603,7 +7619,8 @@ def _evaluate_combo_at_ratio(
     # `Optional[int]` is a `typing` subscript: 331 ns against 95 ns for the
     # bare def, 10,741 times per 150-row sample.  Types: (int, int, int | None,
     # bool).
-    def _price_programme(n_missions, fleet, per_ship=None, full=True):
+    def _price_programme(n_missions, fleet, per_ship=None, full=True,
+                         incumbent=None):
         """Everything downstream of the cascade, for one programme size.
 
         Returns `(cost, total_cost, gross, saturation_mult, concurrent,
@@ -7621,6 +7638,10 @@ def _evaluate_combo_at_ratio(
         call out of ~40, against a 40-key dict built and discarded on every one
         of the other 39.  `total_cost` is the same float either way; see the
         early return in `_mission_cost_tail`.
+
+        v1.42.0: `incumbent` is the ladder's best key so far.  Under
+        `capacity_cap`, a rung that cannot beat it at `rung_gross_ub` returns
+        None before its capped sale is priced; see `prune_dominated_rungs`.
         """
         c = _mission_cost_tail(cost_prologue, n_missions, per_ship,
                                totals_only = not full, rig_cache = rig_by_share,
@@ -7635,6 +7656,27 @@ def _evaluate_combo_at_ratio(
         unsold     = 0.0
         surplus_kg = 0.0
         delivered  = delivered_base
+        # Revenue was certain.  It is not: the launch fails, the spacecraft dies
+        # on the way, or the mining chain does not work when it arrives.  Costs
+        # are charged in FULL, which is correct; you spend the money either
+        # way.  v1.20.0's `charge_insurance` does not reach this term: a
+        # premium replaced hardware rather than revenue, so there was no
+        # double count here to begin with and none is created by removing it.
+        # v1.42.0: priced here, before the market block, because the rung
+        # bound reads it; it reads nothing that block writes, and `g` is
+        # scaled by it where it always was, below.
+        ps = 1.0
+        pm = 1.0
+        if config.model_reliability:
+            # v1.9.0: the mining chain LEARNS, so p_mining is the fleet average
+            # over the programme rather than the first-of-kind figure held flat.
+            # Launch and cruise reliability deliberately do not grow; launch
+            # vehicles are mature, and MTBF is a duration exposure rather than a
+            # heritage question.
+            pm = (_mining_reliability_cached(n_missions, p_first, rel_alpha,
+                                             p_mature, fleet)
+                  if config.model_reliability_growth else p_first)
+            ps = max(0.0, min(1.0, p_launch * p_cruise * pm))
         # ── The rate is the PROGRAMME'S, not one mission's (v1.14.0) ─────────
         # This term's own config comment says it exists because "prices were
         # static at the point of sale, so a mission could return any quantity of
@@ -7746,6 +7788,20 @@ def _evaluate_combo_at_ratio(
                         break
                 if not binds:
                     entry = (gross_base, 1.0, 0.0, delivered_base, 0.0)
+                # v1.42.0: a rung that cannot beat the ladder's best even at
+                # the ceiling is not sold.  `_objective_key` never falls as
+                # gross rises at a fixed cost, no capped sale below exceeds
+                # `rung_gross_ub` (`_rung_gross_ceiling`), and `ps` is 1.0
+                # exactly when reliability is off, so this rung's key is at
+                # most `incumbent` and the ladder would have passed it over.
+                # Tested only once a ceiling binds: the sale it skips is the
+                # dear one, and a rung that takes the fast path above pays
+                # nothing for the test.
+                elif (incumbent is not None
+                      and _objective_key(rung_gross_ub * ps - total_cost,
+                                         rung_gross_ub * ps, total_cost,
+                                         config, on_profit) <= incumbent):
+                    return None
                 elif (beneficiate and payload_mix
                       and not config.price_engineered_hold):
                     # RESHAPE.  Concentrating means the hold's contents are
@@ -7803,24 +7859,8 @@ def _evaluate_combo_at_ratio(
                     )
                 cap_by_programme[ckey] = entry
             g, clearing, unsold, delivered, surplus_kg = entry
-        # Revenue was certain.  It is not: the launch fails, the spacecraft dies
-        # on the way, or the mining chain does not work when it arrives.  Costs
-        # are charged in FULL, which is correct; you spend the money either
-        # way.  v1.20.0's `charge_insurance` does not reach this term: a
-        # premium replaced hardware rather than revenue, so there was no
-        # double count here to begin with and none is created by removing it.
-        ps = 1.0
-        pm = 1.0
+        # Revenue was certain.  It is not; see where `ps` is priced, above.
         if config.model_reliability:
-            # v1.9.0: the mining chain LEARNS, so p_mining is the fleet average
-            # over the programme rather than the first-of-kind figure held flat.
-            # Launch and cruise reliability deliberately do not grow; launch
-            # vehicles are mature, and MTBF is a duration exposure rather than a
-            # heritage question.
-            pm = (_mining_reliability_cached(n_missions, p_first, rel_alpha,
-                                             p_mature, fleet)
-                  if config.model_reliability_growth else p_first)
-            ps = max(0.0, min(1.0, p_launch * p_cruise * pm))
             g *= ps
         # v1.21.0 appends rather than inserts: `_objective_key` reads indices
         # 1 and 2 off this tuple positionally, and the ladder compares on them.
@@ -7856,6 +7896,16 @@ def _evaluate_combo_at_ratio(
         if not programmes:
             return None
     single       = len(programmes) == 1
+    # v1.42.0: the ceiling every rung of a searched capacity-capped ladder is
+    # held to; see `_rung_gross_ceiling`.  Priced whether or not the bound is
+    # on, so `verify.py` check 8 can audit the ladder that skips nothing.
+    rung_gross_ub = 0.0
+    rung_bound    = False
+    if capacity_applies and not single:
+        rung_gross_ub = _rung_gross_ceiling(
+            gross_base, m_payload, sale_terms, payload_mix, phases,
+            bool(beneficiate and payload_mix and not config.price_engineered_hold))
+        rung_bound = bool(getattr(config, "prune_dominated_rungs", True))
     # v1.17.6: the ranking objective is a config field, so it is resolved once
     # here rather than re-read on every rung below.  See `_objective_key`.
     on_profit    = _selects_on_profit(config.selection_objective)
@@ -7867,8 +7917,13 @@ def _evaluate_combo_at_ratio(
     priced_count = 1
 
     for n_missions, fleet, per_ship in programmes[1:]:
-        cand = _price_programme(n_missions, fleet, per_ship, full=False)
+        cand = _price_programme(n_missions, fleet, per_ship, full=False,
+                                incumbent=best_pkey if rung_bound else None)
+        # Counted whether or not it was skipped: `programme_options_priced`
+        # reports the options the ladder considered, as it always has.
         priced_count += 1
+        if cand is None:
+            continue
         key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config, on_profit)
         if key > best_pkey:
             best_pkey, best_priced = key, cand
@@ -7889,8 +7944,11 @@ def _evaluate_combo_at_ratio(
             n_missions = fleet * best_w
             if n_missions < n_floor or n_missions > max_n:
                 continue
-            cand = _price_programme(n_missions, fleet, best_w, full=False)
+            cand = _price_programme(n_missions, fleet, best_w, full=False,
+                                    incumbent=best_pkey if rung_bound else None)
             priced_count += 1
+            if cand is None:
+                continue
             key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config, on_profit)
             if key > best_pkey:
                 best_pkey, best_priced = key, cand
@@ -8324,6 +8382,81 @@ def _combo_bound_applies(config: CalcConfig, market_mode: Optional[str]) -> bool
     return (not config.apply_wacc_compounding
             and market_mode in ("capacity_cap", "elasticity",
                                 "single_mission", "unbounded"))
+
+
+# ── The rung bound  (v1.42.0) ──────────────────────────────────────────────
+def _rung_gross_ceiling(
+    gross_base:  float,
+    m_payload:   float,
+    sale_terms:  List[Tuple[float, float, float, str]],
+    payload_mix: Dict[str, float],
+    phases:      List[Tuple[str, float, float]],
+    reshape:     bool,
+) -> float:
+    """The most one mission of ANY programme rung can sell for, under
+    `capacity_cap`, before reliability (v1.42.0).
+
+    `prune_dominated_rungs` prices a rung's cost exactly (`_mission_cost_tail`
+    runs first) and its revenue at this ceiling, and skips the market-capped
+    sale when even that cannot beat the ladder's best rung so far.  That is
+    exact only if no rung's capped sale exceeds what this returns.  The proof,
+    branch by branch of the capacity block in `_evaluate_combo_at_ratio`:
+
+    * **Nothing binds.**  The sale is `gross_base` itself, and the return value
+      is at least `gross_base` by construction.
+    * **Reshape** (`optimal_payload_mix` with `caps`).  Each phase enters the
+      walk at most twice, a full-price tier and a tier at
+      `price x surplus_price_frac` with the fraction clamped to [0, 1], and
+      both tiers draw on the same feed availability `feed_kg x frac x
+      recovery` the uncapped walk used.  So the positive-price part of the
+      capped load is a loading of the uncapped problem's positive items at
+      prices no higher than theirs, within the same hold, and the greedy walk
+      over those items, which is the positive-price prefix of the uncapped
+      walk, is the fractional knapsack's optimum: it is worth at least as
+      much.  The negative-price part is at most zero.  The uncapped walk loads
+      positive phases first, so that prefix is `payload_mix`'s positive-price
+      entries, read by phase NAME; if a name repeats in `phases`, the mix
+      keeps one entry for it, so the ceiling falls back to `m_payload` at
+      the dearest positive price, which no load can beat.  NOT `gross_base`: the walk keeps filling the hold through
+      negative prices, and a ceiling that keeps a negative phase out of the
+      hold can make the capped load worth MORE than the uncapped one.
+    * **Raw** (`_capped_sale_value`), and an engineered hold, which takes the
+      same branch.  Each term earns `allowance x price + over x price x frac`
+      or `kg x price`, at most `kg x max(price, 0)` when `frac <= 1`.  NOT
+      `gross_base` either: a raw hold's `gross_base` is `m_payload x
+      bulk_value`, which values the composition residual at its own floor,
+      while `sale_terms` spreads the residual over the named phases.
+
+    The pad covers the rounding of summing the same products in a different
+    order: at most a few dozen terms, each rounding by 2^-53 of the largest
+    magnitude present, against a pad of `_BOUND_REL` times every magnitude.
+    `verify.py` check 8 holds every capped sale to this and must catch a
+    planted ceiling too low.
+    """
+    pos = 0.0
+    spread = 0.0
+    if reshape:
+        price: Dict[str, float] = {}
+        for name, _frac, p in phases:
+            if name not in price:
+                price[name] = p
+            if abs(p) > spread:
+                spread = abs(p)
+        spread *= m_payload
+        if len(price) == len(phases):
+            for name, kg in payload_mix.items():
+                p = price.get(name, 0.0)
+                if p > 0.0:
+                    pos += kg * p
+        else:
+            pos = m_payload * max(0.0, max(p for _n, _f, p in phases))
+    else:
+        for kg, p, _mkt, _key in sale_terms:
+            if p > 0.0:
+                pos += kg * p
+            spread += kg * abs(p)
+    top = gross_base if gross_base > pos else pos
+    return top + _BOUND_REL * (abs(top) + spread)
 
 
 def _combo_key_bound(
