@@ -836,6 +836,21 @@ class CalcConfig:
     # not.
     charge_insurance:          bool  = False
 
+    # FAA PER-EVENT FEE (v1.44.0, General_Research rc-337).  Since 2025 an
+    # FAA-licensed launch or reentry pays a statutory fee per event (51 U.S.C.
+    # 50924): $0.25 per pound of payload, capped at $30,000, at the 2026 values
+    # the FAA published (91 FR 21591).  When True, a mission flown on a US
+    # vehicle pays it on the launched stack, and one returning to Earth pays it
+    # again on the returned cargo.  NASA-operated vehicles fly government
+    # missions outside the licence and pay nothing.  Off by default: at the cap
+    # it is $60,000 a mission, under the Part 450 compliance line already
+    # charged, so it moves no ranking that matters.
+    charge_faa_event_fee:      bool  = False
+    # The rate per pound of payload, USD.
+    faa_fee_usd_per_lb:        float = 0.25
+    # The cap per event, USD.
+    faa_fee_cap_usd:           float = 30_000.0
+
     # LAUNCH ACCELERATION (v1.12.0).  Module 3's `max_accel_g` exists to
     # disqualify the kinetic launchers and was read by nothing.  Spacecraft
     # structures qualify to single-digit g and every rocket in the table is
@@ -1326,7 +1341,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.43.0"
+    pipeline_version: str = "1.44.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -5501,6 +5516,14 @@ def _ops_reliability_constants(ops_df: pd.DataFrame) -> Tuple[float, ...]:
 # ─────────────────────────────────────────────────────────────────────────────
 # MISSION COST CASCADE
 # ─────────────────────────────────────────────────────────────────────────────
+def faa_event_fee_usd(payload_kg: float, config: CalcConfig) -> float:
+    """One FAA-licensed event's fee: rate x pounds, capped (rc-337)."""
+    if payload_kg <= 0:
+        return 0.0
+    return min(config.faa_fee_usd_per_lb * payload_kg / 0.45359237,
+               config.faa_fee_cap_usd)
+
+
 def _mission_cost_prologue(
     mass_cascade:        Dict[str, float],
     vehicle:             Row,
@@ -5745,6 +5768,16 @@ def _mission_cost_prologue(
     else:
         recovery_cost  = recovery_depot
         licensing_cost = licensing_depot
+    # v1.44.0: the statutory per-event fee rides on the licensing line, and
+    # only when asked for, so a default run adds nothing at all.
+    if config.charge_faa_event_fee:
+        if ("USA" in str(vehicle.get("country", ""))
+                and str(vehicle.get("operator", "")) != "NASA"):
+            licensing_cost += faa_event_fee_usd(
+                float(mass_cascade["m_launch"]), config)
+        if arch["returns_to_earth"]:
+            licensing_cost += faa_event_fee_usd(
+                float(mass_cascade.get("max_payload_kg", 0.0)), config)
 
     # Launch insurance, percent of (launch + spacecraft book value).
     # Gross value of future revenue is NOT insured, underwriters cover the
