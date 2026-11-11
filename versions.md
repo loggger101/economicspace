@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.72.0 / calc v1.44.0](#master-v1720--calc-v1440)
 - [master v1.70.0 / calc v1.43.0](#master-v1700--calc-v1430)
 - [master v1.69.0 / calc v1.42.0](#master-v1690--calc-v1420)
 - [master v1.68.0 / calc v1.41.0](#master-v1680--calc-v1410)
@@ -123,8 +124,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.43.0** | v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.71.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 4 | `modules/calc.py` | **1.44.0** | v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
+| - | `master.py` | **1.72.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -139,7 +140,7 @@ so the stamp is the only way to tell which code produced a given catalog.
 bumping. Bumping does not mean a number changed.** Reading a version as
 evidence that a result moved is the mistake the table below exists to prevent.
 
-Forty stamps so far have moved without moving a number:
+Forty-one stamps so far have moved without moving a number:
 
 | stamp | why it moved | what a re-run gives |
 |---|---|---|
@@ -183,6 +184,7 @@ Forty stamps so far have moved without moving a number:
 | calc `1.41.0` | performance only | bit-identical, verified |
 | calc `1.42.0` | performance only | bit-identical, verified |
 | calc `1.43.0` | performance only | bit-identical, verified |
+| calc `1.44.0` | **one opt-in fee** | bit-identical, verified (off by default) |
 
 ⚠️  **Read the module, not just the number.** `1.7.1` and `1.17.1` are different
 modules and unrelated releases, and so are `1.13.0` and `1.18.0`, which shipped
@@ -194,7 +196,7 @@ together. Every row above is calc except `mineral_value 1.7.1`,
 `mineral_value 1.17.0`.
 
 ⚠️  **Derive any count of these from the table, not from a sentence.** Eleven
-rows are performance stamps and twenty-nine are not, and that split rotted in prose
+rows are performance stamps and thirty are not, and that split rotted in prose
 three times before `verify_docs.py` check 2 started holding both copies of this
 table to each other and both sentences to the tables. It is spelled out here
 *because* it is checked; a count nothing checks is a number waiting to rot.
@@ -226,6 +228,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.72.0 / calc v1.44.0](#master-v1720--calc-v1440) | 2026-11-10 | **the FAA per-event fee, opt-in**: `charge_faa_event_fee` adds $0.25/lb capped at $30,000 per licensed launch and reentry (General_Research rc-337); off by default, so no default number moves |
 | [master v1.71.0](#master-v1710) | 2026-11-10 | **thirteen General_Research candidates**: comments cite a comparator beside thirteen unsourced values and say which are scenarios; comments only, so no stamp and no number moves |
 | [master v1.70.0 / calc v1.43.0](#master-v1700--calc-v1430) | 2026-11-10 | the programme ladder's market pooling built once per solve, not once per rung: an estimated 2.7-5.0% of a sample run by count, most at earth_surface; no number moves |
 | [master v1.69.0 / calc v1.42.0](#master-v1690--calc-v1420) | 2026-11-09 | **branch-and-bound over programme rungs**: a rung whose market-capped sale cannot beat its ladder's best is not sold, 13-17% faster on capped samples and unchanged at earth_surface; no number moves, and `verify.py` check 8 holds the ceiling on every capped sale |
@@ -304,6 +307,47 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.72.0 / calc v1.44.0
+
+**The FAA per-event fee, behind a new flag that is off by default.** No
+default number moves. Nothing here repins a package.
+
+### Why
+
+General_Research rc-337: since 2025 an FAA-licensed launch or reentry pays a
+statutory fee per event (51 U.S.C. 50924), and the model charged none. The
+2026 values the FAA published (91 FR 21591) are $0.25 per pound of payload,
+capped at $30,000 per event.
+
+### What changes
+
+- **`charge_faa_event_fee`** (default `False`), with `faa_fee_usd_per_lb`
+  (0.25) and `faa_fee_cap_usd` (30,000).
+- **`faa_event_fee_usd(payload_kg, config)`**: rate times pounds, capped, and
+  0 for no payload.
+- **With the flag on**, `licensing_cost` gains one fee on the launched stack
+  (`m_launch`) when the vehicle's `country` names the USA and NASA does not
+  operate it (a government mission flies outside the licence), and a second
+  on the returned cargo (`max_payload_kg`) when the architecture returns to
+  Earth. A launch reaches the cap above about 54 t; a few tonnes of returned
+  cargo pay about $550 a tonne. The line rises by at most $60,000, beside a
+  Part 450 licensing line of $1.2-2.5M.
+- **The pre-filter's lower bound does not take the fee.** It only raises
+  cost, so the bound stays a lower bound.
+
+### What was measured
+
+| harness | result |
+|---|---|
+| `verify.py check`, all eight, against a baseline taken on the clean 1.43.0 tree first (`--tag 1.71.0`) | ALL CHECKS PASSED: the four cells MATCH bit for bit, 151 of 151 columns each |
+| `faa_event_fee_usd` and `mission_cost_usd` on one fixed 40 t stack with 2 t returned, flag off and on | Falcon Heavy and Electron: +$22,046 launch, +$1,102 reentry at earth_surface, launch only at cislunar; SLS and Ariane 6: reentry only at earth_surface, nothing at cislunar |
+| `raw` and `raw+search` cells (cislunar, 356 rows) with the flag on, row for row against off | licensing +$30,000 on 336 and 343 rows, $0 on the SLS rows; no vehicle choice changes, no ROI rank moves, ROI moves by at most 1.4e-6 relative |
+
+### Measured and not
+
+- **The cells verify.py builds are priced for cislunar**, so the reentry fee
+  is measured only on the fixed stack above, not in a cell.
 
 ## master v1.71.0
 
@@ -12324,6 +12368,13 @@ high-inclination arrival. No config field or output column moved, and
 - **New output column, only with the limit on**: `spin_lift_period_h` (None
   where the body has no density). A default run's columns are unchanged.
 - **New functions**: `spin_lift_period_h`, `spin_limited`.
+
+**`1.44.0`  the FAA per-event fee, opt-in.** Full write-up: [master v1.72.0 / calc v1.44.0](#master-v1720--calc-v1440).
+- **New config fields**: `charge_faa_event_fee` (default `False`),
+  `faa_fee_usd_per_lb` (0.25), `faa_fee_cap_usd` (30,000).
+- **New function**: `faa_event_fee_usd`.
+- **No new output column**; with the flag off every number is bit-identical
+  to 1.43.0.
 
 **`1.43.0`  performance only: the ladder's market pooling, hoisted.** Full write-up: [master v1.70.0 / calc v1.43.0](#master-v1700--calc-v1430).
 - **No new config field, function or output column**; every number
