@@ -1004,8 +1004,8 @@ largest article ever built.
 **Return-vehicle structure** (`return_structure_frac_of_payload`, 0.15). The
 return vehicle's dry mass was a flat 500 kg however much it carried, so the
 cascade loaded 125 tonnes of ore into a half-tonne can: **250:1
-payload-to-structure**, against 0.4:1 (Cygnus PCM) to 2:1 (Dragon) for real
-cargo spacecraft. Nothing caught it because the only other bound on returned
+payload-to-structure**, against about 1.2:1 to 1.4:1 for Cygnus's cargo
+module alone (Orbital's PCM figures, GR rc-423). Nothing caught it because the only other bound on returned
 mass was the launch vehicle's fairing *volume*, which dense ore never fills.
 The 500 kg is now a floor and 15% of the payload is added for tankage, primary
 structure and cargo restraint. The closed-form solver carries the term exactly:
