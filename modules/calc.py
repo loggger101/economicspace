@@ -146,8 +146,8 @@ class CalcConfig:
 
     # A FLOOR, not the whole return dry mass: `return_structure_frac_of_payload`
     # adds 15% of the haul on top of it.  Flat 500 kg gave 250:1
-    # payload-to-structure against 0.4:1 (Cygnus) to 2:1 (Dragon) for real
-    # cargo craft, and nothing else bounded returned mass.  The floor is an
+    # payload-to-structure against ~1.2:1 to 1.4:1 for Cygnus's cargo module
+    # alone (GR rc-423), and nothing else bounded returned mass.  The floor is an
     # engineering scenario.  OSIRIS-REx, a whole sample-return spacecraft, was
     # ~880 kg dry (Bierhaus et al. 2018, Space Sci. Rev. 214:107): a different
     # scope, not a lower bound (GR rc-376).
@@ -157,8 +157,8 @@ class CalcConfig:
     # `return_vehicle_dry_kg` was the WHOLE dry mass of the return vehicle, a
     # flat 500 kg however much it carried.  Since the payload is solved for
     # rather than specified, that let the cascade load 125 tonnes of ore into a
-    # 500 kg can, a payload-to-structure ratio of 250:1, where real cargo
-    # spacecraft run between 0.4:1 and 2:1.  Nothing caught it because the only
+    # 500 kg can, a payload-to-structure ratio of 250:1, where a real cargo
+    # module runs nearer 1:1.  Nothing caught it because the only
     # other check on returned mass was the launch vehicle's fairing VOLUME,
     # which a dense metal payload never fills.
     #
@@ -171,8 +171,14 @@ class CalcConfig:
     # should beat a crew-rated capsule.  Heritage for the range: NASA OIG puts
     # Cygnus's upmass at 3,754 kg a mission and Dream Chaser's at 5,500, with
     # Dragon 2 returning 2,507 kg and disposing of 800 kg in its trunk
-    # (IG-18-016, p18); Cygnus's ~1,500 kg dry mass, which would make its
-    # ratio 0.40, has no source here.  OSIRIS-REx's SRC is far worse again at
+    # (IG-18-016, p18).  Orbital's own figures give Cygnus's cargo module
+    # (PCM) alone 1,677 kg dry for 2,000 kg of payload (standard) and 1,995
+    # kg for 2,700 kg (enhanced), structure 0.84 and 0.74 of payload
+    # (Culbertson, Commercial Cargo Operations for the ISS, slide 4; GR
+    # rc-423).  They give no whole-vehicle dry mass, so the unsourced
+    # ~1,500 kg and 0.40 once quoted here are gone, and 0.15 stays an
+    # engineering estimate for a light, unpressurised ore carrier with no
+    # like-for-like benchmark.  OSIRIS-REx's SRC is far worse again at
     # sample scale.  Launch-vehicle STAGES, a different ratio (structure over
     # stage), run 0.038-0.45 historically (Motiwala, Mathias & Mattenberger
     # 2014, NTRS 20150000182).
@@ -205,6 +211,13 @@ class CalcConfig:
     # Set it below 1.0 to restore a depletion limit.  A value low enough to
     # bind is a value that SIZES the mission, which is the thing this default
     # stops it doing silently.
+    #
+    # 1.0 is a no-depletion CEILING for the mission model, not a claim about
+    # recoverable reserves: total body mass is not a reserve, and no study
+    # gives a one-mission extraction fraction (USGS OFR 2017-1041 adapts
+    # resource-assessment methods to asteroids and calls itself a
+    # feasibility study; GR rc-491).  `model_body_resource_budget` bounds
+    # the eligible resource mass separately.
     max_mining_fraction:       float = 1.0
 
     # ─── MINING THROUGHPUT  (v1.4.0) ─────────────────────────────────────────
@@ -552,6 +565,8 @@ class CalcConfig:
     # as one obvious dial rather than being buried as an implicit 0.0.  Read
     # ONLY when `sell_surplus_at_discount` is True, and only under
     # `market_model = "capacity_cap"`; 0.0 reproduces the wall exactly.
+    # A SCENARIO DIAL: no price-response or market-clearing evidence for any
+    # commodity or destination backs 0.5 (GR rc-465); 0.0 and 1.0 bound it.
     surplus_price_fraction:    float = 0.5
 
     # ─── MODELLING COMPLETENESS, PART 2  (v1.8.0) ────────────────────────────
@@ -991,6 +1006,12 @@ class CalcConfig:
     # earth_surface (direct entry), leo (aerocapture + aerobraking) and
     # mars_surface.  Cislunar and lunar_surface ignore it; see uses_tps().
     use_aerocapture_return:    bool  = True
+    # A generic SCENARIO for bodies with unusable elements, not a trajectory:
+    # no arrival v-infinity, interface or end orbit stands behind it.  It
+    # takes the 5,500 m/s propulsive return fallback to 1,500 m/s (floor
+    # 500).  NASA ISPT's 4-5 km/s all-propulsive insertion for NEO return
+    # (Aerocapture for Discovery Missions, 2010, p. 12) gives no residual
+    # (GR rc-519).  Bodies with usable elements get their own saving.
     aerocapture_dv_savings_m_s: float = 4_000   # fallback only, when elements are unusable
     # TPS mass = 15% of returned payload.  Flat, whatever the entry speed: it is
     # a lunar-return-class figure (~11 km/s) and optimistic for faster returns.
@@ -1137,12 +1158,13 @@ class CalcConfig:
     # `missions_sharing_rig` goes back to `min(N, trips)`.
     model_programme_calendar:  bool  = True
     # Share of the NRE line already paid for inside the per-kg recurring
-    # hardware rate.  The Module 3 recurring brackets ($100k-$1M/kg, from
-    # NICM / SSCM / Aerospace Corp SMCM) are regressions fitted to total
-    # program cost, so they carry a development component.  Charging the full
-    # OSIRIS-REx $588.5M NRE on top of them double-books that component.
-    # 0.30 is a mid-range de-duplication; set to 0.0 to restore the
-    # pre-v1.4.0 behaviour and book both in full.
+    # hardware rate.  If the Module 3 recurring bracket ($100k-$1M/kg) came
+    # from regressions on total program cost it would carry a development
+    # component, and charging the full OSIRIS-REx $588.5M NRE on top would
+    # double-book it.  But spacecost says that bracket has no registered
+    # source (it once named NICM and SSCM, neither readable), so 0.30 is a
+    # SCENARIO with no derivation (GR rc-518, rc-517).  Set to 0.0 to
+    # restore the pre-v1.4.0 behaviour and book both in full.
     nre_recurring_overlap_fraction: float = 0.30
     # COST OF CAPITAL.  Time-value of money: compound up-front costs over
     # mission_duration_yr, bucketed so an end-of-mission line is not inflated
@@ -5815,9 +5837,9 @@ def _mission_cost_prologue(
 
     # Spacecraft bus NRE amortised across N missions, less the share already
     # embedded in the per-kg recurring rate (v1.4.0; see
-    # nre_recurring_overlap_fraction).  NICM / SSCM per-kg brackets are
-    # regressions on total program cost, so charging full OSIRIS-REx NRE on
-    # top of a $300k/kg recurring rate books part of the development twice.
+    # nre_recurring_overlap_fraction, a scenario).  If the per-kg recurring
+    # rate carries development cost, charging full OSIRIS-REx NRE on top of
+    # it books part of that twice.
     nre_overlap = min(max(config.nre_recurring_overlap_fraction, 0.0), 1.0)
     nre_base    = nre_total * (1.0 - nre_overlap)
 

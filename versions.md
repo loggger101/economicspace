@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.74.0](#master-v1740)
 - [master v1.73.0 / calc v1.45.0](#master-v1730--calc-v1450)
 - [master v1.72.0 / calc v1.44.0](#master-v1720--calc-v1440)
 - [master v1.70.0 / calc v1.43.0](#master-v1700--calc-v1430)
@@ -126,7 +127,7 @@ one that does not say is not to be used.
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.45.0** | v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.73.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| - | `master.py` | **1.74.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -229,6 +230,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.74.0](#master-v1740) | 2026-11-12 | **six General_Research citation candidates**: comments say which values are scenarios; comments only, so no stamp and no number moves |
 | [master v1.73.0 / calc v1.45.0](#master-v1730--calc-v1450) | 2026-11-11 | **sixteen General_Research method flags on by default**: the omissions they correct are no longer in a default run, so every default number can move (cost over revenue, median: `raw` 1.016x, `raw+search` 1.003x, `benef` 0.970x, `benef+search` 0.978x); the sixteen set to `False` reproduce calc 1.44.0 bit for bit |
 | [master v1.72.0 / calc v1.44.0](#master-v1720--calc-v1440) | 2026-11-10 | **the FAA per-event fee, opt-in**: `charge_faa_event_fee` adds $0.25/lb capped at $30,000 per licensed launch and reentry (General_Research rc-337); off by default, so no default number moves |
 | [master v1.71.0](#master-v1710) | 2026-11-10 | **thirteen General_Research candidates**: comments cite a comparator beside thirteen unsourced values and say which are scenarios; comments only, so no stamp and no number moves |
@@ -309,6 +311,31 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.74.0
+
+**Six General_Research citation candidates, in comments only.** Every value
+stays, and each comment now says whether the value is a scenario. No module's
+`pipeline_version` moves. Ignoring docstrings, the syntax trees of
+`modules/calc.py` and `campaign/worked_calculation.py` are identical to
+v1.73.0's, so no number can move.
+
+- `return_structure_frac_of_payload`: Orbital gives Cygnus's cargo module
+  alone 1,677 kg dry for 2,000 kg of payload and 1,995 kg for 2,700 kg
+  (structure 0.84 and 0.74 of payload). The unsourced ~1,500 kg and 0.40 are
+  gone. 0.15 stays an engineering estimate for an ore carrier (rc-423).
+- `TAU_CRUISE_FIT_YR_PER_M_S`: the fit's cases are spacecost's 4,500, 6,500
+  and 8,500 m/s durations. No residual is recorded, so it is a scenario prior.
+  The 0.5-yr floor per leg is a separate judgement (rc-463).
+- `surplus_price_fraction`: a scenario dial with no price-response evidence
+  behind it (rc-465).
+- `max_mining_fraction`: a no-depletion ceiling, not a recoverable-reserve
+  claim (rc-491).
+- `nre_recurring_overlap_fraction`: spacecost says the recurring bracket has
+  no registered source, so the "regressions fitted to total program cost"
+  reason is conditional, and 0.30 is a scenario (rc-518).
+- `aerocapture_dv_savings_m_s`: a generic fallback scenario with no trajectory
+  behind it (rc-519).
 
 ## master v1.73.0 / calc v1.45.0
 

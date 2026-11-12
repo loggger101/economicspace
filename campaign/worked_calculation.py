@@ -205,7 +205,13 @@ DV_GEO_AEROCAPTURE_ARRIVAL = circularise_at_geo(
 
 # The cruise-time fit, in years per m/s of delta-v.  Calibrated on CHEMICAL
 # transfers, which is why an electric stage takes a thrust-time floor instead
-# of this; see `mass_and_clock`.
+# of this; see `mass_and_clock`.  The cases are spacecost's delta-v table
+# durations as calc's mission-duration docstring lists them: 4,500 m/s 1.0
+# yr, 6,500 1.5 and 8,500 2.0, 0.000222-0.000235 yr per m/s, with 10,500 m/s
+# at 3.5 yr (0.00033) off the line.  Read off by eye, with no residual
+# recorded, from durations that are themselves scenarios, so it is a
+# scenario prior (GR rc-354, rc-463).  The 0.5-yr floor per leg in
+# `mass_and_clock` is a separate judgement, not part of the fit.
 TAU_CRUISE_FIT_YR_PER_M_S = 0.00023
 
 # 🚨  THE CONSTANTS THE DERIVATION FIXES AT IMPORT, HANDED TO THE DOCUMENT
