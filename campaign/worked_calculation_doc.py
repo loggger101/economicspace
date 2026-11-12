@@ -1545,6 +1545,23 @@ def s_cascade(out):
                   [[b["n"], fmt(b["hw_tried"], 1), b["why"], fmt(b["step"], 6)]
                    for b in M["backoffs"]]),
         ]
+    if M.get("relaxed") is not None:
+        # calc v1.38.0, `relax_oscillating_sizing`.
+        pair = M.get("relax_pair") or []
+        damp_blocks.append(note(
+            "key",
+            "<strong>The loop ran out of passes without settling.</strong> "
+            "The model then solves the mission twice more from the top: once "
+            "flying its last pass, as it always has, and once moving half "
+            "way to each pass's sizing so an oscillation can die out. Both "
+            "are priced and the better one on the objective is kept. This "
+            "is the %s solve%s."
+            % ("half-step" if M["relaxed"] else "last-pass",
+               (", at %s against %s for the other"
+                % (prec(pair[1 if M["relaxed"] else 0], 12),
+                   prec(pair[0 if M["relaxed"] else 1], 12))
+                if len(pair) > 1 and all(math.isfinite(p) for p in pair)
+                else ", the only one of the two that closed"))))
     ledger = [
         ("mining rig", fmt(C["cfg"].mining_hardware_kg, 1, "kg")),
         ("power system", fmt(M["plant"], 1, "kg")),
@@ -1647,7 +1664,63 @@ def s_cascade(out):
     # the page rather than asserted.
     rep = M.get("repair")
     repaired = []
-    if rep:
+    rep_kind = (rep or {}).get("kind", "overshoot")
+    if rep and rep_kind == "feed_budget":
+        # calc v1.37.0, `model_isru_feed_budget`.
+        repaired = [
+            ("feed,1", "= %s * %s + %s = %s kg, against a budget of %s kg"
+             % (prec(rep["m_pay"], 12), prec(rep["feed_per_payload"], 12),
+                prec(rep["fuel_feed"], 12),
+                prec(rep["m_pay"] * rep["feed_per_payload"]
+                     + rep["fuel_feed"], 12), prec(rep["budget"], 12)),
+             "the ore feed and the fuel feed of the first solve, at a "
+             "payload of %s kg" % prec(rep["m_pay"], 12)),
+            ("k", "= fuel feed / (m_pay (1 + f) + d_0) = %s / (%s * %s + %s) "
+                  "= %s"
+             % (prec(rep["fuel_feed"], 12), prec(rep["m_pay"], 12),
+                prec(1.0 + rep["f_str"], 12),
+                prec(C["cfg"].return_vehicle_dry_kg, 8),
+                prec(rep["per_load"], 12)),
+             "fuel feed per kilogram of returning stack, which is linear "
+             "in the payload"),
+            ("m_cap", "= (budget - k d_0) / (r + k (1 + f))"),
+            ("", "= (%s - %s * %s) / (%s + %s * %s)"
+             % (prec(rep["budget"], 12), prec(rep["per_load"], 12),
+                prec(C["cfg"].return_vehicle_dry_kg, 8),
+                prec(rep["feed_per_payload"], 12), prec(rep["per_load"], 12),
+                prec(1.0 + rep["f_str"], 12))),
+            ("", "= %s kg" % prec(rep["ceiling"], 15),
+             "the ceiling the mission is priced again under"),
+            ("m_pay", "= %s kg" % prec(M["m_pay"], 15), "the payload flown"),
+        ]
+        caps_rows.append(["feed-budget repair", "the payload whose ore and "
+                          "fuel feed fill the budget", fmt(rep["ceiling"], 0)])
+    elif rep and rep_kind == "rtg_ceiling":
+        # calc v1.38.0, `refit_rtg_ceiling`.
+        repaired = [
+            ("P_1", "= %s W, against P_max = %s W"
+             % (prec(rep["watts"], 12), prec(rep["p_max"], 8)),
+             "the first solve's draw, at a payload of %s kg over a dig of "
+             "%s yr" % (prec(rep["m_pay"], 12), prec(rep["dig_yr"], 12))),
+            ("scale", "= min(P_max / P_1, t_floor / t_dig)"),
+            ("", "= min(%s / %s, %s / %s) = %s"
+             % (prec(rep["p_max"], 8), prec(rep["watts"], 12),
+                prec(rep["floor"], 8), prec(rep["dig_yr"], 12),
+                prec(rep["scale"], 15)),
+             "draw is proportional to payload on a floor stay; past the "
+             "floor a bigger dig only takes longer, so the step goes to the "
+             "floor first"),
+            ("m_cap", "= %s * %s * (1 - 1e-9) = %s kg"
+             % (prec(rep["m_pay"], 12), prec(rep["scale"], 12),
+                prec(rep["ceiling"], 15)),
+             "the ceiling the mission is priced again under, with a margin "
+             "so a draw solved at the ceiling does not fail on rounding"),
+            ("m_pay", "= %s kg" % prec(M["m_pay"], 15), "the payload flown"),
+        ]
+        caps_rows.append(["plant-ceiling repair", "the payload the "
+                          "radioisotope ceiling allows",
+                          fmt(rep["ceiling"], 0)])
+    elif rep:
         fit = rep["refit"]
         repaired = [
             ("m_launch,1", "= %s kg, against M_LEO = %s kg"
@@ -1788,6 +1861,22 @@ def s_cascade(out):
         h(3, "That last pass, term by term"),
         deriv(closed_form),
     ] + ([
+        h(3, "The rock ran out, so the payload was re-solved"),
+        para("The ore feed and the feed for the propellant made on site "
+             "together came to more than the rig can dig in its stay or the "
+             "body allows. The model does not refuse the mission for that: "
+             "fuel feed is linear in the payload through the returning "
+             "stack, so the payload that exactly fills the budget is a "
+             "closed form, and the whole mission is priced again under it."),
+        deriv(repaired),
+    ] if rep and rep_kind == "feed_budget" else [
+        h(3, "The plant was over its ceiling, so the payload was re-solved"),
+        para("The draw came out above what a radioisotope plant can supply. "
+             "The model does not refuse the mission for that: it scales the "
+             "payload down to the one the ceiling allows and prices the "
+             "whole mission again under it."),
+        deriv(repaired),
+    ] if rep and rep_kind == "rtg_ceiling" else [
         h(3, "The stack overshot, so the payload was re-solved"),
         para("The plant re-sized on the payload the loop carried came out "
              "heavier than the plant that payload was solved at, and the "
@@ -1973,6 +2062,16 @@ def s_cascade(out):
                fmt(C["fairing_m3"], 1),
                "volume cap" if M["m_pay"] >= M["vol_cap"] * 0.999999
                else "mass budget rather than the volume cap")))
+        if a["beneficiated"] and C.get("phase_density"):
+            # calc 1.45.0 (`model_cargo_volume`): a concentrate is measured
+            # phase by phase, so its density is its own and not the rock's.
+            html_out.append(para(
+                "That volume is the concentrate's own: each phase in the "
+                "hold at its own density, unpacked, where a phase with no "
+                "stated density takes the body's. The hold as a whole comes "
+                "to %s kg/L, against %s kg/L for the rock it was dug from."
+                % (prec(M["m_pay"] / M["ret_vol"] / 1000.0, 12),
+                   prec(C["rho"], 6))))
     return "".join(html_out)
 
 
@@ -2188,7 +2287,8 @@ def s_power(out):
     hrs = (M["dig_yr"] * 365.25) * 24.0
     dug = M["feed"] + M["isru_feed"]
     draw_terms, total = [], []
-    if a["beneficiated"] or a["isru"]:
+    if (a["beneficiated"] or a["isru"]
+            or C["gr"]["model_raw_excavation_power"]):
         draw_terms.append(
             ("P_dig+ben", "= (e_dig * %s + e_ben * %s) / %s"
              % (prec(dug, 12), prec(M["m_pay"], 12) if a["beneficiated"]
@@ -2396,7 +2496,16 @@ def s_clock(out):
          % ("dig" if M["stay"] >= DV["synodic"] else "launch window")),
         ("calendar bound", "= floor(L_rig / t_stay) = floor(%s / %s) = %d"
          % (prec(C["val"]("Mining rig service life"), 4),
-            prec(M["stay"], 12), M["calendar_cap"])),
+            prec(M["stay"], 12), M["calendar_cap"]))
+        if not (C["gr"]["model_rig_calendar_cadence"] and M["cadence"]
+                and M["stay"] <= C["val"]("Mining rig service life")) else
+        ("calendar bound",
+         "= 1 + floor((L_rig - t_stay) / T_cad) = 1 + floor((%s - %s) / %s) "
+         "= %d" % (prec(C["val"]("Mining rig service life"), 4),
+                   prec(M["stay"], 12), prec(M["cadence"], 12),
+                   M["calendar_cap"]),
+         "the rig ages while it waits on windows, so the bound is on "
+         "elapsed time from its first start"),
         ("trips", "= min(calendar, W_max) = %d" % M["trips"]
          if C["rig_trip_limit"] else "= %d" % M["trips"],
          "campaigns one rig can serve"),
@@ -2630,9 +2739,24 @@ def s_market(out):
         ("", "= %s yr" % prec(rev["window"], 15),
          "how long one delivery's worth of market accumulates"),
     ]
+    # calc 1.45.0 (`model_market_wave_clock`): the market accumulates over the
+    # span the cost calendar reports, whose last wave sells W - 1 cadences
+    # after the first.
+    waves = rev.get("waves")
+    if waves:
+        window = [
+            ("omega", "= (T_miss + (W - 1) * T_cad) / N"),
+            ("", "= (%s + %d * %s) / %d"
+             % (prec(M["duration"], 12), waves - 1,
+                prec(M["cadence"], 12), n),
+             "W waves of F deliveries; the last sells W - 1 cadences on"),
+            ("", "= %s yr" % prec(rev["window"], 15),
+             "how long one delivery's worth of market accumulates"),
+        ]
     sale, total = [], 0.0
     walk = rev["capped"].get("walk") or []
-    if a["beneficiated"]:
+    reshaped = rev.get("reshaped", a["beneficiated"])
+    if reshaped:
         sale_rows = []
         for i, step in enumerate(walk, 1):
             if step["take"] <= 0 and step["stopped"]:
@@ -2662,25 +2786,30 @@ def s_market(out):
                   "of the unbounded hold's value")]),
         para(MARKET_PROSE["capacity_cap"]),
         eq("allowance = ceiling_kg_per_yr * "
-           "[duration + (N - 1) * cadence / F] / N"),
+           + ("[duration + (W - 1) * cadence] / N" if waves else
+              "[duration + (N - 1) * cadence / F] / N")),
         h(3, "The accumulation window behind one delivery"),
         deriv(window),
         h(3, "What each market will take from this delivery"),
         table(["market", "ceiling (kg/yr)", "ceiling x omega",
                "allowance (kg)"], rows),
-        h(3, "The sale, tier by tier" if a["beneficiated"]
+        h(3, "The sale, tier by tier" if reshaped
           else "The sale, phase by phase"),
         para("A concentrated load is <strong>reshaped</strong> rather than "
              "clipped: the ceilings go into the knapsack, so space a capped "
              "phase does not get stays available to the next phase down the "
              "price order. That is why a bounded hold can still fly full."
+             if reshaped else
+             "The hold that was engineered is the hold that sells: the "
+             "mission was sized around this concentrate, so a ceiling clips "
+             "its sale rather than re-picking a cargo the book never flew."
              if a["beneficiated"] else
              "Run-of-mine ore cannot be reshaped: the hold is the body's own "
              "composition, so a ceiling clips the sale rather than steering "
              "the load."),
         table(["#", "phase", "tier", "$/kg", "supply (kg)", "allowance (kg)",
                "sold (kg)", "value"]
-              if a["beneficiated"] else
+              if reshaped else
               ["#", "phase", "", "$/kg", "in hold (kg)", "allowance (kg)",
                "at full price (kg)", "past the ceiling (kg)"], sale),
         deriv([
@@ -2784,6 +2913,17 @@ def s_searches(out):
             if out["M"]["ratio"] < out["ratio"] - 1e-9 else
             "The sweep runs to a saturation ratio of %s and the winner is "
             "%s to one." % (fmt(sweep["r_max"], 3), fmt(out["M"]["ratio"], 4))))
+        if sweep.get("past_step"):
+            html_out.append(para(
+                "The purity bound is not always the top: under market "
+                "ceilings more feed can still buy the scarcer phases a full "
+                "market leaves room for, and the model searches the same "
+                "range when the market is unbounded so the two runs compare. "
+                "So the rungs marked past carry the search on from "
+                "%s to the configured cap of %s, on a geometric grid of its "
+                "own with a step of %s, refined once around its best rung."
+                % (fmt(sweep["r_max"], 3), fmt(sweep["top"], 3),
+                   prec(sweep["past_step"], 12))))
     else:
         html_out.append(para(
             "This mission does not concentrate, so there is no concentration "
@@ -2879,6 +3019,15 @@ def s_searches(out):
             "fleet and exhaustive in campaigns-per-ship, then refined once "
             "around the coarse winner, so it is not an exhaustive search."
             % (len(ladder["coarse"]) + len(ladder["refine"]))))
+        if ladder.get("max_n", float("inf")) != float("inf"):
+            html_out.append(para(
+                "A programme takes its feed from the body once per mission, "
+                "so its size is bounded by the body: %s kg of rock against "
+                "%s kg dug per mission allows at most %s missions, and a "
+                "larger programme is not priced."
+                % (prec(out["M"]["body_kg"], 12),
+                   prec(out["M"]["feed"] + out["M"]["isru_feed"], 12),
+                   prec(ladder["max_n"], 12))))
     else:
         html_out.append(h(3, "The programme"))
         html_out.append(para(
@@ -2990,19 +3139,22 @@ def s_cost(out):
     M, C = out["M"], out["C"]
     lc = cst["lc"]
     lc_note = " x lc" if lc != 1.0 else ""
+    rep = cst.get("repeat") or {"share": 0.0}
+    rep_note = (", less the repeat flights' rig" if rep["share"] > 0 else "")
     basis = {
-        "launch": "%s kg x %s"
+        "launch": "%s kg x %s%s"
                   % (fmt(M["m_launch"], 1),
-                     usd(float(C["veh"]["usd_per_kg_to_leo"]), 0) + "/kg"),
+                     usd(float(C["veh"]["usd_per_kg_to_leo"]), 0) + "/kg",
+                     rep_note),
         # ⚠️  THE PRICE THE RUN PAID, WHICH IS THE ONE THE LINE BESIDE
         # IT WAS COSTED AT.  These read `C["pro"]["cost_usd_per_kg"]` -- the
         # Stage 3 table as it stands TODAY -- while the cost came from the
         # price recovered off the row, so a page whose propellant table had
         # been refetched showed a basis that does not multiply out to its own
         # line.  See `run_propellant_price`.
-        "oprop": "%s kg x %s"
+        "oprop": "%s kg x %s%s"
                  % (fmt(M["m_oprop"], 1),
-                    usd(C["prop_usd_per_kg"], 0) + "/kg"),
+                    usd(C["prop_usd_per_kg"], 0) + "/kg", rep_note),
         "rprop": "%s kg x %s"
                  % (fmt(M["m_rprop"], 1),
                     usd(C["isru_opex"] if a["isru"]
@@ -3027,10 +3179,10 @@ def s_cost(out):
                   fmt(M["ep"]["power"] / 1000.0, 2),
                   usd(C["val"]("Electric propulsion system recurring cost"), 0),
                   lc_note)) if M["ep"]["power"] > 0 else "",
-        "tank": "%s kg x %s%s"
+        "tank": "%s kg x %s%s%s"
                 % (fmt(M["m_tank_ret"] + M["m_tank_out"], 1),
                    usd(C["val"]("Propellant tank recurring cost"), 0) + "/kg",
-                   lc_note),
+                   rep_note, lc_note),
         "tps": "%s kg x %s%s"
                % (fmt(M["m_tps"], 1), usd(C["tps_per_kg"], 0) + "/kg", lc_note),
     }
@@ -3106,7 +3258,10 @@ def s_cost(out):
             usd(cst["rig_total"], 2)),
          "one rig and the plants on it, built once"),
         ("util", "= %s" % prec(cst["used"], 12),
-         "how much of the rig's life this programme uses"),
+         "how much of the rig's life this programme uses"
+         if not C["gr"]["model_rig_calendar_cadence"] else
+         "the larger of elapsed time, (t_stay + (W - 1) * T_cad) / L_rig, "
+         "and duty cycles, W / W_max"),
         # A single mission is credited nothing, whatever is left of the rig:
         # the model takes a terminal value only when N > 1.
         ("terminal", ("= C_rig (1 - util) * salvage = %s"
@@ -3150,6 +3305,41 @@ def s_cost(out):
         table(["line", "basis", "cost"], rows),
         h(3, "The rig, which is bought once and flies every campaign"),
         deriv(rig_terms),
+    ] + ([
+        h(3, "The repeat flights, which leave the rig behind"),
+        para("A rig stays where it digs, so only the first flight of each "
+             "rig carries one. Every later flight is priced without it, and "
+             "without the outbound fuel and tank that carried it, both of "
+             "which are linear in the mass that reaches the asteroid."),
+        deriv([
+            ("share", "= 1 - F / N = 1 - %d / %d = %s"
+             % (rep["first"], P["n"], prec(rep["share"], 12)),
+             "the flights that carry no rig"),
+            ("rig / arrival", "= m_rig / m_at = %s / %s = %s"
+             % (prec(C["cfg"].mining_hardware_kg, 8), prec(M["m_at"], 12),
+                prec(rep["rig_frac"], 12))),
+            ("fuel for it", "= %s * %s = %s kg"
+             % (prec(rep["rig_frac"], 12), prec(M["m_oprop"], 12),
+                prec(rep["fuel"], 12))),
+            ("tank for it", "= %s * %s = %s kg"
+             % (prec(rep["rig_frac"], 12), prec(M["m_tank_out"], 12),
+                prec(rep["tank"], 12))),
+            ("launch", "= %s - %s * %s = %s"
+             % (usd(M["m_launch"] * float(C["veh"]["usd_per_kg_to_leo"]), 2),
+                prec(rep["share"], 12), usd(rep["launch_usd"], 2),
+                usd(lines["launch"], 2)),
+             "rig, fuel and tank at the launch price"),
+            ("outbound propellant", "= %s - %s * %s = %s"
+             % (usd(M["m_oprop"] * C["prop_usd_per_kg"], 2),
+                prec(rep["share"], 12), usd(rep["oprop_usd"], 2),
+                usd(lines["oprop"], 2))),
+            ("tankage", "= (%s - %s * %s)%s = %s"
+             % (usd((M["m_tank_ret"] + M["m_tank_out"])
+                    * C["val"]("Propellant tank recurring cost"), 2),
+                prec(rep["share"], 12), usd(rep["tank_usd"], 2),
+                lc_note, usd(lines["tank"], 2))),
+        ]),
+    ] if rep["share"] > 0 else []) + [
         h(3, "By time bucket"),
         para("What decides how a line compounds is WHEN it is spent, so the "
              "lines are bucketed before any rate is applied: up front at year "

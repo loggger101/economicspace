@@ -684,13 +684,18 @@ class CalcConfig:
     # declined: the rule would have to guess its spin.  Off by default, which
     # moves no number.  starred-repos F13 is the measurement behind it.
     model_spin_limit:          bool  = False
-    # Five method changes that are each off by default, which moves no number.
-    # versions.md (v1.36.0) reports what each does to a run.
+    # General_Research method candidates, each behind its own flag (v1.36.0 to
+    # v1.39.0; versions.md reports what each does to a run).  Since calc
+    # 1.45.0 every one of them is ON by default except three:
+    # `model_rated_array_cost` (moves the headline, a release of its own),
+    # `size_ep_on_flown_load` (needs its own pre-filter bound first) and
+    # `carry_ep_home` (one shared stage; separate units are not built).
+    # Setting the others False reproduces calc 1.44.0 bit for bit.
     #
     # A raw cargo is dug like any other, at the same Wh/kg, and only a
     # concentrating or ISRU mission sized a plant for it.  On, every extracted
     # kilogram charges the array, in sizing and in settlement alike.
-    model_raw_excavation_power: bool = False
+    model_raw_excavation_power: bool = True
     # Module 3's $/W is a price per watt of ARRAY.  Off, the plant is bought at
     # the watts it delivers at the body, so an array whose mass grows with a^2
     # and the night-side oversize costs what one at 1 AU costs.  On, the plant
@@ -700,68 +705,68 @@ class CalcConfig:
     # Off, each return mode flies the apsis with the smaller dv_out + dv_ret,
     # which is not the objective.  On, both go to the mission search and
     # `selection_key` decides, at about twice the candidates.
-    offer_both_apsides:        bool  = False
+    offer_both_apsides:        bool  = True
     # Off, a rig's 15-year calendar life counts its stays.  On, it counts
     # elapsed time, stay + (W - 1) x cadence, in the campaign bound and in the
     # salvage credit, so a rig waiting on windows ages while it waits.
-    model_rig_calendar_cadence: bool = False
+    model_rig_calendar_cadence: bool = True
     # Off, a cryogenic hold clipped to the fairing after sizing keeps the boil-off
     # of the longer dig that loop assumed.  On, the mission is solved again with
     # the clipped hold as its ceiling, so fuel and clock describe one mission.
-    reclose_volume_capped_hold: bool = False
-    # Three more, off by default (v1.37.0).
+    reclose_volume_capped_hold: bool = True
+    # Three more (v1.37.0).
     #
     # Off, a delivery's market window runs to T + (N - 1) x cadence / F, past the
     # T + (W - 1) x cadence the cost calendar sells the last wave at.  On, the
     # market accumulates over the span the programme reports.
-    model_market_wave_clock:   bool  = False
+    model_market_wave_clock:   bool  = True
     # Off, `max_mining_fraction` bounds one mission and a programme may take the
     # body many times over.  On, N x (feed + ISRU feed) has to fit the body's
     # whole mass: a rung that does not is not priced at this load, and is tried
     # at the smaller load that fits it.  One mission always is priced: this
     # bounds the programme, and the sizing bounds the mission.
-    model_body_resource_budget: bool = False
+    model_body_resource_budget: bool = True
     # Off, the loop's ISRU fuel leaves out the return tank the settled fuel
     # includes, and only throughput is checked at the end, so a mission can dig
     # more than the body holds.  On, both books carry the tank, and a mission
     # over min(mineable, throughput) is solved again at the payload that fits.
-    model_isru_feed_budget:    bool  = False
-    # Seven more, off by default (v1.38.0).
+    model_isru_feed_budget:    bool  = True
+    # Seven more (v1.38.0).
     #
     # Off, a radioisotope plant over `rtg_max_power_w` refuses the candidate at
     # the largest payload it tried.  On, it is solved again at the payload the
     # ceiling allows, down to the shortest stay if the dig is what sets the
     # draw, and is refused only if that cannot be found.
-    refit_rtg_ceiling:         bool  = False
+    refit_rtg_ceiling:         bool  = True
     # Off, concentration stops where the hold is pure best-phase, which is the
     # top only while every kilogram sells at full price.  Under ceilings, more
     # feed can still buy the scarcer phases.  On, the search continues to
     # `max_concentration_ratio`, after and in addition to the usual grid.
-    search_concentration_past_purity: bool = False
+    search_concentration_past_purity: bool = True
     # Off, a sizing loop that never had to back off flies its twelfth pass even
     # if that pass has not settled, so an oscillating loop reports whichever
     # side of the answer it stopped on.  On, such a candidate is solved again
     # with every pass relaxed half way, and the better of the two flies.
-    relax_oscillating_sizing:  bool  = False
+    relax_oscillating_sizing:  bool  = True
     # Off, a body's gravity does not enter its transport budget, so a large one
     # is left for less than it takes to leave its surface.  On, a return offer
     # that with the fastest rotation still falls short of surface escape is
     # withdrawn.  A necessary test: passing it is not a surface-launch design.
-    gate_surface_escape:       bool  = False
+    gate_surface_escape:       bool  = True
     # Off, the hold is measured at the parent body's bulk density.  On, a
     # concentrate must also fit at its own phases' densities, unpacked, so a
     # water hold no longer fits at the density of the rock it came from.
-    model_cargo_volume:        bool  = False
+    model_cargo_volume:        bool  = True
     # Off, only the returned cargo is held to the fairing.  On, the propellant
     # loaded on Earth must fit it too, at its own density, with the payload
     # solved down until it does.  A necessary test: tank walls, ullage and the
     # stowed hardware take no volume here.
-    model_launch_liquid_volume: bool = False
+    model_launch_liquid_volume: bool = True
     # Off, boil-off stops at departure and ISRU fuel is exempt, so a capture burn
     # finds all its fuel still in the tank after the cruise home.  On, the fuel
     # for it is carried through the cruise at the propellant's own loss rate.
-    model_return_coast_boiloff: bool = False
-    # Four more, off by default (v1.39.0).
+    model_return_coast_boiloff: bool = True
+    # Four more (v1.39.0); the first two stay off by default.
     #
     # Off, the electric stage is sized on a provisional cascade, which has no
     # return fuel under ISRU and full-vehicle loads otherwise, and is reported
@@ -775,11 +780,11 @@ class CalcConfig:
     # rigs serve N flights and stay where they dig.  On, the N - F repeat
     # flights are priced without one, at the same cargo.  Cargo the freed
     # capacity could carry is not re-solved.
-    model_repeat_manifest:     bool  = False
+    model_repeat_manifest:     bool  = True
     # Off, a capped market re-picks the mix it prices after the hold is
     # engineered, so the sale can be of cargo the book never flew.  On, the
     # hold that was engineered is what sells.
-    price_engineered_hold:     bool  = False
+    price_engineered_hold:     bool  = True
 
     # VOLATILE CARGO CONTAINMENT.  The pipeline sells water at every in-space
     # destination and charged nothing to keep it from subliming across a
@@ -1341,7 +1346,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.44.0"
+    pipeline_version: str = "1.45.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -8588,8 +8593,9 @@ def _combo_key_bound(
 
     COST.  Contingency times: launch and outbound fuel on the least mass that
     reaches the asteroid (rig, empty return vehicle with its shield, tank and,
-    without ISRU, its fuel; the rig left out under `model_repeat_manifest`,
-    whose saving is at most that share); the empty vehicle's return fuel; the
+    without ISRU, its fuel; under `model_repeat_manifest` only the least share
+    of the rig a programme's flights carry, F / N: exact for a fixed
+    programme, 1/cap for a searched one); the empty vehicle's return fuel; the
     rig's share at the most trips a rig flies, net of salvage; the capsule,
     shield, tanks and electric stage at their floors (only while the learning
     curve, which can scale them below 1, is off); ops over the shortest
@@ -8713,7 +8719,27 @@ def _combo_key_bound(
     k_out, k_ret = float(pass1["k_out"]), float(pass1["k_ret"])
     shield = 1.0 + tps_frac
     return_prop = k_ret * shield * d0 * (r_ret - 1.0)
-    rig_kg = 0.0 if config.model_repeat_manifest else config.mining_hardware_kg
+    rig_kg = config.mining_hardware_kg
+    if config.model_repeat_manifest:
+        # calc 1.45.0: each rig's first flight carries it, so the share of a
+        # programme's flights that do is F / N (`_mission_cost_tail`), and a
+        # rig flies at most trips <= the trip cap campaigns.  A fixed
+        # programme (`programme_options`) is N = n_cfg with F >= ceil(N / cap),
+        # or F >= 1 with no cap; a searched one is N = F x W with W <= cap,
+        # and with no cap is not searched at all.
+        n_cfg = max(1, int(config.nre_amortization_missions))
+        cap = 0
+        if (config.model_rig_service_life and config.model_rig_trip_limit
+                and max_trips_raw > 0):
+            cap = max(1, int(max_trips_raw))
+        mode = market_mode if market_mode is not None else _market_mode(config)
+        if mode == "single_mission":
+            share = 1.0
+        elif not config.optimise_programme_scale:
+            share = (math.ceil(n_cfg / cap) if cap else 1) / n_cfg
+        else:
+            share = 1.0 / cap if cap else 0.0
+        rig_kg = config.mining_hardware_kg * share
     at_asteroid = (rig_kg + shield * d0 + tank_frac * return_prop
                    + (0.0 if isru else return_prop))
     outbound_prop = at_asteroid * k_out * (r_out - 1.0)
@@ -8862,13 +8888,17 @@ def evaluate_combo(
     )
 
     def _past_purity(best, best_key):
-        """The ratios above `r_max`, where only a ceiling can make them pay.
+        """The ratios above `r_max`, the purity bound.
 
         After the usual grid and apart from it, so no ratio it priced moves.
+        Searched under `unbounded` as well as `capacity_cap` since calc
+        1.45.0: `verify.py` check 7 holds a capped run to never beating the
+        unbounded one, which needs both to search the same ratios, and the
+        unbounded run does find better missions up here.
         """
         top = float(config.max_concentration_ratio)
         if (not config.search_concentration_past_purity or top <= r_max
-                or _market_mode(config) != "capacity_cap"):
+                or _market_mode(config) not in ("capacity_cap", "unbounded")):
             return best
         lo = max(1.0, r_max)
         n = max(2, int(config.concentration_search_steps))

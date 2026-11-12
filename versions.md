@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.73.0 / calc v1.45.0](#master-v1730--calc-v1450)
 - [master v1.72.0 / calc v1.44.0](#master-v1720--calc-v1440)
 - [master v1.70.0 / calc v1.43.0](#master-v1700--calc-v1430)
 - [master v1.69.0 / calc v1.42.0](#master-v1690--calc-v1420)
@@ -124,8 +125,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.17.0** | v1.17.0, the pricing moves to [`spacevalue`](https://github.com/loggger101/spacevalue) and Stage 2 installs its published `prices-2026-10-07` release; no row moved (v1.13.0 was the last to move a row). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.23.6** | v1.23.6, spacecost v0.13.0: notes cells only since 1.23.0 (no value moved, so the tables on disk stay at 1.23.0), and the config is now spacecost's `SpacecostConfig` with two defaults overridden; 1.23.0 had added an ISRU processing energy and plant throughput row. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.44.0** | v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.72.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 4 | `modules/calc.py` | **1.45.0** | v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
+| - | `master.py` | **1.73.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -228,6 +229,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.73.0 / calc v1.45.0](#master-v1730--calc-v1450) | 2026-11-11 | **sixteen General_Research method flags on by default**: the omissions they correct are no longer in a default run, so every default number can move (cost over revenue, median: `raw` 1.016x, `raw+search` 1.003x, `benef` 0.970x, `benef+search` 0.978x); the sixteen set to `False` reproduce calc 1.44.0 bit for bit |
 | [master v1.72.0 / calc v1.44.0](#master-v1720--calc-v1440) | 2026-11-10 | **the FAA per-event fee, opt-in**: `charge_faa_event_fee` adds $0.25/lb capped at $30,000 per licensed launch and reentry (General_Research rc-337); off by default, so no default number moves |
 | [master v1.71.0](#master-v1710) | 2026-11-10 | **thirteen General_Research candidates**: comments cite a comparator beside thirteen unsourced values and say which are scenarios; comments only, so no stamp and no number moves |
 | [master v1.70.0 / calc v1.43.0](#master-v1700--calc-v1430) | 2026-11-10 | the programme ladder's market pooling built once per solve, not once per rung: an estimated 2.7-5.0% of a sample run by count, most at earth_surface; no number moves |
@@ -307,6 +309,121 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.73.0 / calc v1.45.0
+
+**Sixteen General_Research method flags become the default.** Every default
+number can move. Setting the sixteen back to `False` reproduces calc 1.44.0
+bit for bit. Nothing here repins a package.
+
+### Why
+
+Calc 1.36.0 to 1.39.0 added nineteen method changes from General_Research
+candidates, each behind a flag that was off. Each one corrects a cost or a
+constraint the model left out, and each was measured on its own when it
+landed. Left off, the default run kept the omissions. Sixteen are now on.
+
+### What changes
+
+- **On by default**, with the candidate each answers:
+
+  | flag | candidate | what it does |
+  |---|---|---|
+  | `model_raw_excavation_power` | rc-280 | a raw cargo's dig charges the array |
+  | `offer_both_apsides` | rc-266 | both apsides reach the mission search |
+  | `model_rig_calendar_cadence` | rc-239 | the rig ages while it waits on windows |
+  | `reclose_volume_capped_hold` | rc-253 | a hold clipped to the fairing is solved again |
+  | `model_market_wave_clock` | rc-287 | the market window ends where the cost calendar's last wave sells |
+  | `model_body_resource_budget` | rc-245 | a programme cannot dig more than the body holds |
+  | `model_isru_feed_budget` | rc-241 | ore feed and fuel feed share one budget |
+  | `refit_rtg_ceiling` | rc-281 | a plant over the radioisotope ceiling is refit, not refused |
+  | `search_concentration_past_purity` | rc-265 | under ceilings the concentration search runs past the purity bound |
+  | `relax_oscillating_sizing` | rc-282 | an unsettled sizing loop is also solved at half steps |
+  | `gate_surface_escape` | rc-289 | a return that cannot leave the surface is withdrawn |
+  | `model_cargo_volume` | rc-285 | a concentrate must fit at its own phases' densities |
+  | `model_launch_liquid_volume` | rc-288 | propellant loaded on Earth must fit the fairing |
+  | `model_return_coast_boiloff` | rc-284 | return fuel boils off through the cruise |
+  | `model_repeat_manifest` | rc-248 | repeat flights leave the rig behind |
+  | `price_engineered_hold` | rc-252 | a capped market buys the hold that was loaded |
+
+- **Three stay off.** `model_rated_array_cost` (rc-091) moves the headline and
+  gets a release of its own. `size_ep_on_flown_load` (rc-244) needs its own
+  pre-filter bound first. `carry_ep_home` (rc-246) models one shared stage,
+  and separate units are not built.
+- **The pre-filter's cost floor takes the repeat manifest.** With repeat
+  flights leaving the rig behind, the floor could no longer charge a whole rig
+  per flight, and charging none left `verify.py` check 8 unable to fail on the
+  two fixed-programme cells. The floor now charges the least share of the rig
+  a programme's flights can carry, F / N: `ceil(N / cap) / N` for a fixed
+  programme, `1 / cap` for a searched one, and all of it for a single
+  mission. It is still a lower bound, and no row moves for it.
+- **`search_concentration_past_purity` also searches under `unbounded`.**
+  It searched the ratios past the purity bound only under `capacity_cap`, so
+  a capped run searched a wider range than the unbounded one and beat it,
+  which `verify.py` check 7 forbids. Both now search the same range. A
+  default run is `capacity_cap` and does not move for this.
+- **`verify.py`'s `RESET_FIELDS`** names all nineteen flags, so a baseline
+  build holds them at the baseline's defaults.
+- **The worked calculation, its page and the verification sheet derive the
+  new defaults.** They settle a flag with no column of its own off the row's
+  calc stamp: before 1.45.0 it was off, and from 1.45.0 the live config is
+  read. Eleven of the sixteen change a derivation and are implemented:
+  excavation power on a raw mission, the calendar cadence, the repeat
+  manifest (cost lines and the propellant-price recovery), the wave clock,
+  the engineered hold, cargo volume, the body budget, the ISRU feed budget
+  and its refit, the search past purity, the plant-ceiling refit, and the
+  relaxed loop. The sheet also now prices an electric stage's array at the
+  solar rate on a radioisotope row, as the model does; it had cited the
+  radioisotope rate there.
+
+### What was measured
+
+| harness | result |
+|---|---|
+| `verify.py check`, all eight, against the 1.43.0 baseline (`--tag 1.71.0`) | check 1 DIFFERS on all four cells, as it must with defaults moved; checks 2 to 8 pass |
+| the four cells with the sixteen flags set to `False`, against calc 1.44.0 | bit-identical, 151 of 151 columns each |
+| check 8 on the two fixed-programme cells, before and after the cost floor took the rig share | planted x1.6 floor caught on 0 rungs before (the check could not fail); on 186 rungs of `raw` and 1,213 of `benef` after, 0 violations |
+| check 7 on `benef+search` (356 pairs), before and after the unbounded market searched past purity | capped beat unbounded on 182 pairs, by up to 1.37x, before; on 0 after |
+| the worked calculation on every fourth row of all four new-default cells | 246 of 246 rows reproduced |
+| page audit and verification sheet `--check` on the best `raw` and `benef+search` rows, a plant-ceiling refit row and a relaxed, feed-budget row | complete, and every substitution matched |
+| `verify_docs.py` | all checks pass |
+
+New defaults against old, row for row on `designation`, by cost over
+revenue (new / old; below 1 is better):
+
+| cell | rows | better | same | worse | median | range | time |
+|---|---|---|---|---|---|---|---|
+| `raw` | 356 | 25 | 0 | 331 | 1.0164 | 0.798 to 1.0338 | 1.21x |
+| `raw+search` | 356 | 70 | 0 | 286 | 1.0033 | 0.645 to 1.077 | 1.07x |
+| `benef` | 136 | 98 | 38 | 0 | 0.9695 | | 1.83x |
+| `benef+search` | 136 | 134 | 0 | 2 | 0.9777 | up to 1.0060 | 2.11x |
+
+- **The raw cells get worse because of one flag.** `model_raw_excavation_power`
+  alone moves all 356 `raw` rows, by a median 1.67% and at most 3.4%: a cost
+  that was missing.
+- **The top ten by cost over revenue** keep 10 of 10 on `raw`, `benef` and
+  `benef+search`, and 7 of 10 on `raw+search`.
+
+### Measured and not
+
+- **The release was asked for as "the fourteen".** Sixteen flags were listed
+  and sixteen were flipped.
+- **`MEASURED_CELL_SECONDS` is not re-measured.** The runtime multiples
+  `master.py` prints at start-up are from calc 1.22.0, and the new defaults
+  cost 1.07x to 2.11x more on these samples.
+- **No campaign was re-run.** README's current numbers are from runs made on
+  earlier defaults; CLAUDE.md's "Defaults that moved" says how to reproduce
+  them.
+- **Five of the sixteen have no derivation of their own in the worked
+  calculation**: `offer_both_apsides`, `reclose_volume_capped_hold`,
+  `gate_surface_escape`, `model_launch_liquid_volume` and
+  `model_return_coast_boiloff`. No sampled row needed one: the 246 rows above all reproduce.
+- **The unbounded market does better past the purity bound**, which the
+  bound's own argument says it should not: a hold of pure best phase has
+  nothing better to load. Why was not traced. The search now covers the
+  range either way.
+- **The cells verify.py builds are priced for cislunar**, so nothing here
+  measures the flags at `earth_surface`.
 
 ## master v1.72.0 / calc v1.44.0
 
@@ -12368,6 +12485,20 @@ high-inclination arrival. No config field or output column moved, and
 - **New output column, only with the limit on**: `spin_lift_period_h` (None
   where the body has no density). A default run's columns are unchanged.
 - **New functions**: `spin_lift_period_h`, `spin_limited`.
+
+**`1.45.0`  sixteen method flags on by default.** Full write-up: [master v1.73.0 / calc v1.45.0](#master-v1730--calc-v1450).
+- **Defaults moved to `True`**: `model_raw_excavation_power`,
+  `offer_both_apsides`, `model_rig_calendar_cadence`,
+  `reclose_volume_capped_hold`, `model_market_wave_clock`,
+  `model_body_resource_budget`, `model_isru_feed_budget`, `refit_rtg_ceiling`,
+  `search_concentration_past_purity`, `relax_oscillating_sizing`,
+  `gate_surface_escape`, `model_cargo_volume`, `model_launch_liquid_volume`,
+  `model_return_coast_boiloff`, `model_repeat_manifest`,
+  `price_engineered_hold`.
+- **`_combo_key_bound`**: under `model_repeat_manifest` the cost floor charges
+  the least share of the rig a programme's flights carry, not none of it.
+- **No new config field, function or output column**; with the sixteen set to
+  `False` every number is bit-identical to 1.44.0.
 
 **`1.44.0`  the FAA per-event fee, opt-in.** Full write-up: [master v1.72.0 / calc v1.44.0](#master-v1720--calc-v1440).
 - **New config fields**: `charge_faa_event_fee` (default `False`),

@@ -434,6 +434,16 @@ def body_for_run(archived, body):
 NET_PRICE_COL = "price_net_usd_per_kg"
 
 
+# The calc method flags whose default moved to True in calc 1.45.0, which this
+# derivation settles off the row's stamp (see `build`).
+GR_FLAGS = ("model_raw_excavation_power", "model_rig_calendar_cadence",
+            "model_market_wave_clock", "model_body_resource_budget",
+            "model_cargo_volume", "model_repeat_manifest",
+            "price_engineered_hold", "model_isru_feed_budget",
+            "search_concentration_past_purity", "refit_rtg_ceiling",
+            "relax_oscillating_sizing")
+
+
 def run_calc_at_least(archived, version):
     """Whether the calc that wrote `archived` is `version` or later, read off
     the row's own `pipeline_version` stamp.  False when it cannot say."""
@@ -861,6 +871,12 @@ def dials_in_force(C):
                                   "what that run flew either way"),
         "isru_processing_usd_per_kg": (C["isru_opex"], C["isru_opex_how"]),
     }
+    # calc v1.45.0: no column settles these, so the row's stamp does.
+    for flag in GR_FLAGS:
+        out[flag] = (C["gr"][flag], "the row's calc stamp, %s: before 1.45.0 "
+                     "the default was off, and from it this process's config "
+                     "is read, which the compared columns hold to the run"
+                     % terms["stamp"])
     if C["cfg"].max_mining_fraction == 0.05 and C.get("mining_old_default"):
         out["max_mining_fraction"] = (
             0.05, "the row's calc stamp, %s: before 1.23.0 the default was "
@@ -2027,7 +2043,7 @@ class Recorded(object):
 
 
 # ------------------------------------------------- the price the RUN paid
-def run_propellant_price(pro, archived):
+def run_propellant_price(pro, archived, cfg=None):
     """($/kg the run was costed at, the table's figure if it has since moved).
 
     🚨  A STAGE 3 TABLE ON DISK IS NOT NECESSARILY THE ONE THE RUN READ,
@@ -2060,6 +2076,11 @@ def run_propellant_price(pro, archived):
     `isru_processing_usd_per_kg` and not at the propellant's price at all, so
     the return pair recovers the wrong number on exactly the missions ISRU
     exists for.  The outbound leg is always bought.
+
+    calc v1.45.0: under `model_repeat_manifest` the outbound line is billed
+    net of the fuel the N - F repeat flights do not burn carrying a rig, so
+    the mass the cost divides by is the billed one: the row's own F, N and
+    arrival mass give the share, exactly as `cost` takes it off.
     """
     table_price = float(pro.raw("cost_usd_per_kg"))
     cost = archived.get("outbound_prop_cost_usd")
@@ -2073,6 +2094,13 @@ def run_propellant_price(pro, archived):
         # A row that bought no outbound propellant divides by zero and knows
         # nothing about the price; so does one too old to carry the columns.
         if mass > 0.0 and cost == cost and mass == mass:
+            if (cfg is not None and run_calc_at_least(archived, (1, 45, 0))
+                    and getattr(cfg, "model_repeat_manifest", False)):
+                n = float(archived.get("programme_missions") or 1.0)
+                f = float(archived.get("fleet_ships") or n)
+                m_at = float(archived.get("m_at_asteroid_kg") or 0.0)
+                if n > 1.0 and m_at > 0.0:
+                    mass *= 1.0 - (1.0 - f / n) * (cfg.mining_hardware_kg / m_at)
             recovered = cost / mass
             if abs(recovered - table_price) > 1e-9 * max(1.0, abs(table_price)):
                 used, moved = recovered, table_price
@@ -2430,7 +2458,7 @@ def context(body, archived, tables):
                  else (float(pro["tank_kg_per_L"]) / float(pro["density_kg_per_L"])
                        if cfg.model_tank_mass else 0.0))
 
-    prop_usd_per_kg, prop_moved = run_propellant_price(pro, archived)
+    prop_usd_per_kg, prop_moved = run_propellant_price(pro, archived, cfg)
 
     row_wait = archived.get("launch_window_wait_yr")
     windows_on = (bool(cfg.model_launch_windows)
@@ -3326,8 +3354,15 @@ def isru_processing_terms(C, archived):
     C["isru_opex"], C["isru_opex_how"] = opex, how
 
 
+def repair_ceiling(rep):
+    """The payload ceiling a repair priced the mission again under: the
+    closed form at the settled hardware for an overshoot, and the repair's
+    own closed form for the feed budget and the plant ceiling."""
+    return rep["refit"]["m_pay"] if "refit" in rep else rep["ceiling"]
+
+
 def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
-                   damped0=0):
+                   damped0=0, relax=None):
     """The coupled sizing loop, then the mission actually flown.
 
     Seven quantities in one ring: payload sets the feed, the feed sets the dig
@@ -3388,6 +3423,7 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
     # blends the fraction and `struct - f_str` is not always it to the bit.
     import master
     damp = bool(C.get("damp"))
+    blends = damp or bool(relax)
     step, damped, settled = 1.0, 0, False
     base = target = None
     held_frac = 0.0
@@ -3412,6 +3448,49 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
          held_frac) = tuple(b + step * (t - b) for b, t in zip(base, target))
         struct = cfg.return_structure_frac_of_payload + held_frac
         return False
+
+    feed_budget = C["gr"]["model_isru_feed_budget"]
+
+    def refit_to_feed_budget(payload_kg, fuel_feed, feed_per_payload, f_str,
+                             where):
+        """calc v1.37.0 `model_isru_feed_budget`: the mission again, at the
+        payload whose ore and fuel feed together fill the budget.  Fuel feed
+        is linear in payload through the return stack, so that payload is a
+        closed form."""
+        budget = min(throughput, B["mineable"])
+        dry = cfg.return_vehicle_dry_kg
+        per_load = fuel_feed / (payload_kg * (1.0 + f_str) + dry)
+        ceiling = ((budget - per_load * dry)
+                   / (feed_per_payload + per_load * (1.0 + f_str)))
+        if not 0.0 < ceiling < payload_kg or depth >= 3:
+            return refuse("the ore and the ISRU feed together exceed what the "
+                          "rig can dig or the body allows, and no smaller "
+                          "payload fits")
+        over = {"kind": "feed_budget", "where": where, "m_pay": payload_kg,
+                "fuel_feed": fuel_feed, "feed_per_payload": feed_per_payload,
+                "f_str": f_str, "budget": budget, "per_load": per_load,
+                "ceiling": ceiling}
+        return mass_and_clock(C, B, DV, ratio, ceiling, depth + 1, over,
+                              damped0 + damped)
+
+    def refit_to_plant_ceiling(payload_kg, watts, dig_yr, where):
+        """calc v1.38.0 `refit_rtg_ceiling`: the mission again, at the
+        payload the radioisotope ceiling allows.  Draw is proportional to
+        payload on a floor stay; past the floor a bigger dig only takes
+        longer, so the step goes to the floor first and the ceiling step
+        follows.  The margin keeps a draw solved at the ceiling from failing
+        on its own rounding."""
+        if not C["gr"]["refit_rtg_ceiling"] or depth >= 3:
+            return refuse("the radioisotope plant exceeds `rtg_max_power_w`")
+        scale = min(cfg.rtg_max_power_w / watts,
+                    cfg.station_keeping_floor_yr / dig_yr)
+        ceiling = payload_kg * scale * (1.0 - 1e-9)
+        over = {"kind": "rtg_ceiling", "where": where, "m_pay": payload_kg,
+                "watts": watts, "dig_yr": dig_yr, "scale": scale,
+                "p_max": cfg.rtg_max_power_w,
+                "floor": cfg.station_keeping_floor_yr, "ceiling": ceiling}
+        return mass_and_clock(C, B, DV, ratio, ceiling, depth + 1, over,
+                              damped0 + damped)
 
     while i < limit:
         i += 1
@@ -3457,8 +3536,16 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
             new_isru_prop = ((trial_pay + cfg.return_vehicle_dry_kg
                               + struct * trial_pay)
                              * (1.0 + C["tps_frac"]) * (R["R_ret"] - 1.0))
+            # With the feed budget on, the loop's fuel carries the return
+            # tank the settled fuel carries, so both books agree.
+            if feed_budget:
+                new_isru_prop *= R["k_ret"]
             new_isru_feed = new_isru_prop * C["isru_feed_per_kg_prop"]
             if new_isru_feed >= throughput or new_isru_feed >= B["mineable"]:
+                if feed_budget:
+                    return refit_to_feed_budget(
+                        trial_pay, new_isru_feed,
+                        ratio if C["beneficiated"] else 1.0, struct, "loop")
                 return refuse("the ISRU feed alone exceeds what the rig can dig or the body allows")
         # A raw mission digs exactly what it flies: there is no feed above
         # the payload, so no ratio, and the hold is the body's own mix.
@@ -3488,8 +3575,10 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
         # power system at all.  Charging the dig here gave one mission a 194 kg
         # plant the model never launches.  The dig still costs TIME, which is
         # what bounds the payload; it just does not cost watts.
+        # calc v1.36.0 `model_raw_excavation_power`, on by default since
+        # 1.45.0, ends that: every extracted kilogram charges the array.
         draw = 0.0
-        if C["beneficiated"] or isru:
+        if C["beneficiated"] or isru or C["gr"]["model_raw_excavation_power"]:
             draw += (C["dig_wh"] * (trial_feed + new_isru_feed)
                      + (C["benef_wh"] * trial_pay if C["beneficiated"] else 0.0)
                      ) / hours(trial_dig)
@@ -3514,7 +3603,7 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
         # UNAVAILABLE: DOE's goal is 1.5 kg of Pu-238 a year by 2026, a third
         # of one MMRTG's fuel for the whole world.
         if C["power_source"] == "rtg" and draw > cfg.rtg_max_power_w:
-            return refuse("the radioisotope plant exceeds `rtg_max_power_w`")
+            return refit_to_plant_ceiling(trial_pay, draw, trial_dig, "loop")
         new_plant = draw / C["plant_w_per_kg"] if draw > 0 else 0.0
         new_frac = C["contain_per_kg"] * min(1.0, water / trial_pay)
         new_stay = trial_dig + DV["window_wait"]
@@ -3540,7 +3629,7 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
                    and abs(new_refinery - refinery_kg)
                    <= 0.01 * max(new_refinery, 1.0)
                    and abs(new_frac - held_frac) <= 1e-4)
-        if damp:
+        if blends:
             base = (plant_kg, ep_kg, refinery_kg, isru_feed, isru_prop,
                     stay_est, held_frac)
             target = (new_plant, ep["mass"], new_refinery, new_isru_feed,
@@ -3559,10 +3648,33 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
         struct = cfg.return_structure_frac_of_payload + held_frac
         if settled:
             break
+        if relax and not damped:
+            # A relaxed solve halves its step once, after the first pass
+            # that did not settle, and gets the damped loop's extra passes.
+            step = 0.5
+            damped += 1
+            limit += master._DAMP_EXTRA_PASSES
     # A damped loop must settle: a blend's stage was sized for neither of the
     # stacks it lies between, so the model refuses one that runs out of passes.
     if damped and not settled:
         return refuse("the damped sizing loop did not settle in its passes")
+    # calc v1.38.0 `relax_oscillating_sizing`: a loop that ran out of passes
+    # without settling is solved twice more from the top, once flying its
+    # last pass as it always has and once at half steps, and the better
+    # mission on the objective is the one priced.  The last pass stays in
+    # the running because relaxing can fail where the update is too steep.
+    if C["gr"]["relax_oscillating_sizing"] and not settled and relax is None:
+        pair = []
+        for how in (False, True):
+            m = mass_and_clock(C, B, DV, ratio, cap, depth, attempt,
+                               damped0 + damped, how)
+            obj = (programme_ladder(C, m)["best"]["obj"] if m is not None
+                   else float("inf"))
+            pair.append((obj, m))
+        won = min(pair, key=lambda p: p[0])[1]
+        if won is not None:
+            won["relax_pair"] = [p[0] for p in pair]
+        return won
 
     # The mission actually flown: the loop's payload, capped by volume, with
     # the plant, the seal and the ISRU books re-settled on it and the stack
@@ -3576,6 +3688,14 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
     isru_feed_loop, isru_prop_loop = isru_feed, isru_prop
     ore_throughput = max(0.0, throughput - isru_feed)
     ore_mineable = max(0.0, B["mineable"] - isru_feed)
+    if (feed_budget and isru
+            and (trial_pay * (ratio if C["beneficiated"] else 1.0) + isru_feed)
+            > min(throughput, B["mineable"]) + 1e-6):
+        refit = refit_to_feed_budget(
+            trial_pay, isru_feed, ratio if C["beneficiated"] else 1.0, struct,
+            "before settling")
+        if refit is not None:
+            return refit
     demand = min(cas["m_pay"], ore_mineable)
     if cap is not None and demand > cap:
         demand = cap
@@ -3613,14 +3733,18 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
         # of the ISRU feed, and this is the settled one.
         isru_prop = m_rprop
         isru_feed = isru_prop * C["isru_feed_per_kg_prop"]
-        if isru_feed + feed > throughput + 1e-6:
+        if feed_budget:
+            if isru_feed + feed > min(throughput, B["mineable"]) + 1e-6:
+                return refit_to_feed_budget(m_pay, isru_feed, feed / m_pay,
+                                            f_eff, "settled")
+        elif isru_feed + feed > throughput + 1e-6:
             return refuse("the feed exceeds what the rig can dig in the time")
     isru_water = isru_prop * C["isru_water_per_kg_prop"] if isru else 0.0
 
     dig_yr = max((feed + isru_feed) / C["rate_kg_yr"],
                  cfg.station_keeping_floor_yr)
     draw = 0.0
-    if C["beneficiated"] or isru:
+    if C["beneficiated"] or isru or C["gr"]["model_raw_excavation_power"]:
         draw += (C["dig_wh"] * (feed + isru_feed)
                  + (C["benef_wh"] * m_pay if C["beneficiated"] else 0.0)
                  ) / hours(dig_yr)
@@ -3641,7 +3765,7 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
         draw += isru_draw
         isru_plant_kg = isru_plant(C, isru_prop, dig_yr)
     if C["power_source"] == "rtg" and draw > cfg.rtg_max_power_w:
-        return refuse("the radioisotope plant exceeds `rtg_max_power_w`")
+        return refit_to_plant_ceiling(m_pay, draw, dig_yr, "settled")
     plant_kg = draw / C["plant_w_per_kg"] if draw > 0 else 0.0
     hw = (cfg.mining_hardware_kg + plant_kg + ep["mass"] + refinery_kg
           + isru_plant_kg)
@@ -3687,9 +3811,21 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
     if duration > cfg.max_mission_duration_yr:
         return refuse("the mission runs past `max_mission_duration_yr`")
     cadence = max(stay, DV["synodic"])
-    calendar_cap = max(1, int(C["val"]("Mining rig service life") // stay))
+    rig_life = C["val"]("Mining rig service life")
+    calendar_cap = max(1, int(rig_life // stay))
+    # calc v1.36.0 `model_rig_calendar_cadence`: the rig ages while it waits
+    # on windows, so W campaigns take stay + (W - 1) x cadence of its life.
+    if (C["gr"]["model_rig_calendar_cadence"] and cadence
+            and stay <= rig_life):
+        calendar_cap = 1 + int((rig_life - stay) // cadence)
     trips = (min(calendar_cap, int(C["val"]("Mining rig maximum trips")))
              if C["rig_trip_limit"] else calendar_cap)
+    # A raw hold stays at the body's density, the rock it is.  A concentrate
+    # is measured phase by phase, unpacked, under `model_cargo_volume`.
+    ret_vol = m_pay / C["rho"] / 1000.0
+    if C["beneficiated"] and load["mix"] and C.get("phase_density"):
+        ret_vol = sum(kg / C["phase_density"].get(name, C["rho"])
+                      for name, kg in load["mix"].items()) / 1000.0
     return {"R": R, "passes": passes, "cascade": cas, "ep": ep, "m_tps": m_tps,
             # The hardware the closed form was SOLVED at, which is the previous
             # pass's, against the hardware the stack actually flies.  The
@@ -3706,7 +3842,7 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
             "refine_wh": refine,
             "m_after": m_after, "m_rprop": m_rprop, "m_tank_ret": m_tank_ret,
             "m_at": m_at, "m_oprop": m_oprop, "m_tank_out": m_tank_out,
-            "m_launch": m_launch, "ret_vol": m_pay / C["rho"] / 1000.0,
+            "m_launch": m_launch, "ret_vol": ret_vol, "body_kg": B["mass"],
             "dig_yr": dig_yr, "stay": stay, "chem_fit": chem,
             "electric_floor": electric_floor, "duration": duration,
             "cadence": cadence, "calendar_cap": calendar_cap, "trips": trips,
@@ -3721,7 +3857,10 @@ def mass_and_clock(C, B, DV, ratio, cap=None, depth=0, attempt=None,
             "repair": attempt,
             # calc v1.28.0: the back-offs this solve and any it was repaired
             # from took, and this solve's own, for the page.
-            "damped": damped0 + damped, "backoffs": backoffs}
+            "damped": damped0 + damped, "backoffs": backoffs,
+            # calc v1.38.0: None for a loop that settled natively, else which
+            # of the two re-solves this is.
+            "relaxed": relax}
 
 
 # --------------------------------------------------------- periods and money
@@ -3763,7 +3902,7 @@ def derive_periods(C):
             "window_wait": 0.5 * synodic if C["windows"] else 0.0}
 
 
-def revenue(C, M, n_missions, fleet):
+def revenue(C, M, n_missions, fleet, per_ship=None):
     """What one delivery of an N-mission programme actually sells.
 
     Constant prices and a bounded quantity: every kilogram inside a
@@ -3796,6 +3935,12 @@ def revenue(C, M, n_missions, fleet):
                 "delivered": free["value"] / M["m_pay"] if M["m_pay"] else 0.0}
     window = ((M["duration"] + (n_missions - 1) * (M["cadence"] / fleet))
               / n_missions)
+    # calc v1.37.0 `model_market_wave_clock`: the last wave sells at
+    # T + (W - 1) x cadence, the span the cost calendar reports, and only the
+    # capacity-cap sale reads it.
+    if C["gr"]["model_market_wave_clock"] and mode == "capacity_cap":
+        waves = per_ship or math.ceil(n_missions / fleet)
+        window = (M["duration"] + (waves - 1) * M["cadence"]) / n_missions
     if mode == "elasticity":
         return _elastic_sale(C, M, fleet, window)
     caps, keys = {}, {}
@@ -3804,10 +3949,13 @@ def revenue(C, M, n_missions, fleet):
         keys[name] = key
         caps.setdefault(key, C["market_kg"].get(key, float("inf")) * window)
     frac = C["terms"]["surplus_frac"]
-    if C["beneficiated"]:
+    if C["beneficiated"] and not C["gr"]["price_engineered_hold"]:
         capped = knapsack(M["m_pay"], M["feed"], C["phases"], C["recovery"],
                           caps=dict(caps), keys=keys, surplus_frac=frac)
     else:
+        # calc v1.39.0 `price_engineered_hold`: a concentrated hold sells as
+        # it was engineered, clipped per market like a raw one, instead of
+        # being re-picked under the ceilings after the mission was sized.
         # Raw ore cannot be reshaped: the cargo is the body's own composition,
         # so a ceiling clips the sale rather than steering the hold.  That is
         # why this branch is a sale and the one above is a knapsack.
@@ -3852,6 +4000,11 @@ def revenue(C, M, n_missions, fleet):
     lost = (0.0 if not binds else capped["unsold"] if "unsold" in capped
             else max(0.0, sum(free["mix"].values()) - capped["loaded"]))
     return {"window": window, "allow": caps, "capped": capped, "mode": mode,
+            # Which sale ran and on which clock, for the page to say so.
+            "reshaped": bool(C["beneficiated"]
+                             and not C["gr"]["price_engineered_hold"]),
+            "waves": ((per_ship or math.ceil(n_missions / fleet))
+                      if C["gr"]["model_market_wave_clock"] else None),
             "gross_base": free["value"], "surplus_frac": frac,
             "clearing": capped["value"] / free["value"] if free["value"] else 1.0,
             "unsold": lost, "surplus": capped.get("surplus", 0.0),
@@ -3950,7 +4103,7 @@ def reliability(C, M, n_missions):
             "p_succ": max(0.0, min(1.0, p_launch * p_cruise * p_mining))}
 
 
-def cost(C, M, n_missions, per_ship):
+def cost(C, M, n_missions, per_ship, fleet=None):
     """The whole cost cascade for one mission of an N-mission programme.
 
     Four buckets and three multipliers.  Up-front money is compounded forward
@@ -3985,9 +4138,13 @@ def cost(C, M, n_missions, per_ship):
     # `model_rig_trip_limit` off there is no cycle cap and the calendar term
     # stands alone.  Taking the max unconditionally drove `used` to 1.0 and
     # zeroed a salvage credit the run actually collected.
-    used = share * M["stay"] / val("Mining rig service life")
+    aged = C["gr"]["model_rig_calendar_cadence"]
+    used = ((M["stay"] + (share - 1) * M["cadence"]) if aged
+            else share * M["stay"]) / val("Mining rig service life")
     if C["rig_trip_limit"] and M["trips"] > 0:
-        used = max(used, share / M["trips"])
+        # Once elapsed time binds `trips`, it is no longer the duty life.
+        duty = int(val("Mining rig maximum trips")) if aged else M["trips"]
+        used = max(used, share / duty)
     used = min(1.0, used)
     terminal = (rig_total * (1.0 - used) * val("Rig salvage fraction")
                 if n_missions > 1 else 0.0)
@@ -4000,9 +4157,30 @@ def cost(C, M, n_missions, per_ship):
     # Whether there is an electric stage to price at all, which is also whether
     # the page has anywhere to show the two rates that price it.
     has_ep = M["ep"]["power"] > 0.0
+    # calc v1.39.0 `model_repeat_manifest`: F rigs serve N flights and stay
+    # where they dig, so N - F flights leave the rig behind, and with it the
+    # outbound fuel and tank that carried it, both linear in what arrives.
+    repeat = {"share": 0.0, "first": n_missions, "rig_frac": 0.0,
+              "fuel": 0.0, "tank": 0.0, "launch_usd": 0.0, "oprop_usd": 0.0,
+              "tank_usd": 0.0}
+    if C["gr"]["model_repeat_manifest"] and n_missions > 1:
+        first = fleet if fleet is not None else math.ceil(n_missions / share)
+        rig_frac = cfg.mining_hardware_kg / M["m_at"]
+        fuel_kg = rig_frac * M["m_oprop"]
+        tank_kg = rig_frac * M["m_tank_out"]
+        repeat = {
+            "share": 1.0 - first / n_missions, "first": first,
+            "rig_frac": rig_frac, "fuel": fuel_kg, "tank": tank_kg,
+            "launch_usd": ((cfg.mining_hardware_kg + fuel_kg + tank_kg)
+                           * float(C["veh"]["usd_per_kg_to_leo"])),
+            "oprop_usd": fuel_kg * prop_cost,
+            "tank_usd": tank_kg * val("Propellant tank recurring cost")}
     lines = {
-        "launch": M["m_launch"] * float(C["veh"]["usd_per_kg_to_leo"]),
-        "oprop": M["m_oprop"] * prop_cost,
+        # Subtracting 0.0 x 0.0 is exact, so one expression serves both.
+        "launch": (M["m_launch"] * float(C["veh"]["usd_per_kg_to_leo"])
+                   - repeat["share"] * repeat["launch_usd"]),
+        "oprop": (M["m_oprop"] * prop_cost
+                  - repeat["share"] * repeat["oprop_usd"]),
         # 🚨  PROPELLANT MADE ON SITE IS NOT BOUGHT ON EARTH, and it is not
         # paid for at year zero either: it is manufactured at the asteroid over
         # the mining duration, so it is an ONGOING line rather than an up-front
@@ -4037,8 +4215,9 @@ def cost(C, M, n_missions, per_ship):
                + M["ep"]["power"] / 1000.0
                * val("Electric propulsion system recurring cost",
                      used=has_ep)) * lc,
-        "tank": ((M["m_tank_ret"] + M["m_tank_out"])
-                 * val("Propellant tank recurring cost") * lc),
+        "tank": (((M["m_tank_ret"] + M["m_tank_out"])
+                  * val("Propellant tank recurring cost")
+                  - repeat["share"] * repeat["tank_usd"]) * lc),
     }
     hardware = (lines["rig"] + lines["capsule"] + lines["plant"]
                 + lines["ep"] + lines["tank"])
@@ -4102,6 +4281,7 @@ def cost(C, M, n_missions, per_ship):
             "nre": nre, "autonomy": autonomy, "licensing": licensing,
             "handover": handover, "liability": liability,
             "launch_ins": launch_ins, "rig_total": rig_total, "used": used,
+            "repeat": repeat,
             "terminal": terminal, "rig_gross_share": rig_total / share,
             "rig_credit_share": terminal / share, "share": share,
             "upfront_lines": upfront_lines, "upfront": upfront,
@@ -4117,9 +4297,9 @@ def cost(C, M, n_missions, per_ship):
 
 def price_programme(C, M, n_missions, fleet, per_ship):
     """Revenue, reliability, cost and the objective at one rung of the ladder."""
-    rev = revenue(C, M, n_missions, fleet)
+    rev = revenue(C, M, n_missions, fleet, per_ship)
     rel = reliability(C, M, n_missions)
-    cst = cost(C, M, n_missions, per_ship)
+    cst = cost(C, M, n_missions, per_ship, fleet)
     expected = rev["capped"]["value"] * rel["p_succ"]
     return {"n": n_missions, "f": fleet, "w": per_ship, "rev": rev, "rel": rel,
             "cost": cst, "expected": expected,
@@ -4166,15 +4346,27 @@ def programme_ladder(C, M):
                                        else cfg.nre_amortization_missions))
     programmes, fleets = master._programme_ladder_cached(
         rig, cfg, master._market_mode(cfg))
+    # calc v1.37.0 `model_body_resource_budget`: a programme takes
+    # N x (feed + ISRU feed) from the body, so a rung over its whole mass is
+    # not priced.  One mission always is.
+    max_n = float("inf")
+    if C["gr"]["model_body_resource_budget"]:
+        max_n = M["body_kg"] / (M["feed"] + M["isru_feed"])
+        programmes = [p for p in programmes if p[0] == 1 or p[0] <= max_n]
     coarse = [price_programme(C, M, n, f, w) for n, f, w in programmes]
     best = min(coarse, key=lambda p: p["obj"])
     refine = []
     if len(programmes) > 1:
+        n_floor = max(1, int(cfg.nre_amortization_missions))
         for fleet in master._fleet_refinement_cached(best["f"], fleets):
+            if C["gr"]["model_body_resource_budget"] and not (
+                    n_floor <= fleet * best["w"] <= max_n):
+                continue
             refine.append(price_programme(C, M, fleet * best["w"], fleet,
                                           best["w"]))
     everything = coarse + refine
     return {"coarse": coarse, "refine": refine, "fleets": fleets,
+            "max_n": max_n,
             "best": min(everything, key=lambda p: p["obj"])}
 
 
@@ -4252,9 +4444,31 @@ def concentration_sweep(C, B, DV):
         for ratio in (centre / step ** 0.5, centre * step ** 0.5):
             if 1.0 <= ratio <= r_max:
                 priced.append(("refine", ratio, at(ratio)))
+    # calc v1.38.0 `search_concentration_past_purity`: under ceilings more
+    # feed can still buy the scarcer phases, so the search goes on from the
+    # purity bound to `max_concentration_ratio`, on its own geometric grid,
+    # and refines once around the best rung of that stretch.
+    top = float(cfg.max_concentration_ratio)
+    past_step = None
+    if (C["gr"]["search_concentration_past_purity"] and top > r_max
+            and C["terms"]["market"] in ("capacity_cap", "unbounded")):
+        lo = max(1.0, r_max)
+        past_step = (top / lo) ** (1.0 / (steps - 1))
+        past = [("past", lo * past_step ** i) for i in range(1, steps)]
+        past = [(kind, r, at(r)) for kind, r in past]
+        priced.extend(past)
+        live_past = [p for p in past if p[2]]
+        if live_past:
+            best_past = min(live_past,
+                            key=lambda p: p[2]["ladder"]["best"]["obj"])[1]
+            for ratio in (best_past / past_step ** 0.5,
+                          best_past * past_step ** 0.5):
+                if lo <= ratio <= top:
+                    priced.append(("past refine", ratio, at(ratio)))
     winner = min((p for p in priced if p[2]),
                  key=lambda p: p[2]["ladder"]["best"]["obj"])
-    return {"r_max": r_max, "step": step, "rungs": priced, "winner": winner}
+    return {"r_max": r_max, "step": step, "rungs": priced, "winner": winner,
+            "past_step": past_step, "top": top}
 
 
 # ------------------------------------------------- the dial the row refutes
@@ -4594,11 +4808,26 @@ def build(archived, label, body=None, run_beneficiated=None):
     # used: before 1.29.0 the strict one, whatever this process's config says.
     C["launch_rtol"] = (float(getattr(C["cfg"], "launch_capacity_rtol", 0.0))
                         if run_calc_at_least(archived, (1, 29, 0)) else 0.0)
+    # calc v1.45.0: the General_Research method flags moved to on by default.
+    # None of them adds a column that settles it, so the row's calc stamp
+    # does: before 1.45.0 the default was off, and from it this process's
+    # config is read, which the compared columns hold to the run.
+    C["gr"] = {f: (run_calc_at_least(archived, (1, 45, 0))
+                   and bool(getattr(C["cfg"], f, False)))
+               for f in GR_FLAGS}
     isru_processing_terms(C, archived)
     if C["refinery"]:
         tables["minerals"] = gross_minerals(tables["minerals"])
         C["minerals"] = tables["minerals"]
         C["refinery_rate"] = C["val"]("In-space processing plant throughput")
+    # calc v1.38.0 `model_cargo_volume`: each mineral's own density (kg/L),
+    # for those the Stage 2 table states one for.
+    C["phase_density"] = {}
+    if C["gr"]["model_cargo_volume"] and "density_gcm3" in tables["minerals"]:
+        rho = pd.to_numeric(tables["minerals"]["density_gcm3"], errors="coerce")
+        C["phase_density"] = {
+            name: float(r) for name, r in zip(tables["minerals"]["name"], rho)
+            if math.isfinite(r) and r > 0}
     phases, alloy, yields, ways, refine_wh = phase_table(
         body, tables["minerals"], C["phased"])
     C["refine_wh"] = refine_wh

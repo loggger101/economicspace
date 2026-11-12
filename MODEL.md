@@ -1376,38 +1376,27 @@ Stated plainly so results aren't over-read:
   not declined, because the rule would have to guess its spin. F13 and F18 in
   [starred-repos' `FOURTH-PASS.md`](https://github.com/loggger101/starred-repos/blob/main/FOURTH-PASS.md)
   are the measurements.
-- **Four more questions are flags, off by default.** A default run sizes
-  the electric stage on a provisional load (`size_ep_on_flown_load`), leaves that
-  stage behind for free on the way home (`carry_ep_home`, which most sampled rows do
-  not survive), and flies a new rig's mass on every repeat flight
-  (`model_repeat_manifest`).
-  A capped market also re-picks the cargo it prices after the hold is engineered
-  (`price_engineered_hold`).
-  [Release v1.66.0](versions.md#master-v1660--calc-v1390) has each one's effect.
-- **Seven more limits are flags, off by default.** A radioisotope plant over its
-  ceiling is refused at the largest payload tried (`refit_rtg_ceiling`),
-  concentration stops at purity even where market ceilings would pay for more
-  (`search_concentration_past_purity`), and an oscillating sizing loop flies its
-  last pass (`relax_oscillating_sizing`). A default run also does not carry capture
-  fuel through the cruise home (`model_return_coast_boiloff`), hold Earth-loaded
-  propellant to the fairing (`model_launch_liquid_volume`), measure a concentrate at
-  its own density (`model_cargo_volume`), or test surface escape
-  (`gate_surface_escape`).
-  [Release v1.65.0](versions.md#master-v1650--calc-v1380) has each one's effect.
-- **Three more method questions are flags, off by default.** A default run's
-  market accumulates past the span its programme reports
-  (`model_market_wave_clock`), a programme may dig more than its body holds
-  (`model_body_resource_budget`), and an ISRU mission can overrun the body or be
-  refused where a smaller payload fits (`model_isru_feed_budget`).
-  [Release v1.64.0](versions.md#master-v1640--calc-v1370) has each one's effect.
-- **Five method questions are open, and each is a flag, off by default.** A
-  default run sizes no plant for a raw dig (`model_raw_excavation_power`), buys
-  solar arrays at delivered rather than rated watts (`model_rated_array_cost`,
-  the largest, near 1.7x on the cost per kg of a sampled run), picks the
-  rendezvous apsis on a delta-v sum (`offer_both_apsides`), ages a rig only while
-  it digs (`model_rig_calendar_cadence`) and keeps the boil-off of a longer dig
-  for a hold the fairing clipped (`reclose_volume_capped_hold`).
-  [Release v1.63.0](versions.md#master-v1630--calc-v1360) has each one's effect.
+- **Three method questions are still flags, off by default.** A default run
+  buys solar arrays at delivered rather than rated watts
+  (`model_rated_array_cost`, the largest, near 1.7x on the cost per kg of a
+  sampled run), sizes the electric stage on a provisional load
+  (`size_ep_on_flown_load`), and leaves that stage behind for free on the way
+  home (`carry_ep_home`, which most sampled rows do not survive). Releases
+  [v1.63.0](versions.md#master-v1630--calc-v1360) and
+  [v1.66.0](versions.md#master-v1660--calc-v1390) have each one's effect.
+- **Sixteen more were flags and are the default since calc v1.45.0.** A
+  default run now sizes a plant for a raw dig, offers both rendezvous
+  apsides, ages a rig while it waits on windows, re-solves a hold the fairing
+  clipped, ends the market window where the programme's last wave sells,
+  holds a programme and its ISRU feed to what the body contains, refits a
+  radioisotope plant over its ceiling, searches concentration past purity,
+  also solves an oscillating sizing loop at half steps, tests surface escape,
+  measures a concentrate at its own density, holds Earth-loaded propellant to
+  the fairing, carries capture fuel through the cruise home, leaves the rig
+  behind on repeat flights, and sells the hold that was engineered. Setting
+  the sixteen to `False` reproduces calc v1.44.0;
+  [release v1.73.0](versions.md#master-v1730--calc-v1450) names them and has
+  what moved.
 - **A poorly known orbit costs a lost target, not a wrong Δv.** Many top-ranked
   bodies have orbits fitted to a few days of observations. Pushed through the
   Δv estimator, their orbit covariance barely moves Δv (a few m/s for most),
