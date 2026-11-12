@@ -84,7 +84,7 @@ shim: it imports the four modules, binds the aliases below, holds
 ## Versions and release notes
 
 Current: catalog `1.10.0`, mineral_value `1.17.0`, transportation `1.23.6`,
-calc `1.44.0`, master `1.72.0` (checked by `verify_docs.py` check 2; the master
+calc `1.45.0`, master `1.73.0` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.
@@ -124,6 +124,7 @@ are under `campaign/stage2/` and `campaign/stage3/`).
 | calc 1.27.0 / 1.28.0 | `repair_settled_overshoot`, `damp_sizing_loop` | True | False |
 | calc 1.29.0 | `launch_capacity_rtol` | 1e-9 | 0.0 |
 | calc 1.32.0 | `model_isru_processing` / `isru_processing_usd_per_kg` | True / 0.0 | False / 50.0 |
+| calc 1.45.0 | sixteen General_Research method flags (versions.md master v1.73.0 lists them; `verify.RESET_FIELDS` holds them) | True | False |
 
 Traps in that table:
 - `apply_wacc_compounding` off makes `model_programme_calendar` (still True)

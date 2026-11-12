@@ -273,6 +273,19 @@ RESET_FIELDS = (
     "isru_processing_usd_per_kg",  # v1.32.0: the retired $50/kg is A/B'd against 0.0
     "prune_dominated_combos",    # v1.41.0: check 2 builds every cell with the bound off
     "prune_dominated_rungs",     # v1.42.0: and with the rung bound off
+    # v1.45.0: the General_Research method flags.  Sixteen are on by default
+    # and their release is verified by building every cell with them off, so
+    # each one is a field a cell can differ on; the three still off are listed
+    # for the same reason.
+    "model_raw_excavation_power", "offer_both_apsides",
+    "model_rig_calendar_cadence", "reclose_volume_capped_hold",
+    "model_market_wave_clock", "model_body_resource_budget",
+    "model_isru_feed_budget", "refit_rtg_ceiling",
+    "search_concentration_past_purity", "relax_oscillating_sizing",
+    "gate_surface_escape", "model_cargo_volume", "model_launch_liquid_volume",
+    "model_return_coast_boiloff", "model_repeat_manifest",
+    "price_engineered_hold",
+    "model_rated_array_cost", "size_ep_on_flown_load", "carry_ep_home",
 )
 
 

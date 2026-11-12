@@ -983,7 +983,7 @@ def payload_caps(out):
     C, M, B = out["C"], out["M"], out["B"]
     cas = M["cascade"]
     isru = M.get("isru_feed_loop", M["isru_feed"]) if C["isru"] else 0.0
-    rocket = (min(cas["m_pay"], M["repair"]["refit"]["m_pay"])
+    rocket = (min(cas["m_pay"], W.repair_ceiling(M["repair"]))
               if M.get("repair") else cas["m_pay"])
     caps = [("rocket equation",
              ("the closed form under the settle-up's ceiling"
@@ -2766,11 +2766,76 @@ def part_fixed_point(S, out):
     # that stack settled on and the mission priced again under that ceiling.
     # The ceiling is the same closed form at that attempt's hardware and
     # structure fraction, so it is stepped here rather than asserted.
-    fit = rep["refit"]
     S.step("m_pay_cf", "m_pay,cf", "the closed form's payload",
            "bracket / denom",
            "%s / %s" % (P(cas["bracket"]), P(cas["denom"])),
            cas["m_pay"], "kg", ["bracket", "denom"])
+    if rep.get("kind") in ("feed_budget", "rtg_ceiling"):
+        first = ("<b>Derived on this page</b>: %s, for the first solve, "
+                 "which the model priced again under a ceiling."
+                 % refs("fixed_point", "settled"))
+        S.put("m_pay_1", "m_pay,1", "the first solve's payload",
+              rep["m_pay"], "kg", first)
+        if rep["kind"] == "feed_budget":
+            # calc v1.37.0 `model_isru_feed_budget`.
+            S.put("fuel_feed_1", "feed_fuel,1", "the first solve's fuel feed",
+                  rep["fuel_feed"], "kg", first)
+            S.put("r_1", "r_1", "ore feed per kg of payload then",
+                  rep["feed_per_payload"], "-", first)
+            S.put("f_1", "f_1", "the structure fraction then",
+                  rep["f_str"], "-", first)
+            S.put("budget_feed", "B_feed", "what the rig can dig or the "
+                  "body allows", rep["budget"], "kg",
+                  "<b>Derived on this page</b>: the smaller of the "
+                  "throughput and the mineable mass of %s." % ref("settled"))
+            S.step("k_rep", "k_feed", "fuel feed per kg of returning stack",
+                   "feed_fuel,1 / (m_pay,1 (1 + f_1) + d_0)",
+                   "%s / (%s * (1 + %s) + %s)"
+                   % (P(rep["fuel_feed"]), P(rep["m_pay"]), P(rep["f_str"]),
+                      P(C["cfg"].return_vehicle_dry_kg)),
+                   rep["per_load"], "kg/kg",
+                   ["fuel_feed_1", "m_pay_1", "f_1", "d0"])
+            S.step("m_cap", "m_cap", "the payload that fills the budget",
+                   "(B_feed - k_feed d_0) / (r_1 + k_feed (1 + f_1))",
+                   "(%s - %s * %s) / (%s + %s * (1 + %s))"
+                   % (P(rep["budget"]), P(rep["per_load"]),
+                      P(C["cfg"].return_vehicle_dry_kg),
+                      P(rep["feed_per_payload"]), P(rep["per_load"]),
+                      P(rep["f_str"])),
+                   rep["ceiling"], "kg",
+                   ["budget_feed", "k_rep", "d0", "r_1", "f_1"],
+                   "the ceiling the mission is priced again under")
+        else:
+            # calc v1.38.0 `refit_rtg_ceiling`.
+            S.put("P_1", "P_1", "the first solve's draw", rep["watts"], "W",
+                  first)
+            S.put("t_dig_1", "t_dig,1", "the first solve's dig",
+                  rep["dig_yr"], "yr", first)
+            S.put("P_rtg_max", "P_max", "the radioisotope plant's ceiling",
+                  rep["p_max"], "W", cite_config("rtg_max_power_w"))
+            S.put("t_floor", "t_floor", "the shortest stay",
+                  rep["floor"], "yr", cite_config("station_keeping_floor_yr"))
+            S.step("rtg_scale", "s_rtg", "how far the payload scales down",
+                   "min(P_max / P_1, t_floor / t_dig,1)",
+                   "min(%s / %s, %s / %s)"
+                   % (P(rep["p_max"]), P(rep["watts"]), P(rep["floor"]),
+                      P(rep["dig_yr"])),
+                   rep["scale"], "-",
+                   ["P_rtg_max", "P_1", "t_floor", "t_dig_1"],
+                   "draw is proportional to payload on a floor stay; past "
+                   "the floor a bigger dig only takes longer")
+            S.step("m_cap", "m_cap", "the payload the ceiling allows",
+                   "m_pay,1 * s_rtg * (1 - 1e-9)",
+                   "%s * %s * (1 - 1e-9)" % (P(rep["m_pay"]), P(rep["scale"])),
+                   rep["ceiling"], "kg", ["m_pay_1", "rtg_scale"],
+                   "the ceiling the mission is priced again under")
+        S.step("m_fit", "m_pay,fit", "the payload the stack can carry",
+               "min(m_pay,cf, m_cap)",
+               "min(%s, %s)" % (P(cas["m_pay"]), P(rep["ceiling"])),
+               min(cas["m_pay"], rep["ceiling"]), "kg", ["m_pay_cf", "m_cap"],
+               "%s holds it to the physical ceilings" % ref("settled"))
+        return
+    fit = rep["refit"]
     S.put("m_launch_1", "m_launch,1", "the first settle-up's launch stack",
           rep["m_launch"], "kg",
           "<b>Derived on this page</b>: %s at the payload the "
@@ -2857,7 +2922,8 @@ def part_settled(S, out):
     # the rig before any ore is loaded, which is why both carry it.
     cf_key = "m_fit" if M.get("repair") else "m_pay_cf"
     cf_sym = "m_pay,fit" if M.get("repair") else "m_pay,cf"
-    cf_val = M["repair"]["refit"]["m_pay"] if M.get("repair") else cas["m_pay"]
+    cf_val = (W.repair_ceiling(M["repair"]) if M.get("repair")
+              else cas["m_pay"])
     if M.get("repair"):
         cf_val = min(cas["m_pay"], cf_val)
     isru = bool(C["isru"])
@@ -3036,7 +3102,9 @@ def part_settled(S, out):
     hrs = W.hours(M["dig_yr"])
     # The dig draw is charged only under the condition below, so a raw
     # mission that makes no propellant listed this as never spent.
-    if C["beneficiated"] or C["isru"]:
+    digs = (C["beneficiated"] or C["isru"]
+            or C["gr"]["model_raw_excavation_power"])
+    if digs:
         S.put("e_dig", "e_dig", "excavation energy", C["dig_wh"], "Wh/kg dug",
               cite_ops(C, "Drilling / excavation energy"))
     if C["beneficiated"]:
@@ -3050,7 +3118,7 @@ def part_settled(S, out):
               C["water_wh"], "Wh/kg of water",
               cite_ops(C, "Water liberation energy (bound water)"))
     d1 = 0.0
-    if C["beneficiated"] or C["isru"]:
+    if digs:
         d1 = (C["dig_wh"] * (M["feed"] + M["isru_feed"])
               + (C["benef_wh"] * M["m_pay"] if C["beneficiated"] else 0.0)
               ) / hrs
@@ -3634,12 +3702,25 @@ def part_clock(S, out):
     S.put("W_max", "W_max", "rig maximum campaigns",
           C["val"]("Mining rig maximum trips", used=False), "-",
           cite_ops(C, "Mining rig maximum trips"))
-    S.step("cal_cap", "calendar", "campaigns the calendar allows",
-           "max(1, floor(L_rig / t_stay))",
-           "max(1, floor(%s / %s))"
-           % (P(C["val"]("Mining rig service life", used=False)),
-              P(M["stay"])),
-           M["calendar_cap"], "-", ["L_rig", "stay"])
+    if (C["gr"]["model_rig_calendar_cadence"] and M["cadence"]
+            and M["stay"] <= C["val"]("Mining rig service life", used=False)):
+        # calc 1.45.0 (`model_rig_calendar_cadence`): the rig ages while it
+        # waits on windows, so the bound is on elapsed time.
+        S.step("cal_cap", "calendar", "campaigns the calendar allows",
+               "1 + floor((L_rig - t_stay) / T_cad)",
+               "1 + floor((%s - %s) / %s)"
+               % (P(C["val"]("Mining rig service life", used=False)),
+                  P(M["stay"]), P(M["cadence"])),
+               M["calendar_cap"], "-", ["L_rig", "stay", "T_cad"],
+               "W campaigns take t_stay + (W - 1) * T_cad of the rig's "
+               "life, because it ages while it waits on windows")
+    else:
+        S.step("cal_cap", "calendar", "campaigns the calendar allows",
+               "max(1, floor(L_rig / t_stay))",
+               "max(1, floor(%s / %s))"
+               % (P(C["val"]("Mining rig service life", used=False)),
+                  P(M["stay"])),
+               M["calendar_cap"], "-", ["L_rig", "stay"])
     S.step("trips", "trips", "campaigns one rig serves",
            "min(calendar, W_max)",
            "min(%s, %s)" % (P(M["calendar_cap"]),
@@ -3712,10 +3793,35 @@ def part_hold(S, out):
               P(M["load"]["usd_per_kg"]), P(C["bulk"])))
     S.claim("%s / %s" % (P(M["load"]["usd_per_kg"]), P(C["bulk"])),
             M["load"]["usd_per_kg"] / C["bulk"], "the enrichment factor")
-    S.step("ret_vol", "V_ret", "volume the cargo occupies",
-           "m_pay / rho / 1000",
-           "%s / %s / 1000" % (P(M["m_pay"]), P(C["rho"])),
-           M["ret_vol"], "m3", ["m_pay", "rho"])
+    dens = C.get("phase_density") or {}
+    if C["beneficiated"] and M["load"]["mix"] and dens:
+        # calc 1.45.0 (`model_cargo_volume`): a concentrate is measured at
+        # its phases' own densities, unpacked; a phase the Stage 2 table
+        # states no density for takes the body's.
+        uses = ["m_pay"]
+        for name in M["load"]["mix"]:
+            if name in dens:
+                key = "rho_" + name.replace(" ", "_").replace("-", "_")
+                if key not in S.tag:
+                    S.put(key, "rho_" + name, "density of %s" % name,
+                          dens[name], "g/cm3",
+                          cite_column(C, name, "density_gcm3"))
+                uses.append(key)
+            elif "rho" not in uses:
+                uses.append("rho")
+        S.step("ret_vol", "V_ret", "volume the cargo occupies",
+               "sum over phases of kg / rho_phase, / 1000",
+               "(%s) / 1000" % " + ".join(
+                   "%s / %s" % (P(kg), P(dens.get(name, C["rho"])))
+                   for name, kg in M["load"]["mix"].items()),
+               M["ret_vol"], "m3", uses,
+               "each phase at its own density; one with none stated takes "
+               "the body's")
+    else:
+        S.step("ret_vol", "V_ret", "volume the cargo occupies",
+               "m_pay / rho / 1000",
+               "%s / %s / 1000" % (P(M["m_pay"]), P(C["rho"])),
+               M["ret_vol"], "m3", ["m_pay", "rho"])
 
 
 # ---------------------------------------------------------- 11. the market
@@ -3864,11 +3970,24 @@ def part_market(S, out):
                " + ".join(terms), rev["capped"]["value"], "$",
                ["hold_value", "eps_d", "F", "T_miss"])
     else:
-        S.step("window", "omega", "how long one delivery's market "
-               "accumulates", "(T_miss + (N - 1) * T_cad / F) / N",
-               "(%s + (%s - 1) * %s / %s) / %s"
-               % (P(M["duration"]), P(n), P(M["cadence"]), P(f), P(n)),
-               rev["window"], "yr", ["T_miss", "N", "T_cad", "F"])
+        if rev.get("waves"):
+            # calc 1.45.0 (`model_market_wave_clock`): the last wave sells
+            # W - 1 cadences after the first, the span the cost calendar
+            # reports, and the market accumulates over that.
+            S.step("window", "omega", "how long one delivery's market "
+                   "accumulates", "(T_miss + (W - 1) * T_cad) / N",
+                   "(%s + (%s - 1) * %s) / %s"
+                   % (P(M["duration"]), P(rev["waves"]), P(M["cadence"]),
+                      P(n)),
+                   rev["window"], "yr", ["T_miss", "N", "T_cad", "Wc"],
+                   "W waves of F deliveries each; the last wave sells "
+                   "W - 1 cadences after the first")
+        else:
+            S.step("window", "omega", "how long one delivery's market "
+                   "accumulates", "(T_miss + (N - 1) * T_cad / F) / N",
+                   "(%s + (%s - 1) * %s / %s) / %s"
+                   % (P(M["duration"]), P(n), P(M["cadence"]), P(f), P(n)),
+                   rev["window"], "yr", ["T_miss", "N", "T_cad", "F"])
         keys = market_inputs(S, C, sorted(rev["allow"]))
         rows = []
         for market, allow in sorted(rev["allow"].items()):
@@ -3884,11 +4003,15 @@ def part_market(S, out):
             S.put("surplus", "s", "price fraction past a ceiling",
                   surplus_frac, "-", cite_config("surplus_price_fraction"))
         walk = rev["capped"]["walk"]
-        if not C["beneficiated"]:
-            S.prose("A run-of-mine hold is the body's own proportions, so "
-                    "nothing is chosen: each phase sells what fits inside its "
+        if not rev.get("reshaped", C["beneficiated"]):
+            S.prose("%s: each phase sells what fits inside its "
                     "market's allowance at full price, and what is over it "
-                    "%s." % ("earns the surplus price" if surplus_frac > 0
+                    "%s." % ("The hold that was engineered is the hold that "
+                             "sells, so nothing is re-picked under the "
+                             "ceilings" if C["beneficiated"] else
+                             "A run-of-mine hold is the body's own "
+                             "proportions, so nothing is chosen",
+                             "earns the surplus price" if surplus_frac > 0
                              else "earns nothing, because this run abandoned "
                                   "the surplus"))
             rows, terms = [], []
@@ -4247,10 +4370,39 @@ def part_cost(S, out):
         "usd_per_kg_to_leo")), "$/kg to LEO",
         cite_table_row(C["veh"], "launch_vehicles.csv", C["veh"].raw("name"),
                        ("list_price_usd", "payload_leo_kg", "reference_year")))
-    S.step("L_launch", "C_launch", "launch", "m_launch * c_veh",
-           "%s * %s" % (P(M["m_launch"]), P(C["veh"].raw(
-               "usd_per_kg_to_leo"))),
-           lines["launch"], "$", ["m_launch", "c_veh"])
+    rep = K.get("repeat") or {"share": 0.0}
+    if rep["share"] > 0:
+        # calc 1.45.0 (`model_repeat_manifest`): a rig stays where it digs,
+        # so only each rig's first flight carries one.
+        S.step("rep_share", "q_rep", "flights that carry no rig",
+               "1 - F / N", "1 - %s / %s" % (P(rep["first"]), P(P_["n"])),
+               rep["share"], "-", ["F", "N"],
+               "F rigs serve N flights; each rig's first flight carries it")
+        S.step("rep_frac", "x_rig", "the rig's share of the arriving mass",
+               "m_rig / m_at",
+               "%s / %s" % (P(C["cfg"].mining_hardware_kg), P(M["m_at"])),
+               rep["rig_frac"], "-", ["m_rig", "m_at"],
+               "outbound fuel and tank are linear in what arrives, so this "
+               "share of each carried the rig")
+        S.step("L_launch", "C_launch", "launch",
+               "m_launch * c_veh - q_rep * (m_rig + x_rig * m_oprop "
+               "+ x_rig * m_tank,out) * c_veh",
+               "%s * %s - %s * (%s + %s * %s + %s * %s) * %s"
+               % (P(M["m_launch"]), P(C["veh"].raw("usd_per_kg_to_leo")),
+                  P(rep["share"]), P(C["cfg"].mining_hardware_kg),
+                  P(rep["rig_frac"]), P(M["m_oprop"]),
+                  P(rep["rig_frac"]), P(M["m_tank_out"]),
+                  P(C["veh"].raw("usd_per_kg_to_leo"))),
+               lines["launch"], "$",
+               ["m_launch", "c_veh", "rep_share", "rep_frac", "m_rig",
+                "m_oprop", "m_tank_out"],
+               "the repeat flights launch without the rig, its fuel and "
+               "its tank")
+    else:
+        S.step("L_launch", "C_launch", "launch", "m_launch * c_veh",
+               "%s * %s" % (P(M["m_launch"]), P(C["veh"].raw(
+                   "usd_per_kg_to_leo"))),
+               lines["launch"], "$", ["m_launch", "c_veh"])
     S.put("c_prop", "c_prop", "propellant price", C["prop_usd_per_kg"],
           "$/kg",
           ("<b>profitability_catalog</b>, recovered from this row as "
@@ -4260,9 +4412,20 @@ def part_cost(S, out):
           + cite_table_row(C["pro"], "propellants.csv", C["pro"].raw("name"),
                            ("price_basis", "live_price_source",
                             "reference_year")))
-    S.step("L_oprop", "C_oprop", "outbound propellant", "m_oprop * c_prop",
-           "%s * %s" % (P(M["m_oprop"]), P(C["prop_usd_per_kg"])),
-           lines["oprop"], "$", ["m_oprop", "c_prop"])
+    if rep["share"] > 0:
+        S.step("L_oprop", "C_oprop", "outbound propellant",
+               "m_oprop * c_prop - q_rep * x_rig * m_oprop * c_prop",
+               "%s * %s - %s * %s * %s * %s"
+               % (P(M["m_oprop"]), P(C["prop_usd_per_kg"]), P(rep["share"]),
+                  P(rep["rig_frac"]), P(M["m_oprop"]),
+                  P(C["prop_usd_per_kg"])),
+               lines["oprop"], "$",
+               ["m_oprop", "c_prop", "rep_share", "rep_frac"])
+    else:
+        S.step("L_oprop", "C_oprop", "outbound propellant",
+               "m_oprop * c_prop",
+               "%s * %s" % (P(M["m_oprop"]), P(C["prop_usd_per_kg"])),
+               lines["oprop"], "$", ["m_oprop", "c_prop"])
     if C["isru"]:
         # Three ways `isru_processing_terms` settles the rate, three origins:
         # the config field, the retired $50 it names as a constant, or the
@@ -4316,13 +4479,25 @@ def part_cost(S, out):
                             P(C["val"]("Mining payload recurring cost",
                                        used=False))),
                K["rig_total"], "$", ["m_rig", "c_rig"])
-    S.step("rig_used", "util", "how much of the rig's life this uses",
-           "min(1, max(W t_stay / L_rig, W / trips))",
-           "min(1, max(%s * %s / %s, %s / %s))"
-           % (P(K["share"]), P(M["stay"]),
-              P(C["val"]("Mining rig service life", used=False)),
-              P(K["share"]), P(M["trips"])),
-           K["used"], "-", ["Wc", "stay", "L_rig", "trips"])
+    if C["gr"]["model_rig_calendar_cadence"]:
+        # Elapsed time, on the cadence the bound was taken on; and once that
+        # binds `trips`, the duty life is the table's maximum, not `trips`.
+        S.step("rig_used", "util", "how much of the rig's life this uses",
+               "min(1, max((t_stay + (W - 1) T_cad) / L_rig, W / W_max))",
+               "min(1, max((%s + (%s - 1) * %s) / %s, %s / %s))"
+               % (P(M["stay"]), P(K["share"]), P(M["cadence"]),
+                  P(C["val"]("Mining rig service life", used=False)),
+                  P(K["share"]),
+                  P(int(C["val"]("Mining rig maximum trips", used=False)))),
+               K["used"], "-", ["Wc", "stay", "T_cad", "L_rig", "W_max"])
+    else:
+        S.step("rig_used", "util", "how much of the rig's life this uses",
+               "min(1, max(W t_stay / L_rig, W / trips))",
+               "min(1, max(%s * %s / %s, %s / %s))"
+               % (P(K["share"]), P(M["stay"]),
+                  P(C["val"]("Mining rig service life", used=False)),
+                  P(K["share"]), P(M["trips"])),
+               K["used"], "-", ["Wc", "stay", "L_rig", "trips"])
     S.put("salvage", "salvage", "rig salvage fraction",
           C["val"]("Rig salvage fraction", used=False), "-",
           cite_ops(C, "Rig salvage fraction"))
@@ -4427,24 +4602,50 @@ def part_cost(S, out):
               C["val"]("Electric propulsion system recurring cost",
                        used=False), "$/kW",
               cite_ops(C, "Electric propulsion system recurring cost"))
+        # The stage's array is priced at the SOLAR rate even on a
+        # radioisotope mission: nuclear heat runs the plant and the thruster
+        # still flies panels.  So an RTG row cites that rate on its own.
+        c_arr, arr_key = C["plant_usd_per_w"], "c_W"
+        if C["power_source"] == "rtg":
+            arr_key = "c_W_sol"
+            c_arr = S.put(arr_key, "c_W,sol", "the stage's solar array",
+                          C["val"]("Power system (solar + battery)",
+                                   used=False), "$/W",
+                          cite_ops(C, "Power system (solar + battery)"))
         S.step("L_ep", "C_EP", "electric stage",
-               "(P_EP * c_W + P_EP / 1000 * c_kW) * LC",
+               "(P_EP * %s + P_EP / 1000 * c_kW) * LC"
+               % ("c_W,sol" if arr_key == "c_W_sol" else "c_W"),
                "(%s * %s + %s / 1000 * %s) * %s"
-               % (P(M["ep"]["power"]), P(C["plant_usd_per_w"]),
+               % (P(M["ep"]["power"]), P(c_arr),
                   P(M["ep"]["power"]),
                   P(C["val"]("Electric propulsion system recurring cost",
                              used=False)), P(K["lc"])),
-               lines["ep"], "$", ["P_ep", "c_W", "c_kW", "lc"])
+               lines["ep"], "$", ["P_ep", arr_key, "c_kW", "lc"])
     S.put("c_tank", "c_tank", "propellant tank",
           C["val"]("Propellant tank recurring cost", used=False), "$/kg",
           cite_ops(C, "Propellant tank recurring cost"))
-    S.step("L_tank", "C_tank", "tankage",
-           "(m_tank,ret + m_tank,out) * c_tank * LC",
-           "(%s + %s) * %s * %s"
-           % (P(M["m_tank_ret"]), P(M["m_tank_out"]),
-              P(C["val"]("Propellant tank recurring cost", used=False)),
-              P(K["lc"])),
-           lines["tank"], "$", ["m_tank_ret", "m_tank_out", "c_tank", "lc"])
+    if rep["share"] > 0:
+        S.step("L_tank", "C_tank", "tankage",
+               "((m_tank,ret + m_tank,out) * c_tank "
+               "- q_rep * x_rig * m_tank,out * c_tank) * LC",
+               "((%s + %s) * %s - %s * %s * %s * %s) * %s"
+               % (P(M["m_tank_ret"]), P(M["m_tank_out"]),
+                  P(C["val"]("Propellant tank recurring cost", used=False)),
+                  P(rep["share"]), P(rep["rig_frac"]), P(M["m_tank_out"]),
+                  P(C["val"]("Propellant tank recurring cost", used=False)),
+                  P(K["lc"])),
+               lines["tank"], "$",
+               ["m_tank_ret", "m_tank_out", "c_tank", "lc", "rep_share",
+                "rep_frac"])
+    else:
+        S.step("L_tank", "C_tank", "tankage",
+               "(m_tank,ret + m_tank,out) * c_tank * LC",
+               "(%s + %s) * %s * %s"
+               % (P(M["m_tank_ret"]), P(M["m_tank_out"]),
+                  P(C["val"]("Propellant tank recurring cost", used=False)),
+                  P(K["lc"])),
+               lines["tank"], "$",
+               ["m_tank_ret", "m_tank_out", "c_tank", "lc"])
     S.step("hardware", "C_hw", "hardware subtotal",
            "rig share + capsule + plant + EP + tank",
            "%s + %s + %s + %s + %s"
