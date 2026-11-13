@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.76.0 / catalog v1.11.0](#master-v1760--catalog-v1110)
 - [master v1.75.0 / mineral_value v1.21.0 / transportation v1.26.1 / calc v1.46.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460)
 - [master v1.74.0](#master-v1740)
 - [master v1.73.0 / calc v1.45.0](#master-v1730--calc-v1450)
@@ -124,11 +125,11 @@ one that does not say is not to be used.
 
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
-| 1 | `modules/catalog.py` | **1.10.0** | v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
+| 1 | `modules/catalog.py` | **1.11.0** | v1.11.0, `data-2026-11-13`: an identity read by its grammar, a sigma kept with the value it came from, an orbit taken whole from one source, NEOWISE fits pooled once, the diameter floor applied last; two columns added (`orbit_provider`, `element_epoch_timescale`); see [master v1.76.0](#master-v1760--catalog-v1110). v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.21.0** | v1.21.0, Stage 2 installs `prices-2026-11-12`, built by spacevalue 0.7.0 on spacecost v0.17.1 from the same closes as `prices-2026-10-07`: reference prices re-reviewed, world production revised, one market per in-space demand class (new column `market_id`), and the delivery chains' LOX and recovery; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.17.0, the pricing moved to [`spacevalue`](https://github.com/loggger101/spacevalue). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.26.1** | v1.26.1, spacecost v0.17.1: costs in 2026 dollars, LOX at DLA's price, recovery once per batch, a Henry Hub quote read as gross heat, revised propulsion, launch-vehicle, DSN and body rows; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.23.6, the config became spacecost's `SpacecostConfig` with two defaults overridden. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.46.0** | v1.46.0, no code here moves: Stage 4 imports `spacevalue.cargo` from spacevalue 0.7.0, which pools a hold's sale by the Stage 2 table's `market_id`, so the commodities of one in-space demand class share one allowance; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.75.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| - | `master.py` | **1.76.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -231,6 +232,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.76.0 / catalog v1.11.0](#master-v1760--catalog-v1110) | 2026-11-13 | **Stage 1 repins to `data-2026-11-13`**, AsteroidCatalog's data contract 1.11.0: two columns added, 4,436 bodies added and 1,130 refit; on the bodies that moved, cost over revenue a median 1e-12 apart |
 | [master v1.75.0 / mineral_value v1.21.0 / transportation v1.26.1 / calc v1.46.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460) | 2026-11-12 | **spacecost `v0.17.1` and spacevalue `v0.7.0`, and `prices-2026-11-12` built on them**: new delivery chains, prices and one market per in-space demand class; every default number moves, cost over revenue a median 6% to 10% worse |
 | [master v1.74.0](#master-v1740) | 2026-11-12 | **six General_Research citation candidates**: comments say which values are scenarios; comments only, so no stamp and no number moves |
 | [master v1.73.0 / calc v1.45.0](#master-v1730--calc-v1450) | 2026-11-11 | **sixteen General_Research method flags on by default**: the omissions they correct are no longer in a default run, so every default number can move (cost over revenue, median: `raw` 1.016x, `raw+search` 1.003x, `benef` 0.970x, `benef+search` 0.978x); the sixteen set to `False` reproduce calc 1.44.0 bit for bit |
@@ -313,6 +315,103 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.76.0 / catalog v1.11.0
+
+**Stage 1 repins to `data-2026-11-13`, AsteroidCatalog's data contract
+1.11.0.** No code here changed. The catalog under every stage did, and on
+the bodies both releases carry it moved 1,130 of 1,575,889 (0.07%), almost
+all by JPL's routine refits. Every number below is a sample.
+
+### What moved upstream
+
+- **AsteroidCatalog 0.13.0, data contract 1.11.0**, thirteen General_Research
+  candidates; 0.13.1 and 0.13.2 changed comments only. `data-2026-11-13` is
+  the first release built at it, published by the gated workflow from
+  `a2c527c` (package 0.13.2) on 2026-11-13. Designations are read by their
+  grammar before a leading number (rc-268); a measured value keeps its own
+  row's sigma and provenance (rc-258, rc-257); an orbit is taken whole from
+  one source, with its epoch and the source's timescale label (rc-269,
+  rc-270); NEOWISE fits are pooled once, from the raw fits (rc-259);
+  `min_diameter_km` judges the final diameter (rc-271); non-finite source
+  values are refused (rc-260).
+- **Schema**: two columns added, `orbit_provider` and
+  `element_epoch_timescale`; none removed, and the shared columns keep their
+  order. The manifest's `rejected_rows` now counts bodies (275), not lines of
+  the per-reason log (3). Nothing here reads any of the three. No provenance
+  label is new.
+- **Against `data-2026-10-21b`, on the columns Stage 4 reads**, matched on
+  designation: 4,436 bodies added, none dropped, and of the 1,575,889 in both:
+  orbital elements moved on about 1,100 (median relative change in `a`
+  3e-10), H on 199, and with it the diameter (median 0.9%) and mass (median
+  2.7%) sized from it. One body changed type: **2012 GB40**, a three-observation
+  object JPL re-solved, went from a = 2.07 AU, i = 28.4 deg to a = 2.65 AU,
+  i = 35.3 deg, and its orbit-inferred type from S to C. Every orbit is JPL's
+  except one, which SsODNet now supplies whole.
+
+### What changes here
+
+- `CatalogConfig.catalog_release` `data-2026-10-21b` to `data-2026-11-13`,
+  and `pipeline_version` `1.10.0` to `1.11.0`, together.
+- `verify_stage1.py` gains the census for `("1.11.0", "2026-11-13")`: 1.10.0's
+  counts plus the 4,436 bodies JPL added, every one sized
+  `derived_h_orbit_albedo` and typed `albedo_assumed` (3,311) or `orbit`
+  (1,125). Planting one wrong count turns it red.
+- Stage 2 and Stage 3 are not re-run; mineral_value 1.21.0, transportation
+  1.26.1 and calc 1.46.0 are unchanged. The Stage 1 files before the repin are
+  backed up under `asteroid_pipeline/_inputs_backup_2026-11-13_pre-v1.76.0/`;
+  `data-2026-10-21b` stays downloadable at its tag.
+
+### Measured (samples, not cells)
+
+`verify.py`'s cells stride over the catalog, so 4,436 added rows give them
+different bodies (the 1.75.0 and 1.76.0 baselines share 2 or 3), and they
+cannot measure a catalog repin. Instead the same bodies were cut from both
+catalogs and run through the four cells at cislunar on this checkout, so the
+catalog is the only input that differs.
+
+| cut | cells | result |
+|---|---|---|
+| every 1,570th body with a mass, 1,004 bodies (none of their inputs moved) | all four | bit-identical, 890 evaluable rows each, 151 of 151 columns |
+| the 1,130 bodies whose inputs moved | all four | 1,089 evaluable on `data-2026-10-21b`, 1,088 on `data-2026-11-13`: 2012 GB40 no longer closes a mission on its new orbit |
+
+On the 1,088 movers, cost over revenue, new / old, `r - 1` (negative is
+better):
+
+| cell | better | worse | median | 10th to 90th percentile | over 1% | range | best row |
+|---|---|---|---|---|---|---|---|
+| `raw` | 562 | 526 | -1.6e-12 | -1.8e-5 to 4.5e-6 | 11 | -11.1% to +1.3% | 2018 LQ2 9.6698x, unchanged |
+| `raw+search` | 562 | 526 | -1.9e-12 | -1.3e-5 to 4.3e-6 | 10 | -11.0% to +1.1% | 2018 LQ2 7.3805x, unchanged |
+| `benef` | 561 | 527 | -1.5e-12 | -9.9e-6 to 4.3e-6 | 8 | -12.3% to +1.8% | 2018 LQ2 8.1997x, unchanged |
+| `benef+search` | 558 | 530 | -1.4e-12 | -6.4e-6 to 4.1e-6 | 9 | -12.0% to +4.6% | 499582 5.8574x, unchanged |
+
+- **A refit orbit moves a mission by parts per million**. The 193 evaluable
+  bodies whose H moved, which resizes them, move a median 0.016% to 0.035%, and
+  all but one of the movers over 1% are among them: 2022 WY7 moves 1.3% to
+  1.7% on an orbit refit alone. 2026 RL96 improves most (about 12%), 2026 UA1
+  worsens most (4.6%, `benef+search`).
+- The full-catalog figures README quotes predate this release and are not
+  re-run; at this pin they are dated by these bodies and the 4,436 new ones,
+  none of which any sample here measured.
+
+These are samples; [THE SAMPLING RULE](LESSONS.md#the-sampling-rule) applies.
+
+### Verified
+
+| harness | result |
+|---|---|
+| AsteroidCatalog publish workflow | every release gate passed (row floors, per-source floors, stamps, shrink against `data-2026-10-21b`, physical limits) |
+| Stage 1 install | 2,413,743,360 B as the manifest says; 1,580,325 rows x 104 columns, in 2 min 49 s |
+| `verify_stage1.py` | 4 checks, 0 wrong, census reproduces; a planted wrong count reports NOT VERIFIED |
+| `verify.py invariants`, the new catalog | checks 4 to 8 pass: mass ledger 0 kg on all four cells, never-worse 0 worse on all three pairings (355 pairs each), Stage 2 tables identical (59 rows) and 34/34 phases resolve to a market, the cap beat unbounded on 0 pairs, bounds 0 violations with every planted floor caught |
+| the worked calculation on the default archived row (calc 1.26.0) and on 2026 RL96 from the moved-body `raw+search` cut | 90 of 90 bit-exact; 94 quantities, 0 differ; both audits clean |
+| `verify_docs.py` | every check |
+
+### What did not change
+
+- mineral_value `1.21.0`, transportation `1.26.1`, calc `1.46.0`: no Stage 2,
+  3 or 4 computation moved. A run at this pin is not comparable with one at
+  `data-2026-10-21b` without saying so.
 
 ## master v1.75.0 / mineral_value v1.21.0 / transportation v1.26.1 / calc v1.46.0
 
@@ -11188,6 +11287,12 @@ No column added or removed; `comp_phases`, `comp_phases_detailed`,
 `comp_carbon_fraction`, `comp_pgm_enrichment` and `comp_notes` moved, and
 three bodies' diameters and densities. `verify_stage1.py` gains this
 release's census.
+
+Config: `catalog_release` and `pipeline_version` moved; no field added.
+
+**`1.11.0` installed, `data-2026-11-13` (master v1.76.0).** AsteroidCatalog 0.13.0's contract, the first release built at it (0.13.1 and 0.13.2 changed comments only). Designations are read by their grammar before a leading number; a measured value keeps its own row's sigma and provenance; an orbit is taken whole from one source; NEOWISE fits are pooled once, from the raw fits; `min_diameter_km` judges the final diameter; non-finite source values are refused. Full write-up: [master v1.76.0 / catalog v1.11.0](#master-v1760--catalog-v1110).
+
+New columns: `orbit_provider` (whose elements a row carries) and `element_epoch_timescale` (the source's own label for the epoch, TDB for JPL). Nothing here reads either. The manifest's `rejected_rows` now counts bodies, not lines of the per-reason log; nothing here reads it. No provenance label is new. `verify_stage1.py` gains this release's census.
 
 Config: `catalog_release` and `pipeline_version` moved; no field added.
 
