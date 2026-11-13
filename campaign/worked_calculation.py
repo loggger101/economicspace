@@ -1161,6 +1161,82 @@ def _table_date(path):
     return str(head["catalog_date"].iloc[0])
 
 
+# 🚨  A RELEASE IS DATED BY ITS QUOTES, AND A RUN READS IT FROM ITS PIN.
+# Since master v1.59.0 Stage 2's tables come from a published price release and
+# Stage 3's are built from a recorded fuel snapshot, and both stamp the day the
+# QUOTES were recorded as `catalog_date`, not the day the tables reached a run.
+# master v1.75.0 republished the same `metals-2026-10-07` closes as
+# `prices-2026-11-12` and rebuilt Stage 3 at spacecost v0.17.1 from the same
+# `fuel-2026-10-17` snapshot, so the old and new tables carried one date and an
+# archived 2026-10-31 row derived against the new ones (13 of 94 quantities
+# DIFFERed).  The date a table became readable is the later of its own date
+# and the day this repository first installed it, which these registers hold:
+# a price release by its tag, live Stage 3 tables by the data contract they
+# are stamped with (frozen sets under campaign/stage3/ keep their own dates).
+# An installed release or live stamp that is not listed is a refusal, so the
+# next repin cannot forget its line.
+PRICE_RELEASE_IN_FORCE = {
+    "prices-2026-10-07": "2026-10-26",   # master v1.59.0
+    "prices-2026-11-12": "2026-11-12",   # master v1.75.0
+}
+TRANSPORT_STAMP_IN_FORCE = {
+    "1.26.1": "2026-11-12",              # master v1.75.0, spacecost v0.17.1
+}
+
+
+def _price_release_of(path):
+    """The price release tag a Stage 2 table came from, or None.
+
+    A table in the release cache sits under `<subdir>/<tag>/`; the live table
+    is named by the manifest Stage 2 writes beside it.
+    """
+    import master
+    cfg = master.MINERAL_CONFIG
+    parent = os.path.basename(os.path.dirname(os.path.abspath(path)))
+    grand = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(path))))
+    if grand == cfg.subdir and parent.startswith("prices-"):
+        return parent
+    if os.path.basename(path) == master.CALC_CONFIG.mineral_catalog_file:
+        manifest = os.path.join(os.path.dirname(os.path.abspath(path)),
+                                cfg.manifest_filename)
+        try:
+            with open(manifest, encoding="utf-8") as fh:
+                return json.load(fh).get("release_tag")
+        except (OSError, ValueError):
+            return None
+    return None
+
+
+def _effective_date(path):
+    """The first day a run could have read this table; see the registers above."""
+    date = _table_date(path)
+    live_stage3 = os.path.join(ROOT, "asteroid_pipeline",
+                               _master_calc_config().transportation_subdir)
+    if os.path.abspath(os.path.dirname(path)) == os.path.abspath(live_stage3):
+        stamp = _table_stamp(path)[0]
+        if stamp not in TRANSPORT_STAMP_IN_FORCE:
+            sys.exit("the live Stage 3 tables are stamped %s, which "
+                     "TRANSPORT_STAMP_IN_FORCE does not list.\n  Add the day "
+                     "this repository first ran on them." % stamp)
+        pinned = TRANSPORT_STAMP_IN_FORCE[stamp]
+    else:
+        tag = _price_release_of(path) if path.endswith(".csv") else None
+        if tag is None:
+            return date
+        if tag not in PRICE_RELEASE_IN_FORCE:
+            sys.exit("price release %s is installed and PRICE_RELEASE_IN_FORCE "
+                     "does not list it.\n  Add the day this repository first "
+                     "pinned it." % tag)
+        pinned = PRICE_RELEASE_IN_FORCE[tag]
+    return pinned if date is None else max(date, pinned)
+
+
+def _master_calc_config():
+    """`master.CALC_CONFIG`, imported where it is needed."""
+    import master
+    return master.CALC_CONFIG
+
+
 def _table_stamp(path):
     """`(pipeline_version, catalog_date)` a stage stamped into a table, or Nones."""
     try:
@@ -1244,7 +1320,7 @@ def run_could_read(archived, path):
     the old behaviour, and the compared columns remain the guard there.
     """
     row_date = archived.get("catalog_date") if archived is not None else None
-    table_date = _table_date(path)
+    table_date = _effective_date(path)
     if row_date is None or pd.isna(row_date) or table_date is None:
         return True
     return str(row_date) >= table_date
@@ -1335,7 +1411,7 @@ def mineral_catalog_for(dest, archived=None):
         for tag in sorted(os.listdir(cache)):
             sets.append((os.path.join(cache, tag, name),
                          "price release %s" % tag))
-    sets = [(p, label, _table_date(p)) for p, label in sets if os.path.exists(p)]
+    sets = [(p, label, _effective_date(p)) for p, label in sets if os.path.exists(p)]
     if sets:
         sets.sort(key=lambda st: st[2] or "")
         readable = [st for st in sets if run_could_read(archived, st[0])]
@@ -1405,7 +1481,7 @@ def transport_tables_for(archived=None):
                 sets.append((os.path.join(root, sub),
                              "campaign/stage3/%s, frozen %s"
                              % (sub, sub.replace("-", " "))))
-    sets = [(d, label, _table_date(os.path.join(d, cfg.launch_vehicles_file)))
+    sets = [(d, label, _effective_date(os.path.join(d, cfg.launch_vehicles_file)))
             for d, label in sets
             if os.path.exists(os.path.join(d, cfg.launch_vehicles_file))]
     if not sets:
@@ -1791,10 +1867,34 @@ def taxonomy_fraction_span():
 
 
 def market_ceilings(minerals):
-    """{phase: (market key, kg/yr)}, with the residual pooled onto silicates."""
+    """(caps, alias, ids): kg/yr by market, the residual's alias, and each
+    row's market.
+
+    Stage 2 contract 1.19.0 added `market_id`: the commodities of one in-space
+    demand class share one allowance, named by it.  `caps` carries each such
+    market under its own name beside the rows, so a key `spacevalue.cargo`'s
+    `phase_market_key` returns is always one `caps` holds.  A table without the
+    column keeps a market per name, as calc read it before 1.46.0.
+    """
     import master
     caps = dict(zip(minerals["name"], minerals["annual_market_kg"]))
-    return caps, dict(master._PHASE_MARKET_ALIAS)
+    ids = {}
+    if "market_id" in minerals.columns:
+        ids = {str(n): str(m) for n, m in zip(minerals["name"],
+                                              minerals["market_id"])
+               if pd.notna(m)}
+    split = {}
+    for name, market in ids.items():
+        if name in caps:
+            split.setdefault(market, set()).add(float(caps[name]))
+    split = {m: v for m, v in split.items() if len(v) > 1}
+    if split:
+        sys.exit("the Stage 2 table gives one market several ceilings: %r; "
+                 "a pooled allowance has no single size" % split)
+    for name, market in ids.items():
+        if name in caps:
+            caps.setdefault(market, caps[name])
+    return caps, dict(master._PHASE_MARKET_ALIAS), ids
 
 
 def knapsack(payload_kg, feed_kg, phases, recovery, caps=None, keys=None,
@@ -1917,35 +2017,51 @@ def raw_sale(load, phases, caps, keys, surplus_frac):
     that is the order the model's `_capped_sale_value` walks and floating-point
     addition is not associative.  The two have to agree to the last bit for the
     check at the end to mean anything.
+
+    One market can pool phases at different prices (spacevalue v0.4.0, the
+    in-space demand classes), and its allowance goes to the dearer phase
+    first, as the model grants it: every grant is settled in price order
+    before the sum, which keeps the hold's order.
     """
     price = {n: p for n, _f, p in phases}
     remaining = dict(caps)
     value = unsold = surplus = 0.0
-    # Recorded and never read here, exactly as in `knapsack`: the document
-    # needs to show which phase met its ceiling and by how much, and a sale
-    # reported only by its total cannot say.
-    walk = []
-    for name, kg in load["mix"].items():
+    names = list(load["mix"])
+    grants, offered = {}, {}
+    order = sorted(names, key=lambda n: -price[n])
+    for name in order:
+        kg = load["mix"][name]
         key = keys.get(name, name)
         allowance = remaining.get(key, float("inf"))
-        if kg > allowance:
-            over = kg - allowance
-            value += allowance * price[name]
+        offered[name] = allowance
+        grants[name] = allowance if kg > allowance else kg
+        remaining[key] = 0.0 if kg > allowance else allowance - kg
+    # Recorded and never read here, exactly as in `knapsack`: the document
+    # needs to show which phase met its ceiling and by how much, and a sale
+    # reported only by its total cannot say.  Listed in the order the
+    # allowances were granted, so a pooled market draws down the page.
+    walk = []
+    for name in names:
+        kg = load["mix"][name]
+        allowance = offered[name]
+        if kg > grants[name]:
+            over = kg - grants[name]
+            value += grants[name] * price[name]
             if surplus_frac > 0.0:
                 value += over * price[name] * surplus_frac
                 surplus += over
             else:
                 unsold += over
-            remaining[key] = 0.0
             walk.append({"phase": name, "price": price[name], "hold": kg,
-                         "allowance": allowance, "full": allowance,
+                         "allowance": allowance, "full": grants[name],
                          "over": over, "bound": True})
         else:
             value += kg * price[name]
-            remaining[key] = allowance - kg
             walk.append({"phase": name, "price": price[name], "hold": kg,
                          "allowance": allowance, "full": kg,
                          "over": 0.0, "bound": False})
+    rank = {n: i for i, n in enumerate(order)}
+    walk.sort(key=lambda s: rank[s["phase"]])
     return {"mix": dict(load["mix"]), "value": value, "loaded": load["loaded"],
             "surplus": surplus, "unsold": unsold, "walk": walk,
             "usd_per_kg": value / load["loaded"] if load["loaded"] else 0.0}
@@ -2192,6 +2308,13 @@ _FIRST_V080_STAGE2 = (1, 14, 0)        # mineral_value, the spacecost 0.8.0 repi
 # priced through the old chain.  spacecost keeps it reproducible as
 # `burn_dv=CHAIN_BURN_DV_BEFORE_V090[dest]`, and the table check holds it.
 _FIRST_V090_STAGE2 = (1, 15, 0)        # mineral_value, the spacecost 0.9.0 repin
+# ⚠️  AND THE TUG'S FUEL.  spacecost v0.16.0 priced LOX at DLA's $0.37/kg where
+# it had been $0.20, so the hydrolox tug burns $1.746/kg, was $1.600, and every
+# in-space delivered price rose by its fuel.  Stage 2 moved to data contract
+# 1.21.0 with it (spacevalue 0.7.0, master v1.75.0); every table stamped before
+# that was priced at the old fuel, which spacecost keeps reproducible as
+# `tug_fuel_usd_per_kg=TUG_PROPELLANT_USD_PER_KG_BEFORE_V0160`.
+_FIRST_V0160_STAGE2 = (1, 21, 0)       # mineral_value, the spacecost 0.16.0+ repin
 
 
 def _stamp_key(stamp):
@@ -2217,10 +2340,13 @@ def dv_nrho_to_lunar_surface(archived):
 
 
 def delivery_pricing(minerals):
-    """`(c_LEO, stage_hardware, label, burn_dv)` for the model that priced
-    `minerals`.  `burn_dv` is None unless the destination's chain has moved
-    since the table was priced, as the lunar one did in spacecost v0.9.0."""
+    """`(c_LEO, stage_hardware, label, burn_dv, tug_fuel)` for the model that
+    priced `minerals`.  `burn_dv` is None unless the destination's chain has
+    moved since the table was priced, as the lunar one did in spacecost
+    v0.9.0; `tug_fuel` is None unless the tug's fuel price has, as it did in
+    spacecost v0.16.0."""
     burn_dv = None
+    tug_fuel = None
     if "delivery_destination" in minerals.columns and len(minerals):
         st = (str(minerals["pipeline_version"].iloc[0])
               if "pipeline_version" in minerals.columns else None)
@@ -2228,12 +2354,17 @@ def delivery_pricing(minerals):
         if k is not None and k < _FIRST_V090_STAGE2:
             burn_dv = _sd.CHAIN_BURN_DV_BEFORE_V090.get(
                 str(minerals["delivery_destination"].iloc[0]).strip())
+        if k is not None and k < _FIRST_V0160_STAGE2:
+            tug_fuel = _sd.TUG_PROPELLANT_USD_PER_KG_BEFORE_V0160
     c_leo, hardware, label = _delivery_pricing(minerals)
     if burn_dv is not None:
         label += ("; and the chain's burns at %s m/s, as they were before "
                   "spacecost 0.9.0 re-pinned the lunar descent"
                   % " + ".join(format(dv, ",.0f") for dv in burn_dv))
-    return c_leo, hardware, label, burn_dv
+    if tug_fuel is not None:
+        label += ("; and the tug's hydrolox at $%.3f/kg, as it was before "
+                  "spacecost 0.16.0 repriced LOX" % tug_fuel)
+    return c_leo, hardware, label, burn_dv, tug_fuel
 
 
 def _delivery_pricing(minerals):
@@ -2575,11 +2706,12 @@ def context(body, archived, tables):
         leo_usd_per_kg=pricing[0], stage_hardware=pricing[1],
         pricing_label=pricing[2],
         hw_rates=dict(stage=dict(_sd.STAGE_HARDWARE_USD_PER_KG),
-                      propellant=_sd.TUG_PROPELLANT_USD_PER_KG,
+                      propellant=(_sd.TUG_PROPELLANT_USD_PER_KG
+                                  if pricing[4] is None else pricing[4]),
                       entry=_sd.ENTRY_SYSTEM_USD_PER_KG),
         p_l=master.delivered_cost_usd_per_kg(
             cfg.delivery_destination, pricing[0], stage_hardware=pricing[1],
-            burn_dv=pricing[3]),
+            burn_dv=pricing[3], tug_fuel_usd_per_kg=pricing[4]),
         a_au=a_au, e=float(body["eccentricity"]),
         inc=float(body["inclination_deg"]),
         rho=float(body["density_gcm3"]),
@@ -4841,7 +4973,7 @@ def build(archived, label, body=None, run_beneficiated=None):
     C["refine_raw_wh"] = 0.0
     for name, frac, _price in phases:
         C["refine_raw_wh"] += frac * refine_wh.get(name, 0.0)
-    caps, alias = market_ceilings(tables["minerals"])
+    caps, alias, market_ids = market_ceilings(tables["minerals"])
     C["phases"] = phases
     # calc v1.24.0: with phases, the alloy is one phase among several priced
     # from yields, and it may even be sold as it is.  `ways` holds every such
@@ -4876,8 +5008,11 @@ def build(archived, label, body=None, run_beneficiated=None):
                 caps[n] = caps.get(alias[n], float("inf"))
         alias = {}
     C["market_kg"] = caps
-    C["market_keys"] = {n: (n if n in caps else alias.get(n, n))
-                        for n, _f, _p in phases}
+    # As `phase_market_key` resolves it: the phase's own row if it has one,
+    # else its alias, and either way the market that row sells into.
+    C["market_keys"] = {n: market_ids.get(k, k)
+                        for n, k in ((n, n if n in caps else alias.get(n, n))
+                                     for n, _f, _p in phases)}
     C["chain"] = delivery_chain(C)
     # ⚠️  DERIVED AND THEN HELD TO MODULE 2's OWN ANSWER.  Walking the chain
     # here is what lets the page show it; agreeing with `delivered_cost_usd_per_kg`

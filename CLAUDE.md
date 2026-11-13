@@ -83,8 +83,8 @@ shim: it imports the four modules, binds the aliases below, holds
 
 ## Versions and release notes
 
-Current: catalog `1.10.0`, mineral_value `1.17.0`, transportation `1.23.6`,
-calc `1.45.0`, master `1.74.0` (checked by `verify_docs.py` check 2; the master
+Current: catalog `1.10.0`, mineral_value `1.21.0`, transportation `1.26.1`,
+calc `1.46.0`, master `1.75.0` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.
@@ -495,15 +495,15 @@ lists every file it touched.
   readers that branch on them updated (`verify_stage1.py` check 8 catches
   unknown ones).
 - **Stage 2 downloads published prices**; spacevalue builds and gates them.
-  The pinned price release is `prices-2026-10-07` (`MineralValueConfig.price_release`),
+  The pinned price release is `prices-2026-11-12` (`MineralValueConfig.price_release`),
   checked like the catalog: contract first, every table's sha256, cache
   under `asteroid_pipeline/mineral_value/<tag>/`, manifest last. Stage 2 also
-  imports spacevalue itself, pinned to tag `v0.2.0`, for the names it re-exports
+  imports spacevalue itself, pinned to tag `v0.7.0`, for the names it re-exports
   (check 6 recomputes the installed table through them), and Stage 4 imports
   its `cargo` module, so a repin can move calc's numbers. The pin is typed in
   five places: `requirements.txt`, `PIP_SPEC` in `modules/_runtime.py`, and
   prose in README, CITATIONS.md and this sentence.
-- **Stage 3 is an adapter over spacecost, pinned to tag `v0.14.0`**, and
+- **Stage 3 is an adapter over spacecost, pinned to tag `v0.17.1`**, and
   spacevalue imports `spacecost.delivery` too, so a dropped name fails Stage 2
   first. The pin is typed in five places: `requirements.txt`, `PIP_SPEC` in
   `modules/_runtime.py`, and prose in README, CITATIONS.md and this sentence.
