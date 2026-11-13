@@ -81,8 +81,8 @@ DEFAULT_OUTPUT_DIR = (os.environ.get("ASTEROID_PIPELINE_OUTPUT_DIR")
 # tag is typed in several places in this repo; verify_docs check 7 finds and
 # holds them all.
 PIP_SPEC = {
-    "spacecost": "git+https://github.com/loggger101/spacecost@v0.14.0",
-    "spacevalue": "git+https://github.com/loggger101/spacevalue@v0.2.0",
+    "spacecost": "git+https://github.com/loggger101/spacecost@v0.17.1",
+    "spacevalue": "git+https://github.com/loggger101/spacevalue@v0.7.0",
 }
 
 # samebytes, the toolkit behind tree_check.py, platform_check.py and verify.py's

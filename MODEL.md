@@ -168,10 +168,10 @@ actually be flown.
 | `leo` | $2,555/kg | 1.00 | Falcon Heavy (expendable) $/kg-to-LEO |
 | `gto` | $5,168/kg ($414 of it stage hardware) | 1.86 | LEO to GTO (2,455 m/s), the perigee burn alone, no plane change |
 | `geo` | $8,462/kg ($937 of it stage hardware) | 2.95 | LEO to GTO (2,455 m/s), then 1,836 m/s to circularise and remove 28.5 deg |
-| `cislunar` | $7,236/kg ($742 of it stage hardware) | 2.54 | TLI + NRHO insertion (3,600 m/s), cryo tug |
-| `lunar_surface` | $48,226/kg ($34,737 of it stage hardware) | 5.28 | TLI + LOI (4,050 m/s) tug, then 2,050 m/s lander |
-| `mars_orbit` | $9,154/kg ($1,046 of it stage hardware) | 3.17 | TMI (3,600 m/s) + MOI (900 m/s) into the 1-sol staging orbit |
-| `mars_surface` | $186,306/kg ($159,209 of it stage hardware) | 10.61 | TMI (3,600 m/s), aeroentry at 30% surviving mass, 800 m/s retroprop |
+| `cislunar` | $7,237/kg ($742 of it stage hardware) | 2.54 | TLI + NRHO insertion (3,600 m/s), cryo tug |
+| `lunar_surface` | $48,227/kg ($34,738 of it stage hardware) | 5.28 | TLI + LOI (4,050 m/s) tug, then 2,050 m/s lander |
+| `mars_orbit` | $9,154/kg ($1,047 of it stage hardware) | 3.17 | TMI (3,600 m/s) + MOI (900 m/s) into the 1-sol staging orbit |
+| `mars_surface` | $186,307/kg ($159,210 of it stage hardware) | 10.61 | TMI (3,600 m/s), aeroentry at 30% surviving mass, 800 m/s retroprop |
 
 `gto` is a refuelling depot in a standard 28.5 deg transfer orbit, topping up
 GEO-bound satellites before their apogee burn. Its chain is the first leg of
@@ -245,7 +245,7 @@ the pipeline picks per commodity:
 - **Shipped down**: worth its terrestrial price **minus** the downleg:
   capsule + TPS + recovery + depot-departure burn, derived from the same
   Stage 3 rates Stage 4 charges for an Earth return. ~$25,400/kg from LEO,
-  ~$27,300/kg from NRHO. Coming down is far cheaper than going up.
+  ~$27,200/kg from NRHO. Coming down is far cheaper than going up.
 
 This is what puts an honest number on platinum at a depot. Its in-space
 utility is 0.00, nobody in orbit wants platinum, but it is still platinum,
@@ -273,11 +273,11 @@ are worth reading twice:
   the customer, and the downleg is what sets the price. The downleg did not
   move in `v0.4.0`, which is why the three shipped-down rows only move with
   their quotes.
-- **Platinum at Mars is exactly $0.** The $96,394/kg downleg from Mars exceeds
+- **Platinum at Mars is exactly $0.** The $92,052/kg downleg from Mars exceeds
   every terrestrial price in the catalog, and there is no Martian buyer. That
   is the correct answer, not a bug.
 - **Water at Mars captures a quarter of its freight, and at the Moon three
-  fifths**: $46,374 of $186,306 against $28,733 of $48,226, because Mars has
+  fifths**: $46,374 of $186,307 against $28,733 of $48,227, because Mars has
   its own ground ice and the Moon's is in permanently shadowed craters.
 - **Olivine is worth less on the Moon than at a cislunar depot** ($1,241 vs
   $1,603) even though the surface costs over six times as much to reach.

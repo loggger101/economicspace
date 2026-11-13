@@ -101,7 +101,7 @@ class MineralValueConfig:
     # moves every price, and so every number downstream: record a repin in
     # versions.md.  The published tags are listed at
     # https://github.com/loggger101/spacevalue/releases
-    price_release: str = "prices-2026-10-07"
+    price_release: str = "prices-2026-11-12"
 
     # Where release assets are downloaded from; the tag and the asset name are
     # appended.  Plumbing: change it only to point at a mirror.
@@ -143,7 +143,7 @@ class MineralValueConfig:
     # touched, and Stage 4's stamp check compares the installed table with
     # it.  The record of what each contract changed is spacevalue's
     # CHANGELOG.md; this pipeline's is versions.md > Stage 2 changelog.
-    pipeline_version: str = "1.17.0"
+    pipeline_version: str = "1.21.0"
 
     # ─── DISPLAY ─────────────────────────────────────────────────────────────
     preview_rows:      int = 20   # rows per table in the end-of-run preview

@@ -746,12 +746,37 @@ def check_stage2(m) -> bool:
     # And every phase's market KEY must name a real market, or the pooling in
     # `_capped_sale_value` and the knapsack caps would pool onto a key nothing
     # bounds.  Cheap, and it is the half an alias table can get wrong.
-    stray = sorted(k for k in {m.phase_market_key(markets, p) for p in phase_names}
-                   if markets is not None and k not in markets)
-    ok &= not stray
+    keys = {m.phase_market_key(markets, p) for p in phase_names}
+    stray, split = _market_key_faults(markets, keys)
+    ok &= not stray and not split
     if stray:
         print(f"  phase ceilings *** alias points at no market: {stray} ***")
+    if split:
+        print(f"  phase ceilings *** one market, several ceilings: {split} ***")
     return ok
+
+
+def _market_key_faults(markets, keys):
+    """(stray, split) for the market keys calc pools a hold's sale by.
+
+    A key is a market when a row is named for it or, since spacevalue's data
+    contract 1.19.0, when rows name it in `market_id` (`markets.ids`): the
+    in-space demand classes pool several commodities into one allowance.
+    Pooling is bounded only if every row of one market carries one ceiling,
+    because `phase_market_kg` reads the ceiling off whichever phase it is
+    asked about; `split` names a market whose rows disagree.
+    """
+    if markets is None:
+        return [], []
+    ids = getattr(markets, "ids", {}) or {}
+    pooled = set(ids.values())
+    stray = sorted(k for k in keys if k not in markets and k not in pooled)
+    ceilings: Dict[str, set] = {}
+    for name, market in ids.items():
+        if name in markets:
+            ceilings.setdefault(market, set()).add(float(markets[name]))
+    split = sorted(k for k, v in ceilings.items() if len(v) > 1)
+    return stray, split
 
 
 def check_prune(m, names: List[str],
