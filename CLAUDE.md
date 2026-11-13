@@ -83,8 +83,8 @@ shim: it imports the four modules, binds the aliases below, holds
 
 ## Versions and release notes
 
-Current: catalog `1.10.0`, mineral_value `1.21.0`, transportation `1.26.1`,
-calc `1.46.0`, master `1.75.0` (checked by `verify_docs.py` check 2; the master
+Current: catalog `1.11.0`, mineral_value `1.21.0`, transportation `1.26.1`,
+calc `1.46.0`, master `1.76.0` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.
@@ -484,7 +484,7 @@ lists every file it touched.
 ## Stages 1, 2 and 3 live in other repositories
 
 - **Stage 1 downloads a published catalog**; AsteroidCatalog builds and gates
-  it. The pinned catalog release is `data-2026-10-21b`
+  it. The pinned catalog release is `data-2026-11-13`
   (`CatalogConfig.catalog_release`). Same pin, same bytes; nothing installs
   until every asset matches its sha256, manifest written last, staging in a
   fresh `mkdtemp`. `pipeline_version` there is the data contract, checked not

@@ -118,7 +118,7 @@ class CatalogConfig:
     # reads, and moves every number downstream: record a repin in versions.md.
     # The published tags are listed at
     # https://github.com/loggger101/AsteroidCatalog/releases
-    catalog_release: str = "data-2026-10-21b"
+    catalog_release: str = "data-2026-11-13"
 
     # Where release assets are downloaded from; the tag and the asset name are
     # appended.  Plumbing: change it only to point at a mirror.
@@ -152,7 +152,7 @@ class CatalogConfig:
     # only after the stages that read the catalog have been checked against the
     # new schema.  The record of what each contract changed is AsteroidCatalog's
     # CHANGELOG.md; this pipeline's is versions.md > Stage 1 changelog.
-    pipeline_version: str = "1.10.0"
+    pipeline_version: str = "1.11.0"
 
 
 # Instantiate and create the output dir.  Edit CONFIG values above this line

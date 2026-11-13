@@ -102,6 +102,27 @@ CATALOG = os.path.join(PIPELINE_DIR, "asteroid_catalog.csv")
 # `spectral_type_source`.  Reading all three off one column is the obvious
 # misreading and it is why they are written out per column here.
 CENSUS = {
+    # data contract 1.11.0, `data-2026-11-13` (master v1.76.0).  1.11.0 adds
+    # `orbit_provider` and `element_epoch_timescale` and no provenance label,
+    # so the counts are 1.10.0's plus the 4,436 bodies JPL added since, every
+    # one sized `derived_h_orbit_albedo` and typed `albedo_assumed` (3,311) or
+    # `orbit` (1,125).
+    ("1.11.0", "2026-11-13"): {
+        "rows": 1580325,
+        "diameter_source": {
+            "measured":                  149718,
+            "derived_h_taxonomy_albedo": 105885,
+            "derived_h_orbit_albedo":   1324675,
+            "derived_h_measured_albedo":     31,
+            "derived_mass":                  16,
+        },
+        "spectral_type_source": {
+            "source":         171109,
+            "albedo":          83405,
+            "albedo_assumed": 1301323,
+            "orbit":           24488,
+        },
+    },
     # data contract 1.10.0, `data-2026-10-21b` (master v1.56.0).  1.7.0 to
     # 1.10.0 added the phase columns and moved composition, PGM factors and
     # three bodies' diameters, never a provenance label, so the counts are
