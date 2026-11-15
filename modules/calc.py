@@ -6492,6 +6492,10 @@ if _ES_CORE is not None:
     _ES_LOOP = _ES_CORE.SizingLoop(
         G0_M_S2, _ES_UNSET, _DAMP_MIN_STEP, _DAMP_EXTRA_PASSES)
 
+# Opt-in Rust programme ladder (PROTOTYPE).  None, the default, leaves the
+# ladder in `_evaluate_combo_at_ratio` the Python it was.
+_ES_LADDER = _ES_CORE.ProgrammeLadder() if _ES_CORE is not None else None
+
 
 # Smaller loads a body too small for its programme ladder is tried at; see
 # `model_body_resource_budget`.  The ladder is geometric, so a few span it.
@@ -8146,50 +8150,85 @@ def _evaluate_combo_at_ratio(
     # v1.17.6: the ranking objective is a config field, so it is resolved once
     # here rather than re-read on every rung below.  See `_objective_key`.
     on_profit    = _selects_on_profit(config.selection_objective)
-    best_n, best_f, best_w = programmes[0]
-    best_priced  = _price_programme(best_n, best_f, best_w, full=single)
-    best_pkey    = _objective_key(
-        best_priced[2] - best_priced[1],
-        best_priced[2], best_priced[1], config, on_profit)
-    priced_count = 1
+    # ── Opt-in Rust programme ladder (PROTOTYPE; see `_ES_LADDER`) ──────────
+    # Rust walks the same rungs and returns the same CHOICE (best_n, best_f,
+    # best_w, priced_count); the winner is then re-priced in full below by
+    # `_price_programme`, exactly as the Python ladder's winner always is, so
+    # every number in the row is still Python's.  Kind 0 = run the ladder
+    # below as always.
+    _rl = None
+    if _ES_LADDER is not None and not single:
+        _rl = _ES_LADDER.run(
+            prologue=cost_prologue, programmes=list(programmes),
+            gross_base=gross_base, rung_gross_ub=rung_gross_ub, max_n=max_n,
+            mission_duration_yr=mission_duration_yr, cadence_yr=cadence_yr,
+            p_launch=p_launch, p_cruise=p_cruise, p_first=p_first,
+            model_reliability=config.model_reliability,
+            model_reliability_growth=config.model_reliability_growth,
+            saturation_applies=saturation_applies,
+            capacity_applies=capacity_applies,
+            model_market_wave_clock=config.model_market_wave_clock,
+            rung_bound=rung_bound, on_profit=on_profit,
+            n_floor=max(1, int(config.nre_amortization_missions)),
+            market_pool=market_pool,
+            # the tail's own arguments: cadence, wacc and lc_rate are fields
+            # 36, 31 and 10 of the prologue it unpacks
+            calendar=lambda m: _calendar_multipliers_cached(
+                m, cost_prologue[36], cost_prologue[31]),
+            learning=lambda n: _learning_curve_cached(n, cost_prologue[10]),
+            mining_rel=lambda n, f: _mining_reliability_cached(
+                n, p_first, rel_alpha, p_mature, f),
+            price=lambda n, f, w: _price_programme(n, f, w, full=False),
+            refine=lambda f: _fleet_refinement_cached(f, fleet_ladder),
+        )
+    if _rl is not None and _rl[0] == 2:
+        best_n, best_f, best_w, priced_count = _rl[1]
+        best_priced = (None,)       # re-priced in full below, as always
+    else:
+        best_n, best_f, best_w = programmes[0]
+        best_priced  = _price_programme(best_n, best_f, best_w, full=single)
+        best_pkey    = _objective_key(
+            best_priced[2] - best_priced[1],
+            best_priced[2], best_priced[1], config, on_profit)
+        priced_count = 1
 
-    for n_missions, fleet, per_ship in programmes[1:]:
-        cand = _price_programme(n_missions, fleet, per_ship, full=False,
-                                incumbent=best_pkey if rung_bound else None)
-        # Counted whether or not it was skipped: `programme_options_priced`
-        # reports the options the ladder considered, as it always has.
-        priced_count += 1
-        if cand is None:
-            continue
-        key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config, on_profit)
-        if key > best_pkey:
-            best_pkey, best_priced = key, cand
-            best_n, best_f, best_w = n_missions, fleet, per_ship
-
-    # One refinement pass around the coarse winner, on the same geometric
-    # spacing plus both integer neighbours; see `fleet_refinement`.  Skipped
-    # entirely when the programme is not being searched, which is the default
-    # and the path every committed figure was measured on.
-    #
-    # v1.16.0: refined at the winner's OWN campaigns-per-ship.  W is enumerated
-    # exhaustively, so it needs no refinement of its own, but it does need to
-    # be held fixed while F moves, because N = F × W and refining F against some
-    # other W would price a programme the search never proposed.
-    if len(programmes) > 1:
-        n_floor = max(1, int(config.nre_amortization_missions))
-        for fleet in _fleet_refinement_cached(best_f, fleet_ladder):
-            n_missions = fleet * best_w
-            if n_missions < n_floor or n_missions > max_n:
-                continue
-            cand = _price_programme(n_missions, fleet, best_w, full=False,
+        for n_missions, fleet, per_ship in programmes[1:]:
+            cand = _price_programme(n_missions, fleet, per_ship, full=False,
                                     incumbent=best_pkey if rung_bound else None)
+            # Counted whether or not it was skipped: `programme_options_priced`
+            # reports the options the ladder considered, as it always has.
             priced_count += 1
             if cand is None:
                 continue
             key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config, on_profit)
             if key > best_pkey:
                 best_pkey, best_priced = key, cand
-                best_n, best_f = n_missions, fleet
+                best_n, best_f, best_w = n_missions, fleet, per_ship
+
+        # One refinement pass around the coarse winner, on the same geometric
+        # spacing plus both integer neighbours; see `fleet_refinement`.  Skipped
+        # entirely when the programme is not being searched, which is the default
+        # and the path every committed figure was measured on.
+        #
+        # v1.16.0: refined at the winner's OWN campaigns-per-ship.  W is enumerated
+        # exhaustively, so it needs no refinement of its own, but it does need to
+        # be held fixed while F moves, because N = F × W and refining F against some
+        # other W would price a programme the search never proposed.
+        if len(programmes) > 1:
+            n_floor = max(1, int(config.nre_amortization_missions))
+            for fleet in _fleet_refinement_cached(best_f, fleet_ladder):
+                n_missions = fleet * best_w
+                if n_missions < n_floor or n_missions > max_n:
+                    continue
+                cand = _price_programme(n_missions, fleet, best_w, full=False,
+                                        incumbent=best_pkey if rung_bound else None)
+                priced_count += 1
+                if cand is None:
+                    continue
+                key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config, on_profit)
+                if key > best_pkey:
+                    best_pkey, best_priced = key, cand
+                    best_n, best_f = n_missions, fleet
 
     # The winning programme is the only one whose full cost breakdown is
     # reported, so it is the only one that has to be built.  Re-priced rather

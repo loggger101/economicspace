@@ -27,10 +27,11 @@ import es_core                # noqa: E402
 
 if es_core.planted_defect():
     raise SystemExit("planted build installed; benchmark the real one")
-PY = (calc.max_return_payload_kg, None)
+PY = (calc.max_return_payload_kg, None, None)
 RS = (es_core.Solver(calc.max_return_payload_kg, calc.G0_M_S2),
       es_core.SizingLoop(calc.G0_M_S2, calc._ES_UNSET,
-                         calc._DAMP_MIN_STEP, calc._DAMP_EXTRA_PASSES))
+                         calc._DAMP_MIN_STEP, calc._DAMP_EXTRA_PASSES),
+      es_core.ProgrammeLadder())
 ORIG = calc.evaluate_asteroid
 t = {"py": 0.0, "rs": 0.0}
 n = {"rows": 0, "differ": 0}
@@ -51,7 +52,7 @@ def bits_equal(a, b):
 
 
 def timed(mode, *a, **kw):
-    calc.max_return_payload_kg, calc._ES_LOOP = mode
+    calc.max_return_payload_kg, calc._ES_LOOP, calc._ES_LADDER = mode
     t0 = time.perf_counter()
     r = ORIG(*a, **kw)
     return r, time.perf_counter() - t0
@@ -70,7 +71,7 @@ def bench(*a, **kw):
     n["rows"] += 1
     if not bits_equal(rp, rr):
         n["differ"] += 1
-    calc.max_return_payload_kg, calc._ES_LOOP = PY
+    calc.max_return_payload_kg, calc._ES_LOOP, calc._ES_LADDER = PY
     return rp
 
 
@@ -90,4 +91,5 @@ print("       python %.1f s (%.1f ms/asteroid), rust %.1f s (%.1f ms/asteroid): 
       % (t["py"], 1e3 * t["py"] / max(1, n["rows"]), t["rs"],
          1e3 * t["rs"] / max(1, n["rows"]), t["py"] / max(t["rs"], 1e-9)))
 print("       sizing loops in Rust %d, handed to Python %d" % (fast, slow))
+print("       ladder %s" % dict(sorted(RS[2].stats().items())))
 sys.exit(0 if n["differ"] == 0 and n["rows"] > 0 else 1)

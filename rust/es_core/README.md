@@ -14,6 +14,20 @@ used by default. Nothing changes unless `ECONOMICSPACE_RUST=1` is set.
    what the loop would leave behind. Everything before the loop (its
    inputs) and after it (the settle-up, pricing and programme search) stays
    Python.
+3. **The programme / fleet ladder** in `_evaluate_combo_at_ratio`
+   (`es_core.ProgrammeLadder`, `src/ladder.rs`): the walk over rungs
+   `(n_missions, fleet, wave)` that prices each with
+   `_price_programme(full=False)` and keeps the best `_objective_key`. Rust
+   returns only the CHOICE `(best_n, best_f, best_w, priced_count)`; calc.py
+   then re-prices the winner in full exactly as it always does, so every
+   number in the row is still Python's. `_mission_cost_tail(totals_only=True)`
+   is ported line for line. The memoised helpers (calendar, learning curve,
+   mining reliability, fleet refinement) are called back. A rung whose market
+   answer is not trivial (elasticity, or a capacity ceiling that binds and
+   survives the incumbent bound) is priced by calling Python's
+   `_price_programme` itself, and Rust's own `total_cost` for that rung must
+   equal Python's bit for bit, or the whole ladder falls back. Single-programme
+   searches (`single`) are not routed through it.
 
 The loop can end five ways, and calc.py takes each exactly as the Python
 loop would:
@@ -29,6 +43,9 @@ loop would:
 The refits recurse into `_evaluate_combo_at_ratio`, so Python makes them.
 The knapsack calls inside the loop (beneficiated cargo water and the refinery
 hold) are callbacks into the same Python functions.
+
+The ladder returns kind 0 FALLBACK (calc.py runs its own ladder, untouched)
+or kind 2 DONE with the choice.
 
 ## The contract: bit-identity, not "close enough"
 
@@ -49,7 +66,10 @@ Anything the Rust path cannot be sure of goes back to Python untouched:
   number (Python raises; Rust would not);
 - a callback returning anything other than the exact types;
 - any NaN in the answer. NaN sign is not portable: LLVM may commute
-  `a + b`, and on x86 the NaN that survives depends on operand order.
+  `a + b`, and on x86 the NaN that survives depends on operand order. In
+  the ladder a NaN key also falls back, because CPython compares tuples
+  holding NaN by object identity first;
+- for the ladder, a self-check mismatch on any rung Python priced.
 
 ## Measured (2026-11-15, this host, calc 1.46.0)
 
@@ -66,18 +86,35 @@ Anything the Rust path cannot be sure of goes back to Python untouched:
 | loop shadow, raw, pre-filter and combo bound off, 25 rows | 133,228 calls, 0 mismatches; boil-off on 22,640 |
 | loop shadow, benef/search, pre-filter off, `size_ep_on_flown_load=True`, 8 rows | 154,551 calls, 0 mismatches; flown-load sizing on all |
 | loop plant (one ulp in the damping blend) | caught by the shadow |
-| e2e catalogs, benef/search, 150 rows, 1 worker | byte-identical (Python/Rust/Python) |
-| e2e catalogs, raw, 2,000 rows, 1 worker | byte-identical |
-| e2e catalogs, benef/search, 400 rows, 4-worker spawn pool | byte-identical (first attempt ran out of memory reading the catalog while a shadow ran alongside; rerun alone) |
+| ladder, audited shadow, benef/search, 40 rows | 238,570 calls, 0 mismatches; 132,766 ladders, all in Rust; 4,523,214 rungs settled in Rust, 280,140 priced by Python, 506,980 bound-skipped; 0 self-check mismatches |
+| ladder, audited shadow, `model_reliability=True`, 12 rows | 83,834 calls, 0 mismatches, 0 self-check mismatches |
+| ladder, audited shadow, `apply_wacc_compounding` and `model_learning_curve` on, 12 rows | 177,133 calls, 0 mismatches, 0 self-check mismatches |
+| ladder, audited shadow, `market_model='elasticity'`, 12 rows | 47,440 calls, 0 mismatches; every rung priced by Python (elasticity is always a callback), so correct but no faster |
+| ladder, audited shadow, raw/search, 60 rows | 21,152 calls, 0 mismatches, 0 self-check mismatches |
+| ladder, audited shadow, `selection_objective='profit'`, 12 rows | 129,285 calls, 0 mismatches, 0 self-check mismatches |
+| ladder plant (one ulp in a rung's `total_cost`) | caught by the self-check (17,471 rungs), not by the result comparison |
+| e2e catalogs, benef/search, 150 rows, 1 worker | byte-identical (Python/Rust/Python), before and after the ladder port |
+| e2e catalogs, raw, 2,000 rows, 1 worker | byte-identical; with the ladder, also raw/search 2,000 rows |
+| e2e catalogs, benef/search, 400 rows, 4-worker spawn pool | byte-identical, before and after the ladder port (the first attempt ran out of memory reading the catalog while a shadow ran alongside; rerun alone) |
 | guards: `=yes`, planted build, extension missing | each raises at import |
 
 **Speed**, `bench_rust.py`: the search only, Python and Rust alternating on
 every asteroid in one process, with every result also compared:
 
-| sample | Python | Rust | speed-up |
-|---|---|---|---|
-| cislunar raw, no search, 300 rows | 18.3 ms/asteroid | 11.4 ms/asteroid | 1.59x |
-| cislunar benef/search, 60 rows | 289.8 ms/asteroid | 215.1 ms/asteroid | 1.35x |
+| sample | ported | Python | Rust | speed-up |
+|---|---|---|---|---|
+| cislunar raw, no search, 300 rows | solver + loop | 18.3 ms/asteroid | 11.4 ms/asteroid | 1.59x |
+| cislunar benef/search, 60 rows | solver + loop | 289.8 ms/asteroid | 215.1 ms/asteroid | 1.35x |
+| cislunar raw, no search, 300 rows | + ladder | 41.0 ms/asteroid | 25.2 ms/asteroid | 1.63x |
+| cislunar benef/search, 60 rows | + ladder | 575.5 ms/asteroid | 319.5 ms/asteroid | 1.80x |
+
+The two pairs of rows were taken in different sessions and the machine was
+busier for the second: compare the speed-up within a row, never a Python
+column across rows. A raw run without search never builds a ladder (one
+programme), so its second row measures the solver and loop again. Whole
+Stage 4 runs (`e2e_rust.py`, loading included) gained 1.31x on
+benef/search 150 rows, 1.27x on benef/search 400 rows over 4 workers, and
+1.21x on raw/search 2,000 rows.
 
 The solver alone gave no measurable gain per run, because at about 1.3 us a
 call the Python boundary costs more than the arithmetic. The loop crosses
@@ -121,13 +158,26 @@ Two cautions for anyone timing a sample:
 - The beneficiated + search cells are the expensive ones (the campaign's
   longest), so their profile is the one to port against.
 
-**The next port is programme pricing.** That means the ladder loop over
-`_price_programme`, with `_mission_cost_tail`, `_objective_key` and
-`_capped_sale_value` (spacevalue). If it ran ~10x faster, the beneficiated
-search would gain ~2x on top of today (Amdahl: 1 / (0.45 + 0.055)), about
-2.7x against pure Python. The knapsack is the one after; it lives in
-spacevalue, so a Rust copy is a second implementation that must stay in
-step with that repository.
+That profile sized the ladder port: programme pricing was ~55% of
+beneficiated search. It is now ported (see the 1.80x row above).
+
+**After the ladder port** (benef/search, 60 rows, Rust mode, same tools):
+
+| section | share of search |
+|---|---|
+| the Rust ladder call, including the rungs it hands back to `_price_programme` (11% inclusive) and `_capped_sale_value` (5%) | ~33% |
+| the Rust sizing loop call, including its knapsack callbacks | ~30% |
+| settling the power plant | ~9% |
+| containment settle, market saturation, cost prologue, delivered $/kg | ~3% each |
+| the knapsack across all of the above: `_hold_refining` (22% inclusive), `optimal_payload_mix` (16%) | the largest Python cost left |
+| repairs, `_refit_to_plant_ceiling` | ~28% inclusive |
+
+**The next port would be the knapsack** (`spacevalue.cargo`:
+`optimal_payload_mix`, `_hold_refining`, `_capped_sale_value`). Most of the
+remaining Rust-mode time is Python called back from the two Rust objects,
+and most of that is the knapsack. It lives in another repository, so a Rust
+copy is a second implementation that must stay in step with spacevalue
+(its `test_cargo_golden.py` would have to run against both).
 
 ## Build
 
@@ -145,6 +195,7 @@ The planted copies, which only the gate uses:
 
     python -m maturin build --release --features planted_defect -o dist-plant
     python -m maturin build --release --features planted_loop_defect -o dist-plantloop
+    python -m maturin build --release --features planted_ladder_defect -o dist-plantladder
 
 ## The gate (all of it must pass, and the plants must be caught)
 
@@ -153,8 +204,9 @@ The planted copies, which only the gate uses:
 | `capture.py` | records every real solver call in a sample run | Stage 1-3 outputs in a scratch dir |
 | `verify_rust.py --capture *.pkl` | `exp` and `log` bitwise; solver replay; 300k hostile fuzz; fast-path share | the captures |
 | `verify_rust.py --expect-defect` | the `planted_defect` build is CAUGHT | that build installed |
-| `shadow_rust.py OUT ROWS ...` | every `_evaluate_combo_at_ratio` call, including each recursive repair, computed all-Python and all-Rust and compared recursively, bit for bit; loop share | a scratch output dir |
-| `shadow_rust.py --expect-defect` | the `planted_loop_defect` build is CAUGHT | that build installed |
+| `shadow_rust.py OUT ROWS ...` | every `_evaluate_combo_at_ratio` call, including each recursive repair, computed all-Python and all-Rust and compared recursively, bit for bit; loop and ladder share; the ladder in audit mode | a scratch output dir |
+| `shadow_rust.py --expect-defect` | the `planted_loop_defect` and `planted_ladder_defect` builds are each CAUGHT | that build installed |
+| `shadow_rust.py --set field=value ...` | the same, with a `CalcConfig` dial set for the run, to reach paths the defaults never take | |
 | `e2e_rust.py OUT ROWS WORKERS ...` | Stage 4 run Python, Rust, Python: `profitability_catalog.csv` byte-identical, in-process and through the pool | a scratch output dir |
 | `bench_rust.py OUT ROWS ...` | timing only, but every asteroid's two results are also compared | a scratch output dir |
 | `sample_profile.py [--rust] OUT ROWS STACKS.txt ...`, then `analyse_profile.py STACKS.txt` | where search time goes; sizes the next port | a scratch output dir |
@@ -165,6 +217,16 @@ that one-ulp error lands on the in-loop cascade's `m_tank_outbound`, which
 the settle-up after the loop recomputes, so it never reaches a result. The
 solver replay compares the solver's own output and catches it. A field a
 later stage overwrites is invisible to an end-to-end check.
+
+**The ladder plant taught the same lesson a third time.** It flips one ulp of
+a rung's `total_cost`. The result comparison missed it: a one-ulp drift
+almost never changes which rung wins, and the winner is re-priced by Python
+anyway. The ladder's own self-check (every rung Python priced, Rust's total
+held to Python's) caught it, 17,471 times on the sample. So the shadow builds
+the ladder with `ProgrammeLadder(audit=True)`, which also prices every rung
+Rust settled alone through Python and compares `total_cost` and `g` bit for
+bit, and the shadow fails on any self-check mismatch. Audit mode is for the
+gate only: it does the Python work it exists to skip.
 
 `calc.py` refuses to start with a planted build installed, and it refuses
 `ECONOMICSPACE_RUST=1` when es_core is missing. The shadow and the benchmark
@@ -186,5 +248,10 @@ bypass lives in calc.py.
 - Run one full campaign cell with `ECONOMICSPACE_RUST=1` and compare its hash
   with the archived cell.
 - Port further. Next would be the knapsack (`spacevalue.cargo`, another
-  repository, so a second copy that must stay in step) and programme pricing
-  (`_price_programme`). Size each with `bench_rust.py`, not cProfile.
+  repository, so a second copy that must stay in step). Size it with
+  `bench_rust.py`, not cProfile.
+- The ladder's port of `_mission_cost_tail` is a second copy of a cost model
+  that releases change. A calc release touching the tail, the prologue tuple's
+  order or the rung bound must re-run the audited shadow, or the Rust ladder
+  will silently fall back (self-check) or, worse, agree on a sample and
+  differ elsewhere.

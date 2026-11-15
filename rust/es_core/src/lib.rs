@@ -20,6 +20,7 @@
 //!   * A result containing any NaN is recomputed by Python
 //!     (`Outcome::has_nan`): NaN sign and payload are not portable.
 
+mod ladder;
 mod sizing;
 
 use pyo3::intern;
@@ -465,12 +466,14 @@ fn log_many(xs: Vec<f64>) -> Vec<f64> {
 #[pyfunction]
 fn planted_defect() -> bool {
     cfg!(feature = "planted_defect") || cfg!(feature = "planted_loop_defect")
+        || cfg!(feature = "planted_ladder_defect")
 }
 
 #[pymodule]
 fn es_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Solver>()?;
     m.add_class::<sizing::SizingLoop>()?;
+    m.add_class::<ladder::ProgrammeLadder>()?;
     m.add_function(wrap_pyfunction!(log_many, m)?)?;
     m.add_function(wrap_pyfunction!(exp_many, m)?)?;
     m.add_function(wrap_pyfunction!(planted_defect, m)?)?;

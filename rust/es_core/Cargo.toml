@@ -20,6 +20,8 @@ planted_defect = []
 # The same, but only in the sizing loop's damping blend (sizing.rs), so the
 # loop's own gate is proven able to see a loop-only drift.
 planted_loop_defect = []
+# ...and only in the programme ladder's cost tail (ladder.rs).
+planted_ladder_defect = []
 
 [profile.release]
 # No fast-math, no FMA contraction: rustc never fuses a*b+c unless asked, and

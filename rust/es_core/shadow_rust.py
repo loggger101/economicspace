@@ -43,6 +43,11 @@ assert calc._ES_LOOP is None and not isinstance(calc.max_return_payload_kg, es_c
 if tuple(es_core.SizingLoop.STATE_NAMES) != calc._ES_STATE_NAMES:
     raise SystemExit("es_core STATE_NAMES differ from calc's: rebuild es_core")
 calc.max_return_payload_kg = es_core.Solver(calc.max_return_payload_kg, calc.G0_M_S2)
+assert calc._ES_LADDER is None
+# audit=True: every rung Rust prices is also priced by Python's
+# `_price_programme` and must match bit for bit (total_cost and g).  Result
+# comparison alone cannot see a one-ulp rung drift that flips no winner.
+RS_LADDER = es_core.ProgrammeLadder(audit=True)
 _LOOP = es_core.SizingLoop(calc.G0_M_S2, calc._ES_UNSET,
                            calc._DAMP_MIN_STEP, calc._DAMP_EXTRA_PASSES)
 KIND_NAMES = {0: "fallback", 1: "refuse", 2: "done", 3: "refit_feed", 4: "refit_plant"}
@@ -104,7 +109,7 @@ RS_LOOP = calc._ES_LOOP
 assert RS_LOOP is not None
 ORIG = calc._evaluate_combo_at_ratio
 
-MODES = {"python": (PY_SOLVER, None), "rust": (RS_SOLVER, RS_LOOP)}
+MODES = {"python": (PY_SOLVER, None, None), "rust": (RS_SOLVER, RS_LOOP, RS_LADDER)}
 current = ["rust"]          # the mode a top-level call (from evaluate_combo) is in
 stats = {"calls": 0, "mismatch": 0, "py_s": 0.0, "rs_s": 0.0}
 shown = []
@@ -147,15 +152,15 @@ def same(a, b, path="", diffs=None):
 
 
 def run_in(mode, a, kw):
-    saved = (current[0], calc.max_return_payload_kg, calc._ES_LOOP)
+    saved = (current[0], calc.max_return_payload_kg, calc._ES_LOOP, calc._ES_LADDER)
     current[0] = mode
-    calc.max_return_payload_kg, calc._ES_LOOP = MODES[mode]
+    calc.max_return_payload_kg, calc._ES_LOOP, calc._ES_LADDER = MODES[mode]
     t0 = time.perf_counter()
     try:
         return ORIG(*a, **kw)
     finally:
         stats["py_s" if mode == "python" else "rs_s"] += time.perf_counter() - t0
-        current[0], calc.max_return_payload_kg, calc._ES_LOOP = saved
+        current[0], calc.max_return_payload_kg, calc._ES_LOOP, calc._ES_LADDER = saved
 
 
 def shadow(*a, **kw):
@@ -192,14 +197,19 @@ for d in shown:
     print("   ", "; ".join(d))
 print("LOOP    answered in Rust %d, handed to Python %d (%.1f%% Rust)" % (fast, slow, 100 * share))
 print("PATHS   " + ", ".join("%s %d" % kv for kv in coverage.items()))
+print("LADDER  " + ", ".join("%s %d" % kv for kv in sorted(RS_LADDER.stats().items())))
 unexercised = [k for k, v in coverage.items() if v == 0 and k != "fallback"]
 print("UNEXERCISED by this sample: " + (", ".join(unexercised) or "none"))
 print("TIME    in python-mode calls %.1f s, in rust-mode calls %.1f s (inclusive, nested calls counted in both)"
       % (stats["py_s"], stats["rs_s"]))
 if expect_defect:
-    caught = stats["mismatch"] > 0
+    caught = stats["mismatch"] > 0 or RS_LADDER.stats()["selfcheck_mismatch"] > 0
     print("PLANT", "CAUGHT" if caught else "MISSED")
     sys.exit(0 if caught else 1)
-ok = stats["mismatch"] == 0 and stats["calls"] > 0 and share > 0.5
+lst = RS_LADDER.stats()
+ladder_share = lst["fast"] / max(1, lst["fast"] + lst["fallback"])
+print("LADDER  %.1f%% of ladders in Rust; self-check mismatches %d" % (100 * ladder_share, lst["selfcheck_mismatch"]))
+ok = (stats["mismatch"] == 0 and stats["calls"] > 0 and share > 0.5
+      and ladder_share > 0.5 and lst["selfcheck_mismatch"] == 0)
 print("VERDICT", "PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)
