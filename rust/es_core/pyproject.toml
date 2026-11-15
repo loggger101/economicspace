@@ -1,0 +1,12 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "es_core"
+version = "0.1.0"
+description = "Opt-in Rust ports of economicspace's hottest Stage 4 functions (prototype)"
+requires-python = ">=3.12"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]

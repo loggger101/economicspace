@@ -4745,6 +4745,32 @@ def max_return_payload_kg(
     }
 
 
+# ── Opt-in Rust solver (PROTOTYPE, branch rust-solver-prototype) ─────────────
+# ECONOMICSPACE_RUST=1 swaps `max_return_payload_kg` for `es_core.Solver`
+# (rust/es_core), which answers bit-identically and defers to the Python
+# function above for any call it cannot reproduce exactly.  Unset (the
+# default), nothing here runs and the module is the Python it always was.
+# Asking for Rust without the extension installed is an error, never a quiet
+# fallback: a run that says it used Rust must have.  Spawned workers inherit
+# the variable, so a pool run is all-Rust or all-Python, never mixed.
+if os.environ.get("ECONOMICSPACE_RUST", "") not in ("", "0"):
+    if os.environ["ECONOMICSPACE_RUST"] != "1":
+        raise RuntimeError(
+            "ECONOMICSPACE_RUST=%r: set it to 1 or leave it unset"
+            % os.environ["ECONOMICSPACE_RUST"])
+    try:
+        import es_core as _es_core
+    except ImportError as exc:
+        raise RuntimeError(
+            "ECONOMICSPACE_RUST=1 but the es_core extension is not "
+            "installed (build it: see rust/es_core/README.md)") from exc
+    if _es_core.planted_defect():
+        raise RuntimeError(
+            "es_core was built with the planted_defect feature; rebuild it "
+            "without --features planted_defect")
+    max_return_payload_kg = _es_core.Solver(max_return_payload_kg, G0_M_S2)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # OPERATIONAL-COSTS LOOKUP HELPER
 # ─────────────────────────────────────────────────────────────────────────────
