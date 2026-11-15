@@ -20,13 +20,15 @@
 //!   * A result containing any NaN is recomputed by Python
 //!     (`Outcome::has_nan`): NaN sign and payload are not portable.
 
+mod sizing;
+
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyTuple};
 
 /// The masses the Python solver returns.  `None` from `solve` means "fall
 /// back to Python"; it is never a modelling answer.
-enum Outcome {
+pub(crate) enum Outcome {
     /// `_infeasible(r_out, r_ret)`: ints for the masses, as in Python.
     Infeasible { r_out: f64, r_ret: f64 },
     Isru {
@@ -71,7 +73,7 @@ fn py_max0(x: f64) -> f64 {
 /// `math.exp`: raises OverflowError when a FINITE argument overflows.
 /// `None` is that raise.  `exp(inf)` is inf and does not raise, in both.
 #[inline(always)]
-fn py_exp(x: f64) -> Option<f64> {
+pub(crate) fn py_exp(x: f64) -> Option<f64> {
     let e = x.exp();
     if e.is_infinite() && x.is_finite() {
         None
@@ -84,7 +86,7 @@ fn py_exp(x: f64) -> Option<f64> {
 /// ZeroDivisionError) returns `None` so the caller falls back to Python and
 /// lets it raise.
 #[inline(always)]
-fn py_div(a: f64, b: f64) -> Option<f64> {
+pub(crate) fn py_div(a: f64, b: f64) -> Option<f64> {
     if b == 0.0 {
         None
     } else {
@@ -93,7 +95,7 @@ fn py_div(a: f64, b: f64) -> Option<f64> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn solve(
+pub(crate) fn solve(
     g0: f64,
     leo_capacity_kg: f64,
     isp_s: f64,
@@ -216,7 +218,7 @@ impl Outcome {
     /// and on x86 which NaN survives `a + b` depends on operand order, so
     /// the Rust result can carry +NaN where Python's carries -NaN.  Such
     /// calls go to Python, which keeps even NaN bits identical.
-    fn has_nan(&self) -> bool {
+    pub(crate) fn has_nan(&self) -> bool {
         match *self {
             Outcome::Infeasible { r_out, r_ret } => r_out.is_nan() || r_ret.is_nan(),
             Outcome::Isru {
@@ -238,7 +240,7 @@ impl Outcome {
 
 /// Build the dict with the same keys, in the same order, with the same value
 /// types as the Python function.
-fn to_dict<'py>(py: Python<'py>, o: Outcome) -> PyResult<Bound<'py, PyDict>> {
+pub(crate) fn to_dict<'py>(py: Python<'py>, o: Outcome) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     match o {
         Outcome::Infeasible { r_out, r_ret } => {
@@ -341,7 +343,7 @@ const ISRU: usize = 7;
 /// arithmetic; below 2**53 that conversion is exact, so the f64 here is the
 /// very operand Python computes with.  Above it, int-vs-float COMPARISONS are
 /// exact in Python but not after conversion, so those calls go to Python.
-fn exact_small_int(v: &Bound<'_, PyAny>) -> Option<f64> {
+pub(crate) fn exact_small_int(v: &Bound<'_, PyAny>) -> Option<f64> {
     const LIM: i64 = 1 << 53;
     let n: i64 = v.downcast_exact::<PyInt>().ok()?.extract().ok()?;
     if (-LIM..=LIM).contains(&n) {
@@ -451,15 +453,25 @@ fn exp_many(xs: Vec<f64>) -> Vec<f64> {
     xs.into_iter().map(f64::exp).collect()
 }
 
-/// Whether this build carries the deliberate one-ulp defect.
+/// `ln` exactly as the sizing loop calls it (boil-off), for the same check
+/// against `math.log`.
+#[pyfunction]
+fn log_many(xs: Vec<f64>) -> Vec<f64> {
+    xs.into_iter().map(f64::ln).collect()
+}
+
+/// Whether this build carries a deliberate one-ulp defect (in the solver,
+/// or in the sizing loop's damping blend).
 #[pyfunction]
 fn planted_defect() -> bool {
-    cfg!(feature = "planted_defect")
+    cfg!(feature = "planted_defect") || cfg!(feature = "planted_loop_defect")
 }
 
 #[pymodule]
 fn es_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Solver>()?;
+    m.add_class::<sizing::SizingLoop>()?;
+    m.add_function(wrap_pyfunction!(log_many, m)?)?;
     m.add_function(wrap_pyfunction!(exp_many, m)?)?;
     m.add_function(wrap_pyfunction!(planted_defect, m)?)?;
     Ok(())

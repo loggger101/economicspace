@@ -4753,6 +4753,7 @@ def max_return_payload_kg(
 # Asking for Rust without the extension installed is an error, never a quiet
 # fallback: a run that says it used Rust must have.  Spawned workers inherit
 # the variable, so a pool run is all-Rust or all-Python, never mixed.
+_ES_CORE = None
 if os.environ.get("ECONOMICSPACE_RUST", "") not in ("", "0"):
     if os.environ["ECONOMICSPACE_RUST"] != "1":
         raise RuntimeError(
@@ -4769,6 +4770,7 @@ if os.environ.get("ECONOMICSPACE_RUST", "") not in ("", "0"):
             "es_core was built with the planted_defect feature; rebuild it "
             "without --features planted_defect")
     max_return_payload_kg = _es_core.Solver(max_return_payload_kg, G0_M_S2)
+    _ES_CORE = _es_core
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -6468,6 +6470,28 @@ def asteroid_context(
 _DAMP_MIN_STEP     = 1.0 / 1024.0
 _DAMP_EXTRA_PASSES = 36
 
+# Opt-in Rust sizing loop (PROTOTYPE, ECONOMICSPACE_RUST=1; see the solver's
+# block above).  None, the default, leaves `_evaluate_combo_at_ratio` exactly
+# the Python it was.  `_ES_UNSET` marks a loop local Rust never assigned, so
+# calc.py leaves it unassigned too.
+_ES_UNSET = object()
+_ES_LOOP = None
+_ES_STATE_NAMES = (
+    "power_system_kg", "ep_system_kg", "refinery_kg", "isru_feed_kg",
+    "isru_prop_kg", "stay_est_yr", "containment_frac", "structure_frac_eff",
+    "ep_power_watts", "ep_thrust_n", "ep_thrust_yr", "processing_power_watts",
+    "boiloff_factor", "dv_ret_eff", "converged", "damped_here",
+    "carried_ep_kg", "return_dry_kg", "hardware_est_kg", "cascade",
+    "trial_payload", "r_ret", "hold_water",
+)
+if _ES_CORE is not None:
+    if tuple(_ES_CORE.SizingLoop.STATE_NAMES) != _ES_STATE_NAMES:
+        raise RuntimeError(
+            "es_core.SizingLoop.STATE_NAMES does not match calc.py's unpacking; "
+            "rebuild es_core from this checkout")
+    _ES_LOOP = _ES_CORE.SizingLoop(
+        G0_M_S2, _ES_UNSET, _DAMP_MIN_STEP, _DAMP_EXTRA_PASSES)
+
 
 # Smaller loads a body too small for its programme ladder is tried at; see
 # `model_body_resource_budget`.  The ladder is geometric, so a few span it.
@@ -6896,6 +6920,85 @@ def _evaluate_combo_at_ratio(
     base = target = None
     converged   = False
     passes, pass_limit = 0, 12
+    # ── Opt-in Rust sizing loop (PROTOTYPE; see `_ES_LOOP`) ─────────────────
+    # Runs the `while` below in Rust and hands back what it would leave
+    # behind.  Kind 0 means "not a case Rust reproduces exactly" and the
+    # Python loop runs as always; otherwise the state is assigned here and the
+    # loop is skipped (pass_limit = 0), or the loop's own exits are taken.
+    if _ES_LOOP is not None:
+        _rs = _ES_LOOP.run(
+            leo_cap=leo_cap, isp_s_val=isp_s_val, dv_out_m_s=dv_out_m_s,
+            dv_ret_stored=dv_ret_stored, dv_ret_eff=dv_ret_eff,
+            tps_frac=tps_frac, tank_frac=tank_frac,
+            structure_frac=structure_frac, structure_frac_eff=structure_frac_eff,
+            mineable_kg=mineable_kg, throughput_cap_kg=throughput_cap_kg,
+            window_wait_yr=window_wait_yr, stay_est_yr=stay_est_yr,
+            outbound_yr=outbound_yr, boiloff_pct=boiloff_pct,
+            boiloff_factor=boiloff_factor, eff_used=eff_used,
+            ep_w_per_kg=ep_w_per_kg, ppu_kg_per_kw=ppu_kg_per_kw,
+            thruster_kg_per_n=thruster_kg_per_n,
+            ep_target_thrust_yr=config.ep_target_thrust_yr,
+            isru_feed_per_kg_prop=isru_feed_per_kg_prop,
+            isru_water_per_kg_prop=isru_water_per_kg_prop,
+            isru_process_wh_per_kg=isru_process_wh_per_kg,
+            isru_plant_rate=isru_plant_rate, refinery_rate=refinery_rate,
+            target_ratio=target_ratio, dig_wh=dig_wh, benef_wh=benef_wh,
+            containment_per_kg=containment_per_kg, water_wh=water_wh,
+            plant_w_per_kg=plant_w_per_kg,
+            rtg_max_power_w=config.rtg_max_power_w,
+            mining_hardware_kg=config.mining_hardware_kg,
+            return_vehicle_dry_kg=config.return_vehicle_dry_kg,
+            station_keeping_floor_yr=config.station_keeping_floor_yr,
+            mine_rate_kg_per_day=(config.mining_hardware_kg
+                                  * config.mining_rate_kg_per_day_per_kg_rig),
+            ice_frac=ctx.cargo_ice_frac,
+            power_system_kg=power_system_kg, ep_system_kg=ep_system_kg,
+            refinery_kg=refinery_kg, isru_feed_kg=isru_feed_kg,
+            isru_prop_kg=isru_prop_kg, containment_frac=containment_frac,
+            ep_power_watts=ep_power_watts, ep_thrust_yr=ep_thrust_yr,
+            ep_thrust_n=ep_thrust_n,
+            processing_power_watts=processing_power_watts,
+            models_boiloff=models_boiloff, is_electric=is_electric, isru=isru,
+            beneficiate=beneficiate, power_is_rtg=(power_source == "rtg"),
+            damp=damp, relax=bool(_relax),
+            carry_ep_home=config.carry_ep_home,
+            model_isru_feed_budget=config.model_isru_feed_budget,
+            size_ep_on_flown_load=config.size_ep_on_flown_load,
+            model_raw_excavation_power=config.model_raw_excavation_power,
+            model_water_liberation=config.model_water_liberation,
+            model_volatile_containment=config.model_volatile_containment,
+            refit_rtg_ceiling=config.refit_rtg_ceiling,
+            has_refinery=refinery is not None, has_phases=bool(phases),
+            payload_cap_kg=payload_cap_kg,
+            hold_refining=lambda p, f: _hold_refining(
+                refinery, phases, p, f, beneficiate,
+                config.beneficiation_recovery),
+            cargo_water=lambda p, f: _cargo_water_kg(
+                asteroid_row, phases, p, f, beneficiate, config,
+                ctx.cargo_ice_frac),
+        )
+        if _rs[0] == 1:
+            return None
+        if _rs[0] != 0:
+            _st = _rs[1]
+            (power_system_kg, ep_system_kg, refinery_kg, isru_feed_kg,
+             isru_prop_kg, stay_est_yr, containment_frac, structure_frac_eff,
+             ep_power_watts, ep_thrust_n, ep_thrust_yr, processing_power_watts,
+             boiloff_factor, dv_ret_eff, converged, damped_here,
+             carried_ep_kg, return_dry_kg, hardware_est_kg) = _st[:19]
+            if _st[19] is not _ES_UNSET:
+                cascade = _st[19]
+            if _st[20] is not _ES_UNSET:
+                trial_payload = _st[20]
+            if _st[21] is not _ES_UNSET:
+                r_ret = _st[21]
+            if _st[22] is not _ES_UNSET:
+                hold_water = _st[22]
+            if _rs[0] == 3:
+                return _refit_to_feed_budget(*_rs[2])
+            if _rs[0] == 4:
+                return _refit_to_plant_ceiling(*_rs[2])
+            pass_limit = 0          # kind 2: the loop below already ran
     while passes < pass_limit:
         passes += 1
         # Boil-off, folded into an EFFECTIVE return Δv: since m_return_prop

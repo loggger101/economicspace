@@ -116,6 +116,21 @@ def check_exp(records) -> int:
     return bad
 
 
+def check_log() -> int:
+    """`f64::ln` (the sizing loop's boil-off term) against `math.log`."""
+    rng = random.Random(4046)
+    xs = [1.0 + rng.uniform(0.0, 3.0) for _ in range(1_000_000)]
+    xs += [math.exp(rng.uniform(0.0, 50.0)) for _ in range(1_000_000)]
+    xs += [10.0 ** rng.uniform(-300, 300) for _ in range(200_000)]
+    xs += [1.0, math.nextafter(1.0, 2.0), math.nextafter(1.0, 0.0), 5e-324,
+           1.7976931348623157e308, math.inf]
+    rs = es_core.log_many(xs)
+    bad = sum(1 for x, r in zip(xs, rs) if bits(math.log(x)) != bits(r))
+    print("  log     %s  %d arguments, %d mismatches"
+          % ("PASS" if not bad else "FAIL", len(xs), bad))
+    return bad
+
+
 # ── 2. replay ────────────────────────────────────────────────────────────────
 def check_replay(records) -> int:
     bad = 0
@@ -217,6 +232,7 @@ def main() -> int:
 
     fails = {}
     fails["exp"] = check_exp(records)
+    fails["log"] = check_log()
     fails["replay"] = check_replay(records)
     fails["fuzz"] = check_fuzz(a.fuzz)
     fast, slow = RS.counts()
