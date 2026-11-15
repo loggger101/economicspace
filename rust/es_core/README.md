@@ -65,8 +65,13 @@ or a divisor that is exactly zero.
 You need rustup (stable, `x86_64-pc-windows-msvc`), the MSVC Build Tools
 with the Windows SDK, and `pip install maturin==1.9.6`.
 
+    export CARGO_TARGET_DIR="$HOME/.cargo-target/es_core"   # NOT inside OneDrive
     cd rust/es_core
     python -m maturin build --release -o dist
+
+`target/` inside the synced folder fails: build scripts there report
+"output path is not a writable directory", and the folder would sync
+gigabytes of build output anyway.
     python -m pip install --force-reinstall dist/es_core-*.whl
 
 The planted-defect copy, which only the gate uses:
