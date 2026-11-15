@@ -89,6 +89,46 @@ about 70 s of 116 s. The interleaved benchmark says the loop and solver
 together were worth much less: per-call profiling inflates functions called
 millions of times. Measure with `bench_rust.py`.
 
+## Where the time goes now (2026-11-15, Rust mode, cislunar)
+
+`sample_profile.py` (a stack sampler, ~1 ms, no per-call overhead) and
+`analyse_profile.py`. Shares are of search time, i.e. samples inside
+`evaluate_asteroid`. The sampler is trusted because it predicts the
+measured speed-up: the loop is 40.9% of search in Python mode and 14.7% in
+Rust mode, which implies 1.44x against `bench_rust.py`'s measured 1.35x.
+
+| beneficiated + search, 60 rows | share of search |
+|---|---|
+| programme / fleet ladder in `_evaluate_combo_at_ratio`: `_price_programme` per rung (34% inclusive), `_mission_cost_tail` (13% self), `_objective_key` (6%), `_capped_sale_value` (3%) | ~55% |
+| the Rust sizing loop call, including its knapsack callbacks | ~15% |
+| settling the power plant against the mission flown | ~12% |
+| everything else (containment settle, market saturation, cost prologue, delivered $/kg) | under ~10% together |
+| the knapsack, `spacevalue.cargo.optimal_payload_mix`, across all of the above | ~12% inclusive |
+| repairs re-solving a whole candidate, `_refit_to_plant_ceiling` | ~31% inclusive (an algorithmic cost; a port speeds it up but does not remove it) |
+
+| raw, no search, 300 rows | share of search |
+|---|---|
+| pre-filter and combo bound (`_closes_carrying_its_own_stage`, `_combo_key_bound`) | ~23% |
+| programme ladder and pricing | ~23% |
+| settling the power plant | ~15% |
+| the Rust sizing loop call | ~11% |
+| `evaluate_asteroid`'s own work | ~8% |
+
+Two cautions for anyone timing a sample:
+- On a 300-row raw run, search was 13% of wall time; the rest was loading
+  the 1.58 M-row catalog. A small run's wall clock measures the loader. On
+  a full cell (hours) the search dominates.
+- The beneficiated + search cells are the expensive ones (the campaign's
+  longest), so their profile is the one to port against.
+
+**The next port is programme pricing.** That means the ladder loop over
+`_price_programme`, with `_mission_cost_tail`, `_objective_key` and
+`_capped_sale_value` (spacevalue). If it ran ~10x faster, the beneficiated
+search would gain ~2x on top of today (Amdahl: 1 / (0.45 + 0.055)), about
+2.7x against pure Python. The knapsack is the one after; it lives in
+spacevalue, so a Rust copy is a second implementation that must stay in
+step with that repository.
+
 ## Build
 
 You need rustup (stable, `x86_64-pc-windows-msvc`), the MSVC Build Tools
@@ -117,6 +157,7 @@ The planted copies, which only the gate uses:
 | `shadow_rust.py --expect-defect` | the `planted_loop_defect` build is CAUGHT | that build installed |
 | `e2e_rust.py OUT ROWS WORKERS ...` | Stage 4 run Python, Rust, Python: `profitability_catalog.csv` byte-identical, in-process and through the pool | a scratch output dir |
 | `bench_rust.py OUT ROWS ...` | timing only, but every asteroid's two results are also compared | a scratch output dir |
+| `sample_profile.py [--rust] OUT ROWS STACKS.txt ...`, then `analyse_profile.py STACKS.txt` | where search time goes; sizes the next port | a scratch output dir |
 
 **The two plants need different gates, and that is the point of having
 both.** The shadow compares final results, and it MISSED the solver plant:
