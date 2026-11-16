@@ -42,6 +42,14 @@ used by default. Nothing changes unless `ECONOMICSPACE_RUST=1` is set.
    Python for it. calc.py passes `cargo=(refinery, phases, recovery)`, the
    same three objects its two callbacks close over; if they do not read
    exactly, the callbacks still answer.
+5. **The knapsack calls calc.py makes from Python** (outside the loop): every
+   `_capped_sale_value` (the capped rungs the ladder hands to
+   `_price_programme`) and every `_hold_refining` on a knapsack hold (the
+   containment and plant settles, repairs). calc.py rebinds both names to
+   spacevalue's own Python extension, `spacevalue_cargo_rs` (the same crate,
+   which falls back to spacevalue's Python on any input it cannot reproduce
+   exactly). A raw hold stays Python: it is one multiply, cheaper than the
+   crossing (`_rust_cargo` in calc.py says which goes where).
 
 The loop can end five ways, and calc.py takes each exactly as the Python
 loop would:
@@ -56,7 +64,8 @@ loop would:
 
 The refits recurse into `_evaluate_combo_at_ratio`, so Python makes them.
 The knapsack calls inside the loop (beneficiated cargo water and the refinery
-hold) are callbacks into the same Python functions.
+hold) are answered in Rust (item 4); the Python callbacks remain for an input
+the crate cannot read exactly.
 
 The ladder returns kind 0 FALLBACK (calc.py runs its own ladder, untouched)
 or kind 2 DONE with the choice.
@@ -116,6 +125,7 @@ Anything the Rust path cannot be sure of goes back to Python untouched:
 | e2e catalogs, raw, 2,000 rows, 1 worker | byte-identical; with the ladder, also raw/search 2,000 rows |
 | e2e catalogs, benef/search, 400 rows, 4-worker spawn pool | byte-identical, before and after the ladder port (the first attempt ran out of memory reading the catalog while a shadow ran alongside; rerun alone) |
 | e2e catalogs with the knapsack in Rust: benef/search 150 rows, benef/search 400 rows over 4 workers, raw/search 2,000 rows | byte-identical, the same hashes as every run above |
+| e2e catalogs with calc's own cargo calls in Rust too (item 5): benef/search 150 rows, benef/search 400 rows over 4 workers, raw/search 2,000 rows | byte-identical; whole Stage 4 runs 1.70x, 1.36x and 1.32x (one run each, so read them as levels, not as this change's share) |
 | guards: `=yes`, planted build, extension missing | each raises at import |
 
 **Speed**, `bench_rust.py`: the search only, Python and Rust alternating on
@@ -239,6 +249,7 @@ asteroid, the time did not move and no collection ran.
 |---|---|---|---|
 | ladder: remember `learning`, `calendar` and `mining_rel` ACROSS calls (`ProgrammeLadder`'s shared memo, keyed on Python's own cache equality; `memo=False` turns it off for measuring) | audited shadow (default, and reliability + WACC + learning), 0 mismatches; `planted_memo_defect` (one ulp on memo hits) caught by the rung self-check | benef/search 2.44% +/- 0.08%, rerun 2.13% +/- 0.07%; reliability + WACC + learning 5.81% +/- 0.07%; raw/search 1.45% +/- 0.17% | **kept** |
 | `payload_mix` formatted only for the winner (calc.py: `_format_payload_mix` in `evaluate_asteroid`), not for every candidate | e2e catalogs byte-identical in all three runs, Python legs included (the default path changed too) | 103,658 discarded strings at 6.2 us: 2.7% of benef/search; 0.07% raw | **kept** |
+| calc's Python-side `_capped_sale_value` and knapsack `_hold_refining` answered by `spacevalue_cargo_rs` (item 5 above) | shadow (benef/search 40, raw/search 60, reliability + WACC + learning 12), 0 mismatches; spacevalue's `planted_knapsack_defect` build caught (21,789 and 163 mismatching calls); e2e: see Measured | `_capped_sale_value` 3.42% +/- 0.02% of benef/search, 6.91% +/- 0.03% of raw/search; `_hold_refining` 1.70% benef, but 1.14% SLOWER on raw holds, hence knapsack holds only; `optimal_payload_mix` 0.07%, not routed | **kept** |
 | `Solver.viable(**kw)` for the pre-filter, skipping the 18-key result dict | 1,665,623 captured and fuzzed calls, 0 mismatches; plant caught | benef/search 0.17%; raw 1.59% +/- 0.12%; raw/search 1.33% +/- 0.05% | declined: under CLAUDE.md's ~2% bar everywhere |
 
 ## Build
@@ -263,6 +274,14 @@ The planted copies, which only the gate uses:
 
 es_core needs spacevalue checked out next to economicspace, on the branch
 `rust-cargo-prototype` (`Cargo.toml` reaches `../../../spacevalue/rust/cargo_core`).
+Rust mode also needs spacevalue's Python extension, built there:
+
+    export CARGO_TARGET_DIR="$HOME/.cargo-target/spacevalue_cargo"
+    cd ../spacevalue/rust/cargo_py
+    python -m maturin build --release -o dist
+    python -m pip install --force-reinstall --no-deps dist/spacevalue_cargo_rs-*.whl
+
+and its planted copy, for the gate, with `--features planted_knapsack_defect`.
 
 ## The gate (all of it must pass, and the plants must be caught)
 
@@ -273,6 +292,7 @@ es_core needs spacevalue checked out next to economicspace, on the branch
 | `verify_rust.py --expect-defect` | the `planted_defect` build is CAUGHT | that build installed |
 | `shadow_rust.py OUT ROWS ...` | every `_evaluate_combo_at_ratio` call, including each recursive repair, computed all-Python and all-Rust and compared recursively, bit for bit; loop and ladder share; the ladder in audit mode | a scratch output dir |
 | `shadow_rust.py --expect-defect` | the `planted_loop_defect`, `planted_ladder_defect`, `planted_memo_defect` and `planted_knapsack_defect` builds are each CAUGHT | that build installed |
+| `shadow_rust.py OUT ROWS ...` with spacevalue's planted `spacevalue_cargo_rs` installed | VERDICT FAIL, with mismatches (the shadow swaps calc's cargo calls per mode too) | that build installed |
 | `shadow_rust.py --set field=value ...` | the same, with a `CalcConfig` dial set for the run, to reach paths the defaults never take | |
 | `e2e_rust.py OUT ROWS WORKERS ...` | Stage 4 run Python, Rust, Python: `profitability_catalog.csv` byte-identical, in-process and through the pool | a scratch output dir |
 | `bench_rust.py OUT ROWS ...` | timing only, but every asteroid's two results are also compared | a scratch output dir |
@@ -295,8 +315,9 @@ Rust settled alone through Python and compares `total_cost` and `g` bit for
 bit, and the shadow fails on any self-check mismatch. Audit mode is for the
 gate only: it does the Python work it exists to skip.
 
-`calc.py` refuses to start with a planted build installed, and it refuses
-`ECONOMICSPACE_RUST=1` when es_core is missing. The shadow and the benchmark
+`calc.py` refuses to start with a planted build installed (either
+extension), and it refuses `ECONOMICSPACE_RUST=1` when es_core or
+`spacevalue_cargo_rs` is missing. The shadow and the benchmark
 build their Rust objects themselves rather than through that guard, so no
 bypass lives in calc.py.
 
@@ -318,6 +339,9 @@ bypass lives in calc.py.
   in `requirements.txt`, with a check holding the two together (as check 7
   holds the Python pins). Today it is a path into the sibling checkout, which
   only this machine has.
+- Ship `spacevalue_cargo_rs` with spacevalue (one wheel, or an extra) so
+  Rust mode does not need a second hand-built extension, and pin it with the
+  same tag.
 - Merge spacevalue's `rust-cargo-prototype` first, with CI building and
   testing the crate there (its `rust/README.md` lists what that needs).
 - Port further only with a measured case. A profile names candidates; an

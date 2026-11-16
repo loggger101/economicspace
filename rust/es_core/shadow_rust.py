@@ -112,7 +112,15 @@ RS_LOOP = calc._ES_LOOP
 assert RS_LOOP is not None
 ORIG = calc._evaluate_combo_at_ratio
 
-MODES = {"python": (PY_SOLVER, None, None), "rust": (RS_SOLVER, RS_LOOP, RS_LADDER)}
+# calc's Python-side cargo calls, routed to spacevalue's Rust crate in Rust
+# mode exactly as calc routes them (`_rust_cargo`), swapped per mode below.
+import spacevalue_cargo_rs   # noqa: E402
+PY_CARGO = (calc._capped_sale_value, calc._hold_refining)
+RS_CARGO = calc._rust_cargo(spacevalue_cargo_rs, calc._hold_refining)
+MODES = {"python": (PY_SOLVER, None, None) + PY_CARGO,
+         "rust": (RS_SOLVER, RS_LOOP, RS_LADDER) + RS_CARGO}
+SWAP = ("max_return_payload_kg", "_ES_LOOP", "_ES_LADDER",
+        "_capped_sale_value", "_hold_refining")
 current = ["rust"]          # the mode a top-level call (from evaluate_combo) is in
 stats = {"calls": 0, "mismatch": 0, "py_s": 0.0, "rs_s": 0.0}
 shown = []
@@ -155,15 +163,18 @@ def same(a, b, path="", diffs=None):
 
 
 def run_in(mode, a, kw):
-    saved = (current[0], calc.max_return_payload_kg, calc._ES_LOOP, calc._ES_LADDER)
+    saved = (current[0],) + tuple(getattr(calc, n) for n in SWAP)
     current[0] = mode
-    calc.max_return_payload_kg, calc._ES_LOOP, calc._ES_LADDER = MODES[mode]
+    for n, v in zip(SWAP, MODES[mode]):
+        setattr(calc, n, v)
     t0 = time.perf_counter()
     try:
         return ORIG(*a, **kw)
     finally:
         stats["py_s" if mode == "python" else "rs_s"] += time.perf_counter() - t0
-        current[0], calc.max_return_payload_kg, calc._ES_LOOP, calc._ES_LADDER = saved
+        current[0] = saved[0]
+        for n, v in zip(SWAP, saved[1:]):
+            setattr(calc, n, v)
 
 
 def shadow(*a, **kw):

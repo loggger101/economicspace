@@ -4773,6 +4773,37 @@ if os.environ.get("ECONOMICSPACE_RUST", "") not in ("", "0"):
     _ES_CORE = _es_core
 
 
+def _rust_cargo(rs, py_hold):
+    """(`_capped_sale_value`, `_hold_refining`) answered by spacevalue's Rust
+    cargo crate (`spacevalue_cargo_rs`, bit-identical, falling back to
+    spacevalue's Python on any input it cannot reproduce exactly).  Only a
+    knapsack hold goes to Rust: every other `_hold_refining` call is one
+    multiply in Python, cheaper than the crossing (measured per call)."""
+    rs_hold = rs._hold_refining
+
+    def hold_refining(refinery, phases, payload_kg, feed_kg, beneficiate,
+                      recovery):
+        """`_hold_refining`, in Rust for a knapsack hold only."""
+        fn = (rs_hold if refinery is not None and beneficiate and phases
+              else py_hold)
+        return fn(refinery, phases, payload_kg, feed_kg, beneficiate, recovery)
+    return rs._capped_sale_value, hold_refining
+
+
+if _ES_CORE is not None:
+    try:
+        import spacevalue_cargo_rs as _sv_cargo_rs
+    except ImportError as exc:
+        raise RuntimeError(
+            "ECONOMICSPACE_RUST=1 but spacevalue_cargo_rs is not installed "
+            "(build it: see rust/es_core/README.md)") from exc
+    if _sv_cargo_rs.planted_defect():
+        raise RuntimeError(
+            "spacevalue_cargo_rs was built with planted_knapsack_defect; "
+            "rebuild it without the feature")
+    _capped_sale_value, _hold_refining = _rust_cargo(_sv_cargo_rs, _hold_refining)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # OPERATIONAL-COSTS LOOKUP HELPER
 # ─────────────────────────────────────────────────────────────────────────────
