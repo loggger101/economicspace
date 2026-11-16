@@ -8182,6 +8182,9 @@ def _evaluate_combo_at_ratio(
             learning=lambda n: _learning_curve_cached(n, cost_prologue[10]),
             mining_rel=lambda n, f: _mining_reliability_cached(
                 n, p_first, rel_alpha, p_mature, f),
+            # what that lambda closes over, so Rust can remember its answers
+            # across ladders (pure function of these; see ladder.rs)
+            rel_alpha=rel_alpha, p_mature=p_mature,
             price=lambda n, f, w: _price_programme(n, f, w, full=False),
             refine=lambda f: _fleet_refinement_cached(f, fleet_ladder),
         )
@@ -8295,11 +8298,11 @@ def _evaluate_combo_at_ratio(
         # What the optimiser actually chose to load
         "payload_dominant_phase":   dominant_phase,
         "payload_dominant_frac":    dominant_frac,
-        "payload_mix":              (
-            "; ".join(f"{k} {v:,.0f}kg" for k, v in
-                      sorted(payload_mix.items(), key=lambda kv: -kv[1]))
-            if payload_mix else ""
-        ),
+        # The mix DICT, formatted into the column's text only for the winner,
+        # by `evaluate_asteroid` (`_format_payload_mix`): every losing
+        # candidate built and threw away a ~6 us string.  Nothing reads this
+        # key before then.
+        "payload_mix":              payload_mix,
         # True when the concentrate is at the purity ceiling, i.e. grade, not
         # processing capacity, is what limits the delivered value.  Compared
         # against the delivered figure itself (with a relative tolerance)
@@ -9447,6 +9450,19 @@ def _prefilter_probe(
     return seen, past_first, kept
 
 
+def _format_payload_mix(payload_mix: Dict[str, float]) -> str:
+    """The `payload_mix` column's text: phases by mass, heaviest first.
+
+    The expression `_evaluate_combo_at_ratio` used to build for every
+    candidate, moved here unchanged so only the winner pays for it.
+    """
+    return (
+        "; ".join(f"{k} {v:,.0f}kg" for k, v in
+                  sorted(payload_mix.items(), key=lambda kv: -kv[1]))
+        if payload_mix else ""
+    )
+
+
 def evaluate_asteroid(
     asteroid_row: Row,
     catalogs:     Dict[str, pd.DataFrame],
@@ -9734,6 +9750,12 @@ def evaluate_asteroid(
 
     if best is None:
         return None
+
+    # The winner's `payload_mix` becomes the column's text here, once, rather
+    # than in every candidate (see the key in `_evaluate_combo_at_ratio`).  A
+    # winner seen before (a shared object) is already text.
+    if isinstance(best.get("payload_mix"), dict):
+        best["payload_mix"] = _format_payload_mix(best["payload_mix"])
 
     # Tag with asteroid identifiers + carried-through fields
     best.update({

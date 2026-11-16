@@ -467,6 +467,7 @@ fn log_many(xs: Vec<f64>) -> Vec<f64> {
 fn planted_defect() -> bool {
     cfg!(feature = "planted_defect") || cfg!(feature = "planted_loop_defect")
         || cfg!(feature = "planted_ladder_defect")
+        || cfg!(feature = "planted_memo_defect")
         || cfg!(feature = "planted_knapsack_defect")
 }
 

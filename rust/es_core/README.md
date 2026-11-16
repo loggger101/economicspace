@@ -27,7 +27,12 @@ used by default. Nothing changes unless `ECONOMICSPACE_RUST=1` is set.
    survives the incumbent bound) is priced by calling Python's
    `_price_programme` itself, and Rust's own `total_cost` for that rung must
    equal Python's bit for bit, or the whole ladder falls back. Single-programme
-   searches (`single`) are not routed through it.
+   searches (`single`) are not routed through it. The memoised helpers'
+   answers are kept ACROSS ladders too (a shared memo in the
+   `ProgrammeLadder`): each is a pure function of its arguments, so the float
+   Python returned for a key is the answer for it. Keys are float bit
+   patterns, used only for non-zero, non-NaN exact floats, where bit equality
+   is Python's cache equality; anything else asks Python as before.
 4. **The knapsack inside the sizing loop** (`_hold_refining`, and
    `_cargo_water_kg`'s concentrating branch). This port lives in
    **spacevalue**, which owns the knapsack: its `rust/cargo_core` crate, on
@@ -193,8 +198,48 @@ beneficiated search. It is now ported (see the 1.80x row above).
 That profile pointed at the knapsack, which is now ported inside the sizing
 loop (see item 4 under "What it ports"). The knapsack calls still made from
 Python (the plant settle after the loop, repairs, and the capped rungs the
-ladder hands to `_price_programme`) still run the Python. Profile again
-before choosing the next port.
+ladder hands to `_price_programme`) still run the Python.
+
+**After the knapsack port** (same tools, same sample): the Rust ladder call
+~51% of search by section, the plant settle ~16%, the Rust loop call ~10%,
+the result dict `return {` ~6%, `selection_key` ~5%.
+
+## How to price a change (and how not to)
+
+Three measurements of the same change, the ladder memo below, gave 10.1%,
+0.8% and 2.3%. Only the last was right, and the way each went wrong is the
+lesson.
+
+- **The sampler, 10.1%.** It charged that much of beneficiated search to one
+  line, the ladder's `learning=` callback. Most of it was Rust's own ladder
+  time charged to the last Python frame Rust had called back into. A line
+  Rust calls back into reads high; the Rust dispatch line reads low.
+- **A whole-asteroid A/B, 0.8%.** Rust with the memo against Rust without,
+  alternating per asteroid. Per-asteroid timing noise on this host is
+  +/-2-5%: an A/A control (identical arms) "saved" 2.7% +/- 2.4%, and two
+  runs of the same A/B gave -5.1% and +4.7%. One run of it decides nothing.
+- **Per-call paired timing, 2.3%.** Each call of the thing that changed
+  (here `ProgrammeLadder.run`) is made twice on the same inputs, once per
+  arm, order alternating, results compared; the savings are summed against
+  the search time with the duplicates taken out. Over 41,649 ladders it
+  measured 2.44% +/- 0.08% and, rerun, 2.13% +/- 0.07%. This is the method.
+
+The same profile charged ~15% to the two lines that enter a repair
+(`return _evaluate_combo_at_ratio(...)` and `return
+_refit_to_plant_ceiling(...)`). `sys.monitoring` on the evaluator measured
+the frame itself: entering costs 2.8 us and tearing down 6.1 us per call
+(123,577 calls; a 220-local, 64-cell frame), together ~7-9% of Rust-mode
+search. That is real, and only a port of the evaluator itself removes it.
+Garbage collection is not it: with the collector off, alternating per
+asteroid, the time did not move and no collection ran.
+
+## Small changes, measured (2026-11-15, per-call paired timing)
+
+| change | gate | saving (share of Rust-mode search) | verdict |
+|---|---|---|---|
+| ladder: remember `learning`, `calendar` and `mining_rel` ACROSS calls (`ProgrammeLadder`'s shared memo, keyed on Python's own cache equality; `memo=False` turns it off for measuring) | audited shadow (default, and reliability + WACC + learning), 0 mismatches; `planted_memo_defect` (one ulp on memo hits) caught by the rung self-check | benef/search 2.44% +/- 0.08%, rerun 2.13% +/- 0.07%; reliability + WACC + learning 5.81% +/- 0.07%; raw/search 1.45% +/- 0.17% | **kept** |
+| `payload_mix` formatted only for the winner (calc.py: `_format_payload_mix` in `evaluate_asteroid`), not for every candidate | e2e catalogs byte-identical in all three runs, Python legs included (the default path changed too) | 103,658 discarded strings at 6.2 us: 2.7% of benef/search; 0.07% raw | **kept** |
+| `Solver.viable(**kw)` for the pre-filter, skipping the 18-key result dict | 1,665,623 captured and fuzzed calls, 0 mismatches; plant caught | benef/search 0.17%; raw 1.59% +/- 0.12%; raw/search 1.33% +/- 0.05% | declined: under CLAUDE.md's ~2% bar everywhere |
 
 ## Build
 
@@ -213,6 +258,7 @@ The planted copies, which only the gate uses:
     python -m maturin build --release --features planted_defect -o dist-plant
     python -m maturin build --release --features planted_loop_defect -o dist-plantloop
     python -m maturin build --release --features planted_ladder_defect -o dist-plantladder
+    python -m maturin build --release --features planted_memo_defect -o dist-plantmemo
     python -m maturin build --release --features planted_knapsack_defect -o dist-plantknap
 
 es_core needs spacevalue checked out next to economicspace, on the branch
@@ -226,7 +272,7 @@ es_core needs spacevalue checked out next to economicspace, on the branch
 | `verify_rust.py --capture *.pkl` | `exp` and `log` bitwise; solver replay; 300k hostile fuzz; fast-path share | the captures |
 | `verify_rust.py --expect-defect` | the `planted_defect` build is CAUGHT | that build installed |
 | `shadow_rust.py OUT ROWS ...` | every `_evaluate_combo_at_ratio` call, including each recursive repair, computed all-Python and all-Rust and compared recursively, bit for bit; loop and ladder share; the ladder in audit mode | a scratch output dir |
-| `shadow_rust.py --expect-defect` | the `planted_loop_defect`, `planted_ladder_defect` and `planted_knapsack_defect` builds are each CAUGHT | that build installed |
+| `shadow_rust.py --expect-defect` | the `planted_loop_defect`, `planted_ladder_defect`, `planted_memo_defect` and `planted_knapsack_defect` builds are each CAUGHT | that build installed |
 | `shadow_rust.py --set field=value ...` | the same, with a `CalcConfig` dial set for the run, to reach paths the defaults never take | |
 | `e2e_rust.py OUT ROWS WORKERS ...` | Stage 4 run Python, Rust, Python: `profitability_catalog.csv` byte-identical, in-process and through the pool | a scratch output dir |
 | `bench_rust.py OUT ROWS ...` | timing only, but every asteroid's two results are also compared | a scratch output dir |
@@ -274,8 +320,12 @@ bypass lives in calc.py.
   only this machine has.
 - Merge spacevalue's `rust-cargo-prototype` first, with CI building and
   testing the crate there (its `rust/README.md` lists what that needs).
-- Port further only after a new profile. Size it with `bench_rust.py`, not
-  cProfile.
+- Port further only with a measured case. A profile names candidates; an
+  A/B in one process (or a call count times a per-call saving) prices them.
+  Not cProfile, and not the sampler's share for a line Rust calls back into.
+  What is left is mostly the body of `_evaluate_combo_at_ratio` (plant
+  settle, cascade rebuild, final pricing, the result dict, repairs): a port
+  of the evaluator, not another piece of it.
 - The ladder's port of `_mission_cost_tail` is a second copy of a cost model
   that releases change. A calc release touching the tail, the prologue tuple's
   order or the rung bound must re-run the audited shadow, or the Rust ladder

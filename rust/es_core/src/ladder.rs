@@ -31,6 +31,52 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+use std::sync::Mutex;
+
+/// The ladder's helpers, remembered ACROSS calls (one `run` is one ladder).
+///
+/// `_learning_curve_cached(n, rate)`, `_calendar_multipliers_cached(m,
+/// cadence, wacc)` and `_mining_reliability_cached(n, p_first, alpha,
+/// p_mature, f)` are pure functions of their arguments (none reads the
+/// config), so the float Python returned for a key IS the answer for that
+/// key, and remembering it is bit-identical by construction.  Before this,
+/// the memo lived for one `run`, and every ladder asked Python again for
+/// every rung: about a tenth of beneficiated search, measured.
+///
+/// Keys hold the float arguments as BIT PATTERNS, which equals Python's
+/// `lru_cache` key equality only for non-zero, non-NaN floats (0.0 == -0.0
+/// and NaN != NaN in Python), so any other argument skips this memo and the
+/// callback answers as before.  An int argument skips it too (`1 == 1.0`
+/// shares a cache slot in Python).  Bounded: a full map is cleared, which only
+/// evicts.
+#[derive(Default)]
+struct SharedMemo {
+    lc: HashMap<(i64, u64), f64>,
+    cal: HashMap<(i64, u64, u64), (f64, f64)>,
+    pm: HashMap<(i64, i64, u64, u64, u64, u64), f64>,
+    hits: u64,
+}
+
+const SHARED_MEMO_MAX: usize = 1 << 16;
+
+/// The bits of `v` when it may key the shared memo, else None.
+fn memo_bits(v: &Bound<'_, PyAny>) -> Option<u64> {
+    let f = v.downcast_exact::<PyFloat>().ok()?.value();
+    if f == 0.0 || f.is_nan() {
+        return None;
+    }
+    Some(f.to_bits())
+}
+
+#[inline(always)]
+fn planted_hit(v: f64) -> f64 {
+    #[cfg(feature = "planted_memo_defect")]
+    {
+        return f64::from_bits(v.to_bits() ^ 1);
+    }
+    #[allow(unreachable_code)]
+    v
+}
 
 pub const KIND_FALLBACK: u8 = 0;
 pub const KIND_DONE: u8 = 2;
@@ -173,6 +219,12 @@ struct Cbs<'a, 'py> {
     cal_memo: HashMap<i64, (f64, f64)>,
     lc_memo: HashMap<i64, f64>,
     pm_memo: HashMap<(i64, i64), f64>,
+    /// The cross-call memo, when it could be taken, and this ladder's keys
+    /// into it: (rate), (cadence, wacc), (p_first, alpha, p_mature).
+    shared: Option<std::sync::MutexGuard<'a, SharedMemo>>,
+    lc_key: Option<u64>,
+    cal_key: Option<(u64, u64)>,
+    pm_key: Option<(u64, u64, u64)>,
 }
 
 type Step<T> = PyResult<Option<T>>;
@@ -182,27 +234,66 @@ impl<'a, 'py> Cbs<'a, 'py> {
         if let Some(v) = self.cal_memo.get(&m) {
             return Ok(Some(*v));
         }
+        let skey = self.cal_key.map(|(c, w)| (m, c, w));
+        if let (Some(k), Some(sh)) = (skey, self.shared.as_mut()) {
+            if let Some(&(a, b)) = sh.cal.get(&k) {
+                sh.hits += 1;
+                let v = (planted_hit(a), b);
+                self.cal_memo.insert(m, v);
+                return Ok(Some(v));
+            }
+        }
         let r = self.calendar.call1((m,))?;
         let Ok(t) = r.downcast_exact::<PyTuple>() else { return Ok(None) };
         if t.len() != 2 { return Ok(None); }
         let (Some(a), Some(b)) = (exact_f(&t.get_item(0)?), exact_f(&t.get_item(1)?)) else { return Ok(None) };
         self.cal_memo.insert(m, (a, b));
+        if let (Some(k), Some(sh)) = (skey, self.shared.as_mut()) {
+            if sh.cal.len() >= SHARED_MEMO_MAX { sh.cal.clear(); }
+            sh.cal.insert(k, (a, b));
+        }
         Ok(Some((a, b)))
     }
     fn learning(&mut self, n: i64) -> Step<f64> {
         if let Some(v) = self.lc_memo.get(&n) {
             return Ok(Some(*v));
         }
+        let skey = self.lc_key.map(|r| (n, r));
+        if let (Some(k), Some(sh)) = (skey, self.shared.as_mut()) {
+            if let Some(&v) = sh.lc.get(&k) {
+                sh.hits += 1;
+                let v = planted_hit(v);
+                self.lc_memo.insert(n, v);
+                return Ok(Some(v));
+            }
+        }
         let Some(v) = exact_f(&self.learning.call1((n,))?) else { return Ok(None) };
         self.lc_memo.insert(n, v);
+        if let (Some(k), Some(sh)) = (skey, self.shared.as_mut()) {
+            if sh.lc.len() >= SHARED_MEMO_MAX { sh.lc.clear(); }
+            sh.lc.insert(k, v);
+        }
         Ok(Some(v))
     }
     fn mining_rel(&mut self, n: i64, f: i64) -> Step<f64> {
         if let Some(v) = self.pm_memo.get(&(n, f)) {
             return Ok(Some(*v));
         }
+        let skey = self.pm_key.map(|(a, b, c)| (n, f, a, b, c, 0u64));
+        if let (Some(k), Some(sh)) = (skey, self.shared.as_mut()) {
+            if let Some(&v) = sh.pm.get(&k) {
+                sh.hits += 1;
+                let v = planted_hit(v);
+                self.pm_memo.insert((n, f), v);
+                return Ok(Some(v));
+            }
+        }
         let Some(v) = exact_f(&self.mining_rel.call1((n, f))?) else { return Ok(None) };
         self.pm_memo.insert((n, f), v);
+        if let (Some(k), Some(sh)) = (skey, self.shared.as_mut()) {
+            if sh.pm.len() >= SHARED_MEMO_MAX { sh.pm.clear(); }
+            sh.pm.insert(k, v);
+        }
         Ok(Some(v))
     }
     /// Python's `_price_programme(n, f, w, full=False)` -> (total_cost, g).
@@ -570,8 +661,11 @@ fn run_ladder(
 #[pyclass(frozen)]
 pub struct ProgrammeLadder {
     audit: bool,
+    /// The cross-call helper memo; off only to measure what it is worth.
+    use_memo: bool,
     fast: AtomicU64,
     slow: AtomicU64,
+    memo: Mutex<SharedMemo>,
     // [fast ladders, fallbacks, python-priced rungs, plain rungs, bound skips, self-check misses]
     stats: [AtomicU64; 6],
 }
@@ -579,12 +673,14 @@ pub struct ProgrammeLadder {
 #[pymethods]
 impl ProgrammeLadder {
     #[new]
-    #[pyo3(signature = (audit=false))]
-    fn new(audit: bool) -> Self {
+    #[pyo3(signature = (audit=false, memo=true))]
+    fn new(audit: bool, memo: bool) -> Self {
         ProgrammeLadder {
             audit,
+            use_memo: memo,
             fast: AtomicU64::new(0),
             slow: AtomicU64::new(0),
+            memo: Mutex::new(SharedMemo::default()),
             stats: Default::default(),
         }
     }
@@ -600,10 +696,13 @@ impl ProgrammeLadder {
             "n_floor", "market_pool", "calendar", "learning", "mining_rel", "price",
             "refine", "_unused",
         ];
+        // Optional: the reliability constants `mining_rel` closes over, which
+        // key the cross-call memo (absent: the per-call memo only).
+        const OPTIONAL: [&str; 2] = ["rel_alpha", "p_mature"];
         let mut got: HashMap<String, Bound<'py, PyAny>> = HashMap::new();
         for (k, v) in kw.iter() {
             let name = k.downcast_exact::<PyString>()?.to_cow()?.into_owned();
-            if !NAMES[..24].contains(&name.as_str()) {
+            if !NAMES[..24].contains(&name.as_str()) && !OPTIONAL.contains(&name.as_str()) {
                 return Err(PyTypeError::new_err(format!("ProgrammeLadder.run: unknown input {name:?}")));
             }
             got.insert(name, v);
@@ -664,6 +763,20 @@ impl ProgrammeLadder {
             market_pool,
             programmes,
         };
+        // The keys `calc.py`'s three lambdas pass besides the rung: prologue
+        // fields 10 (lc rate), 36 (cadence) and 31 (wacc), and the reliability
+        // constants.  Read as objects, so an int or a zero skips the memo.
+        let lc_key = memo_bits(&pt.get_item(10)?);
+        let cal_key = match (memo_bits(&pt.get_item(36)?), memo_bits(&pt.get_item(31)?)) {
+            (Some(c), Some(w)) => Some((c, w)),
+            _ => None,
+        };
+        let pm_key = match (memo_bits(&got["p_first"]),
+                            got.get("rel_alpha").and_then(|v| memo_bits(v)),
+                            got.get("p_mature").and_then(|v| memo_bits(v))) {
+            (Some(a), Some(b), Some(c)) => Some((a, b, c)),
+            _ => None,
+        };
         let mut cb = Cbs {
             calendar: &got["calendar"],
             learning: &got["learning"],
@@ -672,6 +785,12 @@ impl ProgrammeLadder {
             cal_memo: HashMap::new(),
             lc_memo: HashMap::new(),
             pm_memo: HashMap::new(),
+            // try_lock: a re-entrant call (a callback reaching another ladder)
+            // simply runs without the shared memo.
+            shared: if self.use_memo { self.memo.try_lock().ok() } else { None },
+            lc_key,
+            cal_key,
+            pm_key,
         };
         let mut stats = [0u64; 6];
         let res = run_ladder(&x, &pro, &mut cb, &got["refine"], &mut stats)?;
@@ -704,6 +823,9 @@ impl ProgrammeLadder {
     fn stats(&self) -> HashMap<&'static str, u64> {
         let names = ["fast", "fallback", "rungs_priced_by_python", "rungs_plain",
                      "rungs_bound_skipped", "selfcheck_mismatch"];
-        names.iter().zip(self.stats.iter()).map(|(n, v)| (*n, v.load(Relaxed))).collect()
+        let mut m: HashMap<&'static str, u64> =
+            names.iter().zip(self.stats.iter()).map(|(n, v)| (*n, v.load(Relaxed))).collect();
+        m.insert("memo_hits", self.memo.lock().map(|g| g.hits).unwrap_or(0));
+        m
     }
 }

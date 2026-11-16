@@ -27,6 +27,8 @@ planted_defect = []
 planted_loop_defect = []
 # ...and only in the programme ladder's cost tail (ladder.rs).
 planted_ladder_defect = []
+# ...and only on a hit in the ladder's cross-call helper memo (ladder.rs).
+planted_memo_defect = []
 # ...and only in spacevalue's knapsack crate (one ulp of every take).
 planted_knapsack_defect = ["spacevalue_cargo_core/planted_knapsack_defect"]
 
