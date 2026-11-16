@@ -354,6 +354,10 @@ struct State {
     trial_payload: Option<f64>,
     r_ret: Option<f64>,
     hold_water: Option<Option<f64>>,
+    // knapsack evaluations (hold or cargo water) this run answered in Rust,
+    // and those it called back into Python for; bookkeeping only
+    knap_native: u64,
+    knap_callback: u64,
 }
 
 impl State {
@@ -644,8 +648,14 @@ fn run_loop(
             || (bv("model_volatile_containment") && containment_per_kg > 0.0);
         let (trial_refine_wh, hold_water) = if bv("has_refinery") {
             match native {
-                Some(nv) => tryc!(nv.hold(trial_payload, trial_feed, beneficiate)),
-                None => tryc!(call_hold_refining(hold_cb, trial_payload, trial_feed)),
+                Some(nv) => {
+                    st.knap_native += 1;
+                    tryc!(nv.hold(trial_payload, trial_feed, beneficiate))
+                }
+                None => {
+                    st.knap_callback += 1;
+                    tryc!(call_hold_refining(hold_cb, trial_payload, trial_feed))
+                }
             }
         } else {
             (0.0, None)   // `_hold_refining(None, ...)` is (0.0, None)
@@ -663,8 +673,14 @@ fn run_loop(
                             0.0
                         } else {
                             match native {
-                                Some(nv) => tryc!(nv.water(trial_payload, trial_feed)),
-                                None => tryc!(call_cargo_water(water_cb, trial_payload, trial_feed)),
+                                Some(nv) => {
+                                    st.knap_native += 1;
+                                    tryc!(nv.water(trial_payload, trial_feed))
+                                }
+                                None => {
+                                    st.knap_callback += 1;
+                                    tryc!(call_cargo_water(water_cb, trial_payload, trial_feed))
+                                }
                             }
                         }
                     } else {
@@ -871,11 +887,6 @@ impl SizingLoop {
             PyTuple::new(py, [KIND_FALLBACK])
         };
         let Some((x, hold_cb, water_cb, native)) = read_inputs(kw)? else { return fallback(self) };
-        if native.is_some() {
-            self.knap_native.fetch_add(1, Relaxed);
-        } else {
-            self.knap_callback.fetch_add(1, Relaxed);
-        }
         let view = native.as_ref().map(NativeView::new);
         let mut st = State {
             power_system_kg: x.f[idx!("power_system_kg")],
@@ -901,12 +912,22 @@ impl SizingLoop {
             trial_payload: None,
             r_ret: None,
             hold_water: None,
+            knap_native: 0,
+            knap_callback: 0,
         };
         let exit = run_loop(self.g0, &x, &mut st, &hold_cb, &water_cb, view.as_ref())?;
+        // knapsack evaluations are counted only for runs Rust answers, so a
+        // run that falls back (and is redone in Python) counts for neither
+        let knap = (st.knap_native, st.knap_callback);
+        let count_knap = |s: &Self| {
+            s.knap_native.fetch_add(knap.0, Relaxed);
+            s.knap_callback.fetch_add(knap.1, Relaxed);
+        };
         let (kind, args) = match exit {
             Exit::Fallback => return fallback(self),
             Exit::Refuse => {
                 self.fast.fetch_add(1, Relaxed);
+                count_knap(self);
                 return PyTuple::new(py, [KIND_REFUSE]);
             }
             Exit::Done => (KIND_DONE, None),
@@ -945,6 +966,7 @@ impl SizingLoop {
             cascade, opt(st.trial_payload)?, opt(st.r_ret)?, hold_water,
         ])?;
         self.fast.fetch_add(1, Relaxed);
+        count_knap(self);
         match args {
             None => PyTuple::new(py, [kind.into_pyobject(py)?.into_any(), state.into_any()]),
             Some((a, b, c)) => PyTuple::new(py, [
@@ -959,7 +981,8 @@ impl SizingLoop {
         (self.fast.load(Relaxed), self.slow.load(Relaxed))
     }
 
-    /// (runs whose knapsack Rust answered, runs that called back into Python)
+    /// (knapsack evaluations answered in Rust, evaluations that called back
+    /// into Python), over the runs Rust answered, since construction.
     fn knapsack_counts(&self) -> (u64, u64) {
         (self.knap_native.load(Relaxed), self.knap_callback.load(Relaxed))
     }

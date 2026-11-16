@@ -4767,8 +4767,8 @@ if os.environ.get("ECONOMICSPACE_RUST", "") not in ("", "0"):
             "installed (build it: see rust/es_core/README.md)") from exc
     if _es_core.planted_defect():
         raise RuntimeError(
-            "es_core was built with the planted_defect feature; rebuild it "
-            "without --features planted_defect")
+            "es_core was built with a planted_* feature (a deliberate defect "
+            "for the gate); rebuild it without any planted_* feature")
     max_return_payload_kg = _es_core.Solver(max_return_payload_kg, G0_M_S2)
     _ES_CORE = _es_core
 
@@ -7016,6 +7016,9 @@ def _evaluate_combo_at_ratio(
             # instead of calling back; unreadable inputs keep the callbacks.
             cargo=(refinery, phases, config.beneficiation_recovery),
         )
+        if _rs[0] not in (0, 1, 2, 3, 4):
+            # a stale or mismatched build: never read an unknown answer
+            raise RuntimeError("es_core.SizingLoop returned kind %r" % (_rs[0],))
         if _rs[0] == 1:
             return None
         if _rs[0] != 0:
@@ -8219,6 +8222,9 @@ def _evaluate_combo_at_ratio(
             price=lambda n, f, w: _price_programme(n, f, w, full=False),
             refine=lambda f: _fleet_refinement_cached(f, fleet_ladder),
         )
+    if _rl is not None and _rl[0] not in (0, 2):
+        # a stale or mismatched build: never read an unknown answer
+        raise RuntimeError("es_core.ProgrammeLadder returned kind %r" % (_rl[0],))
     if _rl is not None and _rl[0] == 2:
         best_n, best_f, best_w, priced_count = _rl[1]
         best_priced = (None,)       # re-priced in full below, as always

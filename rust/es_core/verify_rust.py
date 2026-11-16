@@ -4,19 +4,21 @@
     python rust/es_core/verify_rust.py [--capture FILE.pkl ...] [--fuzz N]
     python rust/es_core/verify_rust.py --expect-defect ...
 
-Four checks, each of which must pass before ECONOMICSPACE_RUST=1 is trusted:
+Five checks, each of which must pass before ECONOMICSPACE_RUST=1 is trusted:
 
   1. exp     `f64::exp` (what the Rust solver calls) against `math.exp` on
              every exponent the captured calls produce, a dense sweep of the
              model's range, and the overflow edge.  Bitwise.
-  2. replay  every captured real call (capture.py's pickles) through both
+  2. log     `f64::ln` against `math.log`, the same way.
+  3. replay  every captured real call (capture.py's pickles) through both
              solvers: same keys in the same order, same value TYPES, floats
              equal as bit patterns.
-  3. fuzz    random and hostile arguments (inf, nan, -0.0, subnormals, ints
+  4. fuzz    random and hostile arguments (inf, nan, -0.0, subnormals, ints
              past 2**53, numpy scalars, bools, None, missing keywords): same
              result or the same exception type and message.
-  4. counts  the fast path really ran (a gate that only exercised the
-             Python fallback would prove nothing).
+  5. counts  the fast path really ran ON THE REPLAY, counted over the replay
+             alone (the fuzz is mostly hostile calls and would dilute it; a
+             replay answered by the fallback compares the Python with itself).
 
 `--expect-defect` inverts the verdict for a build made with
 `--features planted_defect` (a one-ulp error in one output): it exits 0 only
@@ -233,13 +235,18 @@ def main() -> int:
     fails = {}
     fails["exp"] = check_exp(records)
     fails["log"] = check_log()
+    c0 = RS.counts()
     fails["replay"] = check_replay(records)
+    c1 = RS.counts()
     fails["fuzz"] = check_fuzz(a.fuzz)
-    fast, slow = RS.counts()
+    c2 = RS.counts()
+    fast, slow = c1[0] - c0[0], c1[1] - c0[1]
     share = fast / max(1, fast + slow)
     ok_counts = fast > 0 and share > 0.5
-    print("  counts  %s  fast path %d, Python fallback %d (%.1f%% fast)"
-          % ("PASS" if ok_counts else "FAIL", fast, slow, 100 * share))
+    print("  counts  %s  replay: fast path %d, Python fallback %d (%.1f%% fast);"
+          " fuzz: fast %d, fallback %d (not gated)"
+          % ("PASS" if ok_counts else "FAIL", fast, slow, 100 * share,
+             c2[0] - c1[0], c2[1] - c1[1]))
     fails["counts"] = 0 if ok_counts else 1
 
     # Not a gate: the per-call cost of each solver on the captured calls,

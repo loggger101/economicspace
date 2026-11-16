@@ -94,7 +94,7 @@ Anything the Rust path cannot be sure of goes back to Python untouched:
   holding NaN by object identity first;
 - for the ladder, a self-check mismatch on any rung Python priced.
 
-## Measured (2026-11-15, this host, calc 1.46.0)
+## Measured (2026-11-15 and 2026-11-16, this host, calc 1.46.0)
 
 | check | result |
 |---|---|
@@ -140,10 +140,10 @@ every asteroid in one process, with every result also compared:
 | cislunar raw, no search, 300 rows | + knapsack | 21.8 ms/asteroid | 13.8 ms/asteroid | 1.57x |
 | cislunar benef/search, 60 rows | + knapsack | 335.6 ms/asteroid | 157.3 ms/asteroid | 2.13x |
 
-The two pairs of rows were taken in different sessions and the machine was
-busier for the second: compare the speed-up within a row, never a Python
+The pairs of rows were taken in different sessions and the machine was
+busier for the later ones: compare the speed-up within a row, never a Python
 column across rows. A raw run without search never builds a ladder (one
-programme), so its second row measures the solver and loop again. Whole
+programme), so its later rows measure the solver and loop again. Whole
 Stage 4 runs (`e2e_rust.py`, loading included) gained 1.31x on
 benef/search 150 rows, 1.27x on benef/search 400 rows over 4 workers, and
 1.21x on raw/search 2,000 rows. With the knapsack: 1.36x, 1.55x and 1.22x.
@@ -151,13 +151,15 @@ A raw hold never runs the knapsack, so raw gains nothing from it.
 
 The solver alone gave no measurable gain per run, because at about 1.3 us a
 call the Python boundary costs more than the arithmetic. The loop crosses
-once per candidate and pays. What remains is the Python around the loop
-(programme pricing, the knapsack, mission cost) and in `evaluate_combo`.
+once per candidate and pays. What Python is left after the later ports is
+in the last profile under "Where the time goes now".
 
 **Do not size the next port from cProfile.** It charged the loop's callees
 about 70 s of 116 s. The interleaved benchmark says the loop and solver
 together were worth much less: per-call profiling inflates functions called
-millions of times. Measure with `bench_rust.py`.
+millions of times. Size a port with `bench_rust.py` (whole asteroids,
+interleaved) and a small change with per-call paired timing (see "How to
+price a change").
 
 ## Where the time goes now (2026-11-15, Rust mode, cislunar)
 
@@ -206,13 +208,26 @@ beneficiated search. It is now ported (see the 1.80x row above).
 | repairs, `_refit_to_plant_ceiling` | ~28% inclusive |
 
 That profile pointed at the knapsack, which is now ported inside the sizing
-loop (see item 4 under "What it ports"). The knapsack calls still made from
+loop (see item 4 under "What it ports"). The knapsack calls calc makes from
 Python (the plant settle after the loop, repairs, and the capped rungs the
-ladder hands to `_price_programme`) still run the Python.
+ladder hands to `_price_programme`) were then routed to Rust too (item 5).
 
 **After the knapsack port** (same tools, same sample): the Rust ladder call
 ~51% of search by section, the plant settle ~16%, the Rust loop call ~10%,
 the result dict `return {` ~6%, `selection_key` ~5%.
+
+**After calc's own cargo calls went to Rust** (item 5; 2026-11-16, same
+tools; benef/search 60 rows and raw/search 400 rows). By section of
+`_evaluate_combo_at_ratio`: the Rust ladder call ~35% benef and ~29% raw,
+the plant settle ~16% and ~10%, the Rust loop call ~12% and ~8%. What the
+ladder still hands to Python is the capped rungs it prices through the
+`price=` callback: `_price_programme` and its `_mission_cost_tail` are
+~4% of benef search and ~3% of raw, ~7% and ~5% if the callback line's own
+share is counted too (part of that is Rust's time charged to the line, see
+below). On raw cells the pre-filter and combo bound are the largest Python
+cost left: `_closes_carrying_its_own_stage`, `_pass1_cascade` and
+`_combo_key_bound` are ~18% of search by self time. Both are listed under
+"Open candidates" below.
 
 ## How to price a change (and how not to)
 
@@ -233,6 +248,9 @@ lesson.
   arm, order alternating, results compared; the savings are summed against
   the search time with the duplicates taken out. Over 41,649 ladders it
   measured 2.44% +/- 0.08% and, rerun, 2.13% +/- 0.07%. This is the method.
+The paired-timing harnesses used here were one-off scripts and are not
+committed: write one per change (it wraps the changed call, runs both arms on
+the same arguments, and fails on any differing result).
 
 The same profile charged ~15% to the two lines that enter a repair
 (`return _evaluate_combo_at_ratio(...)` and `return
@@ -250,7 +268,28 @@ asteroid, the time did not move and no collection ran.
 | ladder: remember `learning`, `calendar` and `mining_rel` ACROSS calls (`ProgrammeLadder`'s shared memo, keyed on Python's own cache equality; `memo=False` turns it off for measuring) | audited shadow (default, and reliability + WACC + learning), 0 mismatches; `planted_memo_defect` (one ulp on memo hits) caught by the rung self-check | benef/search 2.44% +/- 0.08%, rerun 2.13% +/- 0.07%; reliability + WACC + learning 5.81% +/- 0.07%; raw/search 1.45% +/- 0.17% | **kept** |
 | `payload_mix` formatted only for the winner (calc.py: `_format_payload_mix` in `evaluate_asteroid`), not for every candidate | e2e catalogs byte-identical in all three runs, Python legs included (the default path changed too) | 103,658 discarded strings at 6.2 us: 2.7% of benef/search; 0.07% raw | **kept** |
 | calc's Python-side `_capped_sale_value` and knapsack `_hold_refining` answered by `spacevalue_cargo_rs` (item 5 above) | shadow (benef/search 40, raw/search 60, reliability + WACC + learning 12), 0 mismatches; spacevalue's `planted_knapsack_defect` build caught (21,789 and 163 mismatching calls); e2e: see Measured | `_capped_sale_value` 3.42% +/- 0.02% of benef/search, 6.91% +/- 0.03% of raw/search; `_hold_refining` 1.70% benef, but 1.14% SLOWER on raw holds, hence knapsack holds only; `optimal_payload_mix` 0.07%, not routed | **kept** |
-| `Solver.viable(**kw)` for the pre-filter, skipping the 18-key result dict | 1,665,623 captured and fuzzed calls, 0 mismatches; plant caught | benef/search 0.17%; raw 1.59% +/- 0.12%; raw/search 1.33% +/- 0.05% | declined: under CLAUDE.md's ~2% bar everywhere |
+| `Solver.viable(**kw)` for the pre-filter, skipping the 18-key result dict (built, measured, then removed) | 1,665,623 calls (1,565,623 captured + 100,000 fuzzed), 0 mismatches; plant caught | benef/search 0.17%; raw 1.59% +/- 0.12%; raw/search 1.33% +/- 0.05% | declined: under CLAUDE.md's ~2% bar everywhere |
+| remembering a combo's ratio solves inside `evaluate_combo` (the same ratio solved twice) | counted, not built | 6 repeats in 48,241 solves (0.01%) | declined: there is almost nothing to remember |
+| sharing pass 1, the EP stage floor and the second solve between the pre-filter (`_closes_carrying_its_own_stage`) and the combo bound (`_combo_key_bound`) | not built | sampler estimate ~0.5% of benef/search, ~1.5-3% of raw (not measured per call) | declined as an easy win: under the bar on the expensive cells, and it changes what the bound's admissibility proof reads (CLAUDE.md: a change to pass 1's inputs re-proves the bound) |
+
+### Open candidates (sized by the sampler only, not built)
+
+Each is above the ~2% bar on the sampler's figure, and each is a real port
+rather than an easy win. Measure one per call (the method above) before
+starting it.
+
+- **Price the ladder's capped rungs in `ladder.rs`.** The capacity branch of
+  `_price_programme` (window or wave clock, `_capped_sale_value`, the
+  reshaped knapsack with caps) and `_mission_cost_tail`, using
+  `spacevalue_cargo_core`, which es_core already links, rather than calling
+  back through Python. ~4% of benef search and ~3% of raw, at most ~7% and
+  ~5%. It touches the rung
+  ceiling's proof: check 8 audits every capped sale, and a change to the
+  capacity branch re-proves `_rung_gross_ceiling`.
+- **Port the raw pre-filter and combo bound** (`_closes_carrying_its_own_stage`,
+  `_pass1_cascade`, `_combo_key_bound`): ~18% of raw search, ~3% of benef.
+  The bound is admissible by a term-by-term proof, and `verify.py` check 8
+  must catch a planted floor on the Rust bound before it can be trusted.
 
 ## Build
 
@@ -277,7 +316,7 @@ es_core needs spacevalue checked out next to economicspace, on the branch
 Rust mode also needs spacevalue's Python extension, built there:
 
     export CARGO_TARGET_DIR="$HOME/.cargo-target/spacevalue_cargo"
-    cd ../spacevalue/rust/cargo_py
+    cd ../../../spacevalue/rust/cargo_py     # from rust/es_core
     python -m maturin build --release -o dist
     python -m pip install --force-reinstall --no-deps dist/spacevalue_cargo_rs-*.whl
 
@@ -288,13 +327,13 @@ and its planted copy, for the gate, with `--features planted_knapsack_defect`.
 | tool | checks | needs |
 |---|---|---|
 | `capture.py` | records every real solver call in a sample run | Stage 1-3 outputs in a scratch dir |
-| `verify_rust.py --capture *.pkl` | `exp` and `log` bitwise; solver replay; 300k hostile fuzz; fast-path share | the captures |
+| `verify_rust.py --capture *.pkl` | `exp` and `log` bitwise; solver replay; 300k hostile fuzz; fast-path share of the replay alone | the captures |
 | `verify_rust.py --expect-defect` | the `planted_defect` build is CAUGHT | that build installed |
-| `shadow_rust.py OUT ROWS ...` | every `_evaluate_combo_at_ratio` call, including each recursive repair, computed all-Python and all-Rust and compared recursively, bit for bit; loop and ladder share; the ladder in audit mode | a scratch output dir |
-| `shadow_rust.py --expect-defect` | the `planted_loop_defect`, `planted_ladder_defect`, `planted_memo_defect` and `planted_knapsack_defect` builds are each CAUGHT | that build installed |
+| `shadow_rust.py OUT ROWS ...` | every `_evaluate_combo_at_ratio` call, including each recursive repair, computed all-Python and all-Rust and compared recursively, bit for bit; every solver call outside it (pre-filter, combo bound) answered by both solvers and compared; the ladder in audit mode; the Rust share of each path that ran (loop, ladder, in-loop knapsack evaluations, calc's cargo calls) | a scratch output dir |
+| `shadow_rust.py --expect-defect` | the `planted_defect`, `planted_loop_defect`, `planted_ladder_defect`, `planted_memo_defect` and `planted_knapsack_defect` builds are each CAUGHT | that build installed |
 | `shadow_rust.py OUT ROWS ...` with spacevalue's planted `spacevalue_cargo_rs` installed | VERDICT FAIL, with mismatches (the shadow swaps calc's cargo calls per mode too) | that build installed |
 | `shadow_rust.py --set field=value ...` | the same, with a `CalcConfig` dial set for the run, to reach paths the defaults never take | |
-| `e2e_rust.py OUT ROWS WORKERS ...` | Stage 4 run Python, Rust, Python: `profitability_catalog.csv` byte-identical, in-process and through the pool | a scratch output dir |
+| `e2e_rust.py OUT ROWS WORKERS ...` | Stage 4 run Python, Rust, Python: `profitability_catalog.csv` byte-identical, in-process and through the pool; the catalog is deleted before each run and a run that writes none fails | a scratch output dir |
 | `bench_rust.py OUT ROWS ...` | timing only, but every asteroid's two results are also compared | a scratch output dir |
 | `sample_profile.py [--rust] OUT ROWS STACKS.txt ...`, then `analyse_profile.py STACKS.txt` | where search time goes; sizes the next port | a scratch output dir |
 
@@ -303,7 +342,12 @@ both.** The shadow compares final results, and it MISSED the solver plant:
 that one-ulp error lands on the in-loop cascade's `m_tank_outbound`, which
 the settle-up after the loop recomputes, so it never reaches a result. The
 solver replay compares the solver's own output and catches it. A field a
-later stage overwrites is invisible to an end-to-end check.
+later stage overwrites is invisible to an end-to-end check. (Since the
+review of 2026-11-16 the shadow also compares every solver call made
+outside the evaluator, by the pre-filter and the combo bound, where the
+solver's whole output is read; it now catches this plant too, 38,298 of
+63,039 such calls on benef/search 40 rows. The replay stays the gate that
+compares every field.)
 
 **The ladder plant taught the same lesson a third time.** It flips one ulp of
 a rung's `total_cost`. The result comparison missed it: a one-ulp drift
@@ -315,9 +359,8 @@ Rust settled alone through Python and compares `total_cost` and `g` bit for
 bit, and the shadow fails on any self-check mismatch. Audit mode is for the
 gate only: it does the Python work it exists to skip.
 
-`calc.py` refuses to start with a planted build installed (either
-extension), and it refuses `ECONOMICSPACE_RUST=1` when es_core or
-`spacevalue_cargo_rs` is missing. The shadow and the benchmark
+With `ECONOMICSPACE_RUST=1`, `calc.py` refuses to start when either
+extension is a planted build or is missing (unset, it imports neither). The shadow and the benchmark
 build their Rust objects themselves rather than through that guard, so no
 bypass lives in calc.py.
 
@@ -350,6 +393,25 @@ bypass lives in calc.py.
   What is left is mostly the body of `_evaluate_combo_at_ratio` (plant
   settle, cascade rebuild, final pricing, the result dict, repairs): a port
   of the evaluator, not another piece of it.
+- Report fallbacks from production runs. With `ECONOMICSPACE_RUST=1` no
+  counter (Solver, SizingLoop, ProgrammeLadder, `spacevalue_cargo_rs`) is
+  printed, and a worker's counters die with the pool, so a run that fell back
+  on every call would still read as a Rust run. The ladder's self-check also
+  turns a mismatch into a quiet, counted fallback that only the shadow reads.
+  Print each counter at the end of Stage 4 (summed over workers), and treat a
+  self-check mismatch outside the gate as an error.
+- `verify.py` check 8 (the combo and rung bounds) wraps `_mission_cost_tail`,
+  which the Rust ladder bypasses for the rungs it prices itself; under
+  `ECONOMICSPACE_RUST=1` it now refuses (NOT VERIFIED) rather than audit a
+  subset. Before Rust mode is a release path, the ladder needs its own hook
+  for that audit.
+- Two edges a later change could make real (review of 2026-11-16, neither
+  reachable today): calc's `_rust_cargo` wrapper tests `phases` for truth
+  before `_hold_refining` would have returned on `payload_kg <= 0`, so a
+  numpy-array `phases` would raise where Python returns (calc passes a list);
+  and the ladder's shared memo answers `learning`, `calendar` and
+  `mining_rel` without calling back, so a harness that monkeypatched one of
+  those cached functions mid-process would get stale answers (none does).
 - The ladder's port of `_mission_cost_tail` is a second copy of a cost model
   that releases change. A calc release touching the tail, the prologue tuple's
   order or the rung bound must re-run the audited shadow, or the Rust ladder

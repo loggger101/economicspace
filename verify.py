@@ -871,6 +871,13 @@ def check_bound(m, names: List[str]) -> bool:
     capped, or never breaks a ceiling `_PLANTED_FLOOR` times too low, fails.
     """
     calc = sys.modules["modules.calc"]
+    if getattr(calc, "_ES_LADDER", None) is not None:
+        # The Rust ladder (ECONOMICSPACE_RUST=1, prototype) prices most rungs'
+        # tails itself, past the `_mission_cost_tail` wrapper below, so this
+        # check would audit a subset and still print green.  Refuse instead.
+        print("\n*** NOT VERIFIED: check 8 cannot see the rungs the Rust ladder "
+              "prices; run it with ECONOMICSPACE_RUST unset.")
+        return False
     orig_ec = calc.evaluate_combo
     orig_tail = calc._mission_cost_tail
     orig_solve = calc._evaluate_combo_at_ratio

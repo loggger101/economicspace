@@ -33,6 +33,12 @@ def run(out_dir, rows, workers, flags, rust):
     cmd = [sys.executable, "-X", "utf8", os.path.join(REPO, "run_pipeline.py"),
            "--stages", "4", "--rows", rows, "--workers", workers,
            "--output", out_dir] + flags
+    src = os.path.join(out_dir, "profitability_catalog.csv")
+    # Stage 4 can exit 0 without writing (no viable evaluation, an empty
+    # frame), which would leave the previous run's file to be hashed as this
+    # one's: remove it first, and require that this run wrote a new one.
+    if os.path.exists(src):
+        os.remove(src)
     t0 = time.perf_counter()
     p = subprocess.run(cmd, cwd=REPO, env=env, stdin=subprocess.DEVNULL,
                        capture_output=True, text=True, encoding="utf-8")
@@ -40,7 +46,9 @@ def run(out_dir, rows, workers, flags, rust):
     if p.returncode != 0:
         print(p.stdout[-3000:], p.stderr[-3000:])
         raise SystemExit("run failed (rust=%s)" % rust)
-    src = os.path.join(out_dir, "profitability_catalog.csv")
+    if not os.path.exists(src) or os.path.getsize(src) == 0:
+        print(p.stdout[-3000:], p.stderr[-3000:])
+        raise SystemExit("run exited 0 but wrote no %s (rust=%s)" % (src, rust))
     dst = os.path.join(out_dir, "e2e_%s_%d.csv" % ("rust" if rust else "py", int(t0)))
     shutil.copyfile(src, dst)
     with open(dst, "rb") as fh:
