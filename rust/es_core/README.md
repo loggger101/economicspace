@@ -28,6 +28,15 @@ used by default. Nothing changes unless `ECONOMICSPACE_RUST=1` is set.
    `_price_programme` itself, and Rust's own `total_cost` for that rung must
    equal Python's bit for bit, or the whole ladder falls back. Single-programme
    searches (`single`) are not routed through it.
+4. **The knapsack inside the sizing loop** (`_hold_refining`, and
+   `_cargo_water_kg`'s concentrating branch). This port lives in
+   **spacevalue**, which owns the knapsack: its `rust/cargo_core` crate, on
+   spacevalue's branch `rust-cargo-prototype`, held there to the golden
+   fixture and a fuzz against the Python by `tests/test_cargo_rust.py`.
+   es_core links that crate directly, so the loop no longer calls back into
+   Python for it. calc.py passes `cargo=(refinery, phases, recovery)`, the
+   same three objects its two callbacks close over; if they do not read
+   exactly, the callbacks still answer.
 
 The loop can end five ways, and calc.py takes each exactly as the Python
 loop would:
@@ -93,9 +102,15 @@ Anything the Rust path cannot be sure of goes back to Python untouched:
 | ladder, audited shadow, raw/search, 60 rows | 21,152 calls, 0 mismatches, 0 self-check mismatches |
 | ladder, audited shadow, `selection_objective='profit'`, 12 rows | 129,285 calls, 0 mismatches, 0 self-check mismatches |
 | ladder plant (one ulp in a rung's `total_cost`) | caught by the self-check (17,471 rungs), not by the result comparison |
+| knapsack in the loop, shadow, benef/search, 40 rows | 238,570 calls, 0 mismatches; the knapsack answered in Rust in 100% of sizing loops |
+| knapsack in the loop, shadow, raw/search, 60 rows | 21,152 calls, 0 mismatches |
+| knapsack in the loop, shadow, `model_refinery=False`, 12 rows | 72,761 calls, 0 mismatches |
+| knapsack in the loop, shadow, `model_detailed_phases=False`, 12 rows | 64,257 calls, 0 mismatches |
+| knapsack plant (`planted_knapsack_defect`, spacevalue's feature: one ulp in every take) | caught by the shadow (1,990 mismatches) |
 | e2e catalogs, benef/search, 150 rows, 1 worker | byte-identical (Python/Rust/Python), before and after the ladder port |
 | e2e catalogs, raw, 2,000 rows, 1 worker | byte-identical; with the ladder, also raw/search 2,000 rows |
 | e2e catalogs, benef/search, 400 rows, 4-worker spawn pool | byte-identical, before and after the ladder port (the first attempt ran out of memory reading the catalog while a shadow ran alongside; rerun alone) |
+| e2e catalogs with the knapsack in Rust: benef/search 150 rows, benef/search 400 rows over 4 workers, raw/search 2,000 rows | byte-identical, the same hashes as every run above |
 | guards: `=yes`, planted build, extension missing | each raises at import |
 
 **Speed**, `bench_rust.py`: the search only, Python and Rust alternating on
@@ -107,6 +122,8 @@ every asteroid in one process, with every result also compared:
 | cislunar benef/search, 60 rows | solver + loop | 289.8 ms/asteroid | 215.1 ms/asteroid | 1.35x |
 | cislunar raw, no search, 300 rows | + ladder | 41.0 ms/asteroid | 25.2 ms/asteroid | 1.63x |
 | cislunar benef/search, 60 rows | + ladder | 575.5 ms/asteroid | 319.5 ms/asteroid | 1.80x |
+| cislunar raw, no search, 300 rows | + knapsack | 21.8 ms/asteroid | 13.8 ms/asteroid | 1.57x |
+| cislunar benef/search, 60 rows | + knapsack | 335.6 ms/asteroid | 157.3 ms/asteroid | 2.13x |
 
 The two pairs of rows were taken in different sessions and the machine was
 busier for the second: compare the speed-up within a row, never a Python
@@ -114,7 +131,8 @@ column across rows. A raw run without search never builds a ladder (one
 programme), so its second row measures the solver and loop again. Whole
 Stage 4 runs (`e2e_rust.py`, loading included) gained 1.31x on
 benef/search 150 rows, 1.27x on benef/search 400 rows over 4 workers, and
-1.21x on raw/search 2,000 rows.
+1.21x on raw/search 2,000 rows. With the knapsack: 1.36x, 1.55x and 1.22x.
+A raw hold never runs the knapsack, so raw gains nothing from it.
 
 The solver alone gave no measurable gain per run, because at about 1.3 us a
 call the Python boundary costs more than the arithmetic. The loop crosses
@@ -172,12 +190,11 @@ beneficiated search. It is now ported (see the 1.80x row above).
 | the knapsack across all of the above: `_hold_refining` (22% inclusive), `optimal_payload_mix` (16%) | the largest Python cost left |
 | repairs, `_refit_to_plant_ceiling` | ~28% inclusive |
 
-**The next port would be the knapsack** (`spacevalue.cargo`:
-`optimal_payload_mix`, `_hold_refining`, `_capped_sale_value`). Most of the
-remaining Rust-mode time is Python called back from the two Rust objects,
-and most of that is the knapsack. It lives in another repository, so a Rust
-copy is a second implementation that must stay in step with spacevalue
-(its `test_cargo_golden.py` would have to run against both).
+That profile pointed at the knapsack, which is now ported inside the sizing
+loop (see item 4 under "What it ports"). The knapsack calls still made from
+Python (the plant settle after the loop, repairs, and the capped rungs the
+ladder hands to `_price_programme`) still run the Python. Profile again
+before choosing the next port.
 
 ## Build
 
@@ -196,6 +213,10 @@ The planted copies, which only the gate uses:
     python -m maturin build --release --features planted_defect -o dist-plant
     python -m maturin build --release --features planted_loop_defect -o dist-plantloop
     python -m maturin build --release --features planted_ladder_defect -o dist-plantladder
+    python -m maturin build --release --features planted_knapsack_defect -o dist-plantknap
+
+es_core needs spacevalue checked out next to economicspace, on the branch
+`rust-cargo-prototype` (`Cargo.toml` reaches `../../../spacevalue/rust/cargo_core`).
 
 ## The gate (all of it must pass, and the plants must be caught)
 
@@ -205,7 +226,7 @@ The planted copies, which only the gate uses:
 | `verify_rust.py --capture *.pkl` | `exp` and `log` bitwise; solver replay; 300k hostile fuzz; fast-path share | the captures |
 | `verify_rust.py --expect-defect` | the `planted_defect` build is CAUGHT | that build installed |
 | `shadow_rust.py OUT ROWS ...` | every `_evaluate_combo_at_ratio` call, including each recursive repair, computed all-Python and all-Rust and compared recursively, bit for bit; loop and ladder share; the ladder in audit mode | a scratch output dir |
-| `shadow_rust.py --expect-defect` | the `planted_loop_defect` and `planted_ladder_defect` builds are each CAUGHT | that build installed |
+| `shadow_rust.py --expect-defect` | the `planted_loop_defect`, `planted_ladder_defect` and `planted_knapsack_defect` builds are each CAUGHT | that build installed |
 | `shadow_rust.py --set field=value ...` | the same, with a `CalcConfig` dial set for the run, to reach paths the defaults never take | |
 | `e2e_rust.py OUT ROWS WORKERS ...` | Stage 4 run Python, Rust, Python: `profitability_catalog.csv` byte-identical, in-process and through the pool | a scratch output dir |
 | `bench_rust.py OUT ROWS ...` | timing only, but every asteroid's two results are also compared | a scratch output dir |
@@ -247,9 +268,14 @@ bypass lives in calc.py.
   installed (`_runtime.install()`, the requirements files).
 - Run one full campaign cell with `ECONOMICSPACE_RUST=1` and compare its hash
   with the archived cell.
-- Port further. Next would be the knapsack (`spacevalue.cargo`, another
-  repository, so a second copy that must stay in step). Size it with
-  `bench_rust.py`, not cProfile.
+- Pin `spacevalue_cargo_core` by git tag, the same tag as the spacevalue pin
+  in `requirements.txt`, with a check holding the two together (as check 7
+  holds the Python pins). Today it is a path into the sibling checkout, which
+  only this machine has.
+- Merge spacevalue's `rust-cargo-prototype` first, with CI building and
+  testing the crate there (its `rust/README.md` lists what that needs).
+- Port further only after a new profile. Size it with `bench_rust.py`, not
+  cProfile.
 - The ladder's port of `_mission_cost_tail` is a second copy of a cost model
   that releases change. A calc release touching the tail, the prologue tuple's
   order or the rung bound must re-run the audited shadow, or the Rust ladder

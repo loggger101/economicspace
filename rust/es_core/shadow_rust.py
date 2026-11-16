@@ -79,6 +79,9 @@ class CountingLoop:
     def counts(self):
         return _LOOP.counts()
 
+    def knapsack_counts(self):
+        return _LOOP.knapsack_counts()
+
 
 calc._ES_LOOP = CountingLoop()
 
@@ -198,6 +201,10 @@ for d in shown:
 print("LOOP    answered in Rust %d, handed to Python %d (%.1f%% Rust)" % (fast, slow, 100 * share))
 print("PATHS   " + ", ".join("%s %d" % kv for kv in coverage.items()))
 print("LADDER  " + ", ".join("%s %d" % kv for kv in sorted(RS_LADDER.stats().items())))
+knative, kcall = RS_LOOP.knapsack_counts()
+kshare = knative / max(1, knative + kcall)
+print("KNAP    sizing loops with the knapsack in Rust %d, calling back %d (%.1f%% Rust)"
+      % (knative, kcall, 100 * kshare))
 unexercised = [k for k, v in coverage.items() if v == 0 and k != "fallback"]
 print("UNEXERCISED by this sample: " + (", ".join(unexercised) or "none"))
 print("TIME    in python-mode calls %.1f s, in rust-mode calls %.1f s (inclusive, nested calls counted in both)"
@@ -210,6 +217,6 @@ lst = RS_LADDER.stats()
 ladder_share = lst["fast"] / max(1, lst["fast"] + lst["fallback"])
 print("LADDER  %.1f%% of ladders in Rust; self-check mismatches %d" % (100 * ladder_share, lst["selfcheck_mismatch"]))
 ok = (stats["mismatch"] == 0 and stats["calls"] > 0 and share > 0.5
-      and ladder_share > 0.5 and lst["selfcheck_mismatch"] == 0)
+      and ladder_share > 0.5 and lst["selfcheck_mismatch"] == 0 and kshare > 0.5)
 print("VERDICT", "PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)

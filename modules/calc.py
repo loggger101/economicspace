@@ -6980,6 +6980,10 @@ def _evaluate_combo_at_ratio(
             cargo_water=lambda p, f: _cargo_water_kg(
                 asteroid_row, phases, p, f, beneficiate, config,
                 ctx.cargo_ice_frac),
+            # The same three objects the two callbacks close over, so the
+            # loop can answer the knapsack with spacevalue's Rust crate
+            # instead of calling back; unreadable inputs keep the callbacks.
+            cargo=(refinery, phases, config.beneficiation_recovery),
         )
         if _rs[0] == 1:
             return None

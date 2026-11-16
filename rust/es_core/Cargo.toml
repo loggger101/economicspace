@@ -12,6 +12,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = { version = "=0.26.0", features = ["extension-module"] }
+# spacevalue's knapsack, linked directly so the sizing loop never crosses into
+# Python for it.  PROTOTYPE: a path into the sibling checkout on spacevalue's
+# `rust-cargo-prototype` branch; a merge would pin it to a git tag that
+# matches the spacevalue pin in requirements.txt.
+spacevalue_cargo_core = { path = "../../../spacevalue/rust/cargo_core" }
 
 [features]
 # Builds a copy with a deliberate one-ulp error, so verify_rust.py can prove
@@ -22,6 +27,8 @@ planted_defect = []
 planted_loop_defect = []
 # ...and only in the programme ladder's cost tail (ladder.rs).
 planted_ladder_defect = []
+# ...and only in spacevalue's knapsack crate (one ulp of every take).
+planted_knapsack_defect = ["spacevalue_cargo_core/planted_knapsack_defect"]
 
 [profile.release]
 # No fast-math, no FMA contraction: rustc never fuses a*b+c unless asked, and

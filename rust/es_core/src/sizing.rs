@@ -24,11 +24,18 @@
 //! `math.log` of a non-positive number (raises), a callback returning
 //! anything but the exact types the Python code would carry, and any NaN in
 //! the state handed back (NaN sign is not portable; see lib.rs).
+//!
+//! The knapsack (`_hold_refining`, and `_cargo_water_kg`'s concentrating
+//! branch) is called back into Python, unless `cargo=(refinery, phases,
+//! recovery)` is given and reads exactly: then spacevalue's own Rust crate
+//! (`spacevalue_cargo_core`) answers it here, with no crossing.  Inputs it
+//! cannot read exactly leave the callbacks in charge; both are correct.
 
 use crate::{exact_small_int, py_div, py_exp, solve, to_dict, Outcome};
+use spacevalue_cargo_core as svc;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyDict, PyFloat, PyString, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyFloat, PyList, PyString, PyTuple};
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 
 pub const KIND_FALLBACK: u8 = 0;
@@ -80,6 +87,97 @@ const B_NAMES: [&str; 16] = [
 const O_PAYLOAD_CAP: &str = "payload_cap_kg";
 const O_HOLD_REFINING: &str = "hold_refining";
 const O_CARGO_WATER: &str = "cargo_water";
+const O_CARGO: &str = "cargo";
+
+/// The knapsack's inputs, read once per `run`: `(refinery, phases, recovery)`
+/// exactly as calc's two callbacks close over them.
+struct Native {
+    phases: Vec<(String, f64, f64)>,
+    refinery: Option<(Vec<(String, f64)>, f64)>,
+    recovery: f64,
+}
+
+fn read_native(v: &Bound<'_, PyAny>) -> Option<Native> {
+    if v.is_none() {
+        return None;
+    }
+    let t = v.downcast_exact::<PyTuple>().ok()?;
+    if t.len() != 3 {
+        return None;
+    }
+    let r = t.get_item(0).ok()?;
+    let refinery = if r.is_none() {
+        None
+    } else {
+        let rt = r.downcast_exact::<PyTuple>().ok()?;
+        if rt.len() != 2 {
+            return None;
+        }
+        let d = rt.get_item(0).ok()?;
+        let d = d.downcast_exact::<PyDict>().ok()?;
+        let mut m = Vec::with_capacity(d.len());
+        for (k, val) in d.iter() {
+            let k = k.downcast_exact::<PyString>().ok()?.to_str().ok()?.to_owned();
+            m.push((k, val.downcast_exact::<PyFloat>().ok()?.value()));
+        }
+        Some((m, rt.get_item(1).ok()?.downcast_exact::<PyFloat>().ok()?.value()))
+    };
+    let p = t.get_item(1).ok()?;
+    let mut phases = Vec::new();
+    if !p.is_none() {
+        let l = p.downcast_exact::<PyList>().ok()?;
+        for it in l.iter() {
+            let pt = it.downcast_exact::<PyTuple>().ok()?;
+            if pt.len() != 3 {
+                return None;
+            }
+            let name = pt.get_item(0).ok()?.downcast_exact::<PyString>().ok()?.to_str().ok()?.to_owned();
+            let frac = pt.get_item(1).ok()?.downcast_exact::<PyFloat>().ok()?.value();
+            let price = pt.get_item(2).ok()?.downcast_exact::<PyFloat>().ok()?.value();
+            if price.is_nan() {
+                return None; // the price sort needs a strict weak order
+            }
+            phases.push((name, frac, price));
+        }
+    }
+    let recovery = t.get_item(2).ok()?.downcast_exact::<PyFloat>().ok()?.value();
+    Some(Native { phases, refinery, recovery })
+}
+
+/// The ordered phase table (`_PHASE_ORDER_CACHE`'s list), built once a run.
+struct NativeView<'a> {
+    n: &'a Native,
+    ordered: Vec<svc::Phase<'a>>,
+}
+
+impl<'a> NativeView<'a> {
+    fn new(n: &'a Native) -> Self {
+        let ph: Vec<svc::Phase<'a>> = n.phases.iter()
+            .map(|(name, f, p)| svc::Phase { name: name.as_str(), frac: *f, price: *p }).collect();
+        NativeView { n, ordered: svc::by_price(&ph) }
+    }
+    /// `_hold_refining(refinery, phases, p, f, beneficiate, recovery)`.
+    fn hold(&self, p: f64, f: f64, beneficiate: bool) -> Step<(f64, Option<f64>)> {
+        let r = match &self.n.refinery {
+            None => svc::hold_refining(None, &self.ordered, p, f, beneficiate, self.n.recovery),
+            Some((m, raw)) => {
+                let per = |name: &str| -> f64 {
+                    m.iter().find(|(k, _)| k == name).map(|(_, v)| *v).unwrap_or(0.0)
+                };
+                svc::hold_refining(Some((&per, *raw)), &self.ordered, p, f, beneficiate, self.n.recovery)
+            }
+        };
+        Ok(r.filter(|(wh, w)| !wh.is_nan() && !w.is_some_and(|v| v.is_nan())))
+    }
+    /// `float(optimal_payload_mix(p, f, phases, recovery, want_phase="water"))`.
+    fn water(&self, p: f64, f: f64) -> Step<f64> {
+        match svc::optimal_payload_mix::<svc::CapsVec>(p, f, &self.ordered, self.n.recovery,
+                                                         Some("water"), None, 0.0) {
+            svc::MixOut::Want(v) if !v.is_nan() => Ok(Some(v)),
+            _ => Ok(None),
+        }
+    }
+}
 
 /// What `run` hands back as `state`, in this order.  calc.py unpacks by the
 /// same tuple and asserts it at import.
@@ -390,6 +488,7 @@ fn call_hold_refining(cb: &Bound<'_, PyAny>, p: f64, f: f64) -> Step<(f64, Optio
 fn run_loop(
     g0: f64, x: &In, st: &mut State,
     hold_cb: &Bound<'_, PyAny>, water_cb: &Bound<'_, PyAny>,
+    native: Option<&NativeView<'_>>,
 ) -> PyResult<Exit> {
     let f = |n: usize| x.f[n];
     let bv = |n: &str| x.b[b_idx(n)];
@@ -544,7 +643,10 @@ fn run_loop(
         let need_cargo_water = bv("model_water_liberation")
             || (bv("model_volatile_containment") && containment_per_kg > 0.0);
         let (trial_refine_wh, hold_water) = if bv("has_refinery") {
-            tryc!(call_hold_refining(hold_cb, trial_payload, trial_feed))
+            match native {
+                Some(nv) => tryc!(nv.hold(trial_payload, trial_feed, beneficiate)),
+                None => tryc!(call_hold_refining(hold_cb, trial_payload, trial_feed)),
+            }
         } else {
             (0.0, None)   // `_hold_refining(None, ...)` is (0.0, None)
         };
@@ -560,7 +662,10 @@ fn run_loop(
                         if !bv("has_phases") {
                             0.0
                         } else {
-                            tryc!(call_cargo_water(water_cb, trial_payload, trial_feed))
+                            match native {
+                                Some(nv) => tryc!(nv.water(trial_payload, trial_feed)),
+                                None => tryc!(call_cargo_water(water_cb, trial_payload, trial_feed)),
+                            }
                         }
                     } else {
                         trial_payload * f(idx!("ice_frac"))
@@ -660,15 +765,20 @@ pub struct SizingLoop {
     unset: Py<PyAny>,
     fast: AtomicU64,
     slow: AtomicU64,
+    knap_native: AtomicU64,
+    knap_callback: AtomicU64,
 }
 
-fn read_inputs<'py>(kw: &Bound<'py, PyDict>) -> PyResult<Option<(In, Bound<'py, PyAny>, Bound<'py, PyAny>)>> {
+type Inputs<'py> = (In, Bound<'py, PyAny>, Bound<'py, PyAny>, Option<Native>);
+
+fn read_inputs<'py>(kw: &Bound<'py, PyDict>) -> PyResult<Option<Inputs<'py>>> {
     let mut x = In { f: [0.0; F_NAMES.len()], b: [false; B_NAMES.len()], payload_cap: None };
     let mut seen_f = [false; F_NAMES.len()];
     let mut seen_b = [false; B_NAMES.len()];
     let mut seen_cap = false;
     let mut hold = None;
     let mut water = None;
+    let mut native = None;
     let mut ok = true;
     for (k, v) in kw.iter() {
         let name = k.downcast_exact::<PyString>()?.to_cow()?;
@@ -703,6 +813,9 @@ fn read_inputs<'py>(kw: &Bound<'py, PyDict>) -> PyResult<Option<(In, Bound<'py, 
             hold = Some(v);
         } else if name == O_CARGO_WATER {
             water = Some(v);
+        } else if name == O_CARGO {
+            // Optional; unreadable means the callbacks answer, not a fallback.
+            native = read_native(&v);
         } else {
             // A misspelt or stale name is a programming error, not data.
             return Err(PyTypeError::new_err(format!("SizingLoop.run: unknown input {name:?}")));
@@ -720,7 +833,7 @@ fn read_inputs<'py>(kw: &Bound<'py, PyDict>) -> PyResult<Option<(In, Bound<'py, 
     if !ok {
         return Ok(None);
     }
-    Ok(Some((x, hold.unwrap(), water.unwrap())))
+    Ok(Some((x, hold.unwrap(), water.unwrap(), native)))
 }
 
 #[pymethods]
@@ -733,7 +846,8 @@ impl SizingLoop {
             return Err(PyTypeError::new_err(
                 "SizingLoop: calc's _DAMP_MIN_STEP / _DAMP_EXTRA_PASSES differ from es_core's"));
         }
-        Ok(SizingLoop { g0, unset, fast: AtomicU64::new(0), slow: AtomicU64::new(0) })
+        Ok(SizingLoop { g0, unset, fast: AtomicU64::new(0), slow: AtomicU64::new(0),
+                        knap_native: AtomicU64::new(0), knap_callback: AtomicU64::new(0) })
     }
 
     /// Names of the state tuple, in order.
@@ -746,7 +860,7 @@ impl SizingLoop {
     #[allow(non_snake_case)]
     fn INPUT_NAMES() -> Vec<&'static str> {
         F_NAMES.iter().chain(B_NAMES.iter()).copied()
-            .chain([O_PAYLOAD_CAP, O_HOLD_REFINING, O_CARGO_WATER]).collect()
+            .chain([O_PAYLOAD_CAP, O_HOLD_REFINING, O_CARGO_WATER, O_CARGO]).collect()
     }
 
     #[pyo3(signature = (**kwargs))]
@@ -756,7 +870,13 @@ impl SizingLoop {
             s.slow.fetch_add(1, Relaxed);
             PyTuple::new(py, [KIND_FALLBACK])
         };
-        let Some((x, hold_cb, water_cb)) = read_inputs(kw)? else { return fallback(self) };
+        let Some((x, hold_cb, water_cb, native)) = read_inputs(kw)? else { return fallback(self) };
+        if native.is_some() {
+            self.knap_native.fetch_add(1, Relaxed);
+        } else {
+            self.knap_callback.fetch_add(1, Relaxed);
+        }
+        let view = native.as_ref().map(NativeView::new);
         let mut st = State {
             power_system_kg: x.f[idx!("power_system_kg")],
             ep_system_kg: x.f[idx!("ep_system_kg")],
@@ -782,7 +902,7 @@ impl SizingLoop {
             r_ret: None,
             hold_water: None,
         };
-        let exit = run_loop(self.g0, &x, &mut st, &hold_cb, &water_cb)?;
+        let exit = run_loop(self.g0, &x, &mut st, &hold_cb, &water_cb, view.as_ref())?;
         let (kind, args) = match exit {
             Exit::Fallback => return fallback(self),
             Exit::Refuse => {
@@ -837,5 +957,10 @@ impl SizingLoop {
     /// (loops answered in Rust, loops handed back to Python) since construction.
     fn counts(&self) -> (u64, u64) {
         (self.fast.load(Relaxed), self.slow.load(Relaxed))
+    }
+
+    /// (runs whose knapsack Rust answered, runs that called back into Python)
+    fn knapsack_counts(&self) -> (u64, u64) {
+        (self.knap_native.load(Relaxed), self.knap_callback.load(Relaxed))
     }
 }
