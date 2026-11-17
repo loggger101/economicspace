@@ -34,10 +34,41 @@ python -c "import json,sys; d=json.load(open(sys.argv[1])).get('destination'); p
   exit 3; }
 cd "$REPO"
 CAP="rust/es_core/capture.py"
-[ -f "$W/cap_raw.pkl" ] || python -X utf8 "$CAP" "$REPO" "$W/out" 150 "$W/cap_raw.pkl" \
-  --destination cislunar --raw --no-search < /dev/null 2>&1 | grep -E "^CAPTURED"
+# capture DIR ROWS PKL FLAGS...: record, then refuse an empty capture.
+# capture.py swallows run_pipeline's SystemExit, so a refused run (preflight's
+# destination MISMATCH) used to write a capture of 0 calls and carry on.
+capture() {
+  local dir="$1" rows="$2" pkl="$3"; shift 3
+  [ -f "$pkl" ] && return 0
+  local line
+  line=$(python -X utf8 "$CAP" "$REPO" "$dir" "$rows" "$pkl" "$@" < /dev/null 2>&1 | grep -E "^CAPTURED")
+  echo "$line ($pkl)"
+  case "$line" in
+    "CAPTURED 0"|"") rm -f "$pkl"; echo "refused: empty capture $pkl"; exit 4;;
+  esac
+}
+capture "$W/out" 150 "$W/cap_raw.pkl" --destination cislunar --raw --no-search
 # mars_surface on purpose: the solver capture records solver inputs only, and
-# this destination reaches the solver's surface legs (prices are irrelevant).
-[ -f "$W/cap_ben.pkl" ] || python -X utf8 "$CAP" "$REPO" "$W/out" 60 "$W/cap_ben.pkl" \
-  --destination mars_surface --beneficiated --search < /dev/null 2>&1 | grep -E "^CAPTURED"
+# this destination reaches the solver's surface legs.  Its prices are
+# irrelevant to the capture, but preflight() refuses a destination the Stage 2
+# table was not priced for, so the capture reads its own copy of the inputs
+# with mars_surface's table installed from the pinned price release.
+MARS="$W/out_mars"
+if [ ! -f "$W/cap_ben.pkl" ]; then
+  if [ ! -f "$MARS/asteroid_catalog.csv" ]; then
+    mkdir -p "$MARS"
+    cp "$W/out"/asteroid_catalog.csv "$W/out"/catalog_manifest.json \
+       "$W/out"/catalog_taxonomy.json "$MARS/" || exit 1
+    cp -r "$W/out/transportation" "$MARS/" || exit 1
+  fi
+  python -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('destination')=='mars_surface' else 3)" \
+    "$MARS/mineral_value_manifest.json" < /dev/null 2>/dev/null || {
+    echo "installing mars_surface's Stage 2 table into $MARS"
+    python run_pipeline.py --stages 2 --destination mars_surface --output "$MARS" --yes \
+      < /dev/null > "$W/stage2_mars.log" 2>&1
+    python -c "import json,sys; d=json.load(open(sys.argv[1])).get('destination'); print('Stage 2 table priced for:', d); sys.exit(0 if d=='mars_surface' else 3)" \
+      "$MARS/mineral_value_manifest.json" < /dev/null || { echo "mars_surface Stage 2 install failed: $W/stage2_mars.log"; exit 3; }
+  }
+  capture "$MARS" 60 "$W/cap_ben.pkl" --destination mars_surface --beneficiated --search
+fi
 ls -la "$W" "$W/out"

@@ -44,6 +44,31 @@ says how to pick it up.
   Rust mode matches on 1 and 3-7 and refuses 8 as designed.  Details in the
   section of that name at the end.
 
+## The gate on DESKTOP-PJS73RO (2026-11-17, item 1 closed)
+
+- `gate/gate_all.sh` at `3a41fa5`, cislunar: **29 of 29 steps OK, bad 0**,
+  every plant caught.  Host: python 3.13.9, numpy 2.2.6, pandas 2.3.3, rustc
+  1.100.0; `platform_check.py` libm and numpy rows all match the reference
+  (pandas `str_dtype` differs, as expected on pandas 2.x).
+- Cross-host: `ECONOMICSPACE_RUST=1 verify.py baseline` here gives the four
+  hashes in "verify.py against main" below exactly (raw `53b7aa2e987ae8c5`,
+  raw+search `3ab1013489eb949f`, benef `0bf60835f283d92a`, benef+search
+  `42e9f43b76d344db`).  So the Rust build agrees across the two hosts.
+- **The e2e hashes cannot be compared across hosts or days.** `e2e_rust.py`
+  hashes the whole CSV, and `catalog_date` is the run's date.  Here they were
+  `250f485f4136aef0` (benef/search 150, both pool sizes) and
+  `b437969187922396` (raw/search 2000), Python equal to Rust in each.  Compare
+  verify.py's cell hashes across hosts instead, since they strip provenance.
+- `make_workdir.sh` as first committed could not build `cap_ben.pkl`:
+  `preflight()` refuses mars_surface against the copied cislunar Stage 2
+  table, and `capture.py` swallows the `SystemExit`, which left a capture of 0
+  calls.  It now installs mars_surface's table from the pinned release into
+  `WORKDIR/out_mars` and refuses an empty capture.  Captured here: raw 482,631
+  calls, benef 1,485,398.
+- This host's `python` is the Microsoft Store alias.  The gate scripts call
+  `python`, and maturin and PyO3 need a real `python.exe` on PATH, so put the
+  interpreter's directory first on PATH (a bash shim is not enough).
+
 ## Setting up the desktop
 
 1. Toolchain (install what is missing; the user allowed installing anything
