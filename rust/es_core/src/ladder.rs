@@ -25,7 +25,7 @@
 //! identity in CPython), a self-check mismatch, a Python local that would be
 //! unbound.
 
-use crate::py_div;
+use crate::{py_div, py_max, py_min};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
@@ -83,15 +83,6 @@ pub const KIND_DONE: u8 = 2;
 
 const PROLOGUE_LEN: usize = 43;
 
-/// Python's two-argument `max(a, b)` / `min(a, b)`.
-#[inline(always)]
-fn py_max(a: f64, b: f64) -> f64 {
-    if b > a { b } else { a }
-}
-#[inline(always)]
-fn py_min(a: f64, b: f64) -> f64 {
-    if b < a { b } else { a }
-}
 
 fn exact_f(v: &Bound<'_, PyAny>) -> Option<f64> {
     v.downcast_exact::<PyFloat>().ok().map(|f| f.value())
@@ -603,6 +594,72 @@ fn price_rung(
     Ok(Some(Some(Rung { total, g })))
 }
 
+/// `ProgrammeLadder.run`'s keywords: the required ones, then the optional
+/// reliability constants `mining_rel` closes over (absent: no cross-call memo).
+const RUN_REQUIRED: [&str; 24] = [
+    "prologue", "programmes", "gross_base", "rung_gross_ub", "max_n",
+    "mission_duration_yr", "cadence_yr", "p_launch", "p_cruise", "p_first",
+    "model_reliability", "model_reliability_growth", "saturation_applies",
+    "capacity_applies", "model_market_wave_clock", "rung_bound", "on_profit",
+    "n_floor", "market_pool", "calendar", "learning", "mining_rel", "price",
+    "refine",
+];
+const RUN_OPTIONAL: [&str; 2] = ["rel_alpha", "p_mature"];
+
+/// A keyword's slot in `Got` (generated from the two tables above, which stay
+/// the authority; `run_input_matches_tables` holds them together).
+fn run_input(name: &str) -> Option<usize> {
+    Some(match name {
+        "prologue" => 0,
+        "programmes" => 1,
+        "gross_base" => 2,
+        "rung_gross_ub" => 3,
+        "max_n" => 4,
+        "mission_duration_yr" => 5,
+        "cadence_yr" => 6,
+        "p_launch" => 7,
+        "p_cruise" => 8,
+        "p_first" => 9,
+        "model_reliability" => 10,
+        "model_reliability_growth" => 11,
+        "saturation_applies" => 12,
+        "capacity_applies" => 13,
+        "model_market_wave_clock" => 14,
+        "rung_bound" => 15,
+        "on_profit" => 16,
+        "n_floor" => 17,
+        "market_pool" => 18,
+        "calendar" => 19,
+        "learning" => 20,
+        "mining_rel" => 21,
+        "price" => 22,
+        "refine" => 23,
+        "rel_alpha" => 24,
+        "p_mature" => 25,
+        _ => return None,
+    })
+}
+
+/// `run`'s keywords by slot, read once per call; indexed by name like the
+/// map it replaces (a missing required name has already been refused).
+struct Got<'py> {
+    v: [Option<Bound<'py, PyAny>>; 26],
+}
+
+impl<'py> std::ops::Index<&str> for Got<'py> {
+    type Output = Bound<'py, PyAny>;
+    fn index(&self, name: &str) -> &Self::Output {
+        self.v[run_input(name).expect("a ProgrammeLadder input name")].as_ref()
+            .expect("a required ProgrammeLadder input")
+    }
+}
+
+impl<'py> Got<'py> {
+    fn get(&self, name: &str) -> Option<&Bound<'py, PyAny>> {
+        self.v[run_input(name)?].as_ref()
+    }
+}
+
 /// The ladder: programmes[0], programmes[1:], then the refinement pass.
 /// Returns (best_n, best_f, best_w, priced_count) or None for fallback.
 fn run_ladder(
@@ -688,26 +745,16 @@ impl ProgrammeLadder {
     #[pyo3(signature = (**kwargs))]
     fn run<'py>(&self, py: Python<'py>, kwargs: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyTuple>> {
         let kw = kwargs.ok_or_else(|| PyTypeError::new_err("ProgrammeLadder.run takes keywords"))?;
-        const NAMES: [&str; 25] = [
-            "prologue", "programmes", "gross_base", "rung_gross_ub", "max_n",
-            "mission_duration_yr", "cadence_yr", "p_launch", "p_cruise", "p_first",
-            "model_reliability", "model_reliability_growth", "saturation_applies",
-            "capacity_applies", "model_market_wave_clock", "rung_bound", "on_profit",
-            "n_floor", "market_pool", "calendar", "learning", "mining_rel", "price",
-            "refine", "_unused",
-        ];
-        // Optional: the reliability constants `mining_rel` closes over, which
-        // key the cross-call memo (absent: the per-call memo only).
-        const OPTIONAL: [&str; 2] = ["rel_alpha", "p_mature"];
-        let mut got: HashMap<String, Bound<'py, PyAny>> = HashMap::new();
+        let mut got = Got { v: Default::default() };
         for (k, v) in kw.iter() {
-            let name = k.downcast_exact::<PyString>()?.to_cow()?.into_owned();
-            if !NAMES[..24].contains(&name.as_str()) && !OPTIONAL.contains(&name.as_str()) {
+            let name = k.downcast_exact::<PyString>()?.to_cow()?;
+            let Some(i) = run_input(&name) else {
                 return Err(PyTypeError::new_err(format!("ProgrammeLadder.run: unknown input {name:?}")));
-            }
-            got.insert(name, v);
+            };
+            got.v[i] = Some(v);
         }
-        let missing: Vec<&str> = NAMES[..24].iter().copied().filter(|n| !got.contains_key(*n)).collect();
+        let missing: Vec<&str> = RUN_REQUIRED.iter().enumerate()
+            .filter(|(i, _)| got.v[*i].is_none()).map(|(_, n)| *n).collect();
         if !missing.is_empty() {
             return Err(PyTypeError::new_err(format!("ProgrammeLadder.run: missing inputs {missing:?}")));
         }
@@ -827,5 +874,20 @@ impl ProgrammeLadder {
             names.iter().zip(self.stats.iter()).map(|(n, v)| (*n, v.load(Relaxed))).collect();
         m.insert("memo_hits", self.memo.lock().map(|g| g.hits).unwrap_or(0));
         m
+    }
+}
+
+#[cfg(test)]
+mod run_input_tests {
+    use super::*;
+
+    /// The generated match and the two tables agree on every name.
+    #[test]
+    fn run_input_matches_tables() {
+        for (i, n) in RUN_REQUIRED.iter().chain(RUN_OPTIONAL.iter()).enumerate() {
+            assert_eq!(run_input(n), Some(i), "{n}");
+        }
+        assert_eq!(run_input("_unused"), None);
+        assert_eq!(run_input("no_such_input"), None);
     }
 }

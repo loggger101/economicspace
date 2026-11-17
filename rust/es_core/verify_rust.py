@@ -34,7 +34,6 @@ import math
 import os
 import pickle
 import random
-import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -44,6 +43,7 @@ os.environ.pop("ECONOMICSPACE_RUST", None)   # import the PYTHON solver
 
 import numpy as np            # noqa: E402
 import es_core                # noqa: E402
+import bitsame                # noqa: E402  (this script's folder)
 import modules.calc as calc   # noqa: E402
 
 PY = calc.max_return_payload_kg
@@ -51,39 +51,7 @@ assert not isinstance(PY, es_core.Solver), "calc imported with Rust swapped in"
 RS = es_core.Solver(PY, calc.G0_M_S2)
 
 
-def bits(x: float) -> bytes:
-    return struct.pack("<d", x)
-
-
-def same(a, b) -> bool:
-    """Identical as far as any downstream reader could tell."""
-    if type(a) is not type(b):
-        return False
-    if isinstance(a, float):
-        return bits(a) == bits(b)
-    if isinstance(a, dict):
-        return (list(a) == list(b)
-                and all(same(a[k], b[k]) for k in a))
-    if isinstance(a, np.generic):
-        # numpy scalars (a fallback call fed np.float32 returns them): their
-        # bytes, so NaN == NaN and -0.0 != 0.0 exactly as for floats above.
-        return a.tobytes() == b.tobytes()
-    return a == b
-
-
-def call(fn, kw):
-    try:
-        return ("ok", fn(**kw))
-    except Exception as exc:          # compared, never swallowed
-        return ("raise", type(exc).__name__, str(exc))
-
-
-def outcome_same(p, r) -> bool:
-    if p[0] != r[0]:
-        return False
-    if p[0] == "raise":
-        return p[1:] == r[1:]
-    return same(p[1], r[1])
+bits, same, outcome = bitsame.bits, bitsame.same, bitsame.outcome
 
 
 # ── 1. exp ───────────────────────────────────────────────────────────────────
@@ -138,14 +106,14 @@ def check_replay(records) -> int:
     bad = 0
     for args, kw, recorded in records:
         assert not args, "calc.py calls the solver by keyword only"
-        p = call(PY, kw)
-        r = call(RS, kw)
+        p = outcome(PY, **kw)
+        r = outcome(RS, **kw)
         # The recording is the third witness: Python today must still say
         # what Python said when the capture ran.
         if not (p[0] == "ok" and same(p[1], recorded)):
             print("    python no longer reproduces its own capture:", kw)
             bad += 1
-        elif not outcome_same(p, r):
+        elif not same(p, r):
             bad += 1
             if bad <= 5:
                 diff = [k for k in p[1] if not same(p[1].get(k), r[1].get(k) if r[0] == "ok" else None)]
@@ -193,8 +161,8 @@ def check_fuzz(n: int) -> int:
                 kw.pop(k)
         elif roll < 0.5:                       # an unknown keyword
             kw["tank_fraction"] = 0.1
-        p, r = call(PY, kw), call(RS, kw)
-        if not outcome_same(p, r):
+        p, r = outcome(PY, **kw), outcome(RS, **kw)
+        if not same(p, r):
             bad += 1
             if bad <= 5:
                 print("    fuzz mismatch", kw)

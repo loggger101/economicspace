@@ -152,7 +152,7 @@ A raw hold never runs the knapsack, so raw gains nothing from it.
 The solver alone gave no measurable gain per run, because at about 1.3 us a
 call the Python boundary costs more than the arithmetic. The loop crosses
 once per candidate and pays. What Python is left after the later ports is
-in the last profile under "Where the time goes now".
+in the profile under "Where the time goes now".
 
 **Do not size the next port from cProfile.** It charged the loop's callees
 about 70 s of 116 s. The interleaved benchmark says the loop and solver
@@ -161,30 +161,43 @@ millions of times. Size a port with `bench_rust.py` (whole asteroids,
 interleaved) and a small change with per-call paired timing (see "How to
 price a change").
 
-## Where the time goes now (2026-11-15, Rust mode, cislunar)
+## Where the time goes now (2026-11-16, Rust mode, cislunar)
 
 `sample_profile.py` (a stack sampler, ~1 ms, no per-call overhead) and
 `analyse_profile.py`. Shares are of search time, i.e. samples inside
 `evaluate_asteroid`. The sampler is trusted because it predicts the
 measured speed-up: the loop is 40.9% of search in Python mode and 14.7% in
 Rust mode, which implies 1.44x against `bench_rust.py`'s measured 1.35x.
+It misreads one thing: a line Rust calls back into reads high, because
+Rust's own time is charged to it (see "How to price a change").
 
-| beneficiated + search, 60 rows | share of search |
-|---|---|
-| programme / fleet ladder in `_evaluate_combo_at_ratio`: `_price_programme` per rung (34% inclusive), `_mission_cost_tail` (13% self), `_objective_key` (6%), `_capped_sale_value` (3%) | ~55% |
-| the Rust sizing loop call, including its knapsack callbacks | ~15% |
-| settling the power plant against the mission flown | ~12% |
-| everything else (containment settle, market saturation, cost prologue, delivered $/kg) | under ~10% together |
-| the knapsack, `spacevalue.cargo.optimal_payload_mix`, across all of the above | ~12% inclusive |
-| repairs re-solving a whole candidate, `_refit_to_plant_ceiling` | ~31% inclusive (an algorithmic cost; a port speeds it up but does not remove it) |
+With everything in "What it ports" on (benef/search 60 rows, raw/search 400
+rows), by section of `_evaluate_combo_at_ratio`:
 
-| raw, no search, 300 rows | share of search |
-|---|---|
-| pre-filter and combo bound (`_closes_carrying_its_own_stage`, `_combo_key_bound`) | ~23% |
-| programme ladder and pricing | ~23% |
-| settling the power plant | ~15% |
-| the Rust sizing loop call | ~11% |
-| `evaluate_asteroid`'s own work | ~8% |
+| section | benef/search | raw/search |
+|---|---|---|
+| the Rust ladder call | ~35% | ~29% |
+| settling the power plant against the mission flown | ~16% | ~10% |
+| the Rust sizing loop call | ~12% | ~8% |
+| capped rungs the ladder hands back to Python (`_price_programme`, `_mission_cost_tail`) | ~4% (~7% with the callback line) | ~3% (~5%) |
+
+On raw cells the pre-filter and combo bound are the largest Python cost
+left: `_closes_carrying_its_own_stage`, `_pass1_cascade` and
+`_combo_key_bound` are ~18% of search by self time (~3% on benef). Both
+are listed under "Open candidates" below.
+
+How the profile moved, port by port (benef/search 60 rows unless named;
+each figure is the one that chose the next port):
+
+1. Before any loop work: programme pricing ~55% of search (the ladder);
+   on raw, no search, 300 rows, the pre-filter and combo bound ~23%.
+   Repairs (`_refit_to_plant_ceiling`, re-solving a whole candidate) were
+   ~31% inclusive: an algorithmic cost a port speeds up but cannot remove.
+2. After the ladder port: the knapsack was the largest Python cost left,
+   `_hold_refining` 22% inclusive and `optimal_payload_mix` 16%.
+3. After the knapsack port (item 4): the Rust ladder call ~51% by section,
+   the plant settle ~16%, the result dict ~6%, `selection_key` ~5%; the
+   knapsack calls calc made from Python were then routed to Rust (item 5).
 
 Two cautions for anyone timing a sample:
 - On a 300-row raw run, search was 13% of wall time; the rest was loading
@@ -192,42 +205,6 @@ Two cautions for anyone timing a sample:
   a full cell (hours) the search dominates.
 - The beneficiated + search cells are the expensive ones (the campaign's
   longest), so their profile is the one to port against.
-
-That profile sized the ladder port: programme pricing was ~55% of
-beneficiated search. It is now ported (see the 1.80x row above).
-
-**After the ladder port** (benef/search, 60 rows, Rust mode, same tools):
-
-| section | share of search |
-|---|---|
-| the Rust ladder call, including the rungs it hands back to `_price_programme` (11% inclusive) and `_capped_sale_value` (5%) | ~33% |
-| the Rust sizing loop call, including its knapsack callbacks | ~30% |
-| settling the power plant | ~9% |
-| containment settle, market saturation, cost prologue, delivered $/kg | ~3% each |
-| the knapsack across all of the above: `_hold_refining` (22% inclusive), `optimal_payload_mix` (16%) | the largest Python cost left |
-| repairs, `_refit_to_plant_ceiling` | ~28% inclusive |
-
-That profile pointed at the knapsack, which is now ported inside the sizing
-loop (see item 4 under "What it ports"). The knapsack calls calc makes from
-Python (the plant settle after the loop, repairs, and the capped rungs the
-ladder hands to `_price_programme`) were then routed to Rust too (item 5).
-
-**After the knapsack port** (same tools, same sample): the Rust ladder call
-~51% of search by section, the plant settle ~16%, the Rust loop call ~10%,
-the result dict `return {` ~6%, `selection_key` ~5%.
-
-**After calc's own cargo calls went to Rust** (item 5; 2026-11-16, same
-tools; benef/search 60 rows and raw/search 400 rows). By section of
-`_evaluate_combo_at_ratio`: the Rust ladder call ~35% benef and ~29% raw,
-the plant settle ~16% and ~10%, the Rust loop call ~12% and ~8%. What the
-ladder still hands to Python is the capped rungs it prices through the
-`price=` callback: `_price_programme` and its `_mission_cost_tail` are
-~4% of benef search and ~3% of raw, ~7% and ~5% if the callback line's own
-share is counted too (part of that is Rust's time charged to the line, see
-below). On raw cells the pre-filter and combo bound are the largest Python
-cost left: `_closes_carrying_its_own_stage`, `_pass1_cascade` and
-`_combo_key_bound` are ~18% of search by self time. Both are listed under
-"Open candidates" below.
 
 ## How to price a change (and how not to)
 
@@ -261,13 +238,14 @@ search. That is real, and only a port of the evaluator itself removes it.
 Garbage collection is not it: with the collector off, alternating per
 asteroid, the time did not move and no collection ran.
 
-## Small changes, measured (2026-11-15, per-call paired timing)
+## Small changes, measured (2026-11-15 and 2026-11-16, per-call paired timing)
 
 | change | gate | saving (share of Rust-mode search) | verdict |
 |---|---|---|---|
 | ladder: remember `learning`, `calendar` and `mining_rel` ACROSS calls (`ProgrammeLadder`'s shared memo, keyed on Python's own cache equality; `memo=False` turns it off for measuring) | audited shadow (default, and reliability + WACC + learning), 0 mismatches; `planted_memo_defect` (one ulp on memo hits) caught by the rung self-check | benef/search 2.44% +/- 0.08%, rerun 2.13% +/- 0.07%; reliability + WACC + learning 5.81% +/- 0.07%; raw/search 1.45% +/- 0.17% | **kept** |
 | `payload_mix` formatted only for the winner (calc.py: `_format_payload_mix` in `evaluate_asteroid`), not for every candidate | e2e catalogs byte-identical in all three runs, Python legs included (the default path changed too) | 103,658 discarded strings at 6.2 us: 2.7% of benef/search; 0.07% raw | **kept** |
 | calc's Python-side `_capped_sale_value` and knapsack `_hold_refining` answered by `spacevalue_cargo_rs` (item 5 above) | shadow (benef/search 40, raw/search 60, reliability + WACC + learning 12), 0 mismatches; spacevalue's `planted_knapsack_defect` build caught (21,789 and 163 mismatching calls); e2e: see Measured | `_capped_sale_value` 3.42% +/- 0.02% of benef/search, 6.91% +/- 0.03% of raw/search; `_hold_refining` 1.70% benef, but 1.14% SLOWER on raw holds, hence knapsack holds only; `optimal_payload_mix` 0.07%, not routed | **kept** |
+| keyword reading: `SizingLoop.run` finds each name's slot with one `match` (`slot`, generated from `F_NAMES`, `F_INT_OK` and `B_NAMES`) instead of a linear search of each table; `ProgrammeLadder.run` reads into a fixed array (`run_input`, generated from `RUN_REQUIRED` and `RUN_OPTIONAL`) instead of a per-call `HashMap` of owned strings | the full gate, 27 steps, every plant caught; `slot_matches_tables` and `run_input_matches_tables` hold each generated match to its tables (each failed on a planted mismatch) | reading cost per call 2.0-2.5 to 0.8-1.2 us (loop) and 3.0-3.5 to 0.6-0.9 us (ladder); at the bench's 41,065 loops and 14,273 ladders that is about 0.07-0.11 s of 8.5 s, ~1% of benef/search | **kept** for the simpler code (no per-call allocation, no hand-kept name lists to drift); under the bar as a speed-up |
 | `Solver.viable(**kw)` for the pre-filter, skipping the 18-key result dict (built, measured, then removed) | 1,665,623 calls (1,565,623 captured + 100,000 fuzzed), 0 mismatches; plant caught | benef/search 0.17%; raw 1.59% +/- 0.12%; raw/search 1.33% +/- 0.05% | declined: under CLAUDE.md's ~2% bar everywhere |
 | remembering a combo's ratio solves inside `evaluate_combo` (the same ratio solved twice) | counted, not built | 6 repeats in 48,241 solves (0.01%) | declined: there is almost nothing to remember |
 | sharing pass 1, the EP stage floor and the second solve between the pre-filter (`_closes_carrying_its_own_stage`) and the combo bound (`_combo_key_bound`) | not built | sampler estimate ~0.5% of benef/search, ~1.5-3% of raw (not measured per call) | declined as an easy win: under the bar on the expensive cells, and it changes what the bound's admissibility proof reads (CLAUDE.md: a change to pass 1's inputs re-proves the bound) |
@@ -334,8 +312,14 @@ and its planted copy, for the gate, with `--features planted_knapsack_defect`.
 | `shadow_rust.py OUT ROWS ...` with spacevalue's planted `spacevalue_cargo_rs` installed | VERDICT FAIL, with mismatches (the shadow swaps calc's cargo calls per mode too) | that build installed |
 | `shadow_rust.py --set field=value ...` | the same, with a `CalcConfig` dial set for the run, to reach paths the defaults never take | |
 | `e2e_rust.py OUT ROWS WORKERS ...` | Stage 4 run Python, Rust, Python: `profitability_catalog.csv` byte-identical, in-process and through the pool; the catalog is deleted before each run and a run that writes none fails | a scratch output dir |
-| `bench_rust.py OUT ROWS ...` | timing only, but every asteroid's two results are also compared | a scratch output dir |
+| `bench_rust.py OUT ROWS ...` | timing only, but every asteroid's two results are also compared; Rust mode is everything `ECONOMICSPACE_RUST=1` turns on (since 2026-11-16 including calc's cargo calls, item 5; the speed rows above were taken without them) | a scratch output dir |
+| `cargo test --release --lib` in `rust/es_core` | each generated keyword `match` (`slot`, `run_input`) agrees with the name tables it was generated from, both ways | the Python directory on `PATH` (PyO3 links it) |
 | `sample_profile.py [--rust] OUT ROWS STACKS.txt ...`, then `analyse_profile.py STACKS.txt` | where search time goes; sizes the next port | a scratch output dir |
+
+`verify_rust.py`, `shadow_rust.py` and `bench_rust.py` compare results
+through one rule, `bitsame.py`: same type, same keys in order, floats and
+numpy scalars equal as bit patterns, recursively (its `__main__` is a
+self-check of the edge cases: NaN, -0.0, int against float, key order).
 
 **The two plants need different gates, and that is the point of having
 both.** The shadow compares final results, and it MISSED the solver plant:

@@ -31,7 +31,7 @@
 //! (`spacevalue_cargo_core`) answers it here, with no crossing.  Inputs it
 //! cannot read exactly leave the callbacks in charge; both are correct.
 
-use crate::{exact_small_int, py_div, py_exp, solve, to_dict, Outcome};
+use crate::{exact_small_int, py_div, py_exp, py_max, py_min, solve, to_dict, Outcome};
 use spacevalue_cargo_core as svc;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
@@ -69,6 +69,7 @@ const F_NAMES: [&str; 48] = [
 // comparison that is exact for |n| <= 2**53), so an exact int is converted.
 // Everything else must be an exact float: it can be carried into the state
 // unchanged, and an int there would be a different Python type.
+#[cfg_attr(not(test), allow(dead_code))] // the authority `slot` is generated from; held to it by slot_tests
 const F_INT_OK: [&str; 19] = [
     "leo_cap", "isp_s_val", "tank_frac", "boiloff_pct", "eff_used",
     "ep_w_per_kg", "ppu_kg_per_kw", "thruster_kg_per_n", "isru_plant_rate",
@@ -88,6 +89,95 @@ const O_PAYLOAD_CAP: &str = "payload_cap_kg";
 const O_HOLD_REFINING: &str = "hold_refining";
 const O_CARGO_WATER: &str = "cargo_water";
 const O_CARGO: &str = "cargo";
+
+/// Where a keyword goes: one `match` (generated from F_NAMES, F_INT_OK and
+/// B_NAMES, which stay the authority; `slot_matches_tables` holds the two
+/// together) instead of a linear search of each table for every keyword.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Slot {
+    /// (index into F_NAMES, an exact int is accepted)
+    F(usize, bool),
+    /// index into B_NAMES
+    B(usize),
+    Cap,
+    Hold,
+    Water,
+    Cargo,
+}
+
+fn slot(name: &str) -> Option<Slot> {
+    Some(match name {
+        "leo_cap" => Slot::F(0, true),
+        "isp_s_val" => Slot::F(1, true),
+        "dv_out_m_s" => Slot::F(2, false),
+        "dv_ret_stored" => Slot::F(3, false),
+        "dv_ret_eff" => Slot::F(4, false),
+        "tps_frac" => Slot::F(5, false),
+        "tank_frac" => Slot::F(6, true),
+        "structure_frac" => Slot::F(7, false),
+        "structure_frac_eff" => Slot::F(8, false),
+        "mineable_kg" => Slot::F(9, false),
+        "throughput_cap_kg" => Slot::F(10, false),
+        "window_wait_yr" => Slot::F(11, false),
+        "stay_est_yr" => Slot::F(12, false),
+        "outbound_yr" => Slot::F(13, false),
+        "boiloff_pct" => Slot::F(14, true),
+        "boiloff_factor" => Slot::F(15, false),
+        "eff_used" => Slot::F(16, true),
+        "ep_w_per_kg" => Slot::F(17, true),
+        "ppu_kg_per_kw" => Slot::F(18, true),
+        "thruster_kg_per_n" => Slot::F(19, true),
+        "ep_target_thrust_yr" => Slot::F(20, false),
+        "isru_feed_per_kg_prop" => Slot::F(21, false),
+        "isru_water_per_kg_prop" => Slot::F(22, false),
+        "isru_process_wh_per_kg" => Slot::F(23, false),
+        "isru_plant_rate" => Slot::F(24, true),
+        "refinery_rate" => Slot::F(25, true),
+        "target_ratio" => Slot::F(26, true),
+        "dig_wh" => Slot::F(27, true),
+        "benef_wh" => Slot::F(28, true),
+        "containment_per_kg" => Slot::F(29, true),
+        "water_wh" => Slot::F(30, true),
+        "plant_w_per_kg" => Slot::F(31, true),
+        "rtg_max_power_w" => Slot::F(32, true),
+        "mining_hardware_kg" => Slot::F(33, true),
+        "return_vehicle_dry_kg" => Slot::F(34, true),
+        "station_keeping_floor_yr" => Slot::F(35, false),
+        "mine_rate_kg_per_day" => Slot::F(36, false),
+        "ice_frac" => Slot::F(37, false),
+        "power_system_kg" => Slot::F(38, false),
+        "ep_system_kg" => Slot::F(39, false),
+        "refinery_kg" => Slot::F(40, false),
+        "isru_feed_kg" => Slot::F(41, false),
+        "isru_prop_kg" => Slot::F(42, false),
+        "containment_frac" => Slot::F(43, false),
+        "ep_power_watts" => Slot::F(44, false),
+        "ep_thrust_yr" => Slot::F(45, false),
+        "ep_thrust_n" => Slot::F(46, false),
+        "processing_power_watts" => Slot::F(47, false),
+        "models_boiloff" => Slot::B(0),
+        "is_electric" => Slot::B(1),
+        "isru" => Slot::B(2),
+        "beneficiate" => Slot::B(3),
+        "power_is_rtg" => Slot::B(4),
+        "damp" => Slot::B(5),
+        "relax" => Slot::B(6),
+        "carry_ep_home" => Slot::B(7),
+        "model_isru_feed_budget" => Slot::B(8),
+        "size_ep_on_flown_load" => Slot::B(9),
+        "model_raw_excavation_power" => Slot::B(10),
+        "model_water_liberation" => Slot::B(11),
+        "model_volatile_containment" => Slot::B(12),
+        "refit_rtg_ceiling" => Slot::B(13),
+        "has_refinery" => Slot::B(14),
+        "has_phases" => Slot::B(15),
+        O_PAYLOAD_CAP => Slot::Cap,
+        O_HOLD_REFINING => Slot::Hold,
+        O_CARGO_WATER => Slot::Water,
+        O_CARGO => Slot::Cargo,
+        _ => return None,
+    })
+}
 
 /// The knapsack's inputs, read once per `run`: `(refinery, phases, recovery)`
 /// exactly as calc's two callbacks close over them.
@@ -224,24 +314,6 @@ fn b_idx(name: &str) -> usize {
     B_NAMES.iter().position(|n| *n == name).unwrap()
 }
 
-/// Python's two-argument `max(a, b)`: `a` unless `b > a`.
-#[inline(always)]
-fn py_max(a: f64, b: f64) -> f64 {
-    if b > a {
-        b
-    } else {
-        a
-    }
-}
-/// Python's `min(a, b)`: `a` unless `b < a`.
-#[inline(always)]
-fn py_min(a: f64, b: f64) -> f64 {
-    if b < a {
-        b
-    } else {
-        a
-    }
-}
 /// Python's `min(a, b, c)`: left to right, first minimal wins.
 #[inline(always)]
 fn py_min3(a: f64, b: f64, c: f64) -> f64 {
@@ -799,42 +871,42 @@ fn read_inputs<'py>(kw: &Bound<'py, PyDict>) -> PyResult<Option<Inputs<'py>>> {
     for (k, v) in kw.iter() {
         let name = k.downcast_exact::<PyString>()?.to_cow()?;
         let name: &str = &name;
-        if let Some(i) = F_NAMES.iter().position(|n| *n == name) {
-            seen_f[i] = true;
-            if let Ok(fl) = v.downcast_exact::<PyFloat>() {
-                x.f[i] = fl.value();
-            } else if F_INT_OK.contains(&name) {
-                match exact_small_int(&v) {
-                    Some(val) => x.f[i] = val,
-                    None => ok = false,
+        match slot(name) {
+            Some(Slot::F(i, int_ok)) => {
+                seen_f[i] = true;
+                if let Ok(fl) = v.downcast_exact::<PyFloat>() {
+                    x.f[i] = fl.value();
+                } else if int_ok {
+                    match exact_small_int(&v) {
+                        Some(val) => x.f[i] = val,
+                        None => ok = false,
+                    }
+                } else {
+                    ok = false;
                 }
-            } else {
-                ok = false;
             }
-        } else if let Some(i) = B_NAMES.iter().position(|n| *n == name) {
-            seen_b[i] = true;
-            match v.downcast_exact::<PyBool>() {
-                Ok(bb) => x.b[i] = bb.is_true(),
-                Err(_) => ok = false,
-            }
-        } else if name == O_PAYLOAD_CAP {
-            seen_cap = true;
-            if !v.is_none() {
-                match v.downcast_exact::<PyFloat>() {
-                    Ok(fl) => x.payload_cap = Some(fl.value()),
+            Some(Slot::B(i)) => {
+                seen_b[i] = true;
+                match v.downcast_exact::<PyBool>() {
+                    Ok(bb) => x.b[i] = bb.is_true(),
                     Err(_) => ok = false,
                 }
             }
-        } else if name == O_HOLD_REFINING {
-            hold = Some(v);
-        } else if name == O_CARGO_WATER {
-            water = Some(v);
-        } else if name == O_CARGO {
+            Some(Slot::Cap) => {
+                seen_cap = true;
+                if !v.is_none() {
+                    match v.downcast_exact::<PyFloat>() {
+                        Ok(fl) => x.payload_cap = Some(fl.value()),
+                        Err(_) => ok = false,
+                    }
+                }
+            }
+            Some(Slot::Hold) => hold = Some(v),
+            Some(Slot::Water) => water = Some(v),
             // Optional; unreadable means the callbacks answer, not a fallback.
-            native = read_native(&v);
-        } else {
+            Some(Slot::Cargo) => native = read_native(&v),
             // A misspelt or stale name is a programming error, not data.
-            return Err(PyTypeError::new_err(format!("SizingLoop.run: unknown input {name:?}")));
+            None => return Err(PyTypeError::new_err(format!("SizingLoop.run: unknown input {name:?}"))),
         }
     }
     let missing: Vec<&str> = F_NAMES.iter().zip(seen_f).filter(|(_, s)| !s).map(|(n, _)| *n)
@@ -985,5 +1057,27 @@ impl SizingLoop {
     /// into Python), over the runs Rust answered, since construction.
     fn knapsack_counts(&self) -> (u64, u64) {
         (self.knap_native.load(Relaxed), self.knap_callback.load(Relaxed))
+    }
+}
+
+#[cfg(test)]
+mod slot_tests {
+    use super::*;
+
+    /// The generated match and the tables it was generated from agree on
+    /// every name, both ways.
+    #[test]
+    fn slot_matches_tables() {
+        for (i, n) in F_NAMES.iter().enumerate() {
+            assert_eq!(slot(n), Some(Slot::F(i, F_INT_OK.contains(n))), "{n}");
+        }
+        for (i, n) in B_NAMES.iter().enumerate() {
+            assert_eq!(slot(n), Some(Slot::B(i)), "{n}");
+        }
+        assert_eq!(slot(O_PAYLOAD_CAP), Some(Slot::Cap));
+        assert_eq!(slot(O_HOLD_REFINING), Some(Slot::Hold));
+        assert_eq!(slot(O_CARGO_WATER), Some(Slot::Water));
+        assert_eq!(slot(O_CARGO), Some(Slot::Cargo));
+        assert_eq!(slot("no_such_input"), None);
     }
 }

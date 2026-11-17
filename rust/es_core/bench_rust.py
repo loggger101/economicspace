@@ -12,7 +12,6 @@ results must also be identical, which makes this a third equality check.
 CSV loading, the pool and writing are excluded: this measures the search.
 """
 import os
-import struct
 import sys
 import time
 
@@ -21,38 +20,31 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 os.environ.pop("ECONOMICSPACE_RUST", None)
 sys.path.insert(0, REPO)
 os.chdir(REPO)
-import numpy as np            # noqa: E402
 import modules.calc as calc   # noqa: E402
 import es_core                # noqa: E402
+import spacevalue_cargo_rs   # noqa: E402
+import bitsame                # noqa: E402  (this script's folder)
 
-if es_core.planted_defect():
+if es_core.planted_defect() or spacevalue_cargo_rs.planted_defect():
     raise SystemExit("planted build installed; benchmark the real one")
-PY = (calc.max_return_payload_kg, None, None)
+# Rust mode is everything ECONOMICSPACE_RUST=1 turns on, built as calc builds
+# it: the solver, the sizing loop, the ladder and calc's own cargo calls.
+SWAP = ("max_return_payload_kg", "_ES_LOOP", "_ES_LADDER",
+        "_capped_sale_value", "_hold_refining")
+PY = (calc.max_return_payload_kg, None, None,
+      calc._capped_sale_value, calc._hold_refining)
 RS = (es_core.Solver(calc.max_return_payload_kg, calc.G0_M_S2),
-      es_core.SizingLoop(calc.G0_M_S2, calc._ES_UNSET,
-                         calc._DAMP_MIN_STEP, calc._DAMP_EXTRA_PASSES),
-      es_core.ProgrammeLadder())
+      calc._rust_sizing_loop(es_core),
+      es_core.ProgrammeLadder()) + calc._rust_cargo(spacevalue_cargo_rs,
+                                                    calc._hold_refining)
 ORIG = calc.evaluate_asteroid
 t = {"py": 0.0, "rs": 0.0}
 n = {"rows": 0, "differ": 0}
 
 
-def bits_equal(a, b):
-    if type(a) is not type(b):
-        return False
-    if isinstance(a, float):
-        return struct.pack("<d", a) == struct.pack("<d", b)
-    if isinstance(a, np.generic):
-        return a.tobytes() == b.tobytes()
-    if isinstance(a, dict):
-        return list(a) == list(b) and all(bits_equal(a[k], b[k]) for k in a)
-    if isinstance(a, (list, tuple)):
-        return len(a) == len(b) and all(bits_equal(x, y) for x, y in zip(a, b))
-    return a == b
-
-
 def timed(mode, *a, **kw):
-    calc.max_return_payload_kg, calc._ES_LOOP, calc._ES_LADDER = mode
+    for name, v in zip(SWAP, mode):
+        setattr(calc, name, v)
     t0 = time.perf_counter()
     r = ORIG(*a, **kw)
     return r, time.perf_counter() - t0
@@ -69,9 +61,10 @@ def bench(*a, **kw):
     t["py"] += dp
     t["rs"] += dr
     n["rows"] += 1
-    if not bits_equal(rp, rr):
+    if not bitsame.same(rp, rr):
         n["differ"] += 1
-    calc.max_return_payload_kg, calc._ES_LOOP, calc._ES_LADDER = PY
+    for name, v in zip(SWAP, PY):
+        setattr(calc, name, v)
     return rp
 
 

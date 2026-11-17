@@ -28,9 +28,7 @@ only if a comparison or the ladder's self-check CATCHES the plant.  A
 planted spacevalue_cargo_rs is run WITHOUT --expect-defect (that flag keys on
 es_core's build) and must exit 1 with VERDICT FAIL.
 """
-import math
 import os
-import struct
 import sys
 import time
 
@@ -43,20 +41,17 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 os.environ.pop("ECONOMICSPACE_RUST", None)
 sys.path.insert(0, REPO)
 os.chdir(REPO)
-import numpy as np            # noqa: E402
 import modules.calc as calc   # noqa: E402
+import bitsame                # noqa: E402  (this script's folder)
 import es_core                # noqa: E402
 assert calc._ES_LOOP is None and not isinstance(calc.max_return_payload_kg, es_core.Solver)
-if tuple(es_core.SizingLoop.STATE_NAMES) != calc._ES_STATE_NAMES:
-    raise SystemExit("es_core STATE_NAMES differ from calc's: rebuild es_core")
 calc.max_return_payload_kg = es_core.Solver(calc.max_return_payload_kg, calc.G0_M_S2)
 assert calc._ES_LADDER is None
 # audit=True: every rung Rust prices is also priced by Python's
 # `_price_programme` and must match bit for bit (total_cost and g).  Result
 # comparison alone cannot see a one-ulp rung drift that flips no winner.
 RS_LADDER = es_core.ProgrammeLadder(audit=True)
-_LOOP = es_core.SizingLoop(calc.G0_M_S2, calc._ES_UNSET,
-                           calc._DAMP_MIN_STEP, calc._DAMP_EXTRA_PASSES)
+_LOOP = calc._rust_sizing_loop(es_core)
 KIND_NAMES = {0: "fallback", 1: "refuse", 2: "done", 3: "refit_feed", 4: "refit_plant"}
 coverage = {k: 0 for k in KIND_NAMES.values()}
 coverage.update({"done_damped": 0, "done_not_converged": 0, "relax_on": 0,
@@ -142,42 +137,6 @@ stats = {"calls": 0, "mismatch": 0, "py_s": 0.0, "rs_s": 0.0,
 shown = []
 
 
-def bits(x):
-    return struct.pack("<d", x)
-
-
-def same(a, b, path="", diffs=None):
-    """Identical to any downstream reader?  Collects differing paths."""
-    if type(a) is not type(b):
-        diffs.append("%s type %s vs %s" % (path, type(a).__name__, type(b).__name__))
-        return
-    if isinstance(a, float):
-        if bits(a) != bits(b):
-            diffs.append("%s %s vs %s" % (path, bits(a).hex(), bits(b).hex()))
-    elif isinstance(a, np.generic):
-        if a.tobytes() != b.tobytes():
-            diffs.append("%s np %r vs %r" % (path, a, b))
-    elif isinstance(a, dict):
-        if list(a) != list(b):
-            diffs.append("%s keys differ" % path)
-            return
-        for k in a:
-            same(a[k], b[k], "%s.%s" % (path, k), diffs)
-    elif isinstance(a, (list, tuple)):
-        if len(a) != len(b):
-            diffs.append("%s len %d vs %d" % (path, len(a), len(b)))
-            return
-        for i, (x, y) in enumerate(zip(a, b)):
-            same(x, y, "%s[%d]" % (path, i), diffs)
-    elif a is None or isinstance(a, (str, bool, int)):
-        if a != b:
-            diffs.append("%s %r vs %r" % (path, a, b))
-    else:
-        # Anything else would need its own rule; refuse to call it equal.
-        if not (a is b or a == b):
-            diffs.append("%s unhandled %s" % (path, type(a).__name__))
-
-
 def run_in(mode, a, kw):
     saved = (current[0],) + tuple(getattr(calc, n) for n in SWAP)
     current[0] = mode
@@ -198,24 +157,15 @@ def shadow(*a, **kw):
     r_py = run_in("python", a, kw)
     r_rs = run_in("rust", a, kw)
     stats["calls"] += 1
-    diffs = []
-    same(r_py, r_rs, "result", diffs)
-    if diffs:
+    d = bitsame.diffs(r_py, r_rs, "result")
+    if d:
         stats["mismatch"] += 1
         if len(shown) < 5:
-            shown.append(diffs[:6])
+            shown.append(d[:6])
     return r_py if caller_mode == "python" else r_rs
 
 
 calc._evaluate_combo_at_ratio = shadow
-
-
-def _outcome(f, a, kw):
-    """The result, or the exception's type and text (compared, not swallowed)."""
-    try:
-        return ("ok", f(*a, **kw))
-    except Exception as e:  # noqa: BLE001
-        return ("raised", type(e).__name__, str(e))
 
 
 def dual_solver(*a, **kw):
@@ -224,15 +174,14 @@ def dual_solver(*a, **kw):
     call it there, so run_in's per-mode swap never reaches them.  Both solvers
     answer every such call and must agree bit for bit; a solver bug that only
     moves pruning would otherwise be invisible to this shadow."""
-    r_py = _outcome(PY_SOLVER, a, kw)
-    r_rs = _outcome(RS_SOLVER, a, kw)
+    r_py = bitsame.outcome(PY_SOLVER, *a, **kw)
+    r_rs = bitsame.outcome(RS_SOLVER, *a, **kw)
     stats["outside_calls"] += 1
-    diffs = []
-    same(r_py, r_rs, "solver", diffs)
-    if diffs:
+    d = bitsame.diffs(r_py, r_rs, "solver")
+    if d:
         stats["outside_mismatch"] += 1
         if len(shown) < 5:
-            shown.append(diffs[:6])
+            shown.append(d[:6])
     if r_py[0] == "raised":
         return PY_SOLVER(*a, **kw)      # re-raise the Python's own exception
     return r_py[1]

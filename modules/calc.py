@@ -6515,13 +6515,22 @@ _ES_STATE_NAMES = (
     "carried_ep_kg", "return_dry_kg", "hardware_est_kg", "cascade",
     "trial_payload", "r_ret", "hold_water",
 )
-if _ES_CORE is not None:
-    if tuple(_ES_CORE.SizingLoop.STATE_NAMES) != _ES_STATE_NAMES:
+
+
+def _rust_sizing_loop(es):
+    """`es.SizingLoop` built exactly as calc runs it, refusing a build whose
+    state tuple is not the one `_evaluate_combo_at_ratio` unpacks.  The gate
+    scripts build theirs here too (they load planted builds, so they cannot
+    go through calc's import guard)."""
+    if tuple(es.SizingLoop.STATE_NAMES) != _ES_STATE_NAMES:
         raise RuntimeError(
             "es_core.SizingLoop.STATE_NAMES does not match calc.py's unpacking; "
             "rebuild es_core from this checkout")
-    _ES_LOOP = _ES_CORE.SizingLoop(
-        G0_M_S2, _ES_UNSET, _DAMP_MIN_STEP, _DAMP_EXTRA_PASSES)
+    return es.SizingLoop(G0_M_S2, _ES_UNSET, _DAMP_MIN_STEP, _DAMP_EXTRA_PASSES)
+
+
+if _ES_CORE is not None:
+    _ES_LOOP = _rust_sizing_loop(_ES_CORE)
 
 # Opt-in Rust programme ladder (PROTOTYPE).  None, the default, leaves the
 # ladder in `_evaluate_combo_at_ratio` the Python it was.

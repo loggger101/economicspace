@@ -60,6 +60,25 @@ pub(crate) enum Outcome {
     },
 }
 
+/// Python's two-argument `max(a, b)`: `a` unless `b > a`.
+#[inline(always)]
+pub(crate) fn py_max(a: f64, b: f64) -> f64 {
+    if b > a {
+        b
+    } else {
+        a
+    }
+}
+/// Python's `min(a, b)`: `a` unless `b < a`.
+#[inline(always)]
+pub(crate) fn py_min(a: f64, b: f64) -> f64 {
+    if b < a {
+        b
+    } else {
+        a
+    }
+}
+
 /// Python's `max(0.0, x)`: the first argument unless the second is strictly
 /// greater.  NaN and -0.0 both come back as 0.0, as they do in CPython.
 #[inline(always)]
