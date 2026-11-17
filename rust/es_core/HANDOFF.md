@@ -69,6 +69,46 @@ says how to pick it up.
   `python`, and maturin and PyO3 need a real `python.exe` on PATH, so put the
   interpreter's directory first on PATH (a bash shim is not enough).
 
+## Items 2 and 3 closed on DESKTOP-PJS73RO (2026-11-17, at `cc51d5c`)
+
+- **Item 3, the fallback counters**: Stage 4 now prints one line per
+  component (solver, loop, loop knapsack, ladder, cargo) at the end of
+  `build_profitability_catalog`, summed over the pool's workers (each chunk
+  returns its counter delta), WARNs when a component ran entirely in Python,
+  and raises when the ladder's self-check mismatched outside the gate.
+  Checked on 40 rows benef/search cislunar: serial and 4 workers give the same
+  totals and the same CSV; a planted mismatch raises; an all-fallback ladder
+  WARNs.  `verify.py` and the gate's e2e harness silence Stage 4's console, so
+  the line does not appear in their logs.
+- verify.py at `cc51d5c` against the Rust-mode baseline
+  `rust-3a41fa5-desktop`: Python mode ALL CHECKS PASSED (check 1 MATCH on all
+  four cells, check 2 MATCH with each pruner off, checks 3-7 clean, check 8
+  violations 0 with both plants caught); Rust mode check 1 and 3-7 MATCH,
+  check 8 NOT VERIFIED (exit 1, by design).  Python mode matching a Rust-mode
+  baseline is a cross-mode result too.
+- **Item 2, the gate at three destinations**, each **29 of 29 OK, bad 0**,
+  every share 100% Rust, 0 fallbacks, 0 ladder self-check mismatches, e2e
+  catalogs byte-identical Python = Rust (hashes are of this day's run only):
+
+  | DEST | e2e 150 benef/search | e2e 2000 raw/search | speed-up 150 serial / 150 pool 4 / 2000 |
+  |---|---|---|---|
+  | cislunar | `250f485f4136aef0` | `b437969187922396` | 1.50x / 1.25x / 1.33x |
+  | geo | `45847d4957f0dfc7` | `3147c3bb413e8cd0` | 1.64x / 1.28x / 1.39x |
+  | mars_surface | `65152589ce8ea20a` | `fe7d5980a5858084` | 1.44x / 1.28x / 1.32x |
+
+- Shadow `PATHS`, boil-off loops (shadow_benef / shadow_raw / shadow_dials):
+  cislunar 0 / 0 / 562, geo 2067 / 0 / 725, mars_surface 721 / 0 / 2608.  So
+  the boil-off path is now exercised in the benef shadow, which cislunar
+  never reached.  **`flown_load` is 0 at every destination and in every
+  shadow: no gate has exercised that path yet**; a cell that reaches it is
+  the remaining coverage gap.
+- Setup per destination: a separate work dir (`C:\Users\Owner\es_gate_<D>`),
+  that destination's Stage 2 installed into it with
+  `run_pipeline.py --stages 2 --destination <D> --output <W>/out --yes`, and
+  the two captures copied from the cislunar work dir (they are recorded at
+  fixed destinations, raw at cislunar and benef at mars_surface, whatever
+  `DEST` is).
+
 ## Setting up the desktop
 
 1. Toolchain (install what is missing; the user allowed installing anything
@@ -113,10 +153,12 @@ WORKDIR`.  Use a separate WORKDIR per destination.
    the two machines' Rust builds.  Compare the e2e hashes with the ones above.
    If they differ, first establish whether the Python legs differ too (a
    host difference, not a port defect: CLAUDE.md's Environment section).
-2. **Gate at more destinations**, at least one surface (`earth_surface` or
+2. (Closed 2026-11-17: geo and mars_surface, above.  `flown_load` still
+   unreached.)  **Gate at more destinations**, at least one surface (`earth_surface` or
    `mars_surface`) and `geo`.  Watch the shadow's `PATHS` line for loop paths
    that cislunar never reached.
-3. **Print the fallback counters** at the end of Stage 4, summed over
+3. (Closed 2026-11-17 at `5b13784`/`cc51d5c`, gate re-run 29/29.)
+   **Print the fallback counters** at the end of Stage 4, summed over
    workers, and make a ladder self-check mismatch outside the gate an error.
    A code change in calc: re-run the gate after it.
 4. **A hook for verify.py check 8 inside the Rust ladder**, so check 8 can
