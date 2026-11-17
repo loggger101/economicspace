@@ -302,6 +302,14 @@ and its planted copy, for the gate, with `--features planted_knapsack_defect`.
 
 ## The gate (all of it must pass, and the plants must be caught)
 
+`gate/gate_all.sh WORKDIR` runs all of it in order: it builds the good and
+planted wheels, runs every row below, and swaps the builds in and out. It
+ends with a summary of each step's exit code against what it must be.
+`gate/make_workdir.sh WORKDIR` prepares the work directory (a copy of Stage
+1-3's outputs and the two captures). The plants that are not cargo features
+live in `gate/plants/`. [HANDOFF.md](HANDOFF.md) says how to run it on
+another host.
+
 | tool | checks | needs |
 |---|---|---|
 | `capture.py` | records every real solver call in a sample run | Stage 1-3 outputs in a scratch dir |
@@ -349,6 +357,8 @@ build their Rust objects themselves rather than through that guard, so no
 bypass lives in calc.py.
 
 ## Before this could merge (not done)
+
+[HANDOFF.md](HANDOFF.md) puts these in the order to do them.
 
 - Run the gate on `DESKTOP-PJS73RO`. `platform_check.py` proves numpy
   parity between hosts, not that the C runtime's `exp` and `log` match.

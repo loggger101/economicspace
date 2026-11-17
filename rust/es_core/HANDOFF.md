@@ -1,0 +1,162 @@
+# Handoff: the Rust prototype, from here to a merge
+
+Written 2026-11-16 on host `fartbutt` (user `Loggg`) for an agent continuing
+on `DESKTOP-PJS73RO` (user `Owner`) with no access to the conversation that
+built this.  Read this file, then [README.md](README.md) (what the port is,
+what it measured, the gate), then the repo's `CLAUDE.md`.  The README's
+"Before this could merge" list is the authority for WHAT is left; this file
+says how to pick it up.
+
+## State
+
+- **economicspace** branch `rust-solver-prototype`, **spacevalue** branch
+  `rust-cargo-prototype`.  Both are local commits only (no upstream) unless the
+  user has pushed them since; the two machines see them through OneDrive's copy
+  of `.git`.  Never work on a branch from both machines at once, never
+  `git stash`, and read `git status` with CLAUDE.md's phantom-modification
+  rule in mind.
+- Nothing on `main` imports any of it.  `ECONOMICSPACE_RUST` unset (the
+  default) runs the Python path; `ECONOMICSPACE_RUST=1` swaps in `es_core`
+  (sizing loop, programme ladder, solver) and spacevalue's
+  `spacevalue_cargo_rs` (knapsack, capped sale), and refuses to import if
+  either is missing or is a planted build.
+- The default (Python) path also changed on the branch, though no number
+  should move: `payload_mix` is formatted for the winner only, and calc reads
+  through `_rust_sizing_loop` only in Rust mode.  See "Evidence" below for what
+  proves the output unchanged.
+- The user's verdict on 2026-11-16: not merged, because the items in the
+  README's list are open.  Do not merge to `main` until they are closed; the
+  user decides the merge (`gh pr merge` may be refused by the permission
+  classifier: hand over the command then).
+
+## Evidence so far (this host only, cislunar only)
+
+- The full gate (`gate/gate_all.sh`) passed 27 of 27 steps on 2026-11-16 at
+  commit `1a040af`, every plant caught; e2e catalogs byte-identical
+  (`2dab2c78dfb39cbc` benef/search 150 rows, in process and pooled;
+  `f4289dfb5177ef59` raw/search 2000).
+- That run used the scratchpad copy of the gate.  The repo copy,
+  `gate/gate_all.sh` (29 steps: it adds the two check 8 guard steps), and
+  `gate/make_workdir.sh` have NOT yet run end to end; only their plants and
+  the work-dir checks ran here.  Their first full run is item 1 below: a
+  failure there may be the script, not the port.
+- verify.py against `main` at `e1fee40`: Python mode passes all 8 checks;
+  Rust mode matches on 1 and 3-7 and refuses 8 as designed.  Details in the
+  section of that name at the end.
+
+## Setting up the desktop
+
+1. Toolchain (install what is missing; the user allowed installing anything
+   needed): rustup stable `x86_64-pc-windows-msvc`, the MSVC Build Tools with
+   the Windows SDK, `pip install maturin==1.9.6`.  `cargo --version` from Git
+   Bash needs `export PATH="$HOME/.cargo/bin:$PATH"`.
+2. Both checkouts next to each other under the GitHub folder, on the branches
+   above (es_core's `Cargo.toml` reaches `../../../spacevalue/rust/cargo_core`
+   by path; that path is itself an open item).
+3. `py platform_check.py` and `py tree_check.py` in economicspace.  A library
+   version that differs from `platform_reference.json` is not a defect, but
+   record it with the gate result.
+4. A work directory OUTSIDE OneDrive, e.g. `C:\Users\Owner\es_gate`:
+
+       bash rust/es_core/gate/make_workdir.sh /c/Users/Owner/es_gate
+
+   It copies Stage 1-3's outputs from `asteroid_pipeline/` (gitignored but in
+   the synced folder; if it is missing on the desktop, copy it from this host,
+   never regenerate it) and records the two solver captures (~40 min).
+
+## The gate
+
+    bash rust/es_core/gate/gate_all.sh /c/Users/Owner/es_gate > /c/Users/Owner/es_gate/gate_all.log 2>&1
+
+About 75 minutes.  Run it in the background and wait for it to finish; never
+run a second Stage 4 process beside it (two over the full catalog ran a 32 GB
+host out of memory).  Read the `SUMMARY`: every line `OK`, `bad 0`.  A step
+with `want 1` must fail (a plant or a guard refusing).  It reinstalls
+`es_core` and `spacevalue_cargo_rs` several times and leaves the good builds
+installed.  Never edit `modules/`, `verify.py` or the gate scripts while it
+runs: its subprocesses import them as they start.
+
+At another destination: `DEST=geo bash .../make_workdir.sh WORKDIR` names
+the command that installs that destination's Stage 2 table into the work dir
+(never into `asteroid_pipeline/`); then `DEST=geo bash .../gate_all.sh
+WORKDIR`.  Use a separate WORKDIR per destination.
+
+## Order of work (each closes an item in the README's list)
+
+1. **Gate on the desktop** at cislunar.  This is the cross-host question:
+   `exp`/`log` come from each host's C runtime, and nothing else has compared
+   the two machines' Rust builds.  Compare the e2e hashes with the ones above.
+   If they differ, first establish whether the Python legs differ too (a
+   host difference, not a port defect: CLAUDE.md's Environment section).
+2. **Gate at more destinations**, at least one surface (`earth_surface` or
+   `mars_surface`) and `geo`.  Watch the shadow's `PATHS` line for loop paths
+   that cislunar never reached.
+3. **Print the fallback counters** at the end of Stage 4, summed over
+   workers, and make a ladder self-check mismatch outside the gate an error.
+   A code change in calc: re-run the gate after it.
+4. **A hook for verify.py check 8 inside the Rust ladder**, so check 8 can
+   audit Rust mode instead of refusing.  Its guard plant is
+   `gate/plants/check8_guard.py`; update it with the hook.
+5. **spacevalue first**: CI building and testing `rust/cargo_core` and
+   `cargo_py` (spacevalue's `rust/README.md` lists what that needs), ship
+   `spacevalue_cargo_rs` with the package (a wheel or an extra), merge, tag.
+   That is a spacevalue release; follow its CLAUDE.md.
+6. **Pin es_core's `spacevalue_cargo_core` by git tag**, the tag
+   `requirements.txt` pins spacevalue to, with a check holding the two
+   together (as `verify_docs.py` check 7 holds the Python pins); decide how
+   the `es_core` wheel is built and installed (`_runtime.install()`, the
+   requirements files) and wire the gate into CI.
+7. **One full campaign cell with `ECONOMICSPACE_RUST=1`**, its hash against
+   the archived cell (`campaign/run_cell.py`; read CLAUDE.md's warning about
+   it overwriting the archive first: archive with a suffix).
+8. **Release notes**: versions.md's Releases and Module changelogs (the
+   branch moves no number, so calc's stamp may stay; say so, as the "moved
+   without moving a number" table does), and a PR to `main`.
+
+## Gotchas learned building it
+
+- Build outside OneDrive (`CARGO_TARGET_DIR=$HOME/.cargo-target/<name>`);
+  inside it maturin fails with "output path is not a writable directory".
+- `cargo test --lib` for es_core needs Python's directory on `PATH` (PyO3
+  links it); `gate_all.sh` does this.
+- A gate that compares Rust with Rust, or Python with Python, passes on
+  nothing.  Each comparison in the gate also checks the share that actually
+  ran in Rust, and each has a plant proving it fails.  Keep that shape for
+  anything you add: plant the failure first.
+- The shadow misses a defect in a field a later stage overwrites (the solver
+  plant); the replay catches it.  Do not drop either.
+- Timing two builds in separate sessions measures the session.  The README's
+  "How to price a change" section says how the speed rows were taken.
+- Python's stdout is cp1252: print ASCII.  Never `python - <<EOF`; write a
+  script file and run it with `< /dev/null`.
+
+## verify.py against main
+
+Run 2026-11-16 on this host, at branch commit `1a040af` (tree clean in the
+model paths; only the gate scripts, this file and the README uncommitted).
+The baseline was taken from `main` at `e1fee40` (master 1.76.0, calc 1.46.0)
+in a separate worktree, provenance "model paths clean", and copied to
+`.verify/baseline-main-e1fee40` (gitignored, so it is NOT on the desktop:
+take a new one there with `git worktree add <dir> main` and
+`py verify.py baseline --tag main-<sha>` inside it).
+
+| cell | hash (baseline = branch) |
+|---|---|
+| raw | `53b7aa2e987ae8c5` |
+| raw+search | `3ab1013489eb949f` |
+| benef | `0bf60835f283d92a` |
+| benef+search | `42e9f43b76d344db` |
+
+- **Python mode** (`ECONOMICSPACE_RUST` unset), full check: ALL CHECKS
+  PASSED, exit 0. Check 1 MATCH on all four cells (151/151 rows each);
+  check 2 MATCH with the prune, the combo bound and the rung bound each off;
+  checks 3-7 clean; check 8 violations 0 on every cell, its planted floor
+  caught.  So the branch moves no number on the default path.
+- **Rust mode** (`ECONOMICSPACE_RUST=1`, `--skip prune`): check 1 MATCH on
+  all four cells with the same hashes, check 3 MATCH serial and pooled,
+  checks 4-7 clean; check 8 printed NOT VERIFIED and the run exited 1.  That
+  refusal is the designed behaviour (item 4 of the order below removes it),
+  not a failure of the port.  Rust mode was the faster leg: benef+search
+  serial 56.4 s against Python's 145.3 s in this one session (a single
+  pairing, not a measurement; the README's speed rows are the measured
+  ones).
