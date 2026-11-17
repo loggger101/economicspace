@@ -4771,6 +4771,9 @@ if os.environ.get("ECONOMICSPACE_RUST", "") not in ("", "0"):
             "for the gate); rebuild it without any planted_* feature")
     max_return_payload_kg = _es_core.Solver(max_return_payload_kg, G0_M_S2)
     _ES_CORE = _es_core
+    # Held apart from the name above, which harnesses rebind, so Stage 4's
+    # fallback report reads the solver this module installed.
+    _ES_SOLVER = max_return_payload_kg
 
 
 def _rust_cargo(rs, py_hold):
@@ -6535,6 +6538,69 @@ if _ES_CORE is not None:
 # Opt-in Rust programme ladder (PROTOTYPE).  None, the default, leaves the
 # ladder in `_evaluate_combo_at_ratio` the Python it was.
 _ES_LADDER = _ES_CORE.ProgrammeLadder() if _ES_CORE is not None else None
+
+
+# What each Rust object answered and what it handed back to Python, in this
+# process.  A worker's counters die with the pool, so `_evaluate_chunk` returns
+# each chunk's delta and Stage 4 sums them (`_report_rust_counters`).  Without
+# this a run that fell back on every call would still read as a Rust run.
+_RUST_COUNTER_NAMES = (
+    "solver_rust", "solver_python", "loop_rust", "loop_python",
+    "loop_knapsack_rust", "loop_knapsack_python", "ladder_rust",
+    "ladder_python", "ladder_selfcheck_mismatch", "cargo_rust", "cargo_python",
+)
+
+
+def _rust_counters() -> Optional[Tuple[int, ...]]:
+    """This process's Rust counters in `_RUST_COUNTER_NAMES` order, or None in
+    Python mode."""
+    if _ES_CORE is None:
+        return None
+    st = _ES_LADDER.stats()
+    return (_ES_SOLVER.counts() + _ES_LOOP.counts() + _ES_LOOP.knapsack_counts()
+            + (st["fast"], st["fallback"], st["selfcheck_mismatch"])
+            + tuple(_sv_cargo_rs.counts()))
+
+
+def _counter_delta(after: Tuple[int, ...], before: Tuple[int, ...]) -> Tuple[int, ...]:
+    """`after - before`, counter by counter."""
+    return tuple(a - b for a, b in zip(after, before))
+
+
+def _report_rust_counters(totals: Tuple[int, ...]) -> None:
+    """Print what ran in Rust over the whole search, and refuse a run whose
+    ladder self-check disagreed with Python.
+
+    A self-check mismatch means the Rust ladder's cost for a rung differed
+    from Python's by at least one bit.  The ladder falls back for that call,
+    so the row is still Python's, but the port no longer reproduces the model
+    and every rung it settled alone is suspect.  Outside the gate (whose
+    shadow builds its own audited ladder and counts these) that is an error.
+    """
+    c = dict(zip(_RUST_COUNTER_NAMES, totals))
+
+    def share(fast: str, slow: str) -> str:
+        n = c[fast] + c[slow]
+        pct = (100.0 * c[fast] / n) if n else 0.0
+        return f"{c[fast]:,} in Rust, {c[slow]:,} in Python ({pct:.1f}% Rust)"
+
+    print("\n  Rust mode (ECONOMICSPACE_RUST=1), summed over every process:")
+    for label, fast, slow in (
+            ("solver       ", "solver_rust", "solver_python"),
+            ("sizing loop  ", "loop_rust", "loop_python"),
+            ("loop knapsack", "loop_knapsack_rust", "loop_knapsack_python"),
+            ("ladder       ", "ladder_rust", "ladder_python"),
+            ("cargo calls  ", "cargo_rust", "cargo_python")):
+        print(f"    {label}  {share(fast, slow)}")
+        if c[fast] == 0 and c[slow] > 0:
+            print(f"     WARN   every {label.strip()} call fell back to Python")
+    print(f"    ladder self-check mismatches  {c['ladder_selfcheck_mismatch']:,}")
+    if c["ladder_selfcheck_mismatch"]:
+        raise RuntimeError(
+            "Rust ladder self-check: %d rung(s) priced differently from "
+            "Python; the es_core build does not reproduce this calc.py. "
+            "Re-run the gate (rust/es_core/README.md) or unset "
+            "ECONOMICSPACE_RUST." % c["ladder_selfcheck_mismatch"])
 
 
 # Smaller loads a body too small for its programme ladder is tried at; see
@@ -9920,12 +9986,17 @@ def _evaluate_chunk(chunk: pd.DataFrame) -> List[dict]:
     combos   = _WORKER_CTX["combos"]
     config   = _WORKER_CTX["config"]
 
+    before = _rust_counters()
     out: List[dict] = []
     for row in _iter_row_dicts(chunk):
         result = evaluate_asteroid(row, catalogs, config, combos)
         if result is not None:
             out.append(result)
-    return out
+    if before is None:
+        return out
+    # Rust mode: the chunk's counters travel back with its rows (a worker's
+    # own counters die with the pool).
+    return out, _counter_delta(_rust_counters(), before)
 
 
 # Measured on the reference machine (6 physical / 12 logical cores, working
@@ -10051,6 +10122,7 @@ def _evaluate_in_parallel(
     combos:      List[Tuple[Dict[str, Any], Dict[str, Any]]],
     n_workers:   int,
     on_progress,
+    rust_totals: Optional[List[int]] = None,
 ) -> Optional[List[dict]]:
     """Run the per-asteroid search across `n_workers` processes.
 
@@ -10065,6 +10137,9 @@ def _evaluate_in_parallel(
     matters beyond tidiness: the caller sorts on `profit_usd` with pandas'
     default quicksort, which is not stable, so a different arrival order could
     permute tied rows and make two runs of the same code disagree.
+
+    `rust_totals` (Rust mode only) accumulates each chunk's counter delta,
+    which `_evaluate_chunk` returns beside its rows in that mode.
     """
     chunks = _chunk_frame(work_df, n_workers)
 
@@ -10084,6 +10159,9 @@ def _evaluate_in_parallel(
         results: List[dict] = []
         try:
             for chunk, found in zip(chunks, pool.imap(_evaluate_chunk, chunks)):
+                if rust_totals is not None:
+                    found, delta = found
+                    rust_totals[:] = [a + b for a, b in zip(rust_totals, delta)]
                 results.extend(found)
                 on_progress(len(chunk))
             pool.close()
@@ -10233,14 +10311,20 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
             print(f"     ... {i:,} / {n:,} evaluated  ({progress['pct']}%)")
 
     results = None
+    # Rust mode: workers' counter deltas are added here as their chunks
+    # arrive; this process's own counters (pre-filter probe, serial search)
+    # are added at the end.
+    rust_totals = [0] * len(_RUST_COUNTER_NAMES) if _ES_CORE is not None else None
     n_workers = _resolve_worker_count(config, n)
     if n_workers > 1:
         print(f"       {n_workers} worker processes "
               f"({os.cpu_count()} logical CPUs, parallel_workers="
               f"{config.parallel_workers or 'auto'})")
         results = _evaluate_in_parallel(
-            work_df, catalogs, config, combos, n_workers, report,
+            work_df, catalogs, config, combos, n_workers, report, rust_totals,
         )
+        if results is None and rust_totals is not None:
+            rust_totals = [0] * len(_RUST_COUNTER_NAMES)
 
     if results is None:                       # serial path, or no pool started
         progress["done"] = progress["pct"] = 0
@@ -10250,6 +10334,11 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
             if result is not None:
                 results.append(result)
             report(1)
+
+    if rust_totals is not None:
+        # everything this process answered itself (probe, serial search)
+        own = _rust_counters()
+        _report_rust_counters(tuple(a + b for a, b in zip(rust_totals, own)))
 
     if not results:
         print("\nFAIL  No viable evaluations - every asteroid failed.")
