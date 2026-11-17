@@ -6580,6 +6580,7 @@ def _report_rust_counters(totals: Tuple[int, ...]) -> None:
     c = dict(zip(_RUST_COUNTER_NAMES, totals))
 
     def share(fast: str, slow: str) -> str:
+        """One component's line: answered in Rust, handed to Python, share."""
         n = c[fast] + c[slow]
         pct = (100.0 * c[fast] / n) if n else 0.0
         return f"{c[fast]:,} in Rust, {c[slow]:,} in Python ({pct:.1f}% Rust)"
