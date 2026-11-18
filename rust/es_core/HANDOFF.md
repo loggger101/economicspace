@@ -109,6 +109,34 @@ says how to pick it up.
   fixed destinations, raw at cislunar and benef at mars_surface, whatever
   `DEST` is).
 
+## Item 4 closed on DESKTOP-PJS73RO (2026-11-17, at `c036c80`)
+
+- `ProgrammeLadder.run` takes an optional `rung_hook`; calc passes
+  `_ES_LADDER_HOOK` (None by default, so nothing is collected).  Once per
+  ladder Rust answers, never on a fallback, the hook receives the total of
+  every rung Rust priced without calling `_price_programme`, the ones check
+  8's `_mission_cost_tail` wrapper cannot see.  Check 8 installs it in Rust
+  mode, prints a "Rust ladder:" line per cell, and fails a searched cell whose
+  Rust-priced rungs never break the planted floor.
+- verify.py at `c036c80`: **Rust mode now passes check 8** (`--skip prune`,
+  exit 0; check 1 and 3-7 MATCH as before), and its check 8 counts equal
+  Python mode's to the rung on all four cells (raw+search 2,167,749 rungs of
+  which 1,722,382 priced in Rust alone; benef+search 13,397,065, of which
+  11,849,288).  Python mode `--skip prune parallel`: all checks run passed,
+  same counts.
+- The gate is now **32 steps** (the two refusal steps are replaced by
+  `check8_parity`, `plant_check8_nohook`, `plant_check8_half`,
+  `check8_parity_ladder_only` and `plant_planted_hook_defect`, and builds 9
+  wheels): **32 of 32 OK, bad 0** at cislunar, e2e hashes as earlier that
+  day.  `gate/plants/check8_guard.py` runs check 8 on raw+search 40 and
+  benef+search 12 in both modes and holds every count equal.  The thinned
+  hook and the `planted_hook_defect` build each PASS check 8 alone and fail
+  only parity: that is why parity, not check 8's own blindness test, is the
+  gate step.  Python-mode counts are cached in `WORKDIR/check8_py.json` for
+  the steps after the first.
+- Check 8's hook was not re-run at geo or mars_surface: its cells are
+  verify.py's, which are cislunar whatever `DEST` is.
+
 ## Setting up the desktop
 
 1. Toolchain (install what is missing; the user allowed installing anything
@@ -161,7 +189,8 @@ WORKDIR`.  Use a separate WORKDIR per destination.
    **Print the fallback counters** at the end of Stage 4, summed over
    workers, and make a ladder self-check mismatch outside the gate an error.
    A code change in calc: re-run the gate after it.
-4. **A hook for verify.py check 8 inside the Rust ladder**, so check 8 can
+4. (Closed 2026-11-17 at `c036c80`, above.)
+   **A hook for verify.py check 8 inside the Rust ladder**, so check 8 can
    audit Rust mode instead of refusing.  Its guard plant is
    `gate/plants/check8_guard.py`; update it with the hook.
 5. **spacevalue first**: CI building and testing `rust/cargo_core` and
