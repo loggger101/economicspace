@@ -207,6 +207,42 @@ reaches a value. The rc- numbers are General_Research revision candidates.
   experience curves beside `learning_curve_rate` (rc-385). RASSOR 2.0, above,
   also sits beside `mining_rate_kg_per_day_per_kg_rig` (rc-309), and NHATS
   beside `asteroid_mission_duration_yr` (rc-354).
+- **NASA Office of Safety and Mission Assurance (2021)**, *Process for
+  Limiting Orbital Debris*, NASA-STD-8719.14C, sec. 3.2, p. 13,
+  <https://www.nasa.gov/wp-content/uploads/2023/02/nasa-std-871914c.pdf>: the
+  35,786 km nominal altitude of a circular GEO which, over IERS 2010's
+  equatorial radius above, gives `R_GEO_KM` (rc-600). IERS 2010's Table 1.1
+  also gives the J2000.0 obliquity, 84,381.406 arcsec, behind the 23.44 deg
+  in `_COS_ECLIPTIC_TILT` (rc-601).
+- **Bollman, Clarke, Feitis & Roth (1966)**, *Design Parameters for Ballistic
+  Interplanetary Trajectories, Part II*, JPL Technical Report 32-77
+  (NASA-CR-70154), Table 2-1, p. 12, NTRS 19660007302,
+  <https://ntrs.nasa.gov/citations/19660007302>: the 1950.0-epoch mean
+  element 1.523679 AU, `A_MARS_AU`; NASA's Mars Fact Sheet, above, gives the
+  J2000 value 1.52366231 AU (rc-603).
+- **JPL Solar System Dynamics**, *Planetary Satellite Physical Parameters*,
+  <https://ssd.jpl.nasa.gov/sats/phys_par/>: Mars GM 42,828.37362 km³/s²
+  (MAR097), `MU_MARS_KM3_S2` to two decimals; and *Astrodynamic Parameters*,
+  <https://ssd.jpl.nasa.gov/astro_par.html>, whose DE440 Mars-system GM,
+  42,828.375816, would round to .38 (rc-654).
+- **NASA (2009)**, *Human Exploration of Mars Design Reference Architecture
+  5.0*, NASA SP-2009-566, printed p. 22,
+  <https://www.nasa.gov/pdf/373665main_NASA-SP-2009-566.pdf>: the 250 km x
+  33,793 km 1-sol orbit, over the Mars Fact Sheet's 3,396.2 km equatorial
+  radius, behind `R_MARS_1SOL_PERIAPSIS_KM` and `R_MARS_1SOL_APOAPSIS_KM`
+  (rc-693).
+- **Orloff, R. W. (2000)**, *Apollo by the Numbers: A Statistical Reference*,
+  NASA SP-2000-4029, NTRS 20010008244,
+  <https://ntrs.nasa.gov/citations/20010008244>: the 2,050 m/s powered descent
+  Apollo 15-17 flew, in `DV_NRHO_TO_LUNAR_SURFACE_KM_S` and the worksheet's
+  Apollo descent note (rc-786).
+- **Kleinhenz, J. & Paz, A. (2017)**, *An ISRU Propellant Production System
+  for a Fully Fueled Mars Ascent Vehicle*, AIAA 2017-0423, 10th Symposium on
+  Space Resource Utilization, <https://doi.org/10.2514/6.2017-0423>; NTRS
+  20170005179 hosts it as *An ISRU Propellant Production System to Fully Fuel
+  a Mars Ascent Vehicle*: the 1.7 t, 35-52 kW Mars CH4/O2 plant calc cites as
+  scale context beside the carbon-reduction process. It gives no
+  carbon-reduction yield, which calc says has no source (rc-784).
 
 ---
 

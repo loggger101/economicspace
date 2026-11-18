@@ -2811,10 +2811,19 @@ R_LEO_KM         = 6_378.14 + 200.0    # 200-km circular parking orbit
 # at import.  `_geo_capture_dv_km_s` runs twice per catalog row on every
 # destination, and re-deriving a per-destination constant per call is defect
 # class 3 in LESSONS.md.
+# A nominal geocentric radius, rebuilt from two published figures: the 35,786
+# km nominal altitude of a circular GEO (NASA-STD-8719.14C, sec. 3.2, p. 13)
+# plus the 6,378.1366 km equatorial radius (IERS Conventions 2010, Table
+# 1.1), 42,164.1366 km, rounded.  Not a more precise dynamical GEO radius
+# (GR rc-600).
 R_GEO_KM = 42_164.14                   # geostationary radius
 # Asteroid arrivals are near the ecliptic and GEO is equatorial, so the
 # capture burn buys 23.44 deg of plane change as well as the speed change.
 # This is the term intuition drops, and it is worth several hundred m/s.
+# 23.44 deg is the J2000.0 obliquity of the ecliptic, epsilon_0 = 84,381.406
+# arcsec = 23.4392794 deg (IERS Conventions 2010, Table 1.1, p. 17), rounded.
+# Arriving exactly in the ecliptic is the nominal assumption; it is not each
+# asteroid's measured inclination (GR rc-601).
 _COS_ECLIPTIC_TILT = math.cos(math.radians(23.44))
 _V_GEO_KM_S      = math.sqrt(MU_EARTH_KM3_S2 / R_GEO_KM)
 _V_ESC_GEO_KM_S  = math.sqrt(2.0) * _V_GEO_KM_S
@@ -2875,6 +2884,14 @@ DV_LEO_DEORBIT_KM_S = 0.100
 DV_NRHO_TO_LUNAR_SURFACE_KM_S = 0.730 + 2.050
 
 # ── Mars  (v1.6.0) ───────────────────────────────────────────────────────────
+# Mars GM is the planet's, from JPL's MAR097 satellite ephemeris: 42,828.37362
+# km3/s2 (JPL SSD Planetary Satellite Physical Parameters), to two decimals.
+# The DE440 Mars-SYSTEM GM in JPL's Astrodynamic Parameters, 42,828.375816,
+# rounds to .38; settle which basis is meant before moving it (GR rc-654).
+# The semi-major axis 1.523679 AU is JPL TR 32-77's mean element (Table 2-1,
+# p. 12; its elements run from epoch 1950.0).  NSSDCA's J2000 mean element is
+# 1.52366231 AU, 1.7e-5 AU lower; the 1950.0 figure is the one kept (GR rc-603).
+# The radius under both Mars orbits is NSSDCA's 3,396.2 km equatorial radius.
 MU_MARS_KM3_S2   = 42_828.37           # Mars gravitational parameter
 R_MARS_PARK_KM   = 3_396.2 + 200.0     # 200-km circular parking orbit
 A_MARS_AU        = 1.523_679           # Mars semi-major axis
@@ -2895,6 +2912,9 @@ DV_MARS_POWERED_DESCENT_KM_S = 4.100
 # candidate, so they are resolved once here rather than per call.  That is
 # defect class 3 in LESSONS.md, "a quantity asked at a finer granularity than it
 # has answers", and this function runs twice per catalog row.
+# The altitudes are DRA 5.0's (NASA SP-2009-566, printed p. 22: "a 1-sol
+# orbit (250 km x 33,793 km)"), over NSSDCA's 3,396.2 km equatorial radius
+# (GR rc-693).
 R_MARS_1SOL_PERIAPSIS_KM = 3_396.2 +    250.0
 R_MARS_1SOL_APOAPSIS_KM  = 3_396.2 + 33_793.0
 _A_MARS_1SOL_KM = (R_MARS_1SOL_PERIAPSIS_KM + R_MARS_1SOL_APOAPSIS_KM) / 2.0

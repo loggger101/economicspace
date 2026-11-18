@@ -150,7 +150,10 @@ def hours(years):
 # Every quantity here belongs to the ORBIT rather than to any candidate, so it
 # is resolved once.  An asteroid arrives near the ecliptic and GEO is
 # equatorial, so a capture burn there buys 23.44 deg of plane change as well as
-# the speed change, and that is the term intuition drops.
+# the speed change, and that is the term intuition drops.  Sources as calc's
+# copies: R_GEO is NASA-STD-8719.14C's 35,786 km nominal GEO altitude plus
+# IERS 2010's 6,378.1366 km equatorial radius, rounded; 23.44 deg is the
+# IERS 2010 J2000.0 obliquity, 23.4392794 deg, rounded (GR rc-600, rc-601).
 R_GEO = 42_164.14
 COS_ECLIPTIC_TILT = math.cos(math.radians(23.44))
 V_GEO = math.sqrt(MU_EARTH / R_GEO)
@@ -162,6 +165,9 @@ V_GTO_PERIGEE = math.sqrt(MU_EARTH * (2.0 / R_LEO - 1.0 / A_GTO))
 V_GTO_APOGEE = math.sqrt(MU_EARTH * (2.0 / R_GEO - 1.0 / A_GTO))
 
 # ── Mars ─────────────────────────────────────────────────────────────────────
+# Sources as calc's copies: MU_MARS is JPL's MAR097 planetary GM to two
+# decimals; A_MARS_AU is JPL TR 32-77's 1950.0 mean element; 3,396.2 km is
+# NSSDCA's equatorial radius (GR rc-603, rc-654).
 MU_MARS = 42_828.37
 R_MARS_PARK = 3_396.2 + 200.0
 A_MARS_AU = 1.523_679
@@ -169,7 +175,8 @@ A_MARS_AU = 1.523_679
 # replaces it when there is no atmospheric help.
 DV_MARS_RETROPROP = 0.800
 DV_MARS_POWERED_DESCENT = 4.100
-# The 1-sol staging ellipse, 250 x 33,793 km altitude.  A depot is captured
+# The 1-sol staging ellipse, 250 x 33,793 km altitude (NASA DRA 5.0,
+# SP-2009-566, printed p. 22; GR rc-693).  A depot is captured
 # into the way NRHO is: the burn only has to BIND the orbit, deep at
 # periapsis where Oberth pays, and the apoapsis never comes down.
 R_MARS_1SOL_PERI = 3_396.2 + 250.0
