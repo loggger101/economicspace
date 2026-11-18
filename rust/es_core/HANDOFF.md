@@ -9,10 +9,12 @@ says how to pick it up.
 
 ## State
 
-- **economicspace** branch `rust-solver-prototype`, **spacevalue** branch
-  `rust-cargo-prototype`.  Both are local commits only (no upstream) unless the
-  user has pushed them since; the two machines see them through OneDrive's copy
-  of `.git`.  Never work on a branch from both machines at once, never
+- **economicspace** branch `rust-solver-prototype`: local commits only (no
+  upstream) unless the user has pushed it since.  **spacevalue**'s
+  `rust-cargo-prototype` was merged to its `main` on 2026-11-17
+  (loggger101/spacevalue#14, CI 17/17) and tagged `v0.7.1`; economicspace
+  pins that tag (item 6).  The two machines see the economicspace branch
+  through OneDrive's copy of `.git`.  Never work on a branch from both machines at once, never
   `git stash`, and read `git status` with CLAUDE.md's phantom-modification
   rule in mind.
 - Nothing on `main` imports any of it.  `ECONOMICSPACE_RUST` unset (the
@@ -137,7 +139,7 @@ says how to pick it up.
 - Check 8's hook was not re-run at geo or mars_surface: its cells are
   verify.py's, which are cislunar whatever `DEST` is.
 
-## Item 5 prepared (2026-11-17; spacevalue not pushed, merged or tagged)
+## Item 5 closed (2026-11-17; spacevalue merged at `80ec754`, tagged `v0.7.1`)
 
 - spacevalue `rust-cargo-prototype` now carries the 0.7.1 release: CI's new
   `rust` job (three hosts, Python 3.13 and 3.14: the planted build must fail
@@ -149,15 +151,49 @@ says how to pick it up.
   `spacevalue_cargo_rs @ git+https://github.com/loggger101/spacevalue@v0.7.1#subdirectory=rust/cargo_py`,
   not a `spacevalue` extra (an extra would make every install need Rust).
 - Run locally in a fresh venv on this host (Python 3.13): planted 6 failed;
-  consumer install then 6 passed; whole suite 189 passed.  The GitHub job
-  itself has not run: it runs on the PR.
+  consumer install then 6 passed; whole suite 189 passed.  On the PR
+  (loggger101/spacevalue#14) all 17 jobs passed, the six `rust` jobs
+  included; merged by hand after CI (spacevalue `main` is unprotected, so
+  auto-merge would not have waited for it), then tagged `v0.7.1`.
 - **`cargo_core` has no Rust tests.**  `cargo test` on it passed on zero
-  tests, so the gate's `cargo_test` step could not fail; it is removed (the
-  gate is now **31 steps**; not re-run since, the removal touches no other
-  step) and spacevalue's CI has no such step.
-- Left for the user: push the branch, open the PR, merge, tag `v0.7.1` from
-  main.  Then item 6 pins economicspace's spacevalue at `v0.7.1` (no number
-  moves) and `es_core`'s `spacevalue_cargo_core` at the same tag.
+  tests, so the gate's `cargo_test` step could not fail; it is removed and
+  spacevalue's CI has no such step.
+
+## Item 6 closed (2026-11-18, at `87d3575`)
+
+- **Repin**: spacevalue `v0.7.1` in the five places CLAUDE.md lists
+  (`requirements.txt`, `PIP_SPEC`, README, CITATIONS.md, CLAUDE.md).  No
+  number moves (0.7.1 changes no Python code path).
+- **`es_core` links `spacevalue_cargo_core` by git tag** `v0.7.1`
+  (`Cargo.toml`; `Cargo.lock` records commit `80ec754`), no longer by a
+  relative path to a sibling checkout.  Building against an unreleased
+  spacevalue is a local `[patch]` section, never committed.
+- **Install**: `requirements-rust.txt`, opt-in and never auto-installed
+  (needs a Rust toolchain and maturin): the `spacevalue_cargo_rs` binding
+  from the same tag, and `./rust/es_core`.  calc's missing-binding message
+  points at it.  `_runtime.install()` is untouched: auto-installing would
+  make every run need a compiler.
+- **A check holds the pins together**: `verify_docs.py` check 7 now calls
+  `rust_pin_findings()`, which requires requirements.txt's spacevalue tag,
+  requirements-rust.txt's binding ref and Cargo.toml's
+  `{git = ..., tag = ...}` to be one ref (samebytes' pin reader cannot see
+  the binding's ref: it reads `#subdirectory=` as part of it).  Six plants
+  caught (binding ref, cargo tag, cargo path dependency, cargo branch,
+  python pin moved alone, binding line removed); clean tree passes.
+- **The gate's first step, `sv_checkout_at_pin`**, requires the spacevalue
+  checkout the gate tests (`$SV`) to sit at the pinned tag's commit, equal to
+  `Cargo.lock`'s, with `rust/`, `cargo.py` and `tests/` clean: otherwise the
+  gate would test one knapsack and the build link another.  Plant: a
+  worktree at an older commit fails it.  The gate is now **32 steps**.
+- **Results at `87d3575`**: `verify.py check --skip prune` in Rust mode exit
+  0, the four cell hashes MATCH (`53b7aa2e987ae8c5`, `3ab1013489eb949f`,
+  `0bf60835f283d92a`, `42e9f43b76d344db`); `--skip prune parallel` in Python
+  mode exit 0; gate at cislunar **32/32**, every plant caught;
+  `verify_docs`, `tree_check` pass and `platform_check` is unchanged.
+- **Declined: wiring the gate into CI.**  It needs the gitignored catalog
+  (about 2.4 GB) and runs about 75 minutes; it stays a desktop gate, run
+  before a merge.  spacevalue's CI covers the knapsack's Rust copy.
+- versions.md's notes for this branch wait for item 8.
 
 ## Setting up the desktop
 
@@ -216,11 +252,13 @@ WORKDIR`.  Use a separate WORKDIR per destination.
    **A hook for verify.py check 8 inside the Rust ladder**, so check 8 can
    audit Rust mode instead of refusing.  Its guard plant is
    `gate/plants/check8_guard.py`; update it with the hook.
-5. **spacevalue first**: CI building and testing `rust/cargo_core` and
+5. (Closed 2026-11-17: loggger101/spacevalue#14, tag `v0.7.1`.)
+   **spacevalue first**: CI building and testing `rust/cargo_core` and
    `cargo_py` (spacevalue's `rust/README.md` lists what that needs), ship
    `spacevalue_cargo_rs` with the package (a wheel or an extra), merge, tag.
    That is a spacevalue release; follow its CLAUDE.md.
-6. **Pin es_core's `spacevalue_cargo_core` by git tag**, the tag
+6. (Closed 2026-11-18 at `87d3575`, above; CI wiring declined.)
+   **Pin es_core's `spacevalue_cargo_core` by git tag**, the tag
    `requirements.txt` pins spacevalue to, with a check holding the two
    together (as `verify_docs.py` check 7 holds the Python pins); decide how
    the `es_core` wheel is built and installed (`_runtime.install()`, the
