@@ -738,6 +738,22 @@ def cite_here(name, what=""):
     return "%s.  <span class='src'>%s</span>" % (where, D.esc(what)) if what         else where
 
 
+# The sources of three orbital constants the derivation fixes, as calc's own
+# comments give them (General_Research rc-600, rc-654, rc-693).  Each is cited
+# from more than one place on the page, so it is written once here.
+_R_GEO_WHY = ("Sources: NASA-STD-8719.14C, sec. 3.2, p. 13, the 35,786 km "
+              "nominal altitude of a circular GEO; IERS Conventions (2010), "
+              "Table 1.1, the 6,378.1366 km equatorial radius.  Their sum, "
+              "42,164.1366 km, rounded: a nominal geocentric radius, not a "
+              "dynamical one.")
+_MU_MARS_WHY = ("Source: JPL SSD Planetary Satellite Physical Parameters, Mars "
+                "GM 42,828.37362 km3/s2 (MAR097), to two decimals.  JPL's "
+                "DE440 Mars-system GM, 42,828.375816, would round to .38.")
+_MARS_1SOL_WHY = ("Sources: NASA DRA 5.0 (SP-2009-566), printed p. 22, the 1-sol "
+                  "orbit of 250 km x 33,793 km; NASA's Mars Fact Sheet "
+                  "(NSSDCA), the 3,396.2 km equatorial radius under it.")
+
+
 # WHAT spacecost READS A CONSTANT OUT OF, CITED AS THE ROW.  Five inputs were
 # cited to the name spacecost exports them under (`STAGE_HARDWARE_USD_PER_KG`,
 # `TUG_PROPELLANT_USD_PER_KG`, a `DELIVERY_CHAINS` leg) or to the derivation's
@@ -1927,7 +1943,11 @@ def part_constants(S, out):
                     "gives a mean orbital velocity of 29.78 km/s."))
     S.put("r_LEO", "r_LEO", "parking-orbit radius", W.R_LEO, "km",
           cite_here("R_LEO", "6,378.14 km of Earth radius plus a "
-                    "200 km parking orbit."))
+                    "200 km parking orbit.  Sources: IERS Conventions "
+                    "(2010), Table 1.1, equatorial radius 6,378,136.6 m; "
+                    "NASA's SLS capability tables (Askins 2021, NTRS "
+                    "20210016306), a typical 200 km circular LEO.  A "
+                    "reference-orbit convention, not every mission's orbit."))
     # The fit's calibration is in calc's `mission_duration_yr` docstring:
     # four delta-v rows' durations.  Their notes source the delta-v and not
     # the duration, so the rows are NAMED and not quoted: quoted, part 18
@@ -2032,7 +2052,7 @@ def return_leg_steps(S, out, leg):
                    % (exact(vm2), P(W.A_MARS_AU), P(W.V_EARTH)),
                    leg["v_inf_mars"], "km/s", ["vtM2", "a_Mars", "v_E"])
             const("mu_M", "mu_M", "Mars gravitational parameter", W.MU_MARS,
-                  "km3/s2", "MU_MARS")
+                  "km3/s2", "MU_MARS", _MU_MARS_WHY)
         if name == "ret_mars_surface_prop":
             const("r_Mpark", "r_M,park", "low Mars orbit radius",
                   W.R_MARS_PARK, "km", "R_MARS_PARK", "3,396.2 km of Mars "
@@ -2061,10 +2081,10 @@ def return_leg_steps(S, out, leg):
         elif name == "ret_mars_orbit_prop":
             const("r_1solp", "r_1sol,peri", "1-sol ellipse periapsis radius",
                   W.R_MARS_1SOL_PERI, "km", "R_MARS_1SOL_PERI",
-                  "250 km altitude.")
+                  "250 km altitude.  " + _MARS_1SOL_WHY)
             const("r_1sola", "r_1sol,apo", "1-sol ellipse apoapsis radius",
                   W.R_MARS_1SOL_APO, "km", "R_MARS_1SOL_APO",
-                  "33,793 km altitude.")
+                  "33,793 km altitude.  " + _MARS_1SOL_WHY)
             S.step("a_1sol", "a_1sol", "the 1-sol depot ellipse",
                    "(r_1sol,peri + r_1sol,apo) / 2",
                    "(%s + %s) / 2" % (P(W.R_MARS_1SOL_PERI),
@@ -2200,7 +2220,7 @@ def return_leg_steps(S, out, leg):
     elif name == "ret_gto_prop":
         if "R_GEO" not in S.tag:
             S.put("R_GEO", "R_GEO", "geostationary radius", W.R_GEO, "km",
-                  cite_here("R_GEO"))
+                  cite_here("R_GEO", _R_GEO_WHY))
         S.step("a_GTO", "a_GTO", "the GTO depot ellipse",
                "(r_LEO + R_GEO) / 2", "(%s + %s) / 2" % (P(W.R_LEO),
                                                          P(W.R_GEO)),
@@ -2235,12 +2255,17 @@ def circularise_prep(S):
     """Register what `circularise_at_geo` reads before a step cites it."""
     if "R_GEO" not in S.tag:
         S.put("R_GEO", "R_GEO", "geostationary radius", W.R_GEO, "km",
-              cite_here("R_GEO"))
+              cite_here("R_GEO", _R_GEO_WHY))
     if "tilt" not in S.tag:
         S.put("tilt", "eps", "the ecliptic's tilt to the equator", 23.44,
               "deg", cite_here("COS_ECLIPTIC_TILT", "GEO is equatorial and an "
                                "asteroid arrives near the ecliptic, so the "
-                               "capture buys this plane change too"))
+                               "capture buys this plane change too.  Source: "
+                               "IERS Conventions (2010), Table 1.1, the "
+                               "J2000.0 obliquity epsilon_0 = 84,381.406 "
+                               "arcsec, 23.4392794 deg, rounded.  Arrival in "
+                               "the ecliptic is the nominal assumption, not "
+                               "the asteroid's own inclination."))
     if "v_GEO" not in S.tag:
         S.step("v_GEO", "v_GEO", "circular speed at GEO",
                "sqrt(mu_E / R_GEO)",
@@ -3612,11 +3637,18 @@ def part_clock(S, out):
           "Earth-Mars alignment.%s</span>"
           % (D.esc(C["destination"]),
              # Earth's orbit is 1 au to every figure NASA publishes for it
-             # (read 2026-10-19); calc's Mars figure is not the fact
-             # sheet's to five places, so it is left uncited.
+             # (read 2026-10-19).  calc's Mars figure is not the fact
+             # sheet's J2000 value to five places; it is JPL TR 32-77's
+             # 1950.0 mean element exactly (General_Research rc-603).
              "  Earth's semi-major axis: NASA's Earth Fact Sheet (NSSDCA) "
              "gives 149.598 million km, 1 au to the figures it publishes."
-             if DV["a_dest"] == 1.0 else ""))
+             if DV["a_dest"] == 1.0 else
+             "  Mars's semi-major axis: Source: JPL Technical Report 32-77 "
+             "(NASA-CR-70154), Table 2-1, p. 12, the 1950.0-epoch mean "
+             "element 1.523679 AU.  NASA's Mars Fact Sheet (NSSDCA) gives "
+             "1.52366231 AU for J2000; the 1950.0 figure is the one calc "
+             "keeps."
+             if DV["a_dest"] == W.A_MARS_AU else ""))
     S.step("T_dest", "T_dest", "the orbit the destination is phased against",
            "a_dest ^ 1.5", "%s ^ 1.5" % P(DV["a_dest"]), DV["t_dest"], "yr",
            ["a_dest"])

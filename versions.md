@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.78.0](#master-v1780)
 - [master v1.77.0](#master-v1770)
 - [master v1.76.0 / catalog v1.11.0](#master-v1760--catalog-v1110)
 - [master v1.75.0 / mineral_value v1.21.0 / transportation v1.26.1 / calc v1.46.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460)
@@ -130,7 +131,7 @@ one that does not say is not to be used.
 | 2 | `modules/mineral_value.py` | **1.21.0** | v1.21.0, Stage 2 installs `prices-2026-11-12`, built by spacevalue 0.7.0 on spacecost v0.17.1 from the same closes as `prices-2026-10-07`: reference prices re-reviewed, world production revised, one market per in-space demand class (new column `market_id`), and the delivery chains' LOX and recovery; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.17.0, the pricing moved to [`spacevalue`](https://github.com/loggger101/spacevalue). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.26.1** | v1.26.1, spacecost v0.17.1: costs in 2026 dollars, LOX at DLA's price, recovery once per batch, a Henry Hub quote read as gross heat, revised propulsion, launch-vehicle, DSN and body rows; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.23.6, the config became spacecost's `SpacecostConfig` with two defaults overridden. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.46.0** | v1.46.0, no code here moves: Stage 4 imports `spacevalue.cargo` from spacevalue 0.7.0, which pools a hold's sale by the Stage 2 table's `market_id`, so the commodities of one in-space demand class share one allowance; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.77.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| - | `master.py` | **1.78.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -233,6 +234,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.78.0](#master-v1780) | 2026-11-18 | **eight General_Research citation candidates**: six orbital constants cited where they are set and in the verification worksheet, two references added to CITATIONS; comments and worksheet text only, so no stamp and no number moves |
 | [master v1.77.0](#master-v1770) | 2026-11-18 | **Stage 4's hottest paths in Rust, opt-in** (`ECONOMICSPACE_RUST=1`, `requirements-rust.txt`): the payload solver, sizing loop and programme ladder in `es_core`, the knapsack in spacevalue `v0.7.1`'s binding; a full cislunar cell in Rust mode is identical to the Python cell on every row, so no stamp and no number moves |
 | [master v1.76.0 / catalog v1.11.0](#master-v1760--catalog-v1110) | 2026-11-13 | **Stage 1 repins to `data-2026-11-13`**, AsteroidCatalog's data contract 1.11.0: two columns added, 4,436 bodies added and 1,130 refit; on the bodies that moved, cost over revenue a median 1e-12 apart |
 | [master v1.75.0 / mineral_value v1.21.0 / transportation v1.26.1 / calc v1.46.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460) | 2026-11-12 | **spacecost `v0.17.1` and spacevalue `v0.7.0`, and `prices-2026-11-12` built on them**: new delivery chains, prices and one market per in-space demand class; every default number moves, cost over revenue a median 6% to 10% worse |
@@ -317,6 +319,34 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.78.0
+
+**Eight General_Research citation candidates, in comments, worksheet text and
+CITATIONS only.** Every value stays. No module's `pipeline_version` moves.
+Ignoring docstrings, the syntax trees of `modules/calc.py` and
+`campaign/worked_calculation.py` are identical to v1.77.0's, so no number can
+move. The verification worksheet's text changes, and `--check` passes on each
+page measured: inputs needing backing fall 85 to 84 on the default 2018 DT
+page, 50 to 45 on `mars_orbit__raw__search-off` and 51 to 48 on
+`geo__raw__search-off`.
+
+- `R_GEO_KM`: NASA-STD-8719.14C's 35,786 km nominal GEO altitude plus IERS
+  2010's 6,378.1366 km equatorial radius, 42,164.1366 km rounded; a nominal
+  radius, not a dynamical one (rc-600).
+- `_COS_ECLIPTIC_TILT`: 23.44 deg is IERS 2010's J2000.0 obliquity, 23.4392794
+  deg, rounded; arrival in the ecliptic is the nominal assumption (rc-601).
+- `A_MARS_AU`: 1.523679 AU is JPL TR 32-77's 1950.0-epoch mean element
+  exactly; NSSDCA's J2000 element is 1.52366231 AU, and the 1950.0 figure is
+  kept (rc-603).
+- `MU_MARS_KM3_S2`: JPL's MAR097 planetary GM, 42,828.37362, to two decimals;
+  DE440's Mars-system GM would round to .38 (rc-654).
+- The 1-sol Mars orbit radii: DRA 5.0's 250 x 33,793 km over NSSDCA's 3,396.2
+  km equatorial radius (rc-693).
+- `R_LEO_KM`: the worksheet now names the IERS radius and the SLS tables'
+  200 km LEO, which calc's comment already did (rc-356).
+- CITATIONS.md adds Orloff's *Apollo by the Numbers* (rc-786) and Kleinhenz &
+  Paz 2017 (rc-784), and the sources above.
 
 ## master v1.77.0
 
