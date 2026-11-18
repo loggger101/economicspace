@@ -9,8 +9,8 @@ says how to pick it up.
 
 ## State
 
-- **economicspace** branch `rust-solver-prototype`: local commits only (no
-  upstream) unless the user has pushed it since.  **spacevalue**'s
+- **economicspace** branch `rust-solver-prototype`: pushed and opened as a
+  PR to `main` on 2026-11-18 (item 8), released as master v1.77.0.  **spacevalue**'s
   `rust-cargo-prototype` was merged to its `main` on 2026-11-17
   (loggger101/spacevalue#14, CI 17/17) and tagged `v0.7.1`; economicspace
   pins that tag (item 6).  The two machines see the economicspace branch
@@ -292,7 +292,8 @@ WORKDIR`.  Use a separate WORKDIR per destination.
    **One full campaign cell with `ECONOMICSPACE_RUST=1`**, its hash against
    the archived cell (`campaign/run_cell.py`; read CLAUDE.md's warning about
    it overwriting the archive first: archive with a suffix).
-8. **Release notes**: versions.md's Releases and Module changelogs (the
+8. (Closed 2026-11-18: master v1.77.0 in versions.md, and the PR to `main`.)
+   **Release notes**: versions.md's Releases and Module changelogs (the
    branch moves no number, so calc's stamp may stay; say so, as the "moved
    without moving a number" table does), and a PR to `main`.
 

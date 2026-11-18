@@ -1,7 +1,7 @@
 # es_core: opt-in Rust for Stage 4 (prototype)
 
-**Status:** a prototype on branch `rust-solver-prototype`. Not merged and not
-used by default. Nothing changes unless `ECONOMICSPACE_RUST=1` is set.
+**Status:** opt-in since master v1.77.0 (versions.md), never used by
+default. Nothing changes unless `ECONOMICSPACE_RUST=1` is set.
 
 ## What it ports
 
@@ -353,7 +353,7 @@ extension is a planted build or is missing (unset, it imports neither). The shad
 build their Rust objects themselves rather than through that guard, so no
 bypass lives in calc.py.
 
-## Before this could merge (not done)
+## Before this could merge (closed at master v1.77.0)
 
 [HANDOFF.md](HANDOFF.md) puts these in the order to do them.
 
@@ -369,8 +369,9 @@ bypass lives in calc.py.
   never auto-installed, because it needs a Rust toolchain; it is
   `pip install -r requirements-rust.txt`, and calc's import guard names that
   file when either extension is missing.)
-- Run one full campaign cell with `ECONOMICSPACE_RUST=1` and compare its hash
-  with the archived cell.
+- (Done 2026-11-18.) Run one full campaign cell with `ECONOMICSPACE_RUST=1`
+  and compare it with the archived cell: the cislunar default cell, IDENTICAL
+  to calc 1.46.0's Python archive on every row (HANDOFF.md, item 7).
 - (Done 2026-11-17.) Pin `spacevalue_cargo_core` by git tag: `Cargo.toml`
   links it at `v0.7.1`, the spacevalue pin in `requirements.txt`, and
   `verify_docs.py` check 7 (`rust_pin_findings`) holds the two and
