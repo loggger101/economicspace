@@ -137,6 +137,28 @@ says how to pick it up.
 - Check 8's hook was not re-run at geo or mars_surface: its cells are
   verify.py's, which are cislunar whatever `DEST` is.
 
+## Item 5 prepared (2026-11-17; spacevalue not pushed, merged or tagged)
+
+- spacevalue `rust-cargo-prototype` now carries the 0.7.1 release: CI's new
+  `rust` job (three hosts, Python 3.13 and 3.14: the planted build must fail
+  all six Rust tests, the good binding is `pip install`ed from
+  `rust/cargo_py` as a consumer would, then `test_cargo_rust.py` with
+  `SPACEVALUE_REQUIRE_RUST=1` and the whole suite), CHANGELOG 0.7.1 (data
+  contract 1.21.0 unchanged, no number moves), `__version__` 0.7.1.
+- **How it ships**: a separate optional package from the tag,
+  `spacevalue_cargo_rs @ git+https://github.com/loggger101/spacevalue@v0.7.1#subdirectory=rust/cargo_py`,
+  not a `spacevalue` extra (an extra would make every install need Rust).
+- Run locally in a fresh venv on this host (Python 3.13): planted 6 failed;
+  consumer install then 6 passed; whole suite 189 passed.  The GitHub job
+  itself has not run: it runs on the PR.
+- **`cargo_core` has no Rust tests.**  `cargo test` on it passed on zero
+  tests, so the gate's `cargo_test` step could not fail; it is removed (the
+  gate is now **31 steps**; not re-run since, the removal touches no other
+  step) and spacevalue's CI has no such step.
+- Left for the user: push the branch, open the PR, merge, tag `v0.7.1` from
+  main.  Then item 6 pins economicspace's spacevalue at `v0.7.1` (no number
+  moves) and `es_core`'s `spacevalue_cargo_core` at the same tag.
+
 ## Setting up the desktop
 
 1. Toolchain (install what is missing; the user allowed installing anything

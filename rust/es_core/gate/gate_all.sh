@@ -61,8 +61,10 @@ cd "$REPO"
 inst_es good; inst_sv svgood
 python -c "import es_core, spacevalue_cargo_rs; print('installed good:', es_core.planted_defect(), spacevalue_cargo_rs.planted_defect())" < /dev/null
 
-echo "== STEP cargo + pytest (spacevalue)"
-(cd "$SV"; cargo test -q --manifest-path rust/cargo_core/Cargo.toml < /dev/null 2>&1 | tail -3; exit ${PIPESTATUS[0]}); rec cargo_test 0 $?
+echo "== STEP pytest (spacevalue)"
+# No `cargo test` of cargo_core: it has no Rust tests, so that step passed on
+# zero (removed 2026-11-17).  cargo_core is tested against cargo.py through
+# the binding, here and in spacevalue's CI.
 (cd "$SV"; SPACEVALUE_REQUIRE_RUST=1 python -m pytest -q -p no:cacheprovider tests/test_cargo_rust.py < /dev/null 2>&1 | tail -3; exit ${PIPESTATUS[0]}); rec sv_pytest 0 $?
 python "$HERE/plants/sv_share.py" "$SV" < /dev/null 2>&1 | tail -1; rec plant_sv_test_share 0 ${PIPESTATUS[0]}
 python "$HERE/plants/e2e_stale.py" < /dev/null 2>&1 | tail -1; rec plant_e2e_stale 0 ${PIPESTATUS[0]}
