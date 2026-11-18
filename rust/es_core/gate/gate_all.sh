@@ -49,14 +49,14 @@ rm -rf "$B"; mkdir -p "$B"
 cd "$REPO/rust/es_core"
 export CARGO_TARGET_DIR="$HOME/.cargo-target/es_core"
 python -m maturin build --release -o "$B/good" < /dev/null 2>&1 | tail -1
-for f in planted_defect planted_loop_defect planted_ladder_defect planted_memo_defect planted_knapsack_defect; do
+for f in planted_defect planted_loop_defect planted_ladder_defect planted_memo_defect planted_knapsack_defect planted_hook_defect; do
   python -m maturin build --release --features $f -o "$B/$f" < /dev/null 2>&1 | tail -1
 done
 cd "$SV/rust/cargo_py"
 export CARGO_TARGET_DIR="$HOME/.cargo-target/spacevalue_cargo"
 python -m maturin build --release -o "$B/svgood" < /dev/null 2>&1 | tail -1
 python -m maturin build --release --features planted_knapsack_defect -o "$B/svplant" < /dev/null 2>&1 | tail -1
-n=$(ls "$B"/*/*.whl | wc -l); [ "$n" = 8 ]; rec build_8_wheels 0 $?
+n=$(ls "$B"/*/*.whl | wc -l); [ "$n" = 9 ]; rec build_9_wheels 0 $?
 cd "$REPO"
 inst_es good; inst_sv svgood
 python -c "import es_core, spacevalue_cargo_rs; print('installed good:', es_core.planted_defect(), spacevalue_cargo_rs.planted_defect())" < /dev/null
@@ -73,9 +73,14 @@ echo "== STEP es_core unit tests (keyword tables)"
 echo "== STEP bitsame self-check"
 python rust/es_core/bitsame.py < /dev/null 2>&1 | tail -1; rec bitsame_selfcheck 0 ${PIPESTATUS[0]}
 
-echo "== STEP verify.py check 8 refuses under the Rust ladder (and only there)"
-python "$HERE/plants/check8_guard.py" 1 < /dev/null 2>&1 | tail -1; rec check8_refuses_rust 0 ${PIPESTATUS[0]}
-python "$HERE/plants/check8_guard.py" 0 < /dev/null 2>&1 | tail -1; rec check8_runs_python 0 ${PIPESTATUS[0]}
+echo "== STEP verify.py check 8 under the Rust ladder: counts equal to Python mode's"
+C8="$HERE/plants/check8_guard.py"; C8REF="$W/check8_py.json"; rm -f "$C8REF"
+$PY "$C8" parity "$C8REF" < /dev/null 2>&1 | grep -E "^PARITY|^CHECK8"; rec check8_parity 0 ${PIPESTATUS[0]}
+echo "== STEP plant: check 8 hook dropped, then thinned"
+$PY "$C8" parity "$C8REF" --plant nohook < /dev/null 2>&1 | grep -E "^PARITY|^CHECK8"; rec plant_check8_nohook 1 ${PIPESTATUS[0]}
+$PY "$C8" parity "$C8REF" --plant half < /dev/null 2>&1 | grep -E "^PARITY|^CHECK8"; rec plant_check8_half 1 ${PIPESTATUS[0]}
+echo "== STEP control: the good build passes with only the ladder swapped (the planted build's leg)"
+$PY "$C8" parity "$C8REF" --ladder-only < /dev/null 2>&1 | grep -E "^PARITY|^CHECK8"; rec check8_parity_ladder_only 0 ${PIPESTATUS[0]}
 
 echo "== STEP verify_rust replay"
 $PY rust/es_core/verify_rust.py --capture "$W/cap_ben.pkl" "$W/cap_raw.pkl" < /dev/null 2>&1 | tail -8; rec verify_rust 0 ${PIPESTATUS[0]}
@@ -107,6 +112,9 @@ for f in planted_loop_defect planted_ladder_defect planted_memo_defect planted_k
   inst_es $f
   $PY $SH --expect-defect "$OUT" 40 $BEN < /dev/null 2>&1 | grep -E "^SHADOW|^OUTSIDE|^PLANT"; rec "plant_$f" 0 ${PIPESTATUS[0]}
 done
+echo "== STEP plant: planted_hook_defect (check 8 hook, ladder only)"
+inst_es planted_hook_defect
+$PY "$C8" parity "$C8REF" --ladder-only < /dev/null 2>&1 | grep -E "^PARITY|^CHECK8"; rec plant_planted_hook_defect 1 ${PIPESTATUS[0]}
 inst_es good
 
 echo "== STEP plant: spacevalue planted_knapsack_defect"

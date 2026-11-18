@@ -6538,6 +6538,11 @@ if _ES_CORE is not None:
 # Opt-in Rust programme ladder (PROTOTYPE).  None, the default, leaves the
 # ladder in `_evaluate_combo_at_ratio` the Python it was.
 _ES_LADDER = _ES_CORE.ProgrammeLadder() if _ES_CORE is not None else None
+# `verify.py` check 8's window into that ladder: called once per ladder Rust
+# answers, with the total of every rung Rust priced without calling
+# `_price_programme` (the rungs check 8's `_mission_cost_tail` wrapper cannot
+# see).  None, the default, collects nothing.
+_ES_LADDER_HOOK = None
 
 
 # What each Rust object answered and what it handed back to Python, in this
@@ -8297,6 +8302,7 @@ def _evaluate_combo_at_ratio(
             rel_alpha=rel_alpha, p_mature=p_mature,
             price=lambda n, f, w: _price_programme(n, f, w, full=False),
             refine=lambda f: _fleet_refinement_cached(f, fleet_ladder),
+            rung_hook=_ES_LADDER_HOOK,
         )
     if _rl is not None and _rl[0] not in (0, 2):
         # a stale or mismatched build: never read an unknown answer

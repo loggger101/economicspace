@@ -216,6 +216,28 @@ struct Cbs<'a, 'py> {
     lc_key: Option<u64>,
     cal_key: Option<(u64, u64)>,
     pm_key: Option<(u64, u64, u64)>,
+    /// `rung_hook` given: the total of every rung this ladder priced WITHOUT
+    /// calling Python's `_price_programme` (whose own `_mission_cost_tail`
+    /// verify.py check 8 already sees), in pricing order.  Handed to the hook
+    /// only when the ladder succeeds; a fallback reruns every rung in Python.
+    rungs: Option<Vec<f64>>,
+}
+
+impl Cbs<'_, '_> {
+    /// A rung total nothing in Python computed: remember it for the hook.
+    #[inline(always)]
+    fn rust_only(&mut self, total: f64) {
+        #[cfg(feature = "planted_hook_defect")]
+        {
+            // the plant: about half the Rust-only rungs never reach check 8
+            if total.to_bits() & 1 == 1 {
+                return;
+            }
+        }
+        if let Some(v) = self.rungs.as_mut() {
+            v.push(total);
+        }
+    }
 }
 
 type Step<T> = PyResult<Option<T>>;
@@ -564,6 +586,10 @@ fn price_rung(
                                     stats[5] += 1;
                                     return Ok(None);
                                 }
+                            } else {
+                                // Python's ladder prices a skipped rung's tail
+                                // too, before its bound skips it
+                                cb.rust_only(total);
                             }
                             stats[4] += 1;
                             return Ok(Some(None));
@@ -590,6 +616,8 @@ fn price_rung(
             stats[5] += 1;
             return Ok(None);
         }
+    } else {
+        cb.rust_only(total);
     }
     Ok(Some(Some(Rung { total, g })))
 }
@@ -604,7 +632,7 @@ const RUN_REQUIRED: [&str; 24] = [
     "n_floor", "market_pool", "calendar", "learning", "mining_rel", "price",
     "refine",
 ];
-const RUN_OPTIONAL: [&str; 2] = ["rel_alpha", "p_mature"];
+const RUN_OPTIONAL: [&str; 3] = ["rel_alpha", "p_mature", "rung_hook"];
 
 /// A keyword's slot in `Got` (generated from the two tables above, which stay
 /// the authority; `run_input_matches_tables` holds them together).
@@ -636,6 +664,7 @@ fn run_input(name: &str) -> Option<usize> {
         "refine" => 23,
         "rel_alpha" => 24,
         "p_mature" => 25,
+        "rung_hook" => 26,
         _ => return None,
     })
 }
@@ -643,7 +672,7 @@ fn run_input(name: &str) -> Option<usize> {
 /// `run`'s keywords by slot, read once per call; indexed by name like the
 /// map it replaces (a missing required name has already been refused).
 struct Got<'py> {
-    v: [Option<Bound<'py, PyAny>>; 26],
+    v: [Option<Bound<'py, PyAny>>; 27],
 }
 
 impl<'py> std::ops::Index<&str> for Got<'py> {
@@ -824,6 +853,8 @@ impl ProgrammeLadder {
             (Some(a), Some(b), Some(c)) => Some((a, b, c)),
             _ => None,
         };
+        // verify.py check 8's hook (None, the default, collects nothing)
+        let hook = got.get("rung_hook").filter(|h| !h.is_none());
         let mut cb = Cbs {
             calendar: &got["calendar"],
             learning: &got["learning"],
@@ -838,6 +869,7 @@ impl ProgrammeLadder {
             lc_key,
             cal_key,
             pm_key,
+            rungs: hook.as_ref().map(|_| Vec::new()),
         };
         let mut stats = [0u64; 6];
         let res = run_ladder(&x, &pro, &mut cb, &got["refine"], &mut stats)?;
@@ -847,6 +879,9 @@ impl ProgrammeLadder {
             }
         }
         let Some((bn, bf, bw, priced)) = res else { return fallback(self) };
+        if let (Some(h), Some(totals)) = (hook.as_ref(), cb.rungs.take()) {
+            h.call1((PyList::new(py, totals)?,))?;
+        }
         self.fast.fetch_add(1, Relaxed);
         self.stats[0].fetch_add(1, Relaxed);
         let bw_obj: Bound<'py, PyAny> = match bw {

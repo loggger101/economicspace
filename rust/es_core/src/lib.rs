@@ -488,6 +488,7 @@ fn planted_defect() -> bool {
         || cfg!(feature = "planted_ladder_defect")
         || cfg!(feature = "planted_memo_defect")
         || cfg!(feature = "planted_knapsack_defect")
+        || cfg!(feature = "planted_hook_defect")
 }
 
 #[pymodule]

@@ -387,18 +387,19 @@ bypass lives in calc.py.
   What is left is mostly the body of `_evaluate_combo_at_ratio` (plant
   settle, cascade rebuild, final pricing, the result dict, repairs): a port
   of the evaluator, not another piece of it.
-- Report fallbacks from production runs. With `ECONOMICSPACE_RUST=1` no
-  counter (Solver, SizingLoop, ProgrammeLadder, `spacevalue_cargo_rs`) is
-  printed, and a worker's counters die with the pool, so a run that fell back
-  on every call would still read as a Rust run. The ladder's self-check also
-  turns a mismatch into a quiet, counted fallback that only the shadow reads.
-  Print each counter at the end of Stage 4 (summed over workers), and treat a
-  self-check mismatch outside the gate as an error.
-- `verify.py` check 8 (the combo and rung bounds) wraps `_mission_cost_tail`,
-  which the Rust ladder bypasses for the rungs it prices itself; under
-  `ECONOMICSPACE_RUST=1` it now refuses (NOT VERIFIED) rather than audit a
-  subset. Before Rust mode is a release path, the ladder needs its own hook
-  for that audit.
+- (Done 2026-11-17.) Report fallbacks from production runs: Stage 4 now
+  prints each counter (Solver, SizingLoop, ProgrammeLadder,
+  `spacevalue_cargo_rs`) at its end, summed over the pool's workers, WARNs on
+  a component that ran entirely in Python, and raises on a ladder self-check
+  mismatch outside the gate.
+- (Done 2026-11-17.) `verify.py` check 8 (the combo and rung bounds) wraps
+  `_mission_cost_tail`, which the Rust ladder bypasses for the rungs it prices
+  itself. The ladder now hands those totals to `calc._ES_LADDER_HOOK`
+  (`rung_hook`, once per ladder it answers, never on a fallback), check 8
+  installs it in Rust mode, and a searched cell whose Rust-priced rungs never
+  break the planted floor fails as blind. The gate's `check8_guard.py` holds
+  every check 8 count in Rust mode to Python mode's exactly; dropping the
+  hook, thinning it, and the `planted_hook_defect` build each fail it.
 - Two edges a later change could make real (review of 2026-11-16, neither
   reachable today): calc's `_rust_cargo` wrapper tests `phases` for truth
   before `_hold_refining` would have returned on `payload_kg <= 0`, so a

@@ -31,6 +31,9 @@ planted_ladder_defect = []
 planted_memo_defect = []
 # ...and only in spacevalue's knapsack crate (one ulp of every take).
 planted_knapsack_defect = ["spacevalue_cargo_core/planted_knapsack_defect"]
+# ...and in the ladder's check 8 hook: about half the rungs Rust prices alone
+# never reach verify.py (no number moves; only check 8's audit is blinded).
+planted_hook_defect = []
 
 [profile.release]
 # No fast-math, no FMA contraction: rustc never fuses a*b+c unless asked, and
