@@ -44,6 +44,17 @@ done
 cd "$REPO"; python tree_check.py < /dev/null 2>&1 | tail -1
 git log -1 --oneline; git status --short; (cd "$SV"; git branch --show-current; git log -1 --oneline; git status --short)
 
+echo "== STEP the spacevalue checkout is the pinned tag"
+# es_core links cargo_core at the tag Cargo.toml names (Cargo.lock holds its
+# commit), while the steps below build the binding and run spacevalue's tests
+# from the checkout at $SV.  Two different knapsacks would compare nothing.
+SVTAG=$(sed -n 's/^spacevalue_cargo_core *= *{.*tag *= *"\([^"]*\)".*/\1/p' "$REPO/rust/es_core/Cargo.toml")
+SVLOCK=$(grep -A2 'name = "spacevalue_cargo_core"' "$REPO/rust/es_core/Cargo.lock" | sed -n 's/^source = .*#\([0-9a-f]*\)"$/\1/p')
+SVHEAD=$(git -C "$SV" rev-parse HEAD)
+echo "Cargo.toml tag $SVTAG, Cargo.lock $SVLOCK, $SV HEAD $SVHEAD"
+[ -n "$SVTAG" ] && [ "$SVLOCK" = "$SVHEAD" ] && [ "$(git -C "$SV" rev-parse "$SVTAG^{commit}" 2>/dev/null)" = "$SVHEAD" ] \
+  && [ -z "$(git -C "$SV" status --porcelain -- rust spacevalue/cargo.py tests)" ]; rec sv_checkout_at_pin 0 $?
+
 echo "== STEP build"
 rm -rf "$B"; mkdir -p "$B"
 cd "$REPO/rust/es_core"

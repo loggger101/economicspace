@@ -288,17 +288,14 @@ The planted copies, which only the gate uses:
     python -m maturin build --release --features planted_ladder_defect -o dist-plantladder
     python -m maturin build --release --features planted_memo_defect -o dist-plantmemo
     python -m maturin build --release --features planted_knapsack_defect -o dist-plantknap
+    python -m maturin build --release --features planted_hook_defect -o dist-planthook
 
-es_core needs spacevalue checked out next to economicspace, on the branch
-`rust-cargo-prototype` (`Cargo.toml` reaches `../../../spacevalue/rust/cargo_core`).
-Rust mode also needs spacevalue's Python extension, built there:
-
-    export CARGO_TARGET_DIR="$HOME/.cargo-target/spacevalue_cargo"
-    cd ../../../spacevalue/rust/cargo_py     # from rust/es_core
-    python -m maturin build --release -o dist
-    python -m pip install --force-reinstall --no-deps dist/spacevalue_cargo_rs-*.whl
-
-and its planted copy, for the gate, with `--features planted_knapsack_defect`.
+es_core links spacevalue's `cargo_core` by git at the tag `requirements.txt`
+pins spacevalue to (`Cargo.toml`; `Cargo.lock` holds its commit). Rust mode
+also needs spacevalue's Python extension; both install with
+`pip install -r requirements-rust.txt` (CARGO_TARGET_DIR outside OneDrive).
+The gate builds the binding and its planted copy from a spacevalue checkout
+next to economicspace, which must be at that tag (`sv_checkout_at_pin`).
 
 ## The gate (all of it must pass, and the plants must be caught)
 
@@ -360,27 +357,31 @@ bypass lives in calc.py.
 
 [HANDOFF.md](HANDOFF.md) puts these in the order to do them.
 
-- Run the gate on `DESKTOP-PJS73RO`. `platform_check.py` proves numpy
-  parity between hosts, not that the C runtime's `exp` and `log` match.
-- Run the gate at the other destinations. So far it has run on cislunar
-  only, because the scratch directory holds cislunar Stage 2 prices. Every
-  loop path has been reached there (the shadow's `PATHS` line counts them),
-  boil-off and flown-load sizing only with dials set for the purpose.
+- (Done 2026-11-17.) Run the gate on `DESKTOP-PJS73RO`: 29/29, and the
+  Rust-mode cell hashes equal the other host's.
+- (Done 2026-11-17.) Run the gate at the other destinations: geo and
+  mars_surface, 29/29 each. `flown_load` is still 0 in every gate shadow.
 - Don't run gate jobs side by side. Two Stage 4 processes reading the
   1.58 M-row catalog at once ran this host out of memory.
-- Wire the gate into `verify.py` and CI; decide how the wheel is pinned and
-  installed (`_runtime.install()`, the requirements files).
+- Wire the gate into `verify.py` and CI. Not done: the gate reads the
+  gitignored Stage 1-3 outputs (a 2.4 GB catalog) and runs about 75 minutes,
+  so it stays a host-side step. (Done 2026-11-17: the install. Rust mode is
+  never auto-installed, because it needs a Rust toolchain; it is
+  `pip install -r requirements-rust.txt`, and calc's import guard names that
+  file when either extension is missing.)
 - Run one full campaign cell with `ECONOMICSPACE_RUST=1` and compare its hash
   with the archived cell.
-- Pin `spacevalue_cargo_core` by git tag, the same tag as the spacevalue pin
-  in `requirements.txt`, with a check holding the two together (as check 7
-  holds the Python pins). Today it is a path into the sibling checkout, which
-  only this machine has.
-- Ship `spacevalue_cargo_rs` with spacevalue (one wheel, or an extra) so
-  Rust mode does not need a second hand-built extension, and pin it with the
-  same tag.
-- Merge spacevalue's `rust-cargo-prototype` first, with CI building and
-  testing the crate there (its `rust/README.md` lists what that needs).
+- (Done 2026-11-17.) Pin `spacevalue_cargo_core` by git tag: `Cargo.toml`
+  links it at `v0.7.1`, the spacevalue pin in `requirements.txt`, and
+  `verify_docs.py` check 7 (`rust_pin_findings`) holds the two and
+  `requirements-rust.txt` together. The gate's `sv_checkout_at_pin` step
+  refuses a spacevalue checkout that is not that commit.
+- (Done 2026-11-17.) Ship `spacevalue_cargo_rs` with spacevalue: 0.7.1 ships
+  it from the tag (`#subdirectory=rust/cargo_py`), not as an extra, so a
+  plain spacevalue install needs no Rust.
+- (Done 2026-11-17.) spacevalue's `rust-cargo-prototype` merged
+  (loggger101/spacevalue#14) with CI building and testing the crate on three
+  hosts, and tagged `v0.7.1`.
 - Port further only with a measured case. A profile names candidates; an
   A/B in one process (or a call count times a per-call saving) prices them.
   Not cProfile, and not the sampler's share for a line Rust calls back into.

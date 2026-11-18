@@ -13,10 +13,11 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = { version = "=0.26.0", features = ["extension-module"] }
 # spacevalue's knapsack, linked directly so the sizing loop never crosses into
-# Python for it.  PROTOTYPE: a path into the sibling checkout on spacevalue's
-# `rust-cargo-prototype` branch; a merge would pin it to a git tag that
-# matches the spacevalue pin in requirements.txt.
-spacevalue_cargo_core = { path = "../../../spacevalue/rust/cargo_core" }
+# Python for it.  Pinned to the tag requirements.txt pins spacevalue to;
+# verify_docs.py check 7 holds the two (and requirements-rust.txt) together.
+# To build against an unreleased spacevalue checkout, add a [patch] section
+# locally and never commit it.
+spacevalue_cargo_core = { git = "https://github.com/loggger101/spacevalue", tag = "v0.7.1" }
 
 [features]
 # Builds a copy with a deliberate one-ulp error, so verify_rust.py can prove

@@ -224,7 +224,7 @@ factor or a reference price is a spacevalue change and a new `prices-*`
 release; this repository then moves `price_release` and records it in
 [versions.md](versions.md). It moves every number downstream.
 
-**spacevalue is pinned to a tagged release**, `v0.7.0`, in all five places
+**spacevalue is pinned to a tagged release**, `v0.7.1`, in all five places
 that type it: as a URL in `requirements.txt`, and in `PIP_SPEC` in
 `modules/_runtime.py` (what Stages 2 and 4 install at import: Stage 2 for the
 names it re-exports, Stage 4 for `spacevalue.cargo`, the cargo valuation that

@@ -4799,7 +4799,7 @@ if _ES_CORE is not None:
     except ImportError as exc:
         raise RuntimeError(
             "ECONOMICSPACE_RUST=1 but spacevalue_cargo_rs is not installed "
-            "(build it: see rust/es_core/README.md)") from exc
+            "(pip install -r requirements-rust.txt; see rust/es_core/README.md)") from exc
     if _sv_cargo_rs.planted_defect():
         raise RuntimeError(
             "spacevalue_cargo_rs was built with planted_knapsack_defect; "

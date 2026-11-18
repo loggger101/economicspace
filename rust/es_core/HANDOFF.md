@@ -165,9 +165,10 @@ says how to pick it up.
    needed): rustup stable `x86_64-pc-windows-msvc`, the MSVC Build Tools with
    the Windows SDK, `pip install maturin==1.9.6`.  `cargo --version` from Git
    Bash needs `export PATH="$HOME/.cargo/bin:$PATH"`.
-2. Both checkouts next to each other under the GitHub folder, on the branches
-   above (es_core's `Cargo.toml` reaches `../../../spacevalue/rust/cargo_core`
-   by path; that path is itself an open item).
+2. Both checkouts next to each other under the GitHub folder: economicspace
+   on `rust-solver-prototype`, spacevalue at the tag `requirements.txt` pins
+   (es_core's `Cargo.toml` links `cargo_core` by git at that tag; the gate's
+   `sv_checkout_at_pin` step refuses any other spacevalue checkout).
 3. `py platform_check.py` and `py tree_check.py` in economicspace.  A library
    version that differs from `platform_reference.json` is not a defect, but
    record it with the gate result.

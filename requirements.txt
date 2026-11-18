@@ -25,4 +25,4 @@ pandas
 numpy
 tqdm
 spacecost @ git+https://github.com/loggger101/spacecost@v0.17.1
-spacevalue @ git+https://github.com/loggger101/spacevalue@v0.7.0
+spacevalue @ git+https://github.com/loggger101/spacevalue@v0.7.1

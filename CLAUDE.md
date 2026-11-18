@@ -498,7 +498,7 @@ lists every file it touched.
   The pinned price release is `prices-2026-11-12` (`MineralValueConfig.price_release`),
   checked like the catalog: contract first, every table's sha256, cache
   under `asteroid_pipeline/mineral_value/<tag>/`, manifest last. Stage 2 also
-  imports spacevalue itself, pinned to tag `v0.7.0`, for the names it re-exports
+  imports spacevalue itself, pinned to tag `v0.7.1`, for the names it re-exports
   (check 6 recomputes the installed table through them), and Stage 4 imports
   its `cargo` module, so a repin can move calc's numbers. The pin is typed in
   five places: `requirements.txt`, `PIP_SPEC` in `modules/_runtime.py`, and

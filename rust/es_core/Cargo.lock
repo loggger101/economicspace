@@ -146,6 +146,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 [[package]]
 name = "spacevalue_cargo_core"
 version = "0.1.0"
+source = "git+https://github.com/loggger101/spacevalue?tag=v0.7.1#80ec7549164fc1ed6c800ab0ef6205cde08ae9fd"
 
 [[package]]
 name = "syn"
