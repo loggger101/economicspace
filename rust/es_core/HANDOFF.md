@@ -195,6 +195,31 @@ says how to pick it up.
   before a merge.  spacevalue's CI covers the knapsack's Rust copy.
 - versions.md's notes for this branch wait for item 8.
 
+## Item 7 closed (2026-11-18, at `b7b7591`)
+
+- **The cell**: the full cislunar default cell (`--preset full --stages 4`,
+  beneficiated, searched) in Rust mode, from
+  `asteroid_pipeline/_run9_rust_cislunar_calc-1.46.0_2026-11-18/`: _run8's
+  `cell.py` plus `ECONOMICSPACE_RUST=1` and a refusal to start unless calc
+  installed `es_core` and neither binding is a planted build.  Same pinned
+  Stage 2 table (sha-checked from the release cache), same live catalog and
+  Stage 3 tables as _run8's Python cell.
+- **Verdict: IDENTICAL.**  All 1,397,657 rows, 151 shared columns, compared
+  field by field as the bytes written (stricter than `samebytes.frames`,
+  which treats `""` and NaN alike), provenance columns dropped; headers equal,
+  no extra rows on either side, stripped-stream sha `29df76fd2eb48939` on
+  both.  The comparator (`drive.py`'s `compare()`) was fed seven planted
+  differences first (one ulp, blank vs `nan`, a row missing, extra, swapped,
+  a column dropped) and caught each.
+- **Archive**: `campaign/cells/cislunar__benef__search-on__calc-1.46.0__rust-b7b7591.csv.gz`
+  (suffixed: no reader sees it, the Python archive is untouched), sha256 of
+  the CSV `d3244f5d...` checked against the gzip's contents.
+- **Wall clock**: 47,806 s (13.3 h) against _run8's 109,302 s (30.4 h), a
+  ratio of 2.29.  Two sessions five days apart, so by CLAUDE.md's sampling
+  rule this is a ratio of two sessions, not a measured speedup; it is above
+  the 1.2-1.55x the interleaved benchmarks gave.  Do not feed it into
+  `MEASURED_CELL_SECONDS`.
+
 ## Setting up the desktop
 
 1. Toolchain (install what is missing; the user allowed installing anything
@@ -263,7 +288,8 @@ WORKDIR`.  Use a separate WORKDIR per destination.
    together (as `verify_docs.py` check 7 holds the Python pins); decide how
    the `es_core` wheel is built and installed (`_runtime.install()`, the
    requirements files) and wire the gate into CI.
-7. **One full campaign cell with `ECONOMICSPACE_RUST=1`**, its hash against
+7. (Closed 2026-11-18 at `b7b7591`, above: IDENTICAL, 1,397,657 rows.)
+   **One full campaign cell with `ECONOMICSPACE_RUST=1`**, its hash against
    the archived cell (`campaign/run_cell.py`; read CLAUDE.md's warning about
    it overwriting the archive first: archive with a suffix).
 8. **Release notes**: versions.md's Releases and Module changelogs (the
