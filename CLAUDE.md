@@ -53,7 +53,10 @@ adds its notes to `versions.md` and, if it teaches something, one line here.
 Nothing is built. `modules/` is a package and `master.py` a hand-written
 shim: it imports the four modules, binds the aliases below, holds
 `MasterConfig` and `run_full_pipeline`, and forwards every other
-`master.<name>` to the module that defines it.
+`master.<name>` to the module that defines it. The one exception is opt-in:
+`ECONOMICSPACE_RUST=1` runs Stage 4's solver, sizing loop, ladder and
+knapsack from Rust (`rust/es_core/`, `requirements-rust.txt`), which must stay
+bit-identical; a calc change to any of them re-runs `rust/es_core/gate/`.
 
 | module | master's name for it |
 |---|---|
@@ -84,7 +87,7 @@ shim: it imports the four modules, binds the aliases below, holds
 ## Versions and release notes
 
 Current: catalog `1.11.0`, mineral_value `1.21.0`, transportation `1.26.1`,
-calc `1.46.0`, master `1.76.0` (checked by `verify_docs.py` check 2; the master
+calc `1.46.0`, master `1.77.0` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.
@@ -498,7 +501,7 @@ lists every file it touched.
   The pinned price release is `prices-2026-11-12` (`MineralValueConfig.price_release`),
   checked like the catalog: contract first, every table's sha256, cache
   under `asteroid_pipeline/mineral_value/<tag>/`, manifest last. Stage 2 also
-  imports spacevalue itself, pinned to tag `v0.7.0`, for the names it re-exports
+  imports spacevalue itself, pinned to tag `v0.7.1`, for the names it re-exports
   (check 6 recomputes the installed table through them), and Stage 4 imports
   its `cargo` module, so a repin can move calc's numbers. The pin is typed in
   five places: `requirements.txt`, `PIP_SPEC` in `modules/_runtime.py`, and

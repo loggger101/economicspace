@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.77.0](#master-v1770)
 - [master v1.76.0 / catalog v1.11.0](#master-v1760--catalog-v1110)
 - [master v1.75.0 / mineral_value v1.21.0 / transportation v1.26.1 / calc v1.46.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460)
 - [master v1.74.0](#master-v1740)
@@ -129,7 +130,7 @@ one that does not say is not to be used.
 | 2 | `modules/mineral_value.py` | **1.21.0** | v1.21.0, Stage 2 installs `prices-2026-11-12`, built by spacevalue 0.7.0 on spacecost v0.17.1 from the same closes as `prices-2026-10-07`: reference prices re-reviewed, world production revised, one market per in-space demand class (new column `market_id`), and the delivery chains' LOX and recovery; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.17.0, the pricing moved to [`spacevalue`](https://github.com/loggger101/spacevalue). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.26.1** | v1.26.1, spacecost v0.17.1: costs in 2026 dollars, LOX at DLA's price, recovery once per batch, a Henry Hub quote read as gross heat, revised propulsion, launch-vehicle, DSN and body rows; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.23.6, the config became spacecost's `SpacecostConfig` with two defaults overridden. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.46.0** | v1.46.0, no code here moves: Stage 4 imports `spacevalue.cargo` from spacevalue 0.7.0, which pools a hold's sale by the Stage 2 table's `market_id`, so the commodities of one in-space demand class share one allowance; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.76.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| - | `master.py` | **1.77.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -232,6 +233,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.77.0](#master-v1770) | 2026-11-18 | **Stage 4's hottest paths in Rust, opt-in** (`ECONOMICSPACE_RUST=1`, `requirements-rust.txt`): the payload solver, sizing loop and programme ladder in `es_core`, the knapsack in spacevalue `v0.7.1`'s binding; a full cislunar cell in Rust mode is identical to the Python cell on every row, so no stamp and no number moves |
 | [master v1.76.0 / catalog v1.11.0](#master-v1760--catalog-v1110) | 2026-11-13 | **Stage 1 repins to `data-2026-11-13`**, AsteroidCatalog's data contract 1.11.0: two columns added, 4,436 bodies added and 1,130 refit; on the bodies that moved, cost over revenue a median 1e-12 apart |
 | [master v1.75.0 / mineral_value v1.21.0 / transportation v1.26.1 / calc v1.46.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460) | 2026-11-12 | **spacecost `v0.17.1` and spacevalue `v0.7.0`, and `prices-2026-11-12` built on them**: new delivery chains, prices and one market per in-space demand class; every default number moves, cost over revenue a median 6% to 10% worse |
 | [master v1.74.0](#master-v1740) | 2026-11-12 | **six General_Research citation candidates**: comments say which values are scenarios; comments only, so no stamp and no number moves |
@@ -315,6 +317,72 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.77.0
+
+**Stage 4 can run its hottest paths in Rust, opt-in, and gives the same
+bytes.** With `ECONOMICSPACE_RUST=1`, calc swaps in `es_core` (this repo's
+`rust/es_core/`, a PyO3 extension) for the payload solver
+(`max_return_payload_kg`), the sizing loop and the programme ladder of
+`_evaluate_combo_at_ratio`, and spacevalue's `spacevalue_cargo_rs` for the
+payload knapsack and the capped sale. Unset, which is the default, runs the
+Python path. No module's `pipeline_version` moves: neither mode moves a number,
+and that is measured, not argued (below).
+
+### What changes here
+
+- **calc**, both modes: `payload_mix` is formatted for the winning candidate
+  only, and Stage 4 prints a fallback counter per Rust component at its end
+  (summed over workers), WARNs on a component that ran entirely in Python,
+  and raises on a ladder self-check mismatch. In Rust mode calc refuses to
+  import if either extension is missing or is a planted-defect build, and
+  names `requirements-rust.txt`.
+- **spacevalue repinned `v0.7.0` to `v0.7.1`** in the five places CLAUDE.md
+  lists. 0.7.1 ships the knapsack's Rust copy and its binding from the tag
+  and changes no Python code path, so mineral_value and calc stay put and
+  `prices-2026-11-12` is unchanged.
+- **`requirements-rust.txt`**, opt-in and never auto-installed (it needs a
+  Rust toolchain and maturin): the binding from the `v0.7.1` tag, and
+  `./rust/es_core`, which links `spacevalue_cargo_core` by the same tag.
+- **`verify.py` check 8** audits Rust mode through a rung hook
+  (`calc._ES_LADDER_HOOK`) where it used to refuse it. **`verify_docs.py`
+  check 7** holds the Rust pins to the Python one (`rust_pin_findings`): the
+  spacevalue tag in `requirements.txt`, the binding's ref and `Cargo.toml`'s
+  tag must be one ref.
+- **The gate**, `rust/es_core/gate/gate_all.sh`, 32 steps with their plants:
+  solver replay and fuzz, the loop, ladder and knapsack shadows, e2e
+  catalogs, verify.py in both modes. It reads the gitignored Stage 1-3
+  outputs and runs about 75 minutes, so it is a desktop step before a merge,
+  not CI; spacevalue's CI covers the knapsack's Rust copy.
+- The port's design, its bit-identity contract (`exp` and `log` taken from
+  the host's C runtime, Python's association kept), its measurements and its
+  plants are in [rust/es_core/README.md](rust/es_core/README.md); the order
+  of work that closed it is [HANDOFF.md](rust/es_core/HANDOFF.md).
+
+### Verified
+
+| harness | result |
+|---|---|
+| `verify.py check` against a `main` baseline, Python mode | every check passes (in full at `1a040af`, `--skip prune parallel` at `87d3575`); the four cell hashes MATCH (`53b7aa2e987ae8c5`, `3ab1013489eb949f`, `0bf60835f283d92a`, `42e9f43b76d344db`) |
+| `verify.py check --skip prune`, Rust mode | exit 0, the same four hashes, check 8 auditing the Rust ladder with its planted floor caught |
+| the gate | 32 of 32 at cislunar on `DESKTOP-PJS73RO`, whose e2e hashes equal the first host's; 29 of 29 at `geo` and `mars_surface` before the last three steps were added; every plant caught |
+| **the full cislunar default cell, Rust mode** | **IDENTICAL** to calc 1.46.0's Python archive: 1,397,657 rows, 151 shared columns compared as the bytes written, provenance dropped. Archived suffixed, as `cislunar__benef__search-on__calc-1.46.0__rust-b7b7591.csv.gz` |
+| `verify_docs.py`, `tree_check.py`, `platform_check.py` | pass; platform unchanged |
+
+### Measured and not
+
+- That cell took 13.3 h in Rust mode against the Python cell's 30.4 h, but
+  the two ran in separate sessions five days apart, so the ratio is of two
+  sessions ([THE SAMPLING RULE](LESSONS.md#the-sampling-rule)). The paired
+  measurements are the prototype README's; `MEASURED_CELL_SECONDS` stays the
+  Python cell's.
+- Not measured: a full cell at any destination but cislunar, and Rust mode on
+  another host than the two that built it. `flown_load` sizing is exercised
+  only by a shadow with `size_ep_on_flown_load=True`.
+- The ladder's Rust copy of `_mission_cost_tail` is a second copy of a cost
+  model releases change: a calc release touching the tail, the prologue
+  tuple or the rung bound re-runs the gate, or Rust mode falls back (the
+  self-check) or differs off-sample.
 
 ## master v1.76.0 / catalog v1.11.0
 

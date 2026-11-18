@@ -784,6 +784,65 @@ def check_dashes() -> bool:
 
 
 # ---------------------------------------------------------------- 7. manifests
+_SV_REQ = re.compile(r"^spacevalue\s*@\s*git\+https://github\.com/loggger101/"
+                     r"spacevalue@(\S+)\s*$", re.M)
+_SV_RS_REQ = re.compile(r"^spacevalue_cargo_rs\s*@\s*git\+https://github\.com/"
+                        r"loggger101/spacevalue@([^#\s]+)#subdirectory=rust/cargo_py\s*$",
+                        re.M)
+_CARGO_DEP = re.compile(r"^spacevalue_cargo_core\s*=\s*\{([^}\n]*)\}", re.M)
+
+
+def rust_pin_findings(root: str) -> List[str]:
+    """The Rust prototype's two spacevalue pins against requirements.txt's.
+
+    `rust/es_core/Cargo.toml` must link `spacevalue_cargo_core` by
+    `git = "https://github.com/loggger101/spacevalue"` at `tag = <the ref>`
+    (a `path =` into a sibling checkout links whatever that checkout holds),
+    and `requirements-rust.txt` must install `spacevalue_cargo_rs` from the
+    same ref.  Either file missing is a finding: the prototype ships both.
+    """
+    bad = []
+    texts = {}
+    for rel in ("requirements.txt", "requirements-rust.txt",
+                os.path.join("rust", "es_core", "Cargo.toml")):
+        path = os.path.join(root, rel)
+        if not os.path.exists(path):
+            bad.append("%s is missing" % rel.replace(os.sep, "/"))
+            continue
+        texts[rel] = read(path)
+    if bad:
+        return bad
+    want = _SV_REQ.findall(texts["requirements.txt"])
+    if len(want) != 1:
+        return ["requirements.txt pins spacevalue %d times; the Rust pins are "
+                "held to exactly one" % len(want)]
+    ref = want[0]
+    got = _SV_RS_REQ.findall(texts["requirements-rust.txt"])
+    if len(got) != 1:
+        bad.append("requirements-rust.txt must install spacevalue_cargo_rs once, "
+                   "from spacevalue's git URL at the pinned tag with "
+                   "#subdirectory=rust/cargo_py; found %d" % len(got))
+    elif got[0] != ref:
+        bad.append("requirements-rust.txt installs spacevalue_cargo_rs at %s; "
+                   "requirements.txt pins spacevalue at %s" % (got[0], ref))
+    deps = _CARGO_DEP.findall(texts[os.path.join("rust", "es_core", "Cargo.toml")])
+    if len(deps) != 1:
+        bad.append("rust/es_core/Cargo.toml declares spacevalue_cargo_core %d "
+                   "times (one inline table expected)" % len(deps))
+    else:
+        fields = dict(re.findall(r'(\w+)\s*=\s*"([^"]*)"', deps[0]))
+        if fields.get("git") != "https://github.com/loggger101/spacevalue":
+            bad.append("rust/es_core/Cargo.toml links spacevalue_cargo_core by %s, "
+                       "not git = \"https://github.com/loggger101/spacevalue\""
+                       % (", ".join("%s=%s" % kv for kv in sorted(fields.items()))
+                          or "nothing this check can read"))
+        elif set(fields) != {"git", "tag"} or fields["tag"] != ref:
+            bad.append("rust/es_core/Cargo.toml links spacevalue_cargo_core at %s; "
+                       "requirements.txt pins spacevalue at tag %s"
+                       % (", ".join("%s=%s" % kv for kv in sorted(fields.items())), ref))
+    return bad
+
+
 def check_manifests() -> bool:
     """A list documented in one place, against the list defined in another.
 
@@ -1008,6 +1067,16 @@ def check_manifests() -> bool:
                    "requirements-verify.txt (modules/_runtime.py reads it); "
                    "found: %s" % (", ".join("%s in %s" % (ref, rel)
                                            for rel, ref in sb_hits) or "none"))
+
+    # THE RUST PINS (prototype, ECONOMICSPACE_RUST=1): es_core links
+    # spacevalue's `cargo_core` by a Cargo git tag, and requirements-rust.txt
+    # installs the `spacevalue_cargo_rs` binding from a tag.  Both are copies
+    # of the spacevalue pin that `docs.pins` above cannot read (a Cargo table;
+    # a `#subdirectory=` fragment it would take for part of the ref), and a
+    # repin that misses one links a knapsack other than the one Stage 4's
+    # Python imports.  See `rust_pin_findings`.
+    n += 1
+    bad += rust_pin_findings(REPO)
 
     # THE CATALOG RELEASE PIN, `CatalogConfig.catalog_release`.  Typed once in
     # code, and stated in prose wherever a reader is told which catalog the

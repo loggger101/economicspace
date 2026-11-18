@@ -838,7 +838,8 @@ def check_prune(m, names: List[str],
 _PLANTED_FLOOR = 1.6
 
 
-def check_bound(m, names: List[str]) -> bool:
+def check_bound(m, names: List[str], report: Optional[Dict[str, Dict[str, int]]] = None,
+                **override) -> bool:
     """calc v1.41.0: the combo bound holds on every solve and every rung (check 8).
 
     `prune_dominated_combos` skips a (vehicle, propellant, Δv, ISRU, power)
@@ -871,6 +872,18 @@ def check_bound(m, names: List[str]) -> bool:
     capped, or never breaks a ceiling `_PLANTED_FLOOR` times too low, fails.
     """
     calc = sys.modules["modules.calc"]
+    # The Rust ladder (ECONOMICSPACE_RUST=1, prototype) prices a rung's tail
+    # itself unless a market ceiling binds, past the `_mission_cost_tail`
+    # wrapper below, so without its hook this check would audit a subset and
+    # still print green.  The hook hands every such total to `rust_rungs`, and
+    # a searched cell whose Rust-priced rungs never break the planted floor
+    # fails as blind.  The gate's check8_guard.py holds the rung, solve, ladder
+    # and sale counts to Python mode's exactly.
+    rust = getattr(calc, "_ES_LADDER", None) is not None
+    if rust and not hasattr(calc, "_ES_LADDER_HOOK"):
+        print("\n*** NOT VERIFIED: this calc has no check 8 hook into the Rust "
+              "ladder; run it with ECONOMICSPACE_RUST unset.")
+        return False
     orig_ec = calc.evaluate_combo
     orig_tail = calc._mission_cost_tail
     orig_solve = calc._evaluate_combo_at_ratio
@@ -879,7 +892,8 @@ def check_bound(m, names: List[str]) -> bool:
     orig_capped = calc._capped_sale_value
     stats = dict(combos=0, prunable=0, solves=0, rungs=0, key=0, cost=0,
                  gross=0, payload=0, planted=0, unbounded=0,
-                 ladders=0, sales=0, ceiling=0, planted_ceiling=0)
+                 ladders=0, sales=0, ceiling=0, planted_ceiling=0,
+                 rust_rungs=0, rust_planted=0)
     state = {"cur": None, "best": None, "ceil": None}
 
     def evaluate_combo(asteroid_row, vehicle, propellant, bulk_value_per_kg,
@@ -906,16 +920,30 @@ def check_bound(m, names: List[str]) -> bool:
             state["best"] = key
         return res
 
-    def tail(*a, **k):
-        """Every programme rung's total, against the floor and the planted one."""
-        out = orig_tail(*a, **k)
+    def rung(total) -> bool:
+        """One programme rung's total against the floor; True if the planted
+        floor catches it."""
         cur = state["cur"]
-        if cur is not None:
-            total = out["total_cost"] if isinstance(out, dict) else out
-            stats["rungs"] += 1
-            stats["cost"] += total < cur[3]
-            stats["planted"] += total < cur[3] * _PLANTED_FLOOR
+        if cur is None:
+            return False
+        stats["rungs"] += 1
+        stats["cost"] += total < cur[3]
+        hit = total < cur[3] * _PLANTED_FLOOR
+        stats["planted"] += hit
+        return hit
+
+    def tail(*a, **k):
+        """Every programme rung Python prices, against the floor."""
+        out = orig_tail(*a, **k)
+        rung(out["total_cost"] if isinstance(out, dict) else out)
         return out
+
+    def rust_rungs(totals):
+        """Every rung the Rust ladder priced alone (calc._ES_LADDER_HOOK)."""
+        for total in totals:
+            if state["cur"] is not None:
+                stats["rust_rungs"] += 1
+            stats["rust_planted"] += rung(total)
 
     def solve(*a, **k):
         """Every solve, nested repairs included, against both ceilings."""
@@ -969,16 +997,21 @@ def check_bound(m, names: List[str]) -> bool:
     calc._evaluate_combo_at_ratio, calc.evaluate_asteroid = solve, evaluate_asteroid
     calc._rung_gross_ceiling, calc.optimal_payload_mix = ceiling, knap
     calc._capped_sale_value = capped
+    if rust:
+        orig_hook, calc._ES_LADDER_HOOK = calc._ES_LADDER_HOOK, rust_rungs
     try:
         for name in names:
             for k in stats:
                 stats[k] = 0
             df = run_cell(m, name, prune_dominated_combos=False,
-                          prune_dominated_rungs=False)
+                          prune_dominated_rungs=False, **override)
             m.CALC_CONFIG.prune_dominated_combos = True
             m.CALC_CONFIG.prune_dominated_rungs = True
             bad = stats["key"] + stats["cost"] + stats["gross"] + stats["payload"]
             blind = stats["rungs"] == 0 or stats["planted"] == 0
+            # Rust mode: the rungs only the hook sees must be able to fail too
+            # (a searched cell has a ladder for Rust to price)
+            blind |= rust and "search" in name and stats["rust_planted"] == 0
             good = not df.empty and bad == 0 and not blind
             ok &= good
             print(f"  {name:13s} {stats['combos']:6d} combos, "
@@ -988,6 +1021,10 @@ def check_bound(m, names: List[str]) -> bool:
                   f"{100.0 * stats['prunable'] / max(1, stats['combos']):.1f}%"
                   f"{'' if good else '  FAIL'}"
                   + ("  (CHECK COULD NOT FAIL)" if blind else ""))
+            if rust:
+                print(f"  {name:13s} Rust ladder:  {stats['rust_rungs']:8d} rungs "
+                      f"priced in Rust alone, planted caught on "
+                      f"{stats['rust_planted']} of them")
             # calc v1.42.0: the rung ceiling.  Only a searched cell has a
             # ladder, so only a searched cell can be blind to it.
             searched = "search" in name
@@ -1001,7 +1038,11 @@ def check_bound(m, names: List[str]) -> bool:
                   f"{stats['planted_ceiling']} sales"
                   f"{'' if rgood else '  FAIL'}"
                   + ("  (CHECK COULD NOT FAIL)" if rblind else ""))
+            if report is not None:
+                report[name] = dict(stats, ok=int(good and rgood))
     finally:
+        if rust:
+            calc._ES_LADDER_HOOK = orig_hook
         calc.evaluate_combo, calc._mission_cost_tail = orig_ec, orig_tail
         calc._evaluate_combo_at_ratio, calc.evaluate_asteroid = orig_solve, orig_ea
         calc._rung_gross_ceiling, calc.optimal_payload_mix = orig_ceil, orig_knap

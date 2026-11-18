@@ -1,0 +1,44 @@
+[package]
+name = "es_core"
+version = "0.1.0"
+edition = "2021"
+description = "Opt-in Rust ports of economicspace's hottest Stage 4 functions (prototype)"
+license = "MIT"
+publish = false
+
+[lib]
+name = "es_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "=0.26.0", features = ["extension-module"] }
+# spacevalue's knapsack, linked directly so the sizing loop never crosses into
+# Python for it.  Pinned to the tag requirements.txt pins spacevalue to;
+# verify_docs.py check 7 holds the two (and requirements-rust.txt) together.
+# To build against an unreleased spacevalue checkout, add a [patch] section
+# locally and never commit it.
+spacevalue_cargo_core = { git = "https://github.com/loggger101/spacevalue", tag = "v0.7.1" }
+
+[features]
+# Builds a copy with a deliberate one-ulp error, so verify_rust.py can prove
+# its differential check fails on the smallest drift there is.  Never shipped.
+planted_defect = []
+# The same, but only in the sizing loop's damping blend (sizing.rs), so the
+# loop's own gate is proven able to see a loop-only drift.
+planted_loop_defect = []
+# ...and only in the programme ladder's cost tail (ladder.rs).
+planted_ladder_defect = []
+# ...and only on a hit in the ladder's cross-call helper memo (ladder.rs).
+planted_memo_defect = []
+# ...and only in spacevalue's knapsack crate (one ulp of every take).
+planted_knapsack_defect = ["spacevalue_cargo_core/planted_knapsack_defect"]
+# ...and in the ladder's check 8 hook: about half the rungs Rust prices alone
+# never reach verify.py (no number moves; only check 8's audit is blinded).
+planted_hook_defect = []
+
+[profile.release]
+# No fast-math, no FMA contraction: rustc never fuses a*b+c unless asked, and
+# nothing here asks.  Bit-identity with CPython's float arithmetic depends on it.
+opt-level = 3
+lto = true
+codegen-units = 1

@@ -1,0 +1,16 @@
+# Opt-in Rust mode (ECONOMICSPACE_RUST=1; PROTOTYPE, see rust/es_core/README.md).
+# Never auto-installed: both lines build Rust, so they need a Rust toolchain
+# (rustup stable, and on Windows the MSVC Build Tools) and maturin.  Without
+# them nothing changes: ECONOMICSPACE_RUST unset runs the Python path.
+#
+#   pip install maturin==1.9.6
+#   CARGO_TARGET_DIR=$HOME/.cargo-target/es_core pip install -r requirements-rust.txt
+#
+# (inside a synced folder the build fails with "output path is not a writable
+# directory" unless CARGO_TARGET_DIR points outside it.)
+#
+# The binding's ref is the spacevalue tag requirements.txt pins, and es_core's
+# Cargo.toml links spacevalue_cargo_core at the same tag; verify_docs.py
+# check 7 holds all three together.  es_core itself builds from this checkout.
+spacevalue_cargo_rs @ git+https://github.com/loggger101/spacevalue@v0.7.1#subdirectory=rust/cargo_py
+./rust/es_core

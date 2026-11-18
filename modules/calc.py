@@ -4745,6 +4745,68 @@ def max_return_payload_kg(
     }
 
 
+# ── Opt-in Rust solver (PROTOTYPE, branch rust-solver-prototype) ─────────────
+# ECONOMICSPACE_RUST=1 swaps `max_return_payload_kg` for `es_core.Solver`
+# (rust/es_core), which answers bit-identically and defers to the Python
+# function above for any call it cannot reproduce exactly.  Unset (the
+# default), nothing here runs and the module is the Python it always was.
+# Asking for Rust without the extension installed is an error, never a quiet
+# fallback: a run that says it used Rust must have.  Spawned workers inherit
+# the variable, so a pool run is all-Rust or all-Python, never mixed.
+_ES_CORE = None
+if os.environ.get("ECONOMICSPACE_RUST", "") not in ("", "0"):
+    if os.environ["ECONOMICSPACE_RUST"] != "1":
+        raise RuntimeError(
+            "ECONOMICSPACE_RUST=%r: set it to 1 or leave it unset"
+            % os.environ["ECONOMICSPACE_RUST"])
+    try:
+        import es_core as _es_core
+    except ImportError as exc:
+        raise RuntimeError(
+            "ECONOMICSPACE_RUST=1 but the es_core extension is not "
+            "installed (build it: see rust/es_core/README.md)") from exc
+    if _es_core.planted_defect():
+        raise RuntimeError(
+            "es_core was built with a planted_* feature (a deliberate defect "
+            "for the gate); rebuild it without any planted_* feature")
+    max_return_payload_kg = _es_core.Solver(max_return_payload_kg, G0_M_S2)
+    _ES_CORE = _es_core
+    # Held apart from the name above, which harnesses rebind, so Stage 4's
+    # fallback report reads the solver this module installed.
+    _ES_SOLVER = max_return_payload_kg
+
+
+def _rust_cargo(rs, py_hold):
+    """(`_capped_sale_value`, `_hold_refining`) answered by spacevalue's Rust
+    cargo crate (`spacevalue_cargo_rs`, bit-identical, falling back to
+    spacevalue's Python on any input it cannot reproduce exactly).  Only a
+    knapsack hold goes to Rust: every other `_hold_refining` call is one
+    multiply in Python, cheaper than the crossing (measured per call)."""
+    rs_hold = rs._hold_refining
+
+    def hold_refining(refinery, phases, payload_kg, feed_kg, beneficiate,
+                      recovery):
+        """`_hold_refining`, in Rust for a knapsack hold only."""
+        fn = (rs_hold if refinery is not None and beneficiate and phases
+              else py_hold)
+        return fn(refinery, phases, payload_kg, feed_kg, beneficiate, recovery)
+    return rs._capped_sale_value, hold_refining
+
+
+if _ES_CORE is not None:
+    try:
+        import spacevalue_cargo_rs as _sv_cargo_rs
+    except ImportError as exc:
+        raise RuntimeError(
+            "ECONOMICSPACE_RUST=1 but spacevalue_cargo_rs is not installed "
+            "(pip install -r requirements-rust.txt; see rust/es_core/README.md)") from exc
+    if _sv_cargo_rs.planted_defect():
+        raise RuntimeError(
+            "spacevalue_cargo_rs was built with planted_knapsack_defect; "
+            "rebuild it without the feature")
+    _capped_sale_value, _hold_refining = _rust_cargo(_sv_cargo_rs, _hold_refining)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # OPERATIONAL-COSTS LOOKUP HELPER
 # ─────────────────────────────────────────────────────────────────────────────
@@ -6442,6 +6504,110 @@ def asteroid_context(
 _DAMP_MIN_STEP     = 1.0 / 1024.0
 _DAMP_EXTRA_PASSES = 36
 
+# Opt-in Rust sizing loop (PROTOTYPE, ECONOMICSPACE_RUST=1; see the solver's
+# block above).  None, the default, leaves `_evaluate_combo_at_ratio` exactly
+# the Python it was.  `_ES_UNSET` marks a loop local Rust never assigned, so
+# calc.py leaves it unassigned too.
+_ES_UNSET = object()
+_ES_LOOP = None
+_ES_STATE_NAMES = (
+    "power_system_kg", "ep_system_kg", "refinery_kg", "isru_feed_kg",
+    "isru_prop_kg", "stay_est_yr", "containment_frac", "structure_frac_eff",
+    "ep_power_watts", "ep_thrust_n", "ep_thrust_yr", "processing_power_watts",
+    "boiloff_factor", "dv_ret_eff", "converged", "damped_here",
+    "carried_ep_kg", "return_dry_kg", "hardware_est_kg", "cascade",
+    "trial_payload", "r_ret", "hold_water",
+)
+
+
+def _rust_sizing_loop(es):
+    """`es.SizingLoop` built exactly as calc runs it, refusing a build whose
+    state tuple is not the one `_evaluate_combo_at_ratio` unpacks.  The gate
+    scripts build theirs here too (they load planted builds, so they cannot
+    go through calc's import guard)."""
+    if tuple(es.SizingLoop.STATE_NAMES) != _ES_STATE_NAMES:
+        raise RuntimeError(
+            "es_core.SizingLoop.STATE_NAMES does not match calc.py's unpacking; "
+            "rebuild es_core from this checkout")
+    return es.SizingLoop(G0_M_S2, _ES_UNSET, _DAMP_MIN_STEP, _DAMP_EXTRA_PASSES)
+
+
+if _ES_CORE is not None:
+    _ES_LOOP = _rust_sizing_loop(_ES_CORE)
+
+# Opt-in Rust programme ladder (PROTOTYPE).  None, the default, leaves the
+# ladder in `_evaluate_combo_at_ratio` the Python it was.
+_ES_LADDER = _ES_CORE.ProgrammeLadder() if _ES_CORE is not None else None
+# `verify.py` check 8's window into that ladder: called once per ladder Rust
+# answers, with the total of every rung Rust priced without calling
+# `_price_programme` (the rungs check 8's `_mission_cost_tail` wrapper cannot
+# see).  None, the default, collects nothing.
+_ES_LADDER_HOOK = None
+
+
+# What each Rust object answered and what it handed back to Python, in this
+# process.  A worker's counters die with the pool, so `_evaluate_chunk` returns
+# each chunk's delta and Stage 4 sums them (`_report_rust_counters`).  Without
+# this a run that fell back on every call would still read as a Rust run.
+_RUST_COUNTER_NAMES = (
+    "solver_rust", "solver_python", "loop_rust", "loop_python",
+    "loop_knapsack_rust", "loop_knapsack_python", "ladder_rust",
+    "ladder_python", "ladder_selfcheck_mismatch", "cargo_rust", "cargo_python",
+)
+
+
+def _rust_counters() -> Optional[Tuple[int, ...]]:
+    """This process's Rust counters in `_RUST_COUNTER_NAMES` order, or None in
+    Python mode."""
+    if _ES_CORE is None:
+        return None
+    st = _ES_LADDER.stats()
+    return (_ES_SOLVER.counts() + _ES_LOOP.counts() + _ES_LOOP.knapsack_counts()
+            + (st["fast"], st["fallback"], st["selfcheck_mismatch"])
+            + tuple(_sv_cargo_rs.counts()))
+
+
+def _counter_delta(after: Tuple[int, ...], before: Tuple[int, ...]) -> Tuple[int, ...]:
+    """`after - before`, counter by counter."""
+    return tuple(a - b for a, b in zip(after, before))
+
+
+def _report_rust_counters(totals: Tuple[int, ...]) -> None:
+    """Print what ran in Rust over the whole search, and refuse a run whose
+    ladder self-check disagreed with Python.
+
+    A self-check mismatch means the Rust ladder's cost for a rung differed
+    from Python's by at least one bit.  The ladder falls back for that call,
+    so the row is still Python's, but the port no longer reproduces the model
+    and every rung it settled alone is suspect.  Outside the gate (whose
+    shadow builds its own audited ladder and counts these) that is an error.
+    """
+    c = dict(zip(_RUST_COUNTER_NAMES, totals))
+
+    def share(fast: str, slow: str) -> str:
+        """One component's line: answered in Rust, handed to Python, share."""
+        n = c[fast] + c[slow]
+        pct = (100.0 * c[fast] / n) if n else 0.0
+        return f"{c[fast]:,} in Rust, {c[slow]:,} in Python ({pct:.1f}% Rust)"
+
+    print("\n  Rust mode (ECONOMICSPACE_RUST=1), summed over every process:")
+    for label, fast, slow in (
+            ("solver       ", "solver_rust", "solver_python"),
+            ("sizing loop  ", "loop_rust", "loop_python"),
+            ("loop knapsack", "loop_knapsack_rust", "loop_knapsack_python"),
+            ("ladder       ", "ladder_rust", "ladder_python"),
+            ("cargo calls  ", "cargo_rust", "cargo_python")):
+        print(f"    {label}  {share(fast, slow)}")
+        if c[fast] == 0 and c[slow] > 0:
+            print(f"     WARN   every {label.strip()} call fell back to Python")
+    print(f"    ladder self-check mismatches  {c['ladder_selfcheck_mismatch']:,}")
+    if c["ladder_selfcheck_mismatch"]:
+        raise RuntimeError(
+            "Rust ladder self-check: %d rung(s) priced differently from "
+            "Python; the es_core build does not reproduce this calc.py. "
+            "Re-run the gate (rust/es_core/README.md) or unset "
+            "ECONOMICSPACE_RUST." % c["ladder_selfcheck_mismatch"])
+
 
 # Smaller loads a body too small for its programme ladder is tried at; see
 # `model_body_resource_budget`.  The ladder is geometric, so a few span it.
@@ -6870,6 +7036,92 @@ def _evaluate_combo_at_ratio(
     base = target = None
     converged   = False
     passes, pass_limit = 0, 12
+    # ── Opt-in Rust sizing loop (PROTOTYPE; see `_ES_LOOP`) ─────────────────
+    # Runs the `while` below in Rust and hands back what it would leave
+    # behind.  Kind 0 means "not a case Rust reproduces exactly" and the
+    # Python loop runs as always; otherwise the state is assigned here and the
+    # loop is skipped (pass_limit = 0), or the loop's own exits are taken.
+    if _ES_LOOP is not None:
+        _rs = _ES_LOOP.run(
+            leo_cap=leo_cap, isp_s_val=isp_s_val, dv_out_m_s=dv_out_m_s,
+            dv_ret_stored=dv_ret_stored, dv_ret_eff=dv_ret_eff,
+            tps_frac=tps_frac, tank_frac=tank_frac,
+            structure_frac=structure_frac, structure_frac_eff=structure_frac_eff,
+            mineable_kg=mineable_kg, throughput_cap_kg=throughput_cap_kg,
+            window_wait_yr=window_wait_yr, stay_est_yr=stay_est_yr,
+            outbound_yr=outbound_yr, boiloff_pct=boiloff_pct,
+            boiloff_factor=boiloff_factor, eff_used=eff_used,
+            ep_w_per_kg=ep_w_per_kg, ppu_kg_per_kw=ppu_kg_per_kw,
+            thruster_kg_per_n=thruster_kg_per_n,
+            ep_target_thrust_yr=config.ep_target_thrust_yr,
+            isru_feed_per_kg_prop=isru_feed_per_kg_prop,
+            isru_water_per_kg_prop=isru_water_per_kg_prop,
+            isru_process_wh_per_kg=isru_process_wh_per_kg,
+            isru_plant_rate=isru_plant_rate, refinery_rate=refinery_rate,
+            target_ratio=target_ratio, dig_wh=dig_wh, benef_wh=benef_wh,
+            containment_per_kg=containment_per_kg, water_wh=water_wh,
+            plant_w_per_kg=plant_w_per_kg,
+            rtg_max_power_w=config.rtg_max_power_w,
+            mining_hardware_kg=config.mining_hardware_kg,
+            return_vehicle_dry_kg=config.return_vehicle_dry_kg,
+            station_keeping_floor_yr=config.station_keeping_floor_yr,
+            mine_rate_kg_per_day=(config.mining_hardware_kg
+                                  * config.mining_rate_kg_per_day_per_kg_rig),
+            ice_frac=ctx.cargo_ice_frac,
+            power_system_kg=power_system_kg, ep_system_kg=ep_system_kg,
+            refinery_kg=refinery_kg, isru_feed_kg=isru_feed_kg,
+            isru_prop_kg=isru_prop_kg, containment_frac=containment_frac,
+            ep_power_watts=ep_power_watts, ep_thrust_yr=ep_thrust_yr,
+            ep_thrust_n=ep_thrust_n,
+            processing_power_watts=processing_power_watts,
+            models_boiloff=models_boiloff, is_electric=is_electric, isru=isru,
+            beneficiate=beneficiate, power_is_rtg=(power_source == "rtg"),
+            damp=damp, relax=bool(_relax),
+            carry_ep_home=config.carry_ep_home,
+            model_isru_feed_budget=config.model_isru_feed_budget,
+            size_ep_on_flown_load=config.size_ep_on_flown_load,
+            model_raw_excavation_power=config.model_raw_excavation_power,
+            model_water_liberation=config.model_water_liberation,
+            model_volatile_containment=config.model_volatile_containment,
+            refit_rtg_ceiling=config.refit_rtg_ceiling,
+            has_refinery=refinery is not None, has_phases=bool(phases),
+            payload_cap_kg=payload_cap_kg,
+            hold_refining=lambda p, f: _hold_refining(
+                refinery, phases, p, f, beneficiate,
+                config.beneficiation_recovery),
+            cargo_water=lambda p, f: _cargo_water_kg(
+                asteroid_row, phases, p, f, beneficiate, config,
+                ctx.cargo_ice_frac),
+            # The same three objects the two callbacks close over, so the
+            # loop can answer the knapsack with spacevalue's Rust crate
+            # instead of calling back; unreadable inputs keep the callbacks.
+            cargo=(refinery, phases, config.beneficiation_recovery),
+        )
+        if _rs[0] not in (0, 1, 2, 3, 4):
+            # a stale or mismatched build: never read an unknown answer
+            raise RuntimeError("es_core.SizingLoop returned kind %r" % (_rs[0],))
+        if _rs[0] == 1:
+            return None
+        if _rs[0] != 0:
+            _st = _rs[1]
+            (power_system_kg, ep_system_kg, refinery_kg, isru_feed_kg,
+             isru_prop_kg, stay_est_yr, containment_frac, structure_frac_eff,
+             ep_power_watts, ep_thrust_n, ep_thrust_yr, processing_power_watts,
+             boiloff_factor, dv_ret_eff, converged, damped_here,
+             carried_ep_kg, return_dry_kg, hardware_est_kg) = _st[:19]
+            if _st[19] is not _ES_UNSET:
+                cascade = _st[19]
+            if _st[20] is not _ES_UNSET:
+                trial_payload = _st[20]
+            if _st[21] is not _ES_UNSET:
+                r_ret = _st[21]
+            if _st[22] is not _ES_UNSET:
+                hold_water = _st[22]
+            if _rs[0] == 3:
+                return _refit_to_feed_budget(*_rs[2])
+            if _rs[0] == 4:
+                return _refit_to_plant_ceiling(*_rs[2])
+            pass_limit = 0          # kind 2: the loop below already ran
     while passes < pass_limit:
         passes += 1
         # Boil-off, folded into an EFFECTIVE return Δv: since m_return_prop
@@ -8017,50 +8269,92 @@ def _evaluate_combo_at_ratio(
     # v1.17.6: the ranking objective is a config field, so it is resolved once
     # here rather than re-read on every rung below.  See `_objective_key`.
     on_profit    = _selects_on_profit(config.selection_objective)
-    best_n, best_f, best_w = programmes[0]
-    best_priced  = _price_programme(best_n, best_f, best_w, full=single)
-    best_pkey    = _objective_key(
-        best_priced[2] - best_priced[1],
-        best_priced[2], best_priced[1], config, on_profit)
-    priced_count = 1
+    # ── Opt-in Rust programme ladder (PROTOTYPE; see `_ES_LADDER`) ──────────
+    # Rust walks the same rungs and returns the same CHOICE (best_n, best_f,
+    # best_w, priced_count); the winner is then re-priced in full below by
+    # `_price_programme`, exactly as the Python ladder's winner always is, so
+    # every number in the row is still Python's.  Kind 0 = run the ladder
+    # below as always.
+    _rl = None
+    if _ES_LADDER is not None and not single:
+        _rl = _ES_LADDER.run(
+            prologue=cost_prologue, programmes=list(programmes),
+            gross_base=gross_base, rung_gross_ub=rung_gross_ub, max_n=max_n,
+            mission_duration_yr=mission_duration_yr, cadence_yr=cadence_yr,
+            p_launch=p_launch, p_cruise=p_cruise, p_first=p_first,
+            model_reliability=config.model_reliability,
+            model_reliability_growth=config.model_reliability_growth,
+            saturation_applies=saturation_applies,
+            capacity_applies=capacity_applies,
+            model_market_wave_clock=config.model_market_wave_clock,
+            rung_bound=rung_bound, on_profit=on_profit,
+            n_floor=max(1, int(config.nre_amortization_missions)),
+            market_pool=market_pool,
+            # the tail's own arguments: cadence, wacc and lc_rate are fields
+            # 36, 31 and 10 of the prologue it unpacks
+            calendar=lambda m: _calendar_multipliers_cached(
+                m, cost_prologue[36], cost_prologue[31]),
+            learning=lambda n: _learning_curve_cached(n, cost_prologue[10]),
+            mining_rel=lambda n, f: _mining_reliability_cached(
+                n, p_first, rel_alpha, p_mature, f),
+            # what that lambda closes over, so Rust can remember its answers
+            # across ladders (pure function of these; see ladder.rs)
+            rel_alpha=rel_alpha, p_mature=p_mature,
+            price=lambda n, f, w: _price_programme(n, f, w, full=False),
+            refine=lambda f: _fleet_refinement_cached(f, fleet_ladder),
+            rung_hook=_ES_LADDER_HOOK,
+        )
+    if _rl is not None and _rl[0] not in (0, 2):
+        # a stale or mismatched build: never read an unknown answer
+        raise RuntimeError("es_core.ProgrammeLadder returned kind %r" % (_rl[0],))
+    if _rl is not None and _rl[0] == 2:
+        best_n, best_f, best_w, priced_count = _rl[1]
+        best_priced = (None,)       # re-priced in full below, as always
+    else:
+        best_n, best_f, best_w = programmes[0]
+        best_priced  = _price_programme(best_n, best_f, best_w, full=single)
+        best_pkey    = _objective_key(
+            best_priced[2] - best_priced[1],
+            best_priced[2], best_priced[1], config, on_profit)
+        priced_count = 1
 
-    for n_missions, fleet, per_ship in programmes[1:]:
-        cand = _price_programme(n_missions, fleet, per_ship, full=False,
-                                incumbent=best_pkey if rung_bound else None)
-        # Counted whether or not it was skipped: `programme_options_priced`
-        # reports the options the ladder considered, as it always has.
-        priced_count += 1
-        if cand is None:
-            continue
-        key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config, on_profit)
-        if key > best_pkey:
-            best_pkey, best_priced = key, cand
-            best_n, best_f, best_w = n_missions, fleet, per_ship
-
-    # One refinement pass around the coarse winner, on the same geometric
-    # spacing plus both integer neighbours; see `fleet_refinement`.  Skipped
-    # entirely when the programme is not being searched, which is the default
-    # and the path every committed figure was measured on.
-    #
-    # v1.16.0: refined at the winner's OWN campaigns-per-ship.  W is enumerated
-    # exhaustively, so it needs no refinement of its own, but it does need to
-    # be held fixed while F moves, because N = F × W and refining F against some
-    # other W would price a programme the search never proposed.
-    if len(programmes) > 1:
-        n_floor = max(1, int(config.nre_amortization_missions))
-        for fleet in _fleet_refinement_cached(best_f, fleet_ladder):
-            n_missions = fleet * best_w
-            if n_missions < n_floor or n_missions > max_n:
-                continue
-            cand = _price_programme(n_missions, fleet, best_w, full=False,
+        for n_missions, fleet, per_ship in programmes[1:]:
+            cand = _price_programme(n_missions, fleet, per_ship, full=False,
                                     incumbent=best_pkey if rung_bound else None)
+            # Counted whether or not it was skipped: `programme_options_priced`
+            # reports the options the ladder considered, as it always has.
             priced_count += 1
             if cand is None:
                 continue
             key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config, on_profit)
             if key > best_pkey:
                 best_pkey, best_priced = key, cand
-                best_n, best_f = n_missions, fleet
+                best_n, best_f, best_w = n_missions, fleet, per_ship
+
+        # One refinement pass around the coarse winner, on the same geometric
+        # spacing plus both integer neighbours; see `fleet_refinement`.  Skipped
+        # entirely when the programme is not being searched, which is the default
+        # and the path every committed figure was measured on.
+        #
+        # v1.16.0: refined at the winner's OWN campaigns-per-ship.  W is enumerated
+        # exhaustively, so it needs no refinement of its own, but it does need to
+        # be held fixed while F moves, because N = F × W and refining F against some
+        # other W would price a programme the search never proposed.
+        if len(programmes) > 1:
+            n_floor = max(1, int(config.nre_amortization_missions))
+            for fleet in _fleet_refinement_cached(best_f, fleet_ladder):
+                n_missions = fleet * best_w
+                if n_missions < n_floor or n_missions > max_n:
+                    continue
+                cand = _price_programme(n_missions, fleet, best_w, full=False,
+                                        incumbent=best_pkey if rung_bound else None)
+                priced_count += 1
+                if cand is None:
+                    continue
+                key = _objective_key(cand[2] - cand[1], cand[2], cand[1], config, on_profit)
+                if key > best_pkey:
+                    best_pkey, best_priced = key, cand
+                    best_n, best_f = n_missions, fleet
 
     # The winning programme is the only one whose full cost breakdown is
     # reported, so it is the only one that has to be built.  Re-priced rather
@@ -8123,11 +8417,11 @@ def _evaluate_combo_at_ratio(
         # What the optimiser actually chose to load
         "payload_dominant_phase":   dominant_phase,
         "payload_dominant_frac":    dominant_frac,
-        "payload_mix":              (
-            "; ".join(f"{k} {v:,.0f}kg" for k, v in
-                      sorted(payload_mix.items(), key=lambda kv: -kv[1]))
-            if payload_mix else ""
-        ),
+        # The mix DICT, formatted into the column's text only for the winner,
+        # by `evaluate_asteroid` (`_format_payload_mix`): every losing
+        # candidate built and threw away a ~6 us string.  Nothing reads this
+        # key before then.
+        "payload_mix":              payload_mix,
         # True when the concentrate is at the purity ceiling, i.e. grade, not
         # processing capacity, is what limits the delivered value.  Compared
         # against the delivered figure itself (with a relative tolerance)
@@ -9275,6 +9569,19 @@ def _prefilter_probe(
     return seen, past_first, kept
 
 
+def _format_payload_mix(payload_mix: Dict[str, float]) -> str:
+    """The `payload_mix` column's text: phases by mass, heaviest first.
+
+    The expression `_evaluate_combo_at_ratio` used to build for every
+    candidate, moved here unchanged so only the winner pays for it.
+    """
+    return (
+        "; ".join(f"{k} {v:,.0f}kg" for k, v in
+                  sorted(payload_mix.items(), key=lambda kv: -kv[1]))
+        if payload_mix else ""
+    )
+
+
 def evaluate_asteroid(
     asteroid_row: Row,
     catalogs:     Dict[str, pd.DataFrame],
@@ -9563,6 +9870,12 @@ def evaluate_asteroid(
     if best is None:
         return None
 
+    # The winner's `payload_mix` becomes the column's text here, once, rather
+    # than in every candidate (see the key in `_evaluate_combo_at_ratio`).  A
+    # winner seen before (a shared object) is already text.
+    if isinstance(best.get("payload_mix"), dict):
+        best["payload_mix"] = _format_payload_mix(best["payload_mix"])
+
     # Tag with asteroid identifiers + carried-through fields
     best.update({
         "designation":              asteroid_row.get("designation"),
@@ -9680,12 +9993,17 @@ def _evaluate_chunk(chunk: pd.DataFrame) -> List[dict]:
     combos   = _WORKER_CTX["combos"]
     config   = _WORKER_CTX["config"]
 
+    before = _rust_counters()
     out: List[dict] = []
     for row in _iter_row_dicts(chunk):
         result = evaluate_asteroid(row, catalogs, config, combos)
         if result is not None:
             out.append(result)
-    return out
+    if before is None:
+        return out
+    # Rust mode: the chunk's counters travel back with its rows (a worker's
+    # own counters die with the pool).
+    return out, _counter_delta(_rust_counters(), before)
 
 
 # Measured on the reference machine (6 physical / 12 logical cores, working
@@ -9811,6 +10129,7 @@ def _evaluate_in_parallel(
     combos:      List[Tuple[Dict[str, Any], Dict[str, Any]]],
     n_workers:   int,
     on_progress,
+    rust_totals: Optional[List[int]] = None,
 ) -> Optional[List[dict]]:
     """Run the per-asteroid search across `n_workers` processes.
 
@@ -9825,6 +10144,9 @@ def _evaluate_in_parallel(
     matters beyond tidiness: the caller sorts on `profit_usd` with pandas'
     default quicksort, which is not stable, so a different arrival order could
     permute tied rows and make two runs of the same code disagree.
+
+    `rust_totals` (Rust mode only) accumulates each chunk's counter delta,
+    which `_evaluate_chunk` returns beside its rows in that mode.
     """
     chunks = _chunk_frame(work_df, n_workers)
 
@@ -9844,6 +10166,9 @@ def _evaluate_in_parallel(
         results: List[dict] = []
         try:
             for chunk, found in zip(chunks, pool.imap(_evaluate_chunk, chunks)):
+                if rust_totals is not None:
+                    found, delta = found
+                    rust_totals[:] = [a + b for a, b in zip(rust_totals, delta)]
                 results.extend(found)
                 on_progress(len(chunk))
             pool.close()
@@ -9993,14 +10318,20 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
             print(f"     ... {i:,} / {n:,} evaluated  ({progress['pct']}%)")
 
     results = None
+    # Rust mode: workers' counter deltas are added here as their chunks
+    # arrive; this process's own counters (pre-filter probe, serial search)
+    # are added at the end.
+    rust_totals = [0] * len(_RUST_COUNTER_NAMES) if _ES_CORE is not None else None
     n_workers = _resolve_worker_count(config, n)
     if n_workers > 1:
         print(f"       {n_workers} worker processes "
               f"({os.cpu_count()} logical CPUs, parallel_workers="
               f"{config.parallel_workers or 'auto'})")
         results = _evaluate_in_parallel(
-            work_df, catalogs, config, combos, n_workers, report,
+            work_df, catalogs, config, combos, n_workers, report, rust_totals,
         )
+        if results is None and rust_totals is not None:
+            rust_totals = [0] * len(_RUST_COUNTER_NAMES)
 
     if results is None:                       # serial path, or no pool started
         progress["done"] = progress["pct"] = 0
@@ -10010,6 +10341,11 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
             if result is not None:
                 results.append(result)
             report(1)
+
+    if rust_totals is not None:
+        # everything this process answered itself (probe, serial search)
+        own = _rust_counters()
+        _report_rust_counters(tuple(a + b for a, b in zip(rust_totals, own)))
 
     if not results:
         print("\nFAIL  No viable evaluations - every asteroid failed.")

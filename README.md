@@ -71,6 +71,9 @@ requirements-verify.txt  The pinned samebytes those two (and verify.py's run
 .github/workflows/     CI: the checks that need no catalog, run on every push
 platform_reference.json  What it compares against, recorded on the ref host
 requirements-lock.txt  The exact versions every committed number was measured on
+requirements-rust.txt  Opt-in Rust for Stage 4 (ECONOMICSPACE_RUST=1); needs a
+                       Rust toolchain, never auto-installed
+rust/es_core/         That Rust: its README, contract, measurements and gate
 Dockerfile             Container image for a second host. No CUDA layer, on purpose
 SPARK_SETUP.md         Standing this up on a DGX Spark (aarch64 Linux)
 master.py              Import surface: the four modules, their configs, the orchestrator
@@ -224,7 +227,7 @@ factor or a reference price is a spacevalue change and a new `prices-*`
 release; this repository then moves `price_release` and records it in
 [versions.md](versions.md). It moves every number downstream.
 
-**spacevalue is pinned to a tagged release**, `v0.7.0`, in all five places
+**spacevalue is pinned to a tagged release**, `v0.7.1`, in all five places
 that type it: as a URL in `requirements.txt`, and in `PIP_SPEC` in
 `modules/_runtime.py` (what Stages 2 and 4 install at import: Stage 2 for the
 names it re-exports, Stage 4 for `spacevalue.cargo`, the cargo valuation that
