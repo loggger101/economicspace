@@ -87,7 +87,7 @@ bit-identical; a calc change to any of them re-runs `rust/es_core/gate/`.
 ## Versions and release notes
 
 Current: catalog `1.11.0`, mineral_value `1.21.0`, transportation `1.26.1`,
-calc `1.46.0`, master `1.83.0` (checked by `verify_docs.py` check 2; the master
+calc `1.46.0`, master `1.84.0` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.
@@ -350,8 +350,9 @@ What counts as evidence:
   read; prices now come from pins. A live price is never adopted by re-running:
   record a snapshot (`spacecost quotes record`, `spacevalue quotes record`),
   publish, repin.
-  A frozen row's provenance correction goes in `campaign/stage3/PROVENANCE.md`,
-  never into the CSV's bytes.
+  A frozen row's provenance correction goes in `campaign/stage3/PROVENANCE.md`
+  (Stage 3) or `campaign/stage2/PROVENANCE.md` (Stage 2), never into the CSV's
+  bytes.
 - **`run_cell.py` installs Stage 2** from the pinned price release for the
   cell's destination (a `run_pipeline.py --stages 2` subprocess) and stops the
   cell before Stage 4 if that fails.
