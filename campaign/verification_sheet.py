@@ -396,6 +396,59 @@ def since_frozen(table, name):
             "row's.</span>" % (D.esc(spacecost.__version__), note))
 
 
+def frozen_hydrolox(C, value):
+    """Where a tug propellant price the installed spacecost no longer
+    carries came from: the run's own frozen propellant table, when its
+    hydrolox row IS the price (General_Research rc-626).  The row's note
+    names NASA contracts and no contract, so it is described, not quoted,
+    and part 18 keeps the flag."""
+    import spacecost.delivery as sd
+    path = C.get("files", {}).get("propellants_file")
+    if not (path and os.path.exists(path)):
+        return ""
+    # round_trip: pandas' default parser reads the stored 1.5999999999999999
+    # as 1.6, one ulp from the price the run carries.
+    table = pd.read_csv(path, float_precision="round_trip")
+    hit = table[table["name"] == sd._HYDROLOX]
+    if not len(hit) or float(hit.iloc[0]["ref_cost_usd_per_kg"]) != float(value):
+        return ""
+    return ("  <span class='src'>This run read it from the frozen "
+            "<b>%s</b>, row <i>%s</i>, column <i>ref_cost_usd_per_kg</i>; "
+            "that row's LH2 base and handling overhead name no contract, "
+            "and no blend calculation is given (campaign/stage3/"
+            "PROVENANCE.md).</span>"
+            % (D.esc(repo_path(path)), D.esc(sd._HYDROLOX)))
+
+
+# WHAT AN M-CLASS FALLBACK IS, for a body that was not measured.  Written for
+# the values AsteroidCatalog's M row carries, and said only beside them, so a
+# moved row stops being described rather than described wrongly
+# (General_Research rc-386, rc-632).
+_CLASS_SCOPE = {
+    ("M", "albedo", 0.133): (
+        "AsteroidCatalog's M-class median is 0.133 (n = 139).  The NEOWISE "
+        "Tholen-M median, 0.125 (n = 33, SD 0.037; Mainzer et al. 2011, "
+        "Table 1), is a comparator, and that paper warns that visible-"
+        "selected taxonomy samples bias class albedos upward."),
+    ("M", "rho", 3.9): (
+        "The 3.9 g/cm3 is a class-level scenario: individual M-type estimates, "
+        "16 Psyche's 3.88 +/- 0.25 among them (Siltala and Granvik 2021), are "
+        "analogues that define no class distribution, and none measures "
+        "this body.")}
+
+
+def class_scope(C, what):
+    """The scope sentence for an unmeasured body's class fallback, or ''."""
+    measured = (C.get("albedo_measured") if what == "albedo"
+                else bool(C["body"].get("density_measured")))
+    if measured:
+        return ""
+    value = round(float(C[what]), 6)
+    text = _CLASS_SCOPE.get((str(C["body"].get("spectral_type") or ""),
+                             what, value))
+    return ".  <span class='src'>%s</span>" % text if text else ""
+
+
 def cite_ops(C, category):
     """Cite one row of Module 3's operational-costs table.
 
@@ -793,6 +846,37 @@ _MARS_1SOL_WHY = ("Sources: NASA DRA 5.0 (SP-2009-566), printed p. 22, the 1-sol
                   "(NSSDCA), the 3,396.2 km equatorial radius under it.")
 
 
+# WHAT THE DELIVERY CHAIN'S TYPED CONSTANTS ARE, as spacecost's own comments
+# give them (General_Research rc-582).  Each is an analogue standing in for a
+# generic stage, so each says that no source fixes the generic value, and
+# part 18 keeps flagging it.
+_TUG_ISP_WHY = ("The figure is the RL10B-2's ~465.5 s at O/F 5.88 (NASA "
+                "Glenn, NTRS 20200002036, slide 7), rounded, as spacecost's "
+                "comment gives it: one engine standing in for every tug, so "
+                "no source fixes the generic value (General_Research "
+                "rc-358, rc-582).")
+_DRY_WHY = {
+    "tug": ("0.10 is a scenario midpoint for a cryogenic upper stage, "
+            "stage dry mass over dry plus propellant, with no source of "
+            "its own: ICPS, a modified DCSS, is 3.7 t unfueled and 32.7 t "
+            "fueled, 0.113 (NASA SLS Reference Guide 2022, p. 9), a "
+            "comparator (General_Research rc-359, rc-582)."),
+    "lander": ("0.20 is Apollo 10's LM-4 descent stage rounded, 4,703 lb "
+               "dry on 18,134 lb of loaded DPS propellant, 0.206 (Apollo "
+               "10 Press Kit, p. 44): one lunar lander standing in for "
+               "every powered descent, so no source fixes the generic "
+               "value (General_Research rc-360, rc-582).")}
+
+
+def dry_why(dry):
+    """The scope sentence for a chain leg's dry fraction, or ''."""
+    import spacecost.delivery as sd
+    which = {sd.TUG_DRY_MASS_FRAC: "tug",
+             sd.LANDER_DRY_MASS_FRAC: "lander"}.get(dry)
+    return ("  <span class='src'>%s</span>" % _DRY_WHY[which]
+            if which else "")
+
+
 # WHAT spacecost READS A CONSTANT OUT OF, CITED AS THE ROW.  Five inputs were
 # cited to the name spacecost exports them under (`STAGE_HARDWARE_USD_PER_KG`,
 # `TUG_PROPELLANT_USD_PER_KG`, a `DELIVERY_CHAINS` leg) or to the derivation's
@@ -927,6 +1011,16 @@ def cite_constant(name, value, what=""):
 _CHAIN_SEGMENTS = {}
 
 
+def _dv_name(call):
+    """The row a `_dv(\"...\")` call names, or None."""
+    import ast
+    if (isinstance(call, ast.Call)
+            and getattr(call.func, "id", "") == "_dv"
+            and call.args and isinstance(call.args[0], ast.Constant)):
+        return call.args[0].value
+    return None
+
+
 def chain_segments(destination):
     """The delta-v rows `DELIVERY_CHAINS[destination]` names, leg by leg.
 
@@ -958,15 +1052,70 @@ def chain_segments(destination):
                     seg = None
                     if isinstance(leg, ast.Tuple) and len(leg.elts) > 1:
                         call = leg.elts[1]
-                        if (isinstance(call, ast.Call)
-                                and getattr(call.func, "id", "") == "_dv"
-                                and call.args
-                                and isinstance(call.args[0], ast.Constant)):
-                            seg = call.args[0].value
+                        seg = _dv_name(call)
+                        # A leg written as a sum of rows, `_dv(a) + _dv(b)`
+                        # (lunar_surface's TLI + LOI), names both, in
+                        # order (General_Research rc-697).
+                        if (seg is None and isinstance(call, ast.BinOp)
+                                and isinstance(call.op, ast.Add)):
+                            pair = (_dv_name(call.left),
+                                    _dv_name(call.right))
+                            seg = pair if None not in pair else None
                     legs.append(seg)
                 _CHAIN_SEGMENTS[k.value] = legs
         _CHAIN_SEGMENTS.setdefault("", [])
     return _CHAIN_SEGMENTS.get(destination, [])
+
+
+def summed_dv_rows(names, dv):
+    """Cite a chain leg spacecost flies as the sum of delta-v rows, or None.
+
+    Only when the installed rows still add up to the leg on the page, the
+    same equality `spacecost_row` holds a single row to.  The arithmetic is
+    printed, and each row's notes are quoted for part 18.
+    """
+    import spacecost
+    table = spacecost.load_delta_v()
+    rows = []
+    for name in names:
+        hit = table[table["segment"] == name]
+        if not len(hit):
+            return None
+        rows.append(hit.iloc[0])
+    if sum(float(r["dv_m_per_s"]) for r in rows) != float(dv):
+        return None
+    notes = "".join("  <span class='src'>%s</span>" % trim(r.get("notes"))
+                    for r in rows if trim(r.get("notes")))
+    return ("spacecost %s's <b>delta_v_segments.csv</b>, the sum of rows "
+            "<i>%s</i>, %s m/s, flown as one burn by "
+            "<b>spacecost/delivery.py</b>'s <i>DELIVERY_CHAINS</i>.  The "
+            "staged chain's leg, not the table's composite row to the same "
+            "place (General_Research rc-697).%s"
+            % (D.esc(spacecost.__version__),
+               "</i> + <i>".join(D.esc(r["segment"]) for r in rows),
+               " + ".join(P(float(r["dv_m_per_s"])) for r in rows)
+               + " = " + P(float(dv)), notes))
+
+
+def utility_route(name, destination):
+    """Which of spacevalue's two maps sets `name`'s utility at `destination`.
+
+    The citation said every factor came from the destination's override,
+    and cislunar's override is empty, as is lunar_surface's for carbon and
+    troilite: those fall back to the base map (General_Research rc-696).
+    Read off the installed release, which says so, since a frozen catalog
+    was written by the release of its day.
+    """
+    import spacevalue
+    import spacevalue.catalog as sv
+    over = sv.IN_SPACE_UTILITY_BY_DESTINATION.get(destination) or {}
+    how = ("its <i>IN_SPACE_UTILITY_BY_DESTINATION</i> override for %s"
+           % D.esc(destination) if name in over else
+           "the base <i>IN_SPACE_UTILITY</i> map, %s having no override "
+           "for it in <i>IN_SPACE_UTILITY_BY_DESTINATION</i>"
+           % D.esc(destination))
+    return "%s, in the installed spacevalue %s" % (
+        how, D.esc(spacevalue.__version__))
 
 
 def phase_price_keys(S, C, only=None):
@@ -1091,7 +1240,8 @@ def part_body(S, out):
                    cite_body(C, "albedo_assumed_for_diameter",
                              "measured albedo" if C["albedo_measured"]
                              else "NOT measured: the taxonomy default for this "
-                                  "class, so the diameter is an inference"))
+                                  "class, so the diameter is an inference")
+                   + class_scope(C, "albedo"))
     else:
         S.put("D", "D", "diameter", B["d_km"], "km",
               cite_body(C, "diameter_km",
@@ -1100,7 +1250,8 @@ def part_body(S, out):
     rho = S.put("rho", "rho", "bulk density", C["rho"], "g/cm3",
                 cite_body(C, "density_gcm3",
                           "measured" if bool(C["body"].get("density_measured"))
-                          else "NOT measured: the taxonomy estimate"))
+                          else "NOT measured: the taxonomy estimate")
+                + class_scope(C, "rho"))
     phi = S.put("phi", "phi_min", "mineable fraction of the body",
                 C["cfg"].max_mining_fraction, "-",
                 cite_config("max_mining_fraction")
@@ -1265,7 +1416,7 @@ def part_prices(S, out):
                   if row is not None else
                   "<b>spacecost/delivery.py</b>, "
                   "<i>TUG_PROPELLANT_USD_PER_KG</i>: the hydrolox row's "
-                  "reference price.")
+                  "reference price.%s" % frozen_hydrolox(C, rates["propellant"]))
         if any(leg["kind"] != "burn" for leg in steps):
             name = "Heat shield / TPS for Earth return"
             row = spacecost_row("load_operational_costs", "category", name,
@@ -1308,14 +1459,19 @@ def part_prices(S, out):
             continue
         dv, isp, dry = leg["dv"], leg["isp"], leg["dry"]
         seg = segs[n - 1]
-        row = (spacecost_row("load_delta_v", "segment", seg, "dv_m_per_s", dv)
-               if seg else None)
+        if isinstance(seg, tuple):
+            summed = summed_dv_rows(seg, dv)
+            seg, row = None, None
+        else:
+            summed = None
+            row = (spacecost_row("load_delta_v", "segment", seg,
+                                 "dv_m_per_s", dv) if seg else None)
         S.put("dv%d" % n, "dv_%d" % n, "leg %d delta-v" % n, dv, "m/s",
               cite_spacecost_row(
                   "load_delta_v", seg, "flown by <b>spacecost/delivery.py</b>'s "
                   "<i>DELIVERY_CHAINS</i> for %s, re-exported as Module 2's "
                   "<i>_DELIVERY_LEGS</i>" % D.esc(C["destination"]), row)
-              if row is not None else
+              if row is not None else summed if summed else
               "<b>spacecost/delivery.py</b>, <i>DELIVERY_CHAINS</i> for "
               "%s, re-exported as Module 2's <i>_DELIVERY_LEGS</i>.  "
               "<span class='src'>The chain is walked backwards from the "
@@ -1330,11 +1486,13 @@ def part_prices(S, out):
               "every leg of <i>DELIVERY_CHAINS</i>.  The upper stage this "
               "leg is flown on: an upper-stage figure typed there, "
               "deliberately not the hydrolox row's, and spacecost asserts "
-              "the gap between the two at import.")
+              "the gap between the two at import.  "
+              "<span class='src'>%s</span>" % _TUG_ISP_WHY)
         S.put("dry%d" % n, "delta_%d" % n, "leg %d dry-mass fraction" % n,
               dry, "-", "<b>spacecost/delivery.py</b>, "
                         "<i>DELIVERY_CHAINS</i>.  Stage dry mass as a "
-                        "fraction of its propellant load.")
+                        "fraction of its propellant load.%s"
+                        % dry_why(dry))
         S.step("ve%d" % n, "v_e,%d" % n, "leg %d exhaust velocity" % n,
                "I_sp * g_0", "%s * %s" % (P(isp), P(W.G0)), leg["ve"], "m/s",
                ["isp%d" % n, "g0"])
@@ -1462,9 +1620,9 @@ def part_prices(S, out):
               pp["utility"], "-",
               "<b>mineral_value_catalog.csv</b>, row <i>%s</i>, column "
               "<i>in_space_utility</i>, written by "
-              "spacevalue's <b>spacevalue/catalog.py</b> and its "
-              "<i>IN_SPACE_UTILITY_BY_DESTINATION</i> for %s.  %s"
-              % (D.esc(base), D.esc(C["destination"]), UTILITY_NOTE
+              "spacevalue's <b>spacevalue/catalog.py</b>: %s.  %s"
+              % (D.esc(base), utility_route(base, C["destination"]),
+                 UTILITY_NOTE
                  if first_u is None else
                  # Said in full once: it is the same five lines under
                  # every phase, a dozen times on an S-type.
@@ -1993,13 +2151,18 @@ def part_constants(S, out):
     # would credit the fit with sources that stand behind a different column.
     S.put("tau", "tau_fit", "cruise-time fit", W.TAU_CRUISE_FIT_YR_PER_M_S,
           "yr per m/s",
-          cite_here("TAU_CRUISE_FIT_YR_PER_M_S", "A linear fit of "
-                    "transfer time against delta-v, floored at half a "
-                    "year, calibrated (calc's mission_duration_yr) on the "
-                    "duration_yr column of the delta-v table's LEO to easy, "
-                    "average and hard NEA and main-belt rows.  Those rows' "
+          cite_here("TAU_CRUISE_FIT_YR_PER_M_S", "A scenario prior, not "
+                    "a calibration: transfer time against delta-v, read off "
+                    "by eye with no residual recorded from the duration_yr "
+                    "column of the delta-v table's LEO to easy, average and "
+                    "hard NEA rows (calc's mission_duration_yr), 4,500 m/s "
+                    "1.0 yr, 6,500 1.5 and 8,500 2.0, with the main-belt "
+                    "row's 10,500 m/s at 3.5 yr off the line.  Those rows' "
                     "notes source the delta-v; nothing sources the "
-                    "durations."))
+                    "durations.  The half-year floor per leg is a separate "
+                    "judgement, with no source of its own and not part of "
+                    "the fit; it binds on any leg below 0.5 / 0.00023 = "
+                    "2,174 m/s (General_Research rc-534, rc-637)."))
     if C["return_leg"] in ("ret_cislunar_prop", "ret_lunar_surface_prop"):
         S.put("R_M", "R_M", "lunar orbital radius", W.R_MOON, "km",
               cite_here("R_MOON", "The Moon's semi-major axis: NASA's Moon "
@@ -2195,7 +2358,10 @@ def return_leg_steps(S, out, leg):
         if name == "ret_earth_surface_prop":
             keys.append(const("dv_deorb", "dv_deorbit", "deorbit burn",
                               W.DV_LEO_DEORBIT, "km/s", "DV_LEO_DEORBIT",
-                              "The capsule still has to come down."))
+                              "The capsule still has to come down.  A "
+                              "scenario with no source named for it: no "
+                              "entry interface, flight-path angle or capsule "
+                              "is stated (General_Research rc-599)."))
     elif name == "ret_leo_aero":
         keys.append(const("dv_trim", "dv_trim", "periapsis-raise trim after "
                           "aerobraking", W.DV_AEROBRAKE_TRIM, "km/s",
@@ -2423,16 +2589,21 @@ def part_transfer(S, out):
                                C["pro"].raw("name"),
                                ("dv_penalty_factor", "thrust_scaling")))
     # Literals in the model, not table rows: cited to the function that
-    # applies them, which is where a reader would go to check them.
+    # applies them, which is where a reader would go to check them.  What
+    # calc's comment says of both is said beside each (General_Research
+    # rc-633, rc-692).
+    _FLOOR_WHY = ("calc's comment: the 3,000 and 300 m/s floors are model "
+                  "safeguards, not typical leg requirements, and have no "
+                  "source.")
     S.put("floor_out", "floor_out", "outbound delta-v floor", DV["floor_out"],
           "m/s", "<b>modules/calc.py</b>, <i>asteroid_dv_options</i>: "
           "<span class='src'>the outbound leg is floored before anything "
           "else touches it, the same floor <i>derive_dv</i> applies "
-          "here.</span>")
+          "here.  %s</span>" % _FLOOR_WHY)
     S.put("floor_ret", "floor_ret", "return delta-v floor", DV["floor_ret"],
           "m/s", "<b>modules/calc.py</b>, <i>asteroid_dv_options</i>: "
           "<span class='src'>the return leg's floor, applied the same "
-          "way.</span>")
+          "way.  %s</span>" % _FLOOR_WHY)
     S.put("dv_ceil", "dv_max", "delta-v ceiling", DV["ceiling"], "m/s",
           cite_config("max_dv_outbound_m_s"))
     S.step("dv_out", "dv_out", "outbound delta-v, as flown",
@@ -3918,7 +4089,10 @@ def market_inputs(S, C, markets):
                      "(<i>IN_SPACE_ANNUAL_DEMAND_KG</i>) times its commodity "
                      "class's share of it (<i>_DEMAND_SHARE_BY_CLASS</i>, "
                      "both in spacevalue's <b>spacevalue/catalog.py</b>), and one "
-                     "flown home by world annual production"
+                     "flown home by world annual production.  Both depot "
+                     "factors are model allocations, not observed demand: "
+                     "the import budgets are judgements, and no source "
+                     "apportions one by class (General_Research rc-726)"
                      if first is None else
                      "routed as the %s ceiling above is"
                      % D.esc(first)))
@@ -5573,7 +5747,8 @@ SOURCE_NAMES = (
     "metals.dev", "Fastmarkets", "Argus", "Platts", "COMEX", "NYMEX", "CME",
     "SpaceX", "Blue Origin", "ULA", "Rocket Lab", "Arianespace",
     "Northrop Grumman", "DARPA", "GAO", "AIAA", "DLA", "Reuters",
-    "SpaceNews", "Astronautix", "RocketCEA", "Gallagher", "Damodaran")
+    "SpaceNews", "Astronautix", "RocketCEA", "Gallagher", "Damodaran",
+    "Sibanye-Stillwater")
 _MONTHS = ("Jan|Feb|Mar|Apr|May|Jun|June|Jul|July|Aug|Sep|Sept|Oct|Nov|Dec|"
            "Q[1-4]|NET|FY|early|late|mid")
 _LABEL = re.compile(r"\b(?:Anchors?|Sources?|References?|Cited|Citation)\s*:")
@@ -6644,12 +6819,36 @@ def footer(out, sheet):
                    % D.esc(", ".join(sorted(sheet.tag[k]
                                             for k in loose_in))),
                    len(loose_step)))
-    bits.append("<p>Generated %s from <code>%s</code>.  Re-run "
+    bits.append("<p>Generated %s from <code>%s</code> at economicspace "
+                "commit <code>%s</code>.  Re-run "
                 "<code>py campaign/verification_sheet.py</code> and every "
                 "figure moves with the model.</p>"
-                % (datetime.date.today().isoformat(), D.esc(out["cell"])))
+                % (datetime.date.today().isoformat(), D.esc(out["cell"]),
+                   D.esc(source_commit())))
     bits.append("</div>")
     return "".join(bits)
+
+
+def source_commit():
+    """The checkout's commit, with a mark when it has uncommitted edits.
+
+    CITATIONS.md section 8 asks a quoted result for its git commit beside
+    the release identifiers the header prints (General_Research rc-782).
+    A tree with no git answers \"unknown\", which is what it is.
+    """
+    import subprocess
+    try:
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
+                             capture_output=True, text=True, timeout=30,
+                             check=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain",
+                                "--untracked-files=no"], cwd=ROOT,
+                               capture_output=True, text=True, timeout=30,
+                               check=True).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return sha + (" with uncommitted edits" if dirty else "") if sha \
+        else "unknown"
 
 
 def build_sheet(out):

@@ -1054,6 +1054,8 @@ class CalcConfig:
     # ─── COST AMORTISATION & FINANCIAL ───────────────────────────────────────
     # Spacecraft development NRE (~$588M for OSIRIS-REx class).  If 1, the
     # first mission carries the full NRE; raise N to spread across a fleet.
+    # N = 1 is a fixed scenario setting, not an estimate of an actual
+    # campaign or fleet size (GR rc-647).
     nre_amortization_missions: int   = 1
     # ─── PROGRAMME SCALE AND FLEET SIZE (v1.15.0) ────────────────────────────
     # `nre_amortization_missions` above is N, the programme size, and until
@@ -2872,7 +2874,9 @@ DV_AEROBRAKE_TRIM_KM_S = 0.100
 # Deorbit from a 200-km circular parking orbit onto an entry trajectory.  Small
 # but not zero, and the all-propulsive Earth-surface return has to pay it: that
 # architecture captures into LEO and then still has to come down.  Standard
-# figure for lowering perigee to ~50 km from a 200-km circular orbit.
+# figure for lowering perigee to ~50 km from a 200-km circular orbit.  A
+# scenario: no source is named, and no entry interface, flight-path angle or
+# capsule is stated (GR rc-599).
 DV_LEO_DEORBIT_KM_S = 0.100
 
 # ── Lunar surface  (v1.6.0) ──────────────────────────────────────────────────
@@ -3967,6 +3971,9 @@ def _sizing_propellant_consts(
 # with a reason: SLS Block 1 (216 m3) and Proton-M (91.1) stop taking this
 # default, and 34 of 76 rows (17 of the 48 operational ones) still do, some of
 # them rows that had carried an unsourced figure before.
+# The 100 m3 itself is a SCENARIO fallback with no source or derivation, not
+# a sourced usable envelope: a row that takes it has an unknown volume
+# (GR rc-597).
 DEFAULT_FAIRING_VOLUME_M3 = 100.0
 
 
