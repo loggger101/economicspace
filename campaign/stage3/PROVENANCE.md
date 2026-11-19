@@ -67,11 +67,23 @@ beside each one it reads.
   (Chang Diaz et al., IEPC-2022-525, pp. 1 and 9), a different benchmark from
   VX-200's performance (rc-661).
 
+### launch_vehicles.csv (`spacecost-0.4.0/` to `spacecost-0.14.0/`)
+
+- **Ariane 6 (A64)**, $115M to $132M, an estimate. The note's "€115M (2018
+  est.)" is a target in 2014 economic conditions, not a 2018 estimate
+  (Assemblée nationale, Rapport d'information no. 1438, 2018, printed p. 36),
+  converted at $1.15/€ without escalation; the $115M low end has no range
+  method. The 0.4.0 and 0.5.0 notes credit the ESA Ariane 6 overview, which
+  states payloads only. The same report's press-reported $130M transition
+  price (p. 62) and Euronews (Jul 2024) are comparators (rc-700).
+
 ### operational_costs.csv
 
 - **Eclipse / night-side dark fraction**, 0.50 [0.35, 0.55]. Scenario
-  geometry. Stubbs & Wang (2012, p. 275) is a Vesta illumination comparator,
-  not an asteroid-wide fraction, and no source gives the range (rc-627).
+  geometry. Stubbs & Wang (2012, sec. 5.1, p. 275) is a Vesta tropical
+  comparator for a roughly half-time dark period, not an asteroid-wide
+  fraction, and no source gives the range (rc-627; the top-level 1.15.0 row,
+  rc-811).
 - **Energy storage round-trip efficiency**, 0.90 [0.80, 0.95]. Schmitz et al.
   (2023, Table 3) is a Li-ion efficiency comparator, at its own system boundary
   (rc-627).
