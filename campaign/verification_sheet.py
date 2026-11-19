@@ -600,8 +600,160 @@ def cite_column(C, name, column, why=""):
                              % name)
     where = ("<b>mineral_value_catalog.csv</b>, row <i>%s</i>, column "
              "<i>%s</i>" % (D.esc(name), D.esc(column)))
-    return ("%s.  <span class='src'>%s</span>" % (where, why) if why
-            else where + ".")
+    return (("%s.  <span class='src'>%s</span>" % (where, why) if why
+             else where + ".") + stage2_limits(C, column, name))
+
+
+# WHAT A STAGE 2 COLUMN'S VALUE IS, AS campaign/stage2/PROVENANCE.md RECORDS IT
+# (General_Research rc-634 to rc-655).  A Stage 2 row's notes describe the
+# mineral and its price source is one catch-all label, so the page cannot
+# quote a source for these columns: it says what the value is and what its
+# comparators do and do not support.  Keyed on the value as well as the row,
+# so a release that moves a number loses the sentence instead of keeping a
+# stale one; the market ceilings also on the destination, whose budget they
+# split.  Printed in a 'now' span, which part 18 strips before it looks for a
+# source: a recorded limit is not backing, and NEED BACKING stands.
+_FE_NI = ("kamacite", "taenite", "nickel-iron")
+_SILICATES = ("olivine", "enstatite", "plagioclase", "silicates")
+_STRUCTURAL = _FE_NI + ("cohenite", "schreibersite", "troilite")
+_BUDGET = {
+    "cislunar": ("cislunar's 100,000 kg/yr import budget, a judgement",
+                 "Kornuta et al. (2019) and LunA-10 (Northrop Grumman 2024) "
+                 "are demand forecasts that apportion nothing by class: "
+                 "context, not a source for the split, and not observed "
+                 "absorption (General_Research rc-636)"),
+    "mars_surface": ("Mars surface's 20,000 kg/yr, a judgement (NASA "
+                     "forecasts no Mars-surface demand)",
+                     "NASA's '10's of metric tons of commodities per year' "
+                     "(Sanders & Kleinhenz 2024, NTRS 20240002713, p. 3) is "
+                     "order-of-magnitude context for an activity not funded "
+                     "or approved (General_Research rc-653)"),
+    "mars_orbit": ("Mars orbit's 60,000 kg/yr, a one-mission scenario",
+                   "NASA's '100s metric tons per year for human Mars "
+                   "transportation' (Sanders & Kleinhenz 2024, p. 3) is scale "
+                   "context, not a depot-market forecast (General_Research "
+                   "rc-655)"),
+}
+_SHARE = (("chemical", ("carbon",), 0.05), ("structural", _STRUCTURAL, 0.25),
+          ("shielding", _SILICATES, 0.15))
+_TOTAL = {"cislunar": 100_000.0, "mars_surface": 20_000.0,
+          "mars_orbit": 60_000.0}
+_HANDBOOK = "Handbook of Mineralogy"
+_STAGE2_LIMITS = [
+    ("refining_kwh_per_kg", _FE_NI, 5.0,
+     "an engineering allowance per kg of raw feed, not a measured phase "
+     "intensity: the one comparator, hydrogen direct reduction at 3.48 kWh/kg "
+     "of liquid steel (Vogl, Ahman & Nilsson 2018), has another feed and "
+     "product (General_Research rc-634)."),
+    ("refining_kwh_per_kg", ("cohenite",), 5.0,
+     "nickel-iron's 5.0 transferred to a carbide with no carbon or product "
+     "boundary (General_Research rc-634)."),
+    ("refining_kwh_per_kg", ("schreibersite",), 6.0,
+     "an unmeasured route assumption: Gull, Feng & Pasek (2022) corrode "
+     "schreibersite in water and report no energy (General_Research rc-634)."),
+    ("refining_kwh_per_kg", _SILICATES, 1.0,
+     "a low-energy scenario: microwave sintering of lunar simulants took "
+     "19-27 kWh/kg (Liu et al. 2025), another route and product, so a "
+     "comparator only (General_Research rc-634)."),
+    ("refining_kwh_per_kg", ("carbon",), 2.0,
+     "an engineering scenario with no source (General_Research rc-634)."),
+    ("density_gcm3", ("kamacite", "nickel-iron"), 7.90,
+     "kamacite's calculated density (%s, D(calc.) 7.90, none measured), used "
+     "for the alloy with no IIIAB bulk-alloy basis; Remo (1993, Table 2) puts "
+     "selected iron-nickel meteorites at 7.29-7.88 (General_Research rc-639)."
+     % _HANDBOOK),
+    ("density_gcm3", ("cohenite",), 7.40,
+     "inside cohenite's measured 7.20-7.65 (%s; General_Research rc-639)."
+     % _HANDBOOK),
+    ("density_gcm3", ("schreibersite",), 7.40,
+     "inside schreibersite's calculated 7.12-7.44 but above its measured "
+     "7.0-7.3 (%s; General_Research rc-639)." % _HANDBOOK),
+    ("density_gcm3", ("troilite",), 4.61,
+     "Agrawal, Carlozzi & Bryson's 4.61 (NTRS 20170001623, Table 1), under a "
+     "formula that reads FeSi; the %s gives FeS at 4.67-4.79 measured and "
+     "4.85 calculated, so it is unreconciled with the phase "
+     "(General_Research rc-640)." % _HANDBOOK),
+    ("density_gcm3", ("carbon",), 2.10,
+     "a graphite proxy, inside graphite's measured 2.09-2.23 (%s); nothing "
+     "supports another carbon form (General_Research rc-640)." % _HANDBOOK),
+    ("density_gcm3", ("plagioclase",), 2.69,
+     "a representative density with no Na/Ca composition defined: inside "
+     "labradorite's measured 2.68-2.72 (%s), against 2.62 for "
+     "albite-composition feldspar (Agrawal et al.) (General_Research rc-640)."
+     % _HANDBOOK),
+    ("terrestrial_price_usd_per_kg", _STRUCTURAL, None,
+     "a missing direct quote, not an observed zero market price "
+     "(General_Research rc-643)."),
+    ("terrestrial_price_usd_per_kg", ("olivine", "enstatite", "silicates"),
+     0.05, "an engineering placeholder with no grade, product or quote year "
+     "(General_Research rc-643)."),
+    ("terrestrial_price_usd_per_kg", ("carbon",), 0.20,
+     "a scenario with no grade or quote; USGS graphite and Platts N330 carbon "
+     "black are other products (General_Research rc-643)."),
+    ("terrestrial_price_usd_per_kg", ("plagioclase",), 0.10,
+     "a rounded comparator to USGS Mineral Commodity Summaries 2026's $110/t "
+     "for 2025 marketable feldspar (p. 82), not a quote for the phase "
+     "(General_Research rc-643)."),
+]
+_CREF_WHY = ("refining_kwh_per_kg at about $6.08/kWh (the $800/W-EOL power "
+             "system over 15 years at full output) plus $200/kg of plant "
+             "($300,000/kg of hardware over 100 kg/yr/kg for 15 years).  Each "
+             "component is a spacecost estimate or scenario (power row "
+             "rc-631, plant hardware rc-517, throughput rc-383): a model "
+             "deduction, not a market quote (General_Research rc-642).")
+
+
+_STAGE2_COLUMNS = ("refining_kwh_per_kg", "density_gcm3",
+                   "terrestrial_price_usd_per_kg",
+                   "in_space_processing_usd_per_kg", "annual_market_kg")
+
+
+def _same(a, b):
+    """Two Stage 2 cells are one value: both missing, or equal to 1e-9."""
+    a_nan = a is None or (isinstance(a, float) and math.isnan(a))
+    b_nan = b is None or (isinstance(b, float) and math.isnan(b))
+    if a_nan or b_nan:
+        return a_nan and b_nan
+    return math.isclose(float(a), float(b), rel_tol=1e-9, abs_tol=1e-12)
+
+
+def stage2_limits(C, column, name):
+    """campaign/stage2/PROVENANCE.md's entry for row `name`'s `column`, or ''."""
+    if column not in _STAGE2_COLUMNS:
+        return ""
+    minerals = C.get("minerals")
+    if minerals is None or column not in getattr(minerals, "columns", ()):
+        return ""
+    hit = minerals[minerals["name"] == name]
+    if not len(hit):
+        return ""
+    raw = hit.iloc[0][column]
+    value = None if pd.isna(raw) else float(raw)
+    why = None
+    if column == "in_space_processing_usd_per_kg":
+        kwh = hit.iloc[0].get("refining_kwh_per_kg")
+        if value is not None and present(kwh) and _same(
+                value, float(kwh) * 800.0 / (15 * 365.25 * 24.0) * 1000.0
+                + 300_000.0 / (100.0 * 15.0)):
+            why = _CREF_WHY
+    elif column == "annual_market_kg":
+        dest = C.get("destination")
+        for _cls, names, share in _SHARE:
+            if (dest in _BUDGET and name in names and value is not None
+                    and _same(value, _TOTAL[dest] * share)):
+                budget, context = _BUDGET[dest]
+                why = ("%s, times the class's %d%% share, an allocation "
+                       "scenario.  %s." % (budget, round(share * 100),
+                                           context))
+    else:
+        for col, names, expect, text in _STAGE2_LIMITS:
+            if col == column and name in names and _same(value, expect):
+                why = text
+                break
+    if not why:
+        return ""
+    return ("  <span class='now'>campaign/stage2/PROVENANCE.md records this "
+            "value as %s</span>" % D.esc(why))
 
 
 # What `in_space_processing_usd_per_kg` IS, said by naming the function that
@@ -1664,9 +1816,10 @@ def part_prices(S, out):
         quoted = math.isfinite(float(pp["terrestrial"]))
         terrestrial = float(pp["terrestrial"]) if quoted else 0.0
         S.put("t_%s" % short, "p_%s" % base, "%s terrestrial quote" % base,
-              terrestrial, "$/kg", cite_mineral(C, base) if quoted else
+              terrestrial, "$/kg", (cite_mineral(C, base) if quoted else
               cite_mineral(C, base) + "  <span class='src'>No quote: Stage 2 "
               "prices a missing terrestrial price as zero.</span>")
+              + stage2_limits(C, "terrestrial_price_usd_per_kg", base))
         if pp["route"] == "used in space":
             S.put("c_%s" % short, "c_ref,%s" % base,
                   "%s on-site refining" % base, pp["refining"], "$/kg",
@@ -4122,7 +4275,8 @@ def market_inputs(S, C, markets):
                      "apportions one by class (General_Research rc-726)"
                      if first is None else
                      "routed as the %s ceiling above is"
-                     % D.esc(first)))
+                     % D.esc(first))
+                  + stage2_limits(C, "annual_market_kg", market))
             first = S.first_cap = first or market
         keys[market] = key
     return keys
