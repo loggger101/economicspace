@@ -396,6 +396,33 @@ def since_frozen(table, name):
             "row's.</span>" % (D.esc(spacecost.__version__), note))
 
 
+# THE FROZEN ROWS WHOSE INSTALLED-SPACECOST COUNTERPART PREDATES THEIR
+# CORRECTION.  `since_frozen` quotes the installed release's row, which is
+# only as current as the pin: spacecost 0.17.1's tank row still reads as
+# the frozen one does, the fix landing in 0.18.4.  So the page says what
+# campaign/stage3/PROVENANCE.md records, in a 'now' span that part 18
+# strips before it looks for a source: a correction is not backing.
+_FROZEN_CORRECTION = {
+    "Propellant tank recurring cost":
+        "an engineering estimate.  The ~$30M Centaur III and ~$20M RL10 "
+        "anchors and the tank-only allocation have no source, and "
+        "whole-stage comparators such as NASA OIG's $29M second ICPS "
+        "(IG-20-012, p. 23) are not tank costs (General_Research rc-825, "
+        "rc-730).",
+}
+
+
+def frozen_correction(category):
+    """PROVENANCE.md's correction to a frozen row, when the page reads one."""
+    if not str(_FROZEN_SET["from"] or "").startswith("campaign/stage3"):
+        return ""
+    why = _FROZEN_CORRECTION.get(category)
+    if not why:
+        return ""
+    return ("  <span class='now'>campaign/stage3/PROVENANCE.md records this "
+            "frozen row as %s</span>" % D.esc(why))
+
+
 def frozen_hydrolox(C, value):
     """Where a tug propellant price the installed spacecost no longer
     carries came from: the run's own frozen propellant table, when its
@@ -4868,7 +4895,8 @@ def part_cost(S, out):
                lines["ep"], "$", ["P_ep", arr_key, "c_kW", "lc"])
     S.put("c_tank", "c_tank", "propellant tank",
           C["val"]("Propellant tank recurring cost", used=False), "$/kg",
-          cite_ops(C, "Propellant tank recurring cost"))
+          cite_ops(C, "Propellant tank recurring cost")
+          + frozen_correction("Propellant tank recurring cost"))
     if rep["share"] > 0:
         S.step("L_tank", "C_tank", "tankage",
                "((m_tank,ret + m_tank,out) * c_tank "

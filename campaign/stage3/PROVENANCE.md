@@ -92,6 +92,14 @@ beside each one it reads.
   not a sourced deep-space baseline (rc-627).
 - **Energy storage usable specific energy**, 104 Wh/kg: as in 0.4.0 below
   (rc-729).
+- **Propellant tank recurring cost**, $6,000/kg of tank dry mass [$3,000,
+  $25,000], in the top-level table and the 0.4.0 to 0.10.0 sets (0.14.0's
+  differently worded row is below, rc-730). An engineering estimate: the
+  note's ~$5,300/kg comes from an unreferenced ~$30M Centaur III stage less
+  an assumed ~$20M RL10, over ~1,880 kg of structure, and neither anchor nor
+  the tank-only allocation has a source. Whole-stage comparators, such as
+  NASA OIG's $29M second-ICPS hardware purchase (IG-20-012, p. 23), are not
+  tank costs (rc-825; current spacecost rc-421).
 
 ## `spacecost-0.4.0/operational_costs.csv`
 
