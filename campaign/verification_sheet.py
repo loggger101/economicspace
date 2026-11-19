@@ -363,6 +363,39 @@ def present(value):
                                   and pd.isna(value)))
 
 
+# WHICH FROZEN SET THE PAGE IS CITING, set by `build_sheet` for one build.
+# A cell before master v1.59.0 read a hand-frozen Stage 3 set, and that set's
+# notes are what spacecost said then: some have since been found to overstate
+# a source or to be scenarios (General_Research rc-584, rc-624 to rc-631 and
+# others; the owner's decision was to leave the frozen bytes alone).  So when
+# a row comes from such a set the page also quotes the installed spacecost
+# release's row of the same name.  It sits in a `now` span, not `src`: it is
+# quoted for its scope and limits, and part 18 does not credit a frozen value
+# with a source the frozen row never named.
+_FROZEN_SET = {"from": None}
+_LOADER_OF = {"operational_costs.csv": ("load_operational_costs", "category"),
+              "propellants.csv": ("load_propellants", "name"),
+              "launch_vehicles.csv": ("load_launch_vehicles", "name")}
+
+
+def since_frozen(table, name):
+    """The installed spacecost row `name`'s note, when the page reads a frozen set."""
+    if not str(_FROZEN_SET["from"] or "").startswith("campaign/stage3"):
+        return ""
+    import spacecost
+    loader, key = _LOADER_OF[table]
+    rows = getattr(spacecost, loader)()
+    hit = rows[rows[key] == name]
+    note = trim(hit.iloc[0].get("notes")) if len(hit) else ""
+    if not note:
+        return ""
+    return ("<span class='now'>Read from a frozen set "
+            "(campaign/stage3/PROVENANCE.md records its corrections).  The "
+            "installed spacecost %s's row of the same name now reads: %s  "
+            "Quoted for its scope and limits; the value here is the frozen "
+            "row's.</span>" % (D.esc(spacecost.__version__), note))
+
+
 def cite_ops(C, category):
     """Cite one row of Module 3's operational-costs table.
 
@@ -397,6 +430,9 @@ def cite_ops(C, category):
     year = row.get("reference_year")
     if year is not None and not pd.isna(year):
         bits.append("reference year %s" % D.esc(int(year)))
+    now = since_frozen("operational_costs.csv", category)
+    if now:
+        bits.append(now)
     return join_clauses(bits)
 
 
@@ -428,6 +464,9 @@ def cite_table_row(row, table, name, fields=()):
     note = trim(row.raw("notes") if hasattr(row, "raw") else row.get("notes"))
     if note:
         bits.append("<span class='src'>%s</span>" % note)
+    now = since_frozen(table, name) if table in _LOADER_OF else ""
+    if now:
+        bits.append(now)
     return join_clauses(bits)
 
 
@@ -5568,6 +5607,7 @@ _SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z(\"'])")
 _ABBREV = re.compile(r"(?:(?<![\w-])[A-Z][a-z]{0,2}|\be\.g|\bi\.e|\bvs|\bcf|"
                      r"\bal|\bpp?)\.$")
 _SRC_SPAN = re.compile(r"<span class='src'>(.*?)</span>", re.S)
+_NOW_SPAN = re.compile(r"<span class='now'>.*?</span>", re.S)
 _FIELD = re.compile(r"<b>(\w+)</b> config, field <i>([a-z0-9_]+)</i>")
 _COLUMN = re.compile(r"column <i>([a-z0-9_]+)</i>")
 _COLUMN_I = re.compile(r"<i>([a-z0-9_]+)</i>")
@@ -5736,7 +5776,9 @@ def input_backing(row):
     not recognise falls through to the sentence test, and to the flag.
     """
     _k, _tag, _sym, quantity, _v, _u, source = row
-    source = source or ""
+    # A frozen row's current counterpart is quoted for scope, never as the
+    # frozen value's source (see `since_frozen`), so it is not read here.
+    source = _NOW_SPAN.sub("", source or "")
     head = plain(source.split(".  ")[0])
     notes = " ".join(_SRC_SPAN.findall(source))
     if head.startswith("Derived on this page"):
@@ -6613,6 +6655,7 @@ def footer(out, sheet):
 def build_sheet(out):
     """Every part, in the order the model evaluates them, as one Worksheet."""
     sheet = Worksheet()
+    _FROZEN_SET["from"] = (out["C"].get("inputs_from") or (None, None))[1]
     builders = {"constants": part_constants, "body": part_body,
                 "prices": part_prices, "transfer": part_transfer,
                 "ratios": part_ratios, "plant": part_plant_rating,
@@ -6626,11 +6669,14 @@ def build_sheet(out):
     # them all first.  Its position on the page is still its PART_KEYS slot.
     # The backing ledger is built after THAT, for the same reason: it has an
     # entry for every row every other part registered.
-    for key in PART_KEYS:
-        if key not in ("dials", "backing"):
-            builders[key](sheet, out)
-    part_dials(sheet, out)
-    part_backing(sheet, out)
+    try:
+        for key in PART_KEYS:
+            if key not in ("dials", "backing"):
+                builders[key](sheet, out)
+        part_dials(sheet, out)
+        part_backing(sheet, out)
+    finally:
+        _FROZEN_SET["from"] = None
     sheet.parts.sort(key=lambda part: part["n"])
     assert [part["key"] for part in sheet.parts] == list(PART_KEYS), (
         "the parts built are not the parts PART_KEYS lists")
