@@ -681,6 +681,14 @@ class CalcConfig:
     # 1,230 quality-coded bright (H<=11) main-belt bodies have a 10.986 h
     # median (Marciniak et al. 2015, Table 1), a different population (GR
     # rc-382).
+    # 10.222 h is a HISTORICAL PRIOR, not the pinned catalog's median: the
+    # 2026-08-08 figure names no release and records no filter, so it cannot
+    # be reproduced.  The pinned AsteroidCatalog data-2026-11-13 release has
+    # 46,159 measured periods with a median of 8.068 h, no filter, the same as
+    # data-2026-10-21b; 10.222 is 21% longer.  It is kept for the bodies whose
+    # period is MISSING, in the conservative direction argued above (a longer
+    # night, a heavier battery), and is not meant to represent all measured
+    # asteroids (GR rc-579).
     default_rotation_period_h: float = 10.222
     # Slow rotators run to hundreds of hours and a few tumble on ~10,000 h.
     # Sizing a battery for a 40-day night is not an answer, it is a different

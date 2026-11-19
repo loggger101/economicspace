@@ -2979,7 +2979,9 @@ def part_plant_rating(S, out):
     S.put("rot", "P_rot", "rotation period", C["rot_h"], "h",
           cite_body(C, "rotation_period_h",
                     "Measured." if C["rot_measured"]
-                    else "NOT measured: the catalog median is used.")
+                    else "NOT measured: the configured fallback is used, a "
+                         "historical prior longer than the pinned catalog's "
+                         "median (GR rc-579).")
           + ("  " + cite_config("default_rotation_period_h")
              if not C["rot_measured"] else ""))
     S.put("dark_max", "dark_max", "ceiling on the modelled night",
