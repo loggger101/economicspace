@@ -218,7 +218,9 @@ DV_GEO_AEROCAPTURE_ARRIVAL = circularise_at_geo(
 # at 3.5 yr (0.00033) off the line.  Read off by eye, with no residual
 # recorded, from durations that are themselves scenarios, so it is a
 # scenario prior (GR rc-354, rc-463).  The 0.5-yr floor per leg in
-# `mass_and_clock` is a separate judgement, not part of the fit.
+# `mass_and_clock` is a separate judgement, not part of the fit, with no
+# source of its own; it binds on a leg below 0.5 / 0.00023 = 2,174 m/s
+# (GR rc-534).
 TAU_CRUISE_FIT_YR_PER_M_S = 0.00023
 
 # 🚨  THE CONSTANTS THE DERIVATION FIXES AT IMPORT, HANDED TO THE DOCUMENT

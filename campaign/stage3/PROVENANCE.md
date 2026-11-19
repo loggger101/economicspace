@@ -11,8 +11,75 @@ row by row, beside the current spacecost treatment.
 Every entry keeps the frozen value and range. None proposes a replacement. The
 rc- numbers are revision candidates in
 [General_Research](https://github.com/loggger101/General_Research); "current
-spacecost" means spacecost main at 0.18.3 (data contract 1.27.3), which this
+spacecost" means spacecost main at 0.18.4 (data contract 1.27.4), which this
 repository has not repinned to.
+
+## Rows the same in every frozen set
+
+The rows below carry the same values in the top-level tables and in every
+`spacecost-0.4.0/` to `spacecost-0.14.0/` set, except where an entry says
+otherwise. Since master v1.80.0 the worksheet quotes the current spacecost row
+beside each one it reads.
+
+### propellants.csv
+
+- **hydrolox (LH2 / LOX)**, $1.60/kg (stored 1.5999999999999999). The note's
+  "LH2 base price $3-6/kg (NASA contracts)" names no contract, and the step to
+  "~$10/kg" with handling overhead, and the blend to $1.60 with LOX, are not
+  shown. Current spacecost calls the $10/kg component a scenario and gives
+  Space Insider's ~$6.1/kg and DLA's FY2025 standard as comparators (rc-576,
+  rc-626).
+- **Krypton (Hall)**, $300/kg in the top-level table and 0.4.0 to 0.9.0 (0.10.0
+  and 0.14.0 store $794/kg). An archived bulk-price reference with no published
+  source. Current spacecost's $794/kg is the geometric centre of $300/kg bulk
+  krypton (INL/RPT-23-75203, sec. 1: about $1/L, ~$267/kg) and SETS Space's
+  $2,100/kg flight-grade lower quote, two procurement scopes; neither rebases
+  the archived $300 (rc-630).
+- **FEEP (indium field emission)**, $250/kg. No price source is recorded. It
+  matches USGS MCS 2026's 2022 U.S. warehouse average for 99.99% refined
+  indium (pp. 99-100; $370/kg 2025e), a comparator, not a FEEP-grade quote;
+  under review as rc-651.
+
+- **Xenon (Hall / ion)**, 54.0 kg/N. The frozen comment's 12.7 kg / 236 mN is
+  NEXT PM1 (12.7 kg, 13.5 kg with harnesses; NASA/TM-2011-216973, pp. 37-38),
+  a predecessor proxy, not NEXT-C: NEXT-C is about 14 kg at 235 mN (NTRS
+  20205005689, pp. 4-5), ~60 kg/N. Neither states a system-mass boundary
+  (rc-656).
+- **Argon (Hall / ion)**, 1,500 s, 0.40, 40.0 kg/N. Generic mission-model
+  scenarios: SpaceX's Starlink report gives only relative figures (2.4x the
+  thrust and 1.5x the Isp of the first generation, Progress Report 2023, p.
+  48), and NASA S3VI names argon with no values (rc-657).
+- **Water (gridded ion / ECR)**, 900 s, 0.35, 80.0 kg/N. Scenarios. The frozen
+  note's Pale Blue flight was a water resistojet (2023); Pale Blue's first
+  successful in-orbit water ion operation is in its 2025 release. The ESA and
+  JAXA ECR systems it names are not identified. Nakagawa et al. (Acta
+  Astronautica 157, 2019) measure at most 665 +/- 59 s on a miniature CubeSat
+  ECR thruster, neutraliser neglected (rc-659).
+- **Water (electrothermal / resistojet)**, 10.0 kg/N, 0.75, continuous
+  scaling. Model assumptions with no matched device. Mirtich (NASA TM-83489,
+  p. 4) gives a historical power-dependent resistojet mass that includes the
+  PPU and thermal rejection, a comparator only (rc-660).
+- **VASIMR (argon, variable Isp)**, 4,000 s, 0.50, 53.0 kg/N. A mission-model
+  scenario: VX-200's measured argon point at 200 kW is 4,900 +/- 300 s, 72
+  +/- 9% and 5.8 +/- 0.4 N (Squire et al., IEPC-2011-154, p. 1). The ~300 kg
+  behind 53 kg/N has no recorded source or mass boundary. The frozen note's
+  "100 hours at 80 kW" is VX-200SS's endurance record, 88 continuous hours
+  (Chang Diaz et al., IEPC-2022-525, pp. 1 and 9), a different benchmark from
+  VX-200's performance (rc-661).
+
+### operational_costs.csv
+
+- **Eclipse / night-side dark fraction**, 0.50 [0.35, 0.55]. Scenario
+  geometry. Stubbs & Wang (2012, p. 275) is a Vesta illumination comparator,
+  not an asteroid-wide fraction, and no source gives the range (rc-627).
+- **Energy storage round-trip efficiency**, 0.90 [0.80, 0.95]. Schmitz et al.
+  (2023, Table 3) is a Li-ion efficiency comparator, at its own system boundary
+  (rc-627).
+- **Power-system row baseline dark period**, 0.58 h [0, 1.2]. The 0.58 h is
+  the ISS eclipse (Kascak et al., NASA/TM-2001-211138, p. 1), a comparator,
+  not a sourced deep-space baseline (rc-627).
+- **Energy storage usable specific energy**, 104 Wh/kg: as in 0.4.0 below
+  (rc-729).
 
 ## `spacecost-0.4.0/operational_costs.csv`
 

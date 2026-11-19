@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.81.0](#master-v1810)
 - [master v1.80.0](#master-v1800)
 - [master v1.79.0](#master-v1790)
 - [master v1.78.0](#master-v1780)
@@ -133,7 +134,7 @@ one that does not say is not to be used.
 | 2 | `modules/mineral_value.py` | **1.21.0** | v1.21.0, Stage 2 installs `prices-2026-11-12`, built by spacevalue 0.7.0 on spacecost v0.17.1 from the same closes as `prices-2026-10-07`: reference prices re-reviewed, world production revised, one market per in-space demand class (new column `market_id`), and the delivery chains' LOX and recovery; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.17.0, the pricing moved to [`spacevalue`](https://github.com/loggger101/spacevalue). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.26.1** | v1.26.1, spacecost v0.17.1: costs in 2026 dollars, LOX at DLA's price, recovery once per batch, a Henry Hub quote read as gross heat, revised propulsion, launch-vehicle, DSN and body rows; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.23.6, the config became spacecost's `SpacecostConfig` with two defaults overridden. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.46.0** | v1.46.0, no code here moves: Stage 4 imports `spacevalue.cargo` from spacevalue 0.7.0, which pools a hold's sale by the Stage 2 table's `market_id`, so the commodities of one in-space demand class share one allowance; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.80.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| - | `master.py` | **1.81.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -236,6 +237,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.81.0](#master-v1810) | 2026-11-19 | **twenty-three General_Research citation candidates in the verification worksheet and the frozen-table provenance file**: scope sentences on twenty-odd inputs, one composite delta-v leg cited to both its rows, the build commit in the footer; worksheet text and comments only, so no stamp and no number moves |
 | [master v1.80.0](#master-v1800) | 2026-11-18 | **the worksheet quotes a frozen row's current spacecost counterpart**, and nine more frozen-row corrections in the provenance file; worksheet text only, so no stamp and no number moves |
 | [master v1.79.0](#master-v1790) | 2026-11-18 | **twenty-four General_Research candidates on the frozen Stage 3 tables**, recorded in a provenance file beside them; no frozen CSV byte, stamp or number moves |
 | [master v1.78.0](#master-v1780) | 2026-11-18 | **eight General_Research citation candidates**: six orbital constants cited where they are set and in the verification worksheet, two references added to CITATIONS; comments and worksheet text only, so no stamp and no number moves |
@@ -323,6 +325,44 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.81.0
+
+**Twenty-three General_Research citation candidates, applied to the verification
+worksheet's citation text, three code comments and
+`campaign/stage3/PROVENANCE.md`.** No value, stamp or output number moves; the
+worksheet's own checks pass on the live best case and on
+`cislunar__raw__search-off`, and the self-test passes.
+
+- The delivery chain's tug Isp and the tug and lander dry fractions say what
+  spacecost's comments say they are: analogues (RL10B-2, ICPS, Apollo LM-4),
+  not sources for a generic stage (rc-582).
+- A chain leg spacecost flies as the sum of two delta-v rows, lunar_surface's
+  TLI + LOI, is cited to both rows with the sum printed, where it fell back to
+  the chain's name (rc-697).
+- The tug propellant price a run reads off a frozen table names that table and
+  row, and says its note names no contract (rc-626).
+- An unmeasured M-class body's albedo and density say what the class fallbacks
+  are, beside their comparators (rc-386, rc-632).
+- The cruise-time fit is called a scenario prior, as `worked_calculation.py`
+  calls it, and its half-year floor per leg a separate judgement with no
+  source, binding below 2,174 m/s (rc-637, rc-534).
+- The outbound and return delta-v floors quote calc's own comment that they
+  have no source (rc-692, rc-633); the deorbit burn says it is a scenario
+  (rc-599, also in calc's comment).
+- A utility factor's citation names the map it came from in the installed
+  spacevalue, the destination override or the base map (rc-696); the absorption
+  ceiling says its two depot factors are allocations (rc-726).
+- Part 18 recognises the Sibanye-Stillwater report the concentration cap's
+  comment names (rc-635): the one input whose backing changes, from NEED
+  BACKING to a named comparator.
+- `nre_amortization_missions` and `DEFAULT_FAIRING_VOLUME_M3` say in their
+  comments that N = 1 and 100 m3 are scenarios (rc-647, rc-597).
+- The footer prints the commit the page was built from (rc-782).
+- PROVENANCE.md gains the rows that are the same in every frozen set: five
+  electric-propulsion rows (rc-656, 657, 659, 660, 661), the hydrolox, krypton
+  and FEEP prices (rc-626, 630; FEEP is still open as rc-651) and three power
+  rows (rc-627).
 
 ## master v1.80.0
 
