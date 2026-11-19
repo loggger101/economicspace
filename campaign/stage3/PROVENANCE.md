@@ -31,6 +31,57 @@ repository has not repinned to.
   Baldwin, NASA/TM-2010-216906, Table 5), not spacecraft batteries; NASA's
   140 Wh/kg usable Li-ion figure at 80% DoD is a separate comparator (rc-729).
 
+## `spacecost-0.5.0/`
+
+Since master v1.80.0 the verification worksheet also quotes, beside any row it
+reads from a frozen set, the installed spacecost release's row of the same name
+(`since_frozen` in `campaign/verification_sheet.py`), for scope only: part 18
+does not credit a frozen value with a source its own row never named.
+
+- **propellants.csv, Krypton (Hall)**, 2,000 s, 0.45 and 35 kg/N. A generic
+  mission-model selection, not demonstrated krypton Hall performance: NASA
+  S3VI's small-spacecraft Kr Hall devices list 900-1,575 s, manufacturer
+  reported; NASA-457M's 0.50 is a discharge efficiency, not the 0.45 total;
+  S3VI's small-device mass and thrust are not the cargo-scale 35 kg/N. Both
+  are comparators, not replacements (rc-584, rc-625).
+- **operational_costs.csv, Rig salvage fraction**, 0.5 [0.0, 0.8] of remaining
+  book value. A scenario: NASA CR-3349's 5-10% of capital and 60-90% of
+  on-orbit cost use other denominators, and Mas 2007 is condition-priced resale
+  in a liquid terrestrial market, not an asteroid rig residual (rc-624).
+- **operational_costs.csv, Depot berthing & handover operations**, $2M
+  [0.5M, 8M] per delivery. A scenario: no commercial depot or institutional
+  component price exists; NASA CRS figures are whole-mission comparators about
+  100x the estimate; ISS berthing is an analogy, not a derivation (rc-629).
+- **operational_costs.csv, Power system (solar + battery)**, $800/W EOL [500,
+  1,500]. An estimate: the JPL comparator (Surampudi et al.) covers solar-array
+  cost only, in older dollars, not the PV-battery train (rc-631).
+- **operational_costs.csv, Volatile cargo containment**, 0.05 [0.03, 0.12] kg
+  per kg of water. The frozen note's "which is what the citation covers" names
+  no citation. An engineering estimate for an incremental passive sealed hold
+  beyond ore restraint: no published source gives the mass fraction or
+  multi-year stability; Jones 2017's tank data and NASA's cryogenic
+  zero-boil-off work are scope comparators only (rc-645).
+- **operational_costs.csv, mining reliability rows**: spacecraft MTBF 30 [15,
+  60] years, an unfitted scenario on an assumed constant hazard; first-of-kind
+  success 0.85 [0.70, 0.95], a selected 11-of-13 outcome tally, not a
+  sustained-mining reliability; mature success 0.95 [0.85, 0.99], an
+  uncalibrated scenario, with satellite-deployment and one-actuator records as
+  comparators only (rc-646).
+- **operational_costs.csv, Beneficiation / on-site processing energy**, 500
+  [100, 2,000] Wh/kg of refined product. Its frozen citation, a classroom
+  worksheet, is a source General_Research rejected. DOE's 2007 Mining Industry
+  Energy Bandwidth Study, Exhibit 24, supports only a terrestrial 19.3 Wh/kg of
+  mined material, on a feed basis; the frozen centre and range are an
+  assumption (rc-684).
+
+## `operational_costs.csv` (top level, spacecost 1.15.0)
+
+- **Launch vehicle reliability**, row 52, 0.97 [0.90, 0.99]. A
+  fleet-representative scenario with no fitted cohort or estimator, and a
+  scenario envelope rather than a confidence interval. Cross & Vesely's
+  first-flight analysis and SpaceX's single-family aggregate are comparators,
+  not a derivation (rc-652).
+
 ## `spacecost-0.10.0/`
 
 - **launch_vehicles.csv, Long March 8A**, 3,500 kg to GTO. No variant-matched
