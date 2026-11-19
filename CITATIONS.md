@@ -134,6 +134,22 @@ reaches a value. The rc- numbers are General_Research revision candidates.
   <https://oig.nasa.gov/docs/IG-23-010.pdf>: DOE's Pu-238 production goal and
   its shortfall (p27) and an MMRTG's fuel load (Table 1, p13), the reasons
   calc gives for `rtg_max_power_w` (General_Research rc-120).
+- **Tiesinga, E., Mohr, P. J., Newell, D. B. & Taylor, B. N. (2021)**,
+  *CODATA recommended values of the fundamental physical constants: 2018*,
+  Rev. Mod. Phys. 93(2), 025010,
+  <https://doi.org/10.1103/RevModPhys.93.025010>, Table XXX: G =
+  6.67430(15) x 10^-11 m^3 kg^-1 s^-2, calc's `_G_SI` in the spin-limit
+  calculation (General_Research rc-850).
+- **Keszthelyi, L. P., Hagerty, J., Bowers, A., Ellefsen, K. J., King, T.,
+  Ridley, I., Trilling, D., Moskovitz, N. & Grundy, W. (2017)**,
+  *Feasibility study for the quantitative assessment of mineral resources in
+  asteroids*, U.S. Geological Survey Open-File Report 2017-1041, 28 p.,
+  <https://doi.org/10.3133/ofr20171041>: Earth resource-assessment methods
+  tried on asteroids, a feasibility study that by its own account does not
+  include a complete analysis of uncertainty (p. 1). Cited beside
+  `max_mining_fraction`'s 1.0 no-depletion ceiling as method context, not a
+  recoverable fraction (General_Research rc-851; the ceiling's reading is
+  rc-491).
 - **NASA NSSDCA, *Mars Fact Sheet***,
   <https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html>: the CO2 and
   N2 fractions and surface pressure behind `mars_surface`'s utility comments,
