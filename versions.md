@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.85.0 / calc v1.47.0](#master-v1850--calc-v1470)
 - [master v1.84.2](#master-v1842)
 - [master v1.84.1](#master-v1841)
 - [master v1.84.0](#master-v1840)
@@ -138,8 +139,8 @@ one that does not say is not to be used.
 | 1 | `modules/catalog.py` | **1.11.0** | v1.11.0, `data-2026-11-13`: an identity read by its grammar, a sigma kept with the value it came from, an orbit taken whole from one source, NEOWISE fits pooled once, the diameter floor applied last; two columns added (`orbit_provider`, `element_epoch_timescale`); see [master v1.76.0](#master-v1760--catalog-v1110). v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
 | 2 | `modules/mineral_value.py` | **1.21.0** | v1.21.0, Stage 2 installs `prices-2026-11-12`, built by spacevalue 0.7.0 on spacecost v0.17.1 from the same closes as `prices-2026-10-07`: reference prices re-reviewed, world production revised, one market per in-space demand class (new column `market_id`), and the delivery chains' LOX and recovery; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.17.0, the pricing moved to [`spacevalue`](https://github.com/loggger101/spacevalue). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.26.1** | v1.26.1, spacecost v0.17.1: costs in 2026 dollars, LOX at DLA's price, recovery once per batch, a Henry Hub quote read as gross heat, revised propulsion, launch-vehicle, DSN and body rows; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.23.6, the config became spacecost's `SpacecostConfig` with two defaults overridden. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.46.0** | v1.46.0, no code here moves: Stage 4 imports `spacevalue.cargo` from spacevalue 0.7.0, which pools a hold's sale by the Stage 2 table's `market_id`, so the commodities of one in-space demand class share one allowance; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.84.2** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 4 | `modules/calc.py` | **1.47.0** | v1.47.0, the heat shield scales with Earth entry speed and no electric stage that burns on the way home is left behind, so default numbers move; see [master v1.85.0](#master-v1850--calc-v1470). v1.46.0, no code here moves: Stage 4 imports `spacevalue.cargo` from spacevalue 0.7.0, which pools a hold's sale by the Stage 2 table's `market_id`, so the commodities of one in-space demand class share one allowance; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
+| - | `master.py` | **1.85.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -242,6 +243,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.85.0 / calc v1.47.0](#master-v1850--calc-v1470) | 2026-11-19 | **the heat shield scales with entry speed, and the electric stage that burns on the way home flies home**: earth_surface cost per kg a median 1.065x; cislunar keeps 57 of 106 sampled rows at a median 2.05x |
 | [master v1.84.2](#master-v1842) | 2026-11-19 | **the git commit recorded beside every Stage 4 result**; no number moves |
 | [master v1.84.1](#master-v1841) | 2026-11-19 | **the rotation-period fallback named a historical prior**; no number moves |
 | [master v1.84.0](#master-v1840) | 2026-11-19 | **a provenance file for the frozen Stage 2 tables, printed on the worksheet**; no frozen CSV byte, stamp or number moves |
@@ -335,6 +337,51 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.85.0 / calc v1.47.0
+
+**Two of the owner's decisions on General_Research method candidates, and
+default numbers move.** Measured on 120 rows on a stride, default cell
+(`--preset full`, beneficiated, programme search on), pinned
+`prices-2026-11-12`, against main (calc 1.46.0) on the same rows. A sample,
+not a campaign result.
+
+- **The heat shield scales with Earth entry speed** (rc-134,
+  `scale_tps_with_entry_speed`, on). `heat_shield_frac_of_payload` = 0.15 is
+  now the fraction at an 11 km/s entry, and an Earth entry at
+  v_e = sqrt(v_inf^2 + v_esc^2) (125 km interface) carries
+  0.15 x (v_e / 11)^1.107: Dec & Braun (AIAA 2006-780, Table 2) size one
+  capsule's PICA at 8.324 cm for 11 km/s and 10.873 cm for 14 km/s, and at
+  fixed geometry and material mass goes with thickness. Mars entries keep the
+  flat 0.15. Rows report `tps_frac`. Measured with this change alone, at `earth_surface`, 107 of 120 rows
+  evaluable before and after: the fraction runs 0.175 to 1.195, median
+  0.194, at entry speeds of 12.6 to 71.7 km/s, median 13.9. 50 rows enter
+  above 14 km/s, where the fit extrapolates, 10 above 16.5 and one, a
+  near-retrograde arrival, at 72 km/s. Cost per kg 0.72x to 1.57x, median
+  1.065x. Cislunar flies no shield and does not move.
+- **No electric stage that burns on the way home is left behind** (rc-246,
+  `separate_ep_units`, on; it supersedes `carry_ep_home`). Each sizing pass
+  flies the cheaper, in launch mass, of two architectures: an outbound unit
+  left at the body plus a smaller return unit that flies home, sharing
+  `ep_target_thrust_yr` split as t ∝ sqrt(w m), or the one shared stage flown
+  home. Rows report `ep_return_unit_kg`. Cislunar: **57 of the 106
+  evaluable rows still close** (the shared stage flown home alone keeps 52,
+  two units alone 59); against the one-way stage of calc 1.46.0, cost per kg
+  1.04x to 1224x, median 2.05x. Against the shared stage flown home, on the
+  52 rows both close, never worse: 16 cheaper (to 0.017x), the rest
+  identical. 21 of the 56 electric rows fly two units. The two rows two units
+  alone close and this does not are lost to the per-pass choice. Two units
+  alone were measured first and cost a median 2.3x the shared stage's $/kg:
+  with a high-Isp return a kilogram flown home costs little more than one left
+  behind, and a second array, PPU and thruster set outweighs it. The
+  one-way stage of earlier releases flew home a stage it did not count, so
+  the 49 rows it closed and this does not were never physical.
+- **Dig energy adds Module 3's handling row** when the Stage 3 tables carry
+  it (spacecost data contract 1.28.0, rc-027: excavation 5.7 Wh/kg plus
+  handling 24.2, where 200 was one row). The pinned spacecost v0.17.1 has no
+  such row, so with the 0.0 default nothing moves until a repin.
+- The opt-in Rust sizing loop does not model `separate_ep_units`; with both
+  on, the loop runs in Python and the solver in Rust.
 
 ## master v1.84.2
 

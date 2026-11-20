@@ -1381,7 +1381,11 @@ Stated plainly so results aren't over-read:
   (`model_rated_array_cost`, the largest, near 1.7x on the cost per kg of a
   sampled run), sizes the electric stage on a provisional load
   (`size_ep_on_flown_load`), and leaves that stage behind for free on the way
-  home (`carry_ep_home`, which most sampled rows do not survive). Releases
+  home (`carry_ep_home`, which most sampled rows do not survive). Since calc
+  1.47.0 the default flies two electric units instead, an outbound one left at
+  the body and a smaller return one that flies home (`separate_ep_units`,
+  rc-246), and an Earth entry's heat shield scales with its entry speed
+  (`scale_tps_with_entry_speed`, rc-134); see versions.md master v1.85.0. Releases
   [v1.63.0](versions.md#master-v1630--calc-v1360) and
   [v1.66.0](versions.md#master-v1660--calc-v1390) have each one's effect.
 - **Sixteen more were flags and are the default since calc v1.45.0.** A
