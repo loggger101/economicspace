@@ -1412,7 +1412,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.47.0"
+    pipeline_version: str = "1.48.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════

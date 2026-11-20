@@ -1184,12 +1184,21 @@ def _table_date(path):
 # are stamped with (frozen sets under campaign/stage3/ keep their own dates).
 # An installed release or live stamp that is not listed is a refusal, so the
 # next repin cannot forget its line.
+#
+# ⚠️  A FROZEN STAGE 3 SET IS DATED BY ITS STAMP TOO.  master v1.86.0 froze
+# the spacecost v0.17.1 tables as `campaign/stage3/spacecost-0.17.1/`, built
+# from the same `fuel-2026-10-17` snapshot as `spacecost-0.14.0/`, so the two
+# carry one `catalog_date` and a row from between the repins would have taken
+# whichever sorts last.  A frozen set whose stamp is listed here is dated by
+# the day that stamp came into force; an unlisted one keeps its own date.
 PRICE_RELEASE_IN_FORCE = {
     "prices-2026-10-07": "2026-10-26",   # master v1.59.0
     "prices-2026-11-12": "2026-11-12",   # master v1.75.0
+    "prices-2026-11-20": "2026-11-20",   # master v1.86.0
 }
 TRANSPORT_STAMP_IN_FORCE = {
     "1.26.1": "2026-11-12",              # master v1.75.0, spacecost v0.17.1
+    "1.28.0": "2026-11-20",              # master v1.86.0, spacecost v0.19.0
 }
 
 
@@ -1228,6 +1237,11 @@ def _effective_date(path):
                      "TRANSPORT_STAMP_IN_FORCE does not list.\n  Add the day "
                      "this repository first ran on them." % stamp)
         pinned = TRANSPORT_STAMP_IN_FORCE[stamp]
+    elif _is_frozen_stage3_set(path):
+        stamp = _table_stamp(path)[0]
+        if stamp not in TRANSPORT_STAMP_IN_FORCE:
+            return date
+        pinned = TRANSPORT_STAMP_IN_FORCE[stamp]
     else:
         tag = _price_release_of(path) if path.endswith(".csv") else None
         if tag is None:
@@ -1238,6 +1252,13 @@ def _effective_date(path):
                      "pinned it." % tag)
         pinned = PRICE_RELEASE_IN_FORCE[tag]
     return pinned if date is None else max(date, pinned)
+
+
+def _is_frozen_stage3_set(path):
+    """True for a table in a `campaign/stage3/spacecost-*/` frozen set."""
+    folder = os.path.dirname(os.path.abspath(path))
+    return (os.path.basename(folder).startswith("spacecost-")
+            and os.path.dirname(folder) == os.path.abspath(os.path.join(CAMP, "stage3")))
 
 
 def _master_calc_config():

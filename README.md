@@ -154,7 +154,7 @@ the data and the config are single-sourced (Stage 3's config is spacecost's
 is held to the pinned tag at import. The invariants are in
 [CLAUDE.md](CLAUDE.md#stages-1-2-and-3-live-in-other-repositories).
 
-**spacecost is pinned to a tagged release**, `v0.17.1`, in all five places
+**spacecost is pinned to a tagged release**, `v0.19.0`, in all five places
 that type it: as a URL in `requirements.txt`, and in `PIP_SPEC` in
 `modules/_runtime.py` (what Stage 3 installs from at import); and in prose
 here, in [CLAUDE.md](CLAUDE.md) and in [CITATIONS.md](CITATIONS.md).
@@ -205,7 +205,7 @@ repository **publishes** price releases: each `prices-YYYY-MM-DD`
 destination's table built from one recorded quote snapshot, gated before it is
 published and checksummed.
 
-Stage 2 installs **one pinned release**. The pinned price release is `prices-2026-11-12`,
+Stage 2 installs **one pinned release**. The pinned price release is `prices-2026-11-20`,
 set by `MineralValueConfig.price_release` in `modules/mineral_value.py`.
 It is priced from the same five COMEX and NYMEX closes as `prices-2026-10-07`,
 the release every measurement before master v1.75.0 was taken on; what
@@ -227,7 +227,7 @@ factor or a reference price is a spacevalue change and a new `prices-*`
 release; this repository then moves `price_release` and records it in
 [versions.md](versions.md). It moves every number downstream.
 
-**spacevalue is pinned to a tagged release**, `v0.7.1`, in all five places
+**spacevalue is pinned to a tagged release**, `v0.8.7`, in all five places
 that type it: as a URL in `requirements.txt`, and in `PIP_SPEC` in
 `modules/_runtime.py` (what Stages 2 and 4 install at import: Stage 2 for the
 names it re-exports, Stage 4 for `spacevalue.cargo`, the cargo valuation that
@@ -246,9 +246,9 @@ namespaces (see [Stage dependencies](#stage-dependencies)).
 | Stage | Module | Version | What it does |
 |-------|--------|---------|--------------|
 | 1 | `modules/catalog.py` | 1.11.0 | Installs the pinned, published [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog) release: JPL SBDB + MP3C + SsODNet ssoBFT + NEOWISE, every body re-keyed onto JPL's designation, merged, validated, enriched with per-spectral-type composition and, since 1.7.0, the mineral phases it is made of (since 1.8.0 with the alloy and the sulfides resolved). Downloads rather than builds since master v1.34.0; the version is the catalog's data contract |
-| 2 | `modules/mineral_value.py` | 1.21.0 | Installs the pinned, published [`spacevalue`](https://github.com/loggger101/spacevalue) price release: for the destination, every commodity priced from recorded COMEX and NYMEX closes and dated USGS/LME/LBMA reference prices, with in-space utility, demand ceilings and per-destination discounts. Downloads rather than prices since master v1.59.0; the version is spacevalue's data contract |
-| 3 | `modules/transportation.py` | 1.26.1 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](MODEL.md#the-propulsion-and-storage-catalog) |
-| 4 | `modules/calc.py` | 1.47.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
+| 2 | `modules/mineral_value.py` | 1.22.1 | Installs the pinned, published [`spacevalue`](https://github.com/loggger101/spacevalue) price release: for the destination, every commodity priced from recorded COMEX and NYMEX closes and dated USGS/LME/LBMA reference prices, with in-space utility, demand ceilings and per-destination discounts. Downloads rather than prices since master v1.59.0; the version is spacevalue's data contract |
+| 3 | `modules/transportation.py` | 1.28.0 | Drives [**spacecost**](https://github.com/loggger101/spacecost): launch vehicles (incl. non-rocket concepts), propellants with storage class and tankage, Δv segments (incl. the delivery ladder above LEO), operational costs, storage systems, and since v1.15.0 the `environments` table Stage 4 does not yet read. The row counts are under [The propulsion and storage catalog](MODEL.md#the-propulsion-and-storage-catalog) |
+| 4 | `modules/calc.py` | 1.48.0 | Per-asteroid Δv **and mission architecture**, and, by default since 1.17.0, **programme size, fleet size and schedule**, in-space delivery, beneficiation, rocket-equation mass cascade (incl. tankage) + cost cascade → net profit, ROI, $/kg-returned |
 
 The version column is held to each module's `pipeline_version` by
 `verify_docs.py` check 2, and the dataclass field is the authority. **What
@@ -672,7 +672,7 @@ that actually move the answer:
 | `.calc.model_reliability_growth` | `True` | Let `p_mining` grow across a programme under the Duane model rather than sitting at the first-of-kind figure. Inert while `model_reliability` is off |
 | `.calc.model_learning_curve` | `False` | Apply a learning curve to recurring hardware across a programme. **Off since calc v1.22.0**: it is a statement about a factory's learning, fitted to programmes that built dozens of articles, and this one prices the marginal physics. Exactly inert at N = 1 either way |
 | `.calc.learning_curve_rate` | `0.85` | Crawford unit-curve rate: each doubling of cumulative production cuts the nth unit's cost to this. Read ONLY when `model_learning_curve` is `True` |
-| `.mineral.price_release` | `"prices-2026-11-12"` | The spacevalue price release Stage 2 installs. A repin moves every price |
+| `.mineral.price_release` | `"prices-2026-11-20"` | The spacevalue price release Stage 2 installs. A repin moves every price |
 | `.transport.quote_snapshot` | `"fuel-2026-10-17"` | The recorded fuel quotes Stage 3 prices from. A repin moves the propellant prices |
 
 ⚠️  **`use_isru_return_propellant` and `use_aerocapture_return` mean

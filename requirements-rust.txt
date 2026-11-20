@@ -12,5 +12,5 @@
 # The binding's ref is the spacevalue tag requirements.txt pins, and es_core's
 # Cargo.toml links spacevalue_cargo_core at the same tag; verify_docs.py
 # check 7 holds all three together.  es_core itself builds from this checkout.
-spacevalue_cargo_rs @ git+https://github.com/loggger101/spacevalue@v0.7.1#subdirectory=rust/cargo_py
+spacevalue_cargo_rs @ git+https://github.com/loggger101/spacevalue@v0.8.7#subdirectory=rust/cargo_py
 ./rust/es_core
