@@ -1021,9 +1021,25 @@ class CalcConfig:
     # (Aerocapture for Discovery Missions, 2010, p. 12) gives no residual
     # (GR rc-519).  Bodies with usable elements get their own saving.
     aerocapture_dv_savings_m_s: float = 4_000   # fallback only, when elements are unusable
-    # TPS mass = 15% of returned payload.  Flat, whatever the entry speed: it is
-    # a lunar-return-class figure (~11 km/s) and optimistic for faster returns.
+    # TPS mass = 15% of returned payload AT AN 11 km/s EARTH ENTRY, the
+    # lunar-return class.  Until calc 1.47.0 it was flat whatever the entry
+    # speed, optimistic for every faster return (General_Research rc-134).
     heat_shield_frac_of_payload: float = 0.15
+    # Since calc 1.47.0 an Earth entry scales it with its own speed,
+    # v_e = sqrt(v_inf^2 + v_esc^2) at a 125 km interface, as
+    # frac * (v_e / 11 km/s) ** 1.107.  The exponent is Dec & Braun's
+    # ablative sizing tool (AIAA 2006-780, Table 2): one Apollo-shaped capsule
+    # needs 8.324 cm of PICA at the stagnation point at 11 km/s and 10.873 cm
+    # at 14 km/s, and at fixed geometry and material the shield's mass goes
+    # with its thickness: ln(10.873 / 8.324) / ln(14 / 11) = 1.107.  Two
+    # points of one design, so above 14 km/s it is an extrapolation, and a
+    # mild one: radiative heating climbs faster than this there (Alpert et
+    # al. 2024 size for 16.5 km/s).  A Mars aerocapture or entry keeps the
+    # flat fraction: CO2 entry at 5-7 km/s is a different regime the two
+    # points do not cover.  False restores the flat fraction everywhere.
+    scale_tps_with_entry_speed: bool = True
+    tps_reference_entry_km_s:   float = 11.0
+    tps_entry_speed_exponent:   float = 1.107
 
     # ─── ISRU  (return propellant manufactured at the asteroid) ──────────────
     # Return propellant is not hauled outbound; it is electrolysed from mined
@@ -3528,6 +3544,33 @@ def uses_tps(config: CalcConfig) -> bool:
     return bool(config.use_aerocapture_return and arch["aero_allowed"])
 
 
+# Earth's entry interface, 125 km up: where an entry speed is quoted.
+_R_ENTRY_INTERFACE_KM = 6_378.14 + 125.0
+
+
+def earth_entry_speed_km_s(v_inf_km_s: float) -> float:
+    """Speed at Earth's entry interface for an arrival at this v_infinity."""
+    v_esc_sq = 2.0 * MU_EARTH_KM3_S2 / _R_ENTRY_INTERFACE_KM
+    return math.sqrt(v_esc_sq + v_inf_km_s * v_inf_km_s)
+
+
+def tps_frac_for_entry(v_inf_km_s: Optional[float], config: CalcConfig) -> float:
+    """Heat-shield mass per kg returned for an Earth entry at this arrival.
+
+    `heat_shield_frac_of_payload` at `tps_reference_entry_km_s`, scaled by
+    entry speed to the power `tps_entry_speed_exponent` (General_Research
+    rc-134; the basis is at the config).  Without an arrival v_infinity, as on
+    the uniform-Δv fallback, or with `scale_tps_with_entry_speed` off, the flat
+    fraction.
+    """
+    frac = config.heat_shield_frac_of_payload
+    if (not config.scale_tps_with_entry_speed or v_inf_km_s is None
+            or not math.isfinite(v_inf_km_s) or v_inf_km_s < 0.0):
+        return frac
+    v_e = earth_entry_speed_km_s(float(v_inf_km_s))
+    return frac * (v_e / config.tps_reference_entry_km_s) ** config.tps_entry_speed_exponent
+
+
 def _dv_fallback_m_s(config: CalcConfig, aero: bool) -> Tuple[float, float]:
     """Uniform reference Δv for a row whose orbital elements are unusable.
 
@@ -3613,7 +3656,8 @@ def asteroid_dv_options(
                              else "ret_earth_surface_aero"]
             offers.append({"dv_out_m_s": dv_out, "dv_ret_m_s": dv_ret,
                            "rendezvous_apsis": legs["rendezvous_apsis"],
-                           "dv_capture_m_s": max(0.0, legs[leg] - departure) * 1_000.0})
+                           "dv_capture_m_s": max(0.0, legs[leg] - departure) * 1_000.0,
+                           "v_inf_km_s": legs.get("v_inf")})
         # Resolve the apsis against the round trip actually being flown, not
         # against a fixed Earth return.  The sort is stable, so a tie keeps the
         # first apsis.
@@ -3624,7 +3668,10 @@ def asteroid_dv_options(
                        "rendezvous_apsis": "reference"}]
         for offer in (offers if config.offer_both_apsides else offers[:1]):
             offer["aero"]     = aero
-            offer["tps_frac"] = config.heat_shield_frac_of_payload if aero else 0.0
+            offer["tps_frac"] = (tps_frac_for_entry(offer.get("v_inf_km_s"), config)
+                                 if aero and "mars" not in leg
+                                 else config.heat_shield_frac_of_payload if aero
+                                 else 0.0)
             out.append(offer)
     if config.gate_surface_escape:
         shortfall = surface_escape_shortfall_m_s(asteroid_row, config)
@@ -6685,6 +6732,7 @@ def _evaluate_combo_at_ratio(
     refinery:          Optional[Tuple[Dict[str, float], float]] = None,
     payload_cap_kg:    Optional[float] = None,
     dv_capture_m_s:    float = 0.0,
+    tps_frac:          Optional[float] = None,
     _repair_depth:     int = 0,
     _damped_steps:     int = 0,
     _relax:            Optional[bool] = None,
@@ -6747,7 +6795,10 @@ def _evaluate_combo_at_ratio(
     # v1.10.0: which return mode this candidate flies is decided by the caller.
     if aero is None:
         aero = uses_tps(config)
-    tps_frac = config.heat_shield_frac_of_payload if aero else 0.0
+    # The offer's own fraction when it brought one (an Earth entry scaled by
+    # its speed, `tps_frac_for_entry`); the flat one otherwise.
+    tps_frac = ((config.heat_shield_frac_of_payload if tps_frac is None
+                 else tps_frac) if aero else 0.0)
 
     # ── ISRU feasibility (v1.10.0) ───────────────────────────────────────────
     # Making return propellant is a property of the (asteroid × propellant)
@@ -7015,6 +7066,7 @@ def _evaluate_combo_at_ratio(
             power_mode=power_mode, ctx=ctx, market_mode=market_mode,
             refinery=refinery, payload_cap_kg=cap_kg,
             dv_capture_m_s=dv_capture_m_s,
+            tps_frac=tps_frac,
             _repair_depth=repair_depth,
             _damped_steps=_damped_steps + damped_here,
             _relax=relax,
@@ -7715,6 +7767,7 @@ def _evaluate_combo_at_ratio(
                     power_mode=power_mode, ctx=ctx, market_mode=market_mode,
                     refinery=refinery, payload_cap_kg=cap,
                     dv_capture_m_s=dv_capture_m_s,
+                    tps_frac=tps_frac,
                     _repair_depth=_repair_depth + 1,
                     _damped_steps=_damped_steps + damped_here,
                     _resize_load=_resize_load,
@@ -8428,6 +8481,9 @@ def _evaluate_combo_at_ratio(
         "delivery_arch":        arch["label"],
         "returns_to_earth":     arch["returns_to_earth"],
         "flies_tps":            tps_frac > 0.0,
+        # calc 1.47.0: the heat shield per kg returned this mission flew,
+        # scaled by its entry speed (General_Research rc-134).
+        "tps_frac":             tps_frac,
         # ── Per-asteroid architecture choices (v1.10.0) ─────────────────────
         "aerocapture_return":   bool(aero),
         "isru_return":          bool(isru),
@@ -8910,6 +8966,7 @@ def _combo_key_bound(
     isru:              bool,
     ctx:               Optional[AsteroidContext],
     market_mode:       Optional[str] = None,
+    tps_frac:          Optional[float] = None,
 ) -> Tuple[Tuple[float, float], float, float, float]:
     """`(key, payload_ub, gross_ub, cost_lb)` for one combo, every result of it.
 
@@ -8972,7 +9029,8 @@ def _combo_key_bound(
     dv_penalty, _te, _tk, tank_frac, _isp, _boil = sizing_consts
     if not config.model_tank_mass:
         tank_frac = 0.0
-    tps_frac = config.heat_shield_frac_of_payload if aero else 0.0
+    tps_frac = ((config.heat_shield_frac_of_payload if tps_frac is None
+                 else tps_frac) if aero else 0.0)
     d0 = config.return_vehicle_dry_kg
 
     first = _pass1_cascade(leo_cap, sizing_consts, ctx.structure_frac,
@@ -9166,6 +9224,7 @@ def evaluate_combo(
     market_mode:       Optional[str] = None,
     refinery:          Optional[Tuple[Dict[str, float], float]] = None,
     dv_capture_m_s:    float = 0.0,
+    tps_frac:          Optional[float] = None,
 ) -> Optional[Dict[str, float]]:
     """Best mission for one (asteroid × vehicle × propellant × architecture),
     optimising over how hard to concentrate.  "Best" is `selection_key`, which
@@ -9198,7 +9257,7 @@ def evaluate_combo(
         market_mode=market_mode,
         aero=aero, isru=isru, rendezvous_apsis=rendezvous_apsis,
         power_mode=power_mode, ctx=ctx, refinery=refinery,
-        dv_capture_m_s=dv_capture_m_s,
+        dv_capture_m_s=dv_capture_m_s, tps_frac=tps_frac,
     )
 
     if not config.use_beneficiation:
@@ -9580,8 +9639,8 @@ def _prefilter_probe(
         for dv_opt in dv_options:
             dv_out = float(dv_opt["dv_out_m_s"])
             dv_ret = float(dv_opt["dv_ret_m_s"])
-            dv_tps = (config.heat_shield_frac_of_payload
-                      if bool(dv_opt["aero"]) else 0.0)
+            dv_tps = float(dv_opt.get("tps_frac", config.heat_shield_frac_of_payload)
+                           if bool(dv_opt["aero"]) else 0.0)
             for isru in isru_modes:
                 seen += 1
                 # `_combo_can_close` rather than the split form the search uses
@@ -9772,7 +9831,8 @@ def evaluate_asteroid(
         (i,
          float(o["dv_out_m_s"]),
          float(o["dv_ret_m_s"]),
-         (config.heat_shield_frac_of_payload if bool(o["aero"]) else 0.0),
+         float(o.get("tps_frac", config.heat_shield_frac_of_payload)
+               if bool(o["aero"]) else 0.0),
          bool(o["aero"]),
          str(o["rendezvous_apsis"]),
          float(o.get("dv_capture_m_s", 0.0)))
@@ -9880,7 +9940,7 @@ def evaluate_asteroid(
                             bound = _combo_key_bound(
                                 asteroid_row, vehicle, propellant, bulk_value,
                                 dv_out, dv_ret, ops_df, config, phases, dv_aero,
-                                isru, ctx, market_mode)[0]
+                                isru, ctx, market_mode, tps_frac=dv_tps)[0]
                         if bound <= best_key:
                             continue
                     result = evaluate_combo(
@@ -9894,6 +9954,7 @@ def evaluate_asteroid(
                         rendezvous_apsis=dv_apsis,
                         power_mode=power_mode, ctx=ctx,
                         refinery=refinery, dv_capture_m_s=dv_capture,
+                        tps_frac=dv_tps,
                     )
                     if result is None:
                         continue
