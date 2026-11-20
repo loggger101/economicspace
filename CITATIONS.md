@@ -427,5 +427,6 @@ say.
 
 If a result from it is quoted, the reproducible identifiers are the
 `pipeline_version` and `catalog_date` stamped into every output CSV, plus the
-git commit. A number without those is not reproducible, which is the point
+git commit, which Stage 4 writes to `profitability_catalog.manifest.json`
+beside its CSV (and the UI to `ui_run_config.json`). A number without those is not reproducible, which is the point
 [`versions.md`](versions.md) exists to make.

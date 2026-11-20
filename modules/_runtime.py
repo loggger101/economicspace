@@ -8,6 +8,8 @@
                          git-pinned package to its tag
     confirm_overwrite()  what a fetching stage asks before it overwrites the
                          only copy of its inputs
+    source_commit()      the git commit (and whether the tree is dirty) a
+                         result was produced from
 
 The first three happen when this file is imported, which each module does
 before anything else.  install() is CALLED, never run at import: calc imports
@@ -294,3 +296,34 @@ def confirm_overwrite(paths, what):
         print("  No console to confirm on (stdin is not a terminal).")
         print("  Pass --yes if overwriting them is what you meant.")
         return False
+
+
+# -----------------------------------------------------------------------------
+# SOURCE COMMIT
+# -----------------------------------------------------------------------------
+# CITATIONS.md section 8 names the git commit, beside `pipeline_version` and
+# `catalog_date`, as what makes a quoted result reproducible (General_Research
+# rc-777).  Stage 4 writes it into its manifest and the UI into its run
+# manifest; neither touches a number.
+
+def source_commit():
+    """{"commit", "dirty"} for this checkout, or None values outside git.
+
+    `dirty` is True when tracked files differ from the commit, since a result
+    from uncommitted code is not reproduced by checking the commit out.
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def git(*args):
+        """One git command in this checkout; its stdout, stripped."""
+        return subprocess.run(["git", "-C", root] + list(args),
+                              capture_output=True, text=True, timeout=20,
+                              check=True).stdout.strip()
+
+    try:
+        commit = git("rev-parse", "HEAD")
+        dirty = bool(git("status", "--porcelain", "--untracked-files=no"))
+    except (OSError, subprocess.SubprocessError):
+        return {"commit": None, "dirty": None,
+                "note": "unavailable: not a git checkout, or git not found"}
+    return {"commit": commit, "dirty": dirty}

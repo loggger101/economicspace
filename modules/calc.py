@@ -10215,6 +10215,42 @@ def _evaluate_in_parallel(
     return results
 
 
+def result_manifest_path(csv_path: str) -> str:
+    """`<csv stem>.manifest.json`, beside the Stage 4 CSV."""
+    return os.path.splitext(csv_path)[0] + ".manifest.json"
+
+
+def write_result_manifest(csv_path: str, df: pd.DataFrame) -> str:
+    """Write the identifiers a quoted Stage 4 result needs, beside its CSV.
+
+    CITATIONS.md section 8: a result is reproducible from `pipeline_version`
+    and `catalog_date`, which every row carries, plus the git commit, which
+    no row does (General_Research rc-777).  Written by every build, GUI or
+    not; the UI's run manifest records the same commit.  No number changes.
+    """
+    import hashlib  # noqa: PLC0415  (only here)
+    h = hashlib.sha256()
+    with open(csv_path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    src = _runtime.source_commit()
+    manifest = {
+        "pipeline_version": str(df["pipeline_version"].iloc[0]),
+        "catalog_date": str(df["catalog_date"].iloc[0]),
+        "git_commit": src["commit"],
+        "git_dirty": src["dirty"],
+        "file": {"name": os.path.basename(csv_path), "rows": int(len(df)),
+                 "sha256": h.hexdigest()},
+    }
+    if "note" in src:
+        manifest["git_note"] = src["note"]
+    path = result_manifest_path(csv_path)
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(manifest, fh, indent=2)
+        fh.write("\n")
+    return path
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN PIPELINE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -10407,6 +10443,7 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
     # existing Windows output, so pinning it changes nothing here.
     df.to_csv(out_path, index=False, lineterminator="\r\n")
     print(f"\n       Profitability catalog -> {out_path}  ({len(df):,} rows)")
+    write_result_manifest(out_path, df)
 
     # ── What the architecture search actually chose ──────────────────────────
     # Worth printing rather than burying in the CSV: if every row picks the
