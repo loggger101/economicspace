@@ -390,7 +390,7 @@ contract unchanged at 1.22.1), its `prices-2026-11-20` release from the same
 | `verify.py check`, all four cells, against the 1.85.0 baseline (`--tag 1.85.0`) | check 1 DIFFERS on all four, as a repin must; checks 2 to 8 pass (bounds 0 violations) |
 | spacevalue at spacecost v0.19.0 | 184 passed, 6 skipped (the Rust binding); `metals-2026-10-07` rebuilt equals `prices-2026-11-12` in every price, yield and value column |
 | the worked calculation on the default archived row (calc 1.26.0) | 90 quantities bit-exact |
-| the worked calculation on the best rows of the four new cells | **DIFFER** on the electric stage, its return mass and what follows (24 to 41 of 94 quantities, at 1% to 3%), and `benef+search`'s best row and a one-way row refused; the derivation has no code for calc 1.47.0's electric units (`separate_ep_units`, rc-246) or its entry-speed heat shield (rc-134), so it has not reproduced an electric row since master v1.85.0. Not fixed here |
+| the worked calculation on the best rows of the four new cells | **DIFFER** on the electric stage, its return mass and what follows (24 to 41 of 94 quantities, at 1% to 3%), and `benef+search`'s best row and a one-way row refused: a known gap, not fixed here. The derivation has no code for calc 1.47.0's electric units (`separate_ep_units`, rc-246) or its entry-speed heat shield (rc-134), so it has not reproduced an electric row since master v1.85.0; `known_gap` now prints that on every such report, and CLAUDE.md, "Worked calculation and verification sheet", records it |
 | `verify_docs.py`, `tree_check.py` | pass |
 
 The new cells against the 1.85.0 baseline, row for row on `designation`, by
@@ -459,6 +459,10 @@ not a campaign result.
   such row, so with the 0.0 default nothing moves until a repin.
 - The opt-in Rust sizing loop does not model `separate_ep_units`; with both
   on, the loop runs in Python and the solver in Rust.
+- **The worked calculation was not updated with it**, and does not model
+  `separate_ep_units` or the entry-speed shield: it reproduces no electric
+  or scaled-shield row from this release on. Found at master v1.86.0, which
+  records it as a known gap (`known_gap`, CLAUDE.md).
 
 ## master v1.84.2
 

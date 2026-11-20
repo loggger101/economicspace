@@ -367,6 +367,17 @@ mission from the equations and compares 88+ quantities with its row.
 `campaign/verification_sheet.py` renders the same derivation as a
 pen-and-paper worksheet and `--check` re-evaluates every printed substitution.
 
+- **Known gap since master v1.85.0 (calc 1.47.0).** The derivation does not
+  model calc's `separate_ep_units` (General_Research rc-246: an electric stage
+  that burns on the way home flies home, as two units or the one shared
+  stage) or `scale_tps_with_entry_speed` (rc-134). It sizes the one-way stage
+  and the flat shield, so it reproduces no electric or scaled-shield row
+  written by calc 1.47.0 or later, and every cislunar row is electric: such a
+  row DIFFERs from the electric stage on, or is refused as closing at no
+  concentration. `known_gap` in the script says so on every report about such
+  a row. Archived rows from before calc 1.47.0 still reproduce (the default
+  one, 90 of 90 bit-exact at master v1.86.0). Closing it means writing both
+  terms out in the derivation, never relaxing the comparison.
 - **The row decides the run, never this process.** Destination, ore state,
   market tier, depletion cap, prices, Stage 2 epoch and Stage 3 tables are read
   off the row or the file it came from (`run_setting`, `dials_in_force`,
