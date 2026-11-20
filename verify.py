@@ -902,7 +902,8 @@ def check_bound(m, names: List[str], report: Optional[Dict[str, Dict[str, int]]]
         bound = calc._combo_key_bound(
             asteroid_row, vehicle, propellant, bulk_value_per_kg, dv_out_m_s,
             dv_ret_m_s, ops_df, config, kw.get("phases"), kw.get("aero"),
-            kw.get("isru", False), kw.get("ctx"), kw.get("market_mode"))
+            kw.get("isru", False), kw.get("ctx"), kw.get("market_mode"),
+            tps_frac=kw.get("tps_frac"))
         stats["combos"] += 1
         stats["unbounded"] += bound[0] == calc._NO_BOUND_KEY
         if state["best"] is not None and bound[0] <= state["best"]:

@@ -712,7 +712,8 @@ class CalcConfig:
     # 1.45.0 every one of them is ON by default except three:
     # `model_rated_array_cost` (moves the headline, a release of its own),
     # `size_ep_on_flown_load` (needs its own pre-filter bound first) and
-    # `carry_ep_home` (one shared stage; separate units are not built).
+    # `carry_ep_home` (one shared stage).  Since calc 1.47.0 rc-246's other
+    # fix, `separate_ep_units`, is on by default and supersedes it.
     # Setting the others False reproduces calc 1.44.0 bit for bit.
     #
     # A raw cargo is dug like any other, at the same Wh/kg, and only a
@@ -798,7 +799,20 @@ class CalcConfig:
     size_ep_on_flown_load:     bool  = False
     # Off, the electric stage is one-way hardware, though the same stage is
     # sized for the return burn.  On, it flies home and is in the return mass.
+    # `separate_ep_units` supersedes it when both are on.
     carry_ep_home:             bool  = False
+    # calc 1.47.0 (General_Research rc-246, the owner's choice of its two
+    # fixes): an electric mission may fly TWO units, one per leg.  The
+    # outbound unit burns the outbound fuel and stays at the body; the return
+    # unit burns the return fuel and flies home in the return mass.  They share
+    # `ep_target_thrust_yr`, split to minimise launch mass, so the return unit
+    # is the smaller.  Each pass flies the cheaper of that and one shared stage
+    # flown home, in launch mass (see `_ep_units_kg`): with a high-Isp return
+    # the shared stage usually wins.  Either way no stage that burns on the
+    # return leg is left behind.  Off, the one shared stage of earlier
+    # releases, one-way unless `carry_ep_home`.  The opt-in Rust sizing loop
+    # does not model it: with it on, the loop runs in Python.
+    separate_ep_units:         bool  = True
     # Off, every flight of a programme is priced with a rig aboard, though F
     # rigs serve N flights and stay where they dig.  On, the N - F repeat
     # flights are priced without one, at the same cargo.  Cargo the freed
@@ -1021,9 +1035,29 @@ class CalcConfig:
     # (Aerocapture for Discovery Missions, 2010, p. 12) gives no residual
     # (GR rc-519).  Bodies with usable elements get their own saving.
     aerocapture_dv_savings_m_s: float = 4_000   # fallback only, when elements are unusable
-    # TPS mass = 15% of returned payload.  Flat, whatever the entry speed: it is
-    # a lunar-return-class figure (~11 km/s) and optimistic for faster returns.
+    # TPS mass = 15% of returned payload AT AN 11 km/s EARTH ENTRY, the
+    # lunar-return class.  Until calc 1.47.0 it was flat whatever the entry
+    # speed, optimistic for every faster return (General_Research rc-134).
     heat_shield_frac_of_payload: float = 0.15
+    # Since calc 1.47.0 an Earth entry scales it with its own speed,
+    # v_e = sqrt(v_inf^2 + v_esc^2) at a 125 km interface, as
+    # frac * (v_e / 11 km/s) ** 1.107.  The exponent is Dec & Braun's
+    # ablative sizing tool (AIAA 2006-780, Table 2): one Apollo-shaped capsule
+    # needs 8.324 cm of PICA at the stagnation point at 11 km/s and 10.873 cm
+    # at 14 km/s, and at fixed geometry and material the shield's mass goes
+    # with its thickness: ln(10.873 / 8.324) / ln(14 / 11) = 1.107.  Two
+    # points of one design, so above 14 km/s it is an extrapolation, and a
+    # mild one: radiative heating climbs faster than this there (Alpert et
+    # al. 2024 size for 16.5 km/s).  A Mars aerocapture or entry keeps the
+    # flat fraction: CO2 entry at 5-7 km/s is a different regime the two
+    # points do not cover.  False restores the flat fraction everywhere.
+    scale_tps_with_entry_speed: bool = True
+    # The entry speed `heat_shield_frac_of_payload` is quoted at: 11 km/s,
+    # Dec & Braun's lunar-return case.
+    tps_reference_entry_km_s:   float = 11.0
+    # Shield mass goes as entry speed to this power: ln(10.873 / 8.324) /
+    # ln(14 / 11) from Dec & Braun's two PICA thicknesses.
+    tps_entry_speed_exponent:   float = 1.107
 
     # ─── ISRU  (return propellant manufactured at the asteroid) ──────────────
     # Return propellant is not hauled outbound; it is electrolysed from mined
@@ -1378,7 +1412,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.46.0"
+    pipeline_version: str = "1.47.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -3528,6 +3562,33 @@ def uses_tps(config: CalcConfig) -> bool:
     return bool(config.use_aerocapture_return and arch["aero_allowed"])
 
 
+# Earth's entry interface, 125 km up: where an entry speed is quoted.
+_R_ENTRY_INTERFACE_KM = 6_378.14 + 125.0
+
+
+def earth_entry_speed_km_s(v_inf_km_s: float) -> float:
+    """Speed at Earth's entry interface for an arrival at this v_infinity."""
+    v_esc_sq = 2.0 * MU_EARTH_KM3_S2 / _R_ENTRY_INTERFACE_KM
+    return math.sqrt(v_esc_sq + v_inf_km_s * v_inf_km_s)
+
+
+def tps_frac_for_entry(v_inf_km_s: Optional[float], config: CalcConfig) -> float:
+    """Heat-shield mass per kg returned for an Earth entry at this arrival.
+
+    `heat_shield_frac_of_payload` at `tps_reference_entry_km_s`, scaled by
+    entry speed to the power `tps_entry_speed_exponent` (General_Research
+    rc-134; the basis is at the config).  Without an arrival v_infinity, as on
+    the uniform-Δv fallback, or with `scale_tps_with_entry_speed` off, the flat
+    fraction.
+    """
+    frac = config.heat_shield_frac_of_payload
+    if (not config.scale_tps_with_entry_speed or v_inf_km_s is None
+            or not math.isfinite(v_inf_km_s) or v_inf_km_s < 0.0):
+        return frac
+    v_e = earth_entry_speed_km_s(float(v_inf_km_s))
+    return frac * (v_e / config.tps_reference_entry_km_s) ** config.tps_entry_speed_exponent
+
+
 def _dv_fallback_m_s(config: CalcConfig, aero: bool) -> Tuple[float, float]:
     """Uniform reference Δv for a row whose orbital elements are unusable.
 
@@ -3613,7 +3674,8 @@ def asteroid_dv_options(
                              else "ret_earth_surface_aero"]
             offers.append({"dv_out_m_s": dv_out, "dv_ret_m_s": dv_ret,
                            "rendezvous_apsis": legs["rendezvous_apsis"],
-                           "dv_capture_m_s": max(0.0, legs[leg] - departure) * 1_000.0})
+                           "dv_capture_m_s": max(0.0, legs[leg] - departure) * 1_000.0,
+                           "v_inf_km_s": legs.get("v_inf")})
         # Resolve the apsis against the round trip actually being flown, not
         # against a fixed Earth return.  The sort is stable, so a tie keeps the
         # first apsis.
@@ -3624,7 +3686,10 @@ def asteroid_dv_options(
                        "rendezvous_apsis": "reference"}]
         for offer in (offers if config.offer_both_apsides else offers[:1]):
             offer["aero"]     = aero
-            offer["tps_frac"] = config.heat_shield_frac_of_payload if aero else 0.0
+            offer["tps_frac"] = (tps_frac_for_entry(offer.get("v_inf_km_s"), config)
+                                 if aero and "mars" not in leg
+                                 else config.heat_shield_frac_of_payload if aero
+                                 else 0.0)
             out.append(offer)
     if config.gate_surface_escape:
         shortfall = surface_escape_shortfall_m_s(asteroid_row, config)
@@ -4208,6 +4273,86 @@ def _ep_stage_kg(
     ppu_kg      = ep_power_w / 1000.0 * ppu_kg_per_kw
     thruster_kg = ep_thrust_n * thruster_kg_per_n
     return array_kg + ppu_kg + thruster_kg, ep_power_w, ep_thrust_n, ep_thrust_yr
+
+
+def _ep_units_kg(
+    cascade:           Dict[str, float],
+    isp_s:             float,
+    eff:               float,
+    ep_w_per_kg:       float,
+    ppu_kg_per_kw:     float,
+    thruster_kg_per_n: float,
+    config:            CalcConfig,
+    tps_frac:          float,
+    tank_frac:         float,
+    isru:              bool,
+) -> Tuple[float, float, float, float, float]:
+    """Two electric units, one per leg, or one shared stage flown home,
+    whichever costs less launch mass (`separate_ep_units`, rc-246).
+
+    Returns `(ep_system_kg, ep_power_w, ep_thrust_n, ep_thrust_yr,
+    return_share)`: the two units' summed mass, power and thrust, the thrust
+    time they share, and the return unit's share of the mass.
+
+    The OUTBOUND unit burns the outbound fuel and is left at the body with the
+    rig; the RETURN unit burns the return fuel and flies home in the return
+    mass.  Each is `_ep_stage_kg` on its own leg's fuel and its own share of
+    `ep_target_thrust_yr`, so the mission's thrusting time is the shared
+    stage's.  A unit's mass goes as fuel / time on every term (array and PPU on
+    power, thruster on thrust, both fuel / time at one Isp), so the split
+    that minimises the launch mass the two cost is t ∝ sqrt(w m): m the leg's
+    fuel, and w the launch mass a kilogram costs per kilogram of one-way
+    hardware.  One-way hardware has w = 1; a kilogram flown home is also
+    shielded, pushed back through the return burn and tanked, so
+        w_ret = 1 + tps + (tank + [no ISRU]) k_ret (1 + tps) (R_ret - 1),
+    the derivative of `_flown_propellant_kg`'s outbound load with respect to
+    the dry return mass.  The return leg therefore gets the longer burn and
+    the smaller unit.
+
+    Never lighter than the shared stage on the same loads: by Cauchy-Schwarz,
+    m_o / t_o + m_r / t_r >= (m_o + m_r) / (t_o + t_r), on power and on thrust
+    alike.  So the pre-filter's and the combo bound's shared-stage floor stays
+    a floor under this architecture.
+    """
+    m_out = float(cascade.get("m_outbound_prop", 0.0))
+    m_ret = float(cascade.get("m_return_prop", 0.0))
+    total_t = config.ep_target_thrust_yr
+    if m_out <= 0.0 or m_ret <= 0.0 or total_t <= 0.0:
+        kg, w, n, yr = _ep_stage_kg(cascade, isp_s, eff, ep_w_per_kg,
+                                    ppu_kg_per_kw, thruster_kg_per_n, config)
+        return kg, w, n, yr, (1.0 if m_out <= 0.0 < m_ret else 0.0)
+    k_ret = float(cascade.get("k_ret", 1.0))
+    r_ret = float(cascade.get("r_ret", 1.0))
+    w_ret = 1.0 + tps_frac + ((tank_frac + (0.0 if isru else 1.0))
+                              * k_ret * (1.0 + tps_frac) * (r_ret - 1.0))
+    a_out = math.sqrt(m_out)
+    a_ret = math.sqrt(w_ret * m_ret)
+    t_out = total_t * a_out / (a_out + a_ret)
+    t_ret = total_t - t_out
+    units = []
+    for m_leg, t_leg in ((m_out, t_out), (m_ret, t_ret)):
+        p_w = ep_power_required_w(m_leg, isp_s, t_leg, eff)
+        f_n = ep_thrust_required_n(m_leg, isp_s, t_leg)
+        kg = ((p_w / ep_w_per_kg if ep_w_per_kg > 0 else 0.0)
+              + p_w / 1000.0 * ppu_kg_per_kw + f_n * thruster_kg_per_n)
+        units.append((kg, p_w, f_n))
+    (out_kg, out_w, out_n), (ret_kg, ret_w, ret_n) = units
+    total_kg = out_kg + ret_kg
+    # The alternative a designer has: ONE stage, sized for both legs, flown
+    # home.  It costs w_ret on all of its mass; the two units cost 1 on the
+    # outbound one and w_ret on the return one.  With a high-Isp return, w_ret
+    # is near 1 and a second set of arrays, PPU and thrusters outweighs what
+    # leaving one behind saves (measured on 120 cislunar rows: two units cost a
+    # median 2.3x the shared stage's $/kg where both close), so each pass flies
+    # whichever costs less launch mass.  Both are physical: every unit is
+    # counted on each leg it flies.
+    shared_kg, shared_w, shared_n, shared_yr = _ep_stage_kg(
+        cascade, isp_s, eff, ep_w_per_kg, ppu_kg_per_kw, thruster_kg_per_n,
+        config)
+    if w_ret * shared_kg <= out_kg + w_ret * ret_kg:
+        return shared_kg, shared_w, shared_n, shared_yr, 1.0
+    share = ret_kg / total_kg if total_kg > 0.0 else 0.0
+    return total_kg, out_w + ret_w, out_n + ret_n, total_t, share
 
 
 def _flown_propellant_kg(
@@ -5511,7 +5656,13 @@ def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, ...]:
         return vals
 
     vals = (
-        _ops_value(ops_df, "Drilling / excavation energy", default=200.0),
+        # Dig energy per kg of feed: breaking it loose plus moving it.  Module 3
+        # split the two at spacecost data contract 1.28.0 (General_Research
+        # rc-027: excavation 200 -> 5.7 Wh/kg, handling 24.2 on its own row).
+        # A catalog without the handling row predates the split, its excavation
+        # figure already carried the handling, and the 0.0 default reproduces it.
+        _ops_value(ops_df, "Drilling / excavation energy", default=200.0)
+        + _ops_value(ops_df, "Regolith handling & transfer energy", default=0.0),
         _ops_value(ops_df, "Beneficiation / on-site processing energy", default=500.0),
         _ops_value(ops_df, "Power system specific mass", default=60.0),
         _ops_value(ops_df, "Electric propulsion efficiency", default=0.60),
@@ -6685,6 +6836,7 @@ def _evaluate_combo_at_ratio(
     refinery:          Optional[Tuple[Dict[str, float], float]] = None,
     payload_cap_kg:    Optional[float] = None,
     dv_capture_m_s:    float = 0.0,
+    tps_frac:          Optional[float] = None,
     _repair_depth:     int = 0,
     _damped_steps:     int = 0,
     _relax:            Optional[bool] = None,
@@ -6747,7 +6899,10 @@ def _evaluate_combo_at_ratio(
     # v1.10.0: which return mode this candidate flies is decided by the caller.
     if aero is None:
         aero = uses_tps(config)
-    tps_frac = config.heat_shield_frac_of_payload if aero else 0.0
+    # The offer's own fraction when it brought one (an Earth entry scaled by
+    # its speed, `tps_frac_for_entry`); the flat one otherwise.
+    tps_frac = ((config.heat_shield_frac_of_payload if tps_frac is None
+                 else tps_frac) if aero else 0.0)
 
     # ── ISRU feasibility (v1.10.0) ───────────────────────────────────────────
     # Making return propellant is a property of the (asteroid × propellant)
@@ -7015,6 +7170,7 @@ def _evaluate_combo_at_ratio(
             power_mode=power_mode, ctx=ctx, market_mode=market_mode,
             refinery=refinery, payload_cap_kg=cap_kg,
             dv_capture_m_s=dv_capture_m_s,
+            tps_frac=tps_frac,
             _repair_depth=repair_depth,
             _damped_steps=_damped_steps + damped_here,
             _relax=relax,
@@ -7071,12 +7227,16 @@ def _evaluate_combo_at_ratio(
     base = target = None
     converged   = False
     passes, pass_limit = 0, 12
+    # `separate_ep_units`: the return unit's share of `ep_system_kg`, from the
+    # pass that last sized the units.  0.0 until one has.
+    separate_ep = bool(config.separate_ep_units)
+    ep_ret_share = 0.0
     # ── Opt-in Rust sizing loop (PROTOTYPE; see `_ES_LOOP`) ─────────────────
     # Runs the `while` below in Rust and hands back what it would leave
     # behind.  Kind 0 means "not a case Rust reproduces exactly" and the
     # Python loop runs as always; otherwise the state is assigned here and the
     # loop is skipped (pass_limit = 0), or the loop's own exits are taken.
-    if _ES_LOOP is not None:
+    if _ES_LOOP is not None and not separate_ep:
         _rs = _ES_LOOP.run(
             leo_cap=leo_cap, isp_s_val=isp_s_val, dv_out_m_s=dv_out_m_s,
             dv_ret_stored=dv_ret_stored, dv_ret_eff=dv_ret_eff,
@@ -7176,7 +7336,8 @@ def _evaluate_combo_at_ratio(
                                                 stay_est_yr - window_wait_yr,
                                                 isru_plant_rate)
                               if isru_plant_rate > 0 else 0.0))
-        carried_ep_kg = ep_system_kg if config.carry_ep_home else 0.0
+        carried_ep_kg = (ep_system_kg * ep_ret_share if separate_ep
+                         else ep_system_kg if config.carry_ep_home else 0.0)
         return_dry_kg = config.return_vehicle_dry_kg + carried_ep_kg
         cascade = max_return_payload_kg(
             leo_capacity_kg = leo_cap,
@@ -7210,7 +7371,15 @@ def _evaluate_combo_at_ratio(
             continue
 
         new_ep_kg = 0.0
-        if is_electric:
+        new_ep_share = ep_ret_share
+        if is_electric and separate_ep:
+            (new_ep_kg, ep_power_watts, ep_thrust_n, ep_thrust_yr,
+             new_ep_share) = _ep_units_kg(
+                cascade, isp_s_val, eff_used, ep_w_per_kg,
+                ppu_kg_per_kw, thruster_kg_per_n, config,
+                tps_frac, tank_frac, isru,
+            )
+        elif is_electric:
             # v1.17.4: one definition, two readers, the pre-filter's second
             # stage sizes the same stage off the same pass-1 cascade.
             (new_ep_kg, ep_power_watts,
@@ -7250,14 +7419,22 @@ def _evaluate_combo_at_ratio(
                 return None
 
         if is_electric and config.size_ep_on_flown_load:
-            (new_ep_kg, ep_power_watts,
-             ep_thrust_n, ep_thrust_yr) = _ep_stage_kg(
-                _flown_propellant_kg(
-                    trial_payload, hardware_est_kg - carried_ep_kg, return_dry_kg,
-                    structure_frac_eff, tps_frac, tank_frac, cascade, isru),
-                isp_s_val, eff_used, ep_w_per_kg,
-                ppu_kg_per_kw, thruster_kg_per_n, config,
-            )
+            flown = _flown_propellant_kg(
+                trial_payload, hardware_est_kg - carried_ep_kg, return_dry_kg,
+                structure_frac_eff, tps_frac, tank_frac, cascade, isru)
+            if separate_ep:
+                (new_ep_kg, ep_power_watts, ep_thrust_n, ep_thrust_yr,
+                 new_ep_share) = _ep_units_kg(
+                    dict(cascade, **flown), isp_s_val, eff_used, ep_w_per_kg,
+                    ppu_kg_per_kw, thruster_kg_per_n, config,
+                    tps_frac, tank_frac, isru,
+                )
+            else:
+                (new_ep_kg, ep_power_watts,
+                 ep_thrust_n, ep_thrust_yr) = _ep_stage_kg(
+                    flown, isp_s_val, eff_used, ep_w_per_kg,
+                    ppu_kg_per_kw, thruster_kg_per_n, config,
+                )
 
         trial_feed = (min(trial_payload * target_ratio,
                           max(0.0, throughput_cap_kg - new_isru_feed),
@@ -7401,6 +7578,7 @@ def _evaluate_combo_at_ratio(
              isru_prop_kg, stay_est_yr, containment_frac) = _damp_blend(
                 base, target, step)
         structure_frac_eff            = structure_frac + containment_frac
+        ep_ret_share                  = new_ep_share
         if converged:
             break
         if _relax and not damped_here:
@@ -7561,7 +7739,8 @@ def _evaluate_combo_at_ratio(
     # bodies this model likes.
     m_dry_return    = config.return_vehicle_dry_kg + structure_frac_eff * m_payload
     m_containment_kg = containment_frac * m_payload
-    carried_ep_kg   = ep_system_kg if config.carry_ep_home else 0.0
+    carried_ep_kg   = (ep_system_kg * ep_ret_share if separate_ep
+                       else ep_system_kg if config.carry_ep_home else 0.0)
     m_tps           = tps_frac * (m_payload + m_dry_return + carried_ep_kg)
     # v1.11.0: the same two tankage scalars the solver used, read back rather
     # than re-derived.  k_ret = 1/(1 − t(R_ret−1)) inflates the post-burn mass
@@ -7715,6 +7894,7 @@ def _evaluate_combo_at_ratio(
                     power_mode=power_mode, ctx=ctx, market_mode=market_mode,
                     refinery=refinery, payload_cap_kg=cap,
                     dv_capture_m_s=dv_capture_m_s,
+                    tps_frac=tps_frac,
                     _repair_depth=_repair_depth + 1,
                     _damped_steps=_damped_steps + damped_here,
                     _resize_load=_resize_load,
@@ -8428,6 +8608,9 @@ def _evaluate_combo_at_ratio(
         "delivery_arch":        arch["label"],
         "returns_to_earth":     arch["returns_to_earth"],
         "flies_tps":            tps_frac > 0.0,
+        # calc 1.47.0: the heat shield per kg returned this mission flew,
+        # scaled by its entry speed (General_Research rc-134).
+        "tps_frac":             tps_frac,
         # ── Per-asteroid architecture choices (v1.10.0) ─────────────────────
         "aerocapture_return":   bool(aero),
         "isru_return":          bool(isru),
@@ -8471,6 +8654,9 @@ def _evaluate_combo_at_ratio(
         "is_electric":              is_electric,
         "ep_power_w":               ep_power_watts,
         "ep_system_kg":             ep_system_kg,
+        # calc 1.47.0: the part of it that flies home (rc-246); with one
+        # shared stage, all of it under `carry_ep_home` and none otherwise.
+        "ep_return_unit_kg":        carried_ep_kg,
         "ep_thrust_yr":             ep_thrust_yr,
         # ── v1.12.0 device-level sizing ────────────────────────────────────
         "ep_thrust_n":              ep_thrust_n,
@@ -8910,6 +9096,7 @@ def _combo_key_bound(
     isru:              bool,
     ctx:               Optional[AsteroidContext],
     market_mode:       Optional[str] = None,
+    tps_frac:          Optional[float] = None,
 ) -> Tuple[Tuple[float, float], float, float, float]:
     """`(key, payload_ub, gross_ub, cost_lb)` for one combo, every result of it.
 
@@ -8972,7 +9159,8 @@ def _combo_key_bound(
     dv_penalty, _te, _tk, tank_frac, _isp, _boil = sizing_consts
     if not config.model_tank_mass:
         tank_frac = 0.0
-    tps_frac = config.heat_shield_frac_of_payload if aero else 0.0
+    tps_frac = ((config.heat_shield_frac_of_payload if tps_frac is None
+                 else tps_frac) if aero else 0.0)
     d0 = config.return_vehicle_dry_kg
 
     first = _pass1_cascade(leo_cap, sizing_consts, ctx.structure_frac,
@@ -9166,6 +9354,7 @@ def evaluate_combo(
     market_mode:       Optional[str] = None,
     refinery:          Optional[Tuple[Dict[str, float], float]] = None,
     dv_capture_m_s:    float = 0.0,
+    tps_frac:          Optional[float] = None,
 ) -> Optional[Dict[str, float]]:
     """Best mission for one (asteroid × vehicle × propellant × architecture),
     optimising over how hard to concentrate.  "Best" is `selection_key`, which
@@ -9198,7 +9387,7 @@ def evaluate_combo(
         market_mode=market_mode,
         aero=aero, isru=isru, rendezvous_apsis=rendezvous_apsis,
         power_mode=power_mode, ctx=ctx, refinery=refinery,
-        dv_capture_m_s=dv_capture_m_s,
+        dv_capture_m_s=dv_capture_m_s, tps_frac=tps_frac,
     )
 
     if not config.use_beneficiation:
@@ -9580,8 +9769,8 @@ def _prefilter_probe(
         for dv_opt in dv_options:
             dv_out = float(dv_opt["dv_out_m_s"])
             dv_ret = float(dv_opt["dv_ret_m_s"])
-            dv_tps = (config.heat_shield_frac_of_payload
-                      if bool(dv_opt["aero"]) else 0.0)
+            dv_tps = float(dv_opt.get("tps_frac", config.heat_shield_frac_of_payload)
+                           if bool(dv_opt["aero"]) else 0.0)
             for isru in isru_modes:
                 seen += 1
                 # `_combo_can_close` rather than the split form the search uses
@@ -9772,7 +9961,8 @@ def evaluate_asteroid(
         (i,
          float(o["dv_out_m_s"]),
          float(o["dv_ret_m_s"]),
-         (config.heat_shield_frac_of_payload if bool(o["aero"]) else 0.0),
+         float(o.get("tps_frac", config.heat_shield_frac_of_payload)
+               if bool(o["aero"]) else 0.0),
          bool(o["aero"]),
          str(o["rendezvous_apsis"]),
          float(o.get("dv_capture_m_s", 0.0)))
@@ -9880,7 +10070,7 @@ def evaluate_asteroid(
                             bound = _combo_key_bound(
                                 asteroid_row, vehicle, propellant, bulk_value,
                                 dv_out, dv_ret, ops_df, config, phases, dv_aero,
-                                isru, ctx, market_mode)[0]
+                                isru, ctx, market_mode, tps_frac=dv_tps)[0]
                         if bound <= best_key:
                             continue
                     result = evaluate_combo(
@@ -9894,6 +10084,7 @@ def evaluate_asteroid(
                         rendezvous_apsis=dv_apsis,
                         power_mode=power_mode, ctx=ctx,
                         refinery=refinery, dv_capture_m_s=dv_capture,
+                        tps_frac=dv_tps,
                     )
                     if result is None:
                         continue

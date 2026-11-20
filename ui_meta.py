@@ -172,6 +172,8 @@ BOUNDS: Dict[str, Tuple[float, float, float]] = {
     "default_dv_return_m_s":             (0.0, 30_000.0, 100.0),
     "aerocapture_dv_savings_m_s":        (0.0, 15_000.0, 100.0),
     "heat_shield_frac_of_payload":       (0.0, 2.0, 0.01),
+    "tps_reference_entry_km_s":          (5.0, 20.0, 0.1),
+    "tps_entry_speed_exponent":          (0.0, 5.0, 0.01),
 
     "isru_processing_usd_per_kg":        (0.0, 100_000.0, 10.0),
     "rtg_max_power_w":                   (0.0, 1_000_000.0, 500.0),
