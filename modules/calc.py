@@ -1038,7 +1038,11 @@ class CalcConfig:
     # flat fraction: CO2 entry at 5-7 km/s is a different regime the two
     # points do not cover.  False restores the flat fraction everywhere.
     scale_tps_with_entry_speed: bool = True
+    # The entry speed `heat_shield_frac_of_payload` is quoted at: 11 km/s,
+    # Dec & Braun's lunar-return case.
     tps_reference_entry_km_s:   float = 11.0
+    # Shield mass goes as entry speed to this power: ln(10.873 / 8.324) /
+    # ln(14 / 11) from Dec & Braun's two PICA thicknesses.
     tps_entry_speed_exponent:   float = 1.107
 
     # ─── ISRU  (return propellant manufactured at the asteroid) ──────────────
@@ -5558,7 +5562,13 @@ def _ops_sizing_constants(ops_df: pd.DataFrame) -> Tuple[float, ...]:
         return vals
 
     vals = (
-        _ops_value(ops_df, "Drilling / excavation energy", default=200.0),
+        # Dig energy per kg of feed: breaking it loose plus moving it.  Module 3
+        # split the two at spacecost data contract 1.28.0 (General_Research
+        # rc-027: excavation 200 -> 5.7 Wh/kg, handling 24.2 on its own row).
+        # A catalog without the handling row predates the split, its excavation
+        # figure already carried the handling, and the 0.0 default reproduces it.
+        _ops_value(ops_df, "Drilling / excavation energy", default=200.0)
+        + _ops_value(ops_df, "Regolith handling & transfer energy", default=0.0),
         _ops_value(ops_df, "Beneficiation / on-site processing energy", default=500.0),
         _ops_value(ops_df, "Power system specific mass", default=60.0),
         _ops_value(ops_df, "Electric propulsion efficiency", default=0.60),
