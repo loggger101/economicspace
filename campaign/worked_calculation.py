@@ -2840,7 +2840,13 @@ def context(body, archived, tables):
         storage_wh_per_kg=val("Energy storage usable specific energy"),
         storage_eff=val("Energy storage round-trip efficiency"),
         baseline_dark_h=val("Power-system row baseline dark period"),
-        dig_wh=val("Drilling / excavation energy"),
+        # ⚠️  DIG ENERGY IS TWO ROWS SINCE spacecost 0.19.0 (contract 1.28.0):
+        # excavation, and the handling it had carried, priced on its own
+        # (General_Research rc-027).  calc adds the handling row when the
+        # tables carry it, in this order; older tables have none.
+        dig_wh=(val("Drilling / excavation energy")
+                + (val("Regolith handling & transfer energy")
+                   if "Regolith handling & transfer energy" in rows else 0.0)),
         benef_wh=val("Beneficiation / on-site processing energy"),
         water_wh=val("Water liberation energy (bound water)"),
         contain_per_kg=val("Volatile cargo containment"),
