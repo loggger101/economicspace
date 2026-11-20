@@ -17,7 +17,7 @@ pyo3 = { version = "=0.26.0", features = ["extension-module"] }
 # verify_docs.py check 7 holds the two (and requirements-rust.txt) together.
 # To build against an unreleased spacevalue checkout, add a [patch] section
 # locally and never commit it.
-spacevalue_cargo_core = { git = "https://github.com/loggger101/spacevalue", tag = "v0.7.1" }
+spacevalue_cargo_core = { git = "https://github.com/loggger101/spacevalue", tag = "v0.8.7" }
 
 [features]
 # Builds a copy with a deliberate one-ulp error, so verify_rust.py can prove

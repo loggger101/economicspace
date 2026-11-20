@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.86.0 / mineral_value v1.22.1 / transportation v1.28.0 / calc v1.48.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480)
 - [master v1.85.0 / calc v1.47.0](#master-v1850--calc-v1470)
 - [master v1.84.2](#master-v1842)
 - [master v1.84.1](#master-v1841)
@@ -137,10 +138,10 @@ one that does not say is not to be used.
 | Stage | Module | Version | Last changed |
 |---|---|---|---|
 | 1 | `modules/catalog.py` | **1.11.0** | v1.11.0, `data-2026-11-13`: an identity read by its grammar, a sigma kept with the value it came from, an orbit taken whole from one source, NEOWISE fits pooled once, the diameter floor applied last; two columns added (`orbit_provider`, `element_epoch_timescale`); see [master v1.76.0](#master-v1760--catalog-v1110). v1.10.0, `data-2026-10-21b`: the S complex, Q, K and L carry PGM factors computed from CI bulk over their metal fraction (1.9.0), D, Z, T and P Tagish Lake's carbon (1.10.0), and Eros, Vesta and Bennu their spacecraft shape volumes; no column added. The stamp is [`asteroid_catalog`](https://github.com/loggger101/AsteroidCatalog)'s data contract; since master v1.34.0 Stage 1 installs a published release of that catalog and checks the contract rather than stamping it |
-| 2 | `modules/mineral_value.py` | **1.21.0** | v1.21.0, Stage 2 installs `prices-2026-11-12`, built by spacevalue 0.7.0 on spacecost v0.17.1 from the same closes as `prices-2026-10-07`: reference prices re-reviewed, world production revised, one market per in-space demand class (new column `market_id`), and the delivery chains' LOX and recovery; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.17.0, the pricing moved to [`spacevalue`](https://github.com/loggger101/spacevalue). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
-| 3 | `modules/transportation.py` | **1.26.1** | v1.26.1, spacecost v0.17.1: costs in 2026 dollars, LOX at DLA's price, recovery once per batch, a Henry Hub quote read as gross heat, revised propulsion, launch-vehicle, DSN and body rows; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.23.6, the config became spacecost's `SpacecostConfig` with two defaults overridden. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
-| 4 | `modules/calc.py` | **1.47.0** | v1.47.0, the heat shield scales with Earth entry speed and no electric stage that burns on the way home is left behind, so default numbers move; see [master v1.85.0](#master-v1850--calc-v1470). v1.46.0, no code here moves: Stage 4 imports `spacevalue.cargo` from spacevalue 0.7.0, which pools a hold's sale by the Stage 2 table's `market_id`, so the commodities of one in-space demand class share one allowance; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.85.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| 2 | `modules/mineral_value.py` | **1.22.1** | v1.22.1, Stage 2 installs `prices-2026-11-20`, built by spacevalue 0.8.7 on spacecost v0.19.0 from the same closes, with the same prices as `prices-2026-11-12`; see [master v1.86.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480). v1.21.0, Stage 2 installs `prices-2026-11-12`, built by spacevalue 0.7.0 on spacecost v0.17.1 from the same closes as `prices-2026-10-07`: reference prices re-reviewed, world production revised, one market per in-space demand class (new column `market_id`), and the delivery chains' LOX and recovery; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.17.0, the pricing moved to [`spacevalue`](https://github.com/loggger101/spacevalue). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
+| 3 | `modules/transportation.py` | **1.28.0** | v1.28.0, spacecost v0.19.0: bottled-gas densities from the reference equations of state, excavation 5.7 Wh/kg plus a handling row; see [master v1.86.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480). v1.26.1, spacecost v0.17.1: costs in 2026 dollars, LOX at DLA's price, recovery once per batch, a Henry Hub quote read as gross heat, revised propulsion, launch-vehicle, DSN and body rows; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.23.6, the config became spacecost's `SpacecostConfig` with two defaults overridden. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
+| 4 | `modules/calc.py` | **1.48.0** | v1.48.0, no code here moves: Stage 3's spacecost v0.19.0 tables lower dig energy and move the gas densities, so default numbers move; see [master v1.86.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480). v1.47.0, the heat shield scales with Earth entry speed and no electric stage that burns on the way home is left behind, so default numbers move; see [master v1.85.0](#master-v1850--calc-v1470). v1.46.0, no code here moves: Stage 4 imports `spacevalue.cargo` from spacevalue 0.7.0, which pools a hold's sale by the Stage 2 table's `market_id`, so the commodities of one in-space demand class share one allowance; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
+| - | `master.py` | **1.86.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -243,6 +244,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.86.0 / mineral_value v1.22.1 / transportation v1.28.0 / calc v1.48.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480) | 2026-11-20 | **spacecost `v0.19.0`, spacevalue `v0.8.7` and `prices-2026-11-20`**: Stage 2's prices unchanged; cheaper dig and the EOS gas densities move cost over revenue a median 0.98x to 0.99x |
 | [master v1.85.0 / calc v1.47.0](#master-v1850--calc-v1470) | 2026-11-19 | **the heat shield scales with entry speed, and the electric stage that burns on the way home flies home**: earth_surface cost per kg a median 1.065x; cislunar keeps 57 of 106 sampled rows at a median 2.05x |
 | [master v1.84.2](#master-v1842) | 2026-11-19 | **the git commit recorded beside every Stage 4 result**; no number moves |
 | [master v1.84.1](#master-v1841) | 2026-11-19 | **the rotation-period fallback named a historical prior**; no number moves |
@@ -338,6 +340,81 @@ fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
 
+## master v1.86.0 / mineral_value v1.22.1 / transportation v1.28.0 / calc v1.48.0
+
+**spacecost `v0.19.0`, spacevalue `v0.8.7`, and `prices-2026-11-20` built on
+them.** Default numbers move, through Stage 3 only: the price release has the
+same prices as `prices-2026-11-12`.
+
+### Why
+
+economicspace pinned spacecost v0.17.1 and spacevalue v0.7.1, so none of
+spacecost 0.17.2 to 0.19.0 (data contracts 1.26.2 to 1.28.0) reached a number:
+not the bottled-gas densities from the reference equations of state
+(General_Research rc-816, rc-857 to rc-859), the excavation energy lowered to
+5.7 Wh/kg with handling priced on its own at 24.2 (rc-027, which calc 1.47.0
+already adds when the tables carry it), or the notes. As at master v1.75.0
+the chain was three releases: spacevalue 0.8.7 on spacecost v0.19.0 (data
+contract unchanged at 1.22.1), its `prices-2026-11-20` release from the same
+`metals-2026-10-07` closes, and this repin.
+
+### What changes
+
+- **Stage 3, spacecost v0.17.1 to v0.19.0**: transportation's stamp is
+  spacecost's contract, 1.28.0. Argon 0.3135, krypton 0.872, nitrogen 0.302
+  and xenon 1.868 kg/L, with the tank fractions moving inversely; excavation
+  5.7 Wh/kg where it was 200, and the new handling row; the rest is notes.
+- **Stage 2, `prices-2026-11-20`, data contract 1.21.0 to 1.22.1**: every
+  price, yield and value column of all eight tables equals
+  `prices-2026-11-12`'s; `ref_price_source` and `notes` carry spacevalue
+  0.8.x's wording, and the stamp moves. The release's tables equal a local
+  build byte for byte.
+- **Stage 4, calc 1.48.0, with only its stamp changed**: dig energy is now
+  5.7 + 24.2 = 29.9 Wh/kg where it was 200.
+- **The Rust prototype** links `spacevalue_cargo_core` at `v0.8.7`, whose
+  crate is unchanged from v0.7.1 but for its README.
+- **The worked calculation follows.** The spacecost v0.17.1 tables every row
+  since master v1.75.0 read are frozen under `campaign/stage3/spacecost-0.17.1/`.
+  They carry the same `catalog_date` as `spacecost-0.14.0/` (both are the
+  `fuel-2026-10-17` snapshot), so a frozen set whose stamp
+  `TRANSPORT_STAMP_IN_FORCE` lists is now dated by that day, where it had
+  been dated by its own: a row from between the two repins would otherwise
+  have read whichever set sorts last. The registers list
+  `prices-2026-11-20` and stamp 1.28.0, and the derivation's dig energy adds
+  the handling row when the tables carry it, as calc does.
+
+### What was measured
+
+| harness | result |
+|---|---|
+| `verify.py check`, all four cells, against the 1.85.0 baseline (`--tag 1.85.0`) | check 1 DIFFERS on all four, as a repin must; checks 2 to 8 pass (bounds 0 violations) |
+| spacevalue at spacecost v0.19.0 | 184 passed, 6 skipped (the Rust binding); `metals-2026-10-07` rebuilt equals `prices-2026-11-12` in every price, yield and value column |
+| the worked calculation on the default archived row (calc 1.26.0) | 90 quantities bit-exact |
+| the worked calculation on the best rows of the four new cells | **DIFFER** on the electric stage, its return mass and what follows (24 to 41 of 94 quantities, at 1% to 3%), and `benef+search`'s best row and a one-way row refused: a known gap, not fixed here. The derivation has no code for calc 1.47.0's electric units (`separate_ep_units`, rc-246) or its entry-speed heat shield (rc-134), so it has not reproduced an electric row since master v1.85.0; `known_gap` now prints that on every such report, and CLAUDE.md, "Worked calculation and verification sheet", records it |
+| `verify_docs.py`, `tree_check.py` | pass |
+
+The new cells against the 1.85.0 baseline, row for row on `designation`, by
+cost over revenue (new / old; below 1 is better):
+
+| cell | rows | better | same | worse | median | range |
+|---|---|---|---|---|---|---|
+| `raw` | 193 | 184 | 0 | 9 | 0.9898 | 0.061 to 1.027 |
+| `raw+search` | 193 | 184 | 0 | 9 | 0.9899 | 0.061 to 1.027 |
+| `benef` | 73 | 69 | 0 | 4 | 0.9777 | 0.564 to 1.021 |
+| `benef+search` | 73 | 72 | 0 | 1 | 0.9775 | 0.555 to 1.001 |
+
+- **Most rows are 1% to 2% better**, from the cheaper dig. No row is
+  profitable before or after. The best rows barely move: `raw+search`
+  13.46 to 13.44, `benef+search` 11.51 to 11.38.
+- **The largest moves are water-electric rows**, 2015 BM212 at 0.061x: the
+  plant sized for 200 Wh/kg of digging is about $0.56B cheaper, and the
+  mission hauls about 15 times the water. They still cost over 300 times
+  their revenue.
+- **Xenon rows are up to 2.7% worse**: 1.868 kg/L where it was 2.000 needs
+  more tank.
+- **Eight `raw` rows and five `benef` rows evaluate that did not** (raw 193
+  to 201, benef 73 to 78); seven of the eight raw rows are water-electric.
+
 ## master v1.85.0 / calc v1.47.0
 
 **Two of the owner's decisions on General_Research method candidates, and
@@ -382,6 +459,10 @@ not a campaign result.
   such row, so with the 0.0 default nothing moves until a repin.
 - The opt-in Rust sizing loop does not model `separate_ep_units`; with both
   on, the loop runs in Python and the solver in Rust.
+- **The worked calculation was not updated with it**, and does not model
+  `separate_ep_units` or the entry-speed shield: it reproduces no electric
+  or scaled-shield row from this release on. Found at master v1.86.0, which
+  records it as a known gap (`known_gap`, CLAUDE.md).
 
 ## master v1.84.2
 

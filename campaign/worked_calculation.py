@@ -1184,12 +1184,21 @@ def _table_date(path):
 # are stamped with (frozen sets under campaign/stage3/ keep their own dates).
 # An installed release or live stamp that is not listed is a refusal, so the
 # next repin cannot forget its line.
+#
+# ⚠️  A FROZEN STAGE 3 SET IS DATED BY ITS STAMP TOO.  master v1.86.0 froze
+# the spacecost v0.17.1 tables as `campaign/stage3/spacecost-0.17.1/`, built
+# from the same `fuel-2026-10-17` snapshot as `spacecost-0.14.0/`, so the two
+# carry one `catalog_date` and a row from between the repins would have taken
+# whichever sorts last.  A frozen set whose stamp is listed here is dated by
+# the day that stamp came into force; an unlisted one keeps its own date.
 PRICE_RELEASE_IN_FORCE = {
     "prices-2026-10-07": "2026-10-26",   # master v1.59.0
     "prices-2026-11-12": "2026-11-12",   # master v1.75.0
+    "prices-2026-11-20": "2026-11-20",   # master v1.86.0
 }
 TRANSPORT_STAMP_IN_FORCE = {
     "1.26.1": "2026-11-12",              # master v1.75.0, spacecost v0.17.1
+    "1.28.0": "2026-11-20",              # master v1.86.0, spacecost v0.19.0
 }
 
 
@@ -1228,6 +1237,11 @@ def _effective_date(path):
                      "TRANSPORT_STAMP_IN_FORCE does not list.\n  Add the day "
                      "this repository first ran on them." % stamp)
         pinned = TRANSPORT_STAMP_IN_FORCE[stamp]
+    elif _is_frozen_stage3_set(path):
+        stamp = _table_stamp(path)[0]
+        if stamp not in TRANSPORT_STAMP_IN_FORCE:
+            return date
+        pinned = TRANSPORT_STAMP_IN_FORCE[stamp]
     else:
         tag = _price_release_of(path) if path.endswith(".csv") else None
         if tag is None:
@@ -1238,6 +1252,13 @@ def _effective_date(path):
                      "pinned it." % tag)
         pinned = PRICE_RELEASE_IN_FORCE[tag]
     return pinned if date is None else max(date, pinned)
+
+
+def _is_frozen_stage3_set(path):
+    """True for a table in a `campaign/stage3/spacecost-*/` frozen set."""
+    folder = os.path.dirname(os.path.abspath(path))
+    return (os.path.basename(folder).startswith("spacecost-")
+            and os.path.dirname(folder) == os.path.abspath(os.path.join(CAMP, "stage3")))
 
 
 def _master_calc_config():
@@ -2326,6 +2347,63 @@ _FIRST_V090_STAGE2 = (1, 15, 0)        # mineral_value, the spacecost 0.9.0 repi
 _FIRST_V0160_STAGE2 = (1, 21, 0)       # mineral_value, the spacecost 0.16.0+ repin
 
 
+# 🚨  KNOWN GAP: TWO calc 1.47.0 TERMS ARE NOT DERIVED HERE.  master v1.85.0
+# made calc fly an electric stage that burns on the way home fly home, as two
+# units or the one shared stage, whichever weighs less at launch
+# (`separate_ep_units`, `_ep_units_kg`, General_Research rc-246), and scaled
+# an Earth entry's heat shield with entry speed (`scale_tps_with_entry_speed`,
+# `tps_frac_for_entry`, rc-134).  This derivation still sizes the one-way
+# stage and the flat shield, so it has reproduced no electric row and no
+# scaled-shield row written by calc 1.47.0 or later: such a row DIFFERs on the
+# electric stage, its return mass and everything after them, or is refused as
+# closing at no concentration.  Every cislunar row is electric.  Rows written
+# before calc 1.47.0 still reproduce.  `known_gap` names the gap wherever a
+# report on such a row is printed, so a DIFFER there is read as this gap and
+# not as a model defect; closing it means writing both terms out here.
+_FIRST_CALC_EP_UNITS = (1, 47, 0)
+
+
+def known_gap(archived):
+    """What this derivation does not model that bears on `archived`, as lines.
+
+    Empty for a row written before calc 1.47.0, or one with neither an
+    electric stage nor a heat shield.  A row whose stamp cannot be read is
+    taken as current, as `dv_nrho_to_lunar_surface` takes it.
+    """
+    if archived is None or not hasattr(archived, "get"):
+        return []
+    stamp = _stamp_key(archived.get("pipeline_version"))
+    if stamp is not None and stamp < _FIRST_CALC_EP_UNITS:
+        return []
+
+    def positive(col):
+        """Whether the row carries a positive value in `col`."""
+        v = archived.get(col)
+        try:
+            return v is not None and not pd.isna(v) and float(v) > 0.0
+        except (TypeError, ValueError):
+            return False
+    lines = []
+    if positive("ep_system_kg"):
+        lines.append("the row flies an electric stage, and this derivation "
+                     "does not model `separate_ep_units` (rc-246): it sizes "
+                     "the one-way stage")
+    if positive("tps_frac") or positive("heat_shield_kg"):
+        lines.append("the row carries a heat shield, and this derivation does "
+                     "not model `scale_tps_with_entry_speed` (rc-134): it "
+                     "flies the flat fraction")
+    return lines
+
+
+def print_known_gap(archived):
+    """Print `known_gap`'s lines under a banner, if there are any."""
+    lines = known_gap(archived)
+    if lines:
+        print("  KNOWN GAP (see `known_gap`; a DIFFER here is expected):")
+        for line in lines:
+            print("    - " + line)
+
+
 def _stamp_key(stamp):
     """A dotted stamp as a comparable tuple, or None."""
     try:
@@ -2819,7 +2897,13 @@ def context(body, archived, tables):
         storage_wh_per_kg=val("Energy storage usable specific energy"),
         storage_eff=val("Energy storage round-trip efficiency"),
         baseline_dark_h=val("Power-system row baseline dark period"),
-        dig_wh=val("Drilling / excavation energy"),
+        # ⚠️  DIG ENERGY IS TWO ROWS SINCE spacecost 0.19.0 (contract 1.28.0):
+        # excavation, and the handling it had carried, priced on its own
+        # (General_Research rc-027).  calc adds the handling row when the
+        # tables carry it, in this order; older tables have none.
+        dig_wh=(val("Drilling / excavation energy")
+                + (val("Regolith handling & transfer energy")
+                   if "Regolith handling & transfer energy" in rows else 0.0)),
         benef_wh=val("Beneficiation / on-site processing energy"),
         water_wh=val("Water liberation energy (bound water)"),
         contain_per_kg=val("Volatile cargo containment"),
@@ -4567,6 +4651,9 @@ def concentration_sweep(C, B, DV):
                     "capped it at 5%% of the body: re-run with\n"
                     "  --max-mining-fraction 0.05 to derive it as that run "
                     "did." % (hauled, row_pay))
+        if C.get("known_gap"):
+            hint += ("\n  KNOWN GAP (see `known_gap`): "
+                     + "; ".join(C["known_gap"]) + ".")
         sys.exit("no mission closes on this body at any concentration ratio.\n"
                  "  The cascade refused because %s.%s" % (why, hint))
     best_r = min(live, key=lambda p: p[2]["ladder"]["best"]["obj"])[1]
@@ -4933,6 +5020,7 @@ def build(archived, label, body=None, run_beneficiated=None):
     # is comparable with -- the cap limits what may be DUG, and the payload is
     # what comes home.  See `mining_cap_note`.
     C["archived_payload"] = float(archived.get("max_payload_kg") or 0.0)
+    C["known_gap"] = known_gap(archived)
     C["archived_feed"] = float(archived.get("feed_processed_kg") or 0.0)
     C["phased"] = run_phases(archived, body)
     C["phases_col"] = phases_column(body)
@@ -6608,6 +6696,7 @@ def main():
               % (str(out["C"]["pro"].raw("name")),
                  out["C"]["prop_usd_per_kg"], out["C"]["prop_moved"]))
     c = out["check"]
+    print_known_gap(winner)
     print("  derived   %d quantities: %d bit-exact, %d within %g, %d DIFFER"
           % (c["n"], c["exact"], c["close"], c["tol"], len(c["bad"])))
     print("  worst     %.3e relative  (%s)" % (c["worst"], c["worst_name"]))

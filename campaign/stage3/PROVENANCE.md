@@ -11,8 +11,9 @@ row by row, beside the current spacecost treatment.
 Every entry keeps the frozen value and range. None proposes a replacement. The
 rc- numbers are revision candidates in
 [General_Research](https://github.com/loggger101/General_Research); "current
-spacecost" means spacecost main at 0.18.4 (data contract 1.27.4), which this
-repository has not repinned to.
+spacecost" means spacecost main at 0.18.4 (data contract 1.27.4) when the
+entries were written; since master v1.86.0 this repository is pinned to
+v0.19.0 (contract 1.28.0), which keeps each treatment named here.
 
 ## Rows the same in every frozen set
 

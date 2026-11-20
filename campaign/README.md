@@ -140,7 +140,13 @@ supported by this campaign.  Nothing in the 2026-08 matrix came close to that.
       re-derived from the equations and then checked column by column against
       that mission's own row; `--verify` runs the check and writes nothing,
       `--audit` adds the completeness audit below, `--pdf` renders with
-      headless Chrome, `--cell` and `--designation` override the choice.  It is the only script here that imports `master`,
+      headless Chrome, `--cell` and `--designation` override the choice.  ⚠️  Known gap since
+      master v1.85.0: it does not model calc 1.47.0's electric units
+      (`separate_ep_units`, rc-246) or entry-speed heat shield
+      (`scale_tps_with_entry_speed`, rc-134), so an electric or scaled-shield
+      row from calc 1.47.0 on DIFFERs or is refused, and says why
+      (`known_gap`); see CLAUDE.md, "Worked calculation and verification
+      sheet".  It is the only script here that imports `master`,
       and the only campaign output that is gitignored rather than committed,
       because it is generated from the run it describes.
   `cargo_golden.py`  the seam into `spacevalue.cargo` (calc 1.33.0 on).

@@ -20,7 +20,8 @@ The sets this file covers are `mineral_value-1.12.0/` (cislunar) and the
 top-level `mineral_value_catalog.mars_surface.csv` and
 `mineral_value_catalog.mars_orbit.csv` (Stage 2 1.9.0). Where the same value
 sits in the pinned price release a live cell reads
-(`asteroid_pipeline/mineral_value/prices-2026-11-12/`, lunar_surface), it
+(`asteroid_pipeline/mineral_value/prices-2026-11-20/`, lunar_surface; its prices are
+`prices-2026-11-12`'s), it
 carries the same limits.
 
 Since master v1.84.0 the verification worksheet prints the entry beside any

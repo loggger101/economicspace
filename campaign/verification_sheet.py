@@ -398,8 +398,9 @@ def since_frozen(table, name):
 
 # THE FROZEN ROWS WHOSE INSTALLED-SPACECOST COUNTERPART PREDATES THEIR
 # CORRECTION.  `since_frozen` quotes the installed release's row, which is
-# only as current as the pin: spacecost 0.17.1's tank row still reads as
-# the frozen one does, the fix landing in 0.18.4.  So the page says what
+# only as current as the pin: spacecost 0.17.1's tank row read as the frozen
+# one does, the fix landing in 0.18.4 (pinned since master v1.86.0, at
+# v0.19.0).  The page still says what
 # campaign/stage3/PROVENANCE.md records, in a 'now' span that part 18
 # strips before it looks for a source: a correction is not backing.
 _FROZEN_CORRECTION = {
