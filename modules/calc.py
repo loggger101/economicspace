@@ -712,7 +712,8 @@ class CalcConfig:
     # 1.45.0 every one of them is ON by default except three:
     # `model_rated_array_cost` (moves the headline, a release of its own),
     # `size_ep_on_flown_load` (needs its own pre-filter bound first) and
-    # `carry_ep_home` (one shared stage; separate units are not built).
+    # `carry_ep_home` (one shared stage).  Since calc 1.47.0 rc-246's other
+    # fix, `separate_ep_units`, is on by default and supersedes it.
     # Setting the others False reproduces calc 1.44.0 bit for bit.
     #
     # A raw cargo is dug like any other, at the same Wh/kg, and only a
@@ -798,7 +799,17 @@ class CalcConfig:
     size_ep_on_flown_load:     bool  = False
     # Off, the electric stage is one-way hardware, though the same stage is
     # sized for the return burn.  On, it flies home and is in the return mass.
+    # `separate_ep_units` supersedes it when both are on.
     carry_ep_home:             bool  = False
+    # calc 1.47.0 (General_Research rc-246, the owner's choice of its two
+    # fixes): an electric mission flies TWO units, one per leg.  The outbound
+    # unit burns the outbound fuel and stays at the body; the return unit burns
+    # the return fuel and flies home in the return mass.  They share
+    # `ep_target_thrust_yr`, split to minimise launch mass, so the return unit
+    # is the smaller (see `_ep_units_kg`).  Off, the one shared stage of
+    # earlier releases, one-way unless `carry_ep_home`.  The opt-in Rust
+    # sizing loop does not model it: with it on, the loop runs in Python.
+    separate_ep_units:         bool  = True
     # Off, every flight of a programme is priced with a rig aboard, though F
     # rigs serve N flights and stay where they dig.  On, the N - F repeat
     # flights are priced without one, at the same cargo.  Cargo the freed
@@ -4261,6 +4272,72 @@ def _ep_stage_kg(
     return array_kg + ppu_kg + thruster_kg, ep_power_w, ep_thrust_n, ep_thrust_yr
 
 
+def _ep_units_kg(
+    cascade:           Dict[str, float],
+    isp_s:             float,
+    eff:               float,
+    ep_w_per_kg:       float,
+    ppu_kg_per_kw:     float,
+    thruster_kg_per_n: float,
+    config:            CalcConfig,
+    tps_frac:          float,
+    tank_frac:         float,
+    isru:              bool,
+) -> Tuple[float, float, float, float, float]:
+    """Two electric units, one per leg (`separate_ep_units`, rc-246).
+
+    Returns `(ep_system_kg, ep_power_w, ep_thrust_n, ep_thrust_yr,
+    return_share)`: the two units' summed mass, power and thrust, the thrust
+    time they share, and the return unit's share of the mass.
+
+    The OUTBOUND unit burns the outbound fuel and is left at the body with the
+    rig; the RETURN unit burns the return fuel and flies home in the return
+    mass.  Each is `_ep_stage_kg` on its own leg's fuel and its own share of
+    `ep_target_thrust_yr`, so the mission's thrusting time is the shared
+    stage's.  A unit's mass goes as fuel / time on every term (array and PPU on
+    power, thruster on thrust, both fuel / time at one Isp), so the split
+    that minimises the launch mass the two cost is t ∝ sqrt(w m): m the leg's
+    fuel, and w the launch mass a kilogram costs per kilogram of one-way
+    hardware.  One-way hardware has w = 1; a kilogram flown home is also
+    shielded, pushed back through the return burn and tanked, so
+        w_ret = 1 + tps + (tank + [no ISRU]) k_ret (1 + tps) (R_ret - 1),
+    the derivative of `_flown_propellant_kg`'s outbound load with respect to
+    the dry return mass.  The return leg therefore gets the longer burn and
+    the smaller unit.
+
+    Never lighter than the shared stage on the same loads: by Cauchy-Schwarz,
+    m_o / t_o + m_r / t_r >= (m_o + m_r) / (t_o + t_r), on power and on thrust
+    alike.  So the pre-filter's and the combo bound's shared-stage floor stays
+    a floor under this architecture.
+    """
+    m_out = float(cascade.get("m_outbound_prop", 0.0))
+    m_ret = float(cascade.get("m_return_prop", 0.0))
+    total_t = config.ep_target_thrust_yr
+    if m_out <= 0.0 or m_ret <= 0.0 or total_t <= 0.0:
+        kg, w, n, yr = _ep_stage_kg(cascade, isp_s, eff, ep_w_per_kg,
+                                    ppu_kg_per_kw, thruster_kg_per_n, config)
+        return kg, w, n, yr, (1.0 if m_out <= 0.0 < m_ret else 0.0)
+    k_ret = float(cascade.get("k_ret", 1.0))
+    r_ret = float(cascade.get("r_ret", 1.0))
+    w_ret = 1.0 + tps_frac + ((tank_frac + (0.0 if isru else 1.0))
+                              * k_ret * (1.0 + tps_frac) * (r_ret - 1.0))
+    a_out = math.sqrt(m_out)
+    a_ret = math.sqrt(w_ret * m_ret)
+    t_out = total_t * a_out / (a_out + a_ret)
+    t_ret = total_t - t_out
+    units = []
+    for m_leg, t_leg in ((m_out, t_out), (m_ret, t_ret)):
+        p_w = ep_power_required_w(m_leg, isp_s, t_leg, eff)
+        f_n = ep_thrust_required_n(m_leg, isp_s, t_leg)
+        kg = ((p_w / ep_w_per_kg if ep_w_per_kg > 0 else 0.0)
+              + p_w / 1000.0 * ppu_kg_per_kw + f_n * thruster_kg_per_n)
+        units.append((kg, p_w, f_n))
+    (out_kg, out_w, out_n), (ret_kg, ret_w, ret_n) = units
+    total_kg = out_kg + ret_kg
+    share = ret_kg / total_kg if total_kg > 0.0 else 0.0
+    return total_kg, out_w + ret_w, out_n + ret_n, total_t, share
+
+
 def _flown_propellant_kg(
     payload_kg:     float,
     hardware_kg:    float,
@@ -7133,12 +7210,16 @@ def _evaluate_combo_at_ratio(
     base = target = None
     converged   = False
     passes, pass_limit = 0, 12
+    # `separate_ep_units`: the return unit's share of `ep_system_kg`, from the
+    # pass that last sized the units.  0.0 until one has.
+    separate_ep = bool(config.separate_ep_units)
+    ep_ret_share = 0.0
     # ── Opt-in Rust sizing loop (PROTOTYPE; see `_ES_LOOP`) ─────────────────
     # Runs the `while` below in Rust and hands back what it would leave
     # behind.  Kind 0 means "not a case Rust reproduces exactly" and the
     # Python loop runs as always; otherwise the state is assigned here and the
     # loop is skipped (pass_limit = 0), or the loop's own exits are taken.
-    if _ES_LOOP is not None:
+    if _ES_LOOP is not None and not separate_ep:
         _rs = _ES_LOOP.run(
             leo_cap=leo_cap, isp_s_val=isp_s_val, dv_out_m_s=dv_out_m_s,
             dv_ret_stored=dv_ret_stored, dv_ret_eff=dv_ret_eff,
@@ -7238,7 +7319,8 @@ def _evaluate_combo_at_ratio(
                                                 stay_est_yr - window_wait_yr,
                                                 isru_plant_rate)
                               if isru_plant_rate > 0 else 0.0))
-        carried_ep_kg = ep_system_kg if config.carry_ep_home else 0.0
+        carried_ep_kg = (ep_system_kg * ep_ret_share if separate_ep
+                         else ep_system_kg if config.carry_ep_home else 0.0)
         return_dry_kg = config.return_vehicle_dry_kg + carried_ep_kg
         cascade = max_return_payload_kg(
             leo_capacity_kg = leo_cap,
@@ -7272,7 +7354,15 @@ def _evaluate_combo_at_ratio(
             continue
 
         new_ep_kg = 0.0
-        if is_electric:
+        new_ep_share = ep_ret_share
+        if is_electric and separate_ep:
+            (new_ep_kg, ep_power_watts, ep_thrust_n, ep_thrust_yr,
+             new_ep_share) = _ep_units_kg(
+                cascade, isp_s_val, eff_used, ep_w_per_kg,
+                ppu_kg_per_kw, thruster_kg_per_n, config,
+                tps_frac, tank_frac, isru,
+            )
+        elif is_electric:
             # v1.17.4: one definition, two readers, the pre-filter's second
             # stage sizes the same stage off the same pass-1 cascade.
             (new_ep_kg, ep_power_watts,
@@ -7312,14 +7402,22 @@ def _evaluate_combo_at_ratio(
                 return None
 
         if is_electric and config.size_ep_on_flown_load:
-            (new_ep_kg, ep_power_watts,
-             ep_thrust_n, ep_thrust_yr) = _ep_stage_kg(
-                _flown_propellant_kg(
-                    trial_payload, hardware_est_kg - carried_ep_kg, return_dry_kg,
-                    structure_frac_eff, tps_frac, tank_frac, cascade, isru),
-                isp_s_val, eff_used, ep_w_per_kg,
-                ppu_kg_per_kw, thruster_kg_per_n, config,
-            )
+            flown = _flown_propellant_kg(
+                trial_payload, hardware_est_kg - carried_ep_kg, return_dry_kg,
+                structure_frac_eff, tps_frac, tank_frac, cascade, isru)
+            if separate_ep:
+                (new_ep_kg, ep_power_watts, ep_thrust_n, ep_thrust_yr,
+                 new_ep_share) = _ep_units_kg(
+                    dict(cascade, **flown), isp_s_val, eff_used, ep_w_per_kg,
+                    ppu_kg_per_kw, thruster_kg_per_n, config,
+                    tps_frac, tank_frac, isru,
+                )
+            else:
+                (new_ep_kg, ep_power_watts,
+                 ep_thrust_n, ep_thrust_yr) = _ep_stage_kg(
+                    flown, isp_s_val, eff_used, ep_w_per_kg,
+                    ppu_kg_per_kw, thruster_kg_per_n, config,
+                )
 
         trial_feed = (min(trial_payload * target_ratio,
                           max(0.0, throughput_cap_kg - new_isru_feed),
@@ -7463,6 +7561,7 @@ def _evaluate_combo_at_ratio(
              isru_prop_kg, stay_est_yr, containment_frac) = _damp_blend(
                 base, target, step)
         structure_frac_eff            = structure_frac + containment_frac
+        ep_ret_share                  = new_ep_share
         if converged:
             break
         if _relax and not damped_here:
@@ -7623,7 +7722,8 @@ def _evaluate_combo_at_ratio(
     # bodies this model likes.
     m_dry_return    = config.return_vehicle_dry_kg + structure_frac_eff * m_payload
     m_containment_kg = containment_frac * m_payload
-    carried_ep_kg   = ep_system_kg if config.carry_ep_home else 0.0
+    carried_ep_kg   = (ep_system_kg * ep_ret_share if separate_ep
+                       else ep_system_kg if config.carry_ep_home else 0.0)
     m_tps           = tps_frac * (m_payload + m_dry_return + carried_ep_kg)
     # v1.11.0: the same two tankage scalars the solver used, read back rather
     # than re-derived.  k_ret = 1/(1 − t(R_ret−1)) inflates the post-burn mass
@@ -8537,6 +8637,9 @@ def _evaluate_combo_at_ratio(
         "is_electric":              is_electric,
         "ep_power_w":               ep_power_watts,
         "ep_system_kg":             ep_system_kg,
+        # calc 1.47.0: the part of it that flies home (rc-246); with one
+        # shared stage, all of it under `carry_ep_home` and none otherwise.
+        "ep_return_unit_kg":        carried_ep_kg,
         "ep_thrust_yr":             ep_thrust_yr,
         # ── v1.12.0 device-level sizing ────────────────────────────────────
         "ep_thrust_n":              ep_thrust_n,
