@@ -802,13 +802,16 @@ class CalcConfig:
     # `separate_ep_units` supersedes it when both are on.
     carry_ep_home:             bool  = False
     # calc 1.47.0 (General_Research rc-246, the owner's choice of its two
-    # fixes): an electric mission flies TWO units, one per leg.  The outbound
-    # unit burns the outbound fuel and stays at the body; the return unit burns
-    # the return fuel and flies home in the return mass.  They share
+    # fixes): an electric mission may fly TWO units, one per leg.  The
+    # outbound unit burns the outbound fuel and stays at the body; the return
+    # unit burns the return fuel and flies home in the return mass.  They share
     # `ep_target_thrust_yr`, split to minimise launch mass, so the return unit
-    # is the smaller (see `_ep_units_kg`).  Off, the one shared stage of
-    # earlier releases, one-way unless `carry_ep_home`.  The opt-in Rust
-    # sizing loop does not model it: with it on, the loop runs in Python.
+    # is the smaller.  Each pass flies the cheaper of that and one shared stage
+    # flown home, in launch mass (see `_ep_units_kg`): with a high-Isp return
+    # the shared stage usually wins.  Either way no stage that burns on the
+    # return leg is left behind.  Off, the one shared stage of earlier
+    # releases, one-way unless `carry_ep_home`.  The opt-in Rust sizing loop
+    # does not model it: with it on, the loop runs in Python.
     separate_ep_units:         bool  = True
     # Off, every flight of a programme is priced with a rig aboard, though F
     # rigs serve N flights and stay where they dig.  On, the N - F repeat
@@ -1409,7 +1412,7 @@ class CalcConfig:
     #                                       measured to say so
     #     versions.md > Module changelogs   this module's own stamp-by-stamp
     #                                       record: Stage 4 changelog
-    pipeline_version: str = "1.46.0"
+    pipeline_version: str = "1.47.0"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -4284,7 +4287,8 @@ def _ep_units_kg(
     tank_frac:         float,
     isru:              bool,
 ) -> Tuple[float, float, float, float, float]:
-    """Two electric units, one per leg (`separate_ep_units`, rc-246).
+    """Two electric units, one per leg, or one shared stage flown home,
+    whichever costs less launch mass (`separate_ep_units`, rc-246).
 
     Returns `(ep_system_kg, ep_power_w, ep_thrust_n, ep_thrust_yr,
     return_share)`: the two units' summed mass, power and thrust, the thrust
@@ -4334,6 +4338,19 @@ def _ep_units_kg(
         units.append((kg, p_w, f_n))
     (out_kg, out_w, out_n), (ret_kg, ret_w, ret_n) = units
     total_kg = out_kg + ret_kg
+    # The alternative a designer has: ONE stage, sized for both legs, flown
+    # home.  It costs w_ret on all of its mass; the two units cost 1 on the
+    # outbound one and w_ret on the return one.  With a high-Isp return, w_ret
+    # is near 1 and a second set of arrays, PPU and thrusters outweighs what
+    # leaving one behind saves (measured on 120 cislunar rows: two units cost a
+    # median 2.3x the shared stage's $/kg where both close), so each pass flies
+    # whichever costs less launch mass.  Both are physical: every unit is
+    # counted on each leg it flies.
+    shared_kg, shared_w, shared_n, shared_yr = _ep_stage_kg(
+        cascade, isp_s, eff, ep_w_per_kg, ppu_kg_per_kw, thruster_kg_per_n,
+        config)
+    if w_ret * shared_kg <= out_kg + w_ret * ret_kg:
+        return shared_kg, shared_w, shared_n, shared_yr, 1.0
     share = ret_kg / total_kg if total_kg > 0.0 else 0.0
     return total_kg, out_w + ret_w, out_n + ret_n, total_t, share
 
