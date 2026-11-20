@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.84.2](#master-v1842)
 - [master v1.84.1](#master-v1841)
 - [master v1.84.0](#master-v1840)
 - [master v1.83.0](#master-v1830)
@@ -138,7 +139,7 @@ one that does not say is not to be used.
 | 2 | `modules/mineral_value.py` | **1.21.0** | v1.21.0, Stage 2 installs `prices-2026-11-12`, built by spacevalue 0.7.0 on spacecost v0.17.1 from the same closes as `prices-2026-10-07`: reference prices re-reviewed, world production revised, one market per in-space demand class (new column `market_id`), and the delivery chains' LOX and recovery; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.17.0, the pricing moved to [`spacevalue`](https://github.com/loggger101/spacevalue). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.26.1** | v1.26.1, spacecost v0.17.1: costs in 2026 dollars, LOX at DLA's price, recovery once per batch, a Henry Hub quote read as gross heat, revised propulsion, launch-vehicle, DSN and body rows; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.23.6, the config became spacecost's `SpacecostConfig` with two defaults overridden. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.46.0** | v1.46.0, no code here moves: Stage 4 imports `spacevalue.cargo` from spacevalue 0.7.0, which pools a hold's sale by the Stage 2 table's `market_id`, so the commodities of one in-space demand class share one allowance; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.84.1** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| - | `master.py` | **1.84.2** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -241,6 +242,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.84.2](#master-v1842) | 2026-11-19 | **the git commit recorded beside every Stage 4 result**; no number moves |
 | [master v1.84.1](#master-v1841) | 2026-11-19 | **the rotation-period fallback named a historical prior**; no number moves |
 | [master v1.84.0](#master-v1840) | 2026-11-19 | **a provenance file for the frozen Stage 2 tables, printed on the worksheet**; no frozen CSV byte, stamp or number moves |
 | [master v1.83.0](#master-v1830) | 2026-11-19 | **the frozen tank row's limits, on the page and in the provenance file, and two references**; no frozen CSV byte, stamp or number moves |
@@ -333,6 +335,17 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.84.2
+
+**Every Stage 4 build records the git commit it ran from** (General_Research
+rc-777). CITATIONS.md section 8 names the commit beside `pipeline_version` and
+`catalog_date` as what makes a quoted result reproducible, and only the latter
+two were written. `build_profitability_catalog` now writes
+`profitability_catalog.manifest.json` beside the CSV, GUI or not: both stamps,
+the commit, whether tracked files differed from it, and the CSV's row count and
+sha256. `ui_run_config.json` gains the same commit under `source`. The CSV is
+unchanged; no number moves.
 
 ## master v1.84.1
 

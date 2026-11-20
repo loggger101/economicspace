@@ -941,10 +941,15 @@ def write_run_manifest(selected: List[str], changes: List[str]) -> str:
     CODE but not the CONFIG. Two runs of identical code at different
     destinations, or with beneficiation on and off, are indistinguishable from
     their outputs alone, and this project's documented failure mode is a number
-    whose provenance nobody can reconstruct.
+    whose provenance nobody can reconstruct.  `source` is the git commit,
+    which CITATIONS.md section 8 names beside `pipeline_version` and
+    `catalog_date` (General_Research rc-777); Stage 4 also writes it to
+    `profitability_catalog.manifest.json` for builds run without the UI.
     """
+    from modules import _runtime  # noqa: PLC0415  (stdlib only; cheap)
     manifest = {
         "written_at": datetime.now().isoformat(timespec="seconds"),
+        "source": _runtime.source_commit(),
         "stages_run": selected,
         "delivery_destination": MASTER.delivery_destination,
         "changes_from_defaults": changes,

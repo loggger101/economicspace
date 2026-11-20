@@ -87,7 +87,7 @@ bit-identical; a calc change to any of them re-runs `rust/es_core/gate/`.
 ## Versions and release notes
 
 Current: catalog `1.11.0`, mineral_value `1.21.0`, transportation `1.26.1`,
-calc `1.46.0`, master `1.84.1` (checked by `verify_docs.py` check 2; the master
+calc `1.46.0`, master `1.84.2` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.
