@@ -126,7 +126,29 @@ ORIG = calc._evaluate_combo_at_ratio
 # mode exactly as calc routes them (`_rust_cargo`), swapped per mode below.
 import spacevalue_cargo_rs   # noqa: E402
 PY_CARGO = (calc._capped_sale_value, calc._hold_refining)
-RS_CARGO = calc._rust_cargo(spacevalue_cargo_rs, calc._hold_refining)
+_RS_SALE, _RS_HOLD = calc._rust_cargo(spacevalue_cargo_rs, calc._hold_refining)
+# Rust-mode cargo calls that MUST reach the crate, judged here from the
+# arguments and not from `_rust_cargo`'s own routing: every capped sale, and
+# every hold refined out of the knapsack (a refinery, a concentrated hold and
+# its phases).  The crate's call count must equal this, so a route that
+# bypassed spacevalue_cargo_rs fails; a sample with none (no refinery flies
+# and no market ceiling binds, e.g. beneficiated earth_surface) has nothing
+# for the crate to answer and is reported, not failed.
+cargo_due = [0]
+
+
+def rs_capped_sale(*a, **kw):
+    cargo_due[0] += 1
+    return _RS_SALE(*a, **kw)
+
+
+def rs_hold_refining(refinery, phases, payload_kg, feed_kg, beneficiate, recovery):
+    if refinery is not None and beneficiate and phases:
+        cargo_due[0] += 1
+    return _RS_HOLD(refinery, phases, payload_kg, feed_kg, beneficiate, recovery)
+
+
+RS_CARGO = (rs_capped_sale, rs_hold_refining)
 MODES = {"python": (PY_SOLVER, None, None) + PY_CARGO,
          "rust": (RS_SOLVER, RS_LOOP, RS_LADDER) + RS_CARGO}
 SWAP = ("max_return_payload_kg", "_ES_LOOP", "_ES_LADDER",
@@ -217,9 +239,11 @@ print("OUTSIDE solver calls outside the evaluator (pre-filter, bound) %d compare
       % (stats["outside_calls"], stats["outside_mismatch"]))
 sv_fast, sv_slow = (n - n0 for n, n0 in zip(spacevalue_cargo_rs.counts(), SV_COUNTS0))
 sv_share = sv_fast / max(1, sv_fast + sv_slow)
-print("CARGO   calc's cargo calls answered by spacevalue_cargo_rs %d, handed to Python %d (%.1f%% Rust)"
-      % (sv_fast, sv_slow, 100 * sv_share))
+print("CARGO   calc's cargo calls answered by spacevalue_cargo_rs %d, handed to Python %d (%.1f%% Rust); due to reach the crate %d"
+      % (sv_fast, sv_slow, 100 * sv_share, cargo_due[0]))
 unexercised = [k for k, v in coverage.items() if v == 0 and k != "fallback"]
+if cargo_due[0] == 0:
+    unexercised.append("cargo crate")
 print("UNEXERCISED by this sample: " + (", ".join(unexercised) or "none"))
 print("TIME    in python-mode calls %.1f s, in rust-mode calls %.1f s (inclusive, nested calls counted in both)"
       % (stats["py_s"], stats["rs_s"]))
@@ -233,12 +257,19 @@ ladder_share = lst["fast"] / max(1, lst["fast"] + lst["fallback"])
 print("LADDER  %.1f%% of ladders in Rust; self-check mismatches %d" % (100 * ladder_share, lst["selfcheck_mismatch"]))
 # A path that ran must have been answered mostly in Rust, or the comparison
 # was Python vs Python.  The in-loop knapsack is gated only where it ran (a
-# raw hold never runs it); calc's cargo calls must have reached Rust at all,
-# since a route that bypassed spacevalue_cargo_rs would leave both counts 0.
+# raw hold never runs it); every cargo call due to reach spacevalue_cargo_rs
+# must have reached it (`cargo_due`), and most must have been answered there.
+# Solver calls outside the evaluator come only from the pre-filter and the
+# combo bound, so they are required only when either is on: a run that turns
+# both off (to reach candidates they prune, e.g. boil-off) has none to make.
+outside_expected = (calc.CONFIG.prune_infeasible_combos
+                    or calc.CONFIG.prune_dominated_combos)
 ok = (stats["mismatch"] == 0 and stats["calls"] > 0 and share > 0.5
       and ladder_share > 0.5 and lst["selfcheck_mismatch"] == 0
-      and stats["outside_calls"] > 0 and stats["outside_mismatch"] == 0
+      and (stats["outside_calls"] > 0 or not outside_expected)
+      and stats["outside_mismatch"] == 0
       and (knative + kcall == 0 or kshare > 0.5)
-      and sv_fast > 0 and sv_share > 0.5)
+      and sv_fast + sv_slow == cargo_due[0]
+      and (cargo_due[0] == 0 or sv_share > 0.5))
 print("VERDICT", "PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)

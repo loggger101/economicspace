@@ -24,6 +24,7 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.87.1](#master-v1871)
 - [master v1.87.0](#master-v1870)
 - [master v1.86.1](#master-v1861)
 - [master v1.86.0 / mineral_value v1.22.1 / transportation v1.28.0 / calc v1.48.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480)
@@ -143,7 +144,7 @@ one that does not say is not to be used.
 | 2 | `modules/mineral_value.py` | **1.22.1** | v1.22.1, Stage 2 installs `prices-2026-11-20`, built by spacevalue 0.8.7 on spacecost v0.19.0 from the same closes, with the same prices as `prices-2026-11-12`; see [master v1.86.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480). v1.21.0, Stage 2 installs `prices-2026-11-12`, built by spacevalue 0.7.0 on spacecost v0.17.1 from the same closes as `prices-2026-10-07`: reference prices re-reviewed, world production revised, one market per in-space demand class (new column `market_id`), and the delivery chains' LOX and recovery; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.17.0, the pricing moved to [`spacevalue`](https://github.com/loggger101/spacevalue). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.28.0** | v1.28.0, spacecost v0.19.0: bottled-gas densities from the reference equations of state, excavation 5.7 Wh/kg plus a handling row; see [master v1.86.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480). v1.26.1, spacecost v0.17.1: costs in 2026 dollars, LOX at DLA's price, recovery once per batch, a Henry Hub quote read as gross heat, revised propulsion, launch-vehicle, DSN and body rows; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.23.6, the config became spacecost's `SpacecostConfig` with two defaults overridden. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.48.0** | v1.48.0, no code here moves: Stage 3's spacecost v0.19.0 tables lower dig energy and move the gas densities, so default numbers move; see [master v1.86.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480). v1.47.0, the heat shield scales with Earth entry speed and no electric stage that burns on the way home is left behind, so default numbers move; see [master v1.85.0](#master-v1850--calc-v1470). v1.46.0, no code here moves: Stage 4 imports `spacevalue.cargo` from spacevalue 0.7.0, which pools a hold's sale by the Stage 2 table's `market_id`, so the commodities of one in-space demand class share one allowance; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.87.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| - | `master.py` | **1.87.1** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -246,6 +247,7 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.87.1](#master-v1871) | 2026-11-23 | **the Rust shadow's verdict requires each path only where it was due to run** (outside-solver calls only with a prune on; cargo calls counted from their arguments), after an audit found two clean runs failed; harness only, no stamp and no number moves |
 | [master v1.87.0](#master-v1870) | 2026-11-23 | **Rust by default for Stage 4 wherever it is installed** (`ECONOMICSPACE_RUST` unset or `auto`; `=0` forces Python, `=1` requires Rust); a host without it runs Python as before; no stamp and no number moves |
 | [master v1.86.1](#master-v1861) | 2026-11-23 | **the opt-in Rust sizing loop models `separate_ep_units`**, so under the defaults it answers every loop again (0% since master v1.85.0); no stamp and no number moves |
 | [master v1.86.0 / mineral_value v1.22.1 / transportation v1.28.0 / calc v1.48.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480) | 2026-11-20 | **spacecost `v0.19.0`, spacevalue `v0.8.7` and `prices-2026-11-20`**: Stage 2's prices unchanged; cheaper dig and the EOS gas densities move cost over revenue a median 0.98x to 0.99x |
@@ -343,6 +345,41 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.87.1
+
+**The shadow's verdict asks whether each path that ran was due to run, not
+whether it ran.** An audit of the Rust build at master v1.87.0 (2026-11-23)
+found two shadow runs that compared every call bit for bit, 0 mismatches,
+and still printed VERDICT FAIL:
+
+- with the pre-filter and the combo bound off (`--set
+  prune_infeasible_combos=False --set prune_dominated_combos=False`) no
+  solver call is made outside the evaluator, and the verdict required some;
+  it now requires them only when either prune is on;
+- at `earth_surface` no refinery flies (the net-price column is absent) and
+  no market ceiling binds, so none of calc's cargo calls can reach
+  `spacevalue_cargo_rs`, and the verdict required some. The shadow now
+  counts the calls **due** to reach the crate from each call's own
+  arguments (every capped sale; a knapsack hold only with a refinery,
+  beneficiation and phases) and requires that exactly that many were
+  answered by it, the Rust share above one half when any were, and names
+  the crate as unexercised when none were.
+
+The second is stricter than the old check where the crate runs (every due
+call must be counted, not some), and the cargo-bypass plant now fails on
+the count itself (0 answered of 206,701 due). Harness only; no stamp and no
+number moves.
+
+Measured 2026-11-23 on this host, Stage 1-3 outputs copied out of OneDrive:
+
+| check | result |
+|---|---|
+| shadow, cislunar raw/search, both prunes off, 25 rows | 121,338 loops, 0 mismatches, 100% in Rust; 19,127 cargo calls due, all answered in Rust; PASS (FAIL before) |
+| shadow, earth_surface benef/search, 20 rows | 90,965 loops, 0 mismatches, 100% in Rust; 61,861 outside calls, 0 mismatches; 0 cargo calls due; PASS (FAIL before) |
+| shadow, mars_surface benef/search, 20 rows | 166,858 loops, 0 mismatches, 100% in Rust; 62,419 outside calls, 0 mismatches; 504,677 cargo calls due, all answered in Rust; PASS |
+| `gate/gate_all.sh`, with the new verdict | 32 steps, 0 bad: every plant caught, every e2e catalog byte-identical |
+| `verify.py baseline` under `ECONOMICSPACE_RUST=0`, then `check` with the variable unset (Rust) | ALL CHECKS PASSED |
 
 ## master v1.87.0
 
