@@ -53,10 +53,13 @@ adds its notes to `versions.md` and, if it teaches something, one line here.
 Nothing is built. `modules/` is a package and `master.py` a hand-written
 shim: it imports the four modules, binds the aliases below, holds
 `MasterConfig` and `run_full_pipeline`, and forwards every other
-`master.<name>` to the module that defines it. The one exception is opt-in:
-`ECONOMICSPACE_RUST=1` runs Stage 4's solver, sizing loop, ladder and
-knapsack from Rust (`rust/es_core/`, `requirements-rust.txt`), which must stay
-bit-identical; a calc change to any of them re-runs `rust/es_core/gate/`.
+`master.<name>` to the module that defines it. The one exception: Stage 4's
+solver, sizing loop, ladder and knapsack run from Rust (`rust/es_core/`,
+`requirements-rust.txt`) **by default wherever it is installed**, and must stay
+bit-identical (`ECONOMICSPACE_RUST=0` forces Python, `=1` requires Rust). A
+calc change to any of them is ported to Rust in the same release, never routed
+around it, and re-runs `rust/es_core/gate/`; a harness that means Python sets
+`=0`, since unset now means Rust.
 
 | module | master's name for it |
 |---|---|
@@ -87,7 +90,7 @@ bit-identical; a calc change to any of them re-runs `rust/es_core/gate/`.
 ## Versions and release notes
 
 Current: catalog `1.11.0`, mineral_value `1.22.1`, transportation `1.28.0`,
-calc `1.48.0`, master `1.86.0` (checked by `verify_docs.py` check 2; the master
+calc `1.48.0`, master `1.87.0` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.

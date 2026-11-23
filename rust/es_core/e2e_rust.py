@@ -26,9 +26,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 
 def run(out_dir, rows, workers, flags, rust):
     env = dict(os.environ)
-    env.pop("ECONOMICSPACE_RUST", None)
-    if rust:
-        env["ECONOMICSPACE_RUST"] = "1"
+    env["ECONOMICSPACE_RUST"] = "1" if rust else "0"
     env["PYTHONIOENCODING"] = "utf-8"
     cmd = [sys.executable, "-X", "utf8", os.path.join(REPO, "run_pipeline.py"),
            "--stages", "4", "--rows", rows, "--workers", workers,

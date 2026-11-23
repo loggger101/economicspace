@@ -882,7 +882,7 @@ def check_bound(m, names: List[str], report: Optional[Dict[str, Dict[str, int]]]
     rust = getattr(calc, "_ES_LADDER", None) is not None
     if rust and not hasattr(calc, "_ES_LADDER_HOOK"):
         print("\n*** NOT VERIFIED: this calc has no check 8 hook into the Rust "
-              "ladder; run it with ECONOMICSPACE_RUST unset.")
+              "ladder; run it with ECONOMICSPACE_RUST=0.")
         return False
     orig_ec = calc.evaluate_combo
     orig_tail = calc._mission_cost_tail

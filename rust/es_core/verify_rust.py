@@ -39,7 +39,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, REPO)
-os.environ.pop("ECONOMICSPACE_RUST", None)   # import the PYTHON solver
+os.environ["ECONOMICSPACE_RUST"] = "0"   # import the PYTHON solver
 
 import numpy as np            # noqa: E402
 import es_core                # noqa: E402

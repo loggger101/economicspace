@@ -4925,32 +4925,79 @@ def max_return_payload_kg(
     }
 
 
-# ── Opt-in Rust solver (PROTOTYPE, branch rust-solver-prototype) ─────────────
-# ECONOMICSPACE_RUST=1 swaps `max_return_payload_kg` for `es_core.Solver`
-# (rust/es_core), which answers bit-identically and defers to the Python
-# function above for any call it cannot reproduce exactly.  Unset (the
-# default), nothing here runs and the module is the Python it always was.
-# Asking for Rust without the extension installed is an error, never a quiet
-# fallback: a run that says it used Rust must have.  Spawned workers inherit
-# the variable, so a pool run is all-Rust or all-Python, never mixed.
-_ES_CORE = None
-if os.environ.get("ECONOMICSPACE_RUST", "") not in ("", "0"):
-    if os.environ["ECONOMICSPACE_RUST"] != "1":
+# ── Rust for Stage 4: the default wherever it is installed ──────────────────
+# `es_core` (rust/es_core) answers the payload solver, the sizing loop and the
+# programme ladder, and spacevalue's `spacevalue_cargo_rs` the knapsack, each
+# bit-identically to the Python here, which stays the fallback for any call
+# they cannot reproduce exactly (rust/es_core/README.md).
+#     ECONOMICSPACE_RUST unset or "auto"   Rust when both extensions are
+#                                          installed and built for this
+#                                          calc.py, otherwise Python
+#     ECONOMICSPACE_RUST=1                 Rust, or refuse to start
+#     ECONOMICSPACE_RUST=0                 Python
+# A planted build (the gate's deliberate defects) is refused in every mode but
+# 0: it is installed only by mistake.  The resolved mode is written back to the
+# variable, so spawned workers inherit the decision instead of redoing it, and
+# a pool run is all-Rust or all-Python, never mixed.  Stage 4 prints which.
+# What `es_core.SizingLoop.run` hands back, in order; a build whose tuple
+# differs was built from another calc.py and is not used.
+_ES_STATE_NAMES = (
+    "power_system_kg", "ep_system_kg", "refinery_kg", "isru_feed_kg",
+    "isru_prop_kg", "stay_est_yr", "containment_frac", "structure_frac_eff",
+    "ep_power_watts", "ep_thrust_n", "ep_thrust_yr", "processing_power_watts",
+    "boiloff_factor", "dv_ret_eff", "converged", "damped_here",
+    "carried_ep_kg", "return_dry_kg", "hardware_est_kg", "cascade",
+    "trial_payload", "r_ret", "hold_water", "ep_ret_share",
+)
+
+
+def _load_rust():
+    """`(es_core, spacevalue_cargo_rs, status)` for this process, or
+    `(None, None, status)` to run the Python; see the block above."""
+    raw = os.environ.get("ECONOMICSPACE_RUST", "")
+    mode = raw.strip().lower() or "auto"
+    if mode not in ("auto", "1", "0"):
         raise RuntimeError(
-            "ECONOMICSPACE_RUST=%r: set it to 1 or leave it unset"
-            % os.environ["ECONOMICSPACE_RUST"])
+            "ECONOMICSPACE_RUST=%r: set it to 1, 0 or auto, or leave it unset"
+            % raw)
+    if mode == "0":
+        return None, None, "off (ECONOMICSPACE_RUST=0)"
+    install = "pip install -r requirements-rust.txt; see rust/es_core/README.md"
+
+    def unavailable(why):
+        """Python for this process, or with `=1` a refusal to start."""
+        if mode == "1":
+            raise RuntimeError("ECONOMICSPACE_RUST=1 but %s (%s)" % (why, install))
+        return None, None, "off: %s (%s)" % (why, install)
     try:
-        import es_core as _es_core
-    except ImportError as exc:
-        raise RuntimeError(
-            "ECONOMICSPACE_RUST=1 but the es_core extension is not "
-            "installed (build it: see rust/es_core/README.md)") from exc
-    if _es_core.planted_defect():
+        import es_core  # noqa: PLC0415
+    except ImportError:
+        return unavailable("the es_core extension is not installed")
+    if es_core.planted_defect():
         raise RuntimeError(
             "es_core was built with a planted_* feature (a deliberate defect "
             "for the gate); rebuild it without any planted_* feature")
-    max_return_payload_kg = _es_core.Solver(max_return_payload_kg, G0_M_S2)
-    _ES_CORE = _es_core
+    try:
+        import spacevalue_cargo_rs  # noqa: PLC0415
+    except ImportError:
+        return unavailable("spacevalue_cargo_rs is not installed")
+    if spacevalue_cargo_rs.planted_defect():
+        raise RuntimeError(
+            "spacevalue_cargo_rs was built with planted_knapsack_defect; "
+            "rebuild it without the feature")
+    if tuple(getattr(es_core.SizingLoop, "STATE_NAMES", ())) != _ES_STATE_NAMES:
+        return unavailable(
+            "the installed es_core was built from an older calc.py; rebuild "
+            "it with --force-reinstall")
+    return es_core, spacevalue_cargo_rs, (
+        "on (ECONOMICSPACE_RUST=1)" if mode == "1"
+        else "on (auto: es_core and spacevalue_cargo_rs installed)")
+
+
+_ES_CORE, _sv_cargo_rs, _RUST_STATUS = _load_rust()
+os.environ["ECONOMICSPACE_RUST"] = "1" if _ES_CORE is not None else "0"
+if _ES_CORE is not None:
+    max_return_payload_kg = _ES_CORE.Solver(max_return_payload_kg, G0_M_S2)
     # Held apart from the name above, which harnesses rebind, so Stage 4's
     # fallback report reads the solver this module installed.
     _ES_SOLVER = max_return_payload_kg
@@ -4974,16 +5021,6 @@ def _rust_cargo(rs, py_hold):
 
 
 if _ES_CORE is not None:
-    try:
-        import spacevalue_cargo_rs as _sv_cargo_rs
-    except ImportError as exc:
-        raise RuntimeError(
-            "ECONOMICSPACE_RUST=1 but spacevalue_cargo_rs is not installed "
-            "(pip install -r requirements-rust.txt; see rust/es_core/README.md)") from exc
-    if _sv_cargo_rs.planted_defect():
-        raise RuntimeError(
-            "spacevalue_cargo_rs was built with planted_knapsack_defect; "
-            "rebuild it without the feature")
     _capped_sale_value, _hold_refining = _rust_cargo(_sv_cargo_rs, _hold_refining)
 
 
@@ -6690,20 +6727,11 @@ def asteroid_context(
 _DAMP_MIN_STEP     = 1.0 / 1024.0
 _DAMP_EXTRA_PASSES = 36
 
-# Opt-in Rust sizing loop (PROTOTYPE, ECONOMICSPACE_RUST=1; see the solver's
-# block above).  None, the default, leaves `_evaluate_combo_at_ratio` exactly
-# the Python it was.  `_ES_UNSET` marks a loop local Rust never assigned, so
-# calc.py leaves it unassigned too.
+# Rust sizing loop (see the solver's block above).  None, in Python mode, leaves
+# `_evaluate_combo_at_ratio` exactly the Python it was.  `_ES_UNSET` marks a
+# loop local Rust never assigned, so calc.py leaves it unassigned too.
 _ES_UNSET = object()
 _ES_LOOP = None
-_ES_STATE_NAMES = (
-    "power_system_kg", "ep_system_kg", "refinery_kg", "isru_feed_kg",
-    "isru_prop_kg", "stay_est_yr", "containment_frac", "structure_frac_eff",
-    "ep_power_watts", "ep_thrust_n", "ep_thrust_yr", "processing_power_watts",
-    "boiloff_factor", "dv_ret_eff", "converged", "damped_here",
-    "carried_ep_kg", "return_dry_kg", "hardware_est_kg", "cascade",
-    "trial_payload", "r_ret", "hold_water",
-)
 
 
 def _rust_sizing_loop(es):
@@ -6776,7 +6804,7 @@ def _report_rust_counters(totals: Tuple[int, ...]) -> None:
         pct = (100.0 * c[fast] / n) if n else 0.0
         return f"{c[fast]:,} in Rust, {c[slow]:,} in Python ({pct:.1f}% Rust)"
 
-    print("\n  Rust mode (ECONOMICSPACE_RUST=1), summed over every process:")
+    print("\n  Rust mode, summed over every process:")
     for label, fast, slow in (
             ("solver       ", "solver_rust", "solver_python"),
             ("sizing loop  ", "loop_rust", "loop_python"),
@@ -6791,8 +6819,8 @@ def _report_rust_counters(totals: Tuple[int, ...]) -> None:
         raise RuntimeError(
             "Rust ladder self-check: %d rung(s) priced differently from "
             "Python; the es_core build does not reproduce this calc.py. "
-            "Re-run the gate (rust/es_core/README.md) or unset "
-            "ECONOMICSPACE_RUST." % c["ladder_selfcheck_mismatch"])
+            "Re-run the gate (rust/es_core/README.md) or set "
+            "ECONOMICSPACE_RUST=0." % c["ladder_selfcheck_mismatch"])
 
 
 # Smaller loads a body too small for its programme ladder is tried at; see
@@ -7236,7 +7264,7 @@ def _evaluate_combo_at_ratio(
     # behind.  Kind 0 means "not a case Rust reproduces exactly" and the
     # Python loop runs as always; otherwise the state is assigned here and the
     # loop is skipped (pass_limit = 0), or the loop's own exits are taken.
-    if _ES_LOOP is not None and not separate_ep:
+    if _ES_LOOP is not None:
         _rs = _ES_LOOP.run(
             leo_cap=leo_cap, isp_s_val=isp_s_val, dv_out_m_s=dv_out_m_s,
             dv_ret_stored=dv_ret_stored, dv_ret_eff=dv_ret_eff,
@@ -7269,6 +7297,7 @@ def _evaluate_combo_at_ratio(
             ep_power_watts=ep_power_watts, ep_thrust_yr=ep_thrust_yr,
             ep_thrust_n=ep_thrust_n,
             processing_power_watts=processing_power_watts,
+            ep_ret_share=ep_ret_share, separate_ep=separate_ep,
             models_boiloff=models_boiloff, is_electric=is_electric, isru=isru,
             beneficiate=beneficiate, power_is_rtg=(power_source == "rtg"),
             damp=damp, relax=bool(_relax),
@@ -7304,6 +7333,7 @@ def _evaluate_combo_at_ratio(
              ep_power_watts, ep_thrust_n, ep_thrust_yr, processing_power_watts,
              boiloff_factor, dv_ret_eff, converged, damped_here,
              carried_ep_kg, return_dry_kg, hardware_est_kg) = _st[:19]
+            ep_ret_share = _st[23]
             if _st[19] is not _ES_UNSET:
                 cascade = _st[19]
             if _st[20] is not _ES_UNSET:
@@ -10584,6 +10614,7 @@ def build_profitability_catalog(config: CalcConfig = CONFIG) -> pd.DataFrame:
     # arrive; this process's own counters (pre-filter probe, serial search)
     # are added at the end.
     rust_totals = [0] * len(_RUST_COUNTER_NAMES) if _ES_CORE is not None else None
+    print(f"       Rust: {_RUST_STATUS}")
     n_workers = _resolve_worker_count(config, n)
     if n_workers > 1:
         print(f"       {n_workers} worker processes "

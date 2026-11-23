@@ -27,7 +27,7 @@ if rust:
     args = args[1:]
     os.environ["ECONOMICSPACE_RUST"] = "1"
 else:
-    os.environ.pop("ECONOMICSPACE_RUST", None)
+    os.environ["ECONOMICSPACE_RUST"] = "0"
 out_dir, rows, dump, flags = args[0], args[1], args[2], args[3:]
 sys.path.insert(0, REPO)
 os.chdir(REPO)

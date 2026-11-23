@@ -1,7 +1,27 @@
 # es_core: opt-in Rust for Stage 4 (prototype)
 
-**Status:** opt-in since master v1.77.0 (versions.md), never used by
-default. Nothing changes unless `ECONOMICSPACE_RUST=1` is set.
+**Status:** the default wherever it is installed, since master v1.87.0
+(opt-in from v1.77.0). It answers bit-identically to the Python and is
+faster, so the Python is the fallback, not the path to prefer.
+
+| `ECONOMICSPACE_RUST` | Stage 4 runs |
+|---|---|
+| unset, empty or `auto` | Rust when `es_core` and `spacevalue_cargo_rs` are both installed and `es_core` was built for this calc.py (its `SizingLoop.STATE_NAMES` match), otherwise Python |
+| `1` | Rust, or refuses to start, naming what is missing |
+| `0` | Python |
+
+A planted build is refused in every mode but `0`. calc writes the resolved
+mode back to the variable, so spawned workers inherit the decision and a
+pool run is never mixed, and Stage 4 prints it (`Rust: on (...)` or
+`Rust: off: <why>`). A harness that means Python sets `=0`: unset means Rust.
+Two rules keep it the default:
+
+- A calc change that a Rust path does not model is ported in the same
+  release, not routed around it. calc 1.47.0 guarded the loop with
+  `not separate_ep` and, with `separate_ep_units` on by default, the Rust
+  loop answered 0% of calls until master v1.86.1 ported it.
+- A Rust component that ran entirely in Python is a regression. Stage 4's
+  end-of-run counters WARN on it; read them after every Rust-mode run.
 
 ## What it ports
 
@@ -13,7 +33,11 @@ default. Nothing changes unless `ECONOMICSPACE_RUST=1` is set.
    Rust runs the whole loop in one crossing per candidate and hands back
    what the loop would leave behind. Everything before the loop (its
    inputs) and after it (the settle-up, pricing and programme search) stays
-   Python.
+   Python. Since master v1.86.1 it includes calc 1.47.0's
+   `separate_ep_units` (`_ep_units_kg`: two units or one shared stage,
+   whichever costs less launch mass, on the cascade's loads and on the flown
+   load), and hands back the return unit's share, `ep_ret_share`, which the
+   settle-up after the loop reads.
 3. **The programme / fleet ladder** in `_evaluate_combo_at_ratio`
    (`es_core.ProgrammeLadder`, `src/ladder.rs`): the walk over rungs
    `(n_missions, fleet, wave)` that prices each with
@@ -127,6 +151,9 @@ Anything the Rust path cannot be sure of goes back to Python untouched:
 | e2e catalogs with the knapsack in Rust: benef/search 150 rows, benef/search 400 rows over 4 workers, raw/search 2,000 rows | byte-identical, the same hashes as every run above |
 | e2e catalogs with calc's own cargo calls in Rust too (item 5): benef/search 150 rows, benef/search 400 rows over 4 workers, raw/search 2,000 rows | byte-identical; whole Stage 4 runs 1.70x, 1.36x and 1.32x (one run each, so read them as levels, not as this change's share) |
 | guards: `=yes`, planted build, extension missing | each raises at import |
+| loop shadow with `separate_ep_units` (calc 1.48.0, master v1.86.1, 2026-11-23): benef/search 40 rows; `size_ep_on_flown_load=True` 8 rows; raw/search 60 rows | 257,597, 137,270 and 21,990 loops, 0 mismatches, 100% in Rust each (0% before the port) |
+| `planted_loop_defect`, same date | caught, 7,015 mismatches |
+| e2e benef/search 150 rows, 1 worker, same date | byte-identical; whole Stage 4 1.42x |
 
 **Speed**, `bench_rust.py`: the search only, Python and Rust alternating on
 every asteroid in one process, with every result also compared:
@@ -348,8 +375,10 @@ Rust settled alone through Python and compares `total_cost` and `g` bit for
 bit, and the shadow fails on any self-check mismatch. Audit mode is for the
 gate only: it does the Python work it exists to skip.
 
-With `ECONOMICSPACE_RUST=1`, `calc.py` refuses to start when either
-extension is a planted build or is missing (unset, it imports neither). The shadow and the benchmark
+`calc.py` refuses to start when either extension is a planted build (unless
+`ECONOMICSPACE_RUST=0`, when it imports neither), and with `=1` also when
+either is missing or stale; unset, a missing or stale build means Python
+(see Status). The shadow and the benchmark
 build their Rust objects themselves rather than through that guard, so no
 bypass lives in calc.py.
 
