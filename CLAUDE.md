@@ -90,7 +90,7 @@ around it, and re-runs `rust/es_core/gate/`; a harness that means Python sets
 ## Versions and release notes
 
 Current: catalog `1.11.0`, mineral_value `1.22.1`, transportation `1.28.0`,
-calc `1.48.0`, master `1.87.0` (checked by `verify_docs.py` check 2; the master
+calc `1.48.0`, master `1.87.1` (checked by `verify_docs.py` check 2; the master
 version is `MASTER_VERSION` in `master.py`).
 
 - Each module's `pipeline_version` is stamped into every CSV it writes.

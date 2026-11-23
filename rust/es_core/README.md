@@ -154,6 +154,8 @@ Anything the Rust path cannot be sure of goes back to Python untouched:
 | loop shadow with `separate_ep_units` (calc 1.48.0, master v1.86.1, 2026-11-23): benef/search 40 rows; `size_ep_on_flown_load=True` 8 rows; raw/search 60 rows | 257,597, 137,270 and 21,990 loops, 0 mismatches, 100% in Rust each (0% before the port) |
 | `planted_loop_defect`, same date | caught, 7,015 mismatches |
 | e2e benef/search 150 rows, 1 worker, same date | byte-identical; whole Stage 4 1.42x |
+| audit at master v1.87.0 (2026-11-23), shadows: cislunar raw/search with both prunes off, 25 rows; earth_surface benef/search, 20 rows; mars_surface benef/search, 20 rows | 121,338, 90,965 and 166,858 loops, 0 mismatches, 100% in Rust each; 0, 61,861 and 62,419 outside calls, 0 mismatches; 19,127, 0 and 504,677 cargo calls due to reach the crate, all answered in Rust. The first two had failed the verdict with 0 mismatches (it required paths those settings cannot take); master v1.87.1 judges each path by whether it was due |
+| `gate_all.sh` and `verify.py` (baseline `=0`, check unset) at the same date | 32 steps, 0 bad; ALL CHECKS PASSED |
 
 **Speed**, `bench_rust.py`: the search only, Python and Rust alternating on
 every asteroid in one process, with every result also compared:
