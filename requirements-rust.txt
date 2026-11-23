@@ -1,7 +1,11 @@
-# Opt-in Rust mode (ECONOMICSPACE_RUST=1; PROTOTYPE, see rust/es_core/README.md).
-# Never auto-installed: both lines build Rust, so they need a Rust toolchain
-# (rustup stable, and on Windows the MSVC Build Tools) and maturin.  Without
-# them nothing changes: ECONOMICSPACE_RUST unset runs the Python path.
+# Rust for Stage 4 (see rust/es_core/README.md).  Once both lines are
+# installed, Stage 4 uses them by default (ECONOMICSPACE_RUST unset or auto);
+# ECONOMICSPACE_RUST=0 forces the Python path and =1 refuses to start without
+# Rust.  Never auto-installed: both lines build Rust, so they need a Rust
+# toolchain (rustup stable, and on Windows the MSVC Build Tools) and maturin.
+# Without them nothing changes: Stage 4 runs the Python path and says so.
+# After pulling a calc.py change, reinstall with --force-reinstall: a build
+# whose sizing-loop state no longer matches calc.py is not used.
 #
 #   pip install maturin==1.9.6
 #   CARGO_TARGET_DIR=$HOME/.cargo-target/es_core pip install -r requirements-rust.txt

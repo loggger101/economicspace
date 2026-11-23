@@ -24,6 +24,8 @@ one that does not say is not to be used.
 - [How the version numbers work](#how-the-version-numbers-work)
 - [What "no number" claims rest on](#what-no-number-claims-rest-on)
 - [Releases](#releases)
+- [master v1.87.0](#master-v1870)
+- [master v1.86.1](#master-v1861)
 - [master v1.86.0 / mineral_value v1.22.1 / transportation v1.28.0 / calc v1.48.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480)
 - [master v1.85.0 / calc v1.47.0](#master-v1850--calc-v1470)
 - [master v1.84.2](#master-v1842)
@@ -141,7 +143,7 @@ one that does not say is not to be used.
 | 2 | `modules/mineral_value.py` | **1.22.1** | v1.22.1, Stage 2 installs `prices-2026-11-20`, built by spacevalue 0.8.7 on spacecost v0.19.0 from the same closes, with the same prices as `prices-2026-11-12`; see [master v1.86.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480). v1.21.0, Stage 2 installs `prices-2026-11-12`, built by spacevalue 0.7.0 on spacecost v0.17.1 from the same closes as `prices-2026-10-07`: reference prices re-reviewed, world production revised, one market per in-space demand class (new column `market_id`), and the delivery chains' LOX and recovery; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.17.0, the pricing moved to [`spacevalue`](https://github.com/loggger101/spacevalue). The stamp is spacevalue's data contract, checked rather than stamped since master v1.59.0 |
 | 3 | `modules/transportation.py` | **1.28.0** | v1.28.0, spacecost v0.19.0: bottled-gas densities from the reference equations of state, excavation 5.7 Wh/kg plus a handling row; see [master v1.86.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480). v1.26.1, spacecost v0.17.1: costs in 2026 dollars, LOX at DLA's price, recovery once per batch, a Henry Hub quote read as gross heat, revised propulsion, launch-vehicle, DSN and body rows; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.23.6, the config became spacecost's `SpacecostConfig` with two defaults overridden. The stamp follows [`spacecost`](https://github.com/loggger101/spacecost)'s data contract, which owns it since master v1.25.0 |
 | 4 | `modules/calc.py` | **1.48.0** | v1.48.0, no code here moves: Stage 3's spacecost v0.19.0 tables lower dig energy and move the gas densities, so default numbers move; see [master v1.86.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480). v1.47.0, the heat shield scales with Earth entry speed and no electric stage that burns on the way home is left behind, so default numbers move; see [master v1.85.0](#master-v1850--calc-v1470). v1.46.0, no code here moves: Stage 4 imports `spacevalue.cargo` from spacevalue 0.7.0, which pools a hold's sale by the Stage 2 table's `market_id`, so the commodities of one in-space demand class share one allowance; see [master v1.75.0](#master-v1750--mineral_value-v1210--transportation-v1261--calc-v1460). v1.45.0, sixteen General_Research method flags become the default, so default numbers move; see [master v1.73.0](#master-v1730--calc-v1450). v1.44.0, an opt-in FAA per-event fee, off by default, and no default number moves; see [master v1.72.0](#master-v1720--calc-v1440). v1.43.0, the ladder's market pooling is built once per solve instead of once per rung, and no number moves; see [master v1.70.0](#master-v1700--calc-v1430). v1.42.0, a programme rung whose market-capped sale cannot beat its ladder's best so far is not sold, and no number moves; see [master v1.69.0](#master-v1690--calc-v1420). v1.41.0, a combo whose best possible result cannot beat the body's best so far is skipped, and no number moves; see [master v1.68.0](#master-v1680--calc-v1410). v1.40.0, two opt-in flags finished and all of them run together, and no default number moves; see [master v1.67.0](#master-v1670--calc-v1400). v1.39.0, four more opt-in changes, off by default, and no default number moves; see [master v1.66.0](#master-v1660--calc-v1390). v1.38.0, seven more opt-in changes, off by default, and no default number moves; see [master v1.65.0](#master-v1650--calc-v1380). v1.37.0, three more opt-in method changes, off by default, and no default number moves; see [master v1.64.0](#master-v1640--calc-v1370). v1.36.0, five opt-in method changes, all off by default, and no default number moves; see [master v1.63.0](#master-v1630--calc-v1360). v1.35.0, eight candidates on paths a default run never takes (fixed N, reliability, cost of capital, the off side of two flags, a release of the wrong contract) and the pre-filter line, and no default number moves; see [master v1.62.0](#master-v1620--calc-v1350) |
-| - | `master.py` | **1.86.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
+| - | `master.py` | **1.87.0** | `MASTER_VERSION` in `master.py`, typed once: since v1.57.0 the file is a hand-written shim over the `modules` package, and `build_master.py` is gone |
 
 ⚠️  **The authority is the `pipeline_version` field in each module's config
 dataclass, never a table.** This one has rotted before: the README's copy read
@@ -244,6 +246,8 @@ moved in that release.
 
 | release | date | what it was |
 |---|---|---|
+| [master v1.87.0](#master-v1870) | 2026-11-23 | **Rust by default for Stage 4 wherever it is installed** (`ECONOMICSPACE_RUST` unset or `auto`; `=0` forces Python, `=1` requires Rust); a host without it runs Python as before; no stamp and no number moves |
+| [master v1.86.1](#master-v1861) | 2026-11-23 | **the opt-in Rust sizing loop models `separate_ep_units`**, so under the defaults it answers every loop again (0% since master v1.85.0); no stamp and no number moves |
 | [master v1.86.0 / mineral_value v1.22.1 / transportation v1.28.0 / calc v1.48.0](#master-v1860--mineral_value-v1221--transportation-v1280--calc-v1480) | 2026-11-20 | **spacecost `v0.19.0`, spacevalue `v0.8.7` and `prices-2026-11-20`**: Stage 2's prices unchanged; cheaper dig and the EOS gas densities move cost over revenue a median 0.98x to 0.99x |
 | [master v1.85.0 / calc v1.47.0](#master-v1850--calc-v1470) | 2026-11-19 | **the heat shield scales with entry speed, and the electric stage that burns on the way home flies home**: earth_surface cost per kg a median 1.065x; cislunar keeps 57 of 106 sampled rows at a median 2.05x |
 | [master v1.84.2](#master-v1842) | 2026-11-19 | **the git commit recorded beside every Stage 4 result**; no number moves |
@@ -339,6 +343,69 @@ moved in that release.
 fields and output columns the release added**; that is the schema history, and
 it lives in [Module changelogs](#module-changelogs) below, one section per
 module in numeric order.
+
+## master v1.87.0
+
+**Stage 4 runs its Rust paths by default wherever they are installed.** Since
+master v1.77.0 `es_core` (solver, sizing loop, programme ladder) and
+spacevalue's `spacevalue_cargo_rs` (knapsack) answered bit-identically to the
+Python but only under `ECONOMICSPACE_RUST=1`. Now calc resolves the mode at
+import:
+
+| `ECONOMICSPACE_RUST` | Stage 4 runs |
+|---|---|
+| unset, empty or `auto` | Rust when both extensions are installed and `es_core`'s sizing-loop state matches this calc.py, otherwise Python |
+| `1` | Rust, or refuses to start, naming what is missing or stale |
+| `0` | Python |
+
+A planted build is refused in every mode but `0`. calc writes the resolved
+mode back to the variable, so pool workers inherit it rather than decide
+again, and Stage 4 prints it (`Rust: on (...)`, `Rust: off: <why>`). The
+stale-build check exists because a default that silently ran an old
+`es_core` would fail mid-run (an input it does not know) or never; it
+compares `SizingLoop.STATE_NAMES`, which is the one thing every loop port
+since master v1.77.0 has changed, so a build older than its calc.py in some
+other way is still caught only by the gate. The harnesses that meant Python
+by unsetting the variable (`shadow_rust.py`, `bench_rust.py`,
+`verify_rust.py`, `sample_profile.py`, `capture.py`, the Python legs of
+`e2e_rust.py`) set `=0`. A host without the extensions (CI, a fresh clone)
+runs Python as before and says so. No stamp and no number moves.
+
+Measured 2026-11-23 on this host, cislunar, Stage 1-3 outputs copied out of
+OneDrive:
+
+| check | result |
+|---|---|
+| the mode resolved in a fresh interpreter, 15 cases (each value of the variable; `es_core` or `spacevalue_cargo_rs` missing; a stale and a planted `es_core`, simulated) | 15 as intended |
+| Stage 4, benef/search, 150 rows, 2-worker pool, variable unset against `=0` | byte-identical (`f91fa1f69e6eb474`); unset ran every solver, loop, knapsack, ladder and cargo call in Rust |
+
+## master v1.86.1
+
+**The opt-in Rust sizing loop models `separate_ep_units`, so under the
+defaults it runs again.** calc 1.47.0 (master v1.85.0) guarded the Rust loop
+with `not separate_ep`, and with `separate_ep_units` on by default every
+sizing loop in Rust mode ran in Python. `es_core`'s `SizingLoop` now ports
+`_ep_units_kg` (two units or one shared stage, whichever costs less launch
+mass, on the cascade's loads and, under `size_ep_on_flown_load`, on the
+flown load), the carried return unit (`ep_system_kg * ep_ret_share`), and
+hands `ep_ret_share` back as a 24th state entry, which calc's settle-up
+reads. calc.py drops the guard and passes the two new inputs; its Python
+path is unchanged, so no stamp and no number moves.
+
+Measured 2026-11-23 on this host, cislunar, Stage 1-3 outputs copied out of
+OneDrive (`rust/es_core/README.md` has the gate):
+
+| check | result |
+|---|---|
+| shadow, benef/search, 40 rows | 257,597 loops, 0 mismatches, 100% answered in Rust (0% before) |
+| shadow, benef/search, `size_ep_on_flown_load=True`, 8 rows | 137,270 loops, all on the flown load, 0 mismatches, 100% in Rust |
+| shadow, raw/search, 60 rows | 21,990 loops, 0 mismatches, 100% in Rust |
+| `planted_loop_defect` build | caught, 7,015 mismatches |
+| e2e, benef/search, 150 rows, 1 worker | Python, Rust, Python byte-identical; whole Stage 4 1.42x (one run: a level, not this change's share) |
+
+Not run: the rest of `gate/gate_all.sh` (solver replay, ladder and knapsack
+plants, the check 8 guard, the pooled e2e), none of whose code moved, and
+any destination but cislunar.
 
 ## master v1.86.0 / mineral_value v1.22.1 / transportation v1.28.0 / calc v1.48.0
 
@@ -458,7 +525,8 @@ not a campaign result.
   handling 24.2, where 200 was one row). The pinned spacecost v0.17.1 has no
   such row, so with the 0.0 default nothing moves until a repin.
 - The opt-in Rust sizing loop does not model `separate_ep_units`; with both
-  on, the loop runs in Python and the solver in Rust.
+  on, the loop runs in Python and the solver in Rust. (Ported at
+  [master v1.86.1](#master-v1861).)
 - **The worked calculation was not updated with it**, and does not model
   `separate_ep_units` or the entry-speed shield: it reproduces no electric
   or scaled-shield row from this release on. Found at master v1.86.0, which

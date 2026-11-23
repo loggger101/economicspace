@@ -17,7 +17,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-os.environ.pop("ECONOMICSPACE_RUST", None)
+os.environ["ECONOMICSPACE_RUST"] = "0"
 sys.path.insert(0, REPO)
 os.chdir(REPO)
 import modules.calc as calc   # noqa: E402

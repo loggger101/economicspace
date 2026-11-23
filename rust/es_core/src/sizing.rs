@@ -49,7 +49,7 @@ const DAMP_MIN_STEP: f64 = 1.0 / 1024.0;
 const DAMP_EXTRA_PASSES: u32 = 36;
 
 // Float inputs, by the name calc.py passes them under (`name=name`).
-const F_NAMES: [&str; 48] = [
+const F_NAMES: [&str; 49] = [
     "leo_cap", "isp_s_val", "dv_out_m_s", "dv_ret_stored", "dv_ret_eff",
     "tps_frac", "tank_frac", "structure_frac", "structure_frac_eff",
     "mineable_kg", "throughput_cap_kg", "window_wait_yr", "stay_est_yr",
@@ -63,7 +63,7 @@ const F_NAMES: [&str; 48] = [
     // the loop's state, as calc.py initialised it
     "power_system_kg", "ep_system_kg", "refinery_kg", "isru_feed_kg",
     "isru_prop_kg", "containment_frac", "ep_power_watts", "ep_thrust_yr",
-    "ep_thrust_n", "processing_power_watts",
+    "ep_thrust_n", "processing_power_watts", "ep_ret_share",
 ];
 // Names whose value only ever meets a float operand (or goes through a
 // comparison that is exact for |n| <= 2**53), so an exact int is converted.
@@ -77,12 +77,12 @@ const F_INT_OK: [&str; 19] = [
     "water_wh", "plant_w_per_kg", "rtg_max_power_w", "mining_hardware_kg",
     "return_vehicle_dry_kg",
 ];
-const B_NAMES: [&str; 16] = [
+const B_NAMES: [&str; 17] = [
     "models_boiloff", "is_electric", "isru", "beneficiate", "power_is_rtg",
     "damp", "relax", "carry_ep_home", "model_isru_feed_budget",
     "size_ep_on_flown_load", "model_raw_excavation_power",
     "model_water_liberation", "model_volatile_containment",
-    "refit_rtg_ceiling", "has_refinery", "has_phases",
+    "refit_rtg_ceiling", "has_refinery", "has_phases", "separate_ep",
 ];
 // Non-float inputs.
 const O_PAYLOAD_CAP: &str = "payload_cap_kg";
@@ -155,6 +155,7 @@ fn slot(name: &str) -> Option<Slot> {
         "ep_thrust_yr" => Slot::F(45, false),
         "ep_thrust_n" => Slot::F(46, false),
         "processing_power_watts" => Slot::F(47, false),
+        "ep_ret_share" => Slot::F(48, false),
         "models_boiloff" => Slot::B(0),
         "is_electric" => Slot::B(1),
         "isru" => Slot::B(2),
@@ -171,6 +172,7 @@ fn slot(name: &str) -> Option<Slot> {
         "refit_rtg_ceiling" => Slot::B(13),
         "has_refinery" => Slot::B(14),
         "has_phases" => Slot::B(15),
+        "separate_ep" => Slot::B(16),
         O_PAYLOAD_CAP => Slot::Cap,
         O_HOLD_REFINING => Slot::Hold,
         O_CARGO_WATER => Slot::Water,
@@ -271,13 +273,13 @@ impl<'a> NativeView<'a> {
 
 /// What `run` hands back as `state`, in this order.  calc.py unpacks by the
 /// same tuple and asserts it at import.
-pub const STATE_NAMES: [&str; 23] = [
+pub const STATE_NAMES: [&str; 24] = [
     "power_system_kg", "ep_system_kg", "refinery_kg", "isru_feed_kg",
     "isru_prop_kg", "stay_est_yr", "containment_frac", "structure_frac_eff",
     "ep_power_watts", "ep_thrust_n", "ep_thrust_yr", "processing_power_watts",
     "boiloff_factor", "dv_ret_eff", "converged", "damped_here",
     "carried_ep_kg", "return_dry_kg", "hardware_est_kg", "cascade",
-    "trial_payload", "r_ret", "hold_water",
+    "trial_payload", "r_ret", "hold_water", "ep_ret_share",
 ];
 
 macro_rules! idx {
@@ -426,6 +428,8 @@ struct State {
     trial_payload: Option<f64>,
     r_ret: Option<f64>,
     hold_water: Option<Option<f64>>,
+    // `separate_ep_units`: the return unit's share of ep_system_kg
+    ep_ret_share: f64,
     // knapsack evaluations (hold or cargo water) this run answered in Rust,
     // and those it called back into Python for; bookkeeping only
     knap_native: u64,
@@ -442,7 +446,7 @@ impl State {
             self.boiloff_factor, self.dv_ret_eff, self.carried_ep_kg,
             self.return_dry_kg, self.hardware_est_kg,
             self.trial_payload.unwrap_or(0.0), self.r_ret.unwrap_or(0.0),
-            self.hold_water.flatten().unwrap_or(0.0),
+            self.hold_water.flatten().unwrap_or(0.0), self.ep_ret_share,
         ];
         fs.iter().any(|v| v.is_nan())
             || self.cascade.as_ref().map(|c| c.o.has_nan()).unwrap_or(false)
@@ -481,11 +485,21 @@ macro_rules! tryc {
 /// `_ep_stage_kg`, from the two propellant loads it reads off a cascade.
 /// Returns (ep_system_kg, ep_power_w, ep_thrust_n, ep_thrust_yr).
 fn ep_stage(g0: f64, m_out: f64, m_ret: f64, x: &In) -> Option<(f64, f64, f64, f64)> {
+    let t_yr = x.f[idx!("ep_target_thrust_yr")];
+    let m = m_out + m_ret;
+    let (kg, w, n) = ep_leg(g0, m, t_yr, x)?;
+    let ep_thrust_yr = if m > 0.0 { t_yr } else { 0.0 };
+    Some((kg, w, n, ep_thrust_yr))
+}
+
+/// One electric unit burning `m` kg in `t_yr`: (kg, power_w, thrust_n).
+/// `ep_power_required_w`, `ep_thrust_required_n`, then array + PPU +
+/// thruster, in `_ep_stage_kg`'s order (and `_ep_units_kg`'s, which spells
+/// the same sum out per leg).
+fn ep_leg(g0: f64, m: f64, t_yr: f64, x: &In) -> Option<(f64, f64, f64)> {
     let isp = x.f[idx!("isp_s_val")];
     let eff = x.f[idx!("eff_used")];
-    let t_yr = x.f[idx!("ep_target_thrust_yr")];
     let ep_w_per_kg = x.f[idx!("ep_w_per_kg")];
-    let m = m_out + m_ret;
     // ep_power_required_w
     let ep_power_w = if t_yr <= 0.0 || m <= 0.0 {
         0.0
@@ -501,11 +515,55 @@ fn ep_stage(g0: f64, m_out: f64, m_ret: f64, x: &In) -> Option<(f64, f64, f64, f
         let seconds = t_yr * 365.25 * 24.0 * 3600.0;
         py_div(m * (isp * g0), seconds)?
     };
-    let ep_thrust_yr = if m > 0.0 { t_yr } else { 0.0 };
     let array_kg = if ep_w_per_kg > 0.0 { py_div(ep_power_w, ep_w_per_kg)? } else { 0.0 };
     let ppu_kg = ep_power_w / 1000.0 * x.f[idx!("ppu_kg_per_kw")];
     let thruster_kg = ep_thrust_n * x.f[idx!("thruster_kg_per_n")];
-    Some((array_kg + ppu_kg + thruster_kg, ep_power_w, ep_thrust_n, ep_thrust_yr))
+    Some((array_kg + ppu_kg + thruster_kg, ep_power_w, ep_thrust_n))
+}
+
+/// `math.sqrt`: ValueError (here None) for x < 0; NaN in -> NaN out.  Both
+/// are correctly rounded (IEEE 754), so the bits agree.
+#[inline(always)]
+fn py_sqrt(x: f64) -> Option<f64> {
+    if x < 0.0 {
+        None
+    } else {
+        Some(x.sqrt())
+    }
+}
+
+/// `_ep_units_kg` (calc 1.47.0, `separate_ep_units`, rc-246): two units, one
+/// per leg, or the one shared stage flown home, whichever costs less launch
+/// mass.  `m_out`, `m_ret` are the loads it reads off its cascade argument
+/// (`dict(cascade, **flown)` on the flown-load path), `k_ret`, `r_ret` that
+/// cascade's.  Returns (ep_system_kg, ep_power_w, ep_thrust_n, ep_thrust_yr,
+/// return_share).
+#[allow(clippy::too_many_arguments)]
+fn ep_units(
+    g0: f64, m_out: f64, m_ret: f64, k_ret: f64, r_ret: f64,
+    tps: f64, tank: f64, isru: bool, x: &In,
+) -> Option<(f64, f64, f64, f64, f64)> {
+    let total_t = x.f[idx!("ep_target_thrust_yr")];
+    if m_out <= 0.0 || m_ret <= 0.0 || total_t <= 0.0 {
+        let (kg, w, n, yr) = ep_stage(g0, m_out, m_ret, x)?;
+        // `1.0 if m_out <= 0.0 < m_ret else 0.0`
+        return Some((kg, w, n, yr, if m_out <= 0.0 && 0.0 < m_ret { 1.0 } else { 0.0 }));
+    }
+    let w_ret = 1.0 + tps
+        + ((tank + (if isru { 0.0 } else { 1.0 })) * k_ret * (1.0 + tps) * (r_ret - 1.0));
+    let a_out = py_sqrt(m_out)?;
+    let a_ret = py_sqrt(w_ret * m_ret)?;
+    let t_out = py_div(total_t * a_out, a_out + a_ret)?;
+    let t_ret = total_t - t_out;
+    let (out_kg, out_w, out_n) = ep_leg(g0, m_out, t_out, x)?;
+    let (ret_kg, ret_w, ret_n) = ep_leg(g0, m_ret, t_ret, x)?;
+    let total_kg = out_kg + ret_kg;
+    let (shared_kg, shared_w, shared_n, shared_yr) = ep_stage(g0, m_out, m_ret, x)?;
+    if w_ret * shared_kg <= out_kg + w_ret * ret_kg {
+        return Some((shared_kg, shared_w, shared_n, shared_yr, 1.0));
+    }
+    let share = if total_kg > 0.0 { py_div(ret_kg, total_kg)? } else { 0.0 };
+    Some((total_kg, out_w + ret_w, out_n + ret_n, total_t, share))
 }
 
 /// `_flown_propellant_kg` -> (m_outbound_prop, m_return_prop).
@@ -580,6 +638,7 @@ fn run_loop(
     let mine_rate = f(idx!("mine_rate_kg_per_day"));
     let (isru, beneficiate, is_electric) = (bv("isru"), bv("beneficiate"), bv("is_electric"));
     let (damp, relax) = (bv("damp"), bv("relax"));
+    let separate_ep = bv("separate_ep");
     let isru_plant_rate = f(idx!("isru_plant_rate"));
     let containment_per_kg = f(idx!("containment_per_kg"));
 
@@ -606,7 +665,13 @@ fn run_loop(
         };
         st.hardware_est_kg = f(idx!("mining_hardware_kg")) + st.power_system_kg
             + st.ep_system_kg + st.refinery_kg + plant_kg;
-        st.carried_ep_kg = if bv("carry_ep_home") { st.ep_system_kg } else { 0.0 };
+        st.carried_ep_kg = if separate_ep {
+            st.ep_system_kg * st.ep_ret_share
+        } else if bv("carry_ep_home") {
+            st.ep_system_kg
+        } else {
+            0.0
+        };
         st.return_dry_kg = f(idx!("return_vehicle_dry_kg")) + st.carried_ep_kg;
         let o = tryf!(solve(
             g0, f(idx!("leo_cap")), isp, f(idx!("dv_out_m_s")), st.dv_ret_eff,
@@ -638,7 +703,14 @@ fn run_loop(
         }
 
         let mut new_ep_kg = 0.0;
-        if is_electric {
+        let mut new_ep_share = st.ep_ret_share;
+        if is_electric && separate_ep {
+            let (mo, mr) = c.props();
+            let r = tryf!(ep_units(g0, mo, mr, c.k_ret(), c.r_ret(), tps, tank, isru, x));
+            new_ep_kg = r.0;
+            (st.ep_power_watts, st.ep_thrust_n, st.ep_thrust_yr) = (r.1, r.2, r.3);
+            new_ep_share = r.4;
+        } else if is_electric {
             let (mo, mr) = c.props();
             let r = tryf!(ep_stage(g0, mo, mr, x));
             new_ep_kg = r.0;
@@ -682,9 +754,18 @@ fn run_loop(
             let (mo, mr) = flown_prop(
                 trial_payload, st.hardware_est_kg - st.carried_ep_kg, st.return_dry_kg,
                 st.structure_frac_eff, tps, tank, c, isru);
-            let r = tryf!(ep_stage(g0, mo, mr, x));
-            new_ep_kg = r.0;
-            (st.ep_power_watts, st.ep_thrust_n, st.ep_thrust_yr) = (r.1, r.2, r.3);
+            if separate_ep {
+                // `_ep_units_kg(dict(cascade, **flown), ...)`: the flown
+                // loads, the cascade's k_ret and r_ret
+                let r = tryf!(ep_units(g0, mo, mr, c.k_ret(), c.r_ret(), tps, tank, isru, x));
+                new_ep_kg = r.0;
+                (st.ep_power_watts, st.ep_thrust_n, st.ep_thrust_yr) = (r.1, r.2, r.3);
+                new_ep_share = r.4;
+            } else {
+                let r = tryf!(ep_stage(g0, mo, mr, x));
+                new_ep_kg = r.0;
+                (st.ep_power_watts, st.ep_thrust_n, st.ep_thrust_yr) = (r.1, r.2, r.3);
+            }
         }
 
         let trial_feed = if beneficiate {
@@ -835,6 +916,7 @@ fn run_loop(
          st.isru_prop_kg, st.stay_est_yr, st.containment_frac) =
             (v[0], v[1], v[2], v[3], v[4], v[5], v[6]);
         st.structure_frac_eff = sf + st.containment_frac;
+        st.ep_ret_share = new_ep_share;
         if st.converged {
             break;
         }
@@ -984,6 +1066,7 @@ impl SizingLoop {
             trial_payload: None,
             r_ret: None,
             hold_water: None,
+            ep_ret_share: x.f[idx!("ep_ret_share")],
             knap_native: 0,
             knap_callback: 0,
         };
@@ -1036,6 +1119,7 @@ impl SizingLoop {
             st.damped_here.into_pyobject(py)?.into_any(),
             fl(st.carried_ep_kg), fl(st.return_dry_kg), fl(st.hardware_est_kg),
             cascade, opt(st.trial_payload)?, opt(st.r_ret)?, hold_water,
+            fl(st.ep_ret_share),
         ])?;
         self.fast.fetch_add(1, Relaxed);
         count_knap(self);

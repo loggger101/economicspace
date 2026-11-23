@@ -38,7 +38,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 # calc is imported in plain Python mode and the Rust objects are built HERE,
 # exactly as calc builds them, because calc (rightly) refuses a planted build
 # and this harness must be able to load one.  No bypass lives in calc.py.
-os.environ.pop("ECONOMICSPACE_RUST", None)
+os.environ["ECONOMICSPACE_RUST"] = "0"
 sys.path.insert(0, REPO)
 os.chdir(REPO)
 import modules.calc as calc   # noqa: E402

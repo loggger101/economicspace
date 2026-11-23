@@ -12,6 +12,8 @@ repo, out_dir, rows, dump = sys.argv[1:5]
 sys.path.insert(0, repo)
 import os
 os.chdir(repo)
+# the PYTHON solver's calls are what verify_rust replays against es_core
+os.environ["ECONOMICSPACE_RUST"] = "0"
 
 import modules.calc as calc
 
